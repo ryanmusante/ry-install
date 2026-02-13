@@ -51,11 +51,10 @@ cd ry-install
 
 ## Configuration Reference
 
-### Kernel Parameters (17)
+### Kernel Parameters (15)
 
 | Parameter | Purpose |
 |-----------|---------|
-| `8250.nr_uarts=0` | Disable serial ports (no UART hardware) |
 | `amd_iommu=off` | Disable IOMMU (no VM passthrough needed) |
 | `amd_pstate=active` | EPP mode for CPU frequency |
 | `amdgpu.cwsr_enable=0` | Disable compute shader workload recovery |
@@ -69,7 +68,6 @@ cd ry-install
 | `pci=pcie_bus_perf` | Optimize PCIe bus for performance |
 | `quiet` | Silent boot |
 | `split_lock_detect=off` | Gaming performance (single-user only) |
-| `tsc=reliable` | Consistent timestamps |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend globally |
 | `zswap.enabled=0` | Disable zswap (128GB RAM) |
 

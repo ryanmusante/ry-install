@@ -225,7 +225,6 @@ set -g SDBOOT_REMOVE_OBSOLETE "yes"
 # audit=0 disables kernel audit framework. CachyOS has no SELinux/AppArmor/auditd.
 # Systems requiring STIG compliance would need audit=1.
 set -g KERNEL_PARAMS \
-    8250.nr_uarts=0 \
     amd_iommu=off \
     amd_pstate=active \
     amdgpu.cwsr_enable=0 \
@@ -239,7 +238,6 @@ set -g KERNEL_PARAMS \
     pci=pcie_bus_perf \
     quiet \
     split_lock_detect=off \
-    tsc=reliable \
     usbcore.autosuspend=-1 \
     zswap.enabled=0
 

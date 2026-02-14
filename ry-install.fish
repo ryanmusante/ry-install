@@ -191,7 +191,6 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/modprobe.d/99-cachyos-modprobe.conf" \
     "/etc/modules-load.d/99-cachyos-modules.conf" \
     "/etc/udev/rules.d/99-cachyos-udev.rules" \
-    "/etc/environment" \
     "/etc/systemd/journald.conf.d/99-cachyos-journald.conf" \
     "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
     "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
@@ -278,7 +277,7 @@ set -g UDEV_RULES \
     'ACTION=="add", SUBSYSTEM=="usb", TEST=="power/control", ATTR{power/control}="on"'
 
 # ENVIRONMENT VARIABLES (gaming: Vulkan, shader cache, Proton)
-# Duplicated in /etc/environment (PAM) and environment.d (systemd user)
+# Written to environment.d (systemd user services)
 set -g ENV_VARS \
     "AMD_VULKAN_ICD=RADV" \
     "MESA_SHADER_CACHE_MAX_SIZE=8G" \
@@ -409,12 +408,6 @@ function get_file_content
                 printf '%s\n' $rule
             end
 
-        case "/etc/environment"
-            printf '%s\n' "# Global environment variables - read by PAM on login"
-            for var in $ENV_VARS
-                printf '%s\n' $var
-            end
-
 
         # Systemd drop-ins
 
@@ -492,8 +485,7 @@ end'
 
         case '*/.config/environment.d/50-gaming.conf'
             printf '%s\n' "# Gaming environment variables for systemd user services"
-            printf '%s\n' "# Note: Duplicates /etc/environment for apps launched via systemd --user"
-            printf '%s\n' "# (e.g., Flatpak apps, user services that don't inherit PAM environment)"
+            printf '%s\n' "# Loaded by systemd --user (graphical sessions, Flatpak, user services)"
             for var in $ENV_VARS
                 printf '%s\n' $var
             end
@@ -1728,15 +1720,6 @@ function verify_static
     if _chk_file /etc/udev/rules.d/99-cachyos-udev.rules
         _chk_grep /etc/udev/rules.d/99-cachyos-udev.rules "ntsync" "ntsync rule"
         _chk_grep /etc/udev/rules.d/99-cachyos-udev.rules 'SUBSYSTEM=="usb"' "USB autosuspend rule"
-    end
-    _echo
-
-    _echo "── Environment ──"
-    if _chk_file /etc/environment
-        for exp in $ENV_VARS
-            set -l n (string split '=' "$exp")[1]
-            _chk_grep /etc/environment "$n=" "$n"
-        end
     end
     _echo
 
@@ -3611,7 +3594,7 @@ function do_export
 
     # Key config files (existence and first line)
     echo "## CONFIG FILES" >> "$export_file"
-    for f in /etc/mkinitcpio.conf /etc/sdboot-manage.conf /etc/modprobe.d/99-cachyos-modprobe.conf /etc/environment /etc/iwd/main.conf
+    for f in /etc/mkinitcpio.conf /etc/sdboot-manage.conf /etc/modprobe.d/99-cachyos-modprobe.conf /etc/iwd/main.conf
         if test -f "$f"
             echo "$f: EXISTS" >> "$export_file"
         else
@@ -4619,7 +4602,9 @@ function _install_preflight
 
         # Check network connectivity (required for package operations)
         if not check_network
-            _warn "Continuing without network - package operations may fail"
+            _err "Network required for package installation — aborting"
+            _kill_sudo_keepalive
+            return 1
         end
 
         # Check kernel version for feature compatibility

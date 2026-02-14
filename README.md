@@ -1,6 +1,6 @@
 # ry-install
 
-**v2.0** — Self-contained CachyOS configuration for **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). All 19 config files and fish completions embedded in `ry-install.fish` — no external configs, requires only standard CachyOS base tools.
+**v2.0** — Self-contained CachyOS configuration for **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). All 18 config files and fish completions embedded in `ry-install.fish` — no external configs, requires only standard CachyOS base tools.
 
 ## Hardware
 
@@ -103,7 +103,7 @@ cd ry-install
 
 **Removed (8):** power-profiles-daemon, plymouth, cachyos-plymouth-bootanimation, ufw, octopi, micro, cachyos-micro-settings, btop
 
-## Embedded Files (19)
+## Embedded Files (18)
 
 | File | Purpose |
 |------|---------|
@@ -114,7 +114,6 @@ cd ry-install
 | `/etc/modprobe.d/99-cachyos-modprobe.conf` | Module options and blacklist |
 | `/etc/modules-load.d/99-cachyos-modules.conf` | Load ntsync at boot |
 | `/etc/udev/rules.d/99-cachyos-udev.rules` | ntsync perms, USB autosuspend off |
-| `/etc/environment` | Global environment variables |
 | `/etc/systemd/journald.conf.d/99-cachyos-journald.conf` | Journal size cap (500M) and retention (2 weeks) |
 | `/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf` | Coredump storage cap (500M) |
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | Disable mDNS |
@@ -126,6 +125,8 @@ cd ry-install
 | `~/.config/environment.d/50-gaming.conf` | Gaming vars for systemd user services |
 | `/etc/systemd/system/amdgpu-performance.service` | Set GPU to high performance |
 | `/etc/systemd/system/cpupower-epp.service` | Set CPU governor and EPP to performance |
+
+**Generated at runtime (not embedded):** `~/.config/fish/completions/ry-install.fish` (fish completions, via `--completions`) · `/etc/NetworkManager/system-connections/<SSID>.nmconnection` (WiFi connection, via `--all` WiFi setup)
 
 ## Safety & Design
 
@@ -218,7 +219,7 @@ set -l backup_dir ~/ry-install-backup-(date +%Y%m%d-%H%M%S)
 mkdir -p $backup_dir
 for f in /etc/kernel/cmdline /etc/sdboot-manage.conf /etc/mkinitcpio.conf \
          /etc/modprobe.d/99-cachyos-modprobe.conf /etc/modules-load.d/99-cachyos-modules.conf \
-         /etc/environment /etc/iwd/main.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf \
+         /etc/iwd/main.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf \
          /etc/conf.d/wireless-regdom /boot/loader/loader.conf \
          /etc/udev/rules.d/99-cachyos-udev.rules \
          /etc/systemd/journald.conf.d/99-cachyos-journald.conf \
@@ -257,4 +258,4 @@ Manual: restore file → rebuild (`sudo mkinitcpio -P`, `sudo sdboot-manage upda
 
 ## License
 
-MIT — `ry-install/` contains `LICENSE`, `README.md`, and `ry-install.fish` (self-contained, 19 configs + completions embedded).
+MIT — `ry-install/` contains `LICENSE`, `README.md`, and `ry-install.fish` (self-contained, 18 configs + completions embedded).

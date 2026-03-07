@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.5.1 — CachyOS config for Beelink GTR9 Pro (Strix Halo) | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.5.1"
+# ry-install v3.5.2 — CachyOS config for Beelink GTR9 Pro (Strix Halo) | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.5.2"
 # --dry-run: simulate all mutations
 set -g DRY false
 # --all: auto-yes every prompt
@@ -3382,7 +3382,7 @@ end
 
 # ═══ LINT, CLEAN — development and maintenance tools ═══
 function do_lint --description "Lint the script source for fish anti-patterns and style issues"
-    _log "=== LINT CHECK START ==="
+    _log "=== LINT START ==="
     _info "Running fish syntax check..."
     _echo
 

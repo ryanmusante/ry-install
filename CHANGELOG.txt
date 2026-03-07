@@ -1,3 +1,10 @@
+3.5.2 (2026-03-07)
+-------------------
+
+  fix: log marker naming — "LINT CHECK START" → "LINT START" for
+    symmetric START/END pairs across all 7 modes. Enables consistent
+    grep-based log section extraction.
+
 3.5.1 (2026-03-07)
 -------------------
 

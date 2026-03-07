@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.5.0 — CachyOS config for Beelink GTR9 Pro (Strix Halo) | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.5.0"
+# ry-install v3.5.1 — CachyOS config for Beelink GTR9 Pro (Strix Halo) | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.5.1"
 # --dry-run: simulate all mutations
 set -g DRY false
 # --all: auto-yes every prompt
@@ -759,6 +759,8 @@ end
 
 # Append JSONL event to LOG_FILE with ISO timestamp
 function _log --description "Append a timestamped message to the log file"
+    # Guard: do not recreate LOG_FILE if it was intentionally deleted (e.g. _acquire_lock contention)
+    test -f "$LOG_FILE" || return 0
     set -l _ts (date '+%Y-%m-%dT%H:%M:%S')
     set -l raw (string join -- " " $argv)
     # Inside if/else, bare set (no -l) re-binds outer event/data; after block, set -l re-binds at outer scope
@@ -1497,6 +1499,7 @@ function validate_configs --description "Run all embedded config validators"
         set errors (math $errors + 1)
     end
 
+    # Systemd unit + fish script syntax validation via systemd-analyze verify / fish --no-execute
     set -l tmpfile_amdgpu (mktemp -t ry-validate-XXXXXX --suffix=.service)
     if test -z "$tmpfile_amdgpu"
         _err "Failed to create temp file for amdgpu-performance.service validation"
@@ -1577,6 +1580,7 @@ function validate_configs --description "Run all embedded config validators"
         command rm -f -- "$tmpfile_sshenv"
     end
 
+    # INI-style config section header validation (resolved, logind, iwd, NetworkManager)
     set -l ini_checks \
         "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf|[Resolve]" \
         "/etc/systemd/logind.conf.d/99-cachyos-logind.conf|[Login]" \
@@ -1628,6 +1632,7 @@ function validate_configs --description "Run all embedded config validators"
         command rm -f -- "$tmpfile_ini"
     end
 
+    # Simple key-value config validation (loader.conf, sdboot-manage.conf, udev rules)
     set -l tmpfile_simple (mktemp -t ry-validate-XXXXXX)
     if test -n "$tmpfile_simple"
         get_file_content "/boot/loader/loader.conf" >"$tmpfile_simple"
@@ -5297,6 +5302,7 @@ function _install_configure_services --description "Enable, start, and configure
         end
     end
 
+    # Service masking: skip lvm2-monitor if LVM volumes detected to avoid breaking storage
     for svc in $MASK
         if string match -q 'lvm2*' -- "$svc"
             if test "$has_lvm" = true
@@ -5348,6 +5354,7 @@ function _install_configure_services --description "Enable, start, and configure
         end
     end
 
+    # User-level services: ssh-agent socket activation + SSH_AUTH_SOCK propagation
     if _ask "Enable ssh-agent (user, socket-activated)?"
         if not _run systemctl --user daemon-reload
             _warn "Systemctl --user daemon-reload failed"
@@ -6470,7 +6477,6 @@ printf '{"ts":"%s","event":"header","version":"%s","mode":"%s","dry_run":%s,"all
     (test "$QUIET" = false&& echo true|| echo false) "$_init_cmd" >"$LOG_FILE"
 
 # Lock policy: write modes (install, diff --fix) acquire; read modes skip
-set -l _has_lock false
 switch $MODE
     case install-file
         # Validate path before lock — exit 2 (usage) not masked by lock failure
@@ -6485,14 +6491,11 @@ switch $MODE
             exit 2
         end
         _acquire_lock || exit 1
-        set _has_lock true
     case install
         _acquire_lock || exit 1
-        set _has_lock true
     case diff
         if test "$FIX" = true
             _acquire_lock || exit 1
-            set _has_lock true
         end
     case '*'
         # No lock needed for read-only modes (verify, lint, logs, diagnose, completions, test-all)

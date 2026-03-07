@@ -1,3 +1,22 @@
+3.5.1 (2026-03-07)
+-------------------
+
+  fix: remove dead _has_lock variable (F-1, execution flow audit)
+    set -l _has_lock false and 3 set _has_lock true never read.
+    Lock release uses set -q LOCK_DIR, not _has_lock. Vestigial
+    from pre-v3.x lock rework. Removed 4 lines.
+  fix: _log guard prevents orphan log stubs on lock contention (F-2)
+    _acquire_lock deletes LOG_FILE before exit 1 on contention,
+    then _cleanup_on_exit → _do_cleanup → _cleanup_tmpfiles → _log
+    recreated the file via >>$LOG_FILE at umask 022 (644 not 600).
+    Guard: test -f "$LOG_FILE" || return 0 at _log entry.
+  docs: add inline section comments to validate_configs
+    3 markers: systemd unit validation, INI config validation,
+    simple key-value config validation. Aids navigation in 198L fn.
+  docs: add inline section comments to _install_configure_services
+    2 markers: LVM-aware mask safety filter, user-level ssh-agent
+    service setup. Aids navigation in 205L fn.
+
 3.5.0 (2026-03-07)
 -------------------
 

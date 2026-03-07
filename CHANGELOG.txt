@@ -1,0 +1,540 @@
+3.5.0 (2026-03-07)
+-------------------
+
+  refactor: decompose do_diagnose (604L → 25L orchestrator + 6 helpers)
+    Extract _diag_info (115L), _diag_services (69L), _diag_hardware
+    (105L), _diag_network (87L), _diag_storage (117L), _diag_config
+    (108L). Shared counters $issues/$checks replaced with globals
+    $_DIAG_ISSUES/$_DIAG_CHECKS, initialized in orchestrator,
+    incremented by helpers. No behavioral change.
+  refactor: decompose do_logs (285L → 67L dispatcher + 2 helpers)
+    Extract _logs_file_ops (114L) for analyze/last/list/all and
+    _logs_journal (118L) for system/gpu/wifi/boot/audio/usb/kernel.
+    Catch-all with fuzzy-match stays in do_logs. Return values
+    propagated via return $status. No behavioral change.
+  fix: wireless-regdom pipeline missing _log (F-3)
+    Add _log before bare sudo cat|sudo tee pipeline in _has_uncommented
+    branch. DRY gate unnecessary — parent block at L4986 already
+    excludes DRY=true. Else branch already used _run.
+  fix: --logs typo falls through to journal without hint (F-15)
+    Add fuzzy-match in service-not-found branch: 3-char prefix match
+    against known targets with ±2 length proximity guard. Prevents
+    false positives on real service names (e.g. usbguard vs usb).
+  fix: `path basename` requires Fish 3.5+ but gate is 3.3+ (A-1)
+    Replace with `string replace -r '.*/' ''` for Fish 3.3+ compat
+  fix: 3 bare `sudo nmcli connection load` bypass _run logging (B-1)
+    Wrap in _run for consistent audit trail in WiFi retry loop
+  fix: bare `set next_arg` in --logs arg parser (A-2)
+    Change to `set -l next_arg` for consistency with --diff/--install-file
+  fix: header comment version stale at v3.4.1 (D-1)
+    Update to v3.5.0 to match VERSION variable, README, CHANGELOG
+  remove: backup system remnants — 2 comments and 2 _warn lines
+    referencing removed ~/ry-install/backups/ directory
+  feat: add _info notice before install and --diff --fix that automatic
+    backups no longer exist; user responsible for rootfs snapshots
+  docs: add 27 inline comments to 19 functions >50 lines with ≤1
+    comment; all 27 functions >50L now have ≥2 inline comments
+    (pre-decomposition count was 34; decomposition reduced 7 below 50L)
+  chore: apply fish_indent -w for canonical formatting (237 lines;
+    spaces around && and || operators)
+  chore: 73 → 81 functions, 6476 → 6562 lines
+  chore: update README — remove backup references from Safety table,
+    Install Flow (21 → 20 steps), and Data Directory; version 3.5.0
+  fix: README iwd/main.conf entry omitted PowerSaveDisable quirk and
+    NameResolvingService=systemd — now lists all 3 sections
+  docs: README BIOS version updated from placeholder vXX to P110
+    (December 2025 — ACPI fix)
+
+3.4.1 (2026-03-06)
+-------------------
+
+  fix: do_test_all completions validation reads installed file instead
+    of empty stdout capture — do_completions writes to file via printf
+    redirect, never stdout; validation always reported 7 missing
+    subcommands (platform-independent false failure)
+
+3.4.0 (2026-03-05)
+-------------------
+
+  remove: drop --no-color flag — NO_COLOR env var (no-color.org) is the
+    sole color control; env detection at startup unchanged
+  remove: drop --no-log flag — NDJSON logging is now always-on; remove
+    LOG_FILE=/dev/null code path, 3 orphan-cleanup blocks in signal/exit
+    handlers, and all 12 `test "$LOG_FILE" != /dev/null` guards on rm
+  remove: drop --clean mode — do_clean (344 lines) and _find_steam_root
+    (10 lines) removed; lock policy, dispatch, arg parser, completions,
+    help text, and examples updated
+  remove: drop _GPU_BUSY_PCT — set in _gather_gpu_state but never read
+  fix: --test-all used --no-color flag — replaced with env NO_COLOR=1
+  chore: trim CHANGELOG to 3.0.0+; drop pre-3.0 entries
+  chore: update help, completions, README, and CHANGELOG for all removals
+
+3.3.7 (2026-03-04)
+-------------------
+
+  fix: 15 scope shadows — set -l inside nested blocks re-declared
+    outer block-scoped vars (12 unique vars across 6 functions)
+
+  Same root cause as v3.2.9 remediation (set -l inside blocks creates
+  block-local shadow invisible to outer scope). Prior fixes only caught
+  function-scope → block shadows; these are block → nested-block.
+
+  CRITICAL (infinite loops):
+  - _install_finalize: reload_wait (L5987) — NM reload wait counter
+    stuck at 0, loop never terminates on WiFi profile detection timeout
+  - _install_finalize: wifi_retry (L6001) — WiFi retry counter stuck
+    at 0, loop never terminates on connection failure
+
+  HIGH (broken functionality):
+  - do_diff: this_diff (L2070) — --diff --fix never triggered for
+    content drift, only repaired permission/ownership drift
+  - install_file: _cur_content (L1845) — skip-unchanged broken for
+    14/17 sudo-path files; always rewrites even when content matches
+  - do_diagnose: nvme_found (L4966) — always printed "No NVMe devices
+    found" even after successfully processing smart-log data
+
+  MED (incorrect output/behavior):
+  - _progress: desc (L1153) — progress bar label blank for >25 char
+    step names ("Wireless regulatory domain", "AMDGPU performance
+    service")
+  - do_diff: actual_perms (L2113), actual_owner (L2114) — system file
+    permission/ownership checks used stale values from user-file branch
+  - do_diff: target_owner (L2155) — chown skipped in --fix for user
+    files (target_owner empty after block)
+  - _install_collect_wifi: wlan_iface (L5187) — iwctl interface
+    detection result discarded; falls through to sysfs glob fallback
+  - do_diagnose: disksize (L5026) — zram size displayed in raw bytes
+    instead of GB
+
+  LOW (credential hygiene):
+  - _install_collect_wifi: wifi_pass (L5255/5259/5263/5267) — credential
+    erasure on validation failure/success ineffective; passphrase persists
+    in outer block scope until block exits naturally (4 sites)
+
+3.3.6 (2026-03-04)
+-------------------
+
+  fix: add LC_ALL=C to NVMe device sort in do_diagnose (L4965)
+    Bare sort without locale pinning was inconsistent with all other
+    sort calls; ASCII-only device names made this cosmetic but the
+    254-check audit flagged it as the sole actionable finding
+
+3.3.5 (2026-03-03)
+-------------------
+
+  fix: 28 scope shadows — set -l inside blocks re-declared function-scope vars
+    (issues in do_diagnose, _log_lines in do_logs, has_diff in do_diff,
+    run_stress in do_diagnose, to_del in _install_configure_services)
+
+  fix: --lint scope shadow awk — gawk-only match() broke silently on mawk
+    Rewrite: mawk-compatible index()+substr(), piped while depth tracking,
+    anchored ^set -l filters string false positives in lint messages
+
+  fix: do_logs system case — set -l _log_lines inside if (sudo) scoped to
+    block, leaving function-scope empty; logs never displayed when sudo available
+
+3.3.4 (2026-03-03)
+-------------------
+
+  fix: do_diagnose CPU governor check — expect powersave, not performance
+    (amd_pstate=active uses powersave governor + performance EPP)
+  fix: _run security comment — document that WIFI_SSID reaches $argv
+    via nmcli, mitigated by character validation
+  fix: reject '%' in WiFi passphrase (GKeyFile parse safety, matches
+    existing SSID restriction); update help text and README
+  fix: remove pipewire-libcamera from PKGS_ADD (pulled as dependency);
+    packages 16 → 15
+  feat: add scope shadow lint check — detects set -l inside blocks that
+    re-declare outer function-scope variables (v3.2.9 regression class)
+  docs: document thermal threshold rationale (conservative vs 95/100°C spec)
+  docs: document log rotation race-safety (rm -f idempotent, last-write-wins)
+
+3.3.3 (2026-03-03)
+-------------------
+
+  Locale safety:
+  - Add LC_ALL=C to 5 sort -u calls in _analyze_log and do_logs for
+    deterministic text ordering across locales
+
+  Formatting:
+  - Apply fish_indent -w for canonical formatting
+    Only change: remove unnecessary quotes on single-word _log argument
+    (line 374: _log "BOOT_TIME_CHECK" → _log BOOT_TIME_CHECK)
+
+3.3.2 (2026-03-03)
+-------------------
+
+  Remove 3 features: --watch, --rollback, --gaming/--profile/--interval.
+
+  Scope fixes (same root cause as v3.3.0/v3.3.1 — set -l inside blocks):
+  - validate_mkinitcpio_hooks: existence_only/hooks shadows (3 instances)
+    → --existence-only mode was completely broken
+  - _log: event/data shadows (2 instances) → section markers logged as
+    event=message instead of event=section in NDJSON
+  - _preflight_boot_sanity: errors counter shadow (2 instances) →
+    "DO NOT REBOOT" safety gate could fail to trigger
+  - validate_configs: errors counter shadows in 6 mktemp failure paths
+    → validation could return 0 despite failures
+  - do_lint: has_errors flag shadows (3 instances) → lint could report
+    0 errors when violations exist
+  - do_test_all: total/passed counter shadows (3 instances) → test
+    suite reported incorrect pass/fail statistics
+
+  Feature removal (−564 lines, 83 → 80 functions):
+  - Remove do_watch (231 lines): live sysfs dashboard
+  - Remove do_rollback (138 lines): backup snapshot restore
+  - Remove _diagnose_gaming (96 lines): Vulkan/session/codecs/Steam
+  - Remove globals: GAMING, PROFILE, WATCH_INTERVAL
+  - Remove argparse cases: --gaming, --profile, --watch, --interval,
+    --rollback
+  - Remove validation blocks: GAMING/PROFILE/WATCH_INTERVAL mode guards,
+    ALL→GAMING promotion
+  - Remove mode dispatch: watch/rollback switch cases + lock acquisition
+  - Remove PROFILE timing output in _progress and _progress_done
+  - Remove GAMING conditional call in do_diagnose
+  - Remove 5 completions entries, 5 help text entries, test suite refs
+  - Update section header: LINT, WATCH, CLEAN → LINT, CLEAN
+
+3.3.1 (2026-03-03)
+-------------------
+
+  Fix:
+  - _analyze_log: set -g total_step_s on local → step timing total
+    always shows 0. Changed to bare set.
+
+3.3.0 (2026-03-03)
+-------------------
+
+  Complete scope remediation: 124 set -l → bare set fixes across 35
+  functions. Resolves all remaining read-after-block scope shadowing
+  bugs introduced by v3.2.9 refactor.
+
+  Previously confirmed broken (now fixed):
+  - do_diff summary: has_diff/has_pacnew/this_diff always false
+  - do_diff --fix: never triggered (this_diff always false)
+  - do_diagnose: all 17 block-scoped counters/labels/issues
+  - do_lint: has_errors never propagated
+  - do_watch: freq/gpu_perf/net_info/svc_info block-scoped
+  - do_logs/do_test_all: exit_code/pass/fail counters
+  - verify_runtime: perms block-scoped
+  - validate_configs: errors counter
+  - _analyze_log: 10 block-scoped vars
+  - _check_hardware_fingerprint: 8 block-scoped vars
+  - _install_system_files/_install_finalize/_install_configure_services
+  - _progress/_progress_done: bar/desc/step_elapsed/elapsed_str
+  - _log/_msg/_banner/_verify_summary: output formatting vars
+  - install_file: perms/_cur_content
+  - show_help: exit_code/next_arg
+  - _cleanup_on_exit: _exit_status
+
+ry-install changelog
+====================
+
+3.2.14 (2026-03-03)
+-------------------
+
+  Comprehensive scope remediation: fixed 228 read-after-block scope
+  shadowing bugs across 33 functions (124 in round 1, 103 in round 2,
+  1 in round 3). Combined with v3.2.11-v3.2.13 fixes (33 set -g → set
+  and 7 set -l → set), total remediation: 268 scope corrections.
+
+  These are the "known remaining" instances from the v3.2.9 refactor
+  that over-applied set -l to variables needing cross-block updates.
+
+  Affected functions (33):
+    _verify_unit_syntax, _cleanup_on_exit, _log, _msg, _banner,
+    _verify_summary, _progress, _progress_done, _run,
+    _install_collect_wifi, install_file, _install_system_files,
+    _install_packages, _install_configure_services, _install_finalize,
+    _install_rebuild_boot, verify_runtime, do_diff,
+    validate_configs, validate_mkinitcpio_hooks, do_lint, _logs_list,
+    _analyze_log, do_logs, do_test_all, do_watch, do_diagnose,
+    _diagnose_gaming, _check_hardware_fingerprint, show_help,
+    _validate_kernel_params, (plus arg parser and script-level)
+
+  Notable behavioral changes (bugs now fixed):
+  - do_diff: has_diff/has_pacnew/this_diff now update correctly →
+    summary reports actual drift, --fix triggers when needed
+  - do_test_all: passed/failed counters now increment → accurate totals
+  - do_diagnose: issue counters work across 17 diagnostic checks
+  - validate_configs: error counter increments → validation catches
+    real errors and correctly aborts (profile timing now requires
+    validation to pass before progress steps fire)
+  - do_lint: has_errors flag updates → lint reports actual failures
+  - _analyze_log: log analysis fields populate correctly
+  - do_watch: GPU/network/service info updates in dashboard
+  - _run: secret redaction applies all matches (not just first)
+
+3.2.13 (2026-03-03)
+-------------------
+
+  Critical fix:
+  - Fix exit_code dispatch bug: 14 instances of `set -g exit_code` on
+    locally-declared variable → every mode always exited 0 regardless
+    of actual result. do_logs empty target (return 2), do_watch non-tty
+    (return 1), and all failure paths were silently swallowed. Also broke
+    NDJSON footer exit_code field and _INTENDED_EXIT_CODE for cleanup
+    handler. Changed to bare `set`.
+
+  Fixes:
+  - Fix lock release: 3 instances of `set -g _has_lock true` on locally-
+    declared variable → write modes (install, diff --fix) never
+    released lock on exit, blocking subsequent runs until stale lock
+    cleared. Changed to bare `set`.
+  - Fix log filename suffixes: 4 instances of `set -g mode_label` on
+    locally-declared variable → log filenames never included modifier
+    suffixes (-dry, -fix, -all) or --logs sub-target. Changed to bare
+    `set`.
+
+3.2.12 (2026-03-03)
+-------------------
+
+  Critical fixes:
+  - Fix MODE dispatch bug: 12 instances of `set -g MODE <value>` on
+    locally-declared MODE variable → dispatch always fell through to
+    install mode. All operational modes (diff, verify, lint,
+    rollback, diagnose, watch, logs, completions, install-file, test-all)
+    executed the install path instead. Changed to bare `set`.
+  - Fix do_diff single-file validation: `set -l target_file` shadowed
+    --argument-names, `set -l valid true` inside for loop never reached
+    outer scope → --diff <path> always rejected every managed file with
+    "Not a managed file".
+  - Fix do_install_file validation: same pattern as do_diff — `set -l
+    valid true` and `set -l use_sudo false` inside for loops never
+    updated outer scope → --install-file <path> always rejected every
+    managed file, and user files would have received sudo.
+  - Fix _validate_kernel_params: `set -l found true` inside inner for
+    loop never reached outer scope → kernel config validation was
+    silently skipped for all parameters.
+
+3.2.11 (2026-03-02)
+-------------------
+
+  Critical fixes:
+  - Fix arg parser infinite loop: 22 instances of `set -g` on locally-
+    declared variables (i, mode_count, DIFF_TARGET, LOG_TARGET,
+    LOG_TARGET_ARG, INSTALL_FILE_TARGET) changed to bare `set`. Fish
+    `set -g` creates a separate global; the local shadows it for reads,
+    so the loop counter never advanced. ALL operational modes (install,
+    diff, verify, lint, rollback, diagnose, watch, logs,
+    completions, test-all, install-file) were unreachable — only --help,
+    --version, and unknown flags worked (they exit inside their case
+    before the increment).
+  - Fix install_files scope bug: `set -g use_sudo true` on locally-
+    declared variable → --sudo flag silently broken, system file installs
+    never received sudo. Changed to bare `set`.
+  - Fix install_files scope bug: `set -g had_failure true` on locally-
+    declared variable → install failures silently swallowed, function
+    always returned 0. Changed to bare `set`.
+
+  Fixes:
+  - Fix header version: v3.2.9 → v3.2.11 to match VERSION global
+
+3.2.10 (2026-03-02)
+-------------------
+
+  Hardening:
+  - Add `command` prefix to 83 bare coreutils calls (rm, mv, cp, chmod,
+    chown, mkdir) to bypass potential Fish function/alias overrides
+  - Add --argument-names to 10 functions for self-documenting signatures
+    (get_file_content, _banner, _chk_file, _chk_grep, validate_systemd_unit,
+    validate_fish_script, install_file, do_diff, do_logs, do_install_file)
+  - Convert 24 function-local variables in verify_runtime/verify_static from
+    set -g to bare set, eliminating global namespace pollution (125 → 101
+    in-function globals); VERIFY_* counters remain global (used by _msg)
+  - Add SECURITY INVARIANT comment at _run $argv execution documenting that
+    no user-controlled input reaches the command execution path
+
+  Fixes:
+  - Fix 2 stdout leaks: printf '\n' in _install_preflight and echo after
+    read -sP in _install_collect_wifi now redirect to >&2 (all UI output
+    uses stderr; stdout reserved for return-value functions and CI output)
+  - Fix do_rollback mkdir: add error handling with _fail, _log, counter
+    increment, and continue on failure for both SYSTEM and USER sections
+
+  Features:
+  - Add --rollback mode: restore managed config files from backup snapshots
+    with interactive backup selection, dry-run support, and /boot skip safety
+  - Add rollback to completions, help text, lock acquisition, and mode validation
+
+  Documentation:
+  - Add block comments to 6 complex sections: signal/cleanup chain, NDJSON
+    logging, _run command wrapper, config validation pipeline, atomic file
+    installation, and argument parser
+  - Document idempotency strategy (hash comparison, test -f, --needed, or-return)
+  - Document verify_runtime scoping rationale (VERIFY_* global vs locals)
+  - Add _log section markers (START/END) to do_rollback,
+    do_diagnose, and do_lint END for consistent NDJSON log analysis
+  - Add --rollback to do_test_all matrix (--rollback --force --dry-run)
+
+3.2.9 (2026-03-02)
+
+  refactor: add explicit set -l to 402 function-scoped variables
+  refactor: add explicit set -g to ~15 top-level arg-parser variables
+  refactor: wrap 10 bare sudo write ops in _run() for logging
+  refactor: add _log to 2 backup mkdir calls for traceability
+
+3.2.8 (2026-03-01)
+
+  fix: run log rotation unconditionally for all modes
+  fix: narrow WiFi credential scope to just before use
+  fix: add post-write sha256 verification in install_file
+  fix: add _log calls to 6 unlogged functions
+  fix: add lock assertion to _backup_init before rotation
+  fix: track created tmpfiles explicitly in _TRACKED_TMPFILES
+  fix: add sudo keepalive liveness checks before critical phases
+  fix: add pipestatus check to regdom write pipeline
+  fix: add completions content validation to test suite
+  fix: check reverse dependencies before package removal
+  fix: add /etc/initcpio/ to mkinitcpio hook validation paths
+  fix: add fish version ceiling warning for untested versions
+  fix: add explicit return 0 to _gather_gpu_state, _gather_cpu_state
+  docs: document lock reclaim TOCTOU window in _acquire_lock
+  docs: add REFACTOR(v3.3) markers for 6 oversized functions
+  docs: clarify --diff/--verify exit 1 is expected behavior
+  docs: add eval-safety invariant to get_file_content
+  docs: document intentional MD5 use for WiFi UUID generation
+  docs: document 45s sudo keepalive interval assumption
+  docs: add TODO(v3.3) for --watch --interval flag
+
+3.2.7 (2026-03-01)
+
+  refactor: add explicit set -l to _json_str function-scope reassignments
+  refactor: add explicit set -l to _log function-scope reassignments
+  refactor: update scoping comments in _json_str and _log
+  refactor: consolidate 6 find calls in _do_cleanup into single ry-* glob
+  fix: add --needed to all 3 user-facing pacman -S suggestions
+  docs: add TODO comment for --root-override flag at root detection gate
+
+3.2.6 (2026-02-28)
+
+  refactor: add 63 function comments — 81/81 functions documented
+  refactor: add 9 section headers for major code regions
+  refactor: combine multiline comment blocks to single line
+  refactor: combine file header + global flags section header
+  fix: add --gaming to README modifiers table and --diagnose sub-options
+  fix: add exit 141 (SIGPIPE) to README exit codes table
+  fix: add --gaming tab-completion to do_completions
+  refactor: remove redundant combined entries from README utilities
+    section — --watch --interval, --diagnose --stress, --diagnose
+    --gaming now documented only in modifiers table
+
+3.2.5 (2026-02-28)
+
+  refactor: remove dead globals MODULES_LOAD and _LOCK_METHOD
+  refactor: simplify _log by removing timestamp cache — direct date
+    call per invocation, ~1ms trade-off negligible vs /proc/uptime read
+  fix: correct string match -- separator in verify_runtime cmdline check
+  fix: trap SIGPIPE with dedicated handler and exit code 141
+  feat: validate KERNEL_PARAMS against /proc/config.gz — warns if
+    cmdline params reference kernel features not compiled in
+  feat: add boot sanity gate after initramfs/bootloader rebuild —
+    verifies vmlinuz exists, initramfs non-zero, and boot entry valid
+  refactor: _gather_temps reads sysfs hwmon instead of forking sensors
+  refactor: extract gaming diagnostics behind --gaming flag — moves
+    Vulkan, session, media codecs, and Steam/Proton checks into
+    _diagnose_gaming; enabled via --diagnose --gaming or --all
+
+3.2.3 (2026-02-28)
+
+  fix: footer double-write race — set _FOOTER_WRITTEN before printf
+  fix: log rotation race — gate rotation with _has_lock flag; only
+    write modes rotate under lock; read-only modes defer
+  fix: backup rotation sort locale — add LC_ALL=C to ISO-date sort
+  fix: log rotation sort locale — add LC_ALL=C to log file sort
+
+3.2.2 (2026-02-28)
+
+  fix: orphan log files on 3 early exit paths — add LOG_FILE cleanup
+    before exit 2
+
+3.2.1 (2026-02-28)
+
+  remove --json flag (--diagnose stdout JSON blob); NDJSON log pipeline
+    unaffected
+  remove --once flag (--watch single snapshot); --watch now requires
+    interactive tty unconditionally
+  remove JSON_OUTPUT and WATCH_ONCE globals, arg parser cases,
+    validation blocks, completions, help text, examples
+
+3.2.0 (2026-02-28)
+
+  add /etc/sysctl.d/99-ry-sysctl.conf — BBR+fq congestion control,
+    tcp_fastopen=3, inotify max_user_watches=524288; complements cachyos
+    vendor 70-cachyos-settings.conf with no overlap; embedded files
+    16 → 17, system destinations 11 → 12
+  add verify_static/verify_runtime/do_diagnose sysctl sections
+  add sysctl --system reload in _install_configure_services and
+    do_install_file
+
+3.1.4 (2026-02-28)
+
+  fix: cat missing -- in _run output capture
+  fix: _install_finalize always returning 0 — now propagates
+    INSTALL_HAD_ERRORS
+  collapse 24 multiline comment blocks to single line
+  move 13 inline comments above their code line
+  condense 5 section headers from 3-line box to single decorated line
+  add 17 comments above dense code blocks
+
+3.1.3 (2026-02-28)
+
+  add 71 inline comments across all major code sections: section
+    headers, magic number annotations, design rationale for lock
+    acquisition, credential lifecycle, atomic writes, hex normalization,
+    vfat permission skip, NM/IWD package gate, GKeyFile escape sequence
+
+3.1.2 (2026-02-27)
+
+  add --description to all 68 helper functions
+  add explanatory comments for printf list expansion in do_diff and
+    verify_static
+  add credential lifecycle comment at WIFI_PASS assignment
+
+3.1.1 (2026-02-27)
+
+  fix: stale modprobe blacklist comment count (4→3) after sp5100_tco
+    removal
+  add -- terminator to touch "$LOG_FILE" and grep -q pattern arg
+  replace 2 inline sudo find pacnew calls with _find_pacnew_files
+    helper
+  apply fish_indent canonical formatting on 2 lines
+
+3.1.0 (2026-02-27)
+
+  add KVER/KVER_MAJOR/KVER_MINOR globals; remove 3 per-function
+    uname -r calls
+  add _ntsync_state helper returning 5 states; replace NTSYNC_SUPPORTED
+    global and 9 inline checks
+  remove sp5100_tco from MODPROBE_BLACKLIST — nowatchdog cmdline and
+    CachyOS vendor blacklist handle it
+  remove btusb.enable_autosuspend=n cmdline, USB udev rule, btusb sysfs
+    verify — usbcore.autosuspend=-1 handles globally; kernel params
+    19 → 18
+  remove modules-load.d destination — CachyOS vendor ships ntsync.conf;
+    keep udev MODE=0666 only; embedded files 17 → 16
+  fix: zswap warning to cite CachyOS 30-zram.rules
+  add --existence-only flag to validate_mkinitcpio_hooks; deduplicate
+    verify_static hook checker
+  add _verify_unit_syntax helper with --user auto-detect
+  add _check_service_active_enabled helper for amdgpu-performance and
+    cpupower-epp
+  fix: split_lock_detect comment — detection off makes sysctl moot
+  move power-profiles-daemon from PKGS_DEL to MASK — prevents dep
+    reinstallation conflicts; packages removed 8 → 7, masked 8 → 9
+  add _find_pacnew_files helper; replace 4 identical sudo find calls
+  add _get_boot_time helper; deduplicate boot time parsing
+
+3.0.0 (2026-02-27)
+
+  fix: temp file pattern ry-diff.XXXXXX → ry-diff-XXXXXX to match
+    _do_cleanup glob
+  fix: sudo tee missing -- sentinel
+  fix: kill -0 missing -- sentinel on keepalive PID check
+  sudo keepalive: replace string escape interpolation with argv
+  _log: default event=message when level omitted
+  show_help: add SSID % restriction to NOTES section
+  credential redaction: word-boundary globs prevent false matches
+  apply fish_indent canonical formatting
+  rewrite README with structured tables
+  changelog: adopt kernel.org style

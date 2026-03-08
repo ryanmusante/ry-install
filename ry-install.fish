@@ -1,6 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v3.5.2 — CachyOS config for Beelink GTR9 Pro (Strix Halo) | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.5.2"
+# ry-install v3.6.0 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.6.0"
+# ── Exit codes ──
+set -g EXIT_OK          0
+set -g EXIT_FAIL        1
+set -g EXIT_USAGE       2
+set -g EXIT_PREFLIGHT   3
+set -g EXIT_BOOT_CRIT   4
+set -g EXIT_LOCK        5
+set -g EXIT_DRIFT       10
+set -g EXIT_LINT_FAIL   11
 # --dry-run: simulate all mutations
 set -g DRY false
 # --all: auto-yes every prompt
@@ -20,7 +29,7 @@ if set -qx NO_COLOR || test "$TERM" = dumb
     set -g NO_COLOR true
 end
 
-set -g HAS_DELTA (command -q delta&& echo true|| echo false)
+set -g HAS_DELTA (command -q delta; and echo true; or echo false)
 
 set -g _IS_ROOT false
 if test (id -u) -eq 0
@@ -88,30 +97,15 @@ set -g _TRACKED_TMPFILES
 
 # ── Retention limits ──
 set -g MAX_LOGS 50
-test $MAX_LOGS -lt 1 && set -g MAX_LOGS 1
+if test $MAX_LOGS -lt 1
+    set -g MAX_LOGS 1
+end
 
 # ── Timing constants ──
 set -g SUDO_KEEPALIVE_INTERVAL 45
 set -g WIFI_RETRY_DELAY 3
 set -g WIFI_CONNECT_WAIT 1
 set -g NM_RESTART_DELAY 3
-
-# Conservative vs spec (95°C throttle / 100°C max) — early warning under sustained load
-set -g TEMP_CPU_WARN 85
-set -g TEMP_CPU_CRIT 90
-set -g TEMP_GPU_WARN 85
-set -g TEMP_GPU_CRIT 95
-set -g DISK_ROOT_CRIT 90
-set -g DISK_ROOT_WARN 80
-set -g BOOT_SPACE_CRIT 200
-set -g BOOT_SPACE_WARN 500
-# Root available space thresholds (GB; check_disk_space preflight)
-set -g ROOT_AVAIL_CRIT 2
-set -g ROOT_AVAIL_WARN 5
-set -g BOOT_TIME_WARN 30
-set -g BOOT_TIME_TARGET 15
-set -g NVME_LIFE_WARN 90
-set -g CACHE_CLEAN_THRESHOLD 100
 
 # ── Kernel version globals for _ntsync_state ≥6.14 gate ──
 set -g KVER (uname -r)
@@ -356,7 +350,7 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     end
     set --erase _TRACKED_TMPFILES
     # Fallback sweep: find -user $_MY_UID catches ry-* tmpfiles missed by the tracked list (e.g., crash before tracking)
-    set -l _tmpdir (set -q TMPDIR&& echo "$TMPDIR"|| echo /tmp)
+    set -l _tmpdir (set -q TMPDIR; and echo "$TMPDIR"; or echo /tmp)
     command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -user $_MY_UID -delete 2>/dev/null
     # Credential erase on every exit path — defense-in-depth against WIFI_PASS lingering in memory
     set --erase WIFI_PASS
@@ -429,136 +423,283 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
     _do_cleanup
 end
 
-# ═══ MANAGED FILE DESTINATIONS — 1:1 map to get_file_content(); system=0644, user=0600 ═══
+# ═══ PROFILES — machine-specific configuration ═══
 
-set -g SYSTEM_DESTINATIONS \
-    "/boot/loader/loader.conf" \
-    /etc/kernel/cmdline \
-    "/etc/sdboot-manage.conf" \
-    "/etc/mkinitcpio.conf" \
-    "/etc/modprobe.d/99-cachyos-modprobe.conf" \
-    "/etc/udev/rules.d/99-cachyos-udev.rules" \
-    "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
-    "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
-    "/etc/iwd/main.conf" \
-    "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-    "/etc/conf.d/wireless-regdom" \
-    "/etc/sysctl.d/99-ry-sysctl.conf"
+function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
+    # ── Identity ──
+    set -g PROFILE_NAME "gtr9_pro"
+    set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
 
-set -g USER_DESTINATIONS \
-    "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
-    "$HOME/.config/environment.d/10-environment.conf" \
-    "$HOME/.config/systemd/user/ssh-agent.service"
+    # ── Managed file destinations — 1:1 map to get_file_content(); system=0644, user=0600 ──
+    set -g SYSTEM_DESTINATIONS \
+        "/boot/loader/loader.conf" \
+        /etc/kernel/cmdline \
+        "/etc/sdboot-manage.conf" \
+        "/etc/mkinitcpio.conf" \
+        "/etc/modprobe.d/99-cachyos-modprobe.conf" \
+        "/etc/udev/rules.d/99-cachyos-udev.rules" \
+        "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
+        "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
+        "/etc/iwd/main.conf" \
+        "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
+        "/etc/conf.d/wireless-regdom" \
+        "/etc/sysctl.d/99-ry-sysctl.conf"
 
-set -g SERVICE_DESTINATIONS \
-    "/etc/systemd/system/amdgpu-performance.service" \
-    "/etc/systemd/system/cpupower-epp.service"
+    set -g USER_DESTINATIONS \
+        "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
+        "$HOME/.config/environment.d/10-environment.conf" \
+        "$HOME/.config/systemd/user/ssh-agent.service"
 
-set -g MANAGED_FILE_COUNT (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
+    set -g SERVICE_DESTINATIONS \
+        "/etc/systemd/system/amdgpu-performance.service" \
+        "/etc/systemd/system/cpupower-epp.service"
 
-# ── systemd-boot loader.conf: @saved default, 0s timeout (hold Space), keep console-mode, no editor ──
-set -g LOADER_DEFAULT "@saved"
-# timeout 0: no menu delay; user holds Space at boot to access menu
-set -g LOADER_TIMEOUT 0
-# console-mode keep: preserve firmware-set resolution (avoids mode switch flicker)
-set -g LOADER_CONSOLE_MODE keep
-# editor no: prevent kernel cmdline editing at boot (security: blocks init= override)
-set -g LOADER_EDITOR no
+    # ── Boot ──
+    set -g LOADER_DEFAULT "@saved"
+    set -g LOADER_TIMEOUT 0
+    set -g LOADER_CONSOLE_MODE keep
+    set -g LOADER_EDITOR no
+    set -g SDBOOT_OVERWRITE yes
+    set -g SDBOOT_REMOVE_EXISTING yes
+    set -g SDBOOT_REMOVE_OBSOLETE yes
 
-# ── sdboot-manage: auto-generate/prune boot entries on kernel upgrade ──
-set -g SDBOOT_OVERWRITE yes
-set -g SDBOOT_REMOVE_EXISTING yes
-set -g SDBOOT_REMOVE_OBSOLETE yes
+    # ── Kernel (18 params) ──
+    set -g KERNEL_PARAMS \
+        amd_iommu=off \
+        amd_pstate=active \
+        amdgpu.aspm=0 \
+        amdgpu.cwsr_enable=0 \
+        amdgpu.gpu_recovery=1 \
+        amdgpu.modeset=1 \
+        amdgpu.ppfeaturemask=0xfffd3fff \
+        amdgpu.runpm=0 \
+        audit=0 \
+        initcall_blacklist=simpledrm_platform_driver_init \
+        mt7925e.disable_aspm=1 \
+        nowatchdog \
+        nvme_core.default_ps_max_latency_us=0 \
+        pci=pcie_bus_perf \
+        quiet \
+        split_lock_detect=off \
+        usbcore.autosuspend=-1 \
+        zswap.enabled=0
 
-# Kernel cmdline (18): IOMMU off, pstate active, amdgpu perf, NVMe/USB no-powersave, mt7925e ASPM fix, zswap off
-set -g KERNEL_PARAMS \
-    amd_iommu=off \
-    amd_pstate=active \
-    amdgpu.aspm=0 \
-    amdgpu.cwsr_enable=0 \
-    amdgpu.gpu_recovery=1 \
-    amdgpu.modeset=1 \
-    amdgpu.ppfeaturemask=0xfffd3fff \
-    amdgpu.runpm=0 \
-    audit=0 \
-    initcall_blacklist=simpledrm_platform_driver_init \
-    mt7925e.disable_aspm=1 \
-    nowatchdog \
-    nvme_core.default_ps_max_latency_us=0 \
-    pci=pcie_bus_perf \
-    quiet \
-    split_lock_detect=off \
-    usbcore.autosuspend=-1 \
-    zswap.enabled=0
+    # ── Initramfs ──
+    set -g MKINITCPIO_MODULES amdgpu nvme
+    set -g MKINITCPIO_HOOKS \
+        base \
+        systemd \
+        autodetect \
+        microcode \
+        modconf \
+        kms \
+        keyboard \
+        sd-vconsole \
+        block \
+        filesystems \
+        fsck
+    set -g MKINITCPIO_COMPRESSION zstd
 
-# Early-load modules: amdgpu before simpledrm (DRM primary), nvme for root fs
-set -g MKINITCPIO_MODULES amdgpu nvme
-# Hooks: Arch systemd path (not CachyOS udev+plymouth); sd-vconsole covers keymap+consolefont
-set -g MKINITCPIO_HOOKS \
-    base \
-    systemd \
-    autodetect \
-    microcode \
-    modconf \
-    kms \
-    keyboard \
-    sd-vconsole \
-    block \
-    filesystems \
-    fsck
-# ── Hardware config: mkinitcpio, udev, iwd, NetworkManager, packages, masking ──
-set -g MKINITCPIO_COMPRESSION zstd
+    # ── Modprobe ──
+    set -g MODPROBE_BLACKLIST snd_acp_pci pcspkr snd_pcsp
 
-# Modprobe blacklist (3) — sp5100_tco removed: 'nowatchdog' cmdline + CachyOS vendor blacklist handle it
-set -g MODPROBE_BLACKLIST snd_acp_pci pcspkr snd_pcsp
+    # ── Udev ──
+    set -g UDEV_RULES \
+        'KERNEL=="ntsync", MODE="0666"'
 
-set -g UDEV_RULES \
-    'KERNEL=="ntsync", MODE="0666"'
-# USB power/control rule removed — usbcore.autosuspend=-1 handles globally
+    # ── Network ──
+    set -g RESOLVED_MDNS no
+    set -g LOGIND_IGNORE_KEYS \
+        HandlePowerKey \
+        HandlePowerKeyLongPress \
+        HandleSuspendKey \
+        HandleHibernateKey \
+        HandleRebootKey
+    set -g IWD_ENABLE_NETWORK_CONFIG false
+    set -g IWD_DRIVER_QUIRKS "DefaultInterface=*" "PowerSaveDisable=*"
+    set -g IWD_DNS_SERVICE systemd
+    set -g NM_WIFI_BACKEND iwd
+    set -g NM_WIFI_POWERSAVE 2
+    set -g NM_LOG_LEVEL ERR
+    set -g WIRELESS_REGDOM US
 
-set -g RESOLVED_MDNS no
+    # ── Environment ──
+    set -g ENV_VARS \
+        "AMD_VULKAN_ICD=RADV" \
+        "MESA_SHADER_CACHE_MAX_SIZE=8G" \
+        "PROTON_USE_NTSYNC=1" \
+        "PROTON_NO_WM_DECORATION=1"
 
-# Logind: ignore power keys
-set -g LOGIND_IGNORE_KEYS \
-    HandlePowerKey \
-    HandlePowerKeyLongPress \
-    HandleSuspendKey \
-    HandleHibernateKey \
-    HandleRebootKey
+    # ── Packages ──
+    set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications fd sd dust procs bat eza bottom git-delta stress-ng lm_sensors
+    set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation ufw octopi micro cachyos-micro-settings btop
 
-set -g IWD_ENABLE_NETWORK_CONFIG false
-set -g IWD_DRIVER_QUIRKS "DefaultInterface=*" "PowerSaveDisable=*"
-set -g IWD_DNS_SERVICE systemd
+    # ── Services ──
+    set -g MASK \
+        ananicy-cpp.service \
+        power-profiles-daemon.service \
+        lvm2-monitor.service \
+        NetworkManager-wait-online.service \
+        sleep.target \
+        suspend.target \
+        hibernate.target \
+        hybrid-sleep.target \
+        suspend-then-hibernate.target
+    set -g EXPECTED_SERVICES amdgpu-performance cpupower-epp fstrim.timer NetworkManager
 
-set -g NM_WIFI_BACKEND iwd
-# NM wifi.powersave values: 0=default 1=ignore 2=disable 3=enable
-set -g NM_WIFI_POWERSAVE 2
-set -g NM_LOG_LEVEL ERR
+    # ── Thresholds ──
+    set -g TEMP_CPU_WARN 85
+    set -g TEMP_CPU_CRIT 90
+    set -g TEMP_GPU_WARN 85
+    set -g TEMP_GPU_CRIT 95
+    set -g DISK_ROOT_CRIT 90
+    set -g DISK_ROOT_WARN 80
+    set -g BOOT_SPACE_CRIT 200
+    set -g BOOT_SPACE_WARN 500
+    set -g ROOT_AVAIL_CRIT 2
+    set -g ROOT_AVAIL_WARN 5
+    set -g BOOT_TIME_WARN 30
+    set -g BOOT_TIME_TARGET 15
+    set -g NVME_LIFE_WARN 90
+    set -g CACHE_CLEAN_THRESHOLD 100
 
-set -g WIRELESS_REGDOM US
+    # ── Hardware fingerprint expectations (optional) ──
+    set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
+    set -g EXPECTED_GPU_PCI "1002:150e"
+end
 
-# ~/.config/environment.d/ — user-session env vars (read by systemd --user)
-set -g ENV_VARS \
-    "AMD_VULKAN_ICD=RADV" \
-    "MESA_SHADER_CACHE_MAX_SIZE=8G" \
-    "PROTON_USE_NTSYNC=1" \
-    "PROTON_NO_WM_DECORATION=1"
+# ═══ PROFILE LOADER ═══
 
-set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications fd sd dust procs bat eza bottom git-delta stress-ng lm_sensors
-# power-profiles-daemon: cpupower-epp handles EPP; btop: replaced by bottom (Rust, lower overhead)
-set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation ufw octopi micro cachyos-micro-settings btop
+function _validate_profile --description "Verify loaded profile has all required globals" --argument-names expected_name
+    set -l required \
+        PROFILE_NAME \
+        PROFILE_DESC \
+        KERNEL_PARAMS \
+        SYSTEM_DESTINATIONS \
+        USER_DESTINATIONS \
+        SERVICE_DESTINATIONS \
+        PKGS_ADD \
+        MASK \
+        MKINITCPIO_MODULES \
+        MKINITCPIO_HOOKS \
+        MKINITCPIO_COMPRESSION \
+        LOADER_DEFAULT \
+        LOADER_TIMEOUT \
+        LOADER_CONSOLE_MODE \
+        LOADER_EDITOR \
+        SDBOOT_OVERWRITE \
+        SDBOOT_REMOVE_EXISTING \
+        SDBOOT_REMOVE_OBSOLETE \
+        EXPECTED_SERVICES \
+        ENV_VARS \
+        LOGIND_IGNORE_KEYS
 
-# Masked services: ananicy-cpp (manual tuning), sleep/suspend targets (24/7 desktop), lvm2 (no LVM)
-set -g MASK \
-    ananicy-cpp.service \
-    power-profiles-daemon.service \
-    lvm2-monitor.service \
-    NetworkManager-wait-online.service \
-    sleep.target \
-    suspend.target \
-    hibernate.target \
-    hybrid-sleep.target \
-    suspend-then-hibernate.target
+    # Conditionally required — needed only when profile includes corresponding destinations
+    for dst in $SYSTEM_DESTINATIONS
+        switch "$dst"
+            case '*/iwd/*' '*/nm.conf'
+                for nw_var in IWD_ENABLE_NETWORK_CONFIG NM_WIFI_BACKEND NM_WIFI_POWERSAVE NM_LOG_LEVEL
+                    if not contains -- $nw_var $required
+                        set -a required $nw_var
+                    end
+                end
+            case '*/wireless-regdom*'
+                if not contains -- WIRELESS_REGDOM $required
+                    set -a required WIRELESS_REGDOM
+                end
+        end
+    end
+
+    set -l missing
+    for var_name in $required
+        if not set -q $var_name
+            set -a missing $var_name
+        else
+            set -l val $$var_name
+            if test (count $val) -eq 0
+                set -a missing $var_name
+            end
+        end
+    end
+
+    if test (count $missing) -gt 0
+        _err "Profile missing required globals: $missing"
+        return 1
+    end
+
+    # Verify PROFILE_NAME matches the function that was called
+    if test -n "$expected_name"; and test "$PROFILE_NAME" != "$expected_name"
+        _err "Profile function profile_$expected_name set PROFILE_NAME='$PROFILE_NAME' (expected '$expected_name')"
+        return 1
+    end
+
+    # Type-check numeric globals
+    for num_var in LOADER_TIMEOUT TEMP_CPU_WARN TEMP_CPU_CRIT TEMP_GPU_WARN TEMP_GPU_CRIT \
+        DISK_ROOT_CRIT DISK_ROOT_WARN BOOT_SPACE_CRIT BOOT_SPACE_WARN \
+        ROOT_AVAIL_CRIT ROOT_AVAIL_WARN BOOT_TIME_WARN BOOT_TIME_TARGET \
+        NVME_LIFE_WARN CACHE_CLEAN_THRESHOLD
+        if set -q $num_var
+            set -l val $$num_var
+            if not string match -qr '^\d+$' -- "$val"
+                _err "Profile global $num_var must be numeric (got '$val')"
+                return 1
+            end
+        end
+    end
+
+    return 0
+end
+
+function _load_profile --description "Determine, load, and validate the active profile"
+    # 1. Determine name
+    set -l name
+    if set -q PROFILE_NAME_ARG; and test -n "$PROFILE_NAME_ARG"
+        set name "$PROFILE_NAME_ARG"
+    else
+        set -l default_file "$HOME/.config/ry-install/default-profile"
+        if test -f "$default_file"
+            set name (string trim < "$default_file")
+        end
+        if test -z "$name"
+            set name gtr9_pro
+        end
+    end
+
+    # 2. Validate name format
+    if not string match -qr '^[a-z0-9][a-z0-9_-]*$' -- "$name"
+        _err "Invalid profile name: '$name' (must be lowercase alphanumeric, starting with [a-z0-9])"
+        exit $EXIT_USAGE
+    end
+
+    # 3. Load profile function
+    set -l profile_dir "$HOME/.config/ry-install/profiles"
+    set -l profile_path "$profile_dir/$name.fish"
+
+    if functions -q "profile_$name"
+        profile_$name
+    else if test -f "$profile_path"
+        if not fish --no-execute "$profile_path" 2>/dev/null
+            _err "Profile file has syntax errors: $profile_path"
+            exit $EXIT_USAGE
+        end
+        source "$profile_path"
+        if not functions -q "profile_$name"
+            _err "Profile file does not define function profile_$name: $profile_path"
+            exit $EXIT_USAGE
+        end
+        profile_$name
+    else
+        _err "Unknown profile: $name"
+        exit $EXIT_USAGE
+    end
+
+    # 4. Validate
+    _validate_profile "$name"
+    or exit $EXIT_USAGE
+
+    # 5. Derived globals
+    set -g MANAGED_FILE_COUNT (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
+end
 
 # Generate config file content by destination path — INVARIANT: content emitted via printf/echo only, NEVER eval'd
 function get_file_content --argument-names dst --description "Return embedded config content for a given destination path"
@@ -669,7 +810,7 @@ function get_file_content --argument-names dst --description "Return embedded co
 
         case '*/.config/fish/conf.d/10-ssh-auth-sock.fish'
             printf '%s\n' '# SSH agent socket for fish shell — priority: forwarded > gcr > systemd
-if status is-interactive&& set -q XDG_RUNTIME_DIR&& not set -q SSH_CONNECTION
+if status is-interactive; and set -q XDG_RUNTIME_DIR; and not set -q SSH_CONNECTION
     if test -S "$XDG_RUNTIME_DIR/gcr/ssh"
         set -gx SSH_AUTH_SOCK "$XDG_RUNTIME_DIR/gcr/ssh"
     else if test -S "$XDG_RUNTIME_DIR/ssh-agent.socket"
@@ -1957,14 +2098,12 @@ function do_diff --argument-names target_file --description "Show diffs between 
             continue
         end
 
-        set -l installed_content (_read_installed "$dst")
+        _read_installed "$dst" >"$tmp_installed" 2>/dev/null
         set -l read_ok $status
 
         set -l this_diff false
         set -l this_perm_only false
         if test $read_ok -eq 0
-            # $installed_content is a fish list (one element per line); printf '%s\n' restores newline-separated file content
-            printf '%s\n' $installed_content >"$tmp_installed"
             if not diff -q -- "$tmp" "$tmp_installed" >/dev/null 2>&1
                 set has_diff true
                 set this_diff true
@@ -2698,6 +2837,108 @@ function verify_static --description "Verify installed configs match embedded ch
     set -l ret $status
     set -g VERIFY_MODE false
     return $ret
+end
+
+# Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted
+function do_check --description "Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted"
+    set -l drift false
+    set -l checked 0
+
+    # File content checks
+    for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
+        # Skip NM/IWD if iwd not installed (same guard as do_diff and install_file)
+        if string match -q '*nm.conf' -- "$dst"; or string match -q '*/iwd/*' -- "$dst"
+            if not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1
+                continue
+            end
+        end
+
+        # Generate expected content — pipe to tmp file, check return code
+        set -l tmp_expected (mktemp -t ry-check.XXXXXX 2>/dev/null)
+        if test -z "$tmp_expected"
+            _log "CHECK_SKIP: mktemp failed for $dst"
+            continue
+        end
+        set -ga _TRACKED_TMPFILES "$tmp_expected"
+        get_file_content "$dst" >"$tmp_expected" 2>/dev/null
+        if test $status -ne 0; or not test -s "$tmp_expected"
+            _log "CHECK_SKIP: cannot generate content for $dst"
+            command rm -f -- "$tmp_expected" 2>/dev/null
+            continue
+        end
+        set -l expected_hash (sha256sum < "$tmp_expected" | string split -- ' ')[1]
+        command rm -f -- "$tmp_expected" 2>/dev/null
+
+        # Read installed file — non-interactive sudo for system files
+        set -l installed_hash
+        if string match -q "$HOME/*" -- "$dst"
+            if not test -r "$dst"
+                _log "CHECK_SKIP: file not found: $dst"
+                continue
+            end
+            set installed_hash (sha256sum < "$dst" 2>/dev/null | string split -- ' ')[1]
+        else
+            if not sudo -n test -r "$dst" 2>/dev/null
+                _log "CHECK_SKIP: no sudo credentials or file missing: $dst"
+                continue
+            end
+            set installed_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+        end
+
+        if test "$expected_hash" != "$installed_hash"
+            _log "CHECK_DRIFT: content mismatch: $dst"
+            set drift true
+        end
+        set checked (math $checked + 1)
+    end
+
+    # Permission/ownership checks — system and service files
+    for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
+        if not sudo -n test -e "$dst" 2>/dev/null
+            continue
+        end
+        set -l perms (sudo -n stat -c '%a %U:%G' -- "$dst" 2>/dev/null)
+        if test -n "$perms"; and test "$perms" != "644 root:root"
+            _log "CHECK_DRIFT: permissions: $dst ($perms, expected 644 root:root)"
+            set drift true
+        end
+    end
+
+    # Permission/ownership checks — user files (already $HOME-expanded)
+    for dst in $USER_DESTINATIONS
+        if not test -e "$dst"
+            continue
+        end
+        set -l perms (stat -c '%a %U:%G' -- "$dst" 2>/dev/null)
+        set -l expected_owner (id -un):(id -gn)
+        if test -n "$perms"; and test "$perms" != "600 $expected_owner"
+            _log "CHECK_DRIFT: permissions: $dst ($perms, expected 600 $expected_owner)"
+            set drift true
+        end
+    end
+
+    # Kernel param presence — word-boundary matching (consistent with verify_runtime)
+    set -l cmdline (cat /proc/cmdline 2>/dev/null)
+    if test -n "$cmdline"
+        for param in $KERNEL_PARAMS
+            if not string match -q -- "* $param *" " $cmdline "
+                _log "CHECK_DRIFT: kernel param missing: $param"
+                set drift true
+            end
+        end
+    end
+
+    test "$drift" = true; and return $EXIT_DRIFT
+
+    # Guard against false negative: if no files could be checked
+    # (all skipped due to missing sudo, mktemp failures, etc.),
+    # report drift rather than falsely claiming clean.
+    if test $checked -eq 0
+        _log "CHECK_DRIFT: no files could be checked (all skipped)"
+        return $EXIT_DRIFT
+    end
+
+    return $EXIT_OK
 end
 
 # Read GPU performance level and busy percentage from amdgpu sysfs nodes
@@ -3567,8 +3808,8 @@ function do_lint --description "Lint the script source for fish anti-patterns an
 
     set -l total (math (count $SYSTEM_DESTINATIONS) + (count $USER_DESTINATIONS) + (count $SERVICE_DESTINATIONS))
     set -l case_count (sed -n -- '/^function get_file_content/,/^end$/p' "$script_path" | grep -cE "case [\"']?(/|[*]/.)")
-    if test $total -eq $case_count
-        _ok "File count verified: $total destinations = $case_count content cases"
+    if test $case_count -ge $total
+        _ok "File count verified: $total destinations, $case_count content cases"
     else
         _fail "File count mismatch: $total destinations but $case_count content cases"
         set has_errors true
@@ -3595,7 +3836,7 @@ function do_lint --description "Lint the script source for fish anti-patterns an
 
     if test "$has_errors" = true
         _fail "Lint check completed with errors"
-        return 1
+        return $EXIT_LINT_FAIL
     else
         _ok "Lint check passed"
         return 0
@@ -4311,7 +4552,7 @@ function _diag_services --description "Diagnose: kernel errors, failed services,
 
     set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
     _echo "── Expected Services ──"
-    for svc in amdgpu-performance cpupower-epp fstrim.timer NetworkManager
+    for svc in $EXPECTED_SERVICES
         set -l state (systemctl is-active "$svc" 2>/dev/null)
         if test "$state" = active
             _ok "$svc: active"
@@ -4905,7 +5146,7 @@ function _install_preflight --description "Run all preflight checks before insta
         end
         sudo true || begin
             _err "Sudo required for installation"
-            return 1
+            return $EXIT_PREFLIGHT
         end
         set -l sudo_all (sudo -l 2>/dev/null | grep -v '^\s*#' | grep -c '(ALL.*) ALL')
         or set sudo_all 0
@@ -4914,7 +5155,7 @@ function _install_preflight --description "Run all preflight checks before insta
                 _err "Restricted sudo incompatible with --all mode (unattended install requires full sudo)"
                 # Verify critical paths exist before proceeding
                 _kill_sudo_keepalive
-                return 1
+                return $EXIT_PREFLIGHT
             end
             _warn "Restricted sudo detected — some operations may fail"
             _warn "Install requires unrestricted sudo for pacman, systemctl, mkinitcpio, etc."
@@ -4932,23 +5173,23 @@ function _install_preflight --description "Run all preflight checks before insta
 
         check_deps || begin
             _kill_sudo_keepalive
-            return 1
+            return $EXIT_PREFLIGHT
         end
 
         check_disk_space || begin
             _kill_sudo_keepalive
-            return 1
+            return $EXIT_PREFLIGHT
         end
 
         _check_hardware_fingerprint || begin
             _kill_sudo_keepalive
-            return 1
+            return $EXIT_PREFLIGHT
         end
 
         check_network || begin
             _err "Network required for package installation — aborting"
             _kill_sudo_keepalive
-            return 1
+            return $EXIT_PREFLIGHT
         end
     else
         _info "(dry-run) Skipping: sudo, disk space, hardware fingerprint, network checks"
@@ -4961,7 +5202,7 @@ function _install_preflight --description "Run all preflight checks before insta
     validate_configs || begin
         _err "Configuration validation failed - aborting"
         _kill_sudo_keepalive
-        return 1
+        return $EXIT_PREFLIGHT
     end
 end
 
@@ -4982,7 +5223,6 @@ function _install_packages --description "Install and remove managed packages vi
 
     set -g SYSTEM_UPGRADED false
     if _ask "Sync databases, upgrade system, and install packages? ($pkgs_to_install)"
-        set -g SYSTEM_UPGRADED true
 
         if test "$DRY" = false
             if not install_file "/etc/mkinitcpio.conf" true
@@ -5004,7 +5244,11 @@ function _install_packages --description "Install and remove managed packages vi
                     _err "Package installation failed after retry"
                     set -g INSTALL_HAD_ERRORS true
                     set _fn_err true
+                else
+                    set -g SYSTEM_UPGRADED true
                 end
+            else
+                set -g SYSTEM_UPGRADED true
             end
 
             if test "$DRY" = false
@@ -5446,7 +5690,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
             set -g INSTALL_HAD_ERRORS true
             if test "$ALL" = true
                 _err "CRITICAL: Boot rebuild failed in unattended mode — aborting remaining steps"
-                return 1
+                return $EXIT_BOOT_CRIT
             end
         end
     end
@@ -5460,7 +5704,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
             set _boot_ok false
             if test "$ALL" = true
                 _err "CRITICAL: Bootloader update failed in unattended mode — aborting remaining steps"
-                return 1
+                return $EXIT_BOOT_CRIT
             end
         end
         if test "$_boot_ok" = true
@@ -5789,6 +6033,10 @@ function do_install --description "Full installation: preflight, packages, confi
     _log "DRY: $DRY"
     _log "ALL: $ALL"
 
+    # Pre-declare _boot_rc at function scope — Fish's set -l inside a block
+    # scopes to THAT BLOCK, not the enclosing function (set -f requires Fish 3.4+)
+    set -l _boot_rc 0
+
     _echo
     _echo "ry-install v$VERSION"
     _echo
@@ -5804,9 +6052,8 @@ function do_install --description "Full installation: preflight, packages, confi
 
     _progress_init
 
-    if not _install_preflight
-        return 1
-    end
+    _install_preflight
+    or return $EXIT_PREFLIGHT
 
     _echo
 
@@ -5822,7 +6069,9 @@ function do_install --description "Full installation: preflight, packages, confi
         set -g INSTALL_HAD_ERRORS true
     end
 
-    if not _install_rebuild_boot
+    _install_rebuild_boot
+    set _boot_rc $status
+    if test $_boot_rc -ne 0
         set -g INSTALL_HAD_ERRORS true
     end
 
@@ -5867,8 +6116,11 @@ function do_install --description "Full installation: preflight, packages, confi
     end
 
     _log "=== INSTALLATION END ==="
-    test "$INSTALL_HAD_ERRORS" = true && return 1
-    return 0
+    if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
+        return $EXIT_BOOT_CRIT
+    end
+    test "$INSTALL_HAD_ERRORS" = true; and return $EXIT_FAIL
+    return $EXIT_OK
 end
 
 # Single-file install: deploy one managed config by destination path
@@ -6039,6 +6291,7 @@ function do_completions --description "Generate fish shell completions for ry-in
         '    complete -c $cmd -l verify-static -d '"'"'Check config files exist with correct content'"'"'' \
         '    complete -c $cmd -l verify-runtime -d '"'"'Check live system state (run after reboot)'"'"'' \
         '    complete -c $cmd -l lint -d '"'"'Run fish syntax and anti-pattern checks'"'"'' \
+        '    complete -c $cmd -l check -d '"'"'Silent idempotency probe (exit 0 = clean, exit 10 = drift)'"'"'' \
         '    complete -c $cmd -l test-all -d '"'"'Run all safe modes and generate NDJSON logs (test suite)'"'"'' \
         '' \
         '    # Utilities' \
@@ -6050,6 +6303,15 @@ function do_completions --description "Generate fish shell completions for ry-in
         '    # Other' \
         '    complete -c $cmd -l fix -d '"'"'Re-install drifted files (use with --diff)'"'"'' \
         '    complete -c $cmd -l stress -d '"'"'Include stress tests (use with --diagnose)'"'"'' \
+        '    complete -c $cmd -l profile -d '"'"'Load machine profile (default: gtr9_pro)'"'"' -rxa "(__ry_install_profiles)"' \
+        '    function __ry_install_profiles' \
+        '        # Built-in profiles' \
+        '        grep -oP '"'"'(?<=^function profile_)\w+'"'"' (status filename) 2>/dev/null' \
+        '        # External profiles' \
+        '        for f in ~/.config/ry-install/profiles/*.fish' \
+        '            string replace -r '"'"'.*/(.*)\.fish$'"'"' '"'"'$1'"'"' -- $f' \
+        '        end' \
+        '    end' \
         '    complete -c $cmd -s h -l help -d '"'"'Show help'"'"'' \
         '    complete -c $cmd -s v -l version -d '"'"'Show version'"'"'' \
         '' \
@@ -6094,6 +6356,7 @@ function do_test_all --description "Run the full test suite across all subcomman
     _echo
 
     set -l modes \
+        --check \
         --verify-static \
         --verify-runtime \
         --lint \
@@ -6228,6 +6491,7 @@ VERIFICATION:
   --verify-static   Check config files exist with correct content
   --verify-runtime  Check live system state (run after reboot)
   --lint            Run fish syntax and anti-pattern checks
+  --check           Silent idempotency probe (exit 0 = clean, exit 10 = drift)
   --test-all        Run all safe modes and generate NDJSON logs (test suite)
 
 UTILITIES:
@@ -6245,14 +6509,20 @@ UTILITIES:
 OPTIONS:
   --fix             Re-install drifted files (use with --diff)
   --stress          Include stress tests (use with --diagnose)
+  --profile <n>     Load machine profile (default: gtr9_pro)
   --                End of options (all subsequent args treated as positional)
   -h, --help        Show this help
   -v, --version     Show version
 
 EXIT CODES:
   0   Success
-  1   Failure (install error, diff found, verification failed)
-  2   Usage error (invalid arguments)
+  1   Non-critical failure (one or more operations failed)
+  2   Usage error (invalid arguments or flag combinations)
+  3   Preflight check failed (deps, disk space, hardware mismatch)
+  4   Boot-critical failure (mkinitcpio, sdboot-manage, vmlinuz missing)
+  5   Lock acquisition failed (another instance running)
+  10  Drift detected (--check mode)
+  11  Lint errors found (--lint mode)
   130  Interrupted (SIGINT)
   141  Broken pipe (SIGPIPE)
 
@@ -6295,6 +6565,7 @@ set -l LOG_TARGET ""
 set -l LOG_TARGET_ARG ""
 set -l INSTALL_FILE_TARGET ""
 set -l DIFF_TARGET ""
+set -l PROFILE_NAME_ARG ""
 
 # ── Argument parsing — manual loop for mode exclusivity, --flag VALUE pairs, and optional trailing args; exit 2 on usage errors ──
 
@@ -6335,6 +6606,9 @@ while test $i -le (count $argv)
         case --lint
             set MODE lint
             set mode_count (math $mode_count + 1)
+        case --check
+            set MODE check
+            set mode_count (math $mode_count + 1)
         case --test-all
             set MODE test-all
             set mode_count (math $mode_count + 1)
@@ -6342,6 +6616,21 @@ while test $i -le (count $argv)
             set -g FIX true
         case --stress
             set -g STRESS true
+        case --profile
+            set -l next_i (math $i + 1)
+            if test $next_i -le (count $argv)
+                set -l next_arg $argv[$next_i]
+                if not string match -q -- '-*' "$next_arg"
+                    set PROFILE_NAME_ARG "$next_arg"
+                    set i $next_i
+                else
+                    echo "[ERR] --profile requires a name argument (got '$next_arg')" >&2
+                    exit $EXIT_USAGE
+                end
+            else
+                echo "[ERR] --profile requires a name argument" >&2
+                exit $EXIT_USAGE
+            end
         case --logs
             set MODE logs
             set mode_count (math $mode_count + 1)
@@ -6449,6 +6738,9 @@ if test "$DRY" = true
     set -g QUIET false
 end
 
+# Load machine profile — must be after arg parsing but before any mode that reads config globals
+_load_profile
+
 set -l mode_label $MODE
 if test -n "$LOG_TARGET"
     set mode_label "$MODE-$LOG_TARGET"
@@ -6472,9 +6764,9 @@ command chmod -- 600 "$LOG_FILE" 2>/dev/null || _warn "Chmod 600 failed on $LOG_
 
 set -l _init_cmd (string join -- " " (status filename) $argv)
 set -l _init_cmd (_json_str "$_init_cmd")
-printf '{"ts":"%s","event":"header","version":"%s","mode":"%s","dry_run":%s,"all":%s,"verbose":%s,"command":"%s"}\n' \
-    (date '+%Y-%m-%dT%H:%M:%S') "$VERSION" "$MODE" "$DRY" "$ALL" \
-    (test "$QUIET" = false&& echo true|| echo false) "$_init_cmd" >"$LOG_FILE"
+printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","dry_run":%s,"all":%s,"verbose":%s,"command":"%s"}\n' \
+    (date '+%Y-%m-%dT%H:%M:%S') "$VERSION" "$PROFILE_NAME" "$MODE" "$DRY" "$ALL" \
+    (test "$QUIET" = false; and echo true; or echo false) "$_init_cmd" >"$LOG_FILE"
 
 # Lock policy: write modes (install, diff --fix) acquire; read modes skip
 switch $MODE
@@ -6490,12 +6782,12 @@ switch $MODE
             command rm -f -- "$LOG_FILE" 2>/dev/null
             exit 2
         end
-        _acquire_lock || exit 1
+        _acquire_lock || exit $EXIT_LOCK
     case install
-        _acquire_lock || exit 1
+        _acquire_lock || exit $EXIT_LOCK
     case diff
         if test "$FIX" = true
-            _acquire_lock || exit 1
+            _acquire_lock || exit $EXIT_LOCK
         end
     case '*'
         # No lock needed for read-only modes (verify, lint, logs, diagnose, completions, test-all)
@@ -6528,6 +6820,9 @@ switch $MODE
     case lint
         do_lint
         set exit_code $status
+    case check
+        do_check
+        set exit_code $status
     case test-all
         do_test_all
         set exit_code $status
@@ -6546,8 +6841,10 @@ switch $MODE
     case install
         do_install
         set -l install_status $status
-        if test $install_status -ne 0 || test "$INSTALL_HAD_ERRORS" = true
-            set exit_code 1
+        if test $install_status -ne 0
+            set exit_code $install_status
+        else if test "$INSTALL_HAD_ERRORS" = true
+            set exit_code $EXIT_FAIL
         end
     case '*'
         _err "Unknown mode: $MODE"
@@ -6560,6 +6857,8 @@ set -g _INTENDED_EXIT_CODE $exit_code
 set -g _FOOTER_WRITTEN true
 printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$MODE" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
 
-echo "[i] Log file: $LOG_FILE" >&2
+if test "$MODE" != check
+    echo "[i] Log file: $LOG_FILE" >&2
+end
 
 exit $exit_code

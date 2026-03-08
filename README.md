@@ -1,10 +1,10 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.5.2-blue)
+![Version](https://img.shields.io/badge/version-3.6.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.3%2B-orange)
 
-Self-contained CachyOS configuration for **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 17 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 17 embedded configs, no external dependencies.
 
 ## Hardware
 
@@ -52,6 +52,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `--verify-static` | Check configs exist with correct content |
 | `--verify-runtime` | Check live system state |
 | `--lint` | Fish syntax and anti-pattern checks |
+| `--check` | Silent idempotency probe (exit 0 = clean, 10 = drift) |
 | `--test-all` | Run all safe modes, generate NDJSON logs |
 
 ### Utilities
@@ -78,6 +79,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 |------|----------|-------------|
 | `--fix` | `--diff` | Re-install drifted files |
 | `--stress` | `--diagnose` | Include stress tests |
+| `--profile <n>` | — | Load machine profile (default: `gtr9_pro`) |
 | `--` | — | End of options |
 | `-h, --help` | — | Show help |
 | `-v, --version` | — | Show version |
@@ -252,8 +254,13 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | Code | Meaning |
 |------|---------|
 | `0` | Success |
-| `1` | Runtime error |
+| `1` | Non-critical failure |
 | `2` | Usage error |
+| `3` | Preflight check failed |
+| `4` | Boot-critical failure (mkinitcpio, sdboot-manage) |
+| `5` | Lock acquisition failed |
+| `10` | Drift detected (`--check`) |
+| `11` | Lint errors (`--lint`) |
 | `130` | Interrupted (SIGINT) |
 | `141` | Broken pipe (SIGPIPE) |
 
@@ -286,9 +293,21 @@ Reboot → `--verify-static` → `--verify-runtime` → `--diagnose` → `sudo p
 | ntsync check | Kernel 6.14+ · `ls /dev/ntsync` |
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` |
 
+### Profiles
+
+Machine-specific globals (kernel params, packages, services, thresholds, destinations) are encapsulated in profile functions. The built-in default is `profile_gtr9_pro`. External profiles load from `~/.config/ry-install/profiles/<name>.fish`.
+
+| Source | Resolution order |
+|--------|-----------------|
+| `--profile <n>` | CLI flag (highest priority) |
+| `~/.config/ry-install/default-profile` | Persistent default (single line: profile name) |
+| `gtr9_pro` | Hardcoded fallback |
+
+External profiles must define a `function profile_<name>` setting all required globals. Files are syntax-checked (`fish --no-execute`) before sourcing. Profile validation enforces 21+ required globals, name consistency, and numeric types.
+
 ### Adapting
 
-Change `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, modprobe blacklist, `PKGS_ADD`/`PKGS_DEL`, `MASK`, service sysfs paths.
+Create `~/.config/ry-install/profiles/<name>.fish` with a `profile_<name>` function. Copy `profile_gtr9_pro` as a starting point and adjust `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, `MODPROBE_BLACKLIST`, `PKGS_ADD`/`PKGS_DEL`, `MASK`, `EXPECTED_SERVICES`, `ENV_VARS`, service destinations, and threshold globals. Run `./ry-install.fish --profile <name> --check` to validate.
 
 ### References
 

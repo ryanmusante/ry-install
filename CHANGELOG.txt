@@ -1,3 +1,46 @@
+3.6.0 (2026-03-08)
+-------------------
+
+  feat: add --profile multi-machine support
+    Machine-specific globals (destinations, kernel params, packages,
+    services, thresholds) extracted into profile functions. Built-in
+    default: profile_gtr9_pro. External profiles sourced from
+    ~/.config/ry-install/profiles/<name>.fish after syntax validation.
+    --profile <name> selects at runtime; ~/.config/ry-install/default-profile
+    persists default. _validate_profile enforces 21+ required globals,
+    name consistency, and numeric type checks. JSONL header includes
+    "profile" field. do_lint relaxed: case_count >= total (profiles may
+    use subset of get_file_content cases).
+  feat: add --check silent idempotency probe
+    Read-only mode: compares all managed files (hash), permissions,
+    and kernel params against profile. Exit 0 = clean, exit 10 = drift.
+    Zero terminal output (JSONL log only). Non-interactive sudo (sudo -n)
+    prevents blocking in cron/timer contexts. Skips unreadable files
+    rather than prompting. Zero-checked guard prevents false negatives.
+  feat: add structured exit codes (EXIT_OK through EXIT_LINT_FAIL)
+    0=success, 1=non-critical, 2=usage, 3=preflight, 4=boot-critical,
+    5=lock, 10=drift, 11=lint. Replaces generic exit 1 in _install_preflight
+    (EXIT_PREFLIGHT), _install_rebuild_boot (EXIT_BOOT_CRIT), _acquire_lock
+    (EXIT_LOCK), do_lint (EXIT_LINT_FAIL). Install dispatch preserves
+    structured codes. show_help documents exit codes. BREAKING: scripts
+    checking $status -eq 1 may miss codes 3-5, 10-11.
+  fix: SYSTEM_UPGRADED premature-true assignment
+    Flag set before pacman ran — mkinitcpio pre-deploy failure or pacman
+    failure left SYSTEM_UPGRADED=true despite no upgrade. Moved to after
+    successful pacman execution (first-try and retry success paths).
+    Dry-run behavior preserved (_run returns 0).
+  fix: do_diff blank-line fidelity
+    List-capture pattern (set -l installed_content) dropped blank lines
+    on Fish <3.4. Replaced with direct pipe (_read_installed > tmpfile),
+    consistent with install path and verify_static.
+  fix: 5 &&/|| anti-patterns
+    4 no-space operators (lines 23, 359, 672, 6477) converted to
+    ; and/; or form. 1 spaced one-liner (line 91) converted to if/end.
+    Line 672 is embedded SSH config content — installed file hash changes
+    on first deploy after update.
+  refactor: _diag_services uses $EXPECTED_SERVICES from profile
+    Hardcoded service list at line 4314 replaced with profile global.
+
 3.5.2 (2026-03-07)
 -------------------
 

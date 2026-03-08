@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.6.0-blue)
+![Version](https://img.shields.io/badge/version-3.6.1-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.3%2B-orange)
 
@@ -248,6 +248,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | Logging | NDJSON in `~/ry-install/logs/YYYY-MM-DD/*.jsonl` (`jq` queryable) |
 | Boot safety | Initramfs/bootloader rebuild aborts on failure |
 | LVM-aware | Skips lvm2-monitor masking when LVM detected |
+| Orphan tracking | Manifest records installed destinations; warns on version or profile change |
 
 ### Exit Codes
 
@@ -278,6 +279,7 @@ Dependencies → Sync → Packages → System files → Regdom → User files �
 | `~/ry-install/logs/YYYY-MM-DD/` | NDJSON log files (*.jsonl) |
 | `~/ry-install/.lock/` | Instance guard (atomic mkdir) |
 | `~/ry-install/.hardware-fingerprint` | Hardware drift detection |
+| `~/ry-install/.manifest` | Orphan tracking (version, profile, destinations) |
 
 ## After Install
 

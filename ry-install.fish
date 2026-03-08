@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.6.0 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.6.0"
+# ry-install v3.6.1 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.6.1"
 # ── Exit codes ──
 set -g EXIT_OK          0
 set -g EXIT_FAIL        1
@@ -97,9 +97,6 @@ set -g _TRACKED_TMPFILES
 
 # ── Retention limits ──
 set -g MAX_LOGS 50
-if test $MAX_LOGS -lt 1
-    set -g MAX_LOGS 1
-end
 
 # ── Timing constants ──
 set -g SUDO_KEEPALIVE_INTERVAL 45
@@ -701,6 +698,71 @@ function _load_profile --description "Determine, load, and validate the active p
     set -g MANAGED_FILE_COUNT (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
 end
 
+# ═══ MANIFEST — orphan tracking across versions and profile switches ═══
+
+set -g MANIFEST_FILE "$HOME/ry-install/.manifest"
+
+# Write manifest: version, profile, and all managed destinations (one per line)
+function _manifest_write --description "Record current profile destinations for orphan detection"
+    if test "$DRY" = true
+        _log "MANIFEST_SKIP: dry-run"
+        return 0
+    end
+    # Create tmpfile in same directory as manifest for same-filesystem atomic mv
+    set -l manifest_dir (dirname -- "$MANIFEST_FILE")
+    set -l tmp (mktemp -p "$manifest_dir" .ry-install.manifest.XXXXXX 2>/dev/null)
+    if test -z "$tmp"
+        _warn "Failed to write manifest (mktemp failed)"
+        return 1
+    end
+    set -ga _TRACKED_TMPFILES "$tmp"
+    printf '%s\n' "v$VERSION" "$PROFILE_NAME" $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS >"$tmp"
+    command chmod -- 600 "$tmp"
+    command mv -f -- "$tmp" "$MANIFEST_FILE" 2>/dev/null
+    or begin
+        command rm -f -- "$tmp" 2>/dev/null
+        _warn "Failed to write manifest"
+        return 1
+    end
+    _log "MANIFEST_WRITTEN: $MANIFEST_FILE ($MANAGED_FILE_COUNT destinations)"
+    return 0
+end
+
+# Check for orphaned files: destinations in previous manifest not in current profile
+function _manifest_check_orphans --description "Warn about files from previous install/profile not in current destinations"
+    if not test -f "$MANIFEST_FILE"
+        return 0
+    end
+    set -l manifest_lines (cat -- "$MANIFEST_FILE" 2>/dev/null)
+    if test (count $manifest_lines) -lt 3
+        return 0
+    end
+    set -l prev_ver "$manifest_lines[1]"
+    set -l prev_profile "$manifest_lines[2]"
+    set -l prev_dests $manifest_lines[3..]
+    set -l current_dests $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
+
+    set -l orphans
+    for prev in $prev_dests
+        if not contains -- "$prev" $current_dests
+            set -a orphans "$prev"
+        end
+    end
+
+    if test (count $orphans) -gt 0
+        if test "$prev_profile" != "$PROFILE_NAME"
+            _warn "Profile changed: $prev_profile → $PROFILE_NAME"
+        else
+            _warn "Destinations changed since $prev_ver"
+        end
+        for orphan in $orphans
+            _warn "  ORPHAN: $orphan (no longer managed)"
+        end
+        _info "  Review and remove orphaned files manually"
+    end
+    return 0
+end
+
 # Generate config file content by destination path — INVARIANT: content emitted via printf/echo only, NEVER eval'd
 function get_file_content --argument-names dst --description "Return embedded config content for a given destination path"
     if test (count $argv) -ne 1
@@ -1194,6 +1256,14 @@ function _progress_done --description "Finalize and close the progress display"
     set -g _STEP_PREV_NAME ""
     set -g _STEP_PREV_START 0
 
+    # Runtime assertion: catch step count drift (lint also checks at build time)
+    # Only meaningful when progress bar was active (--all without --dry-run)
+    if test "$ALL" = true; and test "$DRY" = false
+        if test "$PROGRESS_CURRENT" -ne "$PROGRESS_TOTAL" 2>/dev/null
+            _log "WARN: progress step mismatch: emitted $PROGRESS_CURRENT of $PROGRESS_TOTAL expected"
+        end
+    end
+
     if test "$ALL" = true && test "$DRY" = false
         set -g PROGRESS_CURRENT $PROGRESS_TOTAL
         set -l bar (string repeat -n $PROGRESS_WIDTH -- '█')
@@ -1216,7 +1286,7 @@ end
 # ── Command execution wrapper — secret redaction (10 patterns), dry-run gating, output capture to tmpfiles, structured error reporting ──
 
 # Execute command with logging, secret redaction, dry-run gating, and stdout/stderr capture to tmpfiles
-function _run --description "Execute a command with logging, dry-run support, and error capture"
+function _run --description "Execute a command with logging, dry-run support, and error capture; stdout captured and only displayed when QUIET=false — callers needing stdout must invoke commands directly"
     set -l log_cmd (string join -- " " $argv)
 
     # Redact secrets from log output; globs match --flag=value and --flag value without false positives
@@ -1640,6 +1710,24 @@ function validate_configs --description "Run all embedded config validators"
         set errors (math $errors + 1)
     end
 
+    # Exhaustive cross-reference: verify every destination produces non-empty content
+    for _xref_dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
+        set -l _xref_tmp (mktemp -t ry-validate-XXXXXX 2>/dev/null)
+        if test -z "$_xref_tmp"
+            continue
+        end
+        get_file_content "$_xref_dst" >"$_xref_tmp" 2>/dev/null
+        set -l _xref_status $status
+        if test $_xref_status -ne 0
+            # Non-zero exit may indicate runtime dependency (e.g., findmnt) — log, don't fail
+            _log "VALIDATE_XREF: $_xref_dst returned status $_xref_status (runtime dependency?)"
+        else if not test -s "$_xref_tmp"
+            _err "Destination has no content: $_xref_dst (missing get_file_content case?)"
+            set errors (math $errors + 1)
+        end
+        command rm -f -- "$_xref_tmp" 2>/dev/null
+    end
+
     # Systemd unit + fish script syntax validation via systemd-analyze verify / fish --no-execute
     set -l tmpfile_amdgpu (mktemp -t ry-validate-XXXXXX --suffix=.service)
     if test -z "$tmpfile_amdgpu"
@@ -2022,6 +2110,9 @@ end
 # Compare embedded content against installed files; --fix repairs in-place; exit 1 when drift found.
 function do_diff --argument-names target_file --description "Show diffs between embedded and installed configs"
     _log "=== DIFF START ==="
+
+    # Check for orphaned files from previous install or profile switch
+    _manifest_check_orphans
 
     # target_file is bound by the named-argument declaration on the line above
     if test (count $argv) -gt 0 && test -n "$argv[1]"
@@ -2893,9 +2984,16 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     end
 
     # Permission/ownership checks — system and service files
+    set -l _boot_fstype (findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         if not sudo -n test -e "$dst" 2>/dev/null
             continue
+        end
+        # vfat (ESP) has no Unix permissions — skip permission checks for /boot/*
+        if string match -q '/boot/*' -- "$dst"
+            if test "$_boot_fstype" = vfat
+                continue
+            end
         end
         set -l perms (sudo -n stat -c '%a %U:%G' -- "$dst" 2>/dev/null)
         if test -n "$perms"; and test "$perms" != "644 root:root"
@@ -6046,6 +6144,9 @@ function do_install --description "Full installation: preflight, packages, confi
         _echo
     end
 
+    # Check for orphaned files from previous install or profile switch
+    _manifest_check_orphans
+
     # Automatic pre-install snapshots removed in v3.4.2; user is responsible for rootfs snapshots
     _info "No automatic backup — snapshot your rootfs before proceeding if needed"
     _echo
@@ -6116,6 +6217,7 @@ function do_install --description "Full installation: preflight, packages, confi
     end
 
     _log "=== INSTALLATION END ==="
+    _manifest_write
     if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
         return $EXIT_BOOT_CRIT
     end

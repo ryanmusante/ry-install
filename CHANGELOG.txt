@@ -1,3 +1,44 @@
+3.6.1 (2026-03-08)
+-------------------
+
+  fix: do_check false drift on vfat ESP (F-1)
+    Permission loop hardcoded 644 root:root for all system files,
+    including /boot/loader/loader.conf on vfat ESP where stat returns
+    mount-option defaults (typically 755). Added findmnt vfat detection
+    and /boot/* skip guard, consistent with do_diff and verify_runtime.
+    --check no longer returns EXIT_DRIFT on clean vfat ESP systems.
+  fix: remove dead MAX_LOGS guard (F-3)
+    set -g MAX_LOGS 50 followed by unreachable if test $MAX_LOGS -lt 1
+    guard. Removed 3 dead lines. Guard should be re-added if MAX_LOGS
+    becomes a profile global.
+  fix: document _run stdout capture behavior (F-4)
+    _run captures stdout to tmpfile; only replays when QUIET=false.
+    Callers needing stdout must invoke commands directly. Updated
+    function description to make the contract explicit.
+  feat: manifest-based orphan tracking (F-8, F-10)
+    _manifest_write records version, profile name, and all managed
+    destinations to ~/ry-install/.manifest (0600, atomic same-directory
+    tmpfile + mv, tracked in _TRACKED_TMPFILES for crash cleanup) after
+    successful install. Skipped in dry-run. Preserved on preflight
+    failure (early return before _manifest_write).
+    _manifest_check_orphans reads the manifest and warns about
+    destinations from a previous install or profile that are absent
+    from the current profile. Detects profile switches by comparing
+    stored profile name. Called at start of do_install and do_diff.
+  feat: progress step count runtime assertion (F-6)
+    _progress_done logs a warning if PROGRESS_CURRENT != PROGRESS_TOTAL
+    at finalization. Guarded by ALL=true; and DRY=false to match
+    _progress increment condition — without guard, assertion would
+    false-positive on interactive/dry-run installs where PROGRESS_CURRENT
+    stays at 0. Complements static lint check in do_lint.
+    Only catches undershoot; overshoot absorbed by min() clamp.
+  feat: exhaustive get_file_content cross-reference (F-7)
+    validate_configs calls get_file_content for every destination and
+    verifies non-empty output. Complements do_lint regex-based case
+    count check. Destinations with runtime dependencies (e.g.,
+    /etc/kernel/cmdline requiring findmnt) that return non-zero are
+    logged but not counted as errors.
+
 3.6.0 (2026-03-08)
 -------------------
 

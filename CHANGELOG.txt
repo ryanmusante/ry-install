@@ -1,3 +1,57 @@
+3.7.1 (2026-03-09)
+-------------------
+
+  fix: enforce kernel 6.14+ minimum in check_kernel_version
+    Returns 1 on < 6.14 instead of always returning 0. Preflight captures
+    the failure, sets INSTALL_HAD_ERRORS, and warns. Matches README
+    prerequisite. Reports ntsync state on pass.
+
+  fix: PROGRESS_STEPS ordering after syu reorder
+    Fix 4 (v3.7.0 post-release) moved syu before mkinitcpio in
+    _install_rebuild_boot but did not update PROGRESS_STEPS. Progress
+    bar would show wrong step names. Entries 15-17 swapped to match.
+
+  fix: B-5 do_test_all nested parallelism guard
+    On systems with < 8 cores, all 15 read-only modes now run
+    sequentially instead of forking. Prevents oversubscription from
+    nested parallel children (verify-static: 17, check: 4, diagnose: 5,
+    diff: 17).
+
+  fix: B-1 validate_configs ssh-agent verify scope
+    systemd-analyze --user verify for ssh-agent.service (user unit).
+    Previously ran without --user flag.
+
+  fix: B-3 do_check dead variable
+    Remove unused `set -l idx 0` in Job 4 inline parser.
+
+  fix: consistent _ensure_sudo_cached usage
+    verify_static and do_test_all now use _ensure_sudo_cached helper
+    instead of ad-hoc `sudo true`. Matches B-4 and B-6 pattern.
+
+  fix: batch enable per-unit fallback
+    _install_configure_services B-7: on batch `systemctl enable --now`
+    failure, retry each unit individually to identify which failed.
+
+  fix: manifest gated on success
+    _manifest_write skipped on EXIT_BOOT_CRIT to avoid recording
+    partially-deployed state.
+
+  fix: syu before mkinitcpio in _install_rebuild_boot
+    System upgrade now runs before initramfs rebuild so new kernels are
+    present for mkinitcpio -P. Pacman hooks provide backup coverage.
+
+  fix: log rotation flock serialization
+    Wrap xargs rm in flock -n when available. Eliminates last-write-wins
+    race between concurrent read-only instances.
+
+  fix: spacing consistency (16 instances)
+    Add missing space before || and && across _run, _gather_temps,
+    verify_runtime, do_lint, _logs_*, _diag_info, install_files, and
+    sudo keepalive.
+
+  fix: -- separator consistency in B-1 children
+    Add -- to cp and rm in parallel validation children.
+
 3.7.0 (2026-03-08)
 -------------------
 

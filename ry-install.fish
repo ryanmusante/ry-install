@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.0 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.0"
+# ry-install v3.7.1 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.1"
 # ── Exit codes ──
 set -g EXIT_OK          0
 set -g EXIT_FAIL        1
@@ -1284,9 +1284,9 @@ set -g PROGRESS_STEPS \
     "NetworkManager dispatcher" \
     "CPU performance service" \
     "Enabling timers" \
+    "System upgrade" \
     "Rebuilding initramfs" \
     "Updating bootloader" \
-    "System upgrade" \
     "Finalizing system" \
     "NetworkManager restart" \
     "WiFi reconnection"
@@ -1434,7 +1434,7 @@ function _run --description "Execute a command with logging, dry-run support, an
         return 0
     else
         # mktemp for stderr capture (shared by both paths)
-        set -l stderr_tmp (mktemp -t ry-run-stderr.XXXXXX 2>/dev/null|| echo /dev/null)
+        set -l stderr_tmp (mktemp -t ry-run-stderr.XXXXXX 2>/dev/null || echo /dev/null)
         test "$stderr_tmp" != /dev/null && set -ga _TRACKED_TMPFILES "$stderr_tmp"
         # --passthrough: stdout flows to caller, only stderr captured
         if test "$passthrough" = true
@@ -1455,7 +1455,7 @@ function _run --description "Execute a command with logging, dry-run support, an
             return $ret
         end
         # Standard path: capture both stdout and stderr to tmpfiles
-        set -l stdout_tmp (mktemp -t ry-run-stdout.XXXXXX 2>/dev/null|| echo /dev/null)
+        set -l stdout_tmp (mktemp -t ry-run-stdout.XXXXXX 2>/dev/null || echo /dev/null)
         test "$stdout_tmp" != /dev/null && set -ga _TRACKED_TMPFILES "$stdout_tmp"
         if test "$stderr_tmp" = /dev/null || test "$stdout_tmp" = /dev/null
             _log "WARN: mktemp fallback to /dev/null — output capture degraded"
@@ -1783,10 +1783,20 @@ function check_kernel_version --description "Verify running kernel version meets
 
     _info "Kernel version: $kver"
 
+    # Minimum: 6.14 (ntsync, gfx1151 fixes, mt7925e.disable_aspm)
+    if test "$major" -lt 6 || begin
+            test "$major" -eq 6 && test "$minor" -lt 14
+        end
+        _fail "Kernel $kver < 6.14: ntsync, gfx1151 fixes, and mt7925e.disable_aspm unavailable"
+        _info "  Upgrade kernel before or during install (pacman -Syu)"
+        return 1
+    end
+
     set -l _ns (_ntsync_state)
     if test "$_ns" = unavailable
-        _warn "Kernel $KVER < 6.14: ntsync will NOT be available"
-        _warn "  Upgrade kernel for PROTON_USE_NTSYNC=1 support"
+        _warn "Kernel $kver: ntsync not available (expected builtin or module)"
+    else
+        _ok "Kernel $kver: ntsync $_ns"
     end
 
     return 0
@@ -1982,25 +1992,25 @@ function validate_configs --description "Run all embedded config validators"
             set -l f '$content_dir/'\$unit_key
             if test -s \$f
                 set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service)
-                cp \$f \$tmp
+                cp -- \$f \$tmp
                 if not systemd-analyze verify \$tmp 2>/dev/null
                     set errs (math \$errs + 1)
                 end
-                rm -f \$tmp
+                rm -f -- \$tmp
             else
                 set errs (math \$errs + 1)
             end
         end
-        # ssh-agent.service (user unit)
+        # ssh-agent.service (user unit — verify with --user scope)
         set -l ssh_key (string replace -a '/' '_' '$HOME/.config/systemd/user/ssh-agent.service')
         set -l f '$content_dir/'\$ssh_key
         if test -s \$f
             set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service)
-            cp \$f \$tmp
-            if not systemd-analyze verify \$tmp 2>/dev/null
+            cp -- \$f \$tmp
+            if not systemd-analyze --user verify \$tmp 2>/dev/null
                 set errs (math \$errs + 1)
             end
-            rm -f \$tmp
+            rm -f -- \$tmp
         else
             set errs (math \$errs + 1)
         end
@@ -2285,7 +2295,7 @@ end
 # ═══ FILE OPERATIONS — diff, install, verify ═══
 
 function install_files --description "Install multiple embedded configs with argparse options"
-    set -l _argparse_tmp (mktemp -t ry-argparse.XXXXXX 2>/dev/null|| echo /dev/null)
+    set -l _argparse_tmp (mktemp -t ry-argparse.XXXXXX 2>/dev/null || echo /dev/null)
     argparse s/sudo 'd/desc=' -- $argv 2>$_argparse_tmp
     or begin
         set -l _argparse_err (string trim -- (cat -- "$_argparse_tmp" 2>/dev/null))
@@ -2777,7 +2787,7 @@ end
 # Checksum verification: sha256 of embedded content vs installed file; exit 1 when drifted.
 function verify_static --description "Verify installed configs match embedded checksums"
     _log "=== STATIC VERIFICATION START ==="
-    sudo true 2>/dev/null || begin
+    _ensure_sudo_cached || begin
         _err "Sudo required for verification"
         return 1
     end
@@ -3340,7 +3350,6 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         # B-3a: batch query all expected + masked units in 1 call
         set -l all_units $EXPECTED_SERVICES $MASK
         set -l show_raw (systemctl show --property=ActiveState,UnitFileState -- \$all_units 2>/dev/null)
-        set -l idx 0
         set -l current_active ''
         set -l current_unitfile ''
         set -l results
@@ -3470,7 +3479,7 @@ function _gather_temps --description "Collect thermal sensor readings from sysfs
         test -f "$name_f" || continue
         set -l name (cat -- "$name_f" 2>/dev/null)
         if test "$name" = k10temp || test "$name" = zenpower
-            set raw (cat -- "$f" 2>/dev/null|| echo 0)
+            set raw (cat -- "$f" 2>/dev/null || echo 0)
             if string match -qr '^\d+$' -- "$raw"
                 set -l temp_val (math "$raw / 1000")
                 set -g _TEMP_CPU_INT (string split '.' -- "$temp_val")[1]
@@ -3485,7 +3494,7 @@ function _gather_temps --description "Collect thermal sensor readings from sysfs
         test -d "$card_dir" || continue
         for f in $card_dir/hwmon/hwmon*/temp1_input
             test -f "$f" || continue
-            set -l raw (cat -- "$f" 2>/dev/null|| echo 0)
+            set -l raw (cat -- "$f" 2>/dev/null || echo 0)
             if string match -qr '^\d+$' -- "$raw"
                 set -l temp_val (math "$raw / 1000")
                 set -g _TEMP_GPU_INT (string split '.' -- "$temp_val")[1]
@@ -3645,10 +3654,10 @@ function verify_runtime --description "Verify runtime kernel params, services, a
                 set -l sysfs_val_dec "$sysfs_val"
                 set -l expected_dec "$expected"
                 if string match -q '0x*' -- "$sysfs_val"
-                    set sysfs_val_dec (printf '%d' "$sysfs_val" 2>/dev/null|| echo "$sysfs_val")
+                    set sysfs_val_dec (printf '%d' "$sysfs_val" 2>/dev/null || echo "$sysfs_val")
                 end
                 if string match -q '0x*' -- "$expected"
-                    set expected_dec (printf '%d' "$expected" 2>/dev/null|| echo "$expected")
+                    set expected_dec (printf '%d' "$expected" 2>/dev/null || echo "$expected")
                 end
                 if test "$sysfs_val_dec" = "$expected_dec"
                     _ok "  amdgpu.$pname: $sysfs_val"
@@ -4155,7 +4164,7 @@ function do_lint --description "Lint the script source for fish anti-patterns an
 
     set -l script_path (status filename)
 
-    if test "$script_path" != (status current-filename 2>/dev/null|| echo "$script_path")
+    if test "$script_path" != (status current-filename 2>/dev/null || echo "$script_path")
         _warn "Script appears to be sourced; lint results may vary"
     end
 
@@ -4217,7 +4226,7 @@ function do_lint --description "Lint the script source for fish anti-patterns an
         _ok "No bash-style [[ ]] conditionals found"
     end
 
-    set -l bash_export (printf '%s\n' $clean_content | grep -n '^[[:space:]]*export ' 2>/dev/null|| true)
+    set -l bash_export (printf '%s\n' $clean_content | grep -n '^[[:space:]]*export ' 2>/dev/null || true)
     if test -n "$bash_export"
         _fail "Bash-style 'export' found:"
         set -l lint_out (printf '%s\n' $bash_export | sed 's/^/  /')
@@ -4288,7 +4297,7 @@ function do_lint --description "Lint the script source for fish anti-patterns an
                 }
             }
         }
-    ' "$script_path" 2>/dev/null|| true)
+    ' "$script_path" 2>/dev/null || true)
     if test -n "$shadow_hits"
         set -l shadow_count (printf '%s\n' $shadow_hits | wc -l)
         _warn "Found $shadow_count potential scope shadow(s) (set -l inside block re-declares outer variable):"
@@ -4396,7 +4405,7 @@ function _logs_list --description "List available ry-install log files"
     for f in $files
         set -l fname (basename -- "$f")
         set -l fdir (basename (dirname -- "$f"))
-        set -l size (stat -c '%s' -- "$f" 2>/dev/null|| echo 0)
+        set -l size (stat -c '%s' -- "$f" 2>/dev/null || echo 0)
         set -l size_k (math "ceil($size / 1024)")
 
         set -l footer (tail -n 1 "$f" 2>/dev/null)
@@ -4597,7 +4606,7 @@ function _analyze_log --argument-names log_path --description "Parse and summari
     _echo "── Log File ──"
     _echo "  $log_path"
     set -l line_count (wc -l < "$log_path" 2>/dev/null | string trim --)
-    set -l size (stat -c '%s' -- "$log_path" 2>/dev/null|| echo 0)
+    set -l size (stat -c '%s' -- "$log_path" 2>/dev/null || echo 0)
     _echo "  $line_count events, "(math "ceil($size / 1024)")" KB"
 
     test -n "$exit_code" && return "$exit_code"
@@ -4936,7 +4945,7 @@ function _diag_info --description "Diagnose: system overview, fans, power, sched
     set -l fan_readings
     for f in /sys/class/hwmon/hwmon*/fan*_input
         test -f "$f" || continue
-        set -l rpm (cat -- "$f" 2>/dev/null|| echo 0)
+        set -l rpm (cat -- "$f" 2>/dev/null || echo 0)
         if string match -qr '^\d+$' -- "$rpm" && test "$rpm" -gt 0
             set -l label_f (string replace '_input' '_label' -- "$f")
             set -l label ""
@@ -5770,7 +5779,7 @@ function _install_preflight --description "Run all preflight checks before insta
         end
         set -l my_pid %self
         # Keepalive: refresh assumes credential timeout ≥5min (timestamp_timeout=5)
-        fish -c 'while kill -0 -- $argv[1] 2>/dev/null&& test -d -- $argv[2]; sudo -n true 2>/dev/null|| break; sleep $argv[3]; end' -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null &
+        fish -c 'while kill -0 -- $argv[1] 2>/dev/null && test -d -- $argv[2]; sudo -n true 2>/dev/null || break; sleep $argv[3]; end' -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null &
         set -g SUDO_KEEPALIVE_PID $last_pid
         if not kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
             _warn "Sudo keepalive process failed to start — long installs may require re-auth"
@@ -5804,7 +5813,10 @@ function _install_preflight --description "Run all preflight checks before insta
         _info "(dry-run) Skipping: LVM detection (no sudo credentials)"
     end
 
-    check_kernel_version
+    if not check_kernel_version
+        _warn "Kernel version below 6.14 — some features will not work"
+        set -g INSTALL_HAD_ERRORS true
+    end
 
     _echo
     validate_configs || begin
@@ -6204,10 +6216,19 @@ function _install_configure_services --description "Enable, start, and configure
         # fstrim.timer
         set -a sys_enable fstrim.timer
 
-        # Batch enable all collected system units
+        # Batch enable all collected system units; fall back to per-unit on failure
         if test (count $sys_enable) -gt 0
             if not _run sudo systemctl enable --now -- $sys_enable
-                _warn "Failed to enable some services: $sys_enable"
+                _warn "Batch enable failed — retrying individually to identify failures"
+                for _unit in $sys_enable
+                    if not _run sudo systemctl enable --now -- $_unit
+                        _err "Failed to enable: $_unit"
+                        set -g INSTALL_HAD_ERRORS true
+                        set _fn_err true
+                    else
+                        _ok "Enabled: $_unit"
+                    end
+                end
             end
         end
 
@@ -6345,6 +6366,31 @@ end
 # Pipeline phase 7: mkinitcpio -P, sdboot-manage gen, bootctl install; abort --all on failure
 function _install_rebuild_boot --description "Regenerate initramfs and bootloader entries"
     _check_sudo_keepalive
+
+    # Order: syu → mkinitcpio → sdboot → boot_sanity
+    # syu first so any new kernel is present before mkinitcpio -P regenerates all presets.
+    # Pacman hooks also run mkinitcpio/sdboot, but our explicit pass ensures our configs apply.
+    _progress "System upgrade"
+    if test "$SYSTEM_UPGRADED" = true
+        _ok "System already upgraded during package installation"
+    else if _ask "Perform full system upgrade? (pacman -Syu)"
+        _info "Check https://archlinux.org/news/ and https://wiki.cachyos.org/ for known issues before upgrading"
+        if not _run sudo pacman -Syu --noconfirm
+            _warn "System upgrade failed or was interrupted"
+            set -g INSTALL_HAD_ERRORS true
+        else
+            _ok "System upgrade complete"
+            set -l _pacnew_files (_find_pacnew_files)
+            if test (count $_pacnew_files) -gt 0
+                _warn "Upgrade generated "(count $_pacnew_files)" .pacnew file(s):"
+                for _pf in $_pacnew_files
+                    _info "  $_pf"
+                end
+                _info "Run 'sudo pacdiff' after install to review"
+            end
+        end
+    end
+
     # mkinitcpio/sdboot failure in --all aborts to prevent unbootable system; interactive continues
     _progress "Rebuilding initramfs"
     if _ask "Rebuild initramfs?"
@@ -6403,29 +6449,9 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         end
     end
 
-    # Final boot viability gate: verify vmlinuz, initramfs, and boot entry exist before system upgrade
+    # Final boot viability gate: verify vmlinuz, initramfs, and boot entry exist
     _preflight_boot_sanity || set -g INSTALL_HAD_ERRORS true
 
-    _progress "System upgrade"
-    if test "$SYSTEM_UPGRADED" = true
-        _ok "System already upgraded during package installation"
-    else if _ask "Perform full system upgrade? (pacman -Syu)"
-        _info "Check https://archlinux.org/news/ and https://wiki.cachyos.org/ for known issues before upgrading"
-        if not _run sudo pacman -Syu --noconfirm
-            _warn "System upgrade failed or was interrupted"
-            set -g INSTALL_HAD_ERRORS true
-        else
-            _ok "System upgrade complete"
-            set -l _pacnew_files (_find_pacnew_files)
-            if test (count $_pacnew_files) -gt 0
-                _warn "Upgrade generated "(count $_pacnew_files)" .pacnew file(s):"
-                for _pf in $_pacnew_files
-                    _info "  $_pf"
-                end
-                _info "Run 'sudo pacdiff' after install to review"
-            end
-        end
-    end
     return 0
 end
 
@@ -6791,10 +6817,11 @@ function do_install --description "Full installation: preflight, packages, confi
     end
 
     _log "=== INSTALLATION END ==="
-    _manifest_write
     if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
+        _log "MANIFEST_SKIP: boot-critical failure — partial deploy not recorded"
         return $EXIT_BOOT_CRIT
     end
+    _manifest_write
     test "$INSTALL_HAD_ERRORS" = true; and return $EXIT_FAIL
     return $EXIT_OK
 end
@@ -7032,7 +7059,7 @@ function do_test_all --description "Run the full test suite across all subcomman
     _echo
 
     # Pre-cache sudo for modes that need it
-    sudo true 2>/dev/null
+    _ensure_sudo_cached
 
     # B-5: Split into parallel-safe (read-only, no lock) and sequential (writes or lock-acquiring)
     set -l parallel_modes \
@@ -7056,6 +7083,16 @@ function do_test_all --description "Run the full test suite across all subcomman
         "--dry-run --all" \
         "--diff --fix --dry-run --all" \
         "--install-file /etc/kernel/cmdline --dry-run"
+
+    # Nested parallelism guard: each child may fork its own parallel work
+    # (verify-static: 17, check: 4, diagnose: 5, diff: 17). On low-core
+    # systems, run all modes sequentially to avoid oversubscription.
+    set -l nproc_val (nproc 2>/dev/null)
+    if test -n "$nproc_val" && string match -qr '^\d+$' -- "$nproc_val" && test "$nproc_val" -lt 8
+        _warn "Low CPU count ($nproc_val) — running test modes sequentially to avoid oversubscription"
+        set sequential_modes $parallel_modes $sequential_modes
+        set parallel_modes
+    end
 
     set -l total (math (count $parallel_modes) + (count $sequential_modes) + 1)
     set -l passed 0
@@ -7413,13 +7450,18 @@ switch $MODE
         # No lock needed for read-only modes (verify, lint, logs, diagnose, completions, test-all)
 end
 
-# Log rotation: rm -f is idempotent — concurrent read-only instances may race but cannot corrupt (last-write-wins)
+# Log rotation: flock serializes concurrent instances; without flock, rm -f is idempotent (last-write-wins)
 set -l _log_base_rot "$HOME/ry-install/logs"
 set -l _existing_logs (command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f -printf '%T@\t%p\n' 2>/dev/null | LC_ALL=C sort -n | string replace -r -- '^[^\t]+\t' '')
 set -l _log_count (count $_existing_logs)
 if test $_log_count -gt $MAX_LOGS
     set -l _to_remove (math $_log_count - $MAX_LOGS)
-    string join0 -- $_existing_logs[1..$_to_remove] | xargs -0 rm -f --
+    set -l _rm_targets (string join0 -- $_existing_logs[1..$_to_remove])
+    if command -q flock
+        printf '%s' "$_rm_targets" | flock -n "$_log_base_rot" xargs -0 rm -f -- 2>/dev/null
+    else
+        printf '%s' "$_rm_targets" | xargs -0 rm -f --
+    end
     command find "$_log_base_rot" -mindepth 1 -maxdepth 1 -type d -empty -delete 2>/dev/null
 end
 

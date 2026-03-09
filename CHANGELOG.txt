@@ -1,3 +1,168 @@
+3.7.0 (2026-03-08)
+-------------------
+
+  feat: batch & parallel processing across 9 optimization targets (B-1..B-9)
+    Implements SPEC-batch-parallel.md across 8 phases. Parallel collector
+    pattern: each job writes to its own result file, parent merges after
+    wait, output ordering is deterministic.
+
+  feat: _pregenerate_content_files helper (Prereq 1)
+    Writes all 17 expected-content files to a tmpdir in one pass. Used by
+    B-1, B-2, B-3, B-6 to avoid profile globals in parallel children.
+
+  feat: _ensure_sudo_cached helper (Prereq 2)
+    Calls sudo true once before forking parallel children. Prevents
+    chaotic parallel sudo prompts.
+
+  feat: _parse_systemctl_show helper
+    Parses multi-record systemctl show output (LoadState, ActiveState,
+    UnitFileState) into indexable records. Used by B-8 and B-3.
+
+  feat: B-9 log rotation xargs (Phase 0)
+    Replace for loop with string join0 | xargs -0 rm -f. Code
+    simplification, eliminates per-file fork overhead.
+
+  feat: B-8 verify_runtime batch systemctl (Phase 1)
+    Replace 11 individual systemctl is-active/is-enabled calls with 1
+    batch systemctl show (system scope) + 1 batch (user scope). Saves
+    ~900 ms.
+
+  feat: B-3 do_check parallel + batch systemctl (Phase 2)
+    Split into 4 parallel jobs: file-hashes, file-perms, kernel-params,
+    service-state. Service state uses batch systemctl show (17 calls → 1).
+    Saves ~2-3 s. Meaningful for CI polling.
+
+  feat: B-5 do_test_all parallel read-only modes (Phase 3)
+    Fork 15 read-only modes in parallel, run 3 sequential (lock-acquiring
+    or write) modes after. Saves 13-21 s. Biggest speedup target.
+
+  feat: B-7 _install_configure_services batch enable (Phase 4)
+    In --all mode, batch 3 system-scope systemctl enable --now calls into
+    1. ssh-agent stays separate (user scope). Interactive mode unchanged.
+    Saves ~400 ms in --all mode.
+
+  feat: B-1 validate_configs parallel syntax checks (Phase 5a)
+    Pre-generate content files, then fork 5 parallel validation jobs:
+    cross-reference, systemd units, fish scripts, INI configs, key-value
+    configs. Saves ~400-800 ms.
+
+  feat: B-2 verify_static parallel checksums (Phase 5b)
+    Pre-generate expected content, fork parallel sha256sum comparisons for
+    all 17 destinations. Saves ~1.2-1.6 s.
+
+  feat: B-6 do_diff batch I/O (Phase 6)
+    Pre-generate expected content, parallel installed-file reads + diff
+    computation. Sequential display + fix unchanged. Saves ~500-1000 ms.
+
+  feat: B-4 do_diagnose parallel phases (Phase 7)
+    Run 5 diagnostic functions in parallel: services, hardware, network,
+    storage, config. Each child sources the script, gets its own LOG_FILE.
+    Parent exports ~14 profile globals before forking, unexports after
+    wait. Output printed in deterministic order. Saves ~3-8 s.
+
+  fix: B-4 source safety — serialize functions, not full script (audit)
+    source '$script_path' in children re-executes top-level code (lock
+    acquisition, CLI dispatch, install). Replaced with functions-only
+    serialization via `functions $needed_funcs > $funcs_file`. Children
+    source the functions file (~25 functions, no top-level side effects).
+    Added _ask to needed_funcs (called by _diag_config stress path;
+    auto-denies in non-interactive background children via isatty guard).
+  fix: B-1 validate_configs xref job — existence check, not emptiness (audit)
+    Original code distinguished get_file_content failure (runtime
+    dependency → log and skip) from empty content (→ error). Parallel
+    xref job now checks file count against expected destination count,
+    matching original skip-on-failure behavior.
+  fix: B-6 do_diff — empty guard on diff_status (audit)
+    If parallel child crashes, diff_status file is absent → cat returns
+    empty → `test "" != 0` is true → spurious diff display. Added
+    `test -n "$diff_status"` guard.
+
+3.6.4 (2026-03-08)
+-------------------
+
+  fix: bump fish version gate from 3.3+ to 3.4+ (F-1)
+    string join0 (used by upcoming batch processing) requires fish 3.4+.
+    CachyOS ships fish 4.5 (Arch extra/fish 4.5.0-2). Gate comment, check,
+    error message, upper-bound warning, and help text all updated.
+  fix: remove bat and eza from PKGS_ADD (F-2)
+    Both are hard dependencies of cachyos-fish-config (installed by default
+    on every CachyOS desktop). pacman --needed would skip them, but listing
+    them masks the true delta from a fresh install. PKGS_ADD 15 → 13.
+  docs: README badge, prerequisites, and packages table updated to match.
+
+3.6.3 (2026-03-08)
+-------------------
+
+  fix: root UUID TOCTOU in get_file_content (F-1)
+    findmnt -no UUID / was called on every get_file_content invocation
+    for /etc/kernel/cmdline, creating a TOCTOU between install_file's
+    comparison and write paths. UUID is now cached once in _load_profile
+    as _ROOT_UUID global. get_file_content uses the cached value.
+  feat: _kconfig_cache lazy loader for /proc/config.gz (F-2)
+    _ntsync_state and _validate_kernel_params both called zcat on
+    /proc/config.gz independently. New _kconfig_cache function reads
+    once on first call, stores in _KCONFIG_DATA global, returns cached
+    lines on subsequent calls. Both consumers updated.
+  fix: boot-critical short-circuit in do_install (F-3)
+    When _install_rebuild_boot returned EXIT_BOOT_CRIT, do_install
+    continued to _install_collect_wifi and _install_finalize, masking
+    the failure with unrelated errors and prompting for WiFi credentials
+    unnecessarily. Now short-circuits: skips WiFi/finalize, emits
+    actionable error, calls _progress_skip for remaining steps to keep
+    counter synchronized.
+  feat: hardware mismatch early warning in _load_profile (F-4)
+    Hardcoded gtr9_pro fallback would silently apply GTR9 Pro kernel
+    params on a different machine. _load_profile now checks /proc/cpuinfo
+    against EXPECTED_CPU_MATCH (if set) and warns with profile switch
+    guidance. Lightweight — no lspci/sudo; full fingerprint check remains
+    in _install_preflight.
+  feat: flock(1) atomic lock reclaim in _acquire_lock (F-5)
+    Stale lock reclaim via rmdir+mkdir had a documented TOCTOU race
+    window. When flock(1) is available, stale reclaim now acquires an
+    advisory lock on the parent directory, making the rmdir+mkdir+write
+    sequence atomic. Falls back to original PID-re-verify approach when
+    flock is absent. flock -n -E 5 provides non-blocking contention
+    detection.
+
+3.6.2 (2026-03-08)
+-------------------
+
+  fix: missing space in post-install hint (F-1)
+    --verify-static&& was not a valid shell token. Added space before &&.
+  style: comment inside set continuation (F-2)
+    Moved # comment from inside set -l order_checks \ continuation to
+    above the set statement. Fish 3.7 handles both identically (verified),
+    but comment-above is unambiguous across versions.
+  feat: _run --passthrough flag (F-4)
+    When --passthrough is the first argument, stdout flows directly to
+    the caller instead of being captured to a tmpfile. Stderr is still
+    captured and logged. Logging, dry-run gating, and secret redaction
+    still apply. All existing _run calls are unaffected (additive).
+  feat: _progress_skip function (F-5)
+    New function to advance progress counter for conditionally skipped
+    steps. Keeps PROGRESS_CURRENT synchronized with PROGRESS_TOTAL.
+    Audit confirmed all 20 current steps are unconditional; function
+    is available for future use when steps become conditional.
+  docs: TOCTOU race in _acquire_lock (F-6)
+    Replaced terse 1-line comment with 5-line explanation of the
+    residual rmdir/mkdir race window, PID re-verify mitigation, and
+    flock(1) alternative. No behavioral change.
+  feat: promote fish_indent to FAIL in do_lint (F-9a)
+    _warn -> _fail + set has_errors true. Formatting drift now causes
+    --lint to exit EXIT_LINT_FAIL (11). Previously advisory.
+  feat: do_check verifies service state (F-10)
+    --check now verifies EXPECTED_SERVICES are active+enabled and MASK
+    targets are masked. LVM-aware: skips lvm2-monitor.service when LVM
+    volumes detected (consistent with _install_configure_services).
+    Drift in service state now returns EXIT_DRIFT (10).
+  fix: _json_str silent control char deletion (F-11)
+    Replaced empty-string deletion with ? placeholder for control
+    characters \x01-\x07, \x0b, \x0e-\x1f, \x7f, \x80-\x9f.
+    Preserves string length in JSONL logs for debugging.
+  refactor: show_help relocated to utility section (F-12)
+    Moved 89-line function from between do_test_all and CLI parsing
+    to after _ask in the utility function group. No behavioral change.
+
 3.6.1 (2026-03-08)
 -------------------
 

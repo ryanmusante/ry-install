@@ -1,8 +1,8 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.6.1-blue)
+![Version](https://img.shields.io/badge/version-3.7.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Fish](https://img.shields.io/badge/fish-3.3%2B-orange)
+![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
 Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 17 embedded configs, no external dependencies.
 
@@ -29,7 +29,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 ./ry-install.fish --help       # All options
 ```
 
-**Prerequisites:** CachyOS, systemd-boot, fish 3.3+, kernel 6.14+ (ntsync, gfx1151, mt7925e), 2 GB root + 200 MB `/boot` free. Network for install only. SSIDs and passphrases containing `%` rejected (GKeyFile parse safety).
+**Prerequisites:** CachyOS, systemd-boot, fish 3.4+ (CachyOS ships 4.5), kernel 6.14+ (ntsync, gfx1151, mt7925e), 2 GB root + 200 MB `/boot` free. Network for install only. SSIDs and passphrases containing `%` rejected (GKeyFile parse safety).
 
 ## Options
 
@@ -190,7 +190,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 
 | Action | Packages |
 |--------|----------|
-| **Add (15)** | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bat, eza, bottom, git-delta, stress-ng, lm_sensors |
+| **Add (13)** | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bottom, git-delta, stress-ng, lm_sensors |
 | **Remove (7)** | plymouth, cachyos-plymouth-bootanimation, ufw, octopi, micro, cachyos-micro-settings, btop |
 
 ### Masked Services (9)

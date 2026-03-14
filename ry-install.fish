@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v3.7.1 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.1"
+# ry-install v3.7.5 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.5"
 # ── Exit codes ──
-set -g EXIT_OK          0
-set -g EXIT_FAIL        1
-set -g EXIT_USAGE       2
-set -g EXIT_PREFLIGHT   3
-set -g EXIT_BOOT_CRIT   4
-set -g EXIT_LOCK        5
-set -g EXIT_DRIFT       10
-set -g EXIT_LINT_FAIL   11
+set -g EXIT_OK 0
+set -g EXIT_FAIL 1
+set -g EXIT_USAGE 2
+set -g EXIT_PREFLIGHT 3
+set -g EXIT_BOOT_CRIT 4
+set -g EXIT_LOCK 5
+set -g EXIT_DRIFT 10
+set -g EXIT_LINT_FAIL 11
 # --dry-run: simulate all mutations
 set -g DRY false
 # --all: auto-yes every prompt
@@ -273,11 +273,11 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
     set -l sys_dirs
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         set -l dir (dirname -- "$dst")
-        if not contains "$dir" $sys_dirs
+        if not contains -- "$dir" $sys_dirs
             set -a sys_dirs "$dir"
         end
     end
-    if not contains /etc/NetworkManager/system-connections $sys_dirs
+    if not contains -- /etc/NetworkManager/system-connections $sys_dirs
         set -a sys_dirs /etc/NetworkManager/system-connections
     end
     for dir in $sys_dirs
@@ -288,7 +288,7 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
     set -l usr_dirs
     for dst in $USER_DESTINATIONS
         set -l dir (dirname -- "$dst")
-        if not contains "$dir" $usr_dirs
+        if not contains -- "$dir" $usr_dirs
             set -a usr_dirs "$dir"
         end
     end
@@ -314,7 +314,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     # Atomic mkdir as mutex; PID file inside enables stale-lock detection via process liveness probe
     set -g LOCK_DIR "$HOME/ry-install/.lock"
     set -g LOCK_FILE "$LOCK_DIR/pid"
-    command mkdir -p -- (dirname "$LOCK_DIR") 2>/dev/null || true
+    command mkdir -p -- (dirname -- "$LOCK_DIR") 2>/dev/null || true
 
     if command mkdir -- "$LOCK_DIR" 2>/dev/null
         echo %self >"$LOCK_FILE"
@@ -331,7 +331,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     # Stale lock reclaim — two strategies:
     # (a) flock(1): atomic advisory lock on parent dir during reclaim eliminates TOCTOU
     # (b) fallback: rmdir + mkdir with PID re-verify (narrow race window remains)
-    set -l _reclaim_parent (dirname "$LOCK_DIR")
+    set -l _reclaim_parent (dirname -- "$LOCK_DIR")
     if command -q flock
         # flock -n: non-blocking; flock -E 5: exit 5 on lock contention
         # Inner script uses /bin/sh — only needs rm/rmdir/mkdir; avoids Fish quoting in subshell
@@ -469,7 +469,7 @@ end
 
 function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # ── Identity ──
-    set -g PROFILE_NAME "gtr9_pro"
+    set -g PROFILE_NAME gtr9_pro
     set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
 
     # ── Managed file destinations — 1:1 map to get_file_content(); system=0644, user=0600 ──
@@ -1518,10 +1518,15 @@ function _ask --description "Prompt the user for yes/no confirmation"
 end
 
 function show_help --description "Display usage information and available subcommands"
+    # Fallback: count get_file_content case branches if profile hasn't loaded (--help exits before _load_profile)
+    set -l _file_count "$MANAGED_FILE_COUNT"
+    if test -z "$_file_count"
+        set _file_count (sed -n -- '/^function get_file_content/,/^end$/p' (status filename) | grep -cE "case [\"']?(/|[*]/.)")
+    end
     echo "
 ry-install v$VERSION
 Self-contained CachyOS configuration for Beelink GTR9 Pro (Strix Halo)
-Single fish script, $MANAGED_FILE_COUNT embedded configs, no external dependencies.
+Single fish script, $_file_count embedded configs, no external dependencies.
 
 Usage: "(status filename)" [OPTIONS]
 
@@ -1679,11 +1684,11 @@ function check_deps --description "Verify required packages are installed"
     if test (count $missing) -gt 0
         _err "Missing required commands: $missing"
         _err "  This script requires CachyOS (Arch-based) with systemd-boot"
-        if contains sdboot-manage $missing
+        if contains -- sdboot-manage $missing
             _err "  sdboot-manage is required for CachyOS bootloader management"
             _err "  Install with: sudo pacman -S --needed sdboot-manage"
         end
-        if contains mkinitcpio $missing
+        if contains -- mkinitcpio $missing
             _err "  mkinitcpio is required for initramfs generation (Arch/CachyOS)"
         end
         return 1
@@ -2002,7 +2007,7 @@ function validate_configs --description "Run all embedded config validators"
             end
         end
         # ssh-agent.service (user unit — verify with --user scope)
-        set -l ssh_key (string replace -a '/' '_' '$HOME/.config/systemd/user/ssh-agent.service')
+        set -l ssh_key (string replace -a -- '/' '_' '$HOME/.config/systemd/user/ssh-agent.service')
         set -l f '$content_dir/'\$ssh_key
         if test -s \$f
             set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service)
@@ -2021,7 +2026,7 @@ function validate_configs --description "Run all embedded config validators"
     # Job 3: fish script syntax + environment.d check
     fish -c "
         set -l errs 0
-        set -l fish_key (string replace -a '/' '_' '$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish')
+        set -l fish_key (string replace -a -- '/' '_' '$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish')
         set -l f '$content_dir/'\$fish_key
         if test -s \$f
             if not fish --no-execute \$f 2>/dev/null
@@ -2031,7 +2036,7 @@ function validate_configs --description "Run all embedded config validators"
             set errs (math \$errs + 1)
         end
         # environment.d check
-        set -l env_key (string replace -a '/' '_' '$HOME/.config/environment.d/10-environment.conf')
+        set -l env_key (string replace -a -- '/' '_' '$HOME/.config/environment.d/10-environment.conf')
         set -l ef '$content_dir/'\$env_key
         if test -s \$ef
             if not grep -q -- '^SSH_AUTH_SOCK=' \$ef
@@ -2379,7 +2384,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
             _err "Sudo required for --diff --fix"
             return 1
         end
-        # Automatic pre-install snapshots removed in v3.4.2; user is responsible for rootfs snapshots
+        # Automatic pre-install snapshots removed in v3.5.0; user is responsible for rootfs snapshots
         _info "No automatic backup — snapshot your rootfs before proceeding if needed"
     end
 
@@ -4032,7 +4037,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     set -l checked_dirs
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         set -l dir (dirname -- "$dst")
-        if contains "$dir" $checked_dirs
+        if contains -- "$dir" $checked_dirs
             continue
         end
         set -a checked_dirs "$dir"
@@ -5579,7 +5584,7 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
     set -l diag_pids
     for phase in services hardware network storage config
         # Prereq 3: each child gets its own log file
-        touch "$diag_dir/$phase.jsonl"
+        command touch -- "$diag_dir/$phase.jsonl"
         # Prereq 6: source serialized functions; prereq 4: buffer output
         fish -c "
             source '$funcs_file'
@@ -5936,7 +5941,7 @@ function _install_system_files --description "Deploy all embedded config files t
                     _warn "Unknown regulatory domain: '$regdom_upper' (not in system's wireless-regdom list)"
                     _warn "Proceeding anyway — invalid codes may fail silently at runtime"
                 end
-                set -l dst_dir (dirname /etc/conf.d/wireless-regdom)
+                set -l dst_dir (dirname -- /etc/conf.d/wireless-regdom)
                 set -l tmpfile (sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
                 if test -z "$tmpfile"
                     _err "Failed to create temp file for wireless-regdom"
@@ -6738,7 +6743,7 @@ function do_install --description "Full installation: preflight, packages, confi
     # Check for orphaned files from previous install or profile switch
     _manifest_check_orphans
 
-    # Automatic pre-install snapshots removed in v3.4.2; user is responsible for rootfs snapshots
+    # Automatic pre-install snapshots removed in v3.5.0; user is responsible for rootfs snapshots
     _info "No automatic backup — snapshot your rootfs before proceeding if needed"
     _echo
 
@@ -7216,13 +7221,13 @@ end
 # ═══ CLI ARGUMENT PARSING AND DISPATCH ═══
 
 # Entry point
-set -l MODE install
+set -g MODE install
 set -l mode_count 0
 set -l LOG_TARGET ""
 set -l LOG_TARGET_ARG ""
 set -l INSTALL_FILE_TARGET ""
 set -l DIFF_TARGET ""
-set -l PROFILE_NAME_ARG ""
+set -g PROFILE_NAME_ARG ""
 
 # ── Argument parsing — manual loop for mode exclusivity, --flag VALUE pairs, and optional trailing args; exit 2 on usage errors ──
 

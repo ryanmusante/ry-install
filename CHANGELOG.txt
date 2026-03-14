@@ -1,3 +1,65 @@
+3.7.5 (2026-03-14)
+-------------------
+
+  fix: show_help blank embedded file count
+    --help and unknown-flag paths exit before _load_profile, leaving
+    MANAGED_FILE_COUNT unset. Help text printed "Single fish script,
+    embedded configs" with a missing count. show_help now computes the
+    count dynamically from get_file_content case branches as a fallback
+    when the profile has not loaded. Same sed/grep pattern as do_lint.
+
+  chore: apply fish_indent -w canonical formatting
+    Exit code alignment (lines 5-12) used column-aligned spacing that
+    fish_indent normalizes to single space. PROFILE_NAME assignment had
+    unnecessary quotes. Both caused --lint to exit 11 (FAIL) via the
+    fish_indent drift check promoted to FAIL in v3.6.2.
+
+3.7.4 (2026-03-13)
+-------------------
+
+  fix: stale version reference v3.4.2 → v3.5.0 (2 comments)
+    do_diff and do_install both cited "v3.4.2" for backup removal,
+    but that version never existed. Backup remnants were removed and
+    the _info notice added in v3.5.0 per CHANGELOG.
+
+  fix: add -- to 3 string replace -a calls in validate_configs
+    Parallel children (Job 2 units, Job 3 fish scripts) used
+    string replace -a '/' '_' without --. Consistent with all other
+    string replace calls in the script.
+
+3.7.3 (2026-03-13)
+-------------------
+
+  fix: add -- separator to 6 contains calls (9 instances)
+    _cleanup_tmpfiles: 3 sites (sys_dirs, usr_dirs membership checks).
+    _install_preflight: 2 sites (sdboot-manage, mkinitcpio in $missing).
+    validate_configs: 1 site ($checked_dirs membership check).
+    Prevents misparse if a value starts with a hyphen.
+
+  fix: add command prefix and -- to touch in do_diagnose
+    Bare touch "$diag_dir/$phase.jsonl" bypassed command prefix
+    hardening (v3.2.10). Now command touch --.
+
+  fix: add -- to 3 dirname calls
+    _acquire_lock: 2 sites (mkdir parent, stale reclaim parent).
+    _install_system_files: dirname on wireless-regdom path. Consistent
+    with all other dirname calls.
+
+3.7.2 (2026-03-13)
+-------------------
+
+  docs: README Install Flow order matches PROGRESS_STEPS
+    v3.7.1 moved syu before mkinitcpio in _install_rebuild_boot and
+    updated PROGRESS_STEPS (entries 15-17), but the Install Flow
+    summary still showed Initramfs → Bootloader → Upgrade. Now shows
+    Upgrade → Initramfs → Bootloader.
+
+  docs: README logind.conf.d description lists all key types
+    Said "Ignore power/suspend keys" but LOGIND_IGNORE_KEYS sets 5
+    handles: HandlePowerKey, HandlePowerKeyLongPress, HandleSuspendKey,
+    HandleHibernateKey, HandleRebootKey. Now says "Ignore
+    power/suspend/hibernate/reboot keys".
+
 3.7.1 (2026-03-09)
 -------------------
 
@@ -765,6 +827,11 @@
   refactor: extract gaming diagnostics behind --gaming flag — moves
     Vulkan, session, media codecs, and Steam/Proton checks into
     _diagnose_gaming; enabled via --diagnose --gaming or --all
+
+3.2.4 (2026-02-28)
+-------------------
+
+  (skipped — changes merged into v3.2.5)
 
 3.2.3 (2026-02-28)
 -------------------

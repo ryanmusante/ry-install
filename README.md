@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.1-blue)
+![Version](https://img.shields.io/badge/version-3.7.5-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -151,7 +151,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 |------|---------|
 | `udev rules` | `ntsync` MODE=0666 |
 | `resolved.conf.d` | MulticastDNS=no |
-| `logind.conf.d` | Ignore power/suspend keys |
+| `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks: DefaultInterface/PowerSaveDisable · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=ERR |
 | `wireless-regdom` | WIRELESS_REGDOM="US" |
@@ -270,7 +270,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 
 ### Install Flow (20 steps)
 
-Dependencies → Sync → Packages → System files → Regdom → User files → AMDGPU service → Databases → Reload → Remove packages → Mask services → NM dispatcher → CPU service → Timers → Initramfs → Bootloader → Upgrade → Finalize → NM restart → WiFi
+Dependencies → Sync → Packages → System files → Regdom → User files → AMDGPU service → Databases → Reload → Remove packages → Mask services → NM dispatcher → CPU service → Timers → Upgrade → Initramfs → Bootloader → Finalize → NM restart → WiFi
 
 ### Data Directory
 

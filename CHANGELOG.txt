@@ -1,3 +1,42 @@
+3.7.12 (2026-03-15)
+-------------------
+
+  fix: _do_cleanup tracked tmpfiles cleanup missed directories — 7
+    mktemp -d entries (content, validate-par, diffbatch, hash-par,
+    check-parallel, diag, test) tracked in _TRACKED_TMPFILES were
+    skipped because test -f returns false for directories and rm -f
+    cannot remove them. On signal/crash exit, these directories leaked
+    in /tmp. Changed to test -d with rm -rf --preserve-root for
+    directories, test -f with rm -f for files. Normal-path cleanup
+    (explicit rm -rf at end of each function) was unaffected; bug only
+    manifested on interrupt/crash paths through _do_cleanup.
+
+  fix: boot-critical path missing _progress_skip "Finalizing system"
+    — EXIT_BOOT_CRIT skips _install_finalize entirely, which contains
+    3 _progress calls (Finalizing system, NetworkManager restart, WiFi
+    reconnection). Only the latter 2 had _progress_skip. Missing skip
+    caused _progress_done counter undershoot warning when ALL=true and
+    DRY=false.
+
+  fix: add command prefix to 54 bare cat calls — missed by v3.2.10
+    hardening pass which covered rm, mv, cp, chmod, chown, mkdir (83
+    calls). Bare cat bypasses command prefix convention; fresh fish
+    instances have no aliases so risk was theoretical for parallel
+    children, but main-script calls run in the user's shell where
+    aliases could exist. Sites: _acquire_lock (2), _manifest_check_orphans
+    (1), _read_installed (1), _run (3), validate_configs (1),
+    install_file (2), install_files (1), do_diff (4), verify_static (1),
+    do_check (9), _gather_gpu_state (1), _gather_cpu_state (2),
+    _gather_temps (3), verify_runtime (8), _diag_info (5),
+    _diag_storage (2), _diag_network (1), do_diagnose (4),
+    _check_hardware_fingerprint (1), do_test_all (2).
+
+  fix: _ntsync_state 5 echo calls replaced with printf '%s\n' —
+    consistent with v3.7.9 fix that converted _get_boot_time,
+    _pregenerate_content_files, and _parse_systemctl_show. echo
+    interprets -n/-e flags; ntsync state values are safe strings but
+    printf is the established convention for stdout return values.
+
 3.7.11 (2026-03-15)
 -------------------
 

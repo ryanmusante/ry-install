@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.11 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.11"
+# ry-install v3.7.12 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.12"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -139,15 +139,15 @@ function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_
     if test "$KVER_MAJOR" -lt 6 || begin
             test "$KVER_MAJOR" -eq 6 && test "$KVER_MINOR" -lt 14
         end
-        echo unavailable
+        printf '%s\n' unavailable
     else if _kconfig_cache | grep -q -- '^CONFIG_NTSYNC=y'
-        echo builtin
+        printf '%s\n' builtin
     else if test -c /dev/ntsync
-        echo loaded
+        printf '%s\n' loaded
     else if grep -q -- '^ntsync ' /proc/modules 2>/dev/null
-        echo loaded_nodev
+        printf '%s\n' loaded_nodev
     else
-        echo missing
+        printf '%s\n' missing
     end
 end
 
@@ -290,8 +290,7 @@ end
 # ── Cleanup state: _CLEANUP_DONE prevents double-run across signal + fish_exit handlers ──
 set -g _CLEANUP_DONE false
 
-# Atomic mkdir mutex with PID file; reclaims stale locks via PID liveness check with race-safe re-check
-# When flock(1) is available, uses it for stale reclaim to eliminate the rmdir/mkdir TOCTOU race
+# Atomic mkdir mutex with PID file; reclaims stale locks via PID liveness check; flock(1) eliminates TOCTOU race
 function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     # Atomic mkdir as mutex; PID file inside enables stale-lock detection via process liveness probe
     set -g LOCK_DIR "$HOME/ry-install/.lock"
@@ -304,20 +303,16 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         return 0
     end
     # LOCK_DIR exists — check if the PID inside is still alive
-    set -l old_pid (cat -- "$LOCK_FILE" 2>/dev/null)
+    set -l old_pid (command cat -- "$LOCK_FILE" 2>/dev/null)
     if test -n "$old_pid" && string match -qr '^\d+$' -- "$old_pid" && kill -0 -- "$old_pid" 2>/dev/null
         echo "[ERR] Another ry-install instance is running (PID $old_pid)" >&2
         command rm -f -- "$LOG_FILE" 2>/dev/null
         return 1
     end
-    # Stale lock reclaim — two strategies:
-    # (a) flock(1): atomic advisory lock on parent dir during reclaim eliminates TOCTOU
-    # (b) fallback: rmdir + mkdir with PID re-verify (narrow race window remains)
+    # Stale lock reclaim: (a) flock(1) atomic advisory lock eliminates TOCTOU, (b) fallback rmdir+mkdir with PID re-verify
     set -l _reclaim_parent (dirname -- "$LOCK_DIR")
     if command -q flock
-        # flock -n: non-blocking; flock -E 5: exit 5 on lock contention
-        # Inner script uses /bin/sh — only needs rm/rmdir/mkdir; avoids Fish quoting in subshell
-        # Paths passed as positional args ($1/$2) for safe sh quoting
+        # flock -n/-E 5: non-blocking, exit 5 on contention; /bin/sh inner script avoids Fish quoting; paths as positional args
         flock -n -E 5 "$_reclaim_parent" /bin/sh -c '
             rm -f -- "$1/pid" 2>/dev/null
             find "$1" -maxdepth 1 -type f -delete 2>/dev/null
@@ -338,10 +333,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         # flock subshell wrote its own PID; overwrite with ours
         echo %self >"$LOCK_FILE"
     else
-        # Fallback: rmdir + mkdir is not atomic — a concurrent instance could
-        # acquire between the two calls. PID re-verify after write detects most races
-        # (loser reads winner's PID), but a narrow window remains if both write and read
-        # back their own PID before the filesystem flushes. Acceptable for single-user use.
+        # Fallback: rmdir+mkdir not atomic; PID re-verify detects most races but narrow window remains — acceptable for single-user
         command rm -f -- "$LOCK_FILE" 2>/dev/null
         command find "$LOCK_DIR" -maxdepth 1 -type f -delete 2>/dev/null
         command rmdir -- "$LOCK_DIR" 2>/dev/null || true
@@ -352,7 +344,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         end
         echo %self >"$LOCK_FILE"
     end
-    set -l verify_pid (cat -- "$LOCK_FILE" 2>/dev/null)
+    set -l verify_pid (command cat -- "$LOCK_FILE" 2>/dev/null)
     set -l my_pid %self
     if test "$verify_pid" != "$my_pid"
         echo "[ERR] Lock reclaim lost to concurrent instance (PID $verify_pid)" >&2
@@ -369,8 +361,13 @@ end
 function _do_cleanup --description "Master cleanup: remove tmpfiles, release lock, kill keepalive"
     _cleanup_tmpfiles
     # _TRACKED_TMPFILES stores absolute paths so cleanup works even if TMPDIR changed since file creation
+    # Entries include both files (mktemp) and directories (mktemp -d); test -e covers both
     for _tf in $_TRACKED_TMPFILES
-        test -f "$_tf" && command rm -f -- "$_tf" 2>/dev/null
+        if test -d "$_tf"
+            command rm -rf --preserve-root -- "$_tf" 2>/dev/null
+        else if test -f "$_tf"
+            command rm -f -- "$_tf" 2>/dev/null
+        end
     end
     set --erase _TRACKED_TMPFILES
     # Fallback sweep: find -user $_MY_UID catches ry-* tmpfiles missed by the tracked list (e.g., crash before tracking)
@@ -719,15 +716,13 @@ function _load_profile --description "Determine, load, and validate the active p
     # 5. Derived globals
     set -g MANAGED_FILE_COUNT (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
 
-    # 6. Cache root UUID — findmnt called once here instead of per get_file_content call;
-    # eliminates TOCTOU between install_file's comparison and write paths
+    # 6. Cache root UUID — findmnt called once here; eliminates TOCTOU between install_file's comparison and write paths
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
     if test -z "$_ROOT_UUID"
         _warn "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline generation will fail"
     end
 
-    # 7. Lightweight hardware sanity — /proc/cpuinfo only, no lspci/sudo;
-    # full fingerprint check runs later in _install_preflight
+    # 7. Lightweight hardware sanity — /proc/cpuinfo only, no lspci/sudo; full fingerprint check in _install_preflight
     if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
         set -l _cpu_model (grep -m1 -- 'model name' /proc/cpuinfo 2>/dev/null | sed 's/.*: //')
         if test -n "$_cpu_model"; and not string match -q -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"
@@ -772,7 +767,7 @@ function _manifest_check_orphans --description "Warn about files from previous i
     if not test -f "$MANIFEST_FILE"
         return 0
     end
-    set -l manifest_lines (cat -- "$MANIFEST_FILE" 2>/dev/null)
+    set -l manifest_lines (command cat -- "$MANIFEST_FILE" 2>/dev/null)
     if test (count $manifest_lines) -lt 3
         return 0
     end
@@ -930,8 +925,7 @@ RestartSec=5
 WantedBy=default.target'
 
         case "/etc/systemd/system/amdgpu-performance.service"
-            # After=graphical.target: DRM settle time (Arch #72655); retry loop guards sysfs readiness
-            # ExecStart: 5 retries, 2s delay; exit 1 if no writable sysfs nodes found
+            # After=graphical.target for DRM settle (Arch #72655); ExecStart: 5 retries, 2s delay, exit 1 if no writable sysfs
             printf '%s\n' '[Unit]' \
                 'Description=Set AMDGPU power_dpm_force_performance_level to high' \
                 'After=graphical.target' \
@@ -1174,7 +1168,7 @@ function _read_installed --argument-names dst --description "Read installed file
     # $HOME/* files: read as user; system files: read as root (preserves privilege separation)
     if string match -q "$HOME/*" -- "$dst"
         test -f "$dst" || return 1
-        cat -- "$dst" 2>/dev/null
+        command cat -- "$dst" 2>/dev/null
         return $status
     else
         sudo test -f "$dst" 2>/dev/null || return 1
@@ -1356,8 +1350,7 @@ function _progress_done --description "Finalize and close the progress display"
     set -g _STEP_PREV_NAME ""
     set -g _STEP_PREV_START 0
 
-    # Runtime assertion: catch step count drift (lint also checks at build time)
-    # Only meaningful when progress bar was active (--all without --dry-run)
+    # Runtime assertion: catch step count drift (lint also checks at build time); only meaningful with --all without --dry-run
     if test "$ALL" = true; and test "$DRY" = false
         if test "$PROGRESS_CURRENT" -ne "$PROGRESS_TOTAL" 2>/dev/null
             _log "WARN: progress step mismatch: emitted $PROGRESS_CURRENT of $PROGRESS_TOTAL expected"
@@ -1457,10 +1450,10 @@ function _run --description "Execute a command with logging, dry-run support, an
         if test "$stdout_tmp" != /dev/null && test -s "$stdout_tmp"
             set -l line_count (wc -l < "$stdout_tmp" | string trim --)
             if test $line_count -le 50
-                _log "OUTPUT: "(string join -- " | " (cat -- "$stdout_tmp"))
+                _log "OUTPUT: "(string join -- " | " (command cat -- "$stdout_tmp"))
             else if test $ret -ne 0
                 if test $line_count -le 200
-                    _log "OUTPUT: "(string join -- " | " (cat -- "$stdout_tmp"))
+                    _log "OUTPUT: "(string join -- " | " (command cat -- "$stdout_tmp"))
                 else
                     _log "OUTPUT: "(string join -- " | " (head -n 100 "$stdout_tmp"))" | ... ($line_count lines, showing first 100 + last 100) | "(string join -- " | " (tail -n 100 "$stdout_tmp"))
                 end
@@ -1469,7 +1462,7 @@ function _run --description "Execute a command with logging, dry-run support, an
             end
             # Print captured stdout when QUIET=false; note: install_file uses get_file_content|tee directly, not this wrapper
             if test "$QUIET" = false
-                cat -- "$stdout_tmp"
+                command cat -- "$stdout_tmp"
             end
         end
         command rm -f -- "$stdout_tmp" 2>/dev/null
@@ -1942,9 +1935,7 @@ function validate_configs --description "Run all embedded config validators"
     # Phase 2 (parallel): fork independent validation jobs
     set -l dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
 
-    # Job 1: cross-reference check — verify files were generated (existence, not emptiness).
-    # Empty files may indicate runtime dependencies — original code logged and skipped these.
-    # Content-specific validation (jobs 2-5) catches actual missing content.
+    # Job 1: cross-reference check — verify files exist (empty files indicate runtime deps; content validation in jobs 2-5)
     fish -c "
         set -l errs 0
         set -l expected_count $dst_count
@@ -2094,7 +2085,7 @@ function validate_configs --description "Run all embedded config validators"
             set errors (math $errors + 1)
             continue
         end
-        set -l phase_errors (cat -- "$val_dir/$phase.errors" 2>/dev/null)
+        set -l phase_errors (command cat -- "$val_dir/$phase.errors" 2>/dev/null)
         if test -n "$phase_errors"; and string match -qr '^\d+$' -- "$phase_errors"
             if test "$phase_errors" -gt 0
                 set errors (math $errors + $phase_errors)
@@ -2169,7 +2160,7 @@ function install_file --argument-names dst use_sudo --description "Install a sin
         if test "$use_sudo" = true
             set _cur_content (sudo cat -- "$dst" 2>/dev/null)
         else
-            set _cur_content (cat -- "$dst" 2>/dev/null)
+            set _cur_content (command cat -- "$dst" 2>/dev/null)
         end
         if test "$_new_content" = "$_cur_content"
             _ok "→ $dst (unchanged)"
@@ -2263,7 +2254,7 @@ function install_file --argument-names dst use_sudo --description "Install a sin
         end
         # Post-write integrity check (user file): re-generate + hash to catch content-generation bugs
         set -l _expected_hash (get_file_content "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
-        set -l _actual_hash (cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+        set -l _actual_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
         if test -n "$_expected_hash" && test "$_expected_hash" != "$_actual_hash"
             _fail "→ $dst (post-write checksum mismatch)"
             _log "HASH_MISMATCH: expected=$_expected_hash actual=$_actual_hash dst=$dst"
@@ -2281,7 +2272,7 @@ function install_files --description "Install multiple embedded configs with arg
     set -l _argparse_tmp (mktemp -t ry-argparse.XXXXXX 2>/dev/null || echo /dev/null)
     argparse s/sudo 'd/desc=' -- $argv 2>$_argparse_tmp
     or begin
-        set -l _argparse_err (string trim -- (cat -- "$_argparse_tmp" 2>/dev/null))
+        set -l _argparse_err (string trim -- (command cat -- "$_argparse_tmp" 2>/dev/null))
         command rm -f -- "$_argparse_tmp" 2>/dev/null
         _err "install_files: invalid arguments"(test -n "$_argparse_err" && echo ": $_argparse_err")
         return 1
@@ -2387,7 +2378,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
         set -l safe (string replace -a '/' '_' -- "$dst")
         fish -c "
             if string match -q '$my_home/*' -- '$dst'
-                cat -- '$dst' > '$diff_batch_dir/installed_$safe' 2>/dev/null
+                command cat -- '$dst' > '$diff_batch_dir/installed_$safe' 2>/dev/null
             else
                 sudo -n cat -- '$dst' > '$diff_batch_dir/installed_$safe' 2>/dev/null
             end
@@ -2428,7 +2419,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
             _warn "$dst: diff child crashed without writing results"
             continue
         end
-        set -l read_ok (cat -- "$diff_batch_dir/readok_$safe" 2>/dev/null)
+        set -l read_ok (command cat -- "$diff_batch_dir/readok_$safe" 2>/dev/null)
         if test -z "$read_ok"
             set read_ok 1
         end
@@ -2436,7 +2427,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
         set -l this_diff false
         set -l this_perm_only false
         if test $read_ok -eq 0
-            set -l diff_status (cat -- "$diff_batch_dir/diffstatus_$safe" 2>/dev/null)
+            set -l diff_status (command cat -- "$diff_batch_dir/diffstatus_$safe" 2>/dev/null)
             if test -n "$diff_status"; and test "$diff_status" != 0
                 set has_diff true
                 set this_diff true
@@ -2445,7 +2436,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
                 set -l diff_tmp "$diff_batch_dir/diff_$safe"
                 begin
                     if test "$NO_COLOR" = true
-                        cat -- "$diff_tmp"
+                        command cat -- "$diff_tmp"
                     else if test "$HAS_DELTA" = true
                         delta <"$diff_tmp"
                     else
@@ -3203,7 +3194,7 @@ function verify_static --description "Verify installed configs match embedded ch
     # Collect results in deterministic order
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         set -l safe (string replace -a '/' '_' -- "$dst")
-        set -l result (cat -- "$hash_dir/result_$safe" 2>/dev/null)
+        set -l result (command cat -- "$hash_dir/result_$safe" 2>/dev/null)
         switch "$result"
             case pass
                 _ok "  $dst: checksum match"
@@ -3271,9 +3262,9 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     fish -c "
         set -l drift false
         set -l checked 0
-        set -l sys_dsts (cat -- '$result_dir/sys_dsts')
-        set -l usr_dsts (cat -- '$result_dir/usr_dsts')
-        set -l svc_dsts (cat -- '$result_dir/svc_dsts')
+        set -l sys_dsts (command cat -- '$result_dir/sys_dsts')
+        set -l usr_dsts (command cat -- '$result_dir/usr_dsts')
+        set -l svc_dsts (command cat -- '$result_dir/svc_dsts')
         for dst in \$sys_dsts \$usr_dsts \$svc_dsts
             if string match -q '*nm.conf' -- \"\$dst\"; or string match -q '*/iwd/*' -- \"\$dst\"
                 if test '$skip_iwd' = true
@@ -3310,9 +3301,9 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     # ── Job 2: file permissions (parallel) ──
     fish -c "
         set -l drift false
-        set -l sys_dsts (cat -- '$result_dir/sys_dsts')
-        set -l svc_dsts (cat -- '$result_dir/svc_dsts')
-        set -l usr_dsts (cat -- '$result_dir/usr_dsts')
+        set -l sys_dsts (command cat -- '$result_dir/sys_dsts')
+        set -l svc_dsts (command cat -- '$result_dir/svc_dsts')
+        set -l usr_dsts (command cat -- '$result_dir/usr_dsts')
         for dst in \$sys_dsts \$svc_dsts
             if not sudo -n test -e \"\$dst\" 2>/dev/null
                 continue
@@ -3343,7 +3334,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     # ── Job 3: kernel params (parallel) ──
     fish -c "
         set -l drift false
-        set -l cmdline (cat -- /proc/cmdline 2>/dev/null)
+        set -l cmdline (command cat -- /proc/cmdline 2>/dev/null)
         if test -n \"\$cmdline\"
             for param in $KERNEL_PARAMS
                 if not string match -q -- '* '\$param' *' ' '\$cmdline' '
@@ -3426,13 +3417,13 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
             _log "CHECK_DRIFT: child '$phase' crashed without writing results"
             set drift true
         else
-            set -l result (cat -- "$result_dir/{$phase}_drift" 2>/dev/null)
+            set -l result (command cat -- "$result_dir/{$phase}_drift" 2>/dev/null)
             if test "$result" = true
                 set drift true
             end
         end
     end
-    set checked (cat -- "$result_dir/hash_checked" 2>/dev/null)
+    set checked (command cat -- "$result_dir/hash_checked" 2>/dev/null)
     if test -z "$checked"; or not string match -qr '^\d+$' -- "$checked"
         set checked 0
     end
@@ -3441,9 +3432,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
 
     test "$drift" = true; and return $EXIT_DRIFT
 
-    # Guard against false negative: if no files could be checked
-    # (all skipped due to missing sudo, mktemp failures, etc.),
-    # report drift rather than falsely claiming clean.
+    # Guard against false negative: if no files could be checked (missing sudo, mktemp failures), report drift
     if test $checked -eq 0
         _log "CHECK_DRIFT: no files could be checked (all skipped)"
         return $EXIT_DRIFT
@@ -3457,7 +3446,7 @@ function _gather_gpu_state --description "Collect GPU driver and firmware state 
     set -g _GPU_PERF_LEVEL ""
     for f in /sys/class/drm/card*/device/power_dpm_force_performance_level
         if test -f "$f"
-            set -g _GPU_PERF_LEVEL (cat -- "$f" 2>/dev/null)
+            set -g _GPU_PERF_LEVEL (command cat -- "$f" 2>/dev/null)
             break
         end
     end
@@ -3472,8 +3461,8 @@ function _gather_cpu_state --description "Collect CPU governor and frequency sta
     for cpu_dir in /sys/devices/system/cpu/cpu*/cpufreq
         if test -d "$cpu_dir"
             set -g _CPU_PATH "$cpu_dir"
-            set -g _CPU_GOVERNOR (cat -- "$cpu_dir/scaling_governor" 2>/dev/null)
-            set -g _CPU_EPP (cat -- "$cpu_dir/energy_performance_preference" 2>/dev/null)
+            set -g _CPU_GOVERNOR (command cat -- "$cpu_dir/scaling_governor" 2>/dev/null)
+            set -g _CPU_EPP (command cat -- "$cpu_dir/energy_performance_preference" 2>/dev/null)
             break
         end
         # Collect thermal sensor readings from hwmon sysfs entries for dashboard/diagnostics
@@ -3493,9 +3482,9 @@ function _gather_temps --description "Collect thermal sensor readings from sysfs
         test -f "$f" || continue
         set -l name_f (string replace 'temp1_input' 'name' -- "$f")
         test -f "$name_f" || continue
-        set -l name (cat -- "$name_f" 2>/dev/null)
+        set -l name (command cat -- "$name_f" 2>/dev/null)
         if test "$name" = k10temp || test "$name" = zenpower
-            set raw (cat -- "$f" 2>/dev/null || echo 0)
+            set raw (command cat -- "$f" 2>/dev/null || echo 0)
             if string match -qr '^\d+$' -- "$raw"
                 set -l temp_val (math "$raw / 1000")
                 set -g _TEMP_CPU_INT (string split '.' -- "$temp_val")[1]
@@ -3510,7 +3499,7 @@ function _gather_temps --description "Collect thermal sensor readings from sysfs
         test -d "$card_dir" || continue
         for f in $card_dir/hwmon/hwmon*/temp1_input
             test -f "$f" || continue
-            set -l raw (cat -- "$f" 2>/dev/null || echo 0)
+            set -l raw (command cat -- "$f" 2>/dev/null || echo 0)
             if string match -qr '^\d+$' -- "$raw"
                 set -l temp_val (math "$raw / 1000")
                 set -g _TEMP_GPU_INT (string split '.' -- "$temp_val")[1]
@@ -3548,7 +3537,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     _echo "KERNEL CMDLINE"
     _echo
 
-    set -l cmdline (cat -- /proc/cmdline 2>/dev/null)
+    set -l cmdline (command cat -- /proc/cmdline 2>/dev/null)
     for param in $KERNEL_PARAMS
         if string match -q -- "* $param *" " $cmdline "
             _ok "  $param: active"
@@ -3570,7 +3559,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     for f in /sys/class/drm/card*/device/power_dpm_force_performance_level
         if test -f "$f"
             set found_gpu true
-            set -l level (cat -- "$f" 2>/dev/null)
+            set -l level (command cat -- "$f" 2>/dev/null)
             if test "$level" = high
                 _ok "  $f: $level"
                 set gpu_ok true
@@ -3624,7 +3613,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
             "scaling_governor:powersave:Governor" \
             "energy_performance_preference:performance:EPP"
             set -l parts (string split ':' -- "$check")
-            set -l sysfs_val (cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
+            set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
 
             if test "$sysfs_val" = "$parts[2]"
                 _ok "  $parts[3]: $sysfs_val"
@@ -3642,7 +3631,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     # btusb check removed — usbcore.autosuspend=-1 handles globally
 
     if test -f /sys/module/usbcore/parameters/autosuspend
-        set -l sysfs_val (cat -- /sys/module/usbcore/parameters/autosuspend 2>/dev/null)
+        set -l sysfs_val (command cat -- /sys/module/usbcore/parameters/autosuspend 2>/dev/null)
         if test "$sysfs_val" = -1
             _ok "  usbcore.autosuspend: $sysfs_val"
         else
@@ -3651,7 +3640,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     end
 
     if test -f /sys/module/nvme_core/parameters/default_ps_max_latency_us
-        set -l sysfs_val (cat -- /sys/module/nvme_core/parameters/default_ps_max_latency_us 2>/dev/null)
+        set -l sysfs_val (command cat -- /sys/module/nvme_core/parameters/default_ps_max_latency_us 2>/dev/null)
         if test "$sysfs_val" = 0
             _ok "  nvme_core.default_ps_max_latency_us: $sysfs_val"
         else
@@ -3666,7 +3655,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
             set -l expected (string split ':' -- "$pair")[2]
             set -l ppath /sys/module/amdgpu/parameters/$pname
             if test -f "$ppath"
-                set sysfs_val (string trim -- (cat -- "$ppath" 2>/dev/null))
+                set sysfs_val (string trim -- (command cat -- "$ppath" 2>/dev/null))
                 set -l sysfs_val_dec "$sysfs_val"
                 set -l expected_dec "$expected"
                 if string match -q '0x*' -- "$sysfs_val"
@@ -3685,7 +3674,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     end
 
     if test -f /sys/module/mt7925e/parameters/disable_aspm
-        set -l sysfs_val (cat -- /sys/module/mt7925e/parameters/disable_aspm 2>/dev/null)
+        set -l sysfs_val (command cat -- /sys/module/mt7925e/parameters/disable_aspm 2>/dev/null)
         if test "$sysfs_val" = Y || test "$sysfs_val" = 1
             _ok "  mt7925e.disable_aspm: $sysfs_val"
         else
@@ -3705,8 +3694,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     set -l show_output (systemctl show --property=LoadState,ActiveState,UnitFileState -- $sys_units 2>/dev/null | string collect --no-trim-newlines)
     set -l parsed (_parse_systemctl_show "$show_output")
 
-    # Index into parsed: 1=amdgpu-performance, 2=cpupower-epp, 3=fstrim, 4=resolved, 5=nm-dispatcher
-    # Each record: LoadState:ActiveState:UnitFileState
+    # Index into parsed (LoadState:ActiveState:UnitFileState): 1=amdgpu-performance, 2=cpupower-epp, 3=fstrim, 4=resolved, 5=nm-dispatcher
 
     # amdgpu-performance.service
     set -l rec (echo "$parsed[1]" | string split -- ':')
@@ -3834,7 +3822,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
         set -l _key (string split '=' -- "$_sc")[1]
         set -l _expected (string split '=' -- "$_sc")[2]
         set -l _proc_path (string replace -a '.' '/' -- "$_key")
-        set -l _actual (cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim --)
+        set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim --)
         if test "$_actual" = "$_expected"
             _ok "  $_key: $_actual"
         else if test -n "$_actual"
@@ -4237,9 +4225,7 @@ function do_lint --description "Lint the script source for fish anti-patterns an
         # Cross-check: header version, VERSION constant, changelog, and README badge
     end
 
-    # Scope shadow check: set -l inside for/while/if/switch blocks can shadow outer variables
-    # mawk-compatible (no match capture groups), tracks piped while (cmd | while read),
-    # anchored ^set -l filters string false positives (e.g. lint messages containing "set -l")
+    # Scope shadow check: set -l in blocks can shadow outer vars; mawk-compatible, tracks piped while, anchored ^set -l filters false positives
     set -l shadow_hits (awk '
         /^[[:space:]]*function / { in_func=1; depth=0; delete vars; next }
         !in_func { next }
@@ -4933,12 +4919,12 @@ function _diag_info --description "Diagnose: system overview, fans, power, sched
     set -l fan_readings
     for f in /sys/class/hwmon/hwmon*/fan*_input
         test -f "$f" || continue
-        set -l rpm (cat -- "$f" 2>/dev/null || echo 0)
+        set -l rpm (command cat -- "$f" 2>/dev/null || echo 0)
         if string match -qr '^\d+$' -- "$rpm" && test "$rpm" -gt 0
             set -l label_f (string replace '_input' '_label' -- "$f")
             set -l label ""
             if test -f "$label_f"
-                set label (string trim -- (cat -- "$label_f" 2>/dev/null))
+                set label (string trim -- (command cat -- "$label_f" 2>/dev/null))
             end
             if test -z "$label"
                 set label (basename -- "$f" | string replace '_input' '')
@@ -4960,7 +4946,7 @@ function _diag_info --description "Diagnose: system overview, fans, power, sched
     set -l pkg_power ""
     for f in /sys/class/hwmon/hwmon*/power1_average
         if test -f "$f"
-            set pkg_power (cat -- "$f" 2>/dev/null)
+            set pkg_power (command cat -- "$f" 2>/dev/null)
             break
         end
     end
@@ -4971,7 +4957,7 @@ function _diag_info --description "Diagnose: system overview, fans, power, sched
     set -l gpu_power ""
     for f in /sys/class/drm/card*/device/hwmon/hwmon*/power1_average
         if test -f "$f"
-            set gpu_power (cat -- "$f" 2>/dev/null)
+            set gpu_power (command cat -- "$f" 2>/dev/null)
             break
         end
     end
@@ -4989,7 +4975,7 @@ function _diag_info --description "Diagnose: system overview, fans, power, sched
     # /sys/kernel/debug/sched/ requires root; fall back to /proc/config.gz CONFIG_SCHED_* if unavailable
     for f in /sys/kernel/debug/sched/*/name
         if test -f "$f"
-            set cpu_sched (cat -- "$f" 2>/dev/null)
+            set cpu_sched (command cat -- "$f" 2>/dev/null)
             break
         end
     end
@@ -5251,7 +5237,7 @@ function _diag_network --description "Diagnose: network, sysctl, gaming, memory,
         set -l _key (string split '=' -- "$_sc")[1]
         set -l _expected (string split '=' -- "$_sc")[2]
         set -l _proc_path (string replace -a '.' '/' -- "$_key")
-        set -l _actual (cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim --)
+        set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim --)
         if test "$_actual" = "$_expected"
             _ok "  $_key: $_actual"
         else if test -n "$_actual"
@@ -5402,7 +5388,7 @@ function _diag_storage --description "Diagnose: journal size, NVMe health, boot 
                 if test -d "$zdev"
                     set -l zname (basename -- "$zdev")
                     set -l algo (grep -oE -- '\[.*\]' "$zdev/comp_algorithm" 2>/dev/null | tr -d '[]')
-                    set -l disksize (cat -- "$zdev/disksize" 2>/dev/null)
+                    set -l disksize (command cat -- "$zdev/disksize" 2>/dev/null)
                     if test -n "$disksize" && test "$disksize" -gt 0 2>/dev/null
                         set disksize (math "round($disksize / 1073741824)")
                         _info "  $zname: $algo, $disksize GB"
@@ -5418,7 +5404,7 @@ function _diag_storage --description "Diagnose: journal size, NVMe health, boot 
         _info "zramctl: not installed"
     end
     if test -f /sys/module/zswap/parameters/enabled
-        set -l zswap_enabled (cat -- /sys/module/zswap/parameters/enabled 2>/dev/null)
+        set -l zswap_enabled (command cat -- /sys/module/zswap/parameters/enabled 2>/dev/null)
         if test "$zswap_enabled" = Y
             _warn "zswap: enabled (expected disabled via cmdline or CachyOS 30-zram.rules)"
             set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
@@ -5503,8 +5489,7 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
     set -g _DIAG_ISSUES 0
     set -g _DIAG_CHECKS 0
 
-    # B-4: Run 5 diagnostic phases in parallel
-    # Prereq 2: cache sudo for children that need it (_diag_storage uses nvme smart-log)
+    # B-4: Run 5 diagnostic phases in parallel; prereq 2: cache sudo for children (_diag_storage uses nvme smart-log)
     _ensure_sudo_cached
     or return 1
 
@@ -5515,8 +5500,7 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
     end
     set -ga _TRACKED_TMPFILES "$diag_dir"
 
-    # Prereq 6: serialize required functions for children (source-ing the full script
-    # would re-execute top-level code: lock acquisition, CLI dispatch, etc.)
+    # Prereq 6: serialize required functions for children (source-ing full script would re-execute top-level code)
     set -l funcs_file "$diag_dir/_functions.fish"
     set -l needed_funcs \
         _diag_services _diag_hardware _diag_network _diag_storage _diag_config \
@@ -5545,8 +5529,7 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
     for phase in services hardware network storage config
         # Prereq 3: each child gets its own log file
         command touch -- "$diag_dir/$phase.jsonl"
-        # Prereq 6: source serialized functions; prereq 4: buffer output
-        # NO_COLOR not set here: _msg detects non-TTY via isatty 2 (stderr → file)
+        # Prereq 6: source serialized functions; prereq 4: buffer output; NO_COLOR unset — _msg detects non-TTY via isatty 2
         fish -c "
             source '$funcs_file'
             set -g _DIAG_ISSUES 0
@@ -5575,15 +5558,15 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
     # Print output in order, merge counters
     for phase in services hardware network storage config
         if test -s "$diag_dir/$phase.out"
-            cat -- "$diag_dir/$phase.out" >&2
+            command cat -- "$diag_dir/$phase.out" >&2
         end
         if not test -f "$diag_dir/$phase.issues"
             _warn "Diagnostics child '$phase' did not produce results"
             set _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
             continue
         end
-        set -l phase_issues (cat -- "$diag_dir/$phase.issues" 2>/dev/null)
-        set -l phase_checks (cat -- "$diag_dir/$phase.checks" 2>/dev/null)
+        set -l phase_issues (command cat -- "$diag_dir/$phase.issues" 2>/dev/null)
+        set -l phase_checks (command cat -- "$diag_dir/$phase.checks" 2>/dev/null)
         if test -n "$phase_issues"; and string match -qr '^\d+$' -- "$phase_issues"
             set _DIAG_ISSUES (math $_DIAG_ISSUES + $phase_issues)
         end
@@ -5595,7 +5578,7 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
     # Merge per-phase JSONL logs into main LOG_FILE
     for phase in services hardware network storage config
         if test -s "$diag_dir/$phase.jsonl"
-            cat -- "$diag_dir/$phase.jsonl" >>"$LOG_FILE" 2>/dev/null
+            command cat -- "$diag_dir/$phase.jsonl" >>"$LOG_FILE" 2>/dev/null
         end
     end
 
@@ -6314,9 +6297,7 @@ end
 function _install_rebuild_boot --description "Regenerate initramfs and bootloader entries"
     _check_sudo_keepalive
 
-    # Order: syu → mkinitcpio → sdboot → boot_sanity
-    # syu first so any new kernel is present before mkinitcpio -P regenerates all presets.
-    # Pacman hooks also run mkinitcpio/sdboot, but our explicit pass ensures our configs apply.
+    # Order: syu → mkinitcpio → sdboot → boot_sanity; syu first so new kernel is present before mkinitcpio -P; explicit pass ensures our configs apply
     _progress "System upgrade"
     if test "$SYSTEM_UPGRADED" = true
         _ok "System already upgraded during package installation"
@@ -6467,8 +6448,7 @@ function _install_finalize --description "Run post-install verification, cleanup
                 # Generate deterministic NM connection UUID from SSID+interface via MD5 (not security-critical)
                 set -l _hex (printf '%s-%s' "$WIFI_SSID" "$WIFI_IFACE" | md5sum | string split -- ' ')[1]
                 set -l conn_uuid (string sub -l 8 -- $_hex)-(string sub -s 9 -l 4 -- $_hex)-(string sub -s 13 -l 4 -- $_hex)-(string sub -s 17 -l 4 -- $_hex)-(string sub -s 21 -l 12 -- $_hex)
-                # GKeyFile escapes for NM keyfile: backslash, semicolon, leading #, leading/trailing space
-                # Note: Fish single-quoted '\\' is one literal \ (not two); quoting levels are correct
+                # GKeyFile escapes for NM keyfile: backslash, semicolon, leading #, leading/trailing space; Fish '\\' = one literal \
                 set -l safe_pass (string replace -a '\\' '\\\\' -- "$WIFI_PASS")
                 set -l safe_pass (string replace -a ';' '\\;' -- "$safe_pass")
                 if string match -q '#*' -- "$safe_pass"
@@ -6572,7 +6552,7 @@ function _check_hardware_fingerprint --description "Verify hardware matches expe
     set -l cur_nvme ""
     for m in /sys/block/nvme*/device/model
         test -f "$m" || continue
-        set cur_nvme (string trim -- (cat -- "$m" 2>/dev/null))
+        set cur_nvme (string trim -- (command cat -- "$m" 2>/dev/null))
         break
     end
     set -l cur_wifi ""
@@ -6670,8 +6650,7 @@ function do_install --description "Full installation: preflight, packages, confi
     _log "DRY: $DRY"
     _log "ALL: $ALL"
 
-    # Pre-declare _boot_rc at function scope — Fish's set -l inside a block
-    # scopes to THAT BLOCK, not the enclosing function (set -f requires Fish 3.4+)
+    # Pre-declare _boot_rc at function scope — Fish's set -l inside a block scopes to THAT BLOCK, not the enclosing function
     set -l _boot_rc 0
 
     _echo
@@ -6715,11 +6694,11 @@ function do_install --description "Full installation: preflight, packages, confi
         set -g INSTALL_HAD_ERRORS true
     end
 
-    # Boot-critical failure: skip WiFi/finalize — system may not boot; continuing
-    # would mask the failure with unrelated errors and waste time on WiFi prompts
+    # Boot-critical failure: skip WiFi/finalize — system may not boot; continuing would mask the failure
     if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
         _err "Boot-critical failure — skipping WiFi and finalization"
         _err "Fix boot issue first: sudo mkinitcpio -P && sudo sdboot-manage gen"
+        _progress_skip "Finalizing system"
         _progress_skip "NetworkManager restart"
         _progress_skip "WiFi reconnection"
     else
@@ -7039,9 +7018,7 @@ function do_test_all --description "Run the full test suite across all subcomman
         "--diff --fix --dry-run --all" \
         "--install-file /etc/kernel/cmdline --dry-run"
 
-    # Nested parallelism guard: each child may fork its own parallel work
-    # (verify-static: 17, check: 4, diagnose: 5, diff: 17). On low-core
-    # systems, run all modes sequentially to avoid oversubscription.
+    # Nested parallelism guard: children fork parallel work (verify-static:17, check:4, diagnose:5, diff:17); sequential on low-core systems
     set -l nproc_val (nproc 2>/dev/null)
     if test -n "$nproc_val" && string match -qr '^\d+$' -- "$nproc_val" && test "$nproc_val" -lt 8
         _warn "Low CPU count ($nproc_val) — running test modes sequentially to avoid oversubscription"
@@ -7081,7 +7058,7 @@ function do_test_all --description "Run the full test suite across all subcomman
     for i in (seq (count $parallel_modes))
         set -l label (string replace -a ' ' '_' -- $parallel_modes[$i] | string replace -a '/' '_' | string replace -a '-' '')
         set -l display_label (string replace -- '--' '' "$parallel_modes[$i]")
-        set -l code (cat -- "$test_dir/$label.exit" 2>/dev/null)
+        set -l code (command cat -- "$test_dir/$label.exit" 2>/dev/null)
         if test -z "$code"
             set code 999
         end
@@ -7135,7 +7112,7 @@ function do_test_all --description "Run the full test suite across all subcomman
     _echo "─ Validating completions output..."
     fish "$script_path" --completions 2>/dev/null
     set -l _comp_file "$HOME/.config/fish/completions/ry-install.fish"
-    set -l _comp_out (cat -- "$_comp_file" 2>/dev/null)
+    set -l _comp_out (command cat -- "$_comp_file" 2>/dev/null)
     set -l _comp_ok true
     if test -z "$_comp_out"
         # dry-run or write failure — skip content validation

@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.10 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.10"
+# ry-install v3.7.11 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.11"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -668,6 +668,7 @@ function _validate_profile --description "Verify loaded profile has all required
     return 0
 end
 
+# Resolve profile name (CLI → default-file → gtr9_pro), load function, cache root UUID, check orphans
 function _load_profile --description "Determine, load, and validate the active profile"
     # 1. Determine name
     set -l name
@@ -989,11 +990,13 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
     return 0
 end
 
+# Pre-cache sudo credential once before forking parallel children (prevents N concurrent prompts)
 function _ensure_sudo_cached --description "Cache sudo credential once before parallel forking"
     sudo true 2>/dev/null
     or return 1
 end
 
+# Parse multi-record systemctl show output into LoadState:ActiveState:UnitFileState lines
 function _parse_systemctl_show --argument-names raw_output --description "Parse multi-record systemctl show output into unit:ActiveState:UnitFileState lines"
     if test (count $argv) -ne 1
         _err "_parse_systemctl_show: expected 1 arg (raw_output), got "(count $argv)
@@ -1490,6 +1493,7 @@ function _ask --description "Prompt the user for yes/no confirmation"
     string match -qir '^y(es)?$' -- "$r"
 end
 
+# Display full usage, options, exit codes, and examples to stdout
 function show_help --description "Display usage information and available subcommands"
     # Fallback: count get_file_content case branches if profile hasn't loaded (--help exits before _load_profile)
     set -l _file_count "$MANAGED_FILE_COUNT"
@@ -3267,9 +3271,9 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     fish -c "
         set -l drift false
         set -l checked 0
-        set -l sys_dsts (cat '$result_dir/sys_dsts')
-        set -l usr_dsts (cat '$result_dir/usr_dsts')
-        set -l svc_dsts (cat '$result_dir/svc_dsts')
+        set -l sys_dsts (cat -- '$result_dir/sys_dsts')
+        set -l usr_dsts (cat -- '$result_dir/usr_dsts')
+        set -l svc_dsts (cat -- '$result_dir/svc_dsts')
         for dst in \$sys_dsts \$usr_dsts \$svc_dsts
             if string match -q '*nm.conf' -- \"\$dst\"; or string match -q '*/iwd/*' -- \"\$dst\"
                 if test '$skip_iwd' = true
@@ -3306,9 +3310,9 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     # ── Job 2: file permissions (parallel) ──
     fish -c "
         set -l drift false
-        set -l sys_dsts (cat '$result_dir/sys_dsts')
-        set -l svc_dsts (cat '$result_dir/svc_dsts')
-        set -l usr_dsts (cat '$result_dir/usr_dsts')
+        set -l sys_dsts (cat -- '$result_dir/sys_dsts')
+        set -l svc_dsts (cat -- '$result_dir/svc_dsts')
+        set -l usr_dsts (cat -- '$result_dir/usr_dsts')
         for dst in \$sys_dsts \$svc_dsts
             if not sudo -n test -e \"\$dst\" 2>/dev/null
                 continue
@@ -3339,7 +3343,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     # ── Job 3: kernel params (parallel) ──
     fish -c "
         set -l drift false
-        set -l cmdline (cat /proc/cmdline 2>/dev/null)
+        set -l cmdline (cat -- /proc/cmdline 2>/dev/null)
         if test -n \"\$cmdline\"
             for param in $KERNEL_PARAMS
                 if not string match -q -- '* '\$param' *' ' '\$cmdline' '
@@ -4704,6 +4708,7 @@ function _logs_file_ops --argument-names target --description "Log viewer: analy
     end
 end
 
+# View journalctl logs filtered by target (system, gpu, wifi, boot, audio, usb, kernel)
 function _logs_journal --argument-names target --description "Log viewer: system journal targets (system, gpu, wifi, boot, audio, usb, kernel)"
     if test (count $argv) -ne 1
         _err "_logs_journal: expected 1 arg (target), got "(count $argv)
@@ -4828,6 +4833,7 @@ function _logs_journal --argument-names target --description "Log viewer: system
     end
 end
 
+# Dispatch --logs to file operations (analyze/last/list/all) or journal targets; fuzzy-match on typos
 function do_logs --argument-names target --description "Browse, search, and analyze ry-install log files"
     if test (count $argv) -gt 2
         _err "do_logs: expected 0-2 args (target [arg]), got "(count $argv)
@@ -5020,6 +5026,7 @@ function _diag_info --description "Diagnose: system overview, fans, power, sched
     _echo
 end
 
+# Check kernel errors, failed systemd services, and expected service states
 function _diag_services --description "Diagnose: kernel errors, failed services, expected services"
     set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
     _echo "── Kernel Errors ──"
@@ -5108,6 +5115,7 @@ function _diag_services --description "Diagnose: kernel errors, failed services,
     set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
 end
 
+# Check GPU state, CPU governor/frequency, disk space, and thermal readings
 function _diag_hardware --description "Diagnose: GPU, CPU, disk space, temperatures"
     _echo "── GPU State ──"
     _gather_gpu_state
@@ -5215,6 +5223,7 @@ function _diag_hardware --description "Diagnose: GPU, CPU, disk space, temperatu
     set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
 end
 
+# Check network interfaces, sysctl overrides, ntsync, memory, and coredumps
 function _diag_network --description "Diagnose: network, sysctl, gaming, memory, coredumps"
     _echo "── Network ──"
     if command -q nmcli
@@ -5304,6 +5313,7 @@ function _diag_network --description "Diagnose: network, sysctl, gaming, memory,
     set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
 end
 
+# Check journal size, NVMe SMART health, boot time, and ZRAM/ZSWAP configuration
 function _diag_storage --description "Diagnose: journal size, NVMe health, boot performance, ZRAM/ZSWAP"
     _echo "── Journal Size ──"
     set -l journal_size (journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[GMK]' | head -n 1)
@@ -5423,6 +5433,7 @@ function _diag_storage --description "Diagnose: journal size, NVMe health, boot 
     set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
 end
 
+# Check power profiles, kernel cmdline params, and pacnew/pacsave files
 function _diag_config --description "Diagnose: power profiles, stress tests, kernel cmdline, pacnew"
     _echo "── Power Profiles ──"
     if command -q powerprofilesctl

@@ -1,3 +1,14 @@
+3.7.6 (2026-03-14)
+-------------------
+
+  fix: NDJSON footer not last line in log files
+    _cleanup_tmpfiles unconditionally logged "CLEANUP_TMPFILES: sweep
+    starting" after the footer was written. Three --logs consumers
+    (list, analyze, all) use tail -n 1 expecting the footer to be last,
+    so exit code and pass/fail/warn extraction failed silently. Guard
+    _log call with _FOOTER_WRITTEN check. Signal-handler cleanup paths
+    (where footer may not yet exist) are unaffected.
+
 3.7.5 (2026-03-14)
 -------------------
 

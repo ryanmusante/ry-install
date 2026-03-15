@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.5 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.5"
+# ry-install v3.7.6 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.6"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -264,7 +264,9 @@ end
 
 # Sweep /tmp for ry-{run-stderr,run-stdout,validate,diff,argparse,test-stderr}.* owned by current UID
 function _cleanup_tmpfiles --description "Remove temporary files created during this run"
-    _log "CLEANUP_TMPFILES: sweep starting"
+    if not set -q _FOOTER_WRITTEN
+        _log "CLEANUP_TMPFILES: sweep starting"
+    end
     # Skip in dry-run; stale tmpfiles from a crashed run are cleaned on next non-dry invocation.
     if test "$DRY" = true
         return 0

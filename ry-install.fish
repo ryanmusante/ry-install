@@ -232,7 +232,7 @@ function _get_boot_time --description "Print boot time in seconds, or return 1"
     set -l line (systemd-analyze 2>/dev/null | head -n 1)
     set -l sec (printf '%s\n' "$line" | string match -r -- '= ([0-9.]+)s' | tail -n 1)
     if test -n "$sec" && string match -qr '^[0-9.]+$' -- "$sec"
-        echo "$sec"
+        printf '%s\n' "$sec"
     else
         return 1
     end
@@ -973,7 +973,7 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
         set -l safe (string replace -a '/' '_' -- "$dst")
         get_file_content "$dst" >"$out_dir/$safe" 2>/dev/null
     end
-    echo "$out_dir"
+    printf '%s\n' "$out_dir"
     return 0
 end
 
@@ -992,7 +992,7 @@ function _parse_systemctl_show --argument-names raw_output --description "Parse 
         if test -z "$line"
             # End of record — emit
             if test $record_idx -ge 0
-                echo "$current_load:$current_active:$current_unitfile"
+                printf '%s\n' "$current_load:$current_active:$current_unitfile"
             end
             set record_idx (math $record_idx + 1)
             set current_active ""
@@ -1011,7 +1011,7 @@ function _parse_systemctl_show --argument-names raw_output --description "Parse 
     end
     # Emit final record if no trailing blank line
     if test -n "$current_active" -o -n "$current_unitfile" -o -n "$current_load"
-        echo "$current_load:$current_active:$current_unitfile"
+        printf '%s\n' "$current_load:$current_active:$current_unitfile"
     end
 end
 
@@ -4577,7 +4577,7 @@ function _logs_file_ops --argument-names target --description "Log viewer: analy
                 _warn "No log directory: $base"
                 return 1
             end
-            set -l files (command find "$base" -name '*.jsonl' -type f -printf '%T@\t%p\n' 2>/dev/null | sort -n | string replace -r -- '^[^\t]+\t' '')
+            set -l files (command find "$base" -name '*.jsonl' -type f ! -path "$LOG_FILE" -printf '%T@\t%p\n' 2>/dev/null | sort -n | string replace -r -- '^[^\t]+\t' '')
             if test (count $files) -eq 0
                 _info "No log files found"
                 return 0
@@ -5473,12 +5473,12 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
         # Prereq 3: each child gets its own log file
         command touch -- "$diag_dir/$phase.jsonl"
         # Prereq 6: source serialized functions; prereq 4: buffer output
+        # NO_COLOR not set here: _msg detects non-TTY via isatty 2 (stderr → file)
         fish -c "
             source '$funcs_file'
             set -g _DIAG_ISSUES 0
             set -g _DIAG_CHECKS 0
             set -g LOG_FILE '$diag_dir/$phase.jsonl'
-            set -g NO_COLOR true
             _diag_$phase 2>&1
             echo \$_DIAG_ISSUES > '$diag_dir/$phase.issues'
             echo \$_DIAG_CHECKS > '$diag_dir/$phase.checks'
@@ -7330,7 +7330,7 @@ end
 
 # Log rotation: flock serializes concurrent instances; without flock, rm -f is idempotent (last-write-wins)
 set -l _log_base_rot "$HOME/ry-install/logs"
-set -l _existing_logs (command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f -printf '%T@\t%p\n' 2>/dev/null | LC_ALL=C sort -n | string replace -r -- '^[^\t]+\t' '')
+set -l _existing_logs (command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f ! -path "$LOG_FILE" -printf '%T@\t%p\n' 2>/dev/null | LC_ALL=C sort -n | string replace -r -- '^[^\t]+\t' '')
 set -l _log_count (count $_existing_logs)
 if test $_log_count -gt $MAX_LOGS
     set -l _to_remove (math $_log_count - $MAX_LOGS)

@@ -1,10 +1,10 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.6-blue)
+![Version](https://img.shields.io/badge/version-3.7.7-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
-Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 16 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 15 embedded configs, no external dependencies.
 
 ## Hardware
 
@@ -205,7 +205,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | `amdgpu-performance.service` | Write `high` to `power_dpm_force_performance_level` sysfs after graphical.target (retry loop, multi-GPU) |
 | `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` sysfs after cpupower.service |
 
-## Embedded Files (16)
+## Embedded Files (15)
 
 | # | Scope | Path |
 |---|-------|------|

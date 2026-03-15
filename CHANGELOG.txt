@@ -1,6 +1,54 @@
 3.7.7 (2026-03-15)
 -------------------
 
+  fix: do_diagnose parallel children missing QUIET export — _msg/_echo
+    output was silently lost because QUIET was not in export_globals;
+    .out files captured no diagnostic messages. Added QUIET to the
+    exported globals list.
+
+  fix: remove dead _check_service_active_enabled function — replaced by
+    batch systemctl show pattern in verify_runtime (v3.6.0); definition
+    remained but was never called
+
+  perf: _diag_services systemctl --failed called twice per scope (once
+    for count, once for details) — now captures output once and derives
+    both count and detail lines from the captured list
+
+  fix: README badge version 3.7.6 → 3.7.7 (missed during release)
+
+  fix: README "Embedded Files (16)" → "(15)" and "16 embedded configs"
+    → "15 embedded configs" — modprobe.conf removal reduced count
+
+  fix: do_lint now cross-checks CHANGELOG version against VERSION global
+    using 'X.Y.Z (date)' format pattern
+
+  fix: /etc/kernel/cmdline now quoted in SYSTEM_DESTINATIONS for
+    consistency with all other entries
+
+  fix: all 6 tmpdir rm -rf calls now use --preserve-root, consistent
+    with LOCK_DIR cleanup
+
+  perf: verify_static masked services check batched via single
+    systemctl show --property=LoadState,UnitFileState replacing N
+    individual systemctl cat + is-enabled calls
+
+  perf: verify_static NM-dispatcher check uses systemctl show instead
+    of individual systemctl is-enabled
+
+  perf: verify_static package checks batched via single pacman -Qq
+    replacing 20+ individual pacman -Qi calls for both PKGS_ADD and
+    PKGS_DEL loops
+
+  perf: _diag_services expected services check batched via single
+    systemctl show --property=ActiveState replacing N individual
+    systemctl is-active calls
+
+  perf: _install_packages post-install verification batched via single
+    pacman -Qq replacing N individual pacman -Qi calls
+
+  perf: _install_configure_services package removal pre-check and retry
+    loop batched via pacman -Qq replacing individual pacman -Qi calls
+
   remove: /etc/modprobe.d/99-cachyos-modprobe.conf — removed from
     SYSTEM_DESTINATIONS, profile (MODPROBE_BLACKLIST), get_file_content,
     validate_modprobe_blacklist, validate_configs, verify_static,

@@ -218,30 +218,6 @@ function _verify_unit_syntax --argument-names unit_path label --description "Ver
     end
 end
 
-# Return 0 only if the named service is both active (running) and enabled (boot-persistent)
-function _check_service_active_enabled --argument-names svc --description "Check if a systemd service is active and enabled"
-    if test (count $argv) -ne 1
-        _err "_check_service_active_enabled: expected 1 arg (svc), got "(count $argv)
-        return 1
-    end
-    set -l state (systemctl is-active "$svc" 2>/dev/null)
-    set -l enabled (systemctl is-enabled "$svc" 2>/dev/null)
-    if test "$state" = active || test "$state" = exited
-        if test "$enabled" = enabled
-            _ok "  $svc: $state (enabled)"
-        else
-            _warn "  $svc: $state but $enabled (won't persist)"
-        end
-        return 0
-    else if test -f "/etc/systemd/system/$svc"
-        _fail "  $svc: $state (expected: active)"
-        return 1
-    else
-        _warn "  $svc: not installed"
-        return 1
-    end
-end
-
 # Emit paths of *.pacnew and *.pacsave files in /etc and /boot via elevated find
 function _find_pacnew_files --description "Find pacnew/pacsave files in /etc /boot"
     if command -q sudo
@@ -477,7 +453,7 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # ── Managed file destinations — 1:1 map to get_file_content(); system=0644, user=0600 ──
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        /etc/kernel/cmdline \
+        "/etc/kernel/cmdline" \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/udev/rules.d/99-cachyos-udev.rules" \
@@ -2100,7 +2076,7 @@ function validate_configs --description "Run all embedded config validators"
         end
     end
 
-    command rm -rf -- "$val_dir" "$content_dir"
+    command rm -rf --preserve-root -- "$val_dir" "$content_dir"
 
     if test $errors -gt 0
         _err "Validation failed with $errors error(s)"
@@ -2732,7 +2708,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
         end
     end
 
-    command rm -rf -- "$diff_batch_dir"
+    command rm -rf --preserve-root -- "$diff_batch_dir"
 
     _log "=== DIFF END ==="
 
@@ -2937,7 +2913,8 @@ function verify_static --description "Verify installed configs match embedded ch
         _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.powersave=$NM_WIFI_POWERSAVE" "WiFi powersave $NM_WIFI_POWERSAVE"
         _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "level=$NM_LOG_LEVEL" "logging level $NM_LOG_LEVEL"
     end
-    set -l nm_disp_state (systemctl is-enabled NetworkManager-dispatcher.service 2>/dev/null)
+    set -l _nm_disp_show (systemctl show --property=UnitFileState -- NetworkManager-dispatcher.service 2>/dev/null)
+    set -l nm_disp_state (printf '%s\n' $_nm_disp_show | string replace -- 'UnitFileState=' '')
     if test "$nm_disp_state" = enabled
         _ok "  NetworkManager-dispatcher.service: enabled"
     else
@@ -2977,10 +2954,16 @@ function verify_static --description "Verify installed configs match embedded ch
     _echo PACKAGES
     _echo
 
+    # Batch: single pacman -Q replaces N individual pacman -Qi calls for both add/del checks
+    set -l _installed_pkgs
+    if command -q pacman
+        set _installed_pkgs (pacman -Qq 2>/dev/null)
+    end
+
     _echo "── Required packages ──"
     if command -q pacman
         for pkg in $PKGS_ADD
-            if pacman -Qi "$pkg" >/dev/null 2>&1
+            if contains -- "$pkg" $_installed_pkgs
                 _ok "  $pkg: installed"
             else
                 _fail "  $pkg: NOT INSTALLED"
@@ -2994,7 +2977,7 @@ function verify_static --description "Verify installed configs match embedded ch
     _echo "── Removed packages ──"
     if command -q pacman
         for pkg in $PKGS_DEL
-            if pacman -Qi "$pkg" >/dev/null 2>&1
+            if contains -- "$pkg" $_installed_pkgs
                 _warn "  $pkg: still installed (should be removed)"
             else
                 _ok "  $pkg: not installed"
@@ -3047,16 +3030,47 @@ function verify_static --description "Verify installed configs match embedded ch
     _echo
 
     _echo "── Masked services ──"
-    for svc in $MASK
-        if not systemctl cat "$svc" >/dev/null 2>&1
-            _info "  $svc: unit not found (may not be installed)"
+    # Batch: single systemctl show replaces N individual is-enabled + cat calls
+    set -l _mask_show (systemctl show --property=LoadState,UnitFileState -- $MASK 2>/dev/null)
+    set -l _mask_idx 0
+    set -l _mask_load ""
+    set -l _mask_uf ""
+    for line in $_mask_show
+        if test -z "$line"
+            if test $_mask_idx -lt (count $MASK)
+                set _mask_idx (math $_mask_idx + 1)
+                set -l _svc $MASK[$_mask_idx]
+                if test "$_mask_load" = not-found
+                    _info "  $_svc: unit not found (may not be installed)"
+                else if test "$_mask_uf" = masked
+                    _ok "  $_svc: masked"
+                else
+                    _fail "  $_svc: $_mask_uf (expected: masked)"
+                end
+            end
+            set _mask_load ""
+            set _mask_uf ""
             continue
         end
-        set -l state (systemctl is-enabled "$svc" 2>/dev/null)
-        if test "$state" = masked
-            _ok "  $svc: masked"
-        else
-            _fail "  $svc: $state (expected: masked)"
+        switch "$line"
+            case 'LoadState=*'
+                set _mask_load (string replace -- 'LoadState=' '' "$line")
+            case 'UnitFileState=*'
+                set _mask_uf (string replace -- 'UnitFileState=' '' "$line")
+        end
+    end
+    # Emit final record if no trailing blank line
+    if test -n "$_mask_load" -o -n "$_mask_uf"
+        set _mask_idx (math $_mask_idx + 1)
+        if test $_mask_idx -le (count $MASK)
+            set -l _svc $MASK[$_mask_idx]
+            if test "$_mask_load" = not-found
+                _info "  $_svc: unit not found (may not be installed)"
+            else if test "$_mask_uf" = masked
+                _ok "  $_svc: masked"
+            else
+                _fail "  $_svc: $_mask_uf (expected: masked)"
+            end
         end
     end
     _echo
@@ -3157,7 +3171,7 @@ function verify_static --description "Verify installed configs match embedded ch
                 _warn "  $dst: verification incomplete (no result from hash job)"
         end
     end
-    command rm -rf -- "$hash_dir"
+    command rm -rf --preserve-root -- "$hash_dir"
     _echo
 
     _log "=== STATIC VERIFICATION END ==="
@@ -3374,7 +3388,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         set checked 0
     end
 
-    command rm -rf -- "$result_dir" "$content_dir"
+    command rm -rf --preserve-root -- "$result_dir" "$content_dir"
 
     test "$drift" = true; and return $EXIT_DRIFT
 
@@ -4238,6 +4252,20 @@ function do_lint --description "Lint the script source for fish anti-patterns an
             _warn "Could not parse README version"
         end
     end
+    set -l changelog_path "$script_dir/CHANGELOG.txt"
+    if test -f "$changelog_path"
+        set -l changelog_ver (sed -n -- 's/^\([0-9][0-9.]*\) (.*/\1/p' "$changelog_path" | head -n 1)
+        if test -n "$changelog_ver"
+            if test "$changelog_ver" = "$VERSION"
+                _ok "CHANGELOG version matches: v$VERSION"
+            else
+                _fail "CHANGELOG version mismatch: changelog=$changelog_ver global=$VERSION"
+                set has_errors true
+            end
+        else
+            _warn "Could not parse CHANGELOG version"
+        end
+    end
 
     set -l total (math (count $SYSTEM_DESTINATIONS) + (count $USER_DESTINATIONS) + (count $SERVICE_DESTINATIONS))
     set -l case_count (sed -n -- '/^function get_file_content/,/^end$/p' "$script_path" | grep -cE "case [\"']?(/|[*]/.)")
@@ -4958,23 +4986,23 @@ function _diag_services --description "Diagnose: kernel errors, failed services,
 
     set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
     _echo "── Failed Services ──"
-    set -l failed (systemctl --failed --no-pager 2>/dev/null | grep -c "failed" | string trim --)
-    if test -n "$failed" && string match -qr '^\d+$' -- "$failed" && test "$failed" -gt 0
+    # Capture once, derive count and details from the same output
+    set -l _sys_failed_lines (systemctl --failed --no-pager 2>/dev/null | grep failed | head -n 5)
+    set -l failed (count $_sys_failed_lines)
+    if test "$failed" -gt 0
         _warn "Found $failed failed system service(s):"
-        set -l _diag_lines (systemctl --failed --no-pager 2>/dev/null | grep failed | head -n 5)
-        for line in $_diag_lines
+        for line in $_sys_failed_lines
             _echo "  $line"
-            # Verify critical services are active and enabled
         end
         set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
     else
         _ok "No failed system services"
     end
-    set -l user_failed (systemctl --user --failed --no-pager 2>/dev/null | grep -c "failed" | string trim --)
-    if test -n "$user_failed" && string match -qr '^\d+$' -- "$user_failed" && test "$user_failed" -gt 0
+    set -l _usr_failed_lines (systemctl --user --failed --no-pager 2>/dev/null | grep failed | head -n 5)
+    set -l user_failed (count $_usr_failed_lines)
+    if test "$user_failed" -gt 0
         _warn "Found $user_failed failed user service(s):"
-        set -l _diag_lines (systemctl --user --failed --no-pager 2>/dev/null | grep failed | head -n 5)
-        for line in $_diag_lines
+        for line in $_usr_failed_lines
             _echo "  $line"
         end
         set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
@@ -4985,14 +5013,31 @@ function _diag_services --description "Diagnose: kernel errors, failed services,
 
     set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
     _echo "── Expected Services ──"
-    for svc in $EXPECTED_SERVICES
-        set -l state (systemctl is-active "$svc" 2>/dev/null)
-        if test "$state" = active
-            _ok "$svc: active"
-        else
-            _warn "$svc: $state"
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
+    # Batch: single systemctl show replaces N individual is-active calls
+    set -l _exp_show (systemctl show --property=ActiveState -- $EXPECTED_SERVICES 2>/dev/null)
+    set -l _exp_idx 0
+    set -l _exp_active ""
+    for line in $_exp_show
+        if test -z "$line"
+            set _exp_idx (math $_exp_idx + 1)
+            set _exp_active ""
+            continue
         end
+        switch "$line"
+            case 'ActiveState=*'
+                set _exp_active (string replace -- 'ActiveState=' '' "$line")
+                set -l _svc_name $EXPECTED_SERVICES[(math $_exp_idx + 1)]
+                if test "$_exp_active" = active -o "$_exp_active" = exited
+                    _ok "$_svc_name: $_exp_active"
+                else
+                    _warn "$_svc_name: $_exp_active"
+                    set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
+                end
+        end
+    end
+    # Handle final record if no trailing blank line
+    if test -n "$_exp_active" -a $_exp_idx -lt (count $EXPECTED_SERVICES)
+        set _exp_idx (math $_exp_idx + 1)
     end
     set -l ssh_user_state (systemctl --user is-active ssh-agent.service 2>/dev/null)
     if test "$ssh_user_state" = active
@@ -5461,7 +5506,7 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
 
     # Prereq 5: export profile globals needed by _diag_* functions
     set -l export_globals \
-        EXPECTED_SERVICES KERNEL_PARAMS STRESS ALL \
+        EXPECTED_SERVICES KERNEL_PARAMS STRESS ALL QUIET \
         TEMP_CPU_WARN TEMP_CPU_CRIT TEMP_GPU_WARN TEMP_GPU_CRIT \
         DISK_ROOT_CRIT DISK_ROOT_WARN BOOT_SPACE_CRIT BOOT_SPACE_WARN \
         ROOT_AVAIL_CRIT ROOT_AVAIL_WARN BOOT_TIME_WARN BOOT_TIME_TARGET \
@@ -5531,7 +5576,7 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
         end
     end
 
-    command rm -rf -- "$diag_dir"
+    command rm -rf --preserve-root -- "$diag_dir"
 
     _echo "════════════════════════════════════════════════════════════════════"
     if test $_DIAG_ISSUES -eq 0
@@ -5776,9 +5821,9 @@ function _install_packages --description "Install and remove managed packages vi
             if test "$DRY" = false
                 _info "Verifying package installation..."
                 set -l missing_pkgs
+                set -l _inst_check (pacman -Qq 2>/dev/null)
                 for pkg in $pkgs_to_install
-                    # Remove packages that conflict with target configuration
-                    if not pacman -Qi "$pkg" >/dev/null 2>&1
+                    if not contains -- "$pkg" $_inst_check
                         set -a missing_pkgs "$pkg"
                     end
                 end
@@ -5906,8 +5951,10 @@ function _install_configure_services --description "Enable, start, and configure
     if test "$DRY" = true
         set to_del $PKGS_DEL
     else
+        # Batch: single pacman -Qq replaces N individual pacman -Qi calls
+        set -l _del_installed (pacman -Qq 2>/dev/null)
         for pkg in $PKGS_DEL
-            if command -q pacman && pacman -Qi "$pkg" >/dev/null 2>&1
+            if contains -- "$pkg" $_del_installed
                 # Check reverse dependencies before removing $pkg; skip if other packages depend on it
                 if command -q pactree
                     set -l _rdeps (pactree -r "$pkg" 2>/dev/null | tail -n +2)
@@ -5935,9 +5982,10 @@ function _install_configure_services --description "Enable, start, and configure
             else if not _run sudo pacman -Rns --noconfirm -- $to_del
                 _warn "Batch removal failed, trying individually..."
                 _log "PKG_REMOVE_BATCH_FAIL: $to_del"
+                # Re-query installed packages for TOCTOU: pkg may be removed between batch and retry
+                set -l _retry_installed (pacman -Qq 2>/dev/null)
                 for pkg in $to_del
-                    # TOCTOU: pkg may be removed between -Qi check and -Rns; the command wrapper catches the error
-                    if command -q pacman && pacman -Qi "$pkg" >/dev/null 2>&1
+                    if contains -- "$pkg" $_retry_installed
                         if not _run sudo pacman -Rns --noconfirm -- "$pkg"
                             _warn "Failed to remove $pkg"
                             _log "PKG_REMOVE_FAIL: $pkg"
@@ -7015,7 +7063,7 @@ function do_test_all --description "Run the full test suite across all subcomman
         end
     end
 
-    command rm -rf -- "$test_dir"
+    command rm -rf --preserve-root -- "$test_dir"
 
     _echo
     _echo "════════════════════════════════════════════════════════════════════"

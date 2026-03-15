@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.8 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.8"
+# ry-install v3.7.10 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.10"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -90,8 +90,12 @@ command mkdir -p -- "$LOG_DIR" 2>/dev/null || begin
 end
 command chmod -- 700 "$HOME/ry-install" 2>/dev/null || true
 set -g LOG_FILE "$LOG_DIR/install-$TIMESTAMP.jsonl"
-touch -- "$LOG_FILE" 2>/dev/null
-command chmod -- 600 "$LOG_FILE" 2>/dev/null || true
+# install -m creates file with 0600 atomically; touch fallback + chmod for systems without install(1)
+command install -m 0600 /dev/null "$LOG_FILE" 2>/dev/null
+or begin
+    command touch -- "$LOG_FILE" 2>/dev/null
+    command chmod -- 600 "$LOG_FILE" 2>/dev/null
+end
 set -g INSTALL_HAD_ERRORS false
 set -g _TRACKED_TMPFILES
 
@@ -585,6 +589,10 @@ end
 # ═══ PROFILE LOADER ═══
 
 function _validate_profile --description "Verify loaded profile has all required globals" --argument-names expected_name
+    if test (count $argv) -gt 1
+        _err "_validate_profile: expected 0-1 args (expected_name), got "(count $argv)
+        return 1
+    end
     set -l required \
         PROFILE_NAME \
         PROFILE_DESC \
@@ -961,6 +969,10 @@ end
 # ═══ BATCH & PARALLEL PREREQUISITES ═══
 
 function _pregenerate_content_files --argument-names out_dir --description "Write all expected-content files to a tmpdir (prereq for parallel consumers)"
+    if test (count $argv) -gt 1
+        _err "_pregenerate_content_files: expected 0-1 args (out_dir), got "(count $argv)
+        return 1
+    end
     # Must run after _load_profile — needs profile globals for get_file_content
     if test -z "$out_dir"
         set out_dir (mktemp -d -t ry-content.XXXXXX)
@@ -983,6 +995,10 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
 end
 
 function _parse_systemctl_show --argument-names raw_output --description "Parse multi-record systemctl show output into unit:ActiveState:UnitFileState lines"
+    if test (count $argv) -ne 1
+        _err "_parse_systemctl_show: expected 1 arg (raw_output), got "(count $argv)
+        return 1
+    end
     # systemctl show outputs records separated by blank lines; each record has key=value pairs
     set -l current_active ""
     set -l current_unitfile ""
@@ -1071,7 +1087,7 @@ function _msg --argument-names level --description "Format and print a leveled s
     set -l valid_levels INFO WARN ERR FAIL OK DRY
     if not contains -- "$level" $valid_levels
         echo "[BUG] _msg called with invalid level: '$level'" >&2
-        printf '{"ts":"%s","event":"bug","data":"_msg called with invalid level: %s"}\n' (date '+%Y-%m-%dT%H:%M:%S') "$level" >>"$LOG_FILE"
+        printf '{"ts":"%s","event":"bug","data":"_msg called with invalid level: %s"}\n' (date '+%Y-%m-%dT%H:%M:%S') (_json_str "$level") >>"$LOG_FILE"
         set level ERR
     end
     # Route level to JSONL event + increment verify counters for summary
@@ -1913,6 +1929,10 @@ function validate_configs --description "Run all embedded config validators"
     end
 
     set -l val_dir (mktemp -d -t ry-validate-par.XXXXXX)
+    if not test -d "$val_dir"
+        _err "Failed to create validation temp directory"
+        return 1
+    end
     set -ga _TRACKED_TMPFILES "$val_dir"
 
     # Phase 2 (parallel): fork independent validation jobs
@@ -1939,11 +1959,11 @@ function validate_configs --description "Run all embedded config validators"
             set -l f '$content_dir/'\$unit_key
             if test -s \$f
                 set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service)
-                cp -- \$f \$tmp
+                command cp -- \$f \$tmp
                 if not systemd-analyze verify \$tmp 2>/dev/null
                     set errs (math \$errs + 1)
                 end
-                rm -f -- \$tmp
+                command rm -f -- \$tmp
             else
                 set errs (math \$errs + 1)
             end
@@ -1953,11 +1973,11 @@ function validate_configs --description "Run all embedded config validators"
         set -l f '$content_dir/'\$ssh_key
         if test -s \$f
             set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service)
-            cp -- \$f \$tmp
+            command cp -- \$f \$tmp
             if not systemd-analyze --user verify \$tmp 2>/dev/null
                 set errs (math \$errs + 1)
             end
-            rm -f -- \$tmp
+            command rm -f -- \$tmp
         else
             set errs (math \$errs + 1)
         end
@@ -2338,6 +2358,10 @@ function do_diff --argument-names target_file --description "Show diffs between 
     # B-6: Batch I/O — pre-generate expected content + parallel installed-file reads
     _ensure_sudo_cached
     set -l diff_batch_dir (mktemp -d -t ry-diffbatch.XXXXXX)
+    if not test -d "$diff_batch_dir"
+        _err "Failed to create diff temp directory"
+        return 1
+    end
     set -ga _TRACKED_TMPFILES "$diff_batch_dir"
     set -l my_home "$HOME"
 
@@ -3113,6 +3137,11 @@ function verify_static --description "Verify installed configs match embedded ch
 
     # B-2: Pre-generate expected content + parallel hash verification
     set -l hash_dir (mktemp -d -t ry-hash-par.XXXXXX)
+    if not test -d "$hash_dir"
+        _err "Failed to create hash verification temp directory"
+        set -g VERIFY_MODE false
+        return 1
+    end
     set -ga _TRACKED_TMPFILES "$hash_dir"
     set -l my_home "$HOME"
 
@@ -3207,6 +3236,10 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     end
 
     set -l result_dir (mktemp -d -t ry-check-parallel.XXXXXX)
+    if not test -d "$result_dir"
+        _log "CHECK_DRIFT: mktemp failed"
+        return $EXIT_DRIFT
+    end
     set -ga _TRACKED_TMPFILES "$result_dir"
     set -l my_home "$HOME"
     set -l boot_fstype (findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
@@ -4540,6 +4573,10 @@ end
 
 # Route --logs subcommands: list, last, all, analyze <path>, system/gpu/wifi/boot/audio/usb/kernel.
 function _logs_file_ops --argument-names target --description "Log viewer: analyze, last, list, all file operations"
+    if test (count $argv) -lt 1
+        _err "_logs_file_ops: expected at least 1 arg (target), got "(count $argv)
+        return 1
+    end
     # File-based log operations: analyze, last, list, all
     switch $target
         case analyze
@@ -4656,6 +4693,10 @@ function _logs_file_ops --argument-names target --description "Log viewer: analy
 end
 
 function _logs_journal --argument-names target --description "Log viewer: system journal targets (system, gpu, wifi, boot, audio, usb, kernel)"
+    if test (count $argv) -ne 1
+        _err "_logs_journal: expected 1 arg (target), got "(count $argv)
+        return 1
+    end
     # Per-target journal/dmesg log retrieval
     set -l _log_lines
     switch $target
@@ -4776,6 +4817,10 @@ function _logs_journal --argument-names target --description "Log viewer: system
 end
 
 function do_logs --argument-names target --description "Browse, search, and analyze ry-install log files"
+    if test (count $argv) -gt 2
+        _err "do_logs: expected 0-2 args (target [arg]), got "(count $argv)
+        return 2
+    end
     set -l target $argv[1]
 
     _banner "ry-install v$VERSION - Log Viewer"
@@ -5440,6 +5485,10 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
     _ensure_sudo_cached
 
     set -l diag_dir (mktemp -d -t ry-diag.XXXXXX)
+    if not test -d "$diag_dir"
+        _err "Failed to create diagnostics temp directory"
+        return 1
+    end
     set -ga _TRACKED_TMPFILES "$diag_dir"
 
     # Prereq 6: serialize required functions for children (source-ing the full script
@@ -6703,6 +6752,10 @@ end
 
 # Single-file install: deploy one managed config by destination path
 function do_install_file --argument-names target --description "Install a single named config file interactively"
+    if test (count $argv) -gt 1
+        _err "do_install_file: expected 0-1 args (target), got "(count $argv)
+        return 2
+    end
     set -l target $argv[1]
     _log "=== INSTALL-FILE START ==="
 
@@ -6977,6 +7030,10 @@ function do_test_all --description "Run the full test suite across all subcomman
 
     # ── Parallel phase: fork all read-only modes ──
     set -l test_dir (mktemp -d -t ry-test.XXXXXX)
+    if not test -d "$test_dir"
+        _err "Failed to create test temp directory"
+        return 1
+    end
     set -ga _TRACKED_TMPFILES "$test_dir"
     set -l parallel_pids
 
@@ -7294,8 +7351,11 @@ if test -f "$LOG_FILE" && test "$LOG_FILE" != "$new_log"
     command mv -- "$LOG_FILE" "$new_log" 2>/dev/null
 end
 set -g LOG_FILE "$new_log"
-touch -- "$LOG_FILE" 2>/dev/null
-command chmod -- 600 "$LOG_FILE" 2>/dev/null || _warn "Chmod 600 failed on $LOG_FILE"
+command install -m 0600 /dev/null "$LOG_FILE" 2>/dev/null
+or begin
+    command touch -- "$LOG_FILE" 2>/dev/null
+    command chmod -- 600 "$LOG_FILE" 2>/dev/null || _warn "Chmod 600 failed on $LOG_FILE"
+end
 
 set -l _init_cmd (string join -- " " (status filename) $argv)
 set -l _init_cmd (_json_str "$_init_cmd")

@@ -1,3 +1,61 @@
+3.7.10 (2026-03-15)
+-------------------
+
+  fix: LOG_FILE creation race — bare touch created file at process
+    umask (typically 022 → 644) before chmod 600 narrowed permissions;
+    brief window where log file was world-readable. Replaced with
+    command install -m 0600 /dev/null for atomic secure creation, with
+    command touch + command chmod fallback for systems without install(1).
+    Parent directory was already 700, so exposure was minimal. Two sites
+    affected: initial LOG_FILE creation (L93) and mode-label rename
+    (L7326). Also adds command prefix to touch calls (missed by v3.2.10
+    hardening pass).
+
+  fix: validate_configs Job 2 parallel children — 4 bare cp/rm calls
+    in fish -c subshells lacked command prefix, inconsistent with
+    v3.2.10 hardening convention. Fresh fish instances have no user
+    aliases, so risk was theoretical. Added command prefix to cp (2)
+    and rm (2) in systemd unit validation children.
+
+  fix: add arity guards to 7 functions with --argument-names but no
+    count $argv check — _validate_profile (0-1), _pregenerate_content_files
+    (0-1), _parse_systemctl_show (1), _logs_file_ops (1+),
+    _logs_journal (1), do_logs (0-2), do_install_file (0-1). All were
+    internally called with correct arity; guards are defensive-in-depth
+    for external profile authors and future refactors.
+
+3.7.9 (2026-03-15)
+-------------------
+
+  fix: _msg bug-logging JSONL line wrote $level directly into JSON
+    without _json_str escaping — if an internal programming error
+    passed a level containing quote or backslash characters, the
+    JSONL line would be malformed; now escaped via _json_str
+
+  fix: six parallel work directories (validate_configs, do_diff,
+    verify_static hash phase, do_check, do_diagnose, do_test_all)
+    created via mktemp -d lacked empty-result guards — if mktemp
+    failed (disk full, TMPDIR unwritable), children would write to
+    empty paths causing silent failures; each site now checks
+    test -d and returns appropriate error code on failure
+
+  fix: _get_boot_time, _pregenerate_content_files, and
+    _parse_systemctl_show used echo for stdout return values —
+    echo interprets -n/-e flags on data that callers consume via
+    command substitution; replaced with printf '%s\n' for safety
+
+  fix: log rotation find did not exclude current $LOG_FILE — could
+    delete in-progress log under clock skew; added ! -path guard
+    consistent with _find_latest_log and _logs_list
+
+  fix: --logs all find did not exclude current $LOG_FILE — caused
+    the in-progress log (header written, no footer) to appear in
+    analysis results with missing exit code; added ! -path guard
+
+  fix: do_diagnose parallel children set NO_COLOR redundantly —
+    _msg already detects non-TTY via isatty 2 when stderr is
+    redirected to file; removed forced override, added comment
+
 3.7.8 (2026-03-15)
 -------------------
 

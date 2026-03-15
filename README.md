@@ -137,14 +137,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | Hooks | `base` → `systemd` → `autodetect` → `microcode` → `modconf` → `kms` → `keyboard` → `sd-vconsole` → `block` → `filesystems` → `fsck` |
 | Compression | `zstd` |
 
-### Modprobe Blacklist (3)
-
-| Module | Reason |
-|--------|--------|
-| `snd_acp_pci` | ACP audio unused |
-| `pcspkr` | PC speaker beep |
-| `snd_pcsp` | PC speaker audio |
-
 ### System Configuration
 
 | File | Setting |
@@ -221,18 +213,17 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | 2 | System | `/etc/kernel/cmdline` |
 | 3 | System | `/etc/sdboot-manage.conf` |
 | 4 | System | `/etc/mkinitcpio.conf` |
-| 5 | System | `/etc/modprobe.d/99-cachyos-modprobe.conf` |
-| 6 | System | `/etc/udev/rules.d/99-cachyos-udev.rules` |
-| 7 | System | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` |
-| 8 | System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
-| 9 | System | `/etc/iwd/main.conf` |
-| 10 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
-| 11 | System | `/etc/sysctl.d/99-ry-sysctl.conf` |
-| 12 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
-| 13 | User | `~/.config/environment.d/10-environment.conf` |
-| 14 | User | `~/.config/systemd/user/ssh-agent.service` |
-| 15 | Service | `/etc/systemd/system/amdgpu-performance.service` |
-| 16 | Service | `/etc/systemd/system/cpupower-epp.service` |
+| 5 | System | `/etc/udev/rules.d/99-cachyos-udev.rules` |
+| 6 | System | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` |
+| 7 | System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
+| 8 | System | `/etc/iwd/main.conf` |
+| 9 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
+| 10 | System | `/etc/sysctl.d/99-ry-sysctl.conf` |
+| 11 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
+| 12 | User | `~/.config/environment.d/10-environment.conf` |
+| 13 | User | `~/.config/systemd/user/ssh-agent.service` |
+| 14 | Service | `/etc/systemd/system/amdgpu-performance.service` |
+| 15 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
 ## Safety
 
@@ -307,7 +298,7 @@ External profiles must define a `function profile_<name>` setting all required g
 
 ### Adapting
 
-Create `~/.config/ry-install/profiles/<name>.fish` with a `profile_<name>` function. Copy `profile_gtr9_pro` as a starting point and adjust `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, `MODPROBE_BLACKLIST`, `PKGS_ADD`/`PKGS_DEL`, `MASK`, `EXPECTED_SERVICES`, `ENV_VARS`, service destinations, and threshold globals. Run `./ry-install.fish --profile <name> --check` to validate.
+Create `~/.config/ry-install/profiles/<name>.fish` with a `profile_<name>` function. Copy `profile_gtr9_pro` as a starting point and adjust `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, `PKGS_ADD`/`PKGS_DEL`, `MASK`, `EXPECTED_SERVICES`, `ENV_VARS`, service destinations, and threshold globals. Run `./ry-install.fish --profile <name> --check` to validate.
 
 ### References
 

@@ -1,3 +1,36 @@
+3.7.7 (2026-03-15)
+-------------------
+
+  remove: /etc/modprobe.d/99-cachyos-modprobe.conf — removed from
+    SYSTEM_DESTINATIONS, profile (MODPROBE_BLACKLIST), get_file_content,
+    validate_modprobe_blacklist, validate_configs, verify_static,
+    verify_runtime, do_diff --fix tracking, and do_install_file
+
+  fix: parallel child crash detection in validate_configs, verify_static,
+    do_check, and do_diagnose — missing result files from crashed children
+    previously caused false-pass (validate_configs, verify_static) or
+    false-negative (do_check) results; now explicitly detected and flagged
+
+  fix: _manifest_write failure now sets INSTALL_HAD_ERRORS in do_install
+    — previously a silent failure that could mask incomplete deployments
+
+  fix: verify_static distinguishes intentional "skip" from empty result
+    (child crash) — empty results now emit a warning instead of silent skip
+
+  fix: completions __ry_install_profiles grepped (status filename) which
+    resolves to the completions file itself, not ry-install.fish — now
+    embeds the actual script path at generation time
+
+  fix: completions --install-file now offers managed DESTINATIONS as
+    tab-completion suggestions (previously had no path completions)
+
+  fix: completions __ry_install_profiles moved outside `for cmd` loop
+    to avoid redundant redefinition
+
+  doc: add inline DRY-gate comments at all tee write sites (install_file
+    sudo path, install_file user path, WiFi credential write) to clarify
+    that writes only execute when DRY=false
+
 3.7.6 (2026-03-14)
 -------------------
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.6 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.6"
+# ry-install v3.7.7 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.7"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -480,7 +480,6 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         /etc/kernel/cmdline \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
-        "/etc/modprobe.d/99-cachyos-modprobe.conf" \
         "/etc/udev/rules.d/99-cachyos-udev.rules" \
         "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
         "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
@@ -542,9 +541,6 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         filesystems \
         fsck
     set -g MKINITCPIO_COMPRESSION zstd
-
-    # ── Modprobe ──
-    set -g MODPROBE_BLACKLIST snd_acp_pci pcspkr snd_pcsp
 
     # ── Udev ──
     set -g UDEV_RULES \
@@ -861,12 +857,6 @@ function get_file_content --argument-names dst --description "Return embedded co
             printf '%s\n' "FILES=()"
             printf '%s\n' "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")"
             printf '%s\n' "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
-
-        case "/etc/modprobe.d/99-cachyos-modprobe.conf"
-            printf '%s\n' "# modprobe configuration"
-            for mod in $MODPROBE_BLACKLIST
-                printf '%s\n' "blacklist $mod"
-            end
 
         case "/etc/udev/rules.d/99-cachyos-udev.rules"
             printf '%s\n' "# udev rules"
@@ -1910,17 +1900,6 @@ function validate_systemd_unit --argument-names tmpfile unit_name --description 
     return 0
 end
 
-# Ensure MODPROBE_BLACKLIST entries contain only valid module name characters
-function validate_modprobe_blacklist --description "Validate modprobe blacklist file syntax"
-    for mod in $MODPROBE_BLACKLIST
-        if not string match -qr '^[a-zA-Z0-9_-]+$' -- "$mod"
-            _err "Invalid module name in blacklist: $mod"
-            return 1
-        end
-    end
-    return 0
-end
-
 # Validate fish script syntax via fish --no-execute on a tmpfile
 function validate_fish_script --argument-names tmpfile script_name --description "Validate fish script syntax via fish --no-execute"
     if test (count $argv) -ne 2
@@ -1949,10 +1928,6 @@ function validate_configs --description "Run all embedded config validators"
         set errors (math $errors + 1)
     end
     validate_mkinitcpio_modules
-
-    if not validate_modprobe_blacklist
-        set errors (math $errors + 1)
-    end
 
     # B-1: Pre-generate all content files for parallel validation
     set -l content_dir (_pregenerate_content_files)
@@ -2112,8 +2087,13 @@ function validate_configs --description "Run all embedded config validators"
 
     wait $pid_xref $pid_units $pid_scripts $pid_ini $pid_simple
 
-    # Merge error counts
+    # Merge error counts — treat missing result files as child crash (prevents false-pass)
     for phase in xref units scripts ini simple
+        if not test -f "$val_dir/$phase.errors"
+            _err "Validation child '$phase' crashed without writing results"
+            set errors (math $errors + 1)
+            continue
+        end
         set -l phase_errors (cat -- "$val_dir/$phase.errors" 2>/dev/null)
         if test -n "$phase_errors"; and test "$phase_errors" -gt 0
             set errors (math $errors + $phase_errors)
@@ -2205,6 +2185,7 @@ function install_file --argument-names dst use_sudo --description "Install a sin
             _fail "→ $dst (temp file is symlink — aborting)"
             return 1
         end
+        # DRY=true returns at line above; this code only runs when DRY=false
         get_file_content "$dst" | sudo tee -- "$tmpfile" >/dev/null
         set -l _ps $pipestatus
         if test $_ps[1] -ne 0
@@ -2252,6 +2233,7 @@ function install_file --argument-names dst use_sudo --description "Install a sin
             _fail "→ $dst (temp file is symlink — aborting)"
             return 1
         end
+        # DRY=true returns at line above; this code only runs when DRY=false
         get_file_content "$dst" | tee -- "$tmpfile" >/dev/null
         set -l _ps $pipestatus
         if test $_ps[1] -ne 0
@@ -2364,7 +2346,6 @@ function do_diff --argument-names target_file --description "Show diffs between 
     set -l fixed_user_services
     set -l udev_files_fixed false
     set -l resolved_files_fixed false
-    set -l modprobe_files_fixed false
     set -l nm_config_fixed false
     set -l logind_files_fixed false
     set -l _boot_fstype (findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
@@ -2589,9 +2570,6 @@ function do_diff --argument-names target_file --description "Show diffs between 
                         if string match -q '*/resolved.conf.d/*' -- "$dst"
                             set resolved_files_fixed true
                         end
-                        if string match -q '*/modprobe.d/*' -- "$dst"
-                            set modprobe_files_fixed true
-                        end
 
                         if string match -q '*/iwd/main.conf' -- "$dst" || string match -q '*/NetworkManager/conf.d/*' -- "$dst"
                             set nm_config_fixed true
@@ -2642,11 +2620,6 @@ function do_diff --argument-names target_file --description "Show diffs between 
             if _ask "Resolved config changed — restart systemd-resolved?"
                 _run sudo systemctl restart systemd-resolved || _warn "Systemd-resolved restart failed"
             end
-        end
-
-        if test "$modprobe_files_fixed" = true
-            # Post-fix: prompt NM restart if network config changed, reload services
-            _info "Module options changed — reboot required for full effect"
         end
 
         if test "$nm_config_fixed" = true && test "$DRY" = false
@@ -2901,14 +2874,6 @@ function verify_static --description "Verify installed configs match embedded ch
     _echo
 
     _echo "SYSTEM CONFIGURATION"
-    _echo
-
-    _echo "── Modprobe ──"
-    if _chk_file /etc/modprobe.d/99-cachyos-modprobe.conf
-        for mod in $MODPROBE_BLACKLIST
-            _chk_grep /etc/modprobe.d/99-cachyos-modprobe.conf "blacklist $mod" "$mod blacklist"
-        end
-    end
     _echo
 
     _echo "── ntsync state ──"
@@ -3185,8 +3150,11 @@ function verify_static --description "Verify installed configs match embedded ch
                 _ok "  $dst: checksum match"
             case fail
                 _fail "  $dst: checksum MISMATCH"
-            case '*'
-                # skip silently (same as original behavior for empty/missing)
+            case skip
+                # Intentional skip (no expected content, file unreadable, or NM/IWD not installed)
+            case ''
+                # Empty or missing result file — child likely crashed
+                _warn "  $dst: verification incomplete (no result from hash job)"
         end
     end
     command rm -rf -- "$hash_dir"
@@ -3389,11 +3357,16 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
 
     wait $pid_hash $pid_perm $pid_kparam $pid_svc
 
-    # Merge results
+    # Merge results — treat missing result files as child crash (prevents false-negative)
     for phase in hash perm kparam svc
-        set -l result (cat -- "$result_dir/{$phase}_drift" 2>/dev/null)
-        if test "$result" = true
+        if not test -f "$result_dir/{$phase}_drift"
+            _log "CHECK_DRIFT: child '$phase' crashed without writing results"
             set drift true
+        else
+            set -l result (cat -- "$result_dir/{$phase}_drift" 2>/dev/null)
+            if test "$result" = true
+                set drift true
+            end
         end
     end
     set checked (cat -- "$result_dir/hash_checked" 2>/dev/null)
@@ -3820,19 +3793,6 @@ function verify_runtime --description "Verify runtime kernel params, services, a
             _info "ntsync: NOT available (kernel 6.14+ required)"
         case missing
             _info "ntsync: NOT available (module not loaded)"
-    end
-    _echo
-
-    _echo "── Blacklisted modules ──"
-    set -l _bl_loaded 0
-    for mod in $MODPROBE_BLACKLIST
-        if grep -q -- "^$mod " /proc/modules 2>/dev/null
-            _fail "  $mod: LOADED (blacklist ineffective — reboot required)"
-            set _bl_loaded (math $_bl_loaded + 1)
-        end
-    end
-    if test $_bl_loaded -eq 0
-        _ok "  All blacklisted modules: not loaded ($MODPROBE_BLACKLIST)"
     end
     _echo
 
@@ -5549,6 +5509,11 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
         if test -s "$diag_dir/$phase.out"
             cat -- "$diag_dir/$phase.out" >&2
         end
+        if not test -f "$diag_dir/$phase.issues"
+            _warn "Diagnostics child '$phase' did not produce results"
+            set _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
+            continue
+        end
         set -l phase_issues (cat -- "$diag_dir/$phase.issues" 2>/dev/null)
         set -l phase_checks (cat -- "$diag_dir/$phase.checks" 2>/dev/null)
         if test -n "$phase_issues"; and string match -qr '^\d+$' -- "$phase_issues"
@@ -6387,6 +6352,7 @@ function _install_finalize --description "Run post-install verification, cleanup
                 if string match -q '#*' -- "$safe_ssid"
                     set safe_ssid '\\#'(string sub -s 2 -- "$safe_ssid")
                 end
+                # Inside DRY=false gate (line 6374); credential write only occurs on live runs
                 if printf '%s\n' "[connection]" "id=$safe_ssid" "uuid=$conn_uuid" "type=wifi" "interface-name=$WIFI_IFACE" "autoconnect=true" "[wifi]" "mode=infrastructure" "ssid=$safe_ssid" "[wifi-security]" "key-mgmt=wpa-psk" "psk=$safe_pass" "[ipv4]" "method=auto" "[ipv6]" "method=disabled" | sudo tee -- "$tmpfile" >/dev/null
                     set --erase WIFI_PASS
                     if not _run sudo chmod -- 0600 "$tmpfile"
@@ -6670,7 +6636,7 @@ function do_install --description "Full installation: preflight, packages, confi
         _log "MANIFEST_SKIP: boot-critical failure — partial deploy not recorded"
         return $EXIT_BOOT_CRIT
     end
-    _manifest_write
+    _manifest_write || set -g INSTALL_HAD_ERRORS true
     test "$INSTALL_HAD_ERRORS" = true; and return $EXIT_FAIL
     return $EXIT_OK
 end
@@ -6766,9 +6732,6 @@ function do_install_file --argument-names target --description "Install a single
                     _run sudo systemctl restart systemd-resolved || _warn "Systemd-resolved restart failed"
                 end
 
-            else if string match -q '*/modprobe.d/*' -- "$target"
-                _info "Module options changed — reboot required for full effect"
-
             else if string match -q '*/logind.conf.d/*' -- "$target"
                 _info "Logind config changed — reboot required (restarting logind kills all sessions)"
 
@@ -6822,9 +6785,24 @@ function do_completions --description "Generate fish shell completions for ry-in
         return 1
     end
 
+    # Build --install-file destination list at generation time
+    set -l _install_file_targets (string join ' ' $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
+    # Embed the script path for profile discovery (status filename returns completions file, not ry-install)
+    set -l _script_path (status filename)
+
     printf '%s\n' \
         '# Fish completions for ry-install v'"$VERSION" \
         '# Generated by: ./ry-install.fish --completions' \
+        '' \
+        '# Profile discovery — defined before for loop to avoid redefinition' \
+        'function __ry_install_profiles' \
+        '    # Built-in profiles (grep the actual script, not this completions file)' \
+        '    grep -oP '"'"'(?<=^function profile_)\w+'"'"' '"'$_script_path'"' 2>/dev/null' \
+        '    # External profiles' \
+        '    for f in ~/.config/ry-install/profiles/*.fish' \
+        '        string replace -r '"'"'.*/(.*)\.fish$'"'"' '"'"'$1'"'"' -- $f' \
+        '    end' \
+        'end' \
         '' \
         '# Both "ry-install" (renamed) and "ry-install.fish" (direct)' \
         'for cmd in ry-install ry-install.fish' \
@@ -6847,21 +6825,13 @@ function do_completions --description "Generate fish shell completions for ry-in
         '    # Utilities' \
         '    complete -c $cmd -l logs -d '"'"'View logs (system, gpu, wifi, boot, audio, usb, kernel, or service name)'"'"'' \
         '    complete -c $cmd -l diagnose -d '"'"'Automated problem detection'"'"'' \
-        '    complete -c $cmd -l install-file -d '"'"'Re-deploy a single managed file'"'"'' \
+        '    complete -c $cmd -l install-file -d '"'"'Re-deploy a single managed file'"'"' -rxa '"'"$_install_file_targets"'"'' \
         '    complete -c $cmd -l completions -d '"'"'Install fish tab-completions for ry-install itself'"'"'' \
         '' \
         '    # Other' \
         '    complete -c $cmd -l fix -d '"'"'Re-install drifted files (use with --diff)'"'"'' \
         '    complete -c $cmd -l stress -d '"'"'Include stress tests (use with --diagnose)'"'"'' \
         '    complete -c $cmd -l profile -d '"'"'Load machine profile (default: gtr9_pro)'"'"' -rxa "(__ry_install_profiles)"' \
-        '    function __ry_install_profiles' \
-        '        # Built-in profiles' \
-        '        grep -oP '"'"'(?<=^function profile_)\w+'"'"' (status filename) 2>/dev/null' \
-        '        # External profiles' \
-        '        for f in ~/.config/ry-install/profiles/*.fish' \
-        '            string replace -r '"'"'.*/(.*)\.fish$'"'"' '"'"'$1'"'"' -- $f' \
-        '        end' \
-        '    end' \
         '    complete -c $cmd -s h -l help -d '"'"'Show help'"'"'' \
         '    complete -c $cmd -s v -l version -d '"'"'Show version'"'"'' \
         '' \

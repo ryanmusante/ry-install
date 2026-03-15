@@ -486,7 +486,6 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        "/etc/conf.d/wireless-regdom" \
         "/etc/sysctl.d/99-ry-sysctl.conf"
 
     set -g USER_DESTINATIONS \
@@ -565,7 +564,6 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g NM_WIFI_BACKEND iwd
     set -g NM_WIFI_POWERSAVE 2
     set -g NM_LOG_LEVEL ERR
-    set -g WIRELESS_REGDOM US
 
     # ── Environment ──
     set -g ENV_VARS \
@@ -646,10 +644,6 @@ function _validate_profile --description "Verify loaded profile has all required
                     if not contains -- $nw_var $required
                         set -a required $nw_var
                     end
-                end
-            case '*/wireless-regdom*'
-                if not contains -- WIRELESS_REGDOM $required
-                    set -a required WIRELESS_REGDOM
                 end
         end
     end
@@ -915,10 +909,6 @@ function get_file_content --argument-names dst --description "Return embedded co
             printf '%s\n' ""
             printf '%s\n' "[logging]"
             printf '%s\n' "level=$NM_LOG_LEVEL"
-
-        case "/etc/conf.d/wireless-regdom"
-            printf '%s\n' "# Wireless regulatory domain"
-            printf '%s\n' "WIRELESS_REGDOM=\"$WIRELESS_REGDOM\""
 
         case "/etc/sysctl.d/99-ry-sysctl.conf"
             printf '%s\n' "# Network and security sysctl — complements cachyos vendor 70-cachyos-settings.conf"
@@ -1276,7 +1266,6 @@ set -g PROGRESS_STEPS \
     "Syncing packages" \
     "Installing packages" \
     "Installing system files" \
-    "Wireless regulatory domain" \
     "Installing user files" \
     "AMDGPU performance service" \
     "Updating databases" \
@@ -1409,7 +1398,7 @@ function _progress_done --description "Finalize and close the progress display"
     end
 end
 
-# ── Command execution wrapper — secret redaction (10 patterns), dry-run gating, output capture to tmpfiles, structured error reporting ──
+# ── Command execution wrapper — secret redaction (9 patterns), dry-run gating, output capture to tmpfiles, structured error reporting ──
 
 # Execute command with logging, secret redaction, dry-run gating, and stdout/stderr capture to tmpfiles
 function _run --description "Execute a command with logging, dry-run support, and error capture; stdout captured and only displayed when QUIET=false unless --passthrough is set"
@@ -2378,7 +2367,6 @@ function do_diff --argument-names target_file --description "Show diffs between 
     set -l modprobe_files_fixed false
     set -l nm_config_fixed false
     set -l logind_files_fixed false
-    set -l regdom_fixed false
     set -l _boot_fstype (findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
 
     if test "$FIX" = true; and test "$DRY" = false
@@ -2458,13 +2446,15 @@ function do_diff --argument-names target_file --description "Show diffs between 
                 _echo "── $dst ──"
                 # Use pre-computed diff for display
                 set -l diff_tmp "$diff_batch_dir/diff_$safe"
-                if test "$NO_COLOR" = true
-                    cat -- "$diff_tmp"
-                else if test "$HAS_DELTA" = true
-                    delta <"$diff_tmp"
-                else
-                    diff -u --label "embedded: $dst" --label "installed: $dst" --color=always -- "$tmp" "$tmp_installed"
-                end
+                begin
+                    if test "$NO_COLOR" = true
+                        cat -- "$diff_tmp"
+                    else if test "$HAS_DELTA" = true
+                        delta <"$diff_tmp"
+                    else
+                        diff -u --label "embedded: $dst" --label "installed: $dst" --color=always -- "$tmp" "$tmp_installed"
+                    end
+                end >&2
                 while read -l dline
                     _log "DIFF: $dst: $dline"
                 end <"$diff_tmp"
@@ -2609,9 +2599,6 @@ function do_diff --argument-names target_file --description "Show diffs between 
                         if string match -q '*/logind.conf.d/*' -- "$dst"
                             set logind_files_fixed true
                         end
-                        if string match -q '*/conf.d/wireless-regdom' -- "$dst"
-                            set regdom_fixed true
-                        end
                     else
                         set fix_errors true
                     end
@@ -2670,9 +2657,6 @@ function do_diff --argument-names target_file --description "Show diffs between 
         end
         if test "$logind_files_fixed" = true
             _info "Logind config changed — reboot required (restarting logind kills all sessions)"
-        end
-        if test "$regdom_fixed" = true
-            _info "Regulatory domain changed — run 'sudo iw reg set XX' or reboot for full effect"
         end
         if test (count $fixed_user_services) -gt 0 && test "$DRY" = false
             _run systemctl --user daemon-reload || _warn "Systemctl --user daemon-reload failed"
@@ -2993,17 +2977,6 @@ function verify_static --description "Verify installed configs match embedded ch
         _ok "  NetworkManager-dispatcher.service: enabled"
     else
         _fail "  NetworkManager-dispatcher.service: $nm_disp_state (expected: enabled)"
-    end
-    _echo
-
-    _echo "── Wireless regulatory domain ──"
-    if _chk_file /etc/conf.d/wireless-regdom
-        set -l actual_regdom (grep -E '^[[:space:]]*WIRELESS_REGDOM=' /etc/conf.d/wireless-regdom 2>/dev/null | grep -v '^#' | cut -d'"' -f2 | head -n 1)
-        if test -n "$actual_regdom"
-            _ok "WIRELESS_REGDOM=$actual_regdom"
-        else
-            _fail "WIRELESS_REGDOM: not set (no uncommented WIRELESS_REGDOM= line)"
-        end
     end
     _echo
 
@@ -3898,49 +3871,6 @@ function verify_runtime --description "Verify runtime kernel params, services, a
             _warn "  WiFi device: $wifi_state (not connected)"
         end
     end
-
-    set -l reg ""
-    set -l expected_regdom (grep -E '^[[:space:]]*WIRELESS_REGDOM=' /etc/conf.d/wireless-regdom 2>/dev/null | grep -v '^#' | cut -d'"' -f2 | head -n 1)
-    if test -z "$expected_regdom"
-        set expected_regdom US
-    end
-
-    if not command -q iw
-        _warn "  Regulatory domain: iw command not found (install iw package)"
-    else
-        set -l iw_output (iw reg get 2>/dev/null)
-        if test -z "$iw_output"
-            set iw_output (sudo iw reg get 2>/dev/null)
-        end
-
-        if test -n "$iw_output"
-            set -l match_result (printf '%s\n' $iw_output | string match -r -- '^country ([A-Z]{2}):')
-            if test (count $match_result) -ge 2
-                set reg $match_result[2]
-            end
-            if test -z "$reg"
-                set reg (printf '%s\n' $iw_output | awk '/^country/ {gsub(/:/, "", $2); print $2; exit}')
-            end
-        end
-
-        if test -z "$reg" && test -f /sys/module/cfg80211/parameters/ieee80211_regdom
-            set reg (string trim -- (cat /sys/module/cfg80211/parameters/ieee80211_regdom 2>/dev/null))
-        end
-    end
-
-    if test -z "$reg"
-        _info "  Regulatory domain: runtime state unavailable"
-        _info "  Config file set to: $expected_regdom"
-        _info "  Will apply after reboot or: sudo iw reg set $expected_regdom"
-    else if test "$reg" = 00
-        _info "  Regulatory domain: $reg (world domain - not yet applied)"
-        _info "  Expected: $expected_regdom (applies after driver reload or reboot)"
-    else if test "$reg" = "$expected_regdom"
-        _ok "  Regulatory domain: $reg"
-    else
-        _fail "  Regulatory domain: $reg (expected: $expected_regdom)"
-    end
-    _echo
 
     _echo "FILE PERMISSIONS"
     _echo
@@ -5919,94 +5849,6 @@ function _install_system_files --description "Deploy all embedded config files t
         set _fn_err true
     end
 
-    _progress "Wireless regulatory domain"
-    _echo
-    _info "Wireless regulatory domain (current: $WIRELESS_REGDOM)"
-    _info "Common codes: US, GB, DE, FR, JP, AU, CA"
-
-    if test "$DRY" != true && not test "$ALL" = true && isatty stdin
-        # Interactive wireless regulatory domain configuration
-        read -P "[?] Enter your country code (or Enter for US): " regdom_input
-        # Validate regulatory domain: must be 2-letter ISO country code
-        if test -n "$regdom_input"
-            set -l regdom_upper (string upper -- "$regdom_input" | string trim --)
-
-            if not string match -qr '^[A-Z]{2}$' -- "$regdom_upper"
-                _err "Invalid country code: '$regdom_input' (must be 2 letters, e.g., US, GB, DE)"
-                set -g INSTALL_HAD_ERRORS true
-            else
-                set -l known_codes (grep -E '^#WIRELESS_REGDOM=' /etc/conf.d/wireless-regdom 2>/dev/null | string match -rg -- '"([A-Z]{2})"')
-                if test (count $known_codes) -eq 0
-                    set known_codes US GB DE FR JP AU CA NZ IT ES NL BE AT CH SE NO DK FI PL CZ HU RO BG HR SI SK PT IE GR LU EE LV LT MT CY KR TW HK SG MY TH PH IN ID VN BR MX AR CL CO PE VE ZA IL TR UA RU KZ
-                end
-                if not contains -- "$regdom_upper" $known_codes
-                    _warn "Unknown regulatory domain: '$regdom_upper' (not in system's wireless-regdom list)"
-                    _warn "Proceeding anyway — invalid codes may fail silently at runtime"
-                end
-                set -l dst_dir (dirname -- /etc/conf.d/wireless-regdom)
-                set -l tmpfile (sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
-                if test -z "$tmpfile"
-                    _err "Failed to create temp file for wireless-regdom"
-                    set -g INSTALL_HAD_ERRORS true
-                else if sudo test -L "$tmpfile"
-                    sudo rm -f -- "$tmpfile" 2>/dev/null
-                    _err "Temp file is symlink — aborting regulatory domain update"
-                    set -g INSTALL_HAD_ERRORS true
-                else
-                    set -l _has_uncommented false
-                    sudo grep -qE -- '^[[:space:]]*WIRELESS_REGDOM=' /etc/conf.d/wireless-regdom 2>/dev/null && set _has_uncommented true
-                    set -l _write_ok false
-                    if test "$_has_uncommented" = true
-                        _log "RUN: regdom replace pipeline (cat → replace → tee) → $tmpfile"
-                        sudo cat /etc/conf.d/wireless-regdom 2>/dev/null | string replace -r -- 'WIRELESS_REGDOM="[^"]*"' "WIRELESS_REGDOM=\"$regdom_upper\"" | sudo tee -- "$tmpfile" >/dev/null
-                        set -l _regdom_ps $pipestatus
-                        if test $_regdom_ps[1] -ne 0 || test $_regdom_ps[3] -ne 0
-                            sudo rm -f -- "$tmpfile" 2>/dev/null
-                            _err "Regulatory domain pipeline failed (cat=$_regdom_ps[1] tee=$_regdom_ps[3])"
-                            set -g INSTALL_HAD_ERRORS true
-                        else if sudo test -s "$tmpfile"
-                            set _write_ok true
-                        end
-                    else
-                        if _run sudo cp -- /etc/conf.d/wireless-regdom "$tmpfile"
-                            if printf '%s\n' "WIRELESS_REGDOM=\"$regdom_upper\"" | _run sudo tee -a -- "$tmpfile"
-                                set _write_ok true
-                            else
-                                sudo rm -f -- "$tmpfile" 2>/dev/null
-                                _err "Failed to append regulatory domain to temp file"
-                                set -g INSTALL_HAD_ERRORS true
-                            end
-                        else
-                            sudo rm -f -- "$tmpfile" 2>/dev/null
-                            _err "Failed to copy wireless-regdom to temp file"
-                            set -g INSTALL_HAD_ERRORS true
-                        end
-                    end
-                    if test "$_write_ok" = true
-                        if not _run sudo chmod -- 0644 "$tmpfile"
-                            sudo rm -f -- "$tmpfile" 2>/dev/null
-                            _err "Failed to set permissions on regulatory domain temp file"
-                            set -g INSTALL_HAD_ERRORS true
-                        else if not _run sudo mv -- "$tmpfile" /etc/conf.d/wireless-regdom
-                            sudo rm -f -- "$tmpfile" 2>/dev/null
-                            _err "Failed to set regulatory domain (mv failed)"
-                            set -g INSTALL_HAD_ERRORS true
-                        else if not _run sudo chown -- root:root /etc/conf.d/wireless-regdom
-                            _err "Failed to set ownership on wireless-regdom"
-                            set -g INSTALL_HAD_ERRORS true
-                        else
-                            _ok "Set regulatory domain to: $regdom_upper"
-                        end
-                    else
-                        sudo rm -f -- "$tmpfile" 2>/dev/null
-                        _err "Failed to set regulatory domain"
-                        set -g INSTALL_HAD_ERRORS true
-                    end
-                end
-            end
-        end
-    end
-
     _progress "Installing user files"
     _echo
     _info "Installing user configuration files..."
@@ -6935,8 +6777,6 @@ function do_install_file --argument-names target --description "Install a single
                 if _ask "NetworkManager config changed — restart NetworkManager?"
                     _run sudo systemctl restart NetworkManager || _warn "NetworkManager restart failed"
                 end
-            else if string match -q '*/conf.d/wireless-regdom' -- "$target"
-                _info "Regulatory domain changed — run 'sudo iw reg set XX' or reboot for full effect"
             else if string match -q '*/sysctl.d/*' -- "$target"
                 _echo
                 if _ask "Reload sysctl settings?"
@@ -7289,10 +7129,12 @@ while test $i -le (count $argv)
                     set i $next_i
                 else
                     echo "[ERR] --profile requires a name argument (got '$next_arg')" >&2
+                    command rm -f -- "$LOG_FILE" 2>/dev/null
                     exit $EXIT_USAGE
                 end
             else
                 echo "[ERR] --profile requires a name argument" >&2
+                command rm -f -- "$LOG_FILE" 2>/dev/null
                 exit $EXIT_USAGE
             end
         case --logs

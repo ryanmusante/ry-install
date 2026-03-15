@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
-Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 17 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 16 embedded configs, no external dependencies.
 
 ## Hardware
 
@@ -154,7 +154,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks: DefaultInterface/PowerSaveDisable · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=ERR |
-| `wireless-regdom` | WIRELESS_REGDOM="US" |
 
 ### Sysctl Overrides
 
@@ -214,7 +213,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | `amdgpu-performance.service` | Write `high` to `power_dpm_force_performance_level` sysfs after graphical.target (retry loop, multi-GPU) |
 | `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` sysfs after cpupower.service |
 
-## Embedded Files (17)
+## Embedded Files (16)
 
 | # | Scope | Path |
 |---|-------|------|
@@ -228,13 +227,12 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | 8 | System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
 | 9 | System | `/etc/iwd/main.conf` |
 | 10 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
-| 11 | System | `/etc/conf.d/wireless-regdom` |
-| 12 | System | `/etc/sysctl.d/99-ry-sysctl.conf` |
-| 13 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
-| 14 | User | `~/.config/environment.d/10-environment.conf` |
-| 15 | User | `~/.config/systemd/user/ssh-agent.service` |
-| 16 | Service | `/etc/systemd/system/amdgpu-performance.service` |
-| 17 | Service | `/etc/systemd/system/cpupower-epp.service` |
+| 11 | System | `/etc/sysctl.d/99-ry-sysctl.conf` |
+| 12 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
+| 13 | User | `~/.config/environment.d/10-environment.conf` |
+| 14 | User | `~/.config/systemd/user/ssh-agent.service` |
+| 15 | Service | `/etc/systemd/system/amdgpu-performance.service` |
+| 16 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
 ## Safety
 
@@ -268,9 +266,9 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 > `--diff` and `--verify-*` return exit 1 when differences or failures are found.
 > This is expected behavior for scripting: `./ry-install.fish --diff || echo "diffs found"`.
 
-### Install Flow (20 steps)
+### Install Flow (19 steps)
 
-Dependencies → Sync → Packages → System files → Regdom → User files → AMDGPU service → Databases → Reload → Remove packages → Mask services → NM dispatcher → CPU service → Timers → Upgrade → Initramfs → Bootloader → Finalize → NM restart → WiFi
+Dependencies → Sync → Packages → System files → User files → AMDGPU service → Databases → Reload → Remove packages → Mask services → NM dispatcher → CPU service → Timers → Upgrade → Initramfs → Bootloader → Finalize → NM restart → WiFi
 
 ### Data Directory
 

@@ -2091,8 +2091,13 @@ function validate_configs --description "Run all embedded config validators"
             continue
         end
         set -l phase_errors (cat -- "$val_dir/$phase.errors" 2>/dev/null)
-        if test -n "$phase_errors"; and test "$phase_errors" -gt 0
-            set errors (math $errors + $phase_errors)
+        if test -n "$phase_errors"; and string match -qr '^\d+$' -- "$phase_errors"
+            if test "$phase_errors" -gt 0
+                set errors (math $errors + $phase_errors)
+            end
+        else if test -n "$phase_errors"
+            _err "Validation child '$phase' wrote non-numeric result: $phase_errors"
+            set errors (math $errors + 1)
         end
     end
 
@@ -2357,6 +2362,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
 
     # B-6: Batch I/O — pre-generate expected content + parallel installed-file reads
     _ensure_sudo_cached
+    or return 1
     set -l diff_batch_dir (mktemp -d -t ry-diffbatch.XXXXXX)
     if not test -d "$diff_batch_dir"
         _err "Failed to create diff temp directory"
@@ -2412,6 +2418,12 @@ function do_diff --argument-names target_file --description "Show diffs between 
             continue
         end
 
+        # Crash detection: missing readok file means child died before writing results
+        if not test -f "$diff_batch_dir/readok_$safe"
+            set has_diff true
+            _warn "$dst: diff child crashed without writing results"
+            continue
+        end
         set -l read_ok (cat -- "$diff_batch_dir/readok_$safe" 2>/dev/null)
         if test -z "$read_ok"
             set read_ok 1
@@ -3417,7 +3429,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         end
     end
     set checked (cat -- "$result_dir/hash_checked" 2>/dev/null)
-    if test -z "$checked"
+    if test -z "$checked"; or not string match -qr '^\d+$' -- "$checked"
         set checked 0
     end
 
@@ -5483,6 +5495,7 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
     # B-4: Run 5 diagnostic phases in parallel
     # Prereq 2: cache sudo for children that need it (_diag_storage uses nvme smart-log)
     _ensure_sudo_cached
+    or return 1
 
     set -l diag_dir (mktemp -d -t ry-diag.XXXXXX)
     if not test -d "$diag_dir"
@@ -6990,6 +7003,7 @@ function do_test_all --description "Run the full test suite across all subcomman
 
     # Pre-cache sudo for modes that need it
     _ensure_sudo_cached
+    or return 1
 
     # B-5: Split into parallel-safe (read-only, no lock) and sequential (writes or lock-acquiring)
     set -l parallel_modes \
@@ -7286,7 +7300,7 @@ end
 # ── Mode exclusivity: exactly one mode flag allowed per invocation ──
 if test $mode_count -gt 1
     _log "ERR: Cannot combine multiple mode flags — run each separately"
-    if test "$NO_COLOR" = true
+    if test "$NO_COLOR" = true || not isatty 2
         echo "[ERR] Cannot combine multiple mode flags — run each separately" >&2
     else
         begin

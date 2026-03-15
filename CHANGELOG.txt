@@ -1,3 +1,28 @@
+3.7.8 (2026-03-15)
+-------------------
+
+  fix: do_diagnose parallel children _ntsync_state always returned
+    "unavailable" — KVER, KVER_MAJOR, KVER_MINOR were not in
+    export_globals so children saw empty values defaulting to 0;
+    _diag_network ntsync check now reports correct kernel version
+
+  fix: stress tests moved from _diag_config (parallel child with no
+    TTY) to do_diagnose sequential section — interactive _ask prompt
+    was dead code in forked children; now runs after parallel merge
+    where TTY is available
+
+  fix: WiFi credential prompts (interface name, SSID, passphrase)
+    now guard with isatty stdin — prevents indefinite hang when stdin
+    is a pipe or redirected in non-interactive contexts
+
+  fix: --check mode now preserves QUIET=true — previously overridden
+    to false by the non-install QUIET blanket; --check is a "silent
+    idempotency probe" that communicates via exit code only
+
+  fix: do_install_file _warn message for failed user unit enable now
+    appends "(user)" suffix to match the corresponding _ask prompt
+    pattern for consistency
+
 3.7.7 (2026-03-15)
 -------------------
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.7 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.7"
+# ry-install v3.7.8 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.8"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -5384,58 +5384,7 @@ function _diag_config --description "Diagnose: power profiles, stress tests, ker
     _echo
 
     set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Stress Tests (optional) ──"
-    set -l run_stress false
-    if test "$ALL" = true || test "$STRESS" = true
-        set run_stress true
-        _log "ASK: Run stress tests? -> auto-yes (--all/--stress)"
-    else
-        if _ask "Run stress tests? (CPU + memory, ~50s)"
-            set run_stress true
-        end
-    end
-
-    if test "$run_stress" = true
-        if command -q stress-ng
-            _info "Running CPU stress test (30s)..."
-            set -l cpu_result (stress-ng --cpu (nproc) --timeout 30s --metrics 2>&1 | tail -n 3)
-            if test -n "$cpu_result"
-                for line in $cpu_result
-                    _info "  $line"
-                end
-            end
-            _ok "CPU stress test complete"
-
-            _info "Running memory bandwidth test (20s)..."
-            set -l mem_result (stress-ng --stream 1 --timeout 20s --metrics 2>&1 | tail -n 3)
-            if test -n "$mem_result"
-                for line in $mem_result
-                    _info "  $line"
-                end
-            end
-            _ok "Memory bandwidth test complete"
-
-            if _gather_temps && test -n "$_TEMP_CPU_NUM"
-                if test -n "$_TEMP_CPU_INT" && string match -qr '^\d+$' -- "$_TEMP_CPU_INT"
-                    if test "$_TEMP_CPU_INT" -ge $TEMP_CPU_CRIT
-                        _fail "Post-stress CPU temp: $_TEMP_CPU_NUM°C (throttling)"
-                        set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-                    else if test "$_TEMP_CPU_INT" -ge $TEMP_CPU_WARN
-                        # Stress test thermal monitoring (optional)
-                        _warn "Post-stress CPU temp: $_TEMP_CPU_NUM°C (high but within spec)"
-                    else
-                        _ok "Post-stress CPU temp: $_TEMP_CPU_NUM°C"
-                    end
-                end
-            end
-        else
-            _warn "Stress-ng not installed (install via: sudo pacman -S --needed stress-ng)"
-            _info "  Or run: ./ry-install.fish (no flags) to get diagnostic packages"
-        end
-    else
-        _info "Skipped (pass --all or answer yes to run)"
-    end
-    _echo
+    # Stress tests moved to do_diagnose sequential section (requires TTY for prompt)
 
     set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
     _echo "── Kernel Cmdline ──"
@@ -5507,6 +5456,7 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
     # Prereq 5: export profile globals needed by _diag_* functions
     set -l export_globals \
         EXPECTED_SERVICES KERNEL_PARAMS STRESS ALL QUIET \
+        KVER KVER_MAJOR KVER_MINOR \
         TEMP_CPU_WARN TEMP_CPU_CRIT TEMP_GPU_WARN TEMP_GPU_CRIT \
         DISK_ROOT_CRIT DISK_ROOT_WARN BOOT_SPACE_CRIT BOOT_SPACE_WARN \
         ROOT_AVAIL_CRIT ROOT_AVAIL_WARN BOOT_TIME_WARN BOOT_TIME_TARGET \
@@ -5578,6 +5528,60 @@ function do_diagnose --description "Run comprehensive system diagnostics and hea
 
     command rm -rf --preserve-root -- "$diag_dir"
 
+    # Stress tests run sequentially (require TTY for interactive prompt)
+    _echo "── Stress Tests (optional) ──"
+    set -l run_stress false
+    if test "$ALL" = true || test "$STRESS" = true
+        set run_stress true
+        _log "ASK: Run stress tests? -> auto-yes (--all/--stress)"
+    else
+        if _ask "Run stress tests? (CPU + memory, ~50s)"
+            set run_stress true
+        end
+    end
+
+    if test "$run_stress" = true
+        if command -q stress-ng
+            _info "Running CPU stress test (30s)..."
+            set -l cpu_result (stress-ng --cpu (nproc) --timeout 30s --metrics 2>&1 | tail -n 3)
+            if test -n "$cpu_result"
+                for line in $cpu_result
+                    _info "  $line"
+                end
+            end
+            _ok "CPU stress test complete"
+
+            _info "Running memory bandwidth test (20s)..."
+            set -l mem_result (stress-ng --stream 1 --timeout 20s --metrics 2>&1 | tail -n 3)
+            if test -n "$mem_result"
+                for line in $mem_result
+                    _info "  $line"
+                end
+            end
+            _ok "Memory bandwidth test complete"
+
+            if _gather_temps && test -n "$_TEMP_CPU_NUM"
+                if test -n "$_TEMP_CPU_INT" && string match -qr '^\d+$' -- "$_TEMP_CPU_INT"
+                    if test "$_TEMP_CPU_INT" -ge $TEMP_CPU_CRIT
+                        _fail "Post-stress CPU temp: $_TEMP_CPU_NUM°C (throttling)"
+                        set _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
+                    else if test "$_TEMP_CPU_INT" -ge $TEMP_CPU_WARN
+                        _warn "Post-stress CPU temp: $_TEMP_CPU_NUM°C (high but within spec)"
+                    else
+                        _ok "Post-stress CPU temp: $_TEMP_CPU_NUM°C"
+                    end
+                end
+            end
+        else
+            _warn "Stress-ng not installed (install via: sudo pacman -S --needed stress-ng)"
+            _info "  Or run: ./ry-install.fish (no flags) to get diagnostic packages"
+        end
+    else
+        _info "Skipped (pass --all or answer yes to run)"
+    end
+    set _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
+    _echo
+
     _echo "════════════════════════════════════════════════════════════════════"
     if test $_DIAG_ISSUES -eq 0
         _ok "Diagnostics complete: No issues found ($_DIAG_CHECKS checks passed)"
@@ -5633,13 +5637,17 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
 
             if test -z "$wlan_iface"
                 _warn "Could not detect WiFi interface"
-                read -P "[?] Enter WiFi interface name: " wlan_iface
-                if not string match -qr '^[a-zA-Z0-9_]+$' -- "$wlan_iface" || test (string length -- "$wlan_iface") -gt 15
-                    _err "Invalid interface name: must be alphanumeric, max 15 chars"
-                    set wlan_iface ""
-                else if not test -d "/sys/class/net/$wlan_iface"
-                    _err "Interface '$wlan_iface' does not exist (check /sys/class/net/)"
-                    set wlan_iface ""
+                if not isatty stdin
+                    _warn "Non-interactive — skipping WiFi interface prompt"
+                else
+                    read -P "[?] Enter WiFi interface name: " wlan_iface
+                    if not string match -qr '^[a-zA-Z0-9_]+$' -- "$wlan_iface" || test (string length -- "$wlan_iface") -gt 15
+                        _err "Invalid interface name: must be alphanumeric, max 15 chars"
+                        set wlan_iface ""
+                    else if not test -d "/sys/class/net/$wlan_iface"
+                        _err "Interface '$wlan_iface' does not exist (check /sys/class/net/)"
+                        set wlan_iface ""
+                    end
                 end
             end
 
@@ -5647,49 +5655,53 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
                 set -g WIFI_IFACE "$wlan_iface"
                 _info "WiFi interface: $wlan_iface"
 
-                read -P "[?] WiFi SSID: " wifi_ssid
-                if test -n "$wifi_ssid"
-                    set -l _ssid_bad false
-                    # GKeyFile special chars (; # leading/trailing space) + shell metacharacters + printf % format injection
-                    for _c in / '\\' ';' '`' '$' '(' ')' '{' '}' '|' '<' '>' '&' "'" '"' '%' '!'
-                        if string match -q -- "*$_c*" "$wifi_ssid"
-                            set _ssid_bad true
-                            break
+                if not isatty stdin
+                    _warn "Non-interactive — skipping WiFi credential prompts"
+                else
+                    read -P "[?] WiFi SSID: " wifi_ssid
+                    if test -n "$wifi_ssid"
+                        set -l _ssid_bad false
+                        # GKeyFile special chars (; # leading/trailing space) + shell metacharacters + printf % format injection
+                        for _c in / '\\' ';' '`' '$' '(' ')' '{' '}' '|' '<' '>' '&' "'" '"' '%' '!'
+                            if string match -q -- "*$_c*" "$wifi_ssid"
+                                set _ssid_bad true
+                                break
+                            end
                         end
-                    end
-                    if test "$_ssid_bad" = true || string match -qr '\\n|\\r' -- "$wifi_ssid"
-                        _err "Invalid SSID: contains forbidden characters"
-                        _info "SSIDs cannot contain shell metacharacters, quotes, or newlines"
-                        _info "Workaround: skip WiFi setup here, then connect manually:"
-                        _info "  nmcli device wifi connect '<SSID>' password '<pass>'"
-                    else if string match -qr '^ | $' -- "$wifi_ssid"
-                        _err "Invalid SSID: leading/trailing whitespace (GKeyFile trims unquoted values)"
-                    else if test "$wifi_ssid" = "." || test "$wifi_ssid" = ".."
-                        _err "Invalid SSID: cannot be '.' or '..'"
-                    else if test (printf '%s' "$wifi_ssid" | wc -c) -gt 32
-                        _err "Invalid SSID: must be 1-32 bytes (IEEE 802.11)"
-                    else
-                        set -g WIFI_SSID "$wifi_ssid"
-                        set -l wifi_pass ""
-                        read -sP "[?] WiFi passphrase: " wifi_pass
-                        echo >&2
-                        if string match -qr '\n|\r' -- "$wifi_pass"
-                            _err "Invalid passphrase: contains newline"
-                            set -g WIFI_SSID ""
-                            set wifi_pass ""
-                        else if string match -q -- '*%*' "$wifi_pass"
-                            _err "Invalid passphrase: contains '%' (GKeyFile parse safety)"
-                            set -g WIFI_SSID ""
-                            set wifi_pass ""
-                        else if test (string length -- "$wifi_pass") -lt 8 || test (string length -- "$wifi_pass") -gt 63
-                            _err "Invalid passphrase: WPA2 requires 8-63 characters"
-                            set -g WIFI_SSID ""
-                            set wifi_pass ""
+                        if test "$_ssid_bad" = true || string match -qr '\\n|\\r' -- "$wifi_ssid"
+                            _err "Invalid SSID: contains forbidden characters"
+                            _info "SSIDs cannot contain shell metacharacters, quotes, or newlines"
+                            _info "Workaround: skip WiFi setup here, then connect manually:"
+                            _info "  nmcli device wifi connect '<SSID>' password '<pass>'"
+                        else if string match -qr '^ | $' -- "$wifi_ssid"
+                            _err "Invalid SSID: leading/trailing whitespace (GKeyFile trims unquoted values)"
+                        else if test "$wifi_ssid" = "." || test "$wifi_ssid" = ".."
+                            _err "Invalid SSID: cannot be '.' or '..'"
+                        else if test (printf '%s' "$wifi_ssid" | wc -c) -gt 32
+                            _err "Invalid SSID: must be 1-32 bytes (IEEE 802.11)"
                         else
-                            # Credential lifecycle: set here → used in _install_finalize → erased in _do_cleanup
-                            set -g WIFI_PASS "$wifi_pass"
-                            set wifi_pass ""
-                            _ok "WiFi credentials saved (will connect at end)"
+                            set -g WIFI_SSID "$wifi_ssid"
+                            set -l wifi_pass ""
+                            read -sP "[?] WiFi passphrase: " wifi_pass
+                            echo >&2
+                            if string match -qr '\n|\r' -- "$wifi_pass"
+                                _err "Invalid passphrase: contains newline"
+                                set -g WIFI_SSID ""
+                                set wifi_pass ""
+                            else if string match -q -- '*%*' "$wifi_pass"
+                                _err "Invalid passphrase: contains '%' (GKeyFile parse safety)"
+                                set -g WIFI_SSID ""
+                                set wifi_pass ""
+                            else if test (string length -- "$wifi_pass") -lt 8 || test (string length -- "$wifi_pass") -gt 63
+                                _err "Invalid passphrase: WPA2 requires 8-63 characters"
+                                set -g WIFI_SSID ""
+                                set wifi_pass ""
+                            else
+                                # Credential lifecycle: set here → used in _install_finalize → erased in _do_cleanup
+                                set -g WIFI_PASS "$wifi_pass"
+                                set wifi_pass ""
+                                _ok "WiFi credentials saved (will connect at end)"
+                            end
                         end
                     end
                 end
@@ -6761,7 +6773,7 @@ function do_install_file --argument-names target --description "Install a single
                                 or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
                             end
                         else
-                            _warn "Failed to enable "(basename -- "$target")
+                            _warn "Failed to enable "(basename -- "$target")" (user)"
                         end
                     end
                 else
@@ -7177,7 +7189,6 @@ while test $i -le (count $argv)
                 end
             end
         case --diagnose
-            # Parse remaining flags: --completions, --test-all, modifier flags, --help, --version
             set MODE diagnose
             set mode_count (math $mode_count + 1)
 
@@ -7254,7 +7265,7 @@ if test "$_IS_ROOT" = true
     set -g DRY true
 end
 
-if test "$MODE" != install
+if test "$MODE" != install && test "$MODE" != check
     set -g QUIET false
 end
 

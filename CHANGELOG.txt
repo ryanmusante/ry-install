@@ -88,6 +88,17 @@
     '\$HOME/' patterns. Both the lint counter and show_help fallback
     counter updated.
 
+  remove: drop --diagnose mode and 9 associated functions (~700 lines)
+    do_diagnose (25L orchestrator), _diag_info (115L), _diag_services
+    (69L), _diag_hardware (105L), _diag_network (87L), _diag_storage
+    (117L), _diag_config (108L), _gather_gpu_state, _gather_temps.
+    Removed from: arg parser, mode dispatch, lock acquisition, help
+    text, completions, do_test_all parallel_modes, and README. Rationale:
+    diagnostic queries are better served by targeted --logs <target>,
+    --verify-runtime, and direct sysfs/journal inspection. The --stress
+    sub-option (moved to do_diagnose sequential section in v3.7.8) is
+    also removed. 89 → 80 functions, 7300 → 6611 lines.
+
 3.7.12 (2026-03-15)
 -------------------
 

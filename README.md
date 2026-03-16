@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.12-blue)
+![Version](https://img.shields.io/badge/version-3.7.13-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -247,7 +247,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | `1` | Non-critical failure |
 | `2` | Usage error |
 | `3` | Preflight check failed |
-| `4` | Boot-critical failure (mkinitcpio, sdboot-manage) |
+| `4` | Boot-critical failure (mkinitcpio, sdboot-manage, vmlinuz missing) |
 | `5` | Lock acquisition failed |
 | `10` | Drift detected (`--check`) |
 | `11` | Lint errors (`--lint`) |

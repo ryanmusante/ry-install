@@ -1,3 +1,93 @@
+3.7.13 (2026-03-16)
+-------------------
+
+  fix: _verify_summary counter off-by-one in CI line and JSONL footer
+    — _fail/_warn/_ok route through _msg which increments VERIFY_FAIL/
+    VERIFY_WARN/VERIFY_OK when VERIFY_MODE=true. The CI-parseable
+    VERIFY: line and JSONL footer read counters after the increment,
+    producing N+1 for the deciding counter. Fixed by snapshotting
+    counters into locals before calling _fail/_warn/_ok.
+
+  fix: do_check Job 4 interpolated $EXPECTED_SERVICES and $MASK into
+    fish -c string — external profiles with quotes or backslashes in
+    service names would break the interpolated string. Jobs 1-3
+    correctly serialized lists to files; Job 4 now matches by reading
+    from $result_dir/exp_svcs and $result_dir/mask_units.
+
+  fix: get_file_content wildcard case patterns used '*/.config/...'
+    which matches any prefix, not just $HOME — tightened to
+    "$HOME/.config/..." to prevent external profiles with contrived
+    paths from hitting wrong case branches.
+
+  cleanup: remove 3 dead functions — _read_installed (L1163, never
+    called, superseded by inline reads), validate_systemd_unit (L1865,
+    never called, inlined in validate_configs Job 2), validate_fish_
+    script (L1893, never called, inlined in validate_configs Job 3).
+
+  cleanup: remove _run --passthrough dead code path — defined at L1382,
+    parsed and handled, but 0 of 84 _run call sites invoked it. 30
+    lines of untested code removed.
+
+  cleanup: normalize 6 literal exit 2 calls in CLI argument parsing to
+    exit $EXIT_USAGE for consistency with the 7 other sites that
+    already used the constant form.
+
+  cleanup: quote 3 unquoted printf loop variables in get_file_content
+    — $rule (L844), $quirk (L866), $var (L911). Safe in Fish but
+    inconsistent with the 40+ quoted printf calls in the same function.
+
+  cleanup: replace UTF-8 em-dash (U+2014) with ASCII '--' in 2 emitted
+    config file comments — /etc/sysctl.d/99-ry-sysctl.conf line 1 and
+    ~/.config/fish/conf.d/10-ssh-auth-sock.fish line 1. Prevents
+    surprises with LANG=C or byte-level diffing tools.
+
+  cleanup: free _KCONFIG_DATA in _do_cleanup — lazy-loaded ~3K line
+    /proc/config.gz cache was never erased. Harmless for short-lived
+    script but inconsistent with cleanup discipline applied to other
+    cached data.
+
+  cleanup: normalize bare 'set exit_code 0' at L7409 to 'set -g
+    exit_code 0' for consistency with the 265 other set -g calls.
+    Fish top-level bare set is global, so behavior is unchanged.
+
+  doc: align README EXIT_BOOT_CRIT description with show_help — README
+    said "Boot-critical failure (mkinitcpio, sdboot-manage)", show_help
+    adds "vmlinuz missing". README now matches.
+
+  feat: add _btrfs_pre_snapshot for automatic pre-install rootfs
+    snapshots — creates a read-only btrfs snapshot of / before install
+    when root is btrfs. Non-fatal on failure. Uses /.snapshots (snapper
+    convention) or /.ry-snapshots. Names: ry-install-pre-<ver>-<ts>.
+    Replaces the v3.5.0 removal comment with actual functionality.
+
+  fix: do_test_all nested parallelism unthrottled on 8-15 core systems
+    — existing nproc<8 guard fell back to sequential, but 8-15 core
+    systems got full parallel nesting (peak ~225 processes). Added
+    batch throttle: 8-15 cores fork in groups of nproc with wait
+    between batches. 16+ cores unchanged (full parallel).
+
+  refactor: consolidate WiFi GKeyFile escaping into _gkeyfile_escape
+    helper — input validation (read time) and GKeyFile escaping (write
+    time) were split across two sites. Extracted _gkeyfile_escape near
+    _json_str; NM write path now calls helper instead of inline
+    escaping. Single source of truth for backslash, semicolon, leading
+    #, leading/trailing space escaping.
+
+  fix: _verify_summary JSONL footer still got N+1 even with snapshot
+    — the snapshot fix only protected the CI stdout line. The JSONL
+    footer at script exit reads VERIFY_OK/FAIL/WARN globals which were
+    still incremented by the summary _fail/_warn/_ok call. Fixed by
+    setting VERIFY_MODE=false before emitting the summary, so the
+    _msg increment is skipped entirely. All three outputs (stderr, CI
+    line, JSONL footer) now agree.
+
+  fix: do_lint case-count regex missed $HOME-anchored patterns — after
+    tightening wildcard case '*/.config/...' to "$HOME/.config/..." in
+    get_file_content (finding 10.6), the lint regex only matched
+    absolute paths and '*/' prefixes. Updated regex to also match
+    '\$HOME/' patterns. Both the lint counter and show_help fallback
+    counter updated.
+
 3.7.12 (2026-03-15)
 -------------------
 

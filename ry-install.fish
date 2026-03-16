@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.12 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.12"
+# ry-install v3.7.13 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.13"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -375,6 +375,8 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -user $_MY_UID -delete 2>/dev/null
     # Credential erase on every exit path — defense-in-depth against WIFI_PASS lingering in memory
     set --erase WIFI_PASS
+    # Free cached data (harmless but consistent with cleanup discipline)
+    set --erase _KCONFIG_DATA
     # Release LOCK_DIR mutex and PID file
     if set -q LOCK_DIR && test -d "$LOCK_DIR"
         command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
@@ -797,6 +799,56 @@ function _manifest_check_orphans --description "Warn about files from previous i
     return 0
 end
 
+# Create a read-only btrfs snapshot of / before install; non-fatal on failure
+function _btrfs_pre_snapshot --description "Create a btrfs snapshot of rootfs before install"
+    # Only attempt if / is btrfs
+    set -l root_fstype (findmnt -no FSTYPE / 2>/dev/null | string trim --)
+    if test "$root_fstype" != btrfs
+        _info "Root filesystem is $root_fstype (not btrfs) — skipping pre-install snapshot"
+        return 0
+    end
+
+    # Require btrfs tool
+    if not command -q btrfs
+        _warn "btrfs command not found — skipping pre-install snapshot"
+        return 0
+    end
+
+    # Identify the subvolume mount for /
+    set -l root_subvol (btrfs subvolume show / 2>/dev/null | head -1 | string trim --)
+    if test -z "$root_subvol"
+        _warn "Cannot identify root btrfs subvolume — skipping snapshot"
+        return 0
+    end
+
+    # Snapshot naming: ry-install-pre-<version>-<timestamp>
+    set -l snap_name "ry-install-pre-$VERSION-$TIMESTAMP"
+    # Place snapshots in /.snapshots if it exists (snapper convention), else /.ry-snapshots
+    set -l snap_parent "/.snapshots"
+    if not test -d "$snap_parent"
+        set snap_parent "/.ry-snapshots"
+    end
+
+    if test "$DRY" = true
+        _dry "btrfs subvolume snapshot -r / $snap_parent/$snap_name"
+        return 0
+    end
+
+    if not sudo mkdir -p -- "$snap_parent" 2>/dev/null
+        _warn "Cannot create snapshot directory $snap_parent — skipping"
+        return 0
+    end
+
+    if sudo btrfs subvolume snapshot -r / "$snap_parent/$snap_name" >/dev/null 2>&1
+        _ok "Pre-install snapshot: $snap_parent/$snap_name"
+        _log "SNAPSHOT: path=$snap_parent/$snap_name subvol=$root_subvol"
+    else
+        _warn "Btrfs snapshot failed — continuing without rollback point"
+        _log "SNAPSHOT_FAILED: target=$snap_parent/$snap_name"
+    end
+    return 0
+end
+
 # Generate config file content by destination path — INVARIANT: content emitted via printf/echo only, NEVER eval'd
 function get_file_content --argument-names dst --description "Return embedded config content for a given destination path"
     if test (count $argv) -ne 1
@@ -841,7 +893,7 @@ function get_file_content --argument-names dst --description "Return embedded co
         case "/etc/udev/rules.d/99-cachyos-udev.rules"
             printf '%s\n' "# udev rules"
             for rule in $UDEV_RULES
-                printf '%s\n' $rule
+                printf '%s\n' "$rule"
             end
 
         case "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf"
@@ -863,7 +915,7 @@ function get_file_content --argument-names dst --description "Return embedded co
             printf '%s\n' ""
             printf '%s\n' "[DriverQuirks]"
             for quirk in $IWD_DRIVER_QUIRKS
-                printf '%s\n' $quirk
+                printf '%s\n' "$quirk"
             end
             printf '%s\n' ""
             printf '%s\n' "[Network]"
@@ -881,7 +933,7 @@ function get_file_content --argument-names dst --description "Return embedded co
             printf '%s\n' "level=$NM_LOG_LEVEL"
 
         case "/etc/sysctl.d/99-ry-sysctl.conf"
-            printf '%s\n' "# Network and security sysctl — complements cachyos vendor 70-cachyos-settings.conf"
+            printf '%s\n' "# Network and security sysctl -- complements cachyos vendor 70-cachyos-settings.conf"
             printf '%s\n' ""
             printf '%s\n' "# TCP BBR congestion control + fq qdisc for pacing"
             printf '%s\n' "net.core.default_qdisc = fq"
@@ -893,8 +945,8 @@ function get_file_content --argument-names dst --description "Return embedded co
             printf '%s\n' "# Inotify watches for file watchers (IDEs, build tools)"
             printf '%s\n' "fs.inotify.max_user_watches = 524288"
 
-        case '*/.config/fish/conf.d/10-ssh-auth-sock.fish'
-            printf '%s\n' '# SSH agent socket for fish shell — priority: forwarded > gcr > systemd
+        case "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish"
+            printf '%s\n' '# SSH agent socket for fish shell -- priority: forwarded > gcr > systemd
 if status is-interactive; and set -q XDG_RUNTIME_DIR; and not set -q SSH_CONNECTION
     if test -S "$XDG_RUNTIME_DIR/gcr/ssh"
         set -gx SSH_AUTH_SOCK "$XDG_RUNTIME_DIR/gcr/ssh"
@@ -903,15 +955,15 @@ if status is-interactive; and set -q XDG_RUNTIME_DIR; and not set -q SSH_CONNECT
     end
 end'
 
-        case '*/.config/environment.d/10-environment.conf'
+        case "$HOME/.config/environment.d/10-environment.conf"
             printf '%s\n' "# Environment variables for systemd user services and graphical sessions"
             printf '%s\n' "# Loaded by systemd --user (COSMIC, Flatpak, D-Bus activated apps)"
             printf '%s\n' 'SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket'
             for var in $ENV_VARS
-                printf '%s\n' $var
+                printf '%s\n' "$var"
             end
 
-        case '*/.config/systemd/user/ssh-agent.service'
+        case "$HOME/.config/systemd/user/ssh-agent.service"
             printf '%s\n' '[Unit]
 Description=SSH authentication agent
 
@@ -1047,6 +1099,24 @@ function _json_str --description "Escape a string for safe JSON embedding"
     printf '%s\n' "$val"
 end
 
+# Escape a string for GKeyFile format (NetworkManager .nmconnection files)
+# Handles: backslash, semicolon, leading #, leading/trailing space
+# Single source of truth — called from _install_finalize WiFi write path
+function _gkeyfile_escape --argument-names raw --description "Escape a string for GKeyFile (NM keyfile) format"
+    set -l val (string replace -a '\\' '\\\\' -- "$raw")
+    set -l val (string replace -a ';' '\\;' -- "$val")
+    if string match -q '#*' -- "$val"
+        set val '\\#'(string sub -s 2 -- "$val")
+    end
+    if string match -qr '^ ' -- "$val"
+        set val '\\s'(string sub -s 2 -- "$val")
+    end
+    if string match -qr ' $' -- "$val"
+        set val (string sub -l (math (string length -- "$val") - 1) -- "$val")'\\s'
+    end
+    printf '%s\n' "$val"
+end
+
 # ── Structured NDJSON logging — self-contained JSON per line, event classification (section/prefix/message), _json_str escapes+caps at 4096 chars ──
 
 # Append JSONL event to LOG_FILE with ISO timestamp
@@ -1159,24 +1229,6 @@ function _echo --description "Print a plain message without level prefix"
     end
 end
 
-# Read installed file content; uses elevated read for system paths, direct read for $HOME paths
-function _read_installed --argument-names dst --description "Read installed file content at a destination path"
-    if test (count $argv) -ne 1
-        _err "_read_installed: expected 1 arg (dst), got "(count $argv)
-        return 1
-    end
-    # $HOME/* files: read as user; system files: read as root (preserves privilege separation)
-    if string match -q "$HOME/*" -- "$dst"
-        test -f "$dst" || return 1
-        command cat -- "$dst" 2>/dev/null
-        return $status
-    else
-        sudo test -f "$dst" 2>/dev/null || return 1
-        sudo cat -- "$dst" 2>/dev/null
-        return $status
-    end
-end
-
 # Print the boxed ry-install header with mode title; suppressed by QUIET flag
 function _banner --argument-names text --description "Print the ry-install startup banner"
     if test (count $argv) -lt 1
@@ -1210,26 +1262,34 @@ function _verify_summary --description "Print verification pass/fail/warn summar
     _echo "VERIFICATION SUMMARY"
     _echo
 
-    set -l summary "Results: $VERIFY_OK OK"
-    if test "$VERIFY_WARN" -gt 0
-        set summary "$summary, $VERIFY_WARN WARN"
+    # Snapshot counters and disable VERIFY_MODE before _fail/_warn/_ok
+    # (which route through _msg and increment VERIFY_* when VERIFY_MODE=true)
+    # This keeps both the CI line and the JSONL footer in sync with stderr
+    set -l snap_ok $VERIFY_OK
+    set -l snap_fail $VERIFY_FAIL
+    set -l snap_warn $VERIFY_WARN
+    set -g VERIFY_MODE false
+
+    set -l summary "Results: $snap_ok OK"
+    if test "$snap_warn" -gt 0
+        set summary "$summary, $snap_warn WARN"
     end
-    if test "$VERIFY_FAIL" -gt 0
-        set summary "$summary, $VERIFY_FAIL FAIL"
+    if test "$snap_fail" -gt 0
+        set summary "$summary, $snap_fail FAIL"
     end
 
-    if test "$VERIFY_FAIL" -gt 0
+    if test "$snap_fail" -gt 0
         _fail "$summary"
         # CI-friendly: emit machine-parseable summary to stdout (all other output is stderr)
-        echo "VERIFY:FAIL:$VERIFY_OK:$VERIFY_FAIL:$VERIFY_WARN"
+        echo "VERIFY:FAIL:$snap_ok:$snap_fail:$snap_warn"
         return 1
-    else if test "$VERIFY_WARN" -gt 0
+    else if test "$snap_warn" -gt 0
         _warn "$summary"
-        echo "VERIFY:WARN:$VERIFY_OK:$VERIFY_FAIL:$VERIFY_WARN"
+        echo "VERIFY:WARN:$snap_ok:$snap_fail:$snap_warn"
         return 0
     else
         _ok "$summary"
-        echo "VERIFY:OK:$VERIFY_OK:$VERIFY_FAIL:$VERIFY_WARN"
+        echo "VERIFY:OK:$snap_ok:$snap_fail:$snap_warn"
         return 0
     end
 end
@@ -1379,12 +1439,7 @@ end
 # ── Command execution wrapper — secret redaction (9 patterns), dry-run gating, output capture to tmpfiles, structured error reporting ──
 
 # Execute command with logging, secret redaction, dry-run gating, and stdout/stderr capture to tmpfiles
-function _run --description "Execute a command with logging, dry-run support, and error capture; stdout captured and only displayed when QUIET=false unless --passthrough is set"
-    set -l passthrough false
-    if test "$argv[1]" = --passthrough
-        set passthrough true
-        set argv $argv[2..]
-    end
+function _run --description "Execute a command with logging, dry-run support, and error capture; stdout captured and only displayed when QUIET=false"
     set -l log_cmd (string join -- " " $argv)
 
     # Redact secrets from log output; globs match --flag=value and --flag value without false positives
@@ -1402,27 +1457,9 @@ function _run --description "Execute a command with logging, dry-run support, an
         _dry "$log_cmd"
         return 0
     else
-        # mktemp for stderr capture (shared by both paths)
+        # mktemp for stderr capture
         set -l stderr_tmp (mktemp -t ry-run-stderr.XXXXXX 2>/dev/null || echo /dev/null)
         test "$stderr_tmp" != /dev/null && set -ga _TRACKED_TMPFILES "$stderr_tmp"
-        # --passthrough: stdout flows to caller, only stderr captured
-        if test "$passthrough" = true
-            $argv 2>"$stderr_tmp"
-            set -l ret $status
-            if test "$stderr_tmp" != /dev/null && test -s "$stderr_tmp"
-                set -l total_err (wc -l < "$stderr_tmp" | string trim --)
-                set -l first_lines (head -n 5 "$stderr_tmp")
-                _log "STDERR($total_err lines): first: "(string join -- " | " $first_lines)
-                if test "$QUIET" = false && test $ret -ne 0
-                    for el in $first_lines
-                        echo "  stderr: $el" >&2
-                    end
-                end
-            end
-            command rm -f -- "$stderr_tmp" 2>/dev/null
-            _log "EXIT: $ret"
-            return $ret
-        end
         # Standard path: capture both stdout and stderr to tmpfiles
         set -l stdout_tmp (mktemp -t ry-run-stdout.XXXXXX 2>/dev/null || echo /dev/null)
         test "$stdout_tmp" != /dev/null && set -ga _TRACKED_TMPFILES "$stdout_tmp"
@@ -1491,7 +1528,7 @@ function show_help --description "Display usage information and available subcom
     # Fallback: count get_file_content case branches if profile hasn't loaded (--help exits before _load_profile)
     set -l _file_count "$MANAGED_FILE_COUNT"
     if test -z "$_file_count"
-        set _file_count (sed -n -- '/^function get_file_content/,/^end$/p' (status filename) | grep -cE "case [\"']?(/|[*]/.)")
+        set _file_count (sed -n -- '/^function get_file_content/,/^end$/p' (status filename) | grep -cE "case [\"']?(/|[*]/\.|\\\$HOME/)")
     end
     echo "
 ry-install v$VERSION
@@ -1858,51 +1895,6 @@ function validate_mkinitcpio_modules --description "Validate mkinitcpio MODULES 
             _warn "Module may not exist: $mod (continuing anyway)"
         end
     end
-    return 0
-end
-
-# Validate a systemd unit tmpfile via systemd-analyze verify; returns error count
-function validate_systemd_unit --argument-names tmpfile unit_name --description "Validate a systemd unit file via systemd-analyze"
-    if test (count $argv) -ne 2
-        _err "validate_systemd_unit: expected 2 args (tmpfile unit_name), got "(count $argv)
-        return 1
-    end
-    set -l tmpfile $argv[1]
-    set -l unit_name $argv[2]
-
-    if command -q systemd-analyze
-        set -l verify_output (systemd-analyze verify "$tmpfile" 2>&1)
-        set -l verify_status $status
-        if test $verify_status -ne 0
-            _err "Invalid systemd unit syntax: $unit_name"
-            for line in $verify_output
-                _log "  systemd-analyze: $line"
-            end
-            return 1
-        else if test -n "$verify_output"
-            for line in $verify_output
-                _log "  systemd-analyze: $line"
-            end
-        end
-    end
-
-    return 0
-end
-
-# Validate fish script syntax via fish --no-execute on a tmpfile
-function validate_fish_script --argument-names tmpfile script_name --description "Validate fish script syntax via fish --no-execute"
-    if test (count $argv) -ne 2
-        _err "validate_fish_script: expected 2 args (tmpfile script_name), got "(count $argv)
-        return 1
-    end
-    set -l tmpfile $argv[1]
-    set -l script_name $argv[2]
-
-    if not fish --no-execute "$tmpfile" 2>/dev/null
-        _err "Invalid fish syntax: $script_name"
-        return 1
-    end
-
     return 0
 end
 
@@ -3257,6 +3249,9 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     printf '%s\n' $SYSTEM_DESTINATIONS >"$result_dir/sys_dsts"
     printf '%s\n' $USER_DESTINATIONS >"$result_dir/usr_dsts"
     printf '%s\n' $SERVICE_DESTINATIONS >"$result_dir/svc_dsts"
+    # Serialize service/mask lists for Job 4 (avoids interpolation into fish -c strings)
+    printf '%s\n' $EXPECTED_SERVICES >"$result_dir/exp_svcs"
+    printf '%s\n' $MASK >"$result_dir/mask_units"
 
     # ── Job 1: file content hashes (parallel) ──
     fish -c "
@@ -3349,8 +3344,11 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     # ── Job 4: service state — batch systemctl show (parallel) ──
     fish -c "
         set -l drift false
+        # Read serialized lists from files (safe for names with quotes/backslashes)
+        set -l exp_svcs (command cat -- '$result_dir/exp_svcs')
+        set -l mask_units (command cat -- '$result_dir/mask_units')
         # B-3a: batch query all expected + masked units in 1 call
-        set -l all_units $EXPECTED_SERVICES $MASK
+        set -l all_units \$exp_svcs \$mask_units
         set -l show_raw (systemctl show --property=ActiveState,UnitFileState -- \$all_units 2>/dev/null)
         set -l current_active ''
         set -l current_unitfile ''
@@ -3374,7 +3372,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         end
 
         # Check expected services (first N results)
-        set -l exp_count (count (string split -- ' ' '$EXPECTED_SERVICES'))
+        set -l exp_count (count \$exp_svcs)
         for i in (seq 1 \$exp_count)
             set -l rec (string split -- ':' \$results[\$i])
             if test \"\$rec[1]\" != active -a \"\$rec[1]\" != exited
@@ -3394,10 +3392,9 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         end
 
         # Check masked services (remaining results)
-        set -l mask_list $MASK
-        for i in (seq 1 (count \$mask_list))
+        for i in (seq 1 (count \$mask_units))
             set -l ri (math \$exp_count + \$i)
-            if test \"\$mask_list[\$i]\" = lvm2-monitor.service -a \"\$has_lvm\" = true
+            if test \"\$mask_units[\$i]\" = lvm2-monitor.service -a \"\$has_lvm\" = true
                 continue
             end
             set -l rec (string split -- ':' \$results[\$ri])
@@ -4303,7 +4300,7 @@ function do_lint --description "Lint the script source for fish anti-patterns an
     end
 
     set -l total (math (count $SYSTEM_DESTINATIONS) + (count $USER_DESTINATIONS) + (count $SERVICE_DESTINATIONS))
-    set -l case_count (sed -n -- '/^function get_file_content/,/^end$/p' "$script_path" | grep -cE "case [\"']?(/|[*]/.)")
+    set -l case_count (sed -n -- '/^function get_file_content/,/^end$/p' "$script_path" | grep -cE "case [\"']?(/|[*]/\.|\\\$HOME/)")
     if test $case_count -ge $total
         _ok "File count verified: $total destinations, $case_count content cases"
     else
@@ -6449,23 +6446,9 @@ function _install_finalize --description "Run post-install verification, cleanup
                 # Generate deterministic NM connection UUID from SSID+interface via MD5 (not security-critical)
                 set -l _hex (printf '%s-%s' "$WIFI_SSID" "$WIFI_IFACE" | md5sum | string split -- ' ')[1]
                 set -l conn_uuid (string sub -l 8 -- $_hex)-(string sub -s 9 -l 4 -- $_hex)-(string sub -s 13 -l 4 -- $_hex)-(string sub -s 17 -l 4 -- $_hex)-(string sub -s 21 -l 12 -- $_hex)
-                # GKeyFile escapes for NM keyfile: backslash, semicolon, leading #, leading/trailing space; Fish '\\' = one literal \
-                set -l safe_pass (string replace -a '\\' '\\\\' -- "$WIFI_PASS")
-                set -l safe_pass (string replace -a ';' '\\;' -- "$safe_pass")
-                if string match -q '#*' -- "$safe_pass"
-                    set safe_pass '\\#'(string sub -s 2 -- "$safe_pass")
-                end
-                if string match -qr '^ ' -- "$safe_pass"
-                    set safe_pass '\\s'(string sub -s 2 -- "$safe_pass")
-                end
-                if string match -qr ' $' -- "$safe_pass"
-                    set safe_pass (string sub -l (math (string length -- "$safe_pass") - 1) -- "$safe_pass")'\\s'
-                end
-                set -l safe_ssid (string replace -a '\\' '\\\\' -- "$WIFI_SSID")
-                set -l safe_ssid (string replace -a ';' '\\;' -- "$safe_ssid")
-                if string match -q '#*' -- "$safe_ssid"
-                    set safe_ssid '\\#'(string sub -s 2 -- "$safe_ssid")
-                end
+                # GKeyFile escapes via consolidated helper (single source of truth)
+                set -l safe_pass (_gkeyfile_escape "$WIFI_PASS")
+                set -l safe_ssid (_gkeyfile_escape "$WIFI_SSID")
                 # Inside DRY=false gate (line 6374); credential write only occurs on live runs
                 if printf '%s\n' "[connection]" "id=$safe_ssid" "uuid=$conn_uuid" "type=wifi" "interface-name=$WIFI_IFACE" "autoconnect=true" "[wifi]" "mode=infrastructure" "ssid=$safe_ssid" "[wifi-security]" "key-mgmt=wpa-psk" "psk=$safe_pass" "[ipv4]" "method=auto" "[ipv6]" "method=disabled" | sudo tee -- "$tmpfile" >/dev/null
                     set --erase WIFI_PASS
@@ -6666,9 +6649,8 @@ function do_install --description "Full installation: preflight, packages, confi
     # Check for orphaned files from previous install or profile switch
     _manifest_check_orphans
 
-    # Automatic pre-install snapshots removed in v3.5.0; user is responsible for rootfs snapshots
-    _info "No automatic backup — snapshot your rootfs before proceeding if needed"
-    _echo
+    # Pre-install btrfs snapshot (non-fatal; skips gracefully on non-btrfs)
+    _btrfs_pre_snapshot
 
     _progress_init
 
@@ -7019,12 +7001,19 @@ function do_test_all --description "Run the full test suite across all subcomman
         "--diff --fix --dry-run --all" \
         "--install-file /etc/kernel/cmdline --dry-run"
 
-    # Nested parallelism guard: children fork parallel work (verify-static:17, check:4, diagnose:5, diff:17); sequential on low-core systems
+    # Nested parallelism guard: children fork parallel work (verify-static:17, check:4, diagnose:5, diff:17)
+    # <8 cores: fully sequential; 8-15 cores: batch parallel in groups of nproc; 16+: full parallel
     set -l nproc_val (nproc 2>/dev/null)
-    if test -n "$nproc_val" && string match -qr '^\d+$' -- "$nproc_val" && test "$nproc_val" -lt 8
-        _warn "Low CPU count ($nproc_val) — running test modes sequentially to avoid oversubscription"
-        set sequential_modes $parallel_modes $sequential_modes
-        set parallel_modes
+    set -l par_batch_size 0
+    if test -n "$nproc_val" && string match -qr '^\d+$' -- "$nproc_val"
+        if test "$nproc_val" -lt 8
+            _warn "Low CPU count ($nproc_val) — running test modes sequentially to avoid oversubscription"
+            set sequential_modes $parallel_modes $sequential_modes
+            set parallel_modes
+        else if test "$nproc_val" -lt 16
+            set par_batch_size $nproc_val
+            _info "Mid-range CPU count ($nproc_val) — batching parallel modes in groups of $par_batch_size"
+        end
     end
 
     set -l total (math (count $parallel_modes) + (count $sequential_modes) + 1)
@@ -7051,6 +7040,11 @@ function do_test_all --description "Run the full test suite across all subcomman
             echo \$status > '$test_dir/$label.exit'
         " &
         set -a parallel_pids $last_pid
+        # Batch throttle: wait for current batch before forking more (mid-range CPU guard)
+        if test "$par_batch_size" -gt 0 && test (math $i % $par_batch_size) -eq 0
+            wait $parallel_pids
+            set parallel_pids
+        end
     end
 
     wait $parallel_pids
@@ -7188,7 +7182,7 @@ while test $i -le (count $argv)
                 else if not string match -q -- '-*' "$next_arg"
                     echo "[ERR] --diff requires absolute path (got: $next_arg)" >&2
                     command rm -f -- "$LOG_FILE" 2>/dev/null
-                    exit 2
+                    exit $EXIT_USAGE
                 end
             end
         case --verify-static
@@ -7281,7 +7275,7 @@ while test $i -le (count $argv)
             echo >&2
             show_help >&2
             command rm -f -- "$LOG_FILE" 2>/dev/null
-            exit 2
+            exit $EXIT_USAGE
     end
     set i (math $i + 1)
 end
@@ -7300,21 +7294,21 @@ if test $mode_count -gt 1
         end >&2
     end
     command rm -f -- "$LOG_FILE" 2>/dev/null
-    exit 2
+    exit $EXIT_USAGE
 end
 
 if test "$FIX" = true && test "$MODE" != diff
     _log "ERR: --fix requires --diff"
     echo "[ERR] --fix requires --diff" >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
-    exit 2
+    exit $EXIT_USAGE
 end
 
 if test "$STRESS" = true && test "$MODE" != diagnose
     _log "ERR: --stress requires --diagnose"
     echo "[ERR] --stress requires --diagnose" >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
-    exit 2
+    exit $EXIT_USAGE
 end
 
 if test "$_IS_ROOT" = true
@@ -7378,7 +7372,7 @@ switch $MODE
                 _echo "  $dst"
             end
             command rm -f -- "$LOG_FILE" 2>/dev/null
-            exit 2
+            exit $EXIT_USAGE
         end
         _acquire_lock || exit $EXIT_LOCK
     case install
@@ -7406,7 +7400,7 @@ if test $_log_count -gt $MAX_LOGS
     command find "$_log_base_rot" -mindepth 1 -maxdepth 1 -type d -empty -delete 2>/dev/null
 end
 
-set exit_code 0
+set -g exit_code 0
 # ── Main dispatch: route MODE to handler, capture exit code ──
 switch $MODE
     case diff

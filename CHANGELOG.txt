@@ -37,6 +37,13 @@
     interprets -n/-e flags; ntsync state values are safe strings but
     printf is the established convention for stdout return values.
 
+  fix: do_logs journal branch missing return $status — _logs_journal
+    exit code silently dropped. _logs_file_ops branch (analyze, last,
+    list, all) correctly had return $status; journal branch (system,
+    gpu, wifi, boot, audio, usb, kernel) did not. On _logs_journal
+    failure, do_logs returned 0 (implicit switch success), and the
+    dispatch wrote exit_code:0 to the NDJSON footer.
+
 3.7.11 (2026-03-15)
 -------------------
 

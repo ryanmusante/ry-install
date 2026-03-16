@@ -4854,6 +4854,7 @@ function do_logs --argument-names target --description "Browse, search, and anal
             return $status
         case system gpu wifi boot audio usb kernel
             _logs_journal $target
+            return $status
         case '*'
             if string match -q -- '-*' "$target"
                 _warn "Invalid log target: '$target' (looks like a flag)"

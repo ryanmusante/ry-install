@@ -21,8 +21,6 @@ set -g QUIET true
 set -g NO_COLOR false
 # --fix: auto-repair diffs found by --diff
 set -g FIX false
-# --stress: stress-ng in --diagnose
-set -g STRESS false
 
 # ── Environment detection: NO_COLOR (no-color.org), delta, root check, privilege-escalation dry-run safety ──
 if set -qx NO_COLOR || test "$TERM" = dumb
@@ -548,7 +546,7 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "PROTON_NO_WM_DECORATION=1"
 
     # ── Packages ──
-    set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications fd sd dust procs bottom git-delta stress-ng lm_sensors
+    set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications fd sd dust procs bottom git-delta lm_sensors
     set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation ufw octopi micro cachyos-micro-settings btop
 
     # ── Services ──
@@ -565,20 +563,13 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g EXPECTED_SERVICES amdgpu-performance cpupower-epp fstrim.timer NetworkManager
 
     # ── Thresholds ──
-    set -g TEMP_CPU_WARN 85
-    set -g TEMP_CPU_CRIT 90
-    set -g TEMP_GPU_WARN 85
-    set -g TEMP_GPU_CRIT 95
     set -g DISK_ROOT_CRIT 90
     set -g DISK_ROOT_WARN 80
     set -g BOOT_SPACE_CRIT 200
     set -g BOOT_SPACE_WARN 500
     set -g ROOT_AVAIL_CRIT 2
     set -g ROOT_AVAIL_WARN 5
-    set -g BOOT_TIME_WARN 30
     set -g BOOT_TIME_TARGET 15
-    set -g NVME_LIFE_WARN 90
-    set -g CACHE_CLEAN_THRESHOLD 100
 
     # ── Hardware fingerprint expectations (optional) ──
     set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
@@ -651,10 +642,9 @@ function _validate_profile --description "Verify loaded profile has all required
     end
 
     # Type-check numeric globals
-    for num_var in LOADER_TIMEOUT TEMP_CPU_WARN TEMP_CPU_CRIT TEMP_GPU_WARN TEMP_GPU_CRIT \
-        DISK_ROOT_CRIT DISK_ROOT_WARN BOOT_SPACE_CRIT BOOT_SPACE_WARN \
-        ROOT_AVAIL_CRIT ROOT_AVAIL_WARN BOOT_TIME_WARN BOOT_TIME_TARGET \
-        NVME_LIFE_WARN CACHE_CLEAN_THRESHOLD
+    for num_var in LOADER_TIMEOUT DISK_ROOT_CRIT DISK_ROOT_WARN \
+        BOOT_SPACE_CRIT BOOT_SPACE_WARN ROOT_AVAIL_CRIT \
+        ROOT_AVAIL_WARN BOOT_TIME_TARGET
         if set -q $num_var
             set -l val $$num_var
             if not string match -qr '^\d+$' -- "$val"
@@ -1539,7 +1529,6 @@ Usage: "(status filename)" [OPTIONS]
 
 INSTALLATION:
   (no args)         Interactive installation
-    # Installation and verification modes
   -a, --all         Install without prompts (unattended mode)
   -f, --force       Auto-yes prompts, no progress bar
   -V, --verbose     Show output on terminal (default: silent, log only)
@@ -1561,15 +1550,11 @@ UTILITIES:
   --logs last       Analyze most recent log file
   --logs all        Analyze all logs, show combined summary
   --logs list       List recent log files with summaries
-  --diagnose        Automated problem detection
-    # Diagnostic and maintenance modes
-  --diagnose --stress  Include stress tests without prompting
   --install-file <path>  Re-deploy a single managed file
   --completions     Install fish tab-completions for ry-install itself
 
 OPTIONS:
   --fix             Re-install drifted files (use with --diff)
-  --stress          Include stress tests (use with --diagnose)
   --profile <n>     Load machine profile (default: gtr9_pro)
   --                End of options (all subsequent args treated as positional)
   -h, --help        Show this help
@@ -1591,7 +1576,6 @@ EXAMPLES:
   ./ry-install.fish              # Interactive installation
   ./ry-install.fish --all        # Unattended installation
   ./ry-install.fish --diff --fix     # Fix drifted config files
-  ./ry-install.fish --diagnose --stress  # Include stress tests
   ./ry-install.fish --install-file /etc/mkinitcpio.conf  # Re-deploy single file
   ./ry-install.fish --test-all      # Run all safe modes, generate NDJSON logs
   ./ry-install.fish --logs last     # Analyze most recent log
@@ -3438,20 +3422,9 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     return $EXIT_OK
 end
 
-# Read GPU performance level and busy percentage from amdgpu sysfs nodes
-function _gather_gpu_state --description "Collect GPU driver and firmware state for diagnostics"
-    set -g _GPU_PERF_LEVEL ""
-    for f in /sys/class/drm/card*/device/power_dpm_force_performance_level
-        if test -f "$f"
-            set -g _GPU_PERF_LEVEL (command cat -- "$f" 2>/dev/null)
-            break
-        end
-    end
-    return 0
-end
 
-# Read CPU governor and current frequency from cpufreq sysfs; stores path for diagnostics
-function _gather_cpu_state --description "Collect CPU governor and frequency state for diagnostics"
+# Read CPU governor and current frequency from cpufreq sysfs
+function _gather_cpu_state --description "Collect CPU governor and frequency state"
     set -g _CPU_PATH ""
     set -g _CPU_GOVERNOR ""
     set -g _CPU_EPP ""
@@ -3462,56 +3435,10 @@ function _gather_cpu_state --description "Collect CPU governor and frequency sta
             set -g _CPU_EPP (command cat -- "$cpu_dir/energy_performance_preference" 2>/dev/null)
             break
         end
-        # Collect thermal sensor readings from hwmon sysfs entries for dashboard/diagnostics
     end
     return 0
 end
 
-# Read CPU (k10temp) and GPU (amdgpu) temperatures from /sys/class/hwmon/*/temp*_input
-function _gather_temps --description "Collect thermal sensor readings from sysfs hwmon"
-    set -g _TEMP_CPU_NUM ""
-    set -g _TEMP_CPU_INT ""
-    set -g _TEMP_GPU_NUM ""
-    set -g _TEMP_GPU_INT ""
-
-    # CPU: k10temp or zenpower (AMD thermal driver)
-    for f in /sys/class/hwmon/hwmon*/temp1_input
-        test -f "$f" || continue
-        set -l name_f (string replace 'temp1_input' 'name' -- "$f")
-        test -f "$name_f" || continue
-        set -l name (command cat -- "$name_f" 2>/dev/null)
-        if test "$name" = k10temp || test "$name" = zenpower
-            set raw (command cat -- "$f" 2>/dev/null || echo 0)
-            if string match -qr '^\d+$' -- "$raw"
-                set -l temp_val (math "$raw / 1000")
-                set -g _TEMP_CPU_INT (string split '.' -- "$temp_val")[1]
-                set -g _TEMP_CPU_NUM (printf '%.1f' "$temp_val")
-            end
-            break
-        end
-    end
-
-    # GPU: amdgpu hwmon (first DRM card with temp1_input)
-    for card_dir in /sys/class/drm/card*/device
-        test -d "$card_dir" || continue
-        for f in $card_dir/hwmon/hwmon*/temp1_input
-            test -f "$f" || continue
-            set -l raw (command cat -- "$f" 2>/dev/null || echo 0)
-            if string match -qr '^\d+$' -- "$raw"
-                set -l temp_val (math "$raw / 1000")
-                set -g _TEMP_GPU_INT (string split '.' -- "$temp_val")[1]
-                set -g _TEMP_GPU_NUM (printf '%.1f' "$temp_val")
-            end
-            break
-        end
-        break
-    end
-
-    if test -z "$_TEMP_CPU_NUM" && test -z "$_TEMP_GPU_NUM"
-        return 1
-    end
-    return 0
-end
 
 # ═══ RUNTIME VERIFICATION — live sysfs/procfs state checks; exit 1 when state doesn't match config.
 function verify_runtime --description "Verify runtime kernel params, services, and modules"
@@ -3549,7 +3476,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     _echo "HARDWARE STATE"
     _echo
 
-    # _gather_gpu_state samples first card only; this loop validates ALL cards for compliance
+    # This loop validates ALL cards for compliance
     _echo "── GPU performance level ──"
     set -l gpu_ok false
     set -l found_gpu false
@@ -4891,763 +4818,6 @@ function do_logs --argument-names target --description "Browse, search, and anal
     end
 end
 
-# ── Diagnostic helpers ── extracted from do_diagnose for readability ──
-
-function _diag_info --description "Diagnose: system overview, fans, power, schedulers"
-    _echo "── System Overview ──"
-    set -l kernel $KVER
-    # System overview: kernel, uptime, hostname, arch
-    set -l uptime (uptime -p 2>/dev/null | string replace -- 'up ' '')
-    set -l boot_time (who -b 2>/dev/null | awk '{print $3, $4}')
-    _info "Kernel: $kernel"
-    _info "Uptime: $uptime"
-    if test -n "$boot_time"
-        _info "Booted: $boot_time"
-    end
-
-    set -l last_update (grep -E "^\[.*\] \[PACMAN\] starting full system upgrade" /var/log/pacman.log 2>/dev/null | tail -n 1 | grep -oE '\[[-0-9T:+]+\]' | head -n 1 | tr -d '[]')
-    if test -n "$last_update"
-        _info "Last update: $last_update"
-    end
-    _echo
-
-    _echo "── Fans ──"
-    _gather_temps
-    # Read fan RPMs from /sys/class/hwmon/hwmon*/fan*_input; 0 RPM fans are excluded from output
-    set -l fan_readings
-    for f in /sys/class/hwmon/hwmon*/fan*_input
-        test -f "$f" || continue
-        set -l rpm (command cat -- "$f" 2>/dev/null || echo 0)
-        if string match -qr '^\d+$' -- "$rpm" && test "$rpm" -gt 0
-            set -l label_f (string replace '_input' '_label' -- "$f")
-            set -l label ""
-            if test -f "$label_f"
-                set label (string trim -- (command cat -- "$label_f" 2>/dev/null))
-            end
-            if test -z "$label"
-                set label (basename -- "$f" | string replace '_input' '')
-            end
-            set -a fan_readings "$label: $rpm RPM"
-        end
-    end
-    if test (count $fan_readings) -gt 0
-        for fr in $fan_readings
-            _ok "  $fr"
-        end
-    else
-        _info "No fan sensors detected"
-    end
-    _echo
-
-    _echo "── Power ──"
-    # power1_average reports microwatts; 0W means RAPL not exposing data
-    set -l pkg_power ""
-    for f in /sys/class/hwmon/hwmon*/power1_average
-        if test -f "$f"
-            set pkg_power (command cat -- "$f" 2>/dev/null)
-            break
-        end
-    end
-    if test -n "$pkg_power" && string match -qr '^\d+$' -- "$pkg_power"
-        set -l watts (math "$pkg_power / 1000000")
-        _info "Package power: "$watts"W"
-    end
-    set -l gpu_power ""
-    for f in /sys/class/drm/card*/device/hwmon/hwmon*/power1_average
-        if test -f "$f"
-            set gpu_power (command cat -- "$f" 2>/dev/null)
-            break
-        end
-    end
-    if test -n "$gpu_power" && string match -qr '^\d+$' -- "$gpu_power"
-        set -l watts (math "$gpu_power / 1000000")
-        _info "GPU power: "$watts"W"
-    end
-    if test -z "$pkg_power" && test -z "$gpu_power"
-        _info "Power sensors not available"
-    end
-    _echo
-
-    _echo "── Schedulers ──"
-    set -l cpu_sched ""
-    # /sys/kernel/debug/sched/ requires root; fall back to /proc/config.gz CONFIG_SCHED_* if unavailable
-    for f in /sys/kernel/debug/sched/*/name
-        if test -f "$f"
-            set cpu_sched (command cat -- "$f" 2>/dev/null)
-            break
-        end
-    end
-    if test -z "$cpu_sched"
-        set cpu_sched (zgrep CONFIG_SCHED /proc/config.gz 2>/dev/null | grep "=y" | head -n 1 | cut -d'_' -f3 | cut -d'=' -f1)
-    end
-    if test -n "$cpu_sched"
-        _info "CPU scheduler: $cpu_sched"
-    end
-
-    set -l root_dev (findmnt -no SOURCE / 2>/dev/null | string replace -r -- '\[.*\]' '' | xargs -r realpath 2>/dev/null)
-    set -l blk_name
-    if string match -q '/dev/dm-*' -- "$root_dev"
-        # DM devices lack I/O schedulers; traverse slaves/ to find underlying block device
-        set -l dm_name (string replace '/dev/' '' -- "$root_dev")
-        set -l slaves /sys/block/$dm_name/slaves/* 2>/dev/null
-        if set -q slaves[1]
-            set blk_name (string replace -r '.*/' '' -- $slaves[1])
-        end
-    else if test -n "$root_dev"
-        set blk_name (basename (string replace -r 'p?[0-9]*$' '' -- "$root_dev") 2>/dev/null)
-    end
-    if test -z "$blk_name"
-        _warn "Could not detect root block device for I/O scheduler"
-    else
-        set -l io_sched (grep -oE -- '\[.*\]' /sys/block/$blk_name/queue/scheduler 2>/dev/null | tr -d '[]')
-        if test -n "$io_sched"
-            _info "I/O scheduler: $io_sched ($blk_name)"
-        end
-    end
-    _echo
-
-    _echo "════════════════════════════════════════════════════════════════════"
-    _echo
-end
-
-# Check kernel errors, failed systemd services, and expected service states
-function _diag_services --description "Diagnose: kernel errors, failed services, expected services"
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Kernel Errors ──"
-    # Kernel error count from dmesg
-    if command -q sudo
-        set -l kernel_errors (sudo dmesg --level=err 2>/dev/null | wc -l | string trim --)
-        if test -n "$kernel_errors" && string match -qr '^\d+$' -- "$kernel_errors" && test "$kernel_errors" -gt 0
-            _warn "Found $kernel_errors kernel error(s)"
-            set -l _diag_lines (sudo dmesg --level=err 2>/dev/null | tail -n 5)
-            for line in $_diag_lines
-                _echo "  $line"
-            end
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        else
-            _ok "No kernel errors"
-        end
-    else
-        _info "sudo not available for dmesg check"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Failed Services ──"
-    # Capture once, derive count and details from the same output
-    set -l _sys_failed_lines (systemctl --failed --no-pager 2>/dev/null | grep failed | head -n 5)
-    set -l failed (count $_sys_failed_lines)
-    if test "$failed" -gt 0
-        _warn "Found $failed failed system service(s):"
-        for line in $_sys_failed_lines
-            _echo "  $line"
-        end
-        set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-    else
-        _ok "No failed system services"
-    end
-    set -l _usr_failed_lines (systemctl --user --failed --no-pager 2>/dev/null | grep failed | head -n 5)
-    set -l user_failed (count $_usr_failed_lines)
-    if test "$user_failed" -gt 0
-        _warn "Found $user_failed failed user service(s):"
-        for line in $_usr_failed_lines
-            _echo "  $line"
-        end
-        set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-    else
-        _ok "No failed user services"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Expected Services ──"
-    # Batch: single systemctl show replaces N individual is-active calls
-    set -l _exp_show (systemctl show --property=ActiveState -- $EXPECTED_SERVICES 2>/dev/null)
-    set -l _exp_idx 0
-    set -l _exp_active ""
-    for line in $_exp_show
-        if test -z "$line"
-            set _exp_idx (math $_exp_idx + 1)
-            set _exp_active ""
-            continue
-        end
-        switch "$line"
-            case 'ActiveState=*'
-                set _exp_active (string replace -- 'ActiveState=' '' "$line")
-                set -l _svc_name $EXPECTED_SERVICES[(math $_exp_idx + 1)]
-                if test "$_exp_active" = active -o "$_exp_active" = exited
-                    _ok "$_svc_name: $_exp_active"
-                else
-                    _warn "$_svc_name: $_exp_active"
-                    set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-                end
-        end
-    end
-    # Handle final record if no trailing blank line
-    if test -n "$_exp_active" -a $_exp_idx -lt (count $EXPECTED_SERVICES)
-        set _exp_idx (math $_exp_idx + 1)
-    end
-    set -l ssh_user_state (systemctl --user is-active ssh-agent.service 2>/dev/null)
-    if test "$ssh_user_state" = active
-        _ok "ssh-agent.service (user): active"
-    else
-        _warn "Ssh-agent.service (user): $ssh_user_state"
-        set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-end
-
-# Check GPU state, CPU governor/frequency, disk space, and thermal readings
-function _diag_hardware --description "Diagnose: GPU, CPU, disk space, temperatures"
-    _echo "── GPU State ──"
-    _gather_gpu_state
-    if test "$_GPU_PERF_LEVEL" = high
-        _ok "GPU performance: high"
-    else if test -n "$_GPU_PERF_LEVEL"
-        _warn "GPU performance: $_GPU_PERF_LEVEL (expected: high)"
-        set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-    else
-        _warn "Cannot read GPU performance level"
-        set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── CPU State ──"
-    _gather_cpu_state
-    if test "$_CPU_GOVERNOR" = powersave
-        _ok "CPU governor: powersave (amd_pstate=active + performance EPP)"
-    else if test -n "$_CPU_GOVERNOR"
-        _warn "CPU governor: $_CPU_GOVERNOR (expected: powersave)"
-        set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-    else
-        _info "CPU governor: not available"
-    end
-
-    # Disk usage thresholds for root and boot partitions
-    if test "$_CPU_EPP" = performance
-        _ok "CPU EPP: performance"
-    else if test -n "$_CPU_EPP"
-        _warn "CPU EPP: $_CPU_EPP (expected: performance)"
-        set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-    else
-        _info "CPU EPP: not available"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Disk Space ──"
-    set -l root_pct (LC_ALL=C df / 2>/dev/null | tail -n 1 | awk '{print $5}' | tr -d '%')
-    if test -n "$root_pct" && string match -qr '^\d+$' -- "$root_pct"
-        if test "$root_pct" -ge $DISK_ROOT_CRIT
-            _fail "Root filesystem: $root_pct% (critical)"
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        else if test "$root_pct" -ge $DISK_ROOT_WARN
-            _warn "Root filesystem: $root_pct% (getting full)"
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        else
-            _ok "Root filesystem: $root_pct%"
-        end
-    end
-    set -l boot_avail (LC_ALL=C df -BM /boot 2>/dev/null | tail -n 1 | awk '{print $4}' | tr -d 'M')
-    if test -n "$boot_avail" && string match -qr '^\d+$' -- "$boot_avail"
-        if test "$boot_avail" -lt $BOOT_SPACE_CRIT
-            _fail "/boot: "$boot_avail"MB available (critical — initramfs rebuild will fail)"
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        else if test "$boot_avail" -lt $BOOT_SPACE_WARN
-            _warn "/boot: "$boot_avail"MB available (low)"
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        else
-            _ok "/boot: "$boot_avail"MB available"
-        end
-        # Thermal sensor diagnostics: collect temps, warn on high readings
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Temperatures ──"
-    if _gather_temps
-        if test -n "$_TEMP_CPU_NUM"
-            if test -n "$_TEMP_CPU_INT" && string match -qr '^\d+$' -- "$_TEMP_CPU_INT"
-                if test "$_TEMP_CPU_INT" -ge $TEMP_CPU_CRIT
-                    _fail "CPU: $_TEMP_CPU_NUM°C (throttling likely)"
-                    set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-                else if test "$_TEMP_CPU_INT" -ge $TEMP_CPU_WARN
-                    _warn "CPU: $_TEMP_CPU_NUM°C (high)"
-                    set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-                else
-                    _ok "CPU: $_TEMP_CPU_NUM°C"
-                end
-            else
-                _info "CPU: $_TEMP_CPU_NUM°C (unable to parse for threshold check)"
-            end
-        end
-        if test -n "$_TEMP_GPU_NUM"
-            if test -n "$_TEMP_GPU_INT" && string match -qr '^\d+$' -- "$_TEMP_GPU_INT"
-                if test "$_TEMP_GPU_INT" -ge $TEMP_GPU_CRIT
-                    _fail "GPU: $_TEMP_GPU_NUM°C (critical)"
-                    set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-                else if test "$_TEMP_GPU_INT" -ge $TEMP_GPU_WARN
-                    _warn "GPU: $_TEMP_GPU_NUM°C (high)"
-                    set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-                else
-                    _ok "GPU: $_TEMP_GPU_NUM°C"
-                end
-            else
-                _info "GPU: $_TEMP_GPU_NUM°C (unable to parse for threshold check)"
-            end
-        end
-    else
-        _info "No hwmon temperature sensors found"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-end
-
-# Check network interfaces, sysctl overrides, ntsync, memory, and coredumps
-function _diag_network --description "Diagnose: network, sysctl, gaming, memory, coredumps"
-    _echo "── Network ──"
-    if command -q nmcli
-        # NM connectivity and DNS state
-        set -l conn_state (nmcli -t -f STATE g 2>/dev/null)
-        if test "$conn_state" = connected
-            _ok "Network: connected"
-        else
-            _warn "Network: $conn_state"
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        end
-    else
-        _info "Network: nmcli not available"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Sysctl Tuning ──"
-    set -l _diag_sysctl \
-        "net.core.default_qdisc=fq" \
-        "net.ipv4.tcp_congestion_control=bbr" \
-        "net.ipv4.tcp_fastopen=3" \
-        "fs.inotify.max_user_watches=524288"
-    for _sc in $_diag_sysctl
-        set -l _key (string split '=' -- "$_sc")[1]
-        set -l _expected (string split '=' -- "$_sc")[2]
-        set -l _proc_path (string replace -a '.' '/' -- "$_key")
-        set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim --)
-        if test "$_actual" = "$_expected"
-            _ok "  $_key: $_actual"
-        else if test -n "$_actual"
-            _warn "  $_key: $_actual (expected: $_expected)"
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        else
-            _warn "  $_key: cannot read /proc/sys/$_proc_path"
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        end
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    # Memory pressure and OOM history
-    _echo "── Gaming ──"
-    set -l _ns (_ntsync_state)
-    if contains -- $_ns loaded builtin
-        _ok "ntsync: available"
-    else
-        _info "ntsync: not available (kernel 6.14+ required)"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Memory ──"
-    if command -q sudo
-        set -l oom_count (sudo dmesg 2>/dev/null | grep -c "Out of memory" | string trim --)
-        if test -n "$oom_count" && string match -qr '^\d+$' -- "$oom_count" && test "$oom_count" -gt 0
-            _warn "OOM events detected: $oom_count"
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        else
-            _ok "No OOM events"
-        end
-    else
-        _info "sudo not available for OOM check"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Coredumps ──"
-    if command -q coredumpctl
-        set -l dump_count (coredumpctl list --no-pager 2>/dev/null | tail -n +2 | wc -l)
-        set -l dump_count (string trim -- "$dump_count")
-        if test -n "$dump_count" && string match -qr '^\d+$' -- "$dump_count" && test "$dump_count" -gt 0
-            _warn "Found $dump_count coredump(s)"
-            set -l _diag_lines (coredumpctl list --no-pager 2>/dev/null | tail -n 5)
-            for line in $_diag_lines
-                _echo "  $line"
-            end
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        else
-            _ok "No coredumps"
-        end
-    else
-        _info "coredumpctl not available"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-end
-
-# Check journal size, NVMe SMART health, boot time, and ZRAM/ZSWAP configuration
-function _diag_storage --description "Diagnose: journal size, NVMe health, boot performance, ZRAM/ZSWAP"
-    _echo "── Journal Size ──"
-    set -l journal_size (journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[GMK]' | head -n 1)
-    if test -n "$journal_size"
-        set -l size_num (string replace -r '[^0-9.]' '' -- "$journal_size")
-        set -l size_unit (string replace -r '[0-9.]' '' -- "$journal_size")
-        if test -n "$size_num" && string match -qr '^[0-9.]+$' -- "$size_num" && test "$size_unit" = G
-            set -l size_int (math "floor($size_num)" 2>/dev/null)
-            if test -n "$size_int" && test "$size_int" -ge 2
-                _warn "Journal using $journal_size (consider: journalctl --vacuum-size=500M)"
-                set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-            else
-                _ok "Journal size: $journal_size"
-            end
-        else
-            _ok "Journal size: $journal_size"
-        end
-    else
-        _info "Journal size: not available"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── NVMe Health ──"
-    if command -q nvme
-        # NVMe SMART health and wear indicators
-        set -l nvme_found false
-        for dev in (command find /dev -maxdepth 1 -name 'nvme[0-9]*n[0-9]*' -not -name '*p[0-9]*' -type b 2>/dev/null | LC_ALL=C sort)
-            set nvme_found true
-            set -l smart (sudo nvme smart-log $dev 2>/dev/null)
-            if test -n "$smart"
-                set -l pct_used (printf '%s\n' $smart | grep -i "percentage_used" | awk '{print $NF}' | tr -d '%')
-                set -l crit_warn (printf '%s\n' $smart | grep -i "critical_warning" | awk '{print $NF}')
-
-                if test -n "$crit_warn" && test "$crit_warn" != 0
-                    _fail "$dev: Critical warning flag set!"
-                    set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-                else if test -n "$pct_used" && string match -qr '^\d+$' -- "$pct_used" && test "$pct_used" -ge $NVME_LIFE_WARN
-                    _warn "$dev: $pct_used% life used"
-                    set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-                else if test -n "$pct_used" && string match -qr '^\d+$' -- "$pct_used"
-                    _ok "$dev: $pct_used% life used"
-                else
-                    _ok "$dev: healthy"
-                end
-            else
-                _info "$dev: smart-log requires sudo"
-            end
-        end
-        if test "$nvme_found" = false
-            _info "No NVMe devices found"
-        end
-    else
-        _info "nvme-cli not installed (install for NVMe health monitoring)"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Boot Performance ──"
-    if command -q systemd-analyze
-        set -l boot_sec (_get_boot_time)
-        if test -n "$boot_sec" && string match -qr '^[0-9.]+$' -- "$boot_sec"
-            set -l boot_int (math "floor($boot_sec)" 2>/dev/null)
-            if test -n "$boot_int" && test "$boot_int" -ge $BOOT_TIME_WARN
-                _warn "Slow boot: $boot_sec""s (run: systemd-analyze blame)"
-                set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-            else
-                _ok "Boot time: $boot_sec""s"
-            end
-        else
-            _info "Boot time: not available"
-        end
-        # ZRAM/ZSWAP diagnostics: check swap configuration and utilization
-    else
-        _info "Boot time: systemd-analyze not available"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── ZRAM / ZSWAP ──"
-    if command -q zramctl
-        set -l zram_out (zramctl 2>/dev/null)
-        if test -n "$zram_out"
-            _info "ZRAM devices:"
-            for zdev in /sys/block/zram[0-9]*
-                if test -d "$zdev"
-                    set -l zname (basename -- "$zdev")
-                    set -l algo (grep -oE -- '\[.*\]' "$zdev/comp_algorithm" 2>/dev/null | tr -d '[]')
-                    set -l disksize (command cat -- "$zdev/disksize" 2>/dev/null)
-                    if test -n "$disksize" && test "$disksize" -gt 0 2>/dev/null
-                        set disksize (math "round($disksize / 1073741824)")
-                        _info "  $zname: $algo, $disksize GB"
-                    else
-                        _info "  $zname: $algo"
-                    end
-                end
-            end
-        else
-            _info "ZRAM: no devices configured"
-        end
-    else
-        _info "zramctl: not installed"
-    end
-    if test -f /sys/module/zswap/parameters/enabled
-        set -l zswap_enabled (command cat -- /sys/module/zswap/parameters/enabled 2>/dev/null)
-        if test "$zswap_enabled" = Y
-            _warn "zswap: enabled (expected disabled via cmdline or CachyOS 30-zram.rules)"
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        else
-            _ok "zswap: disabled"
-        end
-    else
-        _info "zswap: module not present"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-end
-
-# Check power profiles, kernel cmdline params, and pacnew/pacsave files
-function _diag_config --description "Diagnose: power profiles, stress tests, kernel cmdline, pacnew"
-    _echo "── Power Profiles ──"
-    if command -q powerprofilesctl
-        # Power profile and daemon conflict detection
-        set -l profile (powerprofilesctl get 2>/dev/null)
-        if test -n "$profile"
-            _info "Active power profile: $profile"
-            if systemctl is-active --quiet power-profiles-daemon.service 2>/dev/null
-                _warn "Power-profiles-daemon is running (should be removed per config)"
-                set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-            end
-        end
-    else
-        _ok "powerprofilesctl: not installed (expected — using cpupower-epp)"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    # Stress tests moved to do_diagnose sequential section (requires TTY for prompt)
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Kernel Cmdline ──"
-    if test -f /etc/kernel/cmdline
-        set -l cmdline_content (sudo cat -- /etc/kernel/cmdline 2>/dev/null)
-        set -l missing 0
-        for param in $KERNEL_PARAMS
-            if not string match -q -- "* $param *" " $cmdline_content "
-                set missing (math $missing + 1)
-            end
-        end
-        if test $missing -gt 0
-            _warn "/etc/kernel/cmdline: $missing kernel param(s) missing"
-            _info "  Run: ./ry-install.fish --all (or reinstall to regenerate)"
-            set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-        else
-            _ok "/etc/kernel/cmdline: all params present"
-        end
-    else
-        _info "/etc/kernel/cmdline: not found (kernel-install fallback unavailable)"
-    end
-    _echo
-
-    set -g _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo "── Pacnew/Pacsave ──"
-    set -l _pac_files (_find_pacnew_files)
-    if test (count $_pac_files) -gt 0
-        _warn "  "(count $_pac_files)" stale .pacnew/.pacsave file(s):"
-        for _pf in $_pac_files
-            _info "    $_pf"
-        end
-        _info "  Run 'sudo pacdiff' to review and merge"
-        set -g _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-    else
-        _ok "  No .pacnew/.pacsave files"
-    end
-    _echo
-
-end
-
-# Run 20+ diagnostic sections: CPU, GPU, disk, temps, network, services, boot, sysctl, etc.
-function do_diagnose --description "Run comprehensive system diagnostics and health checks"
-    _log "=== DIAGNOSE START ==="
-    _banner "ry-install v$VERSION - System Diagnostics"
-
-    _diag_info
-
-    set -g _DIAG_ISSUES 0
-    set -g _DIAG_CHECKS 0
-
-    # B-4: Run 5 diagnostic phases in parallel; prereq 2: cache sudo for children (_diag_storage uses nvme smart-log)
-    _ensure_sudo_cached
-    or return 1
-
-    set -l diag_dir (mktemp -d -t ry-diag.XXXXXX)
-    if not test -d "$diag_dir"
-        _err "Failed to create diagnostics temp directory"
-        return 1
-    end
-    set -ga _TRACKED_TMPFILES "$diag_dir"
-
-    # Prereq 6: serialize required functions for children (source-ing full script would re-execute top-level code)
-    set -l funcs_file "$diag_dir/_functions.fish"
-    set -l needed_funcs \
-        _diag_services _diag_hardware _diag_network _diag_storage _diag_config \
-        _gather_gpu_state _gather_cpu_state _gather_temps \
-        _msg _ok _fail _info _warn _dry _err _echo _log _json_str _ask \
-        _kconfig_cache _ntsync_state \
-        _validate_kernel_params _find_pacnew_files _get_boot_time
-    functions $needed_funcs >"$funcs_file" 2>/dev/null
-
-    # Prereq 5: export profile globals needed by _diag_* functions
-    set -l export_globals \
-        EXPECTED_SERVICES KERNEL_PARAMS STRESS ALL QUIET \
-        KVER KVER_MAJOR KVER_MINOR \
-        TEMP_CPU_WARN TEMP_CPU_CRIT TEMP_GPU_WARN TEMP_GPU_CRIT \
-        DISK_ROOT_CRIT DISK_ROOT_WARN BOOT_SPACE_CRIT BOOT_SPACE_WARN \
-        ROOT_AVAIL_CRIT ROOT_AVAIL_WARN BOOT_TIME_WARN BOOT_TIME_TARGET \
-        NVME_LIFE_WARN CACHE_CLEAN_THRESHOLD NO_COLOR VERSION MKINITCPIO_HOOKS
-    for g in $export_globals
-        if set -q $g
-            set -x $g $$g
-        end
-    end
-
-    # Fork 5 diagnostic phases
-    set -l diag_pids
-    for phase in services hardware network storage config
-        # Prereq 3: each child gets its own log file
-        command touch -- "$diag_dir/$phase.jsonl"
-        # Prereq 6: source serialized functions; prereq 4: buffer output; NO_COLOR unset — _msg detects non-TTY via isatty 2
-        fish -c "
-            source '$funcs_file'
-            set -g _DIAG_ISSUES 0
-            set -g _DIAG_CHECKS 0
-            set -g LOG_FILE '$diag_dir/$phase.jsonl'
-            _diag_$phase 2>&1
-            echo \$_DIAG_ISSUES > '$diag_dir/$phase.issues'
-            echo \$_DIAG_CHECKS > '$diag_dir/$phase.checks'
-        " >"$diag_dir/$phase.out" 2>&1 &
-        set -a diag_pids $last_pid
-    end
-
-    wait $diag_pids
-
-    # Unexport globals
-    for g in $export_globals
-        if set -qx $g
-            set -u $g
-            # Re-set as global (not exported)
-            if set -q $g
-                set -g $g $$g
-            end
-        end
-    end
-
-    # Print output in order, merge counters
-    for phase in services hardware network storage config
-        if test -s "$diag_dir/$phase.out"
-            command cat -- "$diag_dir/$phase.out" >&2
-        end
-        if not test -f "$diag_dir/$phase.issues"
-            _warn "Diagnostics child '$phase' did not produce results"
-            set _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-            continue
-        end
-        set -l phase_issues (command cat -- "$diag_dir/$phase.issues" 2>/dev/null)
-        set -l phase_checks (command cat -- "$diag_dir/$phase.checks" 2>/dev/null)
-        if test -n "$phase_issues"; and string match -qr '^\d+$' -- "$phase_issues"
-            set _DIAG_ISSUES (math $_DIAG_ISSUES + $phase_issues)
-        end
-        if test -n "$phase_checks"; and string match -qr '^\d+$' -- "$phase_checks"
-            set _DIAG_CHECKS (math $_DIAG_CHECKS + $phase_checks)
-        end
-    end
-
-    # Merge per-phase JSONL logs into main LOG_FILE
-    for phase in services hardware network storage config
-        if test -s "$diag_dir/$phase.jsonl"
-            command cat -- "$diag_dir/$phase.jsonl" >>"$LOG_FILE" 2>/dev/null
-        end
-    end
-
-    command rm -rf --preserve-root -- "$diag_dir"
-
-    # Stress tests run sequentially (require TTY for interactive prompt)
-    _echo "── Stress Tests (optional) ──"
-    set -l run_stress false
-    if test "$ALL" = true || test "$STRESS" = true
-        set run_stress true
-        _log "ASK: Run stress tests? -> auto-yes (--all/--stress)"
-    else
-        if _ask "Run stress tests? (CPU + memory, ~50s)"
-            set run_stress true
-        end
-    end
-
-    if test "$run_stress" = true
-        if command -q stress-ng
-            _info "Running CPU stress test (30s)..."
-            set -l cpu_result (stress-ng --cpu (nproc) --timeout 30s --metrics 2>&1 | tail -n 3)
-            if test -n "$cpu_result"
-                for line in $cpu_result
-                    _info "  $line"
-                end
-            end
-            _ok "CPU stress test complete"
-
-            _info "Running memory bandwidth test (20s)..."
-            set -l mem_result (stress-ng --stream 1 --timeout 20s --metrics 2>&1 | tail -n 3)
-            if test -n "$mem_result"
-                for line in $mem_result
-                    _info "  $line"
-                end
-            end
-            _ok "Memory bandwidth test complete"
-
-            if _gather_temps && test -n "$_TEMP_CPU_NUM"
-                if test -n "$_TEMP_CPU_INT" && string match -qr '^\d+$' -- "$_TEMP_CPU_INT"
-                    if test "$_TEMP_CPU_INT" -ge $TEMP_CPU_CRIT
-                        _fail "Post-stress CPU temp: $_TEMP_CPU_NUM°C (throttling)"
-                        set _DIAG_ISSUES (math $_DIAG_ISSUES + 1)
-                    else if test "$_TEMP_CPU_INT" -ge $TEMP_CPU_WARN
-                        _warn "Post-stress CPU temp: $_TEMP_CPU_NUM°C (high but within spec)"
-                    else
-                        _ok "Post-stress CPU temp: $_TEMP_CPU_NUM°C"
-                    end
-                end
-            end
-        else
-            _warn "Stress-ng not installed (install via: sudo pacman -S --needed stress-ng)"
-            _info "  Or run: ./ry-install.fish (no flags) to get diagnostic packages"
-        end
-    else
-        _info "Skipped (pass --all or answer yes to run)"
-    end
-    set _DIAG_CHECKS (math $_DIAG_CHECKS + 1)
-    _echo
-
-    _echo "════════════════════════════════════════════════════════════════════"
-    if test $_DIAG_ISSUES -eq 0
-        _ok "Diagnostics complete: No issues found ($_DIAG_CHECKS checks passed)"
-    else
-        _warn "Diagnostics complete: $_DIAG_ISSUES issue(s) found"
-        _info "Run './ry-install.fish --logs system' for more details"
-    end
-
-    _log "=== DIAGNOSE END ==="
-    test $_DIAG_ISSUES -eq 0; and return 0; or return 1
-end
-
 
 # Install pipeline
 
@@ -6923,13 +6093,11 @@ function do_completions --description "Generate fish shell completions for ry-in
         '' \
         '    # Utilities' \
         '    complete -c $cmd -l logs -d '"'"'View logs (system, gpu, wifi, boot, audio, usb, kernel, or service name)'"'"'' \
-        '    complete -c $cmd -l diagnose -d '"'"'Automated problem detection'"'"'' \
         '    complete -c $cmd -l install-file -d '"'"'Re-deploy a single managed file'"'"' -rxa '"'"$_install_file_targets"'"'' \
         '    complete -c $cmd -l completions -d '"'"'Install fish tab-completions for ry-install itself'"'"'' \
         '' \
         '    # Other' \
         '    complete -c $cmd -l fix -d '"'"'Re-install drifted files (use with --diff)'"'"'' \
-        '    complete -c $cmd -l stress -d '"'"'Include stress tests (use with --diagnose)'"'"'' \
         '    complete -c $cmd -l profile -d '"'"'Load machine profile (default: gtr9_pro)'"'"' -rxa "(__ry_install_profiles)"' \
         '    complete -c $cmd -s h -l help -d '"'"'Show help'"'"'' \
         '    complete -c $cmd -s v -l version -d '"'"'Show version'"'"'' \
@@ -6985,7 +6153,6 @@ function do_test_all --description "Run the full test suite across all subcomman
         --verify-runtime \
         --lint \
         --diff \
-        --diagnose \
         "--logs system" \
         "--logs gpu" \
         "--logs wifi" \
@@ -7001,7 +6168,7 @@ function do_test_all --description "Run the full test suite across all subcomman
         "--diff --fix --dry-run --all" \
         "--install-file /etc/kernel/cmdline --dry-run"
 
-    # Nested parallelism guard: children fork parallel work (verify-static:17, check:4, diagnose:5, diff:17)
+    # Nested parallelism guard: children fork parallel work (verify-static:17, check:4, diff:17)
     # <8 cores: fully sequential; 8-15 cores: batch parallel in groups of nproc; 16+: full parallel
     set -l nproc_val (nproc 2>/dev/null)
     set -l par_batch_size 0
@@ -7114,7 +6281,7 @@ function do_test_all --description "Run the full test suite across all subcomman
         _info "  completions file not available (dry-run or write failed) — skipping content check"
         set passed (math $passed + 1)
     else
-        for _expected_cmd in install diff verify-static verify-runtime lint logs diagnose
+        for _expected_cmd in install diff verify-static verify-runtime lint logs
             if not string match -q "*$_expected_cmd*" -- "$_comp_out"
                 _warn "  completions missing: $_expected_cmd"
                 set _comp_ok false
@@ -7202,8 +6369,6 @@ while test $i -le (count $argv)
             set mode_count (math $mode_count + 1)
         case --fix
             set -g FIX true
-        case --stress
-            set -g STRESS true
         case --profile
             set -l next_i (math $i + 1)
             if test $next_i -le (count $argv)
@@ -7242,9 +6407,6 @@ while test $i -le (count $argv)
                     end
                 end
             end
-        case --diagnose
-            set MODE diagnose
-            set mode_count (math $mode_count + 1)
 
         case --completions
             set MODE completions
@@ -7300,13 +6462,6 @@ end
 if test "$FIX" = true && test "$MODE" != diff
     _log "ERR: --fix requires --diff"
     echo "[ERR] --fix requires --diff" >&2
-    command rm -f -- "$LOG_FILE" 2>/dev/null
-    exit $EXIT_USAGE
-end
-
-if test "$STRESS" = true && test "$MODE" != diagnose
-    _log "ERR: --stress requires --diagnose"
-    echo "[ERR] --stress requires --diagnose" >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
     exit $EXIT_USAGE
 end
@@ -7382,7 +6537,7 @@ switch $MODE
             _acquire_lock || exit $EXIT_LOCK
         end
     case '*'
-        # No lock needed for read-only modes (verify, lint, logs, diagnose, completions, test-all)
+        # No lock needed for read-only modes (verify, lint, logs, completions, test-all)
 end
 
 # Log rotation: flock serializes concurrent instances; without flock, rm -f is idempotent (last-write-wins)
@@ -7423,9 +6578,6 @@ switch $MODE
         set exit_code $status
     case logs
         do_logs "$LOG_TARGET" "$LOG_TARGET_ARG"
-        set exit_code $status
-    case diagnose
-        do_diagnose
         set exit_code $status
     case completions
         do_completions

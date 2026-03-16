@@ -59,7 +59,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Flag | Description |
 |------|-------------|
-| `--diagnose` | Problem detection |
 | `--install-file <path>` | Re-deploy single managed file |
 | `--completions` | Install tab-completions |
 
@@ -78,7 +77,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | Flag | Requires | Description |
 |------|----------|-------------|
 | `--fix` | `--diff` | Re-install drifted files |
-| `--stress` | `--diagnose` | Include stress tests |
 | `--profile <n>` | — | Load machine profile (default: `gtr9_pro`) |
 | `--` | — | End of options |
 | `-h, --help` | — | Show help |
@@ -181,7 +179,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 
 | Action | Packages |
 |--------|----------|
-| **Add (13)** | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bottom, git-delta, stress-ng, lm_sensors |
+| **Add (12)** | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove (7)** | plymouth, cachyos-plymouth-bootanimation, ufw, octopi, micro, cachyos-micro-settings, btop |
 
 ### Masked Services (9)
@@ -272,7 +270,7 @@ Dependencies → Sync → Packages → System files → User files → AMDGPU se
 
 ## After Install
 
-Reboot → `--verify-static` → `--verify-runtime` → `--diagnose` → `sudo pacdiff` → test WiFi + gaming
+Reboot → `--verify-static` → `--verify-runtime` → `sudo pacdiff` → test WiFi + gaming
 
 ## Troubleshooting
 

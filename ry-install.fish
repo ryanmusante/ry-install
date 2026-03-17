@@ -413,7 +413,8 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     echo "[WARN] Interrupted - cleaning up..." >&2
     set -g _CLEANUP_DONE true
     if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
-        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":130,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$MODE" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
+        set -l _mode_esc (_json_str "$MODE")
+        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":130,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
     end
     _do_cleanup
     exit 130
@@ -424,7 +425,8 @@ function _cleanup_pipe --on-signal PIPE --description "Signal handler: clean up 
     # SIGPIPE: stderr may also be broken — skip all terminal output
     set -g _CLEANUP_DONE true
     if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
-        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":141,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$MODE" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE" 2>/dev/null
+        set -l _mode_esc (_json_str "$MODE")
+        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":141,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE" 2>/dev/null
     end
     _do_cleanup
     exit 141
@@ -441,7 +443,8 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
         return 0
     end
     if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
-        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s,"cleanup_exit":true}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$MODE" "$_exit_status" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
+        set -l _mode_esc (_json_str "$MODE")
+        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s,"cleanup_exit":true}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$_exit_status" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
     end
     _do_cleanup
 end
@@ -456,7 +459,7 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # ── Managed file destinations — 1:1 map to get_file_content(); system=0644, user=0600 ──
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        "/etc/kernel/cmdline" \
+        /etc/kernel/cmdline \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/udev/rules.d/99-cachyos-udev.rules" \
@@ -1106,6 +1109,10 @@ end
 # Handles: backslash, semicolon, leading #, leading/trailing space
 # Single source of truth — called from _install_finalize WiFi write path
 function _gkeyfile_escape --argument-names raw --description "Escape a string for GKeyFile (NM keyfile) format"
+    if test (count $argv) -ne 1
+        _err "_gkeyfile_escape: expected 1 arg (raw), got "(count $argv)
+        return 1
+    end
     set -l val (string replace -a '\\' '\\\\' -- "$raw")
     set -l val (string replace -a ';' '\\;' -- "$val")
     if string match -q '#*' -- "$val"
@@ -1481,10 +1488,10 @@ function _run --description "Execute a command with logging, dry-run support, an
         _dry "$log_cmd"
         return 0
     else
-        # mktemp for stderr capture; not tracked in _TRACKED_TMPFILES — _do_cleanup fallback sweep catches ry-* pattern
         set -l stderr_tmp (mktemp -t ry-run-stderr.XXXXXX 2>/dev/null; or echo /dev/null)
-        # Standard path: capture both stdout and stderr to tmpfiles
         set -l stdout_tmp (mktemp -t ry-run-stdout.XXXXXX 2>/dev/null; or echo /dev/null)
+        test "$stderr_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$stderr_tmp"
+        test "$stdout_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$stdout_tmp"
         if test "$stderr_tmp" = /dev/null; or test "$stdout_tmp" = /dev/null
             if not set -q _MKTEMP_DEGRADED_WARNED
                 set -g _MKTEMP_DEGRADED_WARNED true
@@ -6234,7 +6241,7 @@ function do_completions --description "Generate fish shell completions for ry-in
         '    for f in ~/.config/ry-install/profiles/*.fish' \
         '        string replace -r '"'"'.*/(.*)\.fish$'"'"' '"'"'$1'"'"' -- $f' \
         '    end' \
-        'end' \
+        end \
         '' \
         '# Both "ry-install" (renamed) and "ry-install.fish" (direct)' \
         'for cmd in ry-install ry-install.fish' \
@@ -6773,7 +6780,8 @@ set -g _INTENDED_EXIT_CODE $exit_code
 
 # Set flag BEFORE write to prevent signal-handler race (SIGINT between printf and flag would double-write)
 set -g _FOOTER_WRITTEN true
-printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$MODE" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
+set -l _mode_esc (_json_str "$MODE")
+printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
 
 if test "$MODE" != check
     echo "[i] Log file: $LOG_FILE" >&2

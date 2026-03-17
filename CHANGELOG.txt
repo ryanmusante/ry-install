@@ -1,3 +1,204 @@
+3.7.19 (2026-03-17)
+-------------------
+
+  fix(high): shell injection in 6 parallel fish -c blocks. do_diff
+    Phase 2, do_check Jobs 1-4, and do_test_all parallel fork loop
+    all used double-quoted fish -c bodies with variable interpolation.
+    Paths containing single-quotes or shell metacharacters could break
+    out of the inner string and execute arbitrary code. Converted all
+    6 blocks to single-quoted bodies with positional $argv args via --
+    separator. Mechanical rewrites; behavior preserved.
+
+  fix: verify_runtime echo|string split pipe pattern. 6 instances of
+    `echo "$parsed[N]" | string split -- ':'` replaced with direct
+    `string split -- ':' -- "$parsed[N]"`. Eliminates unnecessary
+    subshell and prevents echo flag misinterpretation if the value
+    starts with -n, -e, or -E.
+
+  fix: _progress_skip missing step_time JSONL event. _progress emits
+    a step_time event for the previous step before advancing the
+    counter. _progress_skip only advanced the counter, discarding the
+    elapsed time of the preceding step. When EXIT_BOOT_CRIT triggers
+    3 consecutive _progress_skip calls, final install steps had no
+    timing data. Now consistent with _progress.
+
+3.7.18 (2026-03-17)
+-------------------
+
+  fix(high): do_check Job 1 false-negative on missing files. When a
+    managed file was unreadable or missing, the parallel hash child
+    silently `continue`d without setting drift=true. Missing managed
+    files are configuration drift; do_check could return EXIT_OK when
+    files had been deleted.
+
+  fix: _run stderr gated on failure — verbose mode (--verbose/-V)
+    only displayed stderr from commands that FAILED. Deprecation
+    warnings, informational pacman output, and systemd advisory
+    messages from successful commands were swallowed. Removed the
+    `test $ret -ne 0` gate so verbose means verbose.
+
+  fix: _validate_kernel_params return value could exceed 125. Raw
+    mismatch count returned directly, colliding with signal-based
+    exit codes (126=ENOEXEC, 128+N=signal). Capped to boolean 0/1
+    since all callers only check success/failure.
+
+  fix: do_diff Phase 3 redundant pacman -Qi iwd check. Phase 2
+    already computed $_diff_skip_iwd; Phase 3 re-ran `pacman -Qi
+    iwd` per file, wasting subprocesses and introducing a TOCTOU
+    window if the package was installed/removed between phases.
+    Now reuses the pre-computed flag.
+
+  fix: _ensure_sudo_cached swallowed all stderr. When sudo failed
+    (expired credentials, NOPASSWD missing, PAM error), the JSONL
+    log had no diagnostic. Now captures first line of stderr to
+    SUDO_CACHE_FAIL log event.
+
+  fix: _run empty argv guard. Zero-argument _run executed a Fish
+    no-op, returned 0, and logged "RUN: " with no command. Added
+    count check with BUG marker in JSONL log.
+
+  fix: _run EXIT log now includes redacted command string
+    (`EXIT: N cmd=...`) for grep-friendly JSONL correlation. Was
+    bare `EXIT: N` which required scanning backwards to find the
+    matching RUN event.
+
+3.7.17 (2026-03-16)
+-------------------
+
+  fix(critical): do_check brace interpolation bug caused false-positive
+    drift on every invocation. Fish treats {$phase} inside double quotes
+    as literal braces + variable, producing paths like
+    "result_dir/{hash}_drift" instead of "result_dir/hash_drift". Result
+    files were never found, so every phase reported "child crashed" and
+    drift was always set true. Replaced with "result_dir/"$phase"_drift"
+    string concatenation.
+
+  fix: do_diff unbounded parallel fork — all N destination files spawned
+    fish -c children simultaneously (17+ forks on a typical profile).
+    Added nproc-based batch throttle consistent with do_test_all pattern.
+
+  fix: stderr silently discarded in all parallel children across 4
+    functions. Child crashes produced "crashed without writing results"
+    with zero diagnostics. Added 2>dir/phase.stderr capture to:
+    - validate_configs: 5 children (xref, units, scripts, ini, simple)
+    - do_check: 4 children (hash, perm, kparam, svc)
+    - verify_static: N hash workers
+    - do_diff: N parallel file-read children
+
+  fix: crash detection merge loops in validate_configs and do_check now
+    log captured child stderr (head -n 3) on crash, enabling post-mortem
+    diagnosis from JSONL logs. verify_static logs worker stderr after
+    wait. do_diff Phase 3 logs child stderr on readok-missing crash.
+
+3.7.16 (2026-03-16)
+-------------------
+
+  fix: replace 202 Bash-style && / || operators with idiomatic Fish
+    "; and" / "; or" throughout the script. Fish supports && and || as
+    syntactic sugar since 3.0, but "; and" / "; or" are the canonical
+    Fish idioms, consistent with the project's Fish-first conventions.
+
+  fix: 4 instances of "test X && return 0 || return 1" anti-pattern
+    (lines 1831, 1869, 2261, 4687). In Fish, "test ... && A || B"
+    does NOT behave like if/else — if "A" fails, "B" also runs. While
+    "return 0" cannot fail in practice, the pattern is fragile and
+    misleading. Replaced with explicit if/else blocks.
+
+  fix: "set -l desc (test ... && echo X || echo Y)" anti-pattern in
+    install_files (line 2261). Same if/else semantics issue. Replaced
+    with conditional set.
+
+  fix: "test ... && echo ..." error message builder in install_files
+    argparse handler (line 2253). Replaced with explicit conditional
+    string assembly.
+
+  fix: sudo keepalive fish -c string used Bash-style && / || instead
+    of Fish "; and" / "; or" (line 5035). While the single-quoted
+    string runs in a fish -c child, Fish syntax applies.
+
+  fix: awk block inside do_lint scope-shadow check had && incorrectly
+    converted to "; and" during bulk replacement. Restored awk-native
+    && operator.
+
+  fix: grep dead-pipe lint check had "||true" (no space) bypassing
+    the bulk conversion. Normalized to "; or true".
+
+  Preserved && / || in 9 legitimate non-Fish contexts: /bin/sh -c
+    POSIX block (2), ExecStart bash -c strings (2), awk code (1),
+    printf comment-string literals (2), user-facing message strings (2).
+
+3.7.15 (2026-03-16)
+-------------------
+
+  fix: verify_static unbounded fork storm — spawned one fish -c child
+    per destination (~15 concurrent fish+sha256sum+sudo processes).
+    Every other parallel section used bounded workers (validate_configs:
+    5 jobs, do_check: 4 jobs, do_test_all: batch-throttled). Replaced
+    per-file fork with 4 batched workers. Each worker reads a slice of
+    a serialized dst_list file, processing ceil(N/4) destinations per
+    worker. Consistent with do_check's 4-job design.
+
+  fix: verify_static false checksum MISMATCH for iwd/NM configs when
+    iwd not installed — hash verification ran on ALL destinations.
+    When iwd is not installed, iwd/NM config files don't exist on disk;
+    sudo -n cat of a missing file pipes empty stdin to sha256sum,
+    producing a valid hash of empty input that doesn't match the
+    embedded content hash. The verbose checks above correctly skip iwd
+    files, but the hash section didn't. Added skip_iwd filter before
+    hash loop; skipped destinations get pre-written result_skip files.
+
+  fix: do_diff Phases 1-2 wasted work on skipped files — Phase 1
+    generated expected content for ALL destinations. Phase 2 forked
+    parallel children for ALL destinations (each spawning sudo -n cat).
+    Phase 3 had the iwd/NM skip filter and target_file filter, but
+    Phases 1-2 didn't. Single-file diffs (--diff /etc/kernel/cmdline)
+    still forked children for every file. Hoisted _diff_skip_iwd
+    detection before Phase 1. Added target_file and iwd/NM skip
+    filters to both Phase 1 (content generation) and Phase 2 (parallel
+    reads). Phase 3 filters remain as defense-in-depth.
+
+  fix: 4 unguarded wait calls — wait with no args in Fish waits for
+    ALL background jobs, not just the intended ones. If $diff_pids,
+    $hash_pids, or $parallel_pids lists were empty (due to filters or
+    batch-size alignment), wait would block on unrelated background
+    processes (e.g., sudo keepalive). Added count guards: do_diff
+    Phase 2, verify_static hash workers, do_test_all final wait.
+    validate_configs and do_check use named PIDs that are always set
+    (unconditionally forked), so those are safe.
+
+3.7.14 (2026-03-16)
+-------------------
+
+  fix: 6 bare set scope leaks in verify_runtime — set perms (4 sites:
+    NM connection check, system file check, user file check, parent
+    directory check), set sysfs_val (1 site: amdgpu parameter loop).
+    All lacked -l scope flag, causing each loop iteration to leak the
+    variable into the enclosing function scope. Previous iterations'
+    values persisted across loop boundaries and after the loop exited.
+    Fish rebinds to enclosing scope when no -l flag given and no
+    existing local exists; inside for-loops the enclosing scope is the
+    function, not the loop body. Added set -l to all 5 sites.
+
+  fix: 2 bare set scope leaks in do_diff — set actual_perms and
+    set actual_owner in the system-file permission check branch lacked
+    -l flag. These variables were used only within the if-block but
+    leaked into do_diff function scope. Added set -l to both.
+
+  fix: do_check Job 3 kernel params interpolated unsafely — $KERNEL_
+    PARAMS was directly interpolated into fish -c string. Jobs 1, 2,
+    and 4 correctly serialized lists to files for child consumption;
+    Job 3 was the sole holdout. If any kernel param contained single
+    quotes (e.g., hypothetical param='value'), the child shell string
+    would break. Now serializes to $result_dir/kparams file matching
+    the pattern established by the other 3 jobs.
+
+  fix: do_check result merge false negative on empty result file —
+    child crash mid-write produces an empty file that passes the
+    test -f check but reads as empty string. Previously, only
+    result=true triggered drift detection; result="" silently passed
+    as non-drifted. Now treats any value other than "true" or "false"
+    (including empty) as child crash and sets drift=true.
+
 3.7.13 (2026-03-16)
 -------------------
 

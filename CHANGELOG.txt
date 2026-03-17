@@ -1,3 +1,54 @@
+3.7.23 (2026-03-17)
+-------------------
+
+  fix(security): install_file symlink TOCTOU — pre-write test -L and tee
+    had a narrow window where the tmpfile could be replaced with a symlink
+    between the check and the write. Added post-write test -L re-check
+    before chmod/mv. Both sudo and user paths. Attacker would need root
+    (or same-user for user files), limiting practical impact.
+
+  fix(security): fallback lock TOCTOU — _acquire_lock non-flock path used
+    rmdir+mkdir without yielding, so a concurrent reclaimer could overwrite
+    the PID file between the first ownership check and the function return.
+    Added sleep 0.1 yield after PID write + second PID re-verify to narrow
+    the race window. Systems with flock(1) are unaffected.
+
+  fix(verification): verify_static hash workers hardcoded to 4 regardless
+    of core count. On a 2-core system this would oversubscribe. Capped at
+    min(4, nproc), consistent with do_diff batch throttle and do_test_all
+    nested parallelism guard.
+
+  fix(logging): _run stdout truncation notice only displayed to terminal
+    stderr. When QUIET=false and stdout exceeded 50 lines, the truncation
+    was visible on screen but absent from JSONL log. Added STDOUT_TRUNCATED
+    event to _log after the stderr notice.
+
+  fix(install): install_file post-write integrity check called
+    get_file_content a second time to compute the expected hash, then
+    compared against the installed file. If get_file_content were ever
+    non-deterministic, the double-call would mask the bug or produce false
+    mismatches. Now hashes the tmpfile content before mv and compares
+    against the installed file after mv. Verifies mv integrity (fs
+    corruption) rather than generation determinism. Both sudo and user
+    paths.
+
+  fix(logging): do_test_all parallel and sequential stderr previews used
+    head -n 3 while all other stderr diagnostic sites used head -n 5.
+    Standardized to head -n 5. Completes the v3.7.22 head -n
+    standardization which missed these 2 sites.
+
+  fix(changelog): v3.7.21 date corrected from 2026-03-16 to 2026-03-17.
+    Non-monotonic with adjacent v3.7.22 (03-17) and v3.7.20 (03-17).
+
+  fix(changelog): v3.7.22 duplicate entry for validate_configs Job 1 glob
+    fix removed. Same fix already documented in v3.7.20 (original).
+
+  fix(changelog): v3.7.20 claimed _run tmpfile tracking "removed" but
+    code retains set -ga _TRACKED_TMPFILES for stderr/stdout tmpfiles as
+    defense-in-depth against signal interrupts between mktemp and inline
+    rm. Reworded to document what actually changed: inline rm was added,
+    _do_cleanup fallback sweep pattern documented.
+
 3.7.22 (2026-03-17)
 -------------------
 
@@ -7,13 +58,6 @@
     "Not a managed file" error deep in do_install_file. Now validates
     absolute path at parse time with "[ERR] --install-file requires
     absolute path" consistent with --diff.
-
-  fix(parallel): validate_configs Job 1 cross-reference check used
-    count "$content_dir"/* glob which silently aborts in Fish on empty
-    directories. The glob failure left actual_count unset, causing the
-    error comparison to be skipped entirely — writing errs=0 (false
-    negative). Replaced with count (find ... -maxdepth 1 -type f) which
-    returns 0 safely on empty dirs.
 
   fix(logging): _log JSON truncation regex used {0,3} for \uXXXX hex
     digit backtrack window. The sequence has 4 hex digits, so the regex
@@ -36,7 +80,7 @@
     an empty actual_perms into the comparison. Moved stat into each
     branch: unprivileged for $HOME/*, sudo stat for system files.
 
-3.7.21 (2026-03-16)
+3.7.21 (2026-03-17)
 -------------------
 
   fix(high): shell injection in 6 remaining double-quoted fish -c blocks.
@@ -97,9 +141,11 @@
     appended 2 entries to _TRACKED_TMPFILES for stderr/stdout capture
     files that were immediately deleted inline. Over 100+ _run calls in
     --all mode, the list accumulated 200+ stale paths that _do_cleanup
-    re-iterated on exit. Removed tracking; inline rm handles the normal
-    path and _do_cleanup's fallback find sweep (ry-* in TMPDIR) catches
-    signal-interrupted leftovers.
+    re-iterated on exit. Added inline rm -f after each use so tmpfiles
+    are cleaned immediately on the normal path. _TRACKED_TMPFILES
+    tracking retained as defense-in-depth for signal interrupts between
+    mktemp and inline rm; _do_cleanup's fallback find sweep (ry-* in
+    TMPDIR) provides a second safety net.
 
 3.7.19 (2026-03-17)
 -------------------

@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.22 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.22"
+# ry-install v3.7.23 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.23"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -333,7 +333,8 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         # flock subshell wrote its own PID; overwrite with ours
         echo %self >"$LOCK_FILE"
     else
-        # Fallback: rmdir+mkdir not atomic; PID re-verify detects most races but narrow window remains — acceptable for single-user
+        # Fallback: rmdir+mkdir not atomic; yield + double PID verify narrows the race window
+        echo "[WARN] flock(1) not available — using non-atomic stale lock reclaim" >&2
         command rm -f -- "$LOCK_FILE" 2>/dev/null
         command find "$LOCK_DIR" -maxdepth 1 -type f -delete 2>/dev/null
         command rmdir -- "$LOCK_DIR" 2>/dev/null; or true
@@ -343,11 +344,20 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
             return 1
         end
         echo %self >"$LOCK_FILE"
+        # Yield to let any concurrent reclaimer finish writing, then double-verify ownership
+        command sleep 0.1 2>/dev/null; or true
     end
     set -l verify_pid (command cat -- "$LOCK_FILE" 2>/dev/null)
     set -l my_pid %self
     if test "$verify_pid" != "$my_pid"
         echo "[ERR] Lock reclaim lost to concurrent instance (PID $verify_pid)" >&2
+        command rm -f -- "$LOG_FILE" 2>/dev/null
+        return 1
+    end
+    # Second verify after yield: catches late writers that overwrote between first check and now
+    set -l verify_pid2 (command cat -- "$LOCK_FILE" 2>/dev/null)
+    if test "$verify_pid2" != "$my_pid"
+        echo "[ERR] Lock reclaim lost to late writer (PID $verify_pid2)" >&2
         command rm -f -- "$LOG_FILE" 2>/dev/null
         return 1
     end
@@ -1164,8 +1174,12 @@ end
 
 # Format and emit a leveled [LEVEL] message to stderr; respects NO_COLOR and logs to JSONL
 function _msg --argument-names level --description "Format and print a leveled status message"
-    if test (count $argv) -lt 1
-        _err "_msg: expected at least 1 arg (level), got 0"
+    if test (count $argv) -lt 2
+        if test (count $argv) -eq 0
+            echo "[BUG] _msg: expected at least 2 args (level message), got 0" >&2
+        else
+            echo "[BUG] _msg: expected at least 2 args (level message), got 1 (level='$argv[1]')" >&2
+        end
         return 1
     end
     set -l valid_levels INFO WARN ERR FAIL OK DRY
@@ -1471,6 +1485,13 @@ function _run --description "Execute a command with logging, dry-run support, an
         _log "BUG: _run called with no arguments"
         return 1
     end
+    # SECURITY ASSERTION: _run must only be called with known-safe internal commands.
+    # Reject argv[1] containing shell metacharacters (;|&`$\n) to prevent injection if
+    # a future caller accidentally passes untrusted input.
+    if string match -qr '[;|&`\$\n]' -- "$argv[1]"
+        _log "BUG: _run argv[1] contains shell metacharacters — refusing to execute: $argv[1]"
+        return 1
+    end
     set -l log_cmd (string join -- " " $argv)
 
     # Redact secrets from log output; globs match --flag=value and --flag value without false positives
@@ -1536,6 +1557,7 @@ function _run --description "Execute a command with logging, dry-run support, an
                 else
                     command head -n 50 "$stdout_tmp"
                     echo "  stdout: ... ($line_count lines total, showing first 50)" >&2
+                    _log "STDOUT_TRUNCATED: $line_count lines total, displayed first 50"
                 end
             end
         end
@@ -2244,18 +2266,25 @@ function install_file --argument-names dst use_sudo --description "Install a sin
             _fail "→ $dst (write to temp failed)"
             return 1
         end
+        # Post-write symlink re-check: closes TOCTOU between pre-write test -L and tee
+        if sudo test -L "$tmpfile"
+            sudo rm -f -- "$tmpfile" 2>/dev/null
+            _fail "→ $dst (temp file replaced with symlink during write — aborting)"
+            return 1
+        end
         if not _run sudo chmod -- $perms "$tmpfile"
             sudo rm -f -- "$tmpfile" 2>/dev/null
             _fail "→ $dst (chmod failed)"
             return 1
         end
+        # Capture expected hash from tmpfile before mv (single get_file_content call; no redundant re-generation)
+        set -l _expected_hash (sudo cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
         if not _run sudo mv -- "$tmpfile" "$dst"
             sudo rm -f -- "$tmpfile" 2>/dev/null
             _fail "→ $dst (atomic move failed)"
             return 1
         end
-        # Post-write integrity check (system file): re-generate + hash to catch content-generation bugs
-        set -l _expected_hash (get_file_content "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+        # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs)
         set -l _actual_hash (sudo cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
         if test -n "$_expected_hash"; and test "$_expected_hash" != "$_actual_hash"
             _fail "→ $dst (post-write checksum mismatch)"
@@ -2292,18 +2321,25 @@ function install_file --argument-names dst use_sudo --description "Install a sin
             _fail "→ $dst (write to temp failed)"
             return 1
         end
+        # Post-write symlink re-check: closes TOCTOU between pre-write test -L and tee
+        if test -L "$tmpfile"
+            command rm -f -- "$tmpfile" 2>/dev/null
+            _fail "→ $dst (temp file replaced with symlink during write — aborting)"
+            return 1
+        end
         if not command chmod -- $perms "$tmpfile"
             command rm -f -- "$tmpfile" 2>/dev/null
             _fail "→ $dst (chmod failed)"
             return 1
         end
+        # Capture expected hash from tmpfile before mv (single get_file_content call; no redundant re-generation)
+        set -l _expected_hash (command cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
         if not command mv -- "$tmpfile" "$dst"
             command rm -f -- "$tmpfile" 2>/dev/null
             _fail "→ $dst (atomic move failed)"
             return 1
         end
-        # Post-write integrity check (user file): re-generate + hash to catch content-generation bugs
-        set -l _expected_hash (get_file_content "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+        # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs)
         set -l _actual_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
         if test -n "$_expected_hash"; and test "$_expected_hash" != "$_actual_hash"
             _fail "→ $dst (post-write checksum mismatch)"
@@ -3250,10 +3286,14 @@ function verify_static --description "Verify installed configs match embedded ch
         get_file_content "$dst" >"$hash_dir/expected_$safe" 2>/dev/null
     end
 
-    # Serialize destination list for children; batch into 4 workers (consistent with do_check)
+    # Serialize destination list for children; batch into min(4, nproc) workers
     printf '%s\n' $hash_dsts >"$hash_dir/dst_list"
     set -l total_dsts (count $hash_dsts)
-    set -l num_workers 4
+    set -l _nproc_hash (nproc 2>/dev/null)
+    if test -z "$_nproc_hash"; or not string match -qr '^\d+$' -- "$_nproc_hash"
+        set _nproc_hash 4
+    end
+    set -l num_workers (math "min(4, $_nproc_hash)")
     if test $total_dsts -lt $num_workers
         set num_workers $total_dsts
     end
@@ -6405,7 +6445,7 @@ function do_test_all --description "Run the full test suite across all subcomman
             set failed (math $failed + 1)
             _warn "  $display_label: exit code $code"
             if test -s "$test_dir/$label.stderr"
-                set -l _head (head -n 3 "$test_dir/$label.stderr" | string trim --)
+                set -l _head (head -n 5 "$test_dir/$label.stderr" | string trim --)
                 for _hl in $_head
                     _warn "    $_hl"
                 end
@@ -6435,7 +6475,7 @@ function do_test_all --description "Run the full test suite across all subcomman
             set failed (math $failed + 1)
             _warn "  $display_label: exit code $code"
             if test "$_test_stderr" != /dev/null; and test -s "$_test_stderr"
-                set -l _head (head -n 3 "$_test_stderr" | string trim --)
+                set -l _head (head -n 5 "$_test_stderr" | string trim --)
                 for _hl in $_head
                     _warn "    $_hl"
                 end
@@ -6518,7 +6558,12 @@ while test $i -le (count $argv)
             if test $next_i -le (count $argv)
                 set -l next_arg $argv[$next_i]
                 if string match -q -- '/*' "$next_arg"
-                    set DIFF_TARGET "$next_arg"
+                    set -l _canon (realpath -m -- "$next_arg" 2>/dev/null)
+                    if test -n "$_canon"
+                        set DIFF_TARGET "$_canon"
+                    else
+                        set DIFF_TARGET "$next_arg"
+                    end
                     set i $next_i
                 else if not string match -q -- '-*' "$next_arg"
                     echo "[ERR] --diff requires absolute path (got: $next_arg)" >&2
@@ -6592,7 +6637,13 @@ while test $i -le (count $argv)
             if test $next_i -le (count $argv)
                 set -l next_arg $argv[$next_i]
                 if string match -q -- '/*' "$next_arg"
-                    set INSTALL_FILE_TARGET "$next_arg"
+                    # Canonicalize: collapse //, .., symlinks to prevent bypassing managed-file validation
+                    set -l _canon (realpath -m -- "$next_arg" 2>/dev/null)
+                    if test -n "$_canon"
+                        set INSTALL_FILE_TARGET "$_canon"
+                    else
+                        set INSTALL_FILE_TARGET "$next_arg"
+                    end
                     set i $next_i
                 else if not string match -q -- '-*' "$next_arg"
                     echo "[ERR] --install-file requires absolute path (got: $next_arg)" >&2

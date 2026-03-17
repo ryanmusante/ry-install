@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.19 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.19"
+# ry-install v3.7.22 — CachyOS config manager with profile support | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.22"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -1031,10 +1031,16 @@ end
 # Pre-cache sudo credential once before forking parallel children (prevents N concurrent prompts)
 function _ensure_sudo_cached --description "Cache sudo credential once before parallel forking"
     set -l _sudo_err (mktemp -t ry-sudo-err.XXXXXX 2>/dev/null; or echo /dev/null)
+    test "$_sudo_err" != /dev/null; and set -ga _TRACKED_TMPFILES "$_sudo_err"
     if not sudo true 2>"$_sudo_err"
-        set -l _reason (head -n 1 "$_sudo_err" 2>/dev/null)
+        set -l _reason (command head -n 1 "$_sudo_err" 2>/dev/null)
         command rm -f -- "$_sudo_err" 2>/dev/null
         _log "SUDO_CACHE_FAIL: $_reason"
+        if test -n "$_reason"
+            _err "Sudo credential cache failed: $_reason"
+        else
+            _err "Sudo credential cache failed"
+        end
         return 1
     end
     command rm -f -- "$_sudo_err" 2>/dev/null
@@ -1051,14 +1057,12 @@ function _parse_systemctl_show --argument-names raw_output --description "Parse 
     set -l current_active ""
     set -l current_unitfile ""
     set -l current_load ""
-    set -l record_idx 0
     for line in (string split -- \n "$raw_output")
         if test -z "$line"
-            # End of record — emit
-            if test $record_idx -ge 0
+            # End of record — emit only if at least one property was accumulated (guards against leading blank lines)
+            if test -n "$current_active"; or test -n "$current_unitfile"; or test -n "$current_load"
                 printf '%s\n' "$current_load:$current_active:$current_unitfile"
             end
-            set record_idx (math $record_idx + 1)
             set current_active ""
             set current_unitfile ""
             set current_load ""
@@ -1074,7 +1078,7 @@ function _parse_systemctl_show --argument-names raw_output --description "Parse 
         end
     end
     # Emit final record if no trailing blank line
-    if test -n "$current_active" -o -n "$current_unitfile" -o -n "$current_load"
+    if test -n "$current_active"; or test -n "$current_unitfile"; or test -n "$current_load"
         printf '%s\n' "$current_load:$current_active:$current_unitfile"
     end
 end
@@ -1138,8 +1142,15 @@ function _log --description "Append a timestamped message to the log file"
     set -l event (string replace -ra '[^a-z0-9_]' '' -- "$event")
     set -l data (_json_str "$data")
     # Cap $data at 4096 chars to prevent pathological log lines from long paths/SSIDs
+    # Step back from cut point if inside a JSON escape sequence (\\ \n \t \r \b \f \uXXXX) to avoid malformed JSON
     if test (string length -- "$data") -gt 4096
-        set data (string sub -l 4093 -- "$data")"..."
+        set -l cut 4093
+        # If we'd cut inside a backslash escape, step back to before the backslash
+        set -l tail3 (string sub -s (math $cut - 5) -l 6 -- "$data")
+        if string match -qr '\\\\[tnrbfu]?[0-9a-fA-F]{0,4}$' -- "$tail3"
+            set cut (math $cut - (string length -- (string match -r '\\\\[tnrbfu]?[0-9a-fA-F]{0,4}$' -- "$tail3" | head -n 1)))
+        end
+        set data (string sub -l $cut -- "$data")"..."
     end
     printf '{"ts":"%s","event":"%s","data":"%s"}\n' "$_ts" "$event" "$data" >>"$LOG_FILE"
 end
@@ -1470,22 +1481,23 @@ function _run --description "Execute a command with logging, dry-run support, an
         _dry "$log_cmd"
         return 0
     else
-        # mktemp for stderr capture
+        # mktemp for stderr capture; not tracked in _TRACKED_TMPFILES — _do_cleanup fallback sweep catches ry-* pattern
         set -l stderr_tmp (mktemp -t ry-run-stderr.XXXXXX 2>/dev/null; or echo /dev/null)
-        test "$stderr_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$stderr_tmp"
         # Standard path: capture both stdout and stderr to tmpfiles
         set -l stdout_tmp (mktemp -t ry-run-stdout.XXXXXX 2>/dev/null; or echo /dev/null)
-        test "$stdout_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$stdout_tmp"
         if test "$stderr_tmp" = /dev/null; or test "$stdout_tmp" = /dev/null
-            _log "WARN: mktemp fallback to /dev/null — output capture degraded"
+            if not set -q _MKTEMP_DEGRADED_WARNED
+                set -g _MKTEMP_DEGRADED_WARNED true
+                _log "WARN: mktemp fallback to /dev/null — output capture degraded"
+            end
         end
         # SECURITY INVARIANT: $argv is hardcoded from internal callers; WIFI_SSID is read-validated (no metacharacters)
         $argv >"$stdout_tmp" 2>"$stderr_tmp"
         set -l ret $status
         if test "$stderr_tmp" != /dev/null; and test -s "$stderr_tmp"
-            set -l total_err (wc -l < "$stderr_tmp" | string trim --)
-            set -l first_lines (head -n 5 "$stderr_tmp")
-            set -l dedup_lines (LC_ALL=C sort "$stderr_tmp" | uniq -c | sort -rn | sed 's/^ *//')
+            set -l total_err (command wc -l < "$stderr_tmp" | string trim --)
+            set -l first_lines (command head -n 5 "$stderr_tmp")
+            set -l dedup_lines (LC_ALL=C command sort "$stderr_tmp" | command uniq -c | command sort -rn | command sed 's/^ *//')
             _log "STDERR($total_err lines): first: "(string join -- " | " $first_lines)" | dedup: "(string join -- " | " $dedup_lines)
             if test "$QUIET" = false
                 for el in $first_lines
@@ -1498,21 +1510,26 @@ function _run --description "Execute a command with logging, dry-run support, an
         end
         command rm -f -- "$stderr_tmp" 2>/dev/null
         if test "$stdout_tmp" != /dev/null; and test -s "$stdout_tmp"
-            set -l line_count (wc -l < "$stdout_tmp" | string trim --)
+            set -l line_count (command wc -l < "$stdout_tmp" | string trim --)
             if test $line_count -le 50
                 _log "OUTPUT: "(string join -- " | " (command cat -- "$stdout_tmp"))
             else if test $ret -ne 0
                 if test $line_count -le 200
                     _log "OUTPUT: "(string join -- " | " (command cat -- "$stdout_tmp"))
                 else
-                    _log "OUTPUT: "(string join -- " | " (head -n 100 "$stdout_tmp"))" | ... ($line_count lines, showing first 100 + last 100) | "(string join -- " | " (tail -n 100 "$stdout_tmp"))
+                    _log "OUTPUT: "(string join -- " | " (command head -n 100 "$stdout_tmp"))" | ... ($line_count lines, showing first 100 + last 100) | "(string join -- " | " (command tail -n 100 "$stdout_tmp"))
                 end
             else
-                _log "OUTPUT: "(string join -- " | " (head -n 50 "$stdout_tmp"))" | ... ($line_count lines, truncated)"
+                _log "OUTPUT: "(string join -- " | " (command head -n 50 "$stdout_tmp"))" | ... ($line_count lines, truncated)"
             end
-            # Print captured stdout when QUIET=false; note: install_file uses get_file_content|tee directly, not this wrapper
+            # Print captured stdout when QUIET=false; cap display to 50 lines (full output in JSONL log above)
             if test "$QUIET" = false
-                command cat -- "$stdout_tmp"
+                if test $line_count -le 50
+                    command cat -- "$stdout_tmp"
+                else
+                    command head -n 50 "$stdout_tmp"
+                    echo "  stdout: ... ($line_count lines total, showing first 50)" >&2
+                end
             end
         end
         command rm -f -- "$stdout_tmp" 2>/dev/null
@@ -1939,144 +1956,160 @@ function validate_configs --description "Run all embedded config validators"
     set -l dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
 
     # Job 1: cross-reference check — verify files exist (empty files indicate runtime deps; content validation in jobs 2-5)
-    fish -c "
+    fish -c '
         set -l errs 0
-        set -l expected_count $dst_count
-        set -l actual_count (count '$content_dir'/*)
-        if test \$actual_count -lt \$expected_count
-            set errs (math \$expected_count - \$actual_count)
+        set -l expected_count $argv[1]
+        set -l content_dir $argv[2]
+        set -l val_dir $argv[3]
+        set -l actual_count (count (find "$content_dir" -maxdepth 1 -type f 2>/dev/null))
+        if test $actual_count -lt $expected_count
+            set errs (math $expected_count - $actual_count)
         end
-        echo \$errs > '$val_dir/xref.errors'
-    " 2>"$val_dir/xref.stderr" &
+        echo $errs > "$val_dir/xref.errors"
+    ' -- "$dst_count" "$content_dir" "$val_dir" 2>"$val_dir/xref.stderr" &
     set -l pid_xref $last_pid
 
     # Job 2: systemd unit syntax (3 units)
-    fish -c "
+    fish -c '
         set -l errs 0
+        set -l content_dir $argv[1]
+        set -l val_dir $argv[2]
+        set -l my_home $argv[3]
+        if not command -q systemd-analyze
+            echo $errs > "$val_dir/units.errors"
+            exit 0
+        end
         for unit_key in _etc_systemd_system_amdgpu-performance.service _etc_systemd_system_cpupower-epp.service
-            set -l f '$content_dir/'\$unit_key
-            if test -s \$f
+            set -l f "$content_dir/$unit_key"
+            if test -s $f
                 set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service)
-                command cp -- \$f \$tmp
-                if not systemd-analyze verify \$tmp 2>/dev/null
-                    set errs (math \$errs + 1)
+                command cp -- $f $tmp
+                if not systemd-analyze verify $tmp 2>/dev/null
+                    set errs (math $errs + 1)
                 end
-                command rm -f -- \$tmp
+                command rm -f -- $tmp
             else
-                set errs (math \$errs + 1)
+                set errs (math $errs + 1)
             end
         end
         # ssh-agent.service (user unit — verify with --user scope)
-        set -l ssh_key (string replace -a -- '/' '_' '$HOME/.config/systemd/user/ssh-agent.service')
-        set -l f '$content_dir/'\$ssh_key
-        if test -s \$f
+        set -l ssh_key (string replace -a -- "/" "_" "$my_home/.config/systemd/user/ssh-agent.service")
+        set -l f "$content_dir/$ssh_key"
+        if test -s $f
             set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service)
-            command cp -- \$f \$tmp
-            if not systemd-analyze --user verify \$tmp 2>/dev/null
-                set errs (math \$errs + 1)
+            command cp -- $f $tmp
+            if not systemd-analyze --user verify $tmp 2>/dev/null
+                set errs (math $errs + 1)
             end
-            command rm -f -- \$tmp
+            command rm -f -- $tmp
         else
-            set errs (math \$errs + 1)
+            set errs (math $errs + 1)
         end
-        echo \$errs > '$val_dir/units.errors'
-    " 2>"$val_dir/units.stderr" &
+        echo $errs > "$val_dir/units.errors"
+    ' -- "$content_dir" "$val_dir" "$HOME" 2>"$val_dir/units.stderr" &
     set -l pid_units $last_pid
 
     # Job 3: fish script syntax + environment.d check
-    fish -c "
+    fish -c '
         set -l errs 0
-        set -l fish_key (string replace -a -- '/' '_' '$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish')
-        set -l f '$content_dir/'\$fish_key
-        if test -s \$f
-            if not fish --no-execute \$f 2>/dev/null
-                set errs (math \$errs + 1)
+        set -l content_dir $argv[1]
+        set -l val_dir $argv[2]
+        set -l my_home $argv[3]
+        set -l fish_key (string replace -a -- "/" "_" "$my_home/.config/fish/conf.d/10-ssh-auth-sock.fish")
+        set -l f "$content_dir/$fish_key"
+        if test -s $f
+            if not fish --no-execute $f 2>/dev/null
+                set errs (math $errs + 1)
             end
         else
-            set errs (math \$errs + 1)
+            set errs (math $errs + 1)
         end
         # environment.d check
-        set -l env_key (string replace -a -- '/' '_' '$HOME/.config/environment.d/10-environment.conf')
-        set -l ef '$content_dir/'\$env_key
-        if test -s \$ef
-            if not grep -q -- '^SSH_AUTH_SOCK=' \$ef
-                set errs (math \$errs + 1)
+        set -l env_key (string replace -a -- "/" "_" "$my_home/.config/environment.d/10-environment.conf")
+        set -l ef "$content_dir/$env_key"
+        if test -s $ef
+            if not grep -q -- "^SSH_AUTH_SOCK=" $ef
+                set errs (math $errs + 1)
             end
-            if grep -q -- '%t' \$ef
-                set errs (math \$errs + 1)
+            if grep -q -- "%t" $ef
+                set errs (math $errs + 1)
             end
         else
-            set errs (math \$errs + 1)
+            set errs (math $errs + 1)
         end
-        echo \$errs > '$val_dir/scripts.errors'
-    " 2>"$val_dir/scripts.stderr" &
+        echo $errs > "$val_dir/scripts.errors"
+    ' -- "$content_dir" "$val_dir" "$HOME" 2>"$val_dir/scripts.stderr" &
     set -l pid_scripts $last_pid
 
     # Job 4: INI section-header validation (4 configs)
-    fish -c "
+    fish -c '
         set -l errs 0
-        set -l checks \\
-            '_etc_systemd_resolved.conf.d_99-cachyos-resolved.conf|[Resolve]' \\
-            '_etc_systemd_logind.conf.d_99-cachyos-logind.conf|[Login]' \\
-            '_etc_iwd_main.conf|[General],[DriverQuirks],[Network]' \\
-            '_etc_NetworkManager_conf.d_99-cachyos-nm.conf|[device],[connection],[logging]'
-        for check in \$checks
-            set -l key (string split '|' -- \$check)[1]
-            set -l sections_str (string split '|' -- \$check)[2]
-            set -l sections (string split ',' -- \$sections_str)
-            set -l f '$content_dir/'\$key
-            if not test -s \$f
-                set errs (math \$errs + 1)
+        set -l content_dir $argv[1]
+        set -l val_dir $argv[2]
+        set -l checks \
+            "_etc_systemd_resolved.conf.d_99-cachyos-resolved.conf|[Resolve]" \
+            "_etc_systemd_logind.conf.d_99-cachyos-logind.conf|[Login]" \
+            "_etc_iwd_main.conf|[General],[DriverQuirks],[Network]" \
+            "_etc_NetworkManager_conf.d_99-cachyos-nm.conf|[device],[connection],[logging]"
+        for check in $checks
+            set -l key (string split "|" -- $check)[1]
+            set -l sections_str (string split "|" -- $check)[2]
+            set -l sections (string split "," -- $sections_str)
+            set -l f "$content_dir/$key"
+            if not test -s $f
+                set errs (math $errs + 1)
                 continue
             end
-            for section in \$sections
-                if not grep -qF -- \$section \$f
-                    set errs (math \$errs + 1)
+            for section in $sections
+                if not grep -qF -- $section $f
+                    set errs (math $errs + 1)
                 end
             end
         end
-        echo \$errs > '$val_dir/ini.errors'
-    " 2>"$val_dir/ini.stderr" &
+        echo $errs > "$val_dir/ini.errors"
+    ' -- "$content_dir" "$val_dir" 2>"$val_dir/ini.stderr" &
     set -l pid_ini $last_pid
 
     # Job 5: simple key-value config validation (3 configs)
-    fish -c "
+    fish -c '
         set -l errs 0
+        set -l content_dir $argv[1]
+        set -l val_dir $argv[2]
         # loader.conf
-        set -l f '$content_dir/_boot_loader_loader.conf'
-        if test -s \$f
+        set -l f "$content_dir/_boot_loader_loader.conf"
+        if test -s $f
             for key in default timeout console-mode editor
-                if not grep -qE -- \"^\$key \" \$f
-                    set errs (math \$errs + 1)
+                if not grep -qE -- "^$key " $f
+                    set errs (math $errs + 1)
                 end
             end
         else
-            set errs (math \$errs + 1)
+            set errs (math $errs + 1)
         end
         # sdboot-manage.conf
-        set -l f '$content_dir/_etc_sdboot-manage.conf'
-        if test -s \$f
+        set -l f "$content_dir/_etc_sdboot-manage.conf"
+        if test -s $f
             for key in LINUX_OPTIONS LINUX_FALLBACK_OPTIONS DEFAULT_ENTRY REMOVE_EXISTING OVERWRITE_EXISTING REMOVE_OBSOLETE
-                if not grep -qE -- \"^\$key=\" \$f
-                    set errs (math \$errs + 1)
+                if not grep -qE -- "^$key=" $f
+                    set errs (math $errs + 1)
                 end
             end
         else
-            set errs (math \$errs + 1)
+            set errs (math $errs + 1)
         end
         # udev rules
-        set -l f '$content_dir/_etc_udev_rules.d_99-cachyos-udev.rules'
-        if test -s \$f
-            if grep -qE -- '[A-Z]+=[^=]' \$f 2>/dev/null
-                if grep -qE -- '==[[:space:]]*\$' \$f 2>/dev/null
-                    set errs (math \$errs + 1)
+        set -l f "$content_dir/_etc_udev_rules.d_99-cachyos-udev.rules"
+        if test -s $f
+            if grep -qE -- "[A-Z]+=[^=]" $f 2>/dev/null
+                if grep -qE -- "==[[:space:]]*\$" $f 2>/dev/null
+                    set errs (math $errs + 1)
                 end
             end
         else
-            set errs (math \$errs + 1)
+            set errs (math $errs + 1)
         end
-        echo \$errs > '$val_dir/simple.errors'
-    " 2>"$val_dir/simple.stderr" &
+        echo $errs > "$val_dir/simple.errors"
+    ' -- "$content_dir" "$val_dir" 2>"$val_dir/simple.stderr" &
     set -l pid_simple $last_pid
 
     wait $pid_xref $pid_units $pid_scripts $pid_ini $pid_simple
@@ -2086,10 +2119,14 @@ function validate_configs --description "Run all embedded config validators"
         if not test -f "$val_dir/$phase.errors"
             _err "Validation child '$phase' crashed without writing results"
             if test -s "$val_dir/$phase.stderr"
-                _log "VALIDATE_CHILD_STDERR($phase): "(head -n 3 "$val_dir/$phase.stderr")
+                _log "VALIDATE_CHILD_STDERR($phase): "(head -n 5 "$val_dir/$phase.stderr")
             end
             set errors (math $errors + 1)
             continue
+        end
+        # Log stderr from ALL children (warnings from systemd-analyze, fish --no-execute, etc.)
+        if test -s "$val_dir/$phase.stderr"
+            _log "VALIDATE_STDERR($phase): "(head -n 5 "$val_dir/$phase.stderr")
         end
         set -l phase_errors (command cat -- "$val_dir/$phase.errors" 2>/dev/null)
         if test -n "$phase_errors"; and string match -qr '^\d+$' -- "$phase_errors"
@@ -2426,9 +2463,11 @@ function do_diff --argument-names target_file --description "Show diffs between 
             else
                 sudo -n cat -- "$dst" > "$batch_dir/installed_$safe" 2>/dev/null
             end
-            echo $status > "$batch_dir/readok_$safe"
+            set -l read_rc $status
+            printf "%d\n" $read_rc > "$batch_dir/readok_$safe"
             diff -u --label "embedded: $dst" --label "installed: $dst" -- "$batch_dir/expected_$safe" "$batch_dir/installed_$safe" > "$batch_dir/diff_$safe" 2>&1
-            echo $status > "$batch_dir/diffstatus_$safe"
+            set -l diff_rc $status
+            printf "%d\n" $diff_rc > "$batch_dir/diffstatus_$safe"
         ' -- "$dst" "$my_home" "$diff_batch_dir" "$safe" 2>"$diff_batch_dir/stderr_$safe" &
         set -a diff_pids $last_pid
         set diff_fork_count (math $diff_fork_count + 1)
@@ -2468,9 +2507,13 @@ function do_diff --argument-names target_file --description "Show diffs between 
             set has_diff true
             _warn "$dst: diff child crashed without writing results"
             if test -s "$diff_batch_dir/stderr_$safe"
-                _log "DIFF_CHILD_STDERR($dst): "(head -n 3 "$diff_batch_dir/stderr_$safe")
+                _log "DIFF_CHILD_STDERR($dst): "(head -n 5 "$diff_batch_dir/stderr_$safe")
             end
             continue
+        end
+        # Log stderr from ALL children (sudo warnings, diff errors) — not just crashes
+        if test -s "$diff_batch_dir/stderr_$safe"
+            _log "DIFF_STDERR($dst): "(head -n 5 "$diff_batch_dir/stderr_$safe")
         end
         set -l read_ok (command cat -- "$diff_batch_dir/readok_$safe" 2>/dev/null)
         if test -z "$read_ok"
@@ -2501,8 +2544,8 @@ function do_diff --argument-names target_file --description "Show diffs between 
                 end <"$diff_tmp"
                 _echo
             else
-                set -l actual_perms (stat -c '%a' -- "$dst" 2>/dev/null)
                 if string match -q "$HOME/*" -- "$dst"
+                    set -l actual_perms (stat -c '%a' -- "$dst" 2>/dev/null)
                     set -l actual_owner (stat -c '%U:%G' -- "$dst" 2>/dev/null)
                     set -l expected_owner (id -un)":"(id -gn)
                     if test "$actual_perms" != 600
@@ -3115,46 +3158,18 @@ function verify_static --description "Verify installed configs match embedded ch
 
     _echo "── Masked services ──"
     # Batch: single systemctl show replaces N individual is-enabled + cat calls
-    set -l _mask_show (systemctl show --property=LoadState,UnitFileState -- $MASK 2>/dev/null)
-    set -l _mask_idx 0
-    set -l _mask_load ""
-    set -l _mask_uf ""
-    for line in $_mask_show
-        if test -z "$line"
-            if test $_mask_idx -lt (count $MASK)
-                set _mask_idx (math $_mask_idx + 1)
-                set -l _svc $MASK[$_mask_idx]
-                if test "$_mask_load" = not-found
-                    _info "  $_svc: unit not found (may not be installed)"
-                else if test "$_mask_uf" = masked
-                    _ok "  $_svc: masked"
-                else
-                    _fail "  $_svc: $_mask_uf (expected: masked)"
-                end
-            end
-            set _mask_load ""
-            set _mask_uf ""
-            continue
-        end
-        switch "$line"
-            case 'LoadState=*'
-                set _mask_load (string replace -- 'LoadState=' '' "$line")
-            case 'UnitFileState=*'
-                set _mask_uf (string replace -- 'UnitFileState=' '' "$line")
-        end
-    end
-    # Emit final record if no trailing blank line
-    if test -n "$_mask_load" -o -n "$_mask_uf"
-        set _mask_idx (math $_mask_idx + 1)
-        if test $_mask_idx -le (count $MASK)
-            set -l _svc $MASK[$_mask_idx]
-            if test "$_mask_load" = not-found
-                _info "  $_svc: unit not found (may not be installed)"
-            else if test "$_mask_uf" = masked
-                _ok "  $_svc: masked"
-            else
-                _fail "  $_svc: $_mask_uf (expected: masked)"
-            end
+    # string collect preserves blank-line record delimiters (bare command substitution strips them)
+    set -l _mask_raw (systemctl show --property=LoadState,UnitFileState -- $MASK 2>/dev/null | string collect --no-trim-newlines)
+    set -l _mask_parsed (_parse_systemctl_show "$_mask_raw")
+    for _mask_idx in (seq 1 (count $MASK))
+        set -l _svc $MASK[$_mask_idx]
+        set -l _rec (string split -- ':' -- "$_mask_parsed[$_mask_idx]")
+        if test "$_rec[1]" = not-found
+            _info "  $_svc: unit not found (may not be installed)"
+        else if test "$_rec[3]" = masked
+            _ok "  $_svc: masked"
+        else
+            _fail "  $_svc: $_rec[3] (expected: masked)"
         end
     end
     _echo
@@ -3247,36 +3262,40 @@ function verify_static --description "Verify installed configs match embedded ch
         if test $start_idx -gt $total_dsts
             continue
         end
-        fish -c "
-            set -l all_dsts (command cat -- '$hash_dir/dst_list')
+        fish -c '
+            set -l hash_dir $argv[1]
+            set -l my_home $argv[2]
+            set -l start_idx $argv[3]
+            set -l end_idx $argv[4]
+            set -l all_dsts (command cat -- "$hash_dir/dst_list")
             for idx in (seq $start_idx $end_idx)
-                set -l dst \$all_dsts[\$idx]
-                test -n \"\$dst\"; or continue
-                set -l safe (string replace -a '/' '_' -- \"\$dst\")
-                if not test -s '$hash_dir/expected_'\$safe
-                    echo skip > '$hash_dir/result_'\$safe
+                set -l dst $all_dsts[$idx]
+                test -n "$dst"; or continue
+                set -l safe (string replace -a "/" "_" -- "$dst")
+                if not test -s "$hash_dir/expected_$safe"
+                    echo skip > "$hash_dir/result_$safe"
                     continue
                 end
-                set -l expected_hash (sha256sum < '$hash_dir/expected_'\$safe | string split -- ' ')[1]
+                set -l expected_hash (sha256sum < "$hash_dir/expected_$safe" | string split -- " ")[1]
                 set -l installed_hash
-                if string match -q '$my_home/*' -- \"\$dst\"
-                    if not test -r \"\$dst\"
-                        echo skip > '$hash_dir/result_'\$safe
+                if string match -q "$my_home/*" -- "$dst"
+                    if not test -r "$dst"
+                        echo skip > "$hash_dir/result_$safe"
                         continue
                     end
-                    set installed_hash (sha256sum < \"\$dst\" 2>/dev/null | string split -- ' ')[1]
+                    set installed_hash (sha256sum < "$dst" 2>/dev/null | string split -- " ")[1]
                 else
-                    set installed_hash (sudo -n cat -- \"\$dst\" 2>/dev/null | sha256sum | string split -- ' ')[1]
+                    set installed_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- " ")[1]
                 end
-                if test -z \"\$installed_hash\"
-                    echo skip > '$hash_dir/result_'\$safe
-                else if test \"\$expected_hash\" = \"\$installed_hash\"
-                    echo pass > '$hash_dir/result_'\$safe
+                if test -z "$installed_hash"
+                    echo skip > "$hash_dir/result_$safe"
+                else if test "$expected_hash" = "$installed_hash"
+                    echo pass > "$hash_dir/result_$safe"
                 else
-                    echo fail > '$hash_dir/result_'\$safe
+                    echo fail > "$hash_dir/result_$safe"
                 end
             end
-        " 2>"$hash_dir/worker_$worker.stderr" &
+        ' -- "$hash_dir" "$my_home" "$start_idx" "$end_idx" 2>"$hash_dir/worker_$worker.stderr" &
         set -a hash_pids $last_pid
     end
 
@@ -3285,7 +3304,7 @@ function verify_static --description "Verify installed configs match embedded ch
     # Log any worker stderr (child crash diagnostics)
     for worker in (seq 1 $num_workers)
         if test -s "$hash_dir/worker_$worker.stderr"
-            _log "HASH_WORKER_STDERR(worker $worker): "(head -n 3 "$hash_dir/worker_$worker.stderr")
+            _log "HASH_WORKER_STDERR(worker $worker): "(head -n 5 "$hash_dir/worker_$worker.stderr")
         end
     end
 
@@ -3301,8 +3320,8 @@ function verify_static --description "Verify installed configs match embedded ch
             case skip
                 # Intentional skip (no expected content, file unreadable, or NM/IWD not installed)
             case ''
-                # Empty or missing result file — child likely crashed
-                _warn "  $dst: verification incomplete (no result from hash job)"
+                # Empty or missing result file — child likely crashed; must be FAIL (unverified ≠ passed)
+                _fail "  $dst: verification incomplete (no result from hash job)"
         end
     end
     command rm -rf --preserve-root -- "$hash_dir"
@@ -3464,11 +3483,12 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         set -l mask_units (command cat -- "$result_dir/mask_units")
         # B-3a: batch query all expected + masked units in 1 call
         set -l all_units $exp_svcs $mask_units
-        set -l show_raw (systemctl show --property=ActiveState,UnitFileState -- $all_units 2>/dev/null)
+        # string collect preserves blank-line record delimiters (bare command substitution strips them)
+        set -l show_collected (systemctl show --property=ActiveState,UnitFileState -- $all_units 2>/dev/null | string collect --no-trim-newlines)
         set -l current_active ""
         set -l current_unitfile ""
         set -l results
-        for line in $show_raw
+        for line in (string split -- \n "$show_collected")
             if test -z "$line"
                 set -a results "$current_active:$current_unitfile"
                 set current_active ""
@@ -3482,7 +3502,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
                     set current_unitfile (string replace -- "UnitFileState=" "" "$line")
             end
         end
-        if test -n "$current_active" -o -n "$current_unitfile"
+        if test -n "$current_active"; or test -n "$current_unitfile"
             set -a results "$current_active:$current_unitfile"
         end
 
@@ -3490,7 +3510,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         set -l exp_count (count $exp_svcs)
         for i in (seq 1 $exp_count)
             set -l rec (string split -- ":" $results[$i])
-            if test "$rec[1]" != active -a "$rec[1]" != exited
+            if test "$rec[1]" != active; and test "$rec[1]" != exited
                 set drift true
             else if test "$rec[2]" != enabled
                 set drift true
@@ -3509,7 +3529,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         # Check masked services (remaining results)
         for i in (seq 1 (count $mask_units))
             set -l ri (math $exp_count + $i)
-            if test "$mask_units[$i]" = lvm2-monitor.service -a "$has_lvm" = true
+            if test "$mask_units[$i]" = lvm2-monitor.service; and test "$has_lvm" = true
                 continue
             end
             set -l rec (string split -- ":" $results[$ri])
@@ -3526,11 +3546,12 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     # Merge results — treat missing result files as child crash (prevents false-negative)
     for phase in hash perm kparam svc
         set -l _drift_file "$result_dir/"$phase"_drift"
+        # Log stderr from ALL children for diagnostics (not just crashes)
+        if test -s "$result_dir/"$phase".stderr"
+            _log "CHECK_STDERR($phase): "(head -n 5 "$result_dir/"$phase".stderr")
+        end
         if not test -f "$_drift_file"
             _log "CHECK_DRIFT: child '$phase' crashed without writing results"
-            if test -s "$result_dir/"$phase".stderr"
-                _log "CHECK_DRIFT: $phase stderr: "(head -n 3 "$result_dir/"$phase".stderr")
-            end
             set drift true
         else
             set -l result (command cat -- "$_drift_file" 2>/dev/null)
@@ -3763,7 +3784,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     set -l rec (string split -- ':' -- "$parsed[1]")
     if test "$rec[1]" = not-found
         _warn "  amdgpu-performance.service: not installed"
-    else if test "$rec[2]" = active -o "$rec[2]" = exited
+    else if test "$rec[2]" = active; or test "$rec[2]" = exited
         if test "$rec[3]" = enabled
             _ok "  amdgpu-performance.service: $rec[2] (enabled)"
         else
@@ -3779,7 +3800,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     set -l rec (string split -- ':' -- "$parsed[2]")
     if test "$rec[1]" = not-found
         _warn "  cpupower-epp.service: not installed"
-    else if test "$rec[2]" = active -o "$rec[2]" = exited
+    else if test "$rec[2]" = active; or test "$rec[2]" = exited
         if test "$rec[3]" = enabled
             _ok "  cpupower-epp.service: $rec[2] (enabled)"
         else
@@ -3816,7 +3837,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     # NetworkManager-dispatcher
     set -l rec (string split -- ':' -- "$parsed[5]")
     if test "$rec[3]" = enabled
-        if test "$rec[2]" = active -o "$rec[2]" = inactive
+        if test "$rec[2]" = active; or test "$rec[2]" = inactive
             _ok "  NetworkManager-dispatcher: $rec[3] ($rec[2])"
         else
             _warn "  NetworkManager-dispatcher: $rec[2] (enabled but unexpected state)"
@@ -6348,7 +6369,8 @@ function do_test_all --description "Run the full test suite across all subcomman
             set -l script_path $argv[1]; set -l stderr_file $argv[2]; set -l exit_file $argv[3]
             set -l mode_args $argv[4..]
             env NO_COLOR=1 fish "$script_path" $mode_args --verbose </dev/null >/dev/null 2>"$stderr_file"
-            echo $status > "$exit_file"
+            set -l rc $status
+            printf "%d\n" $rc > "$exit_file"
         ' -- "$script_path" "$test_dir/$label.stderr" "$test_dir/$label.exit" $mode_args &
         set -a parallel_pids $last_pid
         # Batch throttle: wait for current batch before forking more (mid-range CPU guard)
@@ -6395,6 +6417,7 @@ function do_test_all --description "Run the full test suite across all subcomman
         _info "  $sequential_modes[$i]"
 
         set -l _test_stderr (mktemp -t ry-test-stderr.XXXXXX 2>/dev/null; or echo /dev/null)
+        test "$_test_stderr" != /dev/null; and set -ga _TRACKED_TMPFILES "$_test_stderr"
         env NO_COLOR=1 fish "$script_path" $mode_args --verbose </dev/null >/dev/null 2>"$_test_stderr"
         set -l code $status
 
@@ -6561,9 +6584,13 @@ while test $i -le (count $argv)
             set -l next_i (math $i + 1)
             if test $next_i -le (count $argv)
                 set -l next_arg $argv[$next_i]
-                if not string match -q -- '-*' "$next_arg"
+                if string match -q -- '/*' "$next_arg"
                     set INSTALL_FILE_TARGET "$next_arg"
                     set i $next_i
+                else if not string match -q -- '-*' "$next_arg"
+                    echo "[ERR] --install-file requires absolute path (got: $next_arg)" >&2
+                    command rm -f -- "$LOG_FILE" 2>/dev/null
+                    exit $EXIT_USAGE
                 end
             end
         case -h --help

@@ -1,3 +1,106 @@
+3.7.22 (2026-03-17)
+-------------------
+
+  fix(options): --install-file accepted relative paths silently. Unlike
+    --diff which validates '/*' at parse time with a clear error,
+    --install-file accepted any non-flag argument, producing a confusing
+    "Not a managed file" error deep in do_install_file. Now validates
+    absolute path at parse time with "[ERR] --install-file requires
+    absolute path" consistent with --diff.
+
+  fix(parallel): validate_configs Job 1 cross-reference check used
+    count "$content_dir"/* glob which silently aborts in Fish on empty
+    directories. The glob failure left actual_count unset, causing the
+    error comparison to be skipped entirely — writing errs=0 (false
+    negative). Replaced with count (find ... -maxdepth 1 -type f) which
+    returns 0 safely on empty dirs.
+
+  fix(logging): _log JSON truncation regex used {0,3} for \uXXXX hex
+    digit backtrack window. The sequence has 4 hex digits, so the regex
+    failed to match when truncation landed on the 4th digit, producing
+    malformed JSON like \u123 in the JSONL log. Changed to {0,4}.
+
+  fix(logging): stderr diagnostic head -n count inconsistent across
+    parallel child crash handlers. validate_configs merge, do_diff child
+    crash, and verify_static hash worker used head -n 3 while _run and
+    do_check used head -n 5. Standardized all to head -n 5.
+
+  fix(stderr): _ensure_sudo_cached used fragile inline substitution
+    (test -n ...; and echo ...; or echo "") to conditionally append the
+    failure reason. If the subshell produced unexpected output the error
+    message could be malformed. Replaced with explicit if/else.
+
+  fix(verification): do_diff Phase 3 ran unprivileged stat -c '%a' on
+    ALL files before branching into user/system paths. For system files,
+    this silently failed (returning empty), wasted a syscall, and leaked
+    an empty actual_perms into the comparison. Moved stat into each
+    branch: unprivileged for $HOME/*, sudo stat for system files.
+
+3.7.21 (2026-03-16)
+-------------------
+
+  fix(high): shell injection in 6 remaining double-quoted fish -c blocks.
+    validate_configs Jobs 1-5 and verify_static hash workers used
+    fish -c "..." with variable interpolation via \$ escaping. Paths
+    containing shell metacharacters in $HOME, $TMPDIR, $content_dir,
+    or $val_dir could break out of the inner string. Converted all 6
+    to single-quoted bodies with positional $argv args via -- separator,
+    consistent with do_diff/do_check/do_test_all (fixed in v3.7.19).
+
+  fix: 7 instances of deprecated test -o / test -a replaced with Fish
+    idiomatic "; or" / "; and". Affected: _parse_systemctl_show,
+    verify_static mask check, verify_runtime service checks (3 sites),
+    do_check Job 4 service and LVM checks. test -o/-a are POSIX
+    extensions that Fish supports but warns against; "; or" / "; and"
+    are canonical Fish.
+
+  fix: do_diff parallel child used bare "echo $status" to write result
+    files. The echo itself resets $status to 0, so readok and diffstatus
+    files always contained 0 regardless of the actual cat/diff exit code.
+    Replaced with "set -l rc $status; printf '%d\n' $rc" pattern. Same
+    fix applied to do_test_all parallel child exit file.
+
+  fix: _ensure_sudo_cached tmpfile leak on signal interrupt. The mktemp
+    file was cleaned up on the normal path but not tracked in
+    _TRACKED_TMPFILES, so SIGINT between mktemp and rm left an orphan.
+
+  fix: _run stdout display unbounded in verbose mode. When QUIET=false,
+    captured stdout was cat'd to terminal without limit. Commands like
+    pacman -Syu produce 500+ lines. Now capped at 50 lines with a
+    truncation notice, matching stderr's existing 5-line cap.
+
+  fix: _run mktemp degradation warning logged on every call when /tmp
+    is full. Over 100+ _run calls this produced 100+ identical WARN
+    lines. Now logged once via _MKTEMP_DEGRADED_WARNED guard.
+
+  fix: _log JSON truncation could split mid-escape-sequence. Cutting
+    at exactly 4093 chars could land inside a \uXXXX or \n escape,
+    producing malformed JSON. Now steps back to before the backslash
+    when truncation point falls inside an escape sequence.
+
+  fix: do_test_all sequential stderr tmpfile not tracked in
+    _TRACKED_TMPFILES. Signal interrupt between mktemp and rm left
+    orphan files in /tmp.
+
+3.7.20 (2026-03-17)
+-------------------
+
+  fix: validate_configs Job 1 false-pass on empty content directory.
+    The cross-reference child used a Fish glob (count "$dir"/*) to count
+    pre-generated files. Fish cancels commands with unmatched globs,
+    leaving actual_count unset; the numeric test then errors and $errs
+    stays 0 — silently reporting no missing files. Replaced with
+    find-based count that returns 0 for empty directories, with
+    defensive numeric validation.
+
+  fix: _run tmpfile list bloat over long installs. Every _run call
+    appended 2 entries to _TRACKED_TMPFILES for stderr/stdout capture
+    files that were immediately deleted inline. Over 100+ _run calls in
+    --all mode, the list accumulated 200+ stale paths that _do_cleanup
+    re-iterated on exit. Removed tracking; inline rm handles the normal
+    path and _do_cleanup's fallback find sweep (ry-* in TMPDIR) catches
+    signal-interrupted leftovers.
+
 3.7.19 (2026-03-17)
 -------------------
 

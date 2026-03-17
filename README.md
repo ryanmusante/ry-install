@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.23-blue)
+![Version](https://img.shields.io/badge/version-3.7.25-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -77,7 +77,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | Flag | Requires | Description |
 |------|----------|-------------|
 | `--fix` | `--diff` | Re-install drifted files |
-| `--profile <n>` | — | Load machine profile (default: `gtr9_pro`) |
 | `--` | — | End of options |
 | `-h, --help` | — | Show help |
 | `-v, --version` | — | Show version |
@@ -288,7 +287,6 @@ Machine-specific globals (kernel params, packages, services, thresholds, destina
 
 | Source | Resolution order |
 |--------|-----------------|
-| `--profile <n>` | CLI flag (highest priority) |
 | `~/.config/ry-install/default-profile` | Persistent default (single line: profile name) |
 | `gtr9_pro` | Hardcoded fallback |
 
@@ -296,7 +294,7 @@ External profiles must define a `function profile_<name>` setting all required g
 
 ### Adapting
 
-Create `~/.config/ry-install/profiles/<name>.fish` with a `profile_<name>` function. Copy `profile_gtr9_pro` as a starting point and adjust `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, `PKGS_ADD`/`PKGS_DEL`, `MASK`, `EXPECTED_SERVICES`, `ENV_VARS`, service destinations, and threshold globals. Run `./ry-install.fish --profile <name> --check` to validate.
+Create `~/.config/ry-install/profiles/<name>.fish` with a `profile_<name>` function. Copy `profile_gtr9_pro` as a starting point and adjust `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, `PKGS_ADD`/`PKGS_DEL`, `MASK`, `EXPECTED_SERVICES`, `ENV_VARS`, service destinations, and threshold globals. Set the profile name in `~/.config/ry-install/default-profile` and run `./ry-install.fish --check` to validate.
 
 ### References
 

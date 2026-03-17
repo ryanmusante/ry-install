@@ -1,3 +1,33 @@
+3.7.25 (2026-03-17)
+-------------------
+
+  remove(cli): removed --profile <n> flag. Profile selection is now
+    exclusively file-based: write the profile name to
+    ~/.config/ry-install/default-profile (one line). The internal profile
+    system (profile functions, _validate_profile, _load_profile, external
+    profile loading from ~/.config/ry-install/profiles/, manifest orphan
+    tracking) is unchanged. Removed: --profile case from argument parser
+    (17 lines), PROFILE_NAME_ARG global, --profile help text,
+    __ry_install_profiles completions function, --profile completion,
+    --profile from hardware mismatch warning. Updated README: removed
+    --profile from Modifiers table and resolution order table, rewrote
+    Adapting section to reference default-profile file instead of CLI
+    flag.
+
+3.7.24 (2026-03-17)
+-------------------
+
+  fix(wifi): SSID validation rejected '!' and '&' unnecessarily. Both
+    are bash-specific metacharacters (history expansion, background job)
+    with no special meaning in Fish execution, GKeyFile format, Linux
+    filenames, or nmcli arguments. Removed from the 17-char forbidden
+    list (now 15). SSIDs containing '!' or '&' no longer require the
+    manual 'nmcli device wifi connect' workaround. Remaining forbidden
+    chars: / (path traversal), \ ; (GKeyFile), ` $ ( ) { } | < >
+    (subshell/expansion/redirect), ' " (quotes), % (printf format).
+    Updated comment and error message to reflect actual rejection
+    categories.
+
 3.7.23 (2026-03-17)
 -------------------
 

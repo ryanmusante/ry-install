@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.28 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.28"
+# ry-install v3.7.29 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.29"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -266,7 +266,9 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
     end
     for dir in $sys_dirs
         for f in (command find "$dir" -maxdepth 1 -name '.ry-install.*' -type f 2>/dev/null)
-            sudo rm -f -- "$f" 2>/dev/null
+            if command -q sudo
+                sudo rm -f -- "$f" 2>/dev/null
+            end
         end
     end
     set -l usr_dirs
@@ -848,7 +850,7 @@ function _btrfs_pre_snapshot --description "Create a btrfs snapshot of rootfs be
         return 0
     end
 
-    if not sudo mkdir -p -- "$snap_parent" 2>/dev/null
+    if not command -q sudo; or not sudo mkdir -p -- "$snap_parent" 2>/dev/null
         _warn "Cannot create snapshot directory $snap_parent — skipping"
         return 0
     end
@@ -1052,9 +1054,17 @@ end
 
 # Pre-cache sudo credential once before forking parallel children (prevents N concurrent prompts)
 function _ensure_sudo_cached --description "Cache sudo credential once before parallel forking"
+    if not command -q sudo
+        _err "Sudo credential cache failed: sudo not found"
+        return 1
+    end
     set -l _sudo_err (mktemp -t ry-sudo-err.XXXXXX 2>/dev/null; or echo /dev/null)
     test "$_sudo_err" != /dev/null; and set -ga _TRACKED_TMPFILES "$_sudo_err"
-    if not sudo true 2>"$_sudo_err"
+    # Avoid "if not sudo true" — Fish's "not" on unknown/failing commands can silently
+    # invert status, causing the if-body to be skipped. Explicit status capture is safe.
+    sudo true 2>"$_sudo_err"
+    set -l _rc $status
+    if test $_rc -ne 0
         set -l _reason (command head -n 1 "$_sudo_err" 2>/dev/null)
         command rm -f -- "$_sudo_err" 2>/dev/null
         _log "SUDO_CACHE_FAIL: $_reason"
@@ -1586,9 +1596,9 @@ function _run --description "Execute a command with logging, dry-run support, an
             # Print captured stdout when QUIET=false; cap display to 50 lines (full output in JSONL log above)
             if test "$QUIET" = false
                 if test $line_count -le 50
-                    command cat -- "$stdout_tmp"
+                    command cat -- "$stdout_tmp" >&2
                 else
-                    command head -n 50 "$stdout_tmp"
+                    command head -n 50 "$stdout_tmp" >&2
                     echo "  stdout: ... ($line_count lines total, showing first 50)" >&2
                     _log "STDOUT_TRUNCATED: $line_count lines total, displayed first 50"
                 end
@@ -2474,7 +2484,12 @@ function do_diff --argument-names target_file --description "Show diffs between 
     set -l _boot_fstype (findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
 
     if test "$FIX" = true; and test "$DRY" = false
-        if not sudo true 2>/dev/null
+        if not command -q sudo
+            _err "Sudo required for --diff --fix"
+            return 1
+        end
+        sudo true 2>/dev/null
+        if test $status -ne 0
             _err "Sudo required for --diff --fix"
             return 1
         end
@@ -2675,7 +2690,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
         if not string match -q "$HOME/*" -- "$dst"
             for _pac_ext in .pacnew .pacsave
                 set -l _pac_file "$dst$_pac_ext"
-                if sudo test -f "$_pac_file" 2>/dev/null
+                if command -q sudo; and sudo test -f "$_pac_file" 2>/dev/null
                     _warn "STALE $_pac_ext: $_pac_file (review with pacdiff or merge manually)"
                     set has_pacnew true
                 end
@@ -3423,7 +3438,12 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     set -l checked 0
 
     # Pre-cache sudo for parallel children
-    if not sudo -n true 2>/dev/null
+    # Avoid "if not sudo -n true" — Fish's "not" on unknown commands silently inverts
+    set -l _sudo_ok false
+    if command -q sudo; and sudo -n true 2>/dev/null
+        set _sudo_ok true
+    end
+    if test "$_sudo_ok" = false
         _log "CHECK_DRIFT: sudo not cached"
         return $EXIT_DRIFT
     end
@@ -3684,6 +3704,10 @@ end
 function verify_runtime --description "Verify runtime kernel params, services, and modules"
     _log "=== RUNTIME VERIFICATION START ==="
 
+    if not command -q sudo
+        _err "Sudo required for verification"
+        return 1
+    end
     sudo true 2>/dev/null; or begin
         _err "Sudo required for verification"
         return 1
@@ -5187,6 +5211,10 @@ function _install_preflight --description "Run all preflight checks before insta
         if test "$ALL" = true
             printf '\n' >&2
         end
+        if not command -q sudo
+            _err "Sudo required for installation"
+            return $EXIT_PREFLIGHT
+        end
         sudo true; or begin
             _err "Sudo required for installation"
             return $EXIT_PREFLIGHT
@@ -5502,7 +5530,7 @@ function _install_configure_services --description "Enable, start, and configure
     end
 
     if test "$has_lvm" = false; and test "$DRY" = false
-        if not sudo -n true 2>/dev/null
+        if not command -q sudo; or not sudo -n true 2>/dev/null
             _info "LVM detection may be incomplete (sudo not cached)"
         end
     end
@@ -6210,6 +6238,10 @@ function do_install_file --argument-names target --description "Install a single
     _banner "ry-install v$VERSION - Install Single File"
 
     if test "$use_sudo" = true; and test "$DRY" = false
+        if not command -q sudo
+            _err "Sudo required"
+            return 1
+        end
         sudo true; or begin
             _err "Sudo required"
             return 1

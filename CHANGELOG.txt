@@ -1,3 +1,59 @@
+3.7.29 (2026-03-18)
+-------------------
+
+  fix(run): _run stdout replay leaked to fd1. When QUIET=false, captured
+    command stdout was replayed via bare "command cat" and "command head"
+    without >&2, violating the documented contract ("stdout reserved for
+    pipeable data"). Consumers piping ry-install output (e.g., --check
+    in CI) would receive command output mixed into the parseable stream.
+    Added >&2 to both cat and head replay paths.
+
+  fix(sudo): _ensure_sudo_cached silently succeeded when sudo binary
+    missing. Fish's "if not <unknown_cmd>" inverts exit 127 to success,
+    so the if-body never executed and the function returned 0. All
+    callers using "or return 1" saw success. Added "command -q sudo"
+    guard and replaced "if not sudo true" with explicit $status capture.
+    Affected modes: --diff, --diff --fix, --verify-static, --check,
+    --test-all.
+
+  fix(diff): .pacnew detection used bare "sudo test -f" without
+    command -q guard. On systems without sudo in PATH (containers, CI),
+    every managed file emitted a Fish "Unknown command: sudo" error to
+    stderr. Added "command -q sudo; and" prefix.
+
+  fix(diff): --diff --fix sudo gate used "if not sudo true" — same
+    Fish inversion bug as _ensure_sudo_cached. Replaced with command -q
+    guard and explicit $status capture.
+
+  fix(check): do_check sudo pre-cache used "if not sudo -n true" —
+    same Fish inversion bug. Replaced with command -q guard and
+    two-step check.
+
+  fix(services): _install_configure_services LVM sudo cache check
+    used "if not sudo -n true". Added "not command -q sudo; or" guard.
+
+  fix(snapshot): _btrfs_pre_snapshot mkdir guard used "if not sudo
+    mkdir" — same Fish inversion bug. Added "not command -q sudo; or"
+    guard.
+
+  fix(verify): verify_runtime used bare "sudo true 2>/dev/null; or
+    begin" without command -q guard. Fish's "Unknown command" error
+    bypasses 2>/dev/null (emitted by Fish's command resolver, not by
+    the process). Added command -q sudo gate before sudo true call.
+
+  fix(install): _install_preflight used bare "sudo true; or begin"
+    without command -q guard — same Fish resolver leak. Added
+    command -q sudo gate.
+
+  fix(install-file): do_install_file used bare "sudo true; or begin"
+    without command -q guard — same Fish resolver leak. Added
+    command -q sudo gate.
+
+  fix(cleanup): _cleanup_tmpfiles used bare "sudo rm -f" without
+    command -q guard. On signal/exit cleanup in environments without
+    sudo, every orphaned tmpfile emitted "Unknown command: sudo" to
+    stderr. Added command -q sudo guard around the sudo rm call.
+
 3.7.28 (2026-03-17)
 -------------------
 

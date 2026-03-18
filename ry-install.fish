@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.32 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.32"
+# ry-install v3.7.33 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.33"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -1666,7 +1666,7 @@ VERIFICATION:
   --test-all        Run all safe modes and generate NDJSON logs (test suite)
 
 UTILITIES:
-  --logs <target>   View logs (system gpu wifi boot audio usb kernel)
+  --logs <target>   View logs (system gpu wifi boot audio usb kernel <service>)
   --logs analyze [file]  Parse NDJSON log, show human-readable results
   --logs last       Analyze most recent log file
   --logs all        Analyze all logs, show combined summary
@@ -1704,7 +1704,7 @@ EXAMPLES:
   ./ry-install.fish --logs analyze ~/ry-install/logs/.../test.jsonl
 
 LOG FILE:
-  ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS.jsonl
+  ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ.jsonl
 
 REQUIREMENTS:
   CachyOS (Arch-based), systemd-boot, fish 3.4+

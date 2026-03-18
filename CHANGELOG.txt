@@ -1,3 +1,18 @@
+3.7.33 (2026-03-18)
+-------------------
+
+  doc: sync README, CHANGELOG, and show_help.
+
+  doc(help): --logs <target> now lists <service> as a valid target.
+
+  doc(help): log file path format includes timezone (+ZZZZ).
+
+  doc(readme): --diff description matches show_help (delta or
+    diff --color).
+
+  doc(readme): -- modifier description matches show_help (remaining
+    arguments ignored).
+
 3.7.32 (2026-03-18)
 -------------------
 

@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.32-blue)
+![Version](https://img.shields.io/badge/version-3.7.33-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -72,7 +72,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Flag | Description |
 |------|-------------|
-| `--diff` | Per-file unified diff (uses `delta` if installed) |
+| `--diff` | Per-file unified diff (`delta` or `diff --color`) |
 | `--diff <path>` | Single file diff |
 | `--diff --fix` | Re-install drifted files |
 | `--verify-static` | Check configs exist with correct content |
@@ -103,7 +103,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | Flag | Requires | Description |
 |------|----------|-------------|
 | `--fix` | `--diff` | Re-install drifted files |
-| `--` | — | End of options |
+| `--` | — | End of options (remaining arguments ignored) |
 | `-h, --help` | — | Show help |
 | `-v, --version` | — | Show version |
 

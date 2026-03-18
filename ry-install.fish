@@ -1119,6 +1119,11 @@ end
 
 # Escape string for JSON embedding; function-scope reassignments use explicit set -l
 function _json_str --description "Escape a string for safe JSON embedding"
+    if test (count $argv) -ne 1
+        _log "BUG: _json_str: expected 1 arg, got "(count $argv)
+        printf '\n'
+        return 1
+    end
     # Escape order: backslash first to avoid double-escaping later chars; each set -l val re-binds the local
     set -l val "$argv[1]"
     set -l val (string replace -a '\\' '\\\\' -- "$val")
@@ -1182,7 +1187,8 @@ function _log --description "Append a timestamped message to the log file"
     if test (string length -- "$data") -gt 4096
         set -l cut 4093
         # If we'd cut inside a backslash escape, step back to before the backslash
-        set -l tail3 (string sub -s (math $cut - 5) -l 6 -- "$data")
+        # Window must be ≥8 chars to catch \\uXXXX (6 chars) starting 1 byte before a 6-char window
+        set -l tail3 (string sub -s (math $cut - 7) -l 8 -- "$data")
         set -l _esc_match (string match -r '\\\\[tnrbfu]?[0-9a-fA-F]{0,4}$' -- "$tail3" | head -n 1)
         if test -n "$_esc_match"
             set -l _esc_len (string length -- "$_esc_match")
@@ -3254,8 +3260,16 @@ function verify_static --description "Verify installed configs match embedded ch
     # string collect preserves blank-line record delimiters (bare command substitution strips them)
     set -l _mask_raw (systemctl show --property=LoadState,UnitFileState -- $MASK 2>/dev/null | string collect --no-trim-newlines)
     set -l _mask_parsed (_parse_systemctl_show "$_mask_raw")
+    if test (count $_mask_parsed) -lt (count $MASK)
+        _warn "  systemctl show returned incomplete mask data ("(count $_mask_parsed)" of "(count $MASK)" records)"
+        _log "SYSTEMCTL_SHOW_MASK_PARTIAL: got="(count $_mask_parsed)" expected="(count $MASK)
+    end
     for _mask_idx in (seq 1 (count $MASK))
         set -l _svc $MASK[$_mask_idx]
+        if test $_mask_idx -gt (count $_mask_parsed)
+            _warn "  $_svc: no data from systemctl show"
+            continue
+        end
         set -l _rec (string split -- ':' -- "$_mask_parsed[$_mask_idx]")
         if test "$_rec[1]" = not-found
             _info "  $_svc: unit not found (may not be installed)"
@@ -3883,88 +3897,98 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     set -l parsed (_parse_systemctl_show "$show_output")
 
     # Index into parsed (LoadState:ActiveState:UnitFileState): 1=amdgpu-performance, 2=cpupower-epp, 3=fstrim, 4=resolved, 5=nm-dispatcher
-
-    # amdgpu-performance.service
-    set -l rec (string split -- ':' -- "$parsed[1]")
-    if test "$rec[1]" = not-found
-        _warn "  amdgpu-performance.service: not installed"
-    else if test "$rec[2]" = active; or test "$rec[2]" = exited
-        if test "$rec[3]" = enabled
-            _ok "  amdgpu-performance.service: $rec[2] (enabled)"
-        else
-            _warn "  amdgpu-performance.service: $rec[2] but $rec[3] (won't persist)"
-        end
-    else if test -f /etc/systemd/system/amdgpu-performance.service
-        _fail "  amdgpu-performance.service: $rec[2] (expected: active)"
+    if test (count $parsed) -lt 5
+        _warn "  systemctl show returned incomplete data ("(count $parsed)" of 5 records)"
+        _log "SYSTEMCTL_SHOW_PARTIAL: got="(count $parsed)" expected=5"
     else
-        _warn "  amdgpu-performance.service: not installed"
-    end
 
-    # cpupower-epp.service
-    set -l rec (string split -- ':' -- "$parsed[2]")
-    if test "$rec[1]" = not-found
-        _warn "  cpupower-epp.service: not installed"
-    else if test "$rec[2]" = active; or test "$rec[2]" = exited
-        if test "$rec[3]" = enabled
-            _ok "  cpupower-epp.service: $rec[2] (enabled)"
+        # amdgpu-performance.service
+        set -l rec (string split -- ':' -- "$parsed[1]")
+        if test "$rec[1]" = not-found
+            _warn "  amdgpu-performance.service: not installed"
+        else if test "$rec[2]" = active; or test "$rec[2]" = exited
+            if test "$rec[3]" = enabled
+                _ok "  amdgpu-performance.service: $rec[2] (enabled)"
+            else
+                _warn "  amdgpu-performance.service: $rec[2] but $rec[3] (won't persist)"
+            end
+        else if test -f /etc/systemd/system/amdgpu-performance.service
+            _fail "  amdgpu-performance.service: $rec[2] (expected: active)"
         else
-            _warn "  cpupower-epp.service: $rec[2] but $rec[3] (won't persist)"
+            _warn "  amdgpu-performance.service: not installed"
         end
-    else if test -f /etc/systemd/system/cpupower-epp.service
-        _fail "  cpupower-epp.service: $rec[2] (expected: active)"
-    else
-        _warn "  cpupower-epp.service: not installed"
-    end
 
-    # fstrim.timer
-    set -l rec (string split -- ':' -- "$parsed[3]")
-    if test "$rec[2]" = active
-        if test "$rec[3]" = enabled
-            _ok "  fstrim.timer: active (enabled)"
+        # cpupower-epp.service
+        set -l rec (string split -- ':' -- "$parsed[2]")
+        if test "$rec[1]" = not-found
+            _warn "  cpupower-epp.service: not installed"
+        else if test "$rec[2]" = active; or test "$rec[2]" = exited
+            if test "$rec[3]" = enabled
+                _ok "  cpupower-epp.service: $rec[2] (enabled)"
+            else
+                _warn "  cpupower-epp.service: $rec[2] but $rec[3] (won't persist)"
+            end
+        else if test -f /etc/systemd/system/cpupower-epp.service
+            _fail "  cpupower-epp.service: $rec[2] (expected: active)"
         else
-            _warn "  fstrim.timer: active but $rec[3] (won't persist)"
+            _warn "  cpupower-epp.service: not installed"
         end
-    else
-        _fail "  fstrim.timer: NOT active"
-    end
 
-    # systemd-resolved
-    set -l rec (string split -- ':' -- "$parsed[4]")
-    if test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
+        # fstrim.timer
+        set -l rec (string split -- ':' -- "$parsed[3]")
         if test "$rec[2]" = active
-            _ok "  systemd-resolved: active"
+            if test "$rec[3]" = enabled
+                _ok "  fstrim.timer: active (enabled)"
+            else
+                _warn "  fstrim.timer: active but $rec[3] (won't persist)"
+            end
         else
-            _fail "  systemd-resolved: $rec[2] (expected: active — DNS may be broken)"
+            _fail "  fstrim.timer: NOT active"
         end
-    end
 
-    # NetworkManager-dispatcher
-    set -l rec (string split -- ':' -- "$parsed[5]")
-    if test "$rec[3]" = enabled
-        if test "$rec[2]" = active; or test "$rec[2]" = inactive
-            _ok "  NetworkManager-dispatcher: $rec[3] ($rec[2])"
-        else
-            _warn "  NetworkManager-dispatcher: $rec[2] (enabled but unexpected state)"
+        # systemd-resolved
+        set -l rec (string split -- ':' -- "$parsed[4]")
+        if test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
+            if test "$rec[2]" = active
+                _ok "  systemd-resolved: active"
+            else
+                _fail "  systemd-resolved: $rec[2] (expected: active — DNS may be broken)"
+            end
         end
-    else
-        _fail "  NetworkManager-dispatcher: $rec[3] (expected: enabled)"
-    end
+
+        # NetworkManager-dispatcher
+        set -l rec (string split -- ':' -- "$parsed[5]")
+        if test "$rec[3]" = enabled
+            if test "$rec[2]" = active; or test "$rec[2]" = inactive
+                _ok "  NetworkManager-dispatcher: $rec[3] ($rec[2])"
+            else
+                _warn "  NetworkManager-dispatcher: $rec[2] (enabled but unexpected state)"
+            end
+        else
+            _fail "  NetworkManager-dispatcher: $rec[3] (expected: enabled)"
+        end
+
+    end # guard: (count $parsed) -lt 5
 
     # User scope: 1 batch call for ssh-agent
     set -l user_show (systemctl --user show --property=LoadState,ActiveState,UnitFileState -- ssh-agent.service 2>/dev/null | string collect --no-trim-newlines)
     set -l user_parsed (_parse_systemctl_show "$user_show")
-    set -l rec (string split -- ':' -- "$user_parsed[1]")
-    if test "$rec[2]" = active
-        if test "$rec[3]" = enabled
-            _ok "  ssh-agent.service: active (enabled)"
-        else
-            _warn "  ssh-agent.service: active but $rec[3] (won't persist)"
-        end
-    else if test -f "$HOME/.config/systemd/user/ssh-agent.service"
-        _fail "  ssh-agent.service: $rec[2] (expected: active)"
+    if test (count $user_parsed) -lt 1
+        _warn "  ssh-agent.service: systemctl --user show returned no data"
     else
-        _warn "  ssh-agent.service: not installed"
-    end
+        set -l rec (string split -- ':' -- "$user_parsed[1]")
+        if test "$rec[2]" = active
+            if test "$rec[3]" = enabled
+                _ok "  ssh-agent.service: active (enabled)"
+            else
+                _warn "  ssh-agent.service: active but $rec[3] (won't persist)"
+            end
+        else if test -f "$HOME/.config/systemd/user/ssh-agent.service"
+            _fail "  ssh-agent.service: $rec[2] (expected: active)"
+        else
+            _warn "  ssh-agent.service: not installed"
+        end
+    end # guard: (count $user_parsed) -lt 1
 
     if set -q SSH_AUTH_SOCK; and test -S "$SSH_AUTH_SOCK"
         if string match -q '*ssh-agent*' -- "$SSH_AUTH_SOCK"
@@ -5095,6 +5119,11 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
     set -g WIFI_IFACE ""
 
     if test "$DRY" != true; and _ask "Reconnect WiFi at end of installation?"
+        # Non-interactive: skip interface detection + credential prompts (avoids wasted nmcli/iwctl/sysfs I/O in --all pipe mode)
+        if not isatty stdin
+            _info "Non-interactive — skipping WiFi setup"
+            return
+        end
         if not command -q nmcli
             _warn "Nmcli not found - WiFi reconnection will be skipped"
         else
@@ -5817,7 +5846,13 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     end
 
     # Final boot viability gate: verify vmlinuz, initramfs, and boot entry exist
-    _preflight_boot_sanity; or set -g INSTALL_HAD_ERRORS true
+    if not _preflight_boot_sanity
+        set -g INSTALL_HAD_ERRORS true
+        if test "$ALL" = true
+            _err "CRITICAL: Boot sanity failed in unattended mode — aborting remaining steps"
+            return $EXIT_BOOT_CRIT
+        end
+    end
 
     return 0
 end

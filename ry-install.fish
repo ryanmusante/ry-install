@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.30 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.30"
+# ry-install v3.7.31 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.31"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -149,6 +149,7 @@ function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_
     else
         printf '%s\n' missing
     end
+    return 0
 end
 
 # Cross-check KERNEL_PARAMS against /proc/config.gz to detect unsupported kernel features
@@ -592,6 +593,7 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # ── Hardware fingerprint expectations (optional) ──
     set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
     set -g EXPECTED_GPU_PCI "1002:150e"
+    return 0
 end
 
 # ═══ PROFILE LOADER ═══
@@ -1047,6 +1049,7 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         set -l safe (string replace -a '/' '_' -- "$dst")
         get_file_content "$dst" >"$out_dir/$safe" 2>/dev/null
+        or _log "CONTENT_GEN_FAIL: dst=$dst"
     end
     printf '%s\n' "$out_dir"
     return 0
@@ -1167,7 +1170,7 @@ end
 function _log --description "Append a timestamped message to the log file"
     # Guard: do not recreate LOG_FILE if it was intentionally deleted (e.g. _acquire_lock contention)
     test -f "$LOG_FILE"; or return 0
-    set -l _ts (date '+%Y-%m-%dT%H:%M:%S')
+    set -l _ts (date '+%Y-%m-%dT%H:%M:%S%z')
     set -l raw (string join -- " " $argv)
     # Inside if/else, bare set (no -l) re-binds outer event/data; after block, set -l re-binds at outer scope
     set -l event message
@@ -1673,7 +1676,7 @@ UTILITIES:
 
 OPTIONS:
   --fix             Re-install drifted files (use with --diff)
-  --                End of options (all subsequent args treated as positional)
+  --                End of options (remaining arguments ignored)
   -h, --help        Show this help
   -v, --version     Show version
 
@@ -1728,6 +1731,10 @@ function _chk_file --argument-names filepath --description "Verify a file exists
     end
     _log "CHECK_FILE: $argv[1]"
     if string match -q '/boot/*' -- "$argv[1]"
+        if not command -q sudo
+            _fail "File check requires sudo: $argv[1]"
+            return 1
+        end
         if sudo test -f "$argv[1]" 2>/dev/null
             _ok "File exists: $argv[1]"
             return 0
@@ -1764,6 +1771,10 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
 
     set -l found false
     if test "$is_boot" = true
+        if not command -q sudo
+            _fail "  $argv[3]: sudo required for /boot path"
+            return 1
+        end
         sudo grep -qF -- "$argv[2]" "$argv[1]" 2>/dev/null; and set found true
     else
         grep -qF -- "$argv[2]" "$argv[1]" 2>/dev/null; and set found true
@@ -1823,10 +1834,12 @@ function check_network --description "Verify network connectivity and DNS resolu
     _log "Checking network connectivity..."
 
     _info "Checking HTTPS connectivity..."
-    for _probe in https://archlinux.org https://cachyos.org https://cdn.cloudflare.com
-        if curl -sf --max-time 5 --head "$_probe" >/dev/null 2>&1
-            _ok "Network connectivity: OK"
-            return 0
+    if command -q curl
+        for _probe in https://archlinux.org https://cachyos.org https://cdn.cloudflare.com
+            if curl -sf --max-time 5 --head "$_probe" >/dev/null 2>&1
+                _ok "Network connectivity: OK"
+                return 0
+            end
         end
     end
 
@@ -2542,6 +2555,9 @@ function do_diff --argument-names target_file --description "Show diffs between 
     if test -z "$diff_batch_limit"; or not string match -qr '^\d+$' -- "$diff_batch_limit"
         set diff_batch_limit 8
     end
+    if test "$diff_batch_limit" -gt 16
+        set diff_batch_limit 16
+    end
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         # Skip non-target files when single-file diff requested
         if test -n "$target_file"; and test "$dst" != "$target_file"
@@ -2622,7 +2638,10 @@ function do_diff --argument-names target_file --description "Show diffs between 
         set -l this_perm_only false
         if test $read_ok -eq 0
             set -l diff_status (command cat -- "$diff_batch_dir/diffstatus_$safe" 2>/dev/null)
-            if test -n "$diff_status"; and test "$diff_status" != 0
+            if test -z "$diff_status"; or not string match -qr '^\d+$' -- "$diff_status"
+                set diff_status 1
+            end
+            if test "$diff_status" != 0
                 set has_diff true
                 set this_diff true
                 _echo "── $dst ──"
@@ -3261,20 +3280,29 @@ function verify_static --description "Verify installed configs match embedded ch
     if test (count $_mask_parsed) -lt (count $MASK)
         _warn "  systemctl show returned incomplete mask data ("(count $_mask_parsed)" of "(count $MASK)" records)"
         _log "SYSTEMCTL_SHOW_MASK_PARTIAL: got="(count $_mask_parsed)" expected="(count $MASK)
-    end
-    for _mask_idx in (seq 1 (count $MASK))
-        set -l _svc $MASK[$_mask_idx]
-        if test $_mask_idx -gt (count $_mask_parsed)
-            _warn "  $_svc: no data from systemctl show"
-            continue
+        # Fallback: per-unit query to avoid positional misattribution
+        for _svc in $MASK
+            set -l _state (systemctl is-enabled "$_svc" 2>/dev/null)
+            switch "$_state"
+                case masked
+                    _ok "  $_svc: masked"
+                case not-found
+                    _info "  $_svc: unit not found (may not be installed)"
+                case '*'
+                    _fail "  $_svc: $_state (expected: masked)"
+            end
         end
-        set -l _rec (string split -- ':' -- "$_mask_parsed[$_mask_idx]")
-        if test "$_rec[1]" = not-found
-            _info "  $_svc: unit not found (may not be installed)"
-        else if test "$_rec[3]" = masked
-            _ok "  $_svc: masked"
-        else
-            _fail "  $_svc: $_rec[3] (expected: masked)"
+    else
+        for _mask_idx in (seq 1 (count $MASK))
+            set -l _svc $MASK[$_mask_idx]
+            set -l _rec (string split -- ':' -- "$_mask_parsed[$_mask_idx]")
+            if test "$_rec[1]" = not-found
+                _info "  $_svc: unit not found (may not be installed)"
+            else if test "$_rec[3]" = masked
+                _ok "  $_svc: masked"
+            else
+                _fail "  $_svc: $_rec[3] (expected: masked)"
+            end
         end
     end
     _echo
@@ -4554,6 +4582,7 @@ function _find_latest_log --description "Find the most recent ry-install log fil
     set -l base "$HOME/ry-install/logs"
     test -d "$base"; or return 1
     command find "$base" -name '*.jsonl' -type f ! -path "$LOG_FILE" -printf '%T@\t%p\n' 2>/dev/null | sort -n | tail -n 1 | string replace -r -- '^[^\t]+\t' ''
+    return 0
 end
 
 # List all log files with size, exit status, and pass/fail/warn counts from JSONL footers
@@ -5902,7 +5931,8 @@ function _install_finalize --description "Run post-install verification, cleanup
         _info "Reconnecting WiFi: $WIFI_SSID on $WIFI_IFACE"
 
         if test "$DRY" = false
-            set -l conn_file "/etc/NetworkManager/system-connections/$WIFI_SSID.nmconnection"
+            set -l safe_filename (string replace -ra '[^a-zA-Z0-9._-]' '_' -- "$WIFI_SSID")
+            set -l conn_file "/etc/NetworkManager/system-connections/$safe_filename.nmconnection"
 
             set -l conn_dir (dirname -- "$conn_file")
             set -l tmpfile (sudo mktemp -p "$conn_dir" .ry-install.XXXXXX 2>/dev/null)
@@ -5992,7 +6022,8 @@ function _install_finalize --description "Run post-install verification, cleanup
             end
         else
             set --erase WIFI_PASS
-            _dry "Create /etc/NetworkManager/system-connections/$WIFI_SSID.nmconnection"
+            set -l safe_filename (string replace -ra '[^a-zA-Z0-9._-]' '_' -- "$WIFI_SSID")
+            _dry "Create /etc/NetworkManager/system-connections/$safe_filename.nmconnection"
         end
     else if test -n "$WIFI_SSID"; and test -n "$WIFI_IFACE"
         _warn "WiFi reconnection skipped (empty passphrase)"
@@ -6488,6 +6519,9 @@ function do_test_all --description "Run the full test suite across all subcomman
         else if test "$nproc_val" -lt 16
             set par_batch_size $nproc_val
             _info "Mid-range CPU count ($nproc_val) — batching parallel modes in groups of $par_batch_size"
+        else
+            set par_batch_size 16
+            _info "High CPU count ($nproc_val) — capping parallel modes at 16"
         end
     end
 

@@ -1,3 +1,47 @@
+3.7.31 (2026-03-18)
+-------------------
+
+  fix(diff): cap parallel fork limit at 16 to prevent oversubscription
+    on high-core machines (was unbounded nproc).
+
+  fix(test): cap test-all outer fork limit at 16 to prevent nested
+    parallelism explosion on high-core machines. Combined with diff
+    cap, worst case is 256 processes (was unbounded nproc squared).
+
+  fix(verify): masked-service index alignment — fall back to per-unit
+    query when systemctl show returns incomplete batch data, preventing
+    off-by-one misattribution. Unverifiable units now count as FAIL.
+
+  fix(diff): diffstatus from parallel children validated as numeric;
+    unparseable values treated as "diff exists" (fail-safe).
+
+  fix(wifi): sanitize SSID in .nmconnection filename to prevent path
+    traversal if input validation is bypassed. NM matches by ssid=
+    field inside the file, not by filename.
+
+  fix(batch): _pregenerate_content_files logs get_file_content
+    failures instead of suppressing stderr. Surfaces broken profile
+    globals in JSONL logs.
+
+  fix(changelog): corrected v3.7.29 date from 2026-03-18 to
+    2026-03-16.
+
+  fix(verify): added command -q sudo guard to _chk_file and _chk_grep
+    for /boot paths. Prevents Fish "Unknown command" leak in
+    environments without sudo.
+
+  fix(network): check_network HTTPS probes now skip gracefully when
+    curl is not installed, falling through to ping probes.
+
+  fix(log): _log timestamp now includes timezone (%z), matching
+    header/footer format for unambiguous JSONL correlation.
+
+  fix(help): clarified -- description from "treated as positional"
+    to "remaining arguments ignored" (no positional args defined).
+
+  style: added explicit return 0 to profile_gtr9_pro,
+    _find_latest_log, and _ntsync_state.
+
 3.7.30 (2026-03-17)
 -------------------
 
@@ -18,7 +62,7 @@
     and line 4185 "# Verify parent directories..." each duplicated the
     section header that immediately followed.
 
-3.7.29 (2026-03-18)
+3.7.29 (2026-03-16)
 -------------------
 
   fix(run): _run stdout replay leaked to fd1. When QUIET=false, captured

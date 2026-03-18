@@ -1,1876 +1,302 @@
+3.7.32 (2026-03-18)
+-------------------
+
+  fix(sudo): _find_pacnew_files used interactive sudo find, triggering
+    credential prompts in dry-run and read-only contexts. Changed to
+    sudo -n (non-interactive) -- silently returns nothing when
+    credentials are not cached.
+
 3.7.31 (2026-03-18)
 -------------------
 
-  fix(diff): cap parallel fork limit at 16 to prevent oversubscription
-    on high-core machines (was unbounded nproc).
+  fix(diff,test): cap parallel fork limit at 16; worst case now 256
+    processes (was unbounded nproc squared).
 
-  fix(test): cap test-all outer fork limit at 16 to prevent nested
-    parallelism explosion on high-core machines. Combined with diff
-    cap, worst case is 256 processes (was unbounded nproc squared).
-
-  fix(verify): masked-service index alignment — fall back to per-unit
-    query when systemctl show returns incomplete batch data, preventing
-    off-by-one misattribution. Unverifiable units now count as FAIL.
+  fix(verify): masked-service index alignment -- fall back to per-unit
+    query when systemctl show returns incomplete batch data. Unverifiable
+    units now count as FAIL.
 
   fix(diff): diffstatus from parallel children validated as numeric;
     unparseable values treated as "diff exists" (fail-safe).
 
   fix(wifi): sanitize SSID in .nmconnection filename to prevent path
-    traversal if input validation is bypassed. NM matches by ssid=
-    field inside the file, not by filename.
+    traversal. NM matches by ssid= field, not filename.
 
-  fix(batch): _pregenerate_content_files logs get_file_content
-    failures instead of suppressing stderr. Surfaces broken profile
-    globals in JSONL logs.
+  fix(batch): _pregenerate_content_files logs get_file_content failures
+    instead of suppressing stderr.
 
-  fix(changelog): corrected v3.7.29 date from 2026-03-18 to
-    2026-03-16.
+  fix(verify): added command -q sudo guard to _chk_file/_chk_grep for
+    /boot paths.
 
-  fix(verify): added command -q sudo guard to _chk_file and _chk_grep
-    for /boot paths. Prevents Fish "Unknown command" leak in
-    environments without sudo.
+  fix(network): check_network HTTPS probes skip gracefully when curl
+    is not installed.
 
-  fix(network): check_network HTTPS probes now skip gracefully when
-    curl is not installed, falling through to ping probes.
+  fix(log): _log timestamp now includes timezone (%z).
 
-  fix(log): _log timestamp now includes timezone (%z), matching
-    header/footer format for unambiguous JSONL correlation.
+  fix(help): clarified -- description to "remaining arguments ignored".
 
-  fix(help): clarified -- description from "treated as positional"
-    to "remaining arguments ignored" (no positional args defined).
-
-  style: added explicit return 0 to profile_gtr9_pro,
-    _find_latest_log, and _ntsync_state.
+  style: added explicit return 0 to 3 functions.
 
 3.7.30 (2026-03-17)
 -------------------
 
-  fix(comments): inline comments on code lines moved above the line.
-    Two "end" statements in verify_runtime had trailing "# guard:" inline
-    comments. Moved each to its own line above the "end" keyword.
-
-  fix(comments): multiline comment merged to single line. Two-line
-    comment block in do_check ("Pre-cache sudo for parallel children" /
-    "Avoid if not sudo -n true ...") fit 119 chars — merged into one
-    comment line.
-
-  fix(comments): removed four stale orphan comments. do_diff line 2787
-    "# Summary: report diff results..." sat inside the FIX block with no
-    referent. do_diff line 2899 "# Supplemental checks..." sat inside an
-    else branch describing the code that already followed it.
-    verify_runtime line 4146 "# Verify installed file permissions..."
-    and line 4185 "# Verify parent directories..." each duplicated the
-    section header that immediately followed.
+  fix(comments): moved 2 inline comments above "end" statements in
+    verify_runtime. Merged 1 two-line comment to single line. Removed
+    4 stale orphan comments in do_diff and verify_runtime.
 
 3.7.29 (2026-03-16)
 -------------------
 
-  fix(run): _run stdout replay leaked to fd1. When QUIET=false, captured
-    command stdout was replayed via bare "command cat" and "command head"
-    without >&2, violating the documented contract ("stdout reserved for
-    pipeable data"). Consumers piping ry-install output (e.g., --check
-    in CI) would receive command output mixed into the parseable stream.
-    Added >&2 to both cat and head replay paths.
+  fix(run): _run stdout replay leaked to fd1. Added >&2 to cat/head
+    replay paths, preserving stdout-reserved-for-pipeable-data contract.
 
-  fix(sudo): _ensure_sudo_cached silently succeeded when sudo binary
-    missing. Fish's "if not <unknown_cmd>" inverts exit 127 to success,
-    so the if-body never executed and the function returned 0. All
-    callers using "or return 1" saw success. Added "command -q sudo"
-    guard and replaced "if not sudo true" with explicit $status capture.
-    Affected modes: --diff, --diff --fix, --verify-static, --check,
-    --test-all.
+  fix(sudo): Fish "if not <unknown_cmd>" inversion bug across 8 call
+    sites. Added command -q sudo gates and explicit $status capture.
 
-  fix(diff): .pacnew detection used bare "sudo test -f" without
-    command -q guard. On systems without sudo in PATH (containers, CI),
-    every managed file emitted a Fish "Unknown command: sudo" error to
-    stderr. Added "command -q sudo; and" prefix.
+3.7.17-3.7.28 (2026-03-16 -- 2026-03-17)
+------------------------------------------
 
-  fix(diff): --diff --fix sudo gate used "if not sudo true" — same
-    Fish inversion bug as _ensure_sudo_cached. Replaced with command -q
-    guard and explicit $status capture.
+  fix(check): do_check brace interpolation -- Fish {$phase} produced
+    literal braces, result files never found. Fixed to concatenation.
 
-  fix(check): do_check sudo pre-cache used "if not sudo -n true" —
-    same Fish inversion bug. Replaced with command -q guard and
-    two-step check.
+  fix: 12 double-quoted fish -c blocks across validate_configs,
+    verify_static, do_diff, do_check, do_test_all interpolated caller
+    variables. Converted to single-quoted bodies with $argv args.
 
-  fix(services): _install_configure_services LVM sudo cache check
-    used "if not sudo -n true". Added "not command -q sudo; or" guard.
+  fix(check): do_check reported clean when managed files were
+    unreadable. Now sets drift=true on missing or unreadable files.
 
-  fix(snapshot): _btrfs_pre_snapshot mkdir guard used "if not sudo
-    mkdir" — same Fish inversion bug. Added "not command -q sudo; or"
-    guard.
+  fix: replaced 202 Bash-style &&/|| with Fish "; and"/"; or".
+    Restored 9 legitimate non-Fish contexts (awk, bash -c).
 
-  fix(verify): verify_runtime used bare "sudo true 2>/dev/null; or
-    begin" without command -q guard. Fish's "Unknown command" error
-    bypasses 2>/dev/null (emitted by Fish's command resolver, not by
-    the process). Added command -q sudo gate before sudo true call.
+  fix(verify): verify_static unbounded fork storm replaced with 4
+    batched workers. False checksum MISMATCH for iwd/NM when iwd not
+    installed -- added skip_iwd filter.
 
-  fix(install): _install_preflight used bare "sudo true; or begin"
-    without command -q guard — same Fish resolver leak. Added
-    command -q sudo gate.
+  fix: 8 set scope leaks in verify_runtime and do_diff.
 
-  fix(install-file): do_install_file used bare "sudo true; or begin"
-    without command -q guard — same Fish resolver leak. Added
-    command -q sudo gate.
+  fix(check): do_check Job 3/4 serialized service/mask/kernel-param
+    lists to files (was direct interpolation into fish -c strings).
 
-  fix(cleanup): _cleanup_tmpfiles used bare "sudo rm -f" without
-    command -q guard. On signal/exit cleanup in environments without
-    sudo, every orphaned tmpfile emitted "Unknown command: sudo" to
-    stderr. Added command -q sudo guard around the sudo rm call.
-
-3.7.28 (2026-03-17)
--------------------
-
-  fix(profile): removed dead globals DISK_ROOT_CRIT and DISK_ROOT_WARN
-    from profile_gtr9_pro. These percentage-based thresholds were
-    replaced by ROOT_AVAIL_CRIT/ROOT_AVAIL_WARN (GB-based) but never
-    cleaned up. They were set, type-checked, and never read.
-
-  fix(validate): added BOOT_SPACE_CRIT, BOOT_SPACE_WARN,
-    ROOT_AVAIL_CRIT, ROOT_AVAIL_WARN to _validate_profile required
-    list. External profiles omitting these caused unguarded $variable
-    expansion in check_disk_space (test "$x" -lt $UNSET → error).
-
-  fix(validate): expanded conditional required globals to cover
-    RESOLVED_MDNS, UDEV_RULES, IWD_DNS_SERVICE, IWD_DRIVER_QUIRKS.
-    These are used in get_file_content but were not validated, so
-    external profiles omitting them silently emitted empty config
-    values (e.g., "MulticastDNS=" instead of "MulticastDNS=no").
-
-  doc(readme): updated required globals count from 21+ to 25+.
-    Removed dead DISK_ROOT_CRIT/DISK_ROOT_WARN from count.
-
-3.7.27 (2026-03-17)
--------------------
-
-  fix(install_file): skip-unchanged comparison used Fish variable
-    equality (test "$a" = "$b") which flattens newlines to spaces.
-    Files with content "a\nb" falsely matched "a b", causing silent
-    skip of legitimate reinstalls. Replaced with SHA256 hash comparison
-    for correctness across all content shapes.
-
-  fix(kconfig_cache): printf '%s\n' on empty Fish list emitted a
-    spurious empty line. Added count guard to return early when
-    /proc/config.gz is absent or unreadable.
-
-  fix(diff): color fallback path (no delta, no NO_COLOR) redundantly
-    re-ran diff instead of using pre-computed unified diff from Phase 2.
-    Replaced with sed-based ANSI colorizer on the pre-computed output.
-
-  fix(progress_skip): _progress_skip incremented the step counter but
-    never redrew the progress bar, causing visual stall when boot-
-    critical failure skipped Finalize/NM restart/WiFi steps. Now renders
-    the bar with "(skip)" suffix, consistent with _progress.
-
-  fix(check): do_check Job 4 LVM detection used unprivileged lvs which
-    silently returned incomplete results. Changed to sudo -n pvs for
-    consistency with _install_configure_services.
-
-  doc(readme): added Prerequisites table with 12-step pre-install
-    checklist for fully automated --all mode (BIOS, disk space, sudo,
-    network, snapshot, CachyOS news, WiFi credentials). Removed
-    redundant inline Prerequisites paragraph from Quick Start. Fixed
-    SSID forbidden char list to match script (15 chars, not 4). Added
-    note that WiFi credential prompts are interactive even with --all.
-
-3.7.26 (2026-03-17)
--------------------
-
-  fix(wifi): awk syntax in _install_collect_wifi used Fish keywords
-    (and/or/semicolons) instead of awk operators (&&/||). iwctl device
-    list parsing produced wrong interface names or empty results. Fixed
-    to valid awk: NR > 4 && /station/, if/|| guards, braced print+exit.
-
-  fix(log): header JSONL entry lost on log file rename. install -m 0600
-    /dev/null truncated the file that command mv had just placed. Now
-    only creates fresh file when mv did not produce one; header appends
-    (>>) instead of truncates (>).
-
-  fix(log): _log truncation step-back calculation could produce math
-    error when regex match was empty. Guard _esc_match with test -n
-    before computing string length.
-
-  fix(wifi): md5sum availability not checked before WiFi UUID
-    generation. Added command -q md5sum guard with fallback to
-    /proc/sys/kernel/random/uuid; fatal error if both unavailable.
-
-  fix(security): sudo -l could re-prompt after credential cache
-    expired between sudo true and sudo -l. Changed to sudo -n -l
-    (non-interactive).
-
-  fix(cleanup): _do_cleanup fallback sweep used find -delete without
-    -type f, could race with directory cleanup. Split into -type f
-    -delete then -type d -empty -delete.
-
-  fix(validate): parallel validation jobs (2-5) used unquoted $f in
-    test -s, grep, cp, rm. Fish doesn't word-split but quoting
-    prevents issues with paths starting with - or containing glob
-    chars. Quoted all variable references in child fish -c scripts.
-
-3.7.25 (2026-03-17)
--------------------
-
-  remove(cli): removed --profile <n> flag. Profile selection is now
-    exclusively file-based: write the profile name to
-    ~/.config/ry-install/default-profile (one line). The internal profile
-    system (profile functions, _validate_profile, _load_profile, external
-    profile loading from ~/.config/ry-install/profiles/, manifest orphan
-    tracking) is unchanged. Removed: --profile case from argument parser
-    (17 lines), PROFILE_NAME_ARG global, --profile help text,
-    __ry_install_profiles completions function, --profile completion,
-    --profile from hardware mismatch warning. Updated README: removed
-    --profile from Modifiers table and resolution order table, rewrote
-    Adapting section to reference default-profile file instead of CLI
-    flag.
-
-3.7.24 (2026-03-17)
--------------------
-
-  fix(wifi): SSID validation rejected '!' and '&' unnecessarily. Both
-    are bash-specific metacharacters (history expansion, background job)
-    with no special meaning in Fish execution, GKeyFile format, Linux
-    filenames, or nmcli arguments. Removed from the 17-char forbidden
-    list (now 15). SSIDs containing '!' or '&' no longer require the
-    manual 'nmcli device wifi connect' workaround. Remaining forbidden
-    chars: / (path traversal), \ ; (GKeyFile), ` $ ( ) { } | < >
-    (subshell/expansion/redirect), ' " (quotes), % (printf format).
-    Updated comment and error message to reflect actual rejection
-    categories.
-
-3.7.23 (2026-03-17)
--------------------
-
-  fix(security): install_file symlink TOCTOU — pre-write test -L and tee
-    had a narrow window where the tmpfile could be replaced with a symlink
-    between the check and the write. Added post-write test -L re-check
-    before chmod/mv. Both sudo and user paths. Attacker would need root
-    (or same-user for user files), limiting practical impact.
-
-  fix(security): fallback lock TOCTOU — _acquire_lock non-flock path used
-    rmdir+mkdir without yielding, so a concurrent reclaimer could overwrite
-    the PID file between the first ownership check and the function return.
-    Added sleep 0.1 yield after PID write + second PID re-verify to narrow
-    the race window. Systems with flock(1) are unaffected.
-
-  fix(verification): verify_static hash workers hardcoded to 4 regardless
-    of core count. On a 2-core system this would oversubscribe. Capped at
-    min(4, nproc), consistent with do_diff batch throttle and do_test_all
-    nested parallelism guard.
-
-  fix(logging): _run stdout truncation notice only displayed to terminal
-    stderr. When QUIET=false and stdout exceeded 50 lines, the truncation
-    was visible on screen but absent from JSONL log. Added STDOUT_TRUNCATED
-    event to _log after the stderr notice.
-
-  fix(install): install_file post-write integrity check called
-    get_file_content a second time to compute the expected hash, then
-    compared against the installed file. If get_file_content were ever
-    non-deterministic, the double-call would mask the bug or produce false
-    mismatches. Now hashes the tmpfile content before mv and compares
-    against the installed file after mv. Verifies mv integrity (fs
-    corruption) rather than generation determinism. Both sudo and user
-    paths.
-
-  fix(logging): do_test_all parallel and sequential stderr previews used
-    head -n 3 while all other stderr diagnostic sites used head -n 5.
-    Standardized to head -n 5. Completes the v3.7.22 head -n
-    standardization which missed these 2 sites.
-
-  fix(changelog): v3.7.21 date corrected from 2026-03-16 to 2026-03-17.
-    Non-monotonic with adjacent v3.7.22 (03-17) and v3.7.20 (03-17).
-
-  fix(changelog): v3.7.22 duplicate entry for validate_configs Job 1 glob
-    fix removed. Same fix already documented in v3.7.20 (original).
-
-  fix(changelog): v3.7.20 claimed _run tmpfile tracking "removed" but
-    code retains set -ga _TRACKED_TMPFILES for stderr/stdout tmpfiles as
-    defense-in-depth against signal interrupts between mktemp and inline
-    rm. Reworded to document what actually changed: inline rm was added,
-    _do_cleanup fallback sweep pattern documented.
-
-3.7.22 (2026-03-17)
--------------------
-
-  fix(options): --install-file accepted relative paths silently. Unlike
-    --diff which validates '/*' at parse time with a clear error,
-    --install-file accepted any non-flag argument, producing a confusing
-    "Not a managed file" error deep in do_install_file. Now validates
-    absolute path at parse time with "[ERR] --install-file requires
-    absolute path" consistent with --diff.
-
-  fix(logging): _log JSON truncation regex used {0,3} for \uXXXX hex
-    digit backtrack window. The sequence has 4 hex digits, so the regex
-    failed to match when truncation landed on the 4th digit, producing
-    malformed JSON like \u123 in the JSONL log. Changed to {0,4}.
-
-  fix(logging): stderr diagnostic head -n count inconsistent across
-    parallel child crash handlers. validate_configs merge, do_diff child
-    crash, and verify_static hash worker used head -n 3 while _run and
-    do_check used head -n 5. Standardized all to head -n 5.
-
-  fix(stderr): _ensure_sudo_cached used fragile inline substitution
-    (test -n ...; and echo ...; or echo "") to conditionally append the
-    failure reason. If the subshell produced unexpected output the error
-    message could be malformed. Replaced with explicit if/else.
-
-  fix(verification): do_diff Phase 3 ran unprivileged stat -c '%a' on
-    ALL files before branching into user/system paths. For system files,
-    this silently failed (returning empty), wasted a syscall, and leaked
-    an empty actual_perms into the comparison. Moved stat into each
-    branch: unprivileged for $HOME/*, sudo stat for system files.
-
-3.7.21 (2026-03-17)
--------------------
-
-  fix(high): shell injection in 6 remaining double-quoted fish -c blocks.
-    validate_configs Jobs 1-5 and verify_static hash workers used
-    fish -c "..." with variable interpolation via \$ escaping. Paths
-    containing shell metacharacters in $HOME, $TMPDIR, $content_dir,
-    or $val_dir could break out of the inner string. Converted all 6
-    to single-quoted bodies with positional $argv args via -- separator,
-    consistent with do_diff/do_check/do_test_all (fixed in v3.7.19).
-
-  fix: 7 instances of deprecated test -o / test -a replaced with Fish
-    idiomatic "; or" / "; and". Affected: _parse_systemctl_show,
-    verify_static mask check, verify_runtime service checks (3 sites),
-    do_check Job 4 service and LVM checks. test -o/-a are POSIX
-    extensions that Fish supports but warns against; "; or" / "; and"
-    are canonical Fish.
-
-  fix: do_diff parallel child used bare "echo $status" to write result
-    files. The echo itself resets $status to 0, so readok and diffstatus
-    files always contained 0 regardless of the actual cat/diff exit code.
-    Replaced with "set -l rc $status; printf '%d\n' $rc" pattern. Same
-    fix applied to do_test_all parallel child exit file.
-
-  fix: _ensure_sudo_cached tmpfile leak on signal interrupt. The mktemp
-    file was cleaned up on the normal path but not tracked in
-    _TRACKED_TMPFILES, so SIGINT between mktemp and rm left an orphan.
-
-  fix: _run stdout display unbounded in verbose mode. When QUIET=false,
-    captured stdout was cat'd to terminal without limit. Commands like
-    pacman -Syu produce 500+ lines. Now capped at 50 lines with a
-    truncation notice, matching stderr's existing 5-line cap.
-
-  fix: _run mktemp degradation warning logged on every call when /tmp
-    is full. Over 100+ _run calls this produced 100+ identical WARN
-    lines. Now logged once via _MKTEMP_DEGRADED_WARNED guard.
-
-  fix: _log JSON truncation could split mid-escape-sequence. Cutting
-    at exactly 4093 chars could land inside a \uXXXX or \n escape,
-    producing malformed JSON. Now steps back to before the backslash
-    when truncation point falls inside an escape sequence.
-
-  fix: do_test_all sequential stderr tmpfile not tracked in
-    _TRACKED_TMPFILES. Signal interrupt between mktemp and rm left
-    orphan files in /tmp.
-
-3.7.20 (2026-03-17)
--------------------
+  fix(verify): _verify_summary counter off-by-one -- CI line and JSONL
+    footer now snapshot counters before calling _fail/_warn/_ok.
 
   fix: validate_configs Job 1 false-pass on empty content directory.
-    The cross-reference child used a Fish glob (count "$dir"/*) to count
-    pre-generated files. Fish cancels commands with unmatched globs,
-    leaving actual_count unset; the numeric test then errors and $errs
-    stays 0 — silently reporting no missing files. Replaced with
-    find-based count that returns 0 for empty directories, with
-    defensive numeric validation.
 
-  fix: _run tmpfile list bloat over long installs. Every _run call
-    appended 2 entries to _TRACKED_TMPFILES for stderr/stdout capture
-    files that were immediately deleted inline. Over 100+ _run calls in
-    --all mode, the list accumulated 200+ stale paths that _do_cleanup
-    re-iterated on exit. Added inline rm -f after each use so tmpfiles
-    are cleaned immediately on the normal path. _TRACKED_TMPFILES
-    tracking retained as defense-in-depth for signal interrupts between
-    mktemp and inline rm; _do_cleanup's fallback find sweep (ry-* in
-    TMPDIR) provides a second safety net.
+  fix(diff): Phases 1-2 skip filtered files (iwd/NM, single-file
+    target). Reuses pre-computed iwd skip flag.
 
-3.7.19 (2026-03-17)
--------------------
+  fix: install_file skip-unchanged comparison used Fish variable
+    equality which flattens newlines. Replaced with SHA256 hash.
+    Post-write integrity check now hashes tmpfile before mv.
 
-  fix(high): shell injection in 6 parallel fish -c blocks. do_diff
-    Phase 2, do_check Jobs 1-4, and do_test_all parallel fork loop
-    all used double-quoted fish -c bodies with variable interpolation.
-    Paths containing single-quotes or shell metacharacters could break
-    out of the inner string and execute arbitrary code. Converted all
-    6 blocks to single-quoted bodies with positional $argv args via --
-    separator. Mechanical rewrites; behavior preserved.
+  fix: install_file added post-write symlink re-check before chmod/mv
+    (both sudo and user paths).
 
-  fix: verify_runtime echo|string split pipe pattern. 6 instances of
-    `echo "$parsed[N]" | string split -- ':'` replaced with direct
-    `string split -- ':' -- "$parsed[N]"`. Eliminates unnecessary
-    subshell and prevents echo flag misinterpretation if the value
-    starts with -n, -e, or -E.
+  fix: fallback lock reclaim added yield + second PID verify in
+    non-flock path. sudo -l changed to sudo -n -l (non-interactive).
 
-  fix: _progress_skip missing step_time JSONL event. _progress emits
-    a step_time event for the previous step before advancing the
-    counter. _progress_skip only advanced the counter, discarding the
-    elapsed time of the preceding step. When EXIT_BOOT_CRIT triggers
-    3 consecutive _progress_skip calls, final install steps had no
-    timing data. Now consistent with _progress.
+  fix(run): _run stderr now unconditionally logged in verbose mode.
+    stdout display capped at 50 lines. mktemp degradation warning
+    logged once.
 
-3.7.18 (2026-03-17)
--------------------
+  fix(log): _log JSON truncation avoids splitting mid-escape-sequence.
 
-  fix(high): do_check Job 1 false-negative on missing files. When a
-    managed file was unreadable or missing, the parallel hash child
-    silently `continue`d without setting drift=true. Missing managed
-    files are configuration drift; do_check could return EXIT_OK when
-    files had been deleted.
+  fix(log): LOG_FILE creation race -- replaced touch+chmod with atomic
+    install -m 0600 /dev/null. Header preserved on log file rename.
 
-  fix: _run stderr gated on failure — verbose mode (--verbose/-V)
-    only displayed stderr from commands that FAILED. Deprecation
-    warnings, informational pacman output, and systemd advisory
-    messages from successful commands were swallowed. Removed the
-    `test $ret -ne 0` gate so verbose means verbose.
+  fix: added argument count guards to 7 functions. 4 unguarded wait
+    calls fixed (empty PID lists waited for ALL background jobs).
 
-  fix: _validate_kernel_params return value could exceed 125. Raw
-    mismatch count returned directly, colliding with signal-based
-    exit codes (126=ENOEXEC, 128+N=signal). Capped to boolean 0/1
-    since all callers only check success/failure.
+  fix: _kconfig_cache empty list guard. _progress_skip renders bar.
+    6 echo|string split pipes replaced with direct string split.
 
-  fix: do_diff Phase 3 redundant pacman -Qi iwd check. Phase 2
-    already computed $_diff_skip_iwd; Phase 3 re-ran `pacman -Qi
-    iwd` per file, wasting subprocesses and introducing a TOCTOU
-    window if the package was installed/removed between phases.
-    Now reuses the pre-computed flag.
+  fix(wifi): SSID validation no longer rejects '!' and '&'. md5sum
+    fallback to /proc/sys/kernel/random/uuid for WiFi UUID generation.
 
-  fix: _ensure_sudo_cached swallowed all stderr. When sudo failed
-    (expired credentials, NOPASSWD missing, PAM error), the JSONL
-    log had no diagnostic. Now captures first line of stderr to
-    SUDO_CACHE_FAIL log event.
+  fix(profile): removed dead DISK_ROOT_CRIT/DISK_ROOT_WARN globals.
+    Added 8 missing globals to _validate_profile required list.
 
-  fix: _run empty argv guard. Zero-argument _run executed a Fish
-    no-op, returned 0, and logged "RUN: " with no command. Added
-    count check with BUG marker in JSONL log.
+  fix: validate_configs parallel children -- added command prefix to
+    4 bare cp/rm calls, quoted all variable references in child scripts.
 
-  fix: _run EXIT log now includes redacted command string
-    (`EXIT: N cmd=...`) for grep-friendly JSONL correlation. Was
-    bare `EXIT: N` which required scanning backwards to find the
-    matching RUN event.
+  fix: _ensure_sudo_cached replaced fragile inline substitution with
+    explicit if/else and stderr capture to JSONL.
 
-3.7.17 (2026-03-16)
--------------------
+  fix(cleanup): find -delete split into -type f then -type d -empty.
 
-  fix(critical): do_check brace interpolation bug caused false-positive
-    drift on every invocation. Fish treats {$phase} inside double quotes
-    as literal braces + variable, producing paths like
-    "result_dir/{hash}_drift" instead of "result_dir/hash_drift". Result
-    files were never found, so every phase reported "child crashed" and
-    drift was always set true. Replaced with "result_dir/"$phase"_drift"
-    string concatenation.
+  fix(cli): --install-file validates absolute path at parse time.
+    --diff stat moved into per-branch paths (user vs system).
 
-  fix: do_diff unbounded parallel fork — all N destination files spawned
-    fish -c children simultaneously (17+ forks on a typical profile).
-    Added nproc-based batch throttle consistent with do_test_all pattern.
+  remove: --profile flag. Profile selection now exclusively file-based
+    via ~/.config/ry-install/default-profile.
 
-  fix: stderr silently discarded in all parallel children across 4
-    functions. Child crashes produced "crashed without writing results"
-    with zero diagnostics. Added 2>dir/phase.stderr capture to:
-    - validate_configs: 5 children (xref, units, scripts, ini, simple)
-    - do_check: 4 children (hash, perm, kparam, svc)
-    - verify_static: N hash workers
-    - do_diff: N parallel file-read children
+  doc: added 12-step Prerequisites table for --all mode.
 
-  fix: crash detection merge loops in validate_configs and do_check now
-    log captured child stderr (head -n 3) on crash, enabling post-mortem
-    diagnosis from JSONL logs. verify_static logs worker stderr after
-    wait. do_diff Phase 3 logs child stderr on readok-missing crash.
+3.7.1-3.7.16 (2026-03-09 -- 2026-03-16)
+-----------------------------------------
 
-3.7.16 (2026-03-16)
--------------------
+  fix: enforce kernel 6.14+ minimum (returns 1, was always 0).
 
-  fix: replace 202 Bash-style && / || operators with idiomatic Fish
-    "; and" / "; or" throughout the script. Fish supports && and || as
-    syntactic sugar since 3.0, but "; and" / "; or" are the canonical
-    Fish idioms, consistent with the project's Fish-first conventions.
+  fix: PROGRESS_STEPS ordering after syu reorder. do_test_all nested
+    parallelism guard (<8 cores -> sequential).
 
-  fix: 4 instances of "test X && return 0 || return 1" anti-pattern
-    (lines 1831, 1869, 2261, 4687). In Fish, "test ... && A || B"
-    does NOT behave like if/else — if "A" fails, "B" also runs. While
-    "return 0" cannot fail in practice, the pattern is fragile and
-    misleading. Replaced with explicit if/else blocks.
+  fix: validate_configs ssh-agent verify uses --user flag. Consistent
+    _ensure_sudo_cached usage. Manifest gated on EXIT_BOOT_CRIT.
 
-  fix: "set -l desc (test ... && echo X || echo Y)" anti-pattern in
-    install_files (line 2261). Same if/else semantics issue. Replaced
-    with conditional set.
+  fix: added -- separator to 13 bare cat/contains/dirname/touch/string
+    replace calls.
 
-  fix: "test ... && echo ..." error message builder in install_files
-    argparse handler (line 2253). Replaced with explicit conditional
-    string assembly.
+  fix: _msg bug-logging escaped via _json_str. 6 parallel work dirs
+    guarded against mktemp failure.
 
-  fix: sudo keepalive fish -c string used Bash-style && / || instead
-    of Fish "; and" / "; or" (line 5035). While the single-quoted
-    string runs in a fish -c child, Fish syntax applies.
+  fix: do_diagnose children -- kernel version globals not exported.
+    Stress tests moved to sequential section (interactive prompt dead
+    in forks). WiFi credential prompts guard with isatty stdin.
 
-  fix: awk block inside do_lint scope-shadow check had && incorrectly
-    converted to "; and" during bulk replacement. Restored awk-native
-    && operator.
+  fix: LOG_FILE creation race. Log rotation and --logs all exclude
+    current LOG_FILE.
 
-  fix: grep dead-pipe lint check had "||true" (no space) bypassing
-    the bulk conversion. Normalized to "; or true".
-
-  Preserved && / || in 9 legitimate non-Fish contexts: /bin/sh -c
-    POSIX block (2), ExecStart bash -c strings (2), awk code (1),
-    printf comment-string literals (2), user-facing message strings (2).
-
-3.7.15 (2026-03-16)
--------------------
-
-  fix: verify_static unbounded fork storm — spawned one fish -c child
-    per destination (~15 concurrent fish+sha256sum+sudo processes).
-    Every other parallel section used bounded workers (validate_configs:
-    5 jobs, do_check: 4 jobs, do_test_all: batch-throttled). Replaced
-    per-file fork with 4 batched workers. Each worker reads a slice of
-    a serialized dst_list file, processing ceil(N/4) destinations per
-    worker. Consistent with do_check's 4-job design.
-
-  fix: verify_static false checksum MISMATCH for iwd/NM configs when
-    iwd not installed — hash verification ran on ALL destinations.
-    When iwd is not installed, iwd/NM config files don't exist on disk;
-    sudo -n cat of a missing file pipes empty stdin to sha256sum,
-    producing a valid hash of empty input that doesn't match the
-    embedded content hash. The verbose checks above correctly skip iwd
-    files, but the hash section didn't. Added skip_iwd filter before
-    hash loop; skipped destinations get pre-written result_skip files.
-
-  fix: do_diff Phases 1-2 wasted work on skipped files — Phase 1
-    generated expected content for ALL destinations. Phase 2 forked
-    parallel children for ALL destinations (each spawning sudo -n cat).
-    Phase 3 had the iwd/NM skip filter and target_file filter, but
-    Phases 1-2 didn't. Single-file diffs (--diff /etc/kernel/cmdline)
-    still forked children for every file. Hoisted _diff_skip_iwd
-    detection before Phase 1. Added target_file and iwd/NM skip
-    filters to both Phase 1 (content generation) and Phase 2 (parallel
-    reads). Phase 3 filters remain as defense-in-depth.
-
-  fix: 4 unguarded wait calls — wait with no args in Fish waits for
-    ALL background jobs, not just the intended ones. If $diff_pids,
-    $hash_pids, or $parallel_pids lists were empty (due to filters or
-    batch-size alignment), wait would block on unrelated background
-    processes (e.g., sudo keepalive). Added count guards: do_diff
-    Phase 2, verify_static hash workers, do_test_all final wait.
-    validate_configs and do_check use named PIDs that are always set
-    (unconditionally forked), so those are safe.
-
-3.7.14 (2026-03-16)
--------------------
-
-  fix: 6 bare set scope leaks in verify_runtime — set perms (4 sites:
-    NM connection check, system file check, user file check, parent
-    directory check), set sysfs_val (1 site: amdgpu parameter loop).
-    All lacked -l scope flag, causing each loop iteration to leak the
-    variable into the enclosing function scope. Previous iterations'
-    values persisted across loop boundaries and after the loop exited.
-    Fish rebinds to enclosing scope when no -l flag given and no
-    existing local exists; inside for-loops the enclosing scope is the
-    function, not the loop body. Added set -l to all 5 sites.
-
-  fix: 2 bare set scope leaks in do_diff — set actual_perms and
-    set actual_owner in the system-file permission check branch lacked
-    -l flag. These variables were used only within the if-block but
-    leaked into do_diff function scope. Added set -l to both.
-
-  fix: do_check Job 3 kernel params interpolated unsafely — $KERNEL_
-    PARAMS was directly interpolated into fish -c string. Jobs 1, 2,
-    and 4 correctly serialized lists to files for child consumption;
-    Job 3 was the sole holdout. If any kernel param contained single
-    quotes (e.g., hypothetical param='value'), the child shell string
-    would break. Now serializes to $result_dir/kparams file matching
-    the pattern established by the other 3 jobs.
-
-  fix: do_check result merge false negative on empty result file —
-    child crash mid-write produces an empty file that passes the
-    test -f check but reads as empty string. Previously, only
-    result=true triggered drift detection; result="" silently passed
-    as non-drifted. Now treats any value other than "true" or "false"
-    (including empty) as child crash and sets drift=true.
-
-3.7.13 (2026-03-16)
--------------------
-
-  fix: _verify_summary counter off-by-one in CI line and JSONL footer
-    — _fail/_warn/_ok route through _msg which increments VERIFY_FAIL/
-    VERIFY_WARN/VERIFY_OK when VERIFY_MODE=true. The CI-parseable
-    VERIFY: line and JSONL footer read counters after the increment,
-    producing N+1 for the deciding counter. Fixed by snapshotting
-    counters into locals before calling _fail/_warn/_ok.
-
-  fix: do_check Job 4 interpolated $EXPECTED_SERVICES and $MASK into
-    fish -c string — external profiles with quotes or backslashes in
-    service names would break the interpolated string. Jobs 1-3
-    correctly serialized lists to files; Job 4 now matches by reading
-    from $result_dir/exp_svcs and $result_dir/mask_units.
-
-  fix: get_file_content wildcard case patterns used '*/.config/...'
-    which matches any prefix, not just $HOME — tightened to
-    "$HOME/.config/..." to prevent external profiles with contrived
-    paths from hitting wrong case branches.
-
-  cleanup: remove 3 dead functions — _read_installed (L1163, never
-    called, superseded by inline reads), validate_systemd_unit (L1865,
-    never called, inlined in validate_configs Job 2), validate_fish_
-    script (L1893, never called, inlined in validate_configs Job 3).
-
-  cleanup: remove _run --passthrough dead code path — defined at L1382,
-    parsed and handled, but 0 of 84 _run call sites invoked it. 30
-    lines of untested code removed.
-
-  cleanup: normalize 6 literal exit 2 calls in CLI argument parsing to
-    exit $EXIT_USAGE for consistency with the 7 other sites that
-    already used the constant form.
-
-  cleanup: quote 3 unquoted printf loop variables in get_file_content
-    — $rule (L844), $quirk (L866), $var (L911). Safe in Fish but
-    inconsistent with the 40+ quoted printf calls in the same function.
-
-  cleanup: replace UTF-8 em-dash (U+2014) with ASCII '--' in 2 emitted
-    config file comments — /etc/sysctl.d/99-ry-sysctl.conf line 1 and
-    ~/.config/fish/conf.d/10-ssh-auth-sock.fish line 1. Prevents
-    surprises with LANG=C or byte-level diffing tools.
-
-  cleanup: free _KCONFIG_DATA in _do_cleanup — lazy-loaded ~3K line
-    /proc/config.gz cache was never erased. Harmless for short-lived
-    script but inconsistent with cleanup discipline applied to other
-    cached data.
-
-  cleanup: normalize bare 'set exit_code 0' at L7409 to 'set -g
-    exit_code 0' for consistency with the 265 other set -g calls.
-    Fish top-level bare set is global, so behavior is unchanged.
-
-  doc: align README EXIT_BOOT_CRIT description with show_help — README
-    said "Boot-critical failure (mkinitcpio, sdboot-manage)", show_help
-    adds "vmlinuz missing". README now matches.
-
-  feat: add _btrfs_pre_snapshot for automatic pre-install rootfs
-    snapshots — creates a read-only btrfs snapshot of / before install
-    when root is btrfs. Non-fatal on failure. Uses /.snapshots (snapper
-    convention) or /.ry-snapshots. Names: ry-install-pre-<ver>-<ts>.
-    Replaces the v3.5.0 removal comment with actual functionality.
-
-  fix: do_test_all nested parallelism unthrottled on 8-15 core systems
-    — existing nproc<8 guard fell back to sequential, but 8-15 core
-    systems got full parallel nesting (peak ~225 processes). Added
-    batch throttle: 8-15 cores fork in groups of nproc with wait
-    between batches. 16+ cores unchanged (full parallel).
-
-  refactor: consolidate WiFi GKeyFile escaping into _gkeyfile_escape
-    helper — input validation (read time) and GKeyFile escaping (write
-    time) were split across two sites. Extracted _gkeyfile_escape near
-    _json_str; NM write path now calls helper instead of inline
-    escaping. Single source of truth for backslash, semicolon, leading
-    #, leading/trailing space escaping.
-
-  fix: _verify_summary JSONL footer still got N+1 even with snapshot
-    — the snapshot fix only protected the CI stdout line. The JSONL
-    footer at script exit reads VERIFY_OK/FAIL/WARN globals which were
-    still incremented by the summary _fail/_warn/_ok call. Fixed by
-    setting VERIFY_MODE=false before emitting the summary, so the
-    _msg increment is skipped entirely. All three outputs (stderr, CI
-    line, JSONL footer) now agree.
-
-  fix: do_lint case-count regex missed $HOME-anchored patterns — after
-    tightening wildcard case '*/.config/...' to "$HOME/.config/..." in
-    get_file_content (finding 10.6), the lint regex only matched
-    absolute paths and '*/' prefixes. Updated regex to also match
-    '\$HOME/' patterns. Both the lint counter and show_help fallback
-    counter updated.
-
-  remove: drop --diagnose mode and 9 associated functions (~700 lines)
-    do_diagnose (25L orchestrator), _diag_info (115L), _diag_services
-    (69L), _diag_hardware (105L), _diag_network (87L), _diag_storage
-    (117L), _diag_config (108L), _gather_gpu_state, _gather_temps.
-    Removed from: arg parser, mode dispatch, lock acquisition, help
-    text, completions, do_test_all parallel_modes, and README. Rationale:
-    diagnostic queries are better served by targeted --logs <target>,
-    --verify-runtime, and direct sysfs/journal inspection. The --stress
-    sub-option (moved to do_diagnose sequential section in v3.7.8) is
-    also removed. 89 → 80 functions, 7300 → 6611 lines.
-
-3.7.12 (2026-03-15)
--------------------
-
-  fix: _do_cleanup tracked tmpfiles cleanup missed directories — 7
-    mktemp -d entries (content, validate-par, diffbatch, hash-par,
-    check-parallel, diag, test) tracked in _TRACKED_TMPFILES were
-    skipped because test -f returns false for directories and rm -f
-    cannot remove them. On signal/crash exit, these directories leaked
-    in /tmp. Changed to test -d with rm -rf --preserve-root for
-    directories, test -f with rm -f for files. Normal-path cleanup
-    (explicit rm -rf at end of each function) was unaffected; bug only
-    manifested on interrupt/crash paths through _do_cleanup.
-
-  fix: boot-critical path missing _progress_skip "Finalizing system"
-    — EXIT_BOOT_CRIT skips _install_finalize entirely, which contains
-    3 _progress calls (Finalizing system, NetworkManager restart, WiFi
-    reconnection). Only the latter 2 had _progress_skip. Missing skip
-    caused _progress_done counter undershoot warning when ALL=true and
-    DRY=false.
-
-  fix: add command prefix to 54 bare cat calls — missed by v3.2.10
-    hardening pass which covered rm, mv, cp, chmod, chown, mkdir (83
-    calls). Bare cat bypasses command prefix convention; fresh fish
-    instances have no aliases so risk was theoretical for parallel
-    children, but main-script calls run in the user's shell where
-    aliases could exist. Sites: _acquire_lock (2), _manifest_check_orphans
-    (1), _read_installed (1), _run (3), validate_configs (1),
-    install_file (2), install_files (1), do_diff (4), verify_static (1),
-    do_check (9), _gather_gpu_state (1), _gather_cpu_state (2),
-    _gather_temps (3), verify_runtime (8), _diag_info (5),
-    _diag_storage (2), _diag_network (1), do_diagnose (4),
-    _check_hardware_fingerprint (1), do_test_all (2).
-
-  fix: _ntsync_state 5 echo calls replaced with printf '%s\n' —
-    consistent with v3.7.9 fix that converted _get_boot_time,
-    _pregenerate_content_files, and _parse_systemctl_show. echo
-    interprets -n/-e flags; ntsync state values are safe strings but
-    printf is the established convention for stdout return values.
-
-  fix: do_logs journal branch missing return $status — _logs_journal
-    exit code silently dropped. _logs_file_ops branch (analyze, last,
-    list, all) correctly had return $status; journal branch (system,
-    gpu, wifi, boot, audio, usb, kernel) did not. On _logs_journal
-    failure, do_logs returned 0 (implicit switch success), and the
-    dispatch wrote exit_code:0 to the NDJSON footer.
-
-3.7.11 (2026-03-15)
--------------------
-
-  fix: add -- separator to 7 bare cat calls in do_check parallel
-    children — Job 1 (3 sites: sys_dsts, usr_dsts, svc_dsts), Job 2
-    (3 sites: sys_dsts, svc_dsts, usr_dsts), and Job 3 (1 site:
-    /proc/cmdline). Fresh fish instances have no aliases, so risk was
-    theoretical. Consistent with v3.7.10 F2 command-prefix hardening
-    in validate_configs children.
-
-  doc: add inline comments above 11 functions that had --description
-    but no nearby # block comment — _load_profile, _ensure_sudo_cached,
-    _parse_systemctl_show, show_help, _logs_journal, do_logs,
-    _diag_services, _diag_hardware, _diag_network, _diag_storage,
-    _diag_config. All 90 functions now have both --description and a
-    nearby comment. Comment coverage: 90/90 (was 79/90).
-
-3.7.10 (2026-03-15)
--------------------
-
-  fix: LOG_FILE creation race — bare touch created file at process
-    umask (typically 022 → 644) before chmod 600 narrowed permissions;
-    brief window where log file was world-readable. Replaced with
-    command install -m 0600 /dev/null for atomic secure creation, with
-    command touch + command chmod fallback for systems without install(1).
-    Parent directory was already 700, so exposure was minimal. Two sites
-    affected: initial LOG_FILE creation (L93) and mode-label rename
-    (L7326). Also adds command prefix to touch calls (missed by v3.2.10
-    hardening pass).
-
-  fix: validate_configs Job 2 parallel children — 4 bare cp/rm calls
-    in fish -c subshells lacked command prefix, inconsistent with
-    v3.2.10 hardening convention. Fresh fish instances have no user
-    aliases, so risk was theoretical. Added command prefix to cp (2)
-    and rm (2) in systemd unit validation children.
-
-  fix: add arity guards to 7 functions with --argument-names but no
-    count $argv check — _validate_profile (0-1), _pregenerate_content_files
-    (0-1), _parse_systemctl_show (1), _logs_file_ops (1+),
-    _logs_journal (1), do_logs (0-2), do_install_file (0-1). All were
-    internally called with correct arity; guards are defensive-in-depth
-    for external profile authors and future refactors.
-
-3.7.9 (2026-03-15)
--------------------
-
-  fix: _msg bug-logging JSONL line wrote $level directly into JSON
-    without _json_str escaping — if an internal programming error
-    passed a level containing quote or backslash characters, the
-    JSONL line would be malformed; now escaped via _json_str
-
-  fix: six parallel work directories (validate_configs, do_diff,
-    verify_static hash phase, do_check, do_diagnose, do_test_all)
-    created via mktemp -d lacked empty-result guards — if mktemp
-    failed (disk full, TMPDIR unwritable), children would write to
-    empty paths causing silent failures; each site now checks
-    test -d and returns appropriate error code on failure
-
-  fix: _get_boot_time, _pregenerate_content_files, and
-    _parse_systemctl_show used echo for stdout return values —
-    echo interprets -n/-e flags on data that callers consume via
-    command substitution; replaced with printf '%s\n' for safety
-
-  fix: log rotation find did not exclude current $LOG_FILE — could
-    delete in-progress log under clock skew; added ! -path guard
-    consistent with _find_latest_log and _logs_list
-
-  fix: --logs all find did not exclude current $LOG_FILE — caused
-    the in-progress log (header written, no footer) to appear in
-    analysis results with missing exit code; added ! -path guard
-
-  fix: do_diagnose parallel children set NO_COLOR redundantly —
-    _msg already detects non-TTY via isatty 2 when stderr is
-    redirected to file; removed forced override, added comment
-
-3.7.8 (2026-03-15)
--------------------
-
-  fix: do_diagnose parallel children _ntsync_state always returned
-    "unavailable" — KVER, KVER_MAJOR, KVER_MINOR were not in
-    export_globals so children saw empty values defaulting to 0;
-    _diag_network ntsync check now reports correct kernel version
-
-  fix: stress tests moved from _diag_config (parallel child with no
-    TTY) to do_diagnose sequential section — interactive _ask prompt
-    was dead code in forked children; now runs after parallel merge
-    where TTY is available
-
-  fix: WiFi credential prompts (interface name, SSID, passphrase)
-    now guard with isatty stdin — prevents indefinite hang when stdin
-    is a pipe or redirected in non-interactive contexts
-
-  fix: --check mode now preserves QUIET=true — previously overridden
-    to false by the non-install QUIET blanket; --check is a "silent
-    idempotency probe" that communicates via exit code only
-
-  fix: do_install_file _warn message for failed user unit enable now
-    appends "(user)" suffix to match the corresponding _ask prompt
-    pattern for consistency
-
-3.7.7 (2026-03-15)
--------------------
-
-  fix: do_diagnose parallel children missing QUIET export — _msg/_echo
-    output was silently lost because QUIET was not in export_globals;
-    .out files captured no diagnostic messages. Added QUIET to the
-    exported globals list.
-
-  fix: remove dead _check_service_active_enabled function — replaced by
-    batch systemctl show pattern in verify_runtime (v3.6.0); definition
-    remained but was never called
-
-  perf: _diag_services systemctl --failed called twice per scope (once
-    for count, once for details) — now captures output once and derives
-    both count and detail lines from the captured list
-
-  fix: README badge version 3.7.6 → 3.7.7 (missed during release)
-
-  fix: README "Embedded Files (16)" → "(15)" and "16 embedded configs"
-    → "15 embedded configs" — modprobe.conf removal reduced count
-
-  fix: do_lint now cross-checks CHANGELOG version against VERSION global
-    using 'X.Y.Z (date)' format pattern
-
-  fix: /etc/kernel/cmdline now quoted in SYSTEM_DESTINATIONS for
-    consistency with all other entries
-
-  fix: all 6 tmpdir rm -rf calls now use --preserve-root, consistent
-    with LOCK_DIR cleanup
-
-  perf: verify_static masked services check batched via single
-    systemctl show --property=LoadState,UnitFileState replacing N
-    individual systemctl cat + is-enabled calls
-
-  perf: verify_static NM-dispatcher check uses systemctl show instead
-    of individual systemctl is-enabled
-
-  perf: verify_static package checks batched via single pacman -Qq
-    replacing 20+ individual pacman -Qi calls for both PKGS_ADD and
-    PKGS_DEL loops
-
-  perf: _diag_services expected services check batched via single
-    systemctl show --property=ActiveState replacing N individual
-    systemctl is-active calls
-
-  perf: _install_packages post-install verification batched via single
-    pacman -Qq replacing N individual pacman -Qi calls
-
-  perf: _install_configure_services package removal pre-check and retry
-    loop batched via pacman -Qq replacing individual pacman -Qi calls
-
-  remove: /etc/modprobe.d/99-cachyos-modprobe.conf — removed from
-    SYSTEM_DESTINATIONS, profile (MODPROBE_BLACKLIST), get_file_content,
-    validate_modprobe_blacklist, validate_configs, verify_static,
-    verify_runtime, do_diff --fix tracking, and do_install_file
-
-  fix: parallel child crash detection in validate_configs, verify_static,
-    do_check, and do_diagnose — missing result files from crashed children
-    previously caused false-pass (validate_configs, verify_static) or
-    false-negative (do_check) results; now explicitly detected and flagged
-
-  fix: _manifest_write failure now sets INSTALL_HAD_ERRORS in do_install
-    — previously a silent failure that could mask incomplete deployments
-
-  fix: verify_static distinguishes intentional "skip" from empty result
-    (child crash) — empty results now emit a warning instead of silent skip
-
-  fix: completions __ry_install_profiles grepped (status filename) which
-    resolves to the completions file itself, not ry-install.fish — now
-    embeds the actual script path at generation time
-
-  fix: completions --install-file now offers managed DESTINATIONS as
-    tab-completion suggestions (previously had no path completions)
-
-  fix: completions __ry_install_profiles moved outside `for cmd` loop
-    to avoid redundant redefinition
-
-  doc: add inline DRY-gate comments at all tee write sites (install_file
-    sudo path, install_file user path, WiFi credential write) to clarify
-    that writes only execute when DRY=false
-
-3.7.6 (2026-03-14)
--------------------
-
-  fix: NDJSON footer not last line in log files
-    _cleanup_tmpfiles unconditionally logged "CLEANUP_TMPFILES: sweep
-    starting" after the footer was written. Three --logs consumers
-    (list, analyze, all) use tail -n 1 expecting the footer to be last,
-    so exit code and pass/fail/warn extraction failed silently. Guard
-    _log call with _FOOTER_WRITTEN check. Signal-handler cleanup paths
-    (where footer may not yet exist) are unaffected.
-
-3.7.5 (2026-03-14)
--------------------
-
-  fix: show_help blank embedded file count
-    --help and unknown-flag paths exit before _load_profile, leaving
-    MANAGED_FILE_COUNT unset. Help text printed "Single fish script,
-    embedded configs" with a missing count. show_help now computes the
-    count dynamically from get_file_content case branches as a fallback
-    when the profile has not loaded. Same sed/grep pattern as do_lint.
-
-  chore: apply fish_indent -w canonical formatting
-    Exit code alignment (lines 5-12) used column-aligned spacing that
-    fish_indent normalizes to single space. PROFILE_NAME assignment had
-    unnecessary quotes. Both caused --lint to exit 11 (FAIL) via the
-    fish_indent drift check promoted to FAIL in v3.6.2.
-
-3.7.4 (2026-03-13)
--------------------
-
-  fix: stale version reference v3.4.2 → v3.5.0 (2 comments)
-    do_diff and do_install both cited "v3.4.2" for backup removal,
-    but that version never existed. Backup remnants were removed and
-    the _info notice added in v3.5.0 per CHANGELOG.
-
-  fix: add -- to 3 string replace -a calls in validate_configs
-    Parallel children (Job 2 units, Job 3 fish scripts) used
-    string replace -a '/' '_' without --. Consistent with all other
-    string replace calls in the script.
-
-3.7.3 (2026-03-13)
--------------------
-
-  fix: add -- separator to 6 contains calls (9 instances)
-    _cleanup_tmpfiles: 3 sites (sys_dirs, usr_dirs membership checks).
-    _install_preflight: 2 sites (sdboot-manage, mkinitcpio in $missing).
-    validate_configs: 1 site ($checked_dirs membership check).
-    Prevents misparse if a value starts with a hyphen.
-
-  fix: add command prefix and -- to touch in do_diagnose
-    Bare touch "$diag_dir/$phase.jsonl" bypassed command prefix
-    hardening (v3.2.10). Now command touch --.
-
-  fix: add -- to 3 dirname calls
-    _acquire_lock: 2 sites (mkdir parent, stale reclaim parent).
-    _install_system_files: dirname on wireless-regdom path. Consistent
-    with all other dirname calls.
-
-3.7.2 (2026-03-13)
--------------------
-
-  docs: README Install Flow order matches PROGRESS_STEPS
-    v3.7.1 moved syu before mkinitcpio in _install_rebuild_boot and
-    updated PROGRESS_STEPS (entries 15-17), but the Install Flow
-    summary still showed Initramfs → Bootloader → Upgrade. Now shows
-    Upgrade → Initramfs → Bootloader.
-
-  docs: README logind.conf.d description lists all key types
-    Said "Ignore power/suspend keys" but LOGIND_IGNORE_KEYS sets 5
-    handles: HandlePowerKey, HandlePowerKeyLongPress, HandleSuspendKey,
-    HandleHibernateKey, HandleRebootKey. Now says "Ignore
-    power/suspend/hibernate/reboot keys".
-
-3.7.1 (2026-03-09)
--------------------
-
-  fix: enforce kernel 6.14+ minimum in check_kernel_version
-    Returns 1 on < 6.14 instead of always returning 0. Preflight captures
-    the failure, sets INSTALL_HAD_ERRORS, and warns. Matches README
-    prerequisite. Reports ntsync state on pass.
-
-  fix: PROGRESS_STEPS ordering after syu reorder
-    Fix 4 (v3.7.0 post-release) moved syu before mkinitcpio in
-    _install_rebuild_boot but did not update PROGRESS_STEPS. Progress
-    bar would show wrong step names. Entries 15-17 swapped to match.
-
-  fix: B-5 do_test_all nested parallelism guard
-    On systems with < 8 cores, all 15 read-only modes now run
-    sequentially instead of forking. Prevents oversubscription from
-    nested parallel children (verify-static: 17, check: 4, diagnose: 5,
-    diff: 17).
-
-  fix: B-1 validate_configs ssh-agent verify scope
-    systemd-analyze --user verify for ssh-agent.service (user unit).
-    Previously ran without --user flag.
-
-  fix: B-3 do_check dead variable
-    Remove unused `set -l idx 0` in Job 4 inline parser.
-
-  fix: consistent _ensure_sudo_cached usage
-    verify_static and do_test_all now use _ensure_sudo_cached helper
-    instead of ad-hoc `sudo true`. Matches B-4 and B-6 pattern.
-
-  fix: batch enable per-unit fallback
-    _install_configure_services B-7: on batch `systemctl enable --now`
-    failure, retry each unit individually to identify which failed.
-
-  fix: manifest gated on success
-    _manifest_write skipped on EXIT_BOOT_CRIT to avoid recording
-    partially-deployed state.
-
-  fix: syu before mkinitcpio in _install_rebuild_boot
-    System upgrade now runs before initramfs rebuild so new kernels are
-    present for mkinitcpio -P. Pacman hooks provide backup coverage.
-
-  fix: log rotation flock serialization
-    Wrap xargs rm in flock -n when available. Eliminates last-write-wins
-    race between concurrent read-only instances.
-
-  fix: spacing consistency (16 instances)
-    Add missing space before || and && across _run, _gather_temps,
-    verify_runtime, do_lint, _logs_*, _diag_info, install_files, and
-    sudo keepalive.
-
-  fix: -- separator consistency in B-1 children
-    Add -- to cp and rm in parallel validation children.
+  doc: README Install Flow order matches PROGRESS_STEPS.
 
 3.7.0 (2026-03-08)
 -------------------
 
-  feat: batch & parallel processing across 9 optimization targets (B-1..B-9)
-    Implements SPEC-batch-parallel.md across 8 phases. Parallel collector
-    pattern: each job writes to its own result file, parent merges after
-    wait, output ordering is deterministic.
-
-  feat: _pregenerate_content_files helper (Prereq 1)
-    Writes all 17 expected-content files to a tmpdir in one pass. Used by
-    B-1, B-2, B-3, B-6 to avoid profile globals in parallel children.
-
-  feat: _ensure_sudo_cached helper (Prereq 2)
-    Calls sudo true once before forking parallel children. Prevents
-    chaotic parallel sudo prompts.
-
-  feat: _parse_systemctl_show helper
-    Parses multi-record systemctl show output (LoadState, ActiveState,
-    UnitFileState) into indexable records. Used by B-8 and B-3.
-
-  feat: B-9 log rotation xargs (Phase 0)
-    Replace for loop with string join0 | xargs -0 rm -f. Code
-    simplification, eliminates per-file fork overhead.
-
-  feat: B-8 verify_runtime batch systemctl (Phase 1)
-    Replace 11 individual systemctl is-active/is-enabled calls with 1
-    batch systemctl show (system scope) + 1 batch (user scope). Saves
-    ~900 ms.
-
-  feat: B-3 do_check parallel + batch systemctl (Phase 2)
-    Split into 4 parallel jobs: file-hashes, file-perms, kernel-params,
-    service-state. Service state uses batch systemctl show (17 calls → 1).
-    Saves ~2-3 s. Meaningful for CI polling.
-
-  feat: B-5 do_test_all parallel read-only modes (Phase 3)
-    Fork 15 read-only modes in parallel, run 3 sequential (lock-acquiring
-    or write) modes after. Saves 13-21 s. Biggest speedup target.
-
-  feat: B-7 _install_configure_services batch enable (Phase 4)
-    In --all mode, batch 3 system-scope systemctl enable --now calls into
-    1. ssh-agent stays separate (user scope). Interactive mode unchanged.
-    Saves ~400 ms in --all mode.
-
-  feat: B-1 validate_configs parallel syntax checks (Phase 5a)
-    Pre-generate content files, then fork 5 parallel validation jobs:
-    cross-reference, systemd units, fish scripts, INI configs, key-value
-    configs. Saves ~400-800 ms.
-
-  feat: B-2 verify_static parallel checksums (Phase 5b)
-    Pre-generate expected content, fork parallel sha256sum comparisons for
-    all 17 destinations. Saves ~1.2-1.6 s.
-
-  feat: B-6 do_diff batch I/O (Phase 6)
-    Pre-generate expected content, parallel installed-file reads + diff
-    computation. Sequential display + fix unchanged. Saves ~500-1000 ms.
-
-  feat: B-4 do_diagnose parallel phases (Phase 7)
-    Run 5 diagnostic functions in parallel: services, hardware, network,
-    storage, config. Each child sources the script, gets its own LOG_FILE.
-    Parent exports ~14 profile globals before forking, unexports after
-    wait. Output printed in deterministic order. Saves ~3-8 s.
-
-  fix: B-4 source safety — serialize functions, not full script (audit)
-    source '$script_path' in children re-executes top-level code (lock
-    acquisition, CLI dispatch, install). Replaced with functions-only
-    serialization via `functions $needed_funcs > $funcs_file`. Children
-    source the functions file (~25 functions, no top-level side effects).
-    Added _ask to needed_funcs (called by _diag_config stress path;
-    auto-denies in non-interactive background children via isatty guard).
-  fix: B-1 validate_configs xref job — existence check, not emptiness (audit)
-    Original code distinguished get_file_content failure (runtime
-    dependency → log and skip) from empty content (→ error). Parallel
-    xref job now checks file count against expected destination count,
-    matching original skip-on-failure behavior.
-  fix: B-6 do_diff — empty guard on diff_status (audit)
-    If parallel child crashes, diff_status file is absent → cat returns
-    empty → `test "" != 0` is true → spurious diff display. Added
-    `test -n "$diff_status"` guard.
-
-3.6.4 (2026-03-08)
--------------------
-
-  fix: bump fish version gate from 3.3+ to 3.4+ (F-1)
-    string join0 (used by upcoming batch processing) requires fish 3.4+.
-    CachyOS ships fish 4.5 (Arch extra/fish 4.5.0-2). Gate comment, check,
-    error message, upper-bound warning, and help text all updated.
-  fix: remove bat and eza from PKGS_ADD (F-2)
-    Both are hard dependencies of cachyos-fish-config (installed by default
-    on every CachyOS desktop). pacman --needed would skip them, but listing
-    them masks the true delta from a fresh install. PKGS_ADD 15 → 13.
-  docs: README badge, prerequisites, and packages table updated to match.
-
-3.6.3 (2026-03-08)
--------------------
-
-  fix: root UUID TOCTOU in get_file_content (F-1)
-    findmnt -no UUID / was called on every get_file_content invocation
-    for /etc/kernel/cmdline, creating a TOCTOU between install_file's
-    comparison and write paths. UUID is now cached once in _load_profile
-    as _ROOT_UUID global. get_file_content uses the cached value.
-  feat: _kconfig_cache lazy loader for /proc/config.gz (F-2)
-    _ntsync_state and _validate_kernel_params both called zcat on
-    /proc/config.gz independently. New _kconfig_cache function reads
-    once on first call, stores in _KCONFIG_DATA global, returns cached
-    lines on subsequent calls. Both consumers updated.
-  fix: boot-critical short-circuit in do_install (F-3)
-    When _install_rebuild_boot returned EXIT_BOOT_CRIT, do_install
-    continued to _install_collect_wifi and _install_finalize, masking
-    the failure with unrelated errors and prompting for WiFi credentials
-    unnecessarily. Now short-circuits: skips WiFi/finalize, emits
-    actionable error, calls _progress_skip for remaining steps to keep
-    counter synchronized.
-  feat: hardware mismatch early warning in _load_profile (F-4)
-    Hardcoded gtr9_pro fallback would silently apply GTR9 Pro kernel
-    params on a different machine. _load_profile now checks /proc/cpuinfo
-    against EXPECTED_CPU_MATCH (if set) and warns with profile switch
-    guidance. Lightweight — no lspci/sudo; full fingerprint check remains
-    in _install_preflight.
-  feat: flock(1) atomic lock reclaim in _acquire_lock (F-5)
-    Stale lock reclaim via rmdir+mkdir had a documented TOCTOU race
-    window. When flock(1) is available, stale reclaim now acquires an
-    advisory lock on the parent directory, making the rmdir+mkdir+write
-    sequence atomic. Falls back to original PID-re-verify approach when
-    flock is absent. flock -n -E 5 provides non-blocking contention
-    detection.
-
-3.6.2 (2026-03-08)
--------------------
-
-  fix: missing space in post-install hint (F-1)
-    --verify-static&& was not a valid shell token. Added space before &&.
-  style: comment inside set continuation (F-2)
-    Moved # comment from inside set -l order_checks \ continuation to
-    above the set statement. Fish 3.7 handles both identically (verified),
-    but comment-above is unambiguous across versions.
-  feat: _run --passthrough flag (F-4)
-    When --passthrough is the first argument, stdout flows directly to
-    the caller instead of being captured to a tmpfile. Stderr is still
-    captured and logged. Logging, dry-run gating, and secret redaction
-    still apply. All existing _run calls are unaffected (additive).
-  feat: _progress_skip function (F-5)
-    New function to advance progress counter for conditionally skipped
-    steps. Keeps PROGRESS_CURRENT synchronized with PROGRESS_TOTAL.
-    Audit confirmed all 20 current steps are unconditional; function
-    is available for future use when steps become conditional.
-  docs: TOCTOU race in _acquire_lock (F-6)
-    Replaced terse 1-line comment with 5-line explanation of the
-    residual rmdir/mkdir race window, PID re-verify mitigation, and
-    flock(1) alternative. No behavioral change.
-  feat: promote fish_indent to FAIL in do_lint (F-9a)
-    _warn -> _fail + set has_errors true. Formatting drift now causes
-    --lint to exit EXIT_LINT_FAIL (11). Previously advisory.
-  feat: do_check verifies service state (F-10)
-    --check now verifies EXPECTED_SERVICES are active+enabled and MASK
-    targets are masked. LVM-aware: skips lvm2-monitor.service when LVM
-    volumes detected (consistent with _install_configure_services).
-    Drift in service state now returns EXIT_DRIFT (10).
-  fix: _json_str silent control char deletion (F-11)
-    Replaced empty-string deletion with ? placeholder for control
-    characters \x01-\x07, \x0b, \x0e-\x1f, \x7f, \x80-\x9f.
-    Preserves string length in JSONL logs for debugging.
-  refactor: show_help relocated to utility section (F-12)
-    Moved 89-line function from between do_test_all and CLI parsing
-    to after _ask in the utility function group. No behavioral change.
-
-3.6.1 (2026-03-08)
--------------------
-
-  fix: do_check false drift on vfat ESP (F-1)
-    Permission loop hardcoded 644 root:root for all system files,
-    including /boot/loader/loader.conf on vfat ESP where stat returns
-    mount-option defaults (typically 755). Added findmnt vfat detection
-    and /boot/* skip guard, consistent with do_diff and verify_runtime.
-    --check no longer returns EXIT_DRIFT on clean vfat ESP systems.
-  fix: remove dead MAX_LOGS guard (F-3)
-    set -g MAX_LOGS 50 followed by unreachable if test $MAX_LOGS -lt 1
-    guard. Removed 3 dead lines. Guard should be re-added if MAX_LOGS
-    becomes a profile global.
-  docs: document _run stdout capture behavior (F-4)
-    _run captures stdout to tmpfile; only replays when QUIET=false.
-    Callers needing stdout must invoke commands directly. Updated
-    function description to make the contract explicit.
-  feat: manifest-based orphan tracking (F-8, F-10)
-    _manifest_write records version, profile name, and all managed
-    destinations to ~/ry-install/.manifest (0600, atomic same-directory
-    tmpfile + mv, tracked in _TRACKED_TMPFILES for crash cleanup) after
-    successful install. Skipped in dry-run. Preserved on preflight
-    failure (early return before _manifest_write).
-    _manifest_check_orphans reads the manifest and warns about
-    destinations from a previous install or profile that are absent
-    from the current profile. Detects profile switches by comparing
-    stored profile name. Called at start of do_install and do_diff.
-  feat: progress step count runtime assertion (F-6)
-    _progress_done logs a warning if PROGRESS_CURRENT != PROGRESS_TOTAL
-    at finalization. Guarded by ALL=true; and DRY=false to match
-    _progress increment condition — without guard, assertion would
-    false-positive on interactive/dry-run installs where PROGRESS_CURRENT
-    stays at 0. Complements static lint check in do_lint.
-    Only catches undershoot; overshoot absorbed by min() clamp.
-  feat: exhaustive get_file_content cross-reference (F-7)
-    validate_configs calls get_file_content for every destination and
-    verifies non-empty output. Complements do_lint regex-based case
-    count check. Destinations with runtime dependencies (e.g.,
-    /etc/kernel/cmdline requiring findmnt) that return non-zero are
-    logged but not counted as errors.
-
-3.6.0 (2026-03-08)
--------------------
-
-  feat: add --profile multi-machine support
-    Machine-specific globals (destinations, kernel params, packages,
-    services, thresholds) extracted into profile functions. Built-in
-    default: profile_gtr9_pro. External profiles sourced from
-    ~/.config/ry-install/profiles/<name>.fish after syntax validation.
-    --profile <name> selects at runtime; ~/.config/ry-install/default-profile
-    persists default. _validate_profile enforces 21+ required globals,
-    name consistency, and numeric type checks. JSONL header includes
-    "profile" field. do_lint relaxed: case_count >= total (profiles may
-    use subset of get_file_content cases).
-  feat: add --check silent idempotency probe
-    Read-only mode: compares all managed files (hash), permissions,
-    and kernel params against profile. Exit 0 = clean, exit 10 = drift.
-    Zero terminal output (JSONL log only). Non-interactive sudo (sudo -n)
-    prevents blocking in cron/timer contexts. Skips unreadable files
-    rather than prompting. Zero-checked guard prevents false negatives.
-  feat: add structured exit codes (EXIT_OK through EXIT_LINT_FAIL)
-    0=success, 1=non-critical, 2=usage, 3=preflight, 4=boot-critical,
-    5=lock, 10=drift, 11=lint. Replaces generic exit 1 in _install_preflight
-    (EXIT_PREFLIGHT), _install_rebuild_boot (EXIT_BOOT_CRIT), _acquire_lock
-    (EXIT_LOCK), do_lint (EXIT_LINT_FAIL). Install dispatch preserves
-    structured codes. show_help documents exit codes. BREAKING: scripts
-    checking $status -eq 1 may miss codes 3-5, 10-11.
-  fix: SYSTEM_UPGRADED premature-true assignment
-    Flag set before pacman ran — mkinitcpio pre-deploy failure or pacman
-    failure left SYSTEM_UPGRADED=true despite no upgrade. Moved to after
-    successful pacman execution (first-try and retry success paths).
-    Dry-run behavior preserved (_run returns 0).
-  fix: do_diff blank-line fidelity
-    List-capture pattern (set -l installed_content) dropped blank lines
-    on Fish <3.4. Replaced with direct pipe (_read_installed > tmpfile),
-    consistent with install path and verify_static.
-  fix: 5 &&/|| anti-patterns
-    4 no-space operators (lines 23, 359, 672, 6477) converted to
-    ; and/; or form. 1 spaced one-liner (line 91) converted to if/end.
-    Line 672 is embedded SSH config content — installed file hash changes
-    on first deploy after update.
-  refactor: _diag_services uses $EXPECTED_SERVICES from profile
-    Hardcoded service list at line 4314 replaced with profile global.
-
-3.5.2 (2026-03-07)
--------------------
-
-  fix: log marker naming — "LINT CHECK START" → "LINT START" for
-    symmetric START/END pairs across all 7 modes. Enables consistent
-    grep-based log section extraction.
-
-3.5.1 (2026-03-07)
--------------------
-
-  fix: remove dead _has_lock variable (F-1, execution flow audit)
-    set -l _has_lock false and 3 set _has_lock true never read.
-    Lock release uses set -q LOCK_DIR, not _has_lock. Vestigial
-    from pre-v3.x lock rework. Removed 4 lines.
-  fix: _log guard prevents orphan log stubs on lock contention (F-2)
-    _acquire_lock deletes LOG_FILE before exit 1 on contention,
-    then _cleanup_on_exit → _do_cleanup → _cleanup_tmpfiles → _log
-    recreated the file via >>$LOG_FILE at umask 022 (644 not 600).
-    Guard: test -f "$LOG_FILE" || return 0 at _log entry.
-  docs: add inline section comments to validate_configs
-    3 markers: systemd unit validation, INI config validation,
-    simple key-value config validation. Aids navigation in 198L fn.
-  docs: add inline section comments to _install_configure_services
-    2 markers: LVM-aware mask safety filter, user-level ssh-agent
-    service setup. Aids navigation in 205L fn.
-
-3.5.0 (2026-03-07)
--------------------
-
-  refactor: decompose do_diagnose (604L → 25L orchestrator + 6 helpers)
-    Extract _diag_info (115L), _diag_services (69L), _diag_hardware
-    (105L), _diag_network (87L), _diag_storage (117L), _diag_config
-    (108L). Shared counters $issues/$checks replaced with globals
-    $_DIAG_ISSUES/$_DIAG_CHECKS, initialized in orchestrator,
-    incremented by helpers. No behavioral change.
-  refactor: decompose do_logs (285L → 67L dispatcher + 2 helpers)
-    Extract _logs_file_ops (114L) for analyze/last/list/all and
-    _logs_journal (118L) for system/gpu/wifi/boot/audio/usb/kernel.
-    Catch-all with fuzzy-match stays in do_logs. Return values
-    propagated via return $status. No behavioral change.
-  fix: wireless-regdom pipeline missing _log (F-3)
-    Add _log before bare sudo cat|sudo tee pipeline in _has_uncommented
-    branch. DRY gate unnecessary — parent block at L4986 already
-    excludes DRY=true. Else branch already used _run.
-  fix: --logs typo falls through to journal without hint (F-15)
-    Add fuzzy-match in service-not-found branch: 3-char prefix match
-    against known targets with ±2 length proximity guard. Prevents
-    false positives on real service names (e.g. usbguard vs usb).
-  fix: `path basename` requires Fish 3.5+ but gate is 3.3+ (A-1)
-    Replace with `string replace -r '.*/' ''` for Fish 3.3+ compat
-  fix: 3 bare `sudo nmcli connection load` bypass _run logging (B-1)
-    Wrap in _run for consistent audit trail in WiFi retry loop
-  fix: bare `set next_arg` in --logs arg parser (A-2)
-    Change to `set -l next_arg` for consistency with --diff/--install-file
-  fix: header comment version stale at v3.4.1 (D-1)
-    Update to v3.5.0 to match VERSION variable, README, CHANGELOG
-  remove: backup system remnants — 2 comments and 2 _warn lines
-    referencing removed ~/ry-install/backups/ directory
-  feat: add _info notice before install and --diff --fix that automatic
-    backups no longer exist; user responsible for rootfs snapshots
-  docs: add 27 inline comments to 19 functions >50 lines with ≤1
-    comment; all 27 functions >50L now have ≥2 inline comments
-    (pre-decomposition count was 34; decomposition reduced 7 below 50L)
-  chore: apply fish_indent -w for canonical formatting (237 lines;
-    spaces around && and || operators)
-  chore: 73 → 81 functions, 6476 → 6562 lines
-  chore: update README — remove backup references from Safety table,
-    Install Flow (21 → 20 steps), and Data Directory; version 3.5.0
-  fix: README iwd/main.conf entry omitted PowerSaveDisable quirk and
-    NameResolvingService=systemd — now lists all 3 sections
-  docs: README BIOS version updated from placeholder vXX to P110
-    (December 2025 — ACPI fix)
-
-3.4.1 (2026-03-06)
--------------------
-
-  fix: do_test_all completions validation reads installed file instead
-    of empty stdout capture — do_completions writes to file via printf
-    redirect, never stdout; validation always reported 7 missing
-    subcommands (platform-independent false failure)
-
-3.4.0 (2026-03-05)
--------------------
-
-  remove: drop --no-color flag — NO_COLOR env var (no-color.org) is the
-    sole color control; env detection at startup unchanged
-  remove: drop --no-log flag — NDJSON logging is now always-on; remove
-    LOG_FILE=/dev/null code path, 3 orphan-cleanup blocks in signal/exit
-    handlers, and all 12 `test "$LOG_FILE" != /dev/null` guards on rm
-  remove: drop --clean mode — do_clean (344 lines) and _find_steam_root
-    (10 lines) removed; lock policy, dispatch, arg parser, completions,
-    help text, and examples updated
-  remove: drop _GPU_BUSY_PCT — set in _gather_gpu_state but never read
-  fix: --test-all used --no-color flag — replaced with env NO_COLOR=1
-  chore: trim CHANGELOG to 3.0.0+; drop pre-3.0 entries
-  chore: update help, completions, README, and CHANGELOG for all removals
-
-3.3.7 (2026-03-04)
--------------------
-
-  fix: 15 scope shadows — set -l inside nested blocks re-declared
-    outer block-scoped vars (12 unique vars across 6 functions)
-
-  Same root cause as v3.2.9 remediation (set -l inside blocks creates
-  block-local shadow invisible to outer scope). Prior fixes only caught
-  function-scope → block shadows; these are block → nested-block.
-
-  CRITICAL (infinite loops):
-  - _install_finalize: reload_wait (L5987) — NM reload wait counter
-    stuck at 0, loop never terminates on WiFi profile detection timeout
-  - _install_finalize: wifi_retry (L6001) — WiFi retry counter stuck
-    at 0, loop never terminates on connection failure
-
-  HIGH (broken functionality):
-  - do_diff: this_diff (L2070) — --diff --fix never triggered for
-    content drift, only repaired permission/ownership drift
-  - install_file: _cur_content (L1845) — skip-unchanged broken for
-    14/17 sudo-path files; always rewrites even when content matches
-  - do_diagnose: nvme_found (L4966) — always printed "No NVMe devices
-    found" even after successfully processing smart-log data
-
-  MED (incorrect output/behavior):
-  - _progress: desc (L1153) — progress bar label blank for >25 char
-    step names ("Wireless regulatory domain", "AMDGPU performance
-    service")
-  - do_diff: actual_perms (L2113), actual_owner (L2114) — system file
-    permission/ownership checks used stale values from user-file branch
-  - do_diff: target_owner (L2155) — chown skipped in --fix for user
-    files (target_owner empty after block)
-  - _install_collect_wifi: wlan_iface (L5187) — iwctl interface
-    detection result discarded; falls through to sysfs glob fallback
-  - do_diagnose: disksize (L5026) — zram size displayed in raw bytes
-    instead of GB
-
-  LOW (credential hygiene):
-  - _install_collect_wifi: wifi_pass (L5255/5259/5263/5267) — credential
-    erasure on validation failure/success ineffective; passphrase persists
-    in outer block scope until block exits naturally (4 sites)
-
-3.3.6 (2026-03-04)
--------------------
-
-  fix: add LC_ALL=C to NVMe device sort in do_diagnose (L4965)
-    Bare sort without locale pinning was inconsistent with all other
-    sort calls; ASCII-only device names made this cosmetic but the
-    254-check audit flagged it as the sole actionable finding
-
-3.3.5 (2026-03-03)
--------------------
-
-  fix: 28 scope shadows — set -l inside blocks re-declared function-scope vars
-    (issues in do_diagnose, _log_lines in do_logs, has_diff in do_diff,
-    run_stress in do_diagnose, to_del in _install_configure_services)
-
-  fix: --lint scope shadow awk — gawk-only match() broke silently on mawk
-    Rewrite: mawk-compatible index()+substr(), piped while depth tracking,
-    anchored ^set -l filters string false positives in lint messages
-
-  fix: do_logs system case — set -l _log_lines inside if (sudo) scoped to
-    block, leaving function-scope empty; logs never displayed when sudo available
-
-3.3.4 (2026-03-03)
--------------------
-
-  fix: do_diagnose CPU governor check — expect powersave, not performance
-    (amd_pstate=active uses powersave governor + performance EPP)
-  fix: _run security comment — document that WIFI_SSID reaches $argv
-    via nmcli, mitigated by character validation
-  fix: reject '%' in WiFi passphrase (GKeyFile parse safety, matches
-    existing SSID restriction); update help text and README
-  fix: remove pipewire-libcamera from PKGS_ADD (pulled as dependency);
-    packages 16 → 15
-  feat: add scope shadow lint check — detects set -l inside blocks that
-    re-declare outer function-scope variables (v3.2.9 regression class)
-  docs: document thermal threshold rationale (conservative vs 95/100°C spec)
-  docs: document log rotation race-safety (rm -f idempotent, last-write-wins)
-
-3.3.3 (2026-03-03)
--------------------
-
-  fix: locale safety
-  - Add LC_ALL=C to 5 sort -u calls in _analyze_log and do_logs for
-    deterministic text ordering across locales
-
-  chore: formatting
-  - Apply fish_indent -w for canonical formatting
-    Only change: remove unnecessary quotes on single-word _log argument
-    (line 374: _log "BOOT_TIME_CHECK" → _log BOOT_TIME_CHECK)
-
-3.3.2 (2026-03-03)
--------------------
-
-  remove: --watch, --rollback, --gaming/--profile/--interval
-
-  fix: scope shadows (same root cause as v3.3.0/v3.3.1 — set -l inside blocks):
-  - validate_mkinitcpio_hooks: existence_only/hooks shadows (3 instances)
-    → --existence-only mode was completely broken
-  - _log: event/data shadows (2 instances) → section markers logged as
-    event=message instead of event=section in NDJSON
-  - _preflight_boot_sanity: errors counter shadow (2 instances) →
-    "DO NOT REBOOT" safety gate could fail to trigger
-  - validate_configs: errors counter shadows in 6 mktemp failure paths
-    → validation could return 0 despite failures
-  - do_lint: has_errors flag shadows (3 instances) → lint could report
-    0 errors when violations exist
-  - do_test_all: total/passed counter shadows (3 instances) → test
-    suite reported incorrect pass/fail statistics
-
-  remove: feature removal (−564 lines, 83 → 80 functions):
-  - Remove do_watch (231 lines): live sysfs dashboard
-  - Remove do_rollback (138 lines): backup snapshot restore
-  - Remove _diagnose_gaming (96 lines): Vulkan/session/codecs/Steam
-  - Remove globals: GAMING, PROFILE, WATCH_INTERVAL
-  - Remove argparse cases: --gaming, --profile, --watch, --interval,
-    --rollback
-  - Remove validation blocks: GAMING/PROFILE/WATCH_INTERVAL mode guards,
-    ALL→GAMING promotion
-  - Remove mode dispatch: watch/rollback switch cases + lock acquisition
-  - Remove PROFILE timing output in _progress and _progress_done
-  - Remove GAMING conditional call in do_diagnose
-  - Remove 5 completions entries, 5 help text entries, test suite refs
-  - Update section header: LINT, WATCH, CLEAN → LINT, CLEAN
-
-3.3.1 (2026-03-03)
--------------------
-
-  fix: _analyze_log scope shadow
-  - _analyze_log: set -g total_step_s on local → step timing total
-    always shows 0. Changed to bare set.
-
-3.3.0 (2026-03-03)
--------------------
-
-  fix: complete scope remediation — 124 set -l → bare set fixes across 35
-  functions. Resolves all remaining read-after-block scope shadowing
-  bugs introduced by v3.2.9 refactor.
-
-  Previously confirmed broken (now fixed):
-  - do_diff summary: has_diff/has_pacnew/this_diff always false
-  - do_diff --fix: never triggered (this_diff always false)
-  - do_diagnose: all 17 block-scoped counters/labels/issues
-  - do_lint: has_errors never propagated
-  - do_watch: freq/gpu_perf/net_info/svc_info block-scoped
-  - do_logs/do_test_all: exit_code/pass/fail counters
-  - verify_runtime: perms block-scoped
-  - validate_configs: errors counter
-  - _analyze_log: 10 block-scoped vars
-  - _check_hardware_fingerprint: 8 block-scoped vars
-  - _install_system_files/_install_finalize/_install_configure_services
-  - _progress/_progress_done: bar/desc/step_elapsed/elapsed_str
-  - _log/_msg/_banner/_verify_summary: output formatting vars
-  - install_file: perms/_cur_content
-  - show_help: exit_code/next_arg
-  - _cleanup_on_exit: _exit_status
-
-3.2.14 (2026-03-03)
--------------------
-
-  fix: comprehensive scope remediation — 228 read-after-block scope
-  shadowing bugs across 33 functions (124 in round 1, 103 in round 2,
-  1 in round 3). Combined with v3.2.11-v3.2.13 fixes (33 set -g → set
-  and 7 set -l → set), total remediation: 268 scope corrections.
-
-  These are the "known remaining" instances from the v3.2.9 refactor
-  that over-applied set -l to variables needing cross-block updates.
-
-  Affected functions (33):
-    _verify_unit_syntax, _cleanup_on_exit, _log, _msg, _banner,
-    _verify_summary, _progress, _progress_done, _run,
-    _install_collect_wifi, install_file, _install_system_files,
-    _install_packages, _install_configure_services, _install_finalize,
-    _install_rebuild_boot, verify_runtime, do_diff,
-    validate_configs, validate_mkinitcpio_hooks, do_lint, _logs_list,
-    _analyze_log, do_logs, do_test_all, do_watch, do_diagnose,
-    _diagnose_gaming, _check_hardware_fingerprint, show_help,
-    _validate_kernel_params, (plus arg parser and script-level)
-
-  Notable behavioral changes (bugs now fixed):
-  - do_diff: has_diff/has_pacnew/this_diff now update correctly →
-    summary reports actual drift, --fix triggers when needed
-  - do_test_all: passed/failed counters now increment → accurate totals
-  - do_diagnose: issue counters work across 17 diagnostic checks
-  - validate_configs: error counter increments → validation catches
-    real errors and correctly aborts (profile timing now requires
-    validation to pass before progress steps fire)
-  - do_lint: has_errors flag updates → lint reports actual failures
-  - _analyze_log: log analysis fields populate correctly
-  - do_watch: GPU/network/service info updates in dashboard
-  - _run: secret redaction applies all matches (not just first)
-
-3.2.13 (2026-03-03)
--------------------
-
-  fix: exit_code dispatch — set -g on local variable
-  - Fix exit_code dispatch bug: 14 instances of `set -g exit_code` on
-    locally-declared variable → every mode always exited 0 regardless
-    of actual result. do_logs empty target (return 2), do_watch non-tty
-    (return 1), and all failure paths were silently swallowed. Also broke
-    NDJSON footer exit_code field and _INTENDED_EXIT_CODE for cleanup
-    handler. Changed to bare `set`.
-
-  fix: lock and log filename scope shadows
-  - Fix lock release: 3 instances of `set -g _has_lock true` on locally-
-    declared variable → write modes (install, diff --fix) never
-    released lock on exit, blocking subsequent runs until stale lock
-    cleared. Changed to bare `set`.
-  - Fix log filename suffixes: 4 instances of `set -g mode_label` on
-    locally-declared variable → log filenames never included modifier
-    suffixes (-dry, -fix, -all) or --logs sub-target. Changed to bare
-    `set`.
-
-3.2.12 (2026-03-03)
--------------------
-
-  fix: MODE dispatch and validation scope shadows
-  - Fix MODE dispatch bug: 12 instances of `set -g MODE <value>` on
-    locally-declared MODE variable → dispatch always fell through to
-    install mode. All operational modes (diff, verify, lint,
-    rollback, diagnose, watch, logs, completions, install-file, test-all)
-    executed the install path instead. Changed to bare `set`.
-  - Fix do_diff single-file validation: `set -l target_file` shadowed
-    --argument-names, `set -l valid true` inside for loop never reached
-    outer scope → --diff <path> always rejected every managed file with
-    "Not a managed file".
-  - Fix do_install_file validation: same pattern as do_diff — `set -l
-    valid true` and `set -l use_sudo false` inside for loops never
-    updated outer scope → --install-file <path> always rejected every
-    managed file, and user files would have received sudo.
-  - Fix _validate_kernel_params: `set -l found true` inside inner for
-    loop never reached outer scope → kernel config validation was
-    silently skipped for all parameters.
-
-3.2.11 (2026-03-02)
--------------------
-
-  fix: arg parser and install_files scope shadows
-  - Fix arg parser infinite loop: 22 instances of `set -g` on locally-
-    declared variables (i, mode_count, DIFF_TARGET, LOG_TARGET,
-    LOG_TARGET_ARG, INSTALL_FILE_TARGET) changed to bare `set`. Fish
-    `set -g` creates a separate global; the local shadows it for reads,
-    so the loop counter never advanced. ALL operational modes (install,
-    diff, verify, lint, rollback, diagnose, watch, logs,
-    completions, test-all, install-file) were unreachable — only --help,
-    --version, and unknown flags worked (they exit inside their case
-    before the increment).
-  - Fix install_files scope bug: `set -g use_sudo true` on locally-
-    declared variable → --sudo flag silently broken, system file installs
-    never received sudo. Changed to bare `set`.
-  - Fix install_files scope bug: `set -g had_failure true` on locally-
-    declared variable → install failures silently swallowed, function
-    always returned 0. Changed to bare `set`.
-
-  fix: header version stale
-  - Fix header version: v3.2.9 → v3.2.11 to match VERSION global
-
-3.2.10 (2026-03-02)
--------------------
-
-  fix: hardening
-  - Add `command` prefix to 83 bare coreutils calls (rm, mv, cp, chmod,
-    chown, mkdir) to bypass potential Fish function/alias overrides
-  - Add --argument-names to 10 functions for self-documenting signatures
-    (get_file_content, _banner, _chk_file, _chk_grep, validate_systemd_unit,
-    validate_fish_script, install_file, do_diff, do_logs, do_install_file)
-  - Convert 24 function-local variables in verify_runtime/verify_static from
-    set -g to bare set, eliminating global namespace pollution (125 → 101
-    in-function globals); VERIFY_* counters remain global (used by _msg)
-  - Add SECURITY INVARIANT comment at _run $argv execution documenting that
-    no user-controlled input reaches the command execution path
-
-  fix: stdout leaks and rollback mkdir
-  - Fix 2 stdout leaks: printf '\n' in _install_preflight and echo after
-    read -sP in _install_collect_wifi now redirect to >&2 (all UI output
-    uses stderr; stdout reserved for return-value functions and CI output)
-  - Fix do_rollback mkdir: add error handling with _fail, _log, counter
-    increment, and continue on failure for both SYSTEM and USER sections
-
-  feat: features
-  - Add --rollback mode: restore managed config files from backup snapshots
-    with interactive backup selection, dry-run support, and /boot skip safety
-  - Add rollback to completions, help text, lock acquisition, and mode validation
-
-  docs: documentation
-  - Add block comments to 6 complex sections: signal/cleanup chain, NDJSON
-    logging, _run command wrapper, config validation pipeline, atomic file
-    installation, and argument parser
-  - Document idempotency strategy (hash comparison, test -f, --needed, or-return)
-  - Document verify_runtime scoping rationale (VERIFY_* global vs locals)
-  - Add _log section markers (START/END) to do_rollback,
-    do_diagnose, and do_lint END for consistent NDJSON log analysis
-  - Add --rollback to do_test_all matrix (--rollback --force --dry-run)
-
-3.2.9 (2026-03-02)
--------------------
-
-  refactor: add explicit set -l to 402 function-scoped variables
-  refactor: add explicit set -g to ~15 top-level arg-parser variables
-  refactor: wrap 10 bare sudo write ops in _run() for logging
-  refactor: add _log to 2 backup mkdir calls for traceability
-
-3.2.8 (2026-03-01)
--------------------
-
-  fix: run log rotation unconditionally for all modes
-  fix: narrow WiFi credential scope to just before use
-  fix: add post-write sha256 verification in install_file
-  fix: add _log calls to 6 unlogged functions
-  fix: add lock assertion to _backup_init before rotation
-  fix: track created tmpfiles explicitly in _TRACKED_TMPFILES
-  fix: add sudo keepalive liveness checks before critical phases
-  fix: add pipestatus check to regdom write pipeline
-  fix: add completions content validation to test suite
-  fix: check reverse dependencies before package removal
-  fix: add /etc/initcpio/ to mkinitcpio hook validation paths
-  fix: add fish version ceiling warning for untested versions
-  fix: add explicit return 0 to _gather_gpu_state, _gather_cpu_state
-  docs: document lock reclaim TOCTOU window in _acquire_lock
-  docs: add REFACTOR(v3.3) markers for 6 oversized functions
-  docs: clarify --diff/--verify exit 1 is expected behavior
-  docs: add eval-safety invariant to get_file_content
-  docs: document intentional MD5 use for WiFi UUID generation
-  docs: document 45s sudo keepalive interval assumption
-  docs: add TODO(v3.3) for --watch --interval flag
-
-3.2.7 (2026-03-01)
--------------------
-
-  refactor: add explicit set -l to _json_str function-scope reassignments
-  refactor: add explicit set -l to _log function-scope reassignments
-  refactor: update scoping comments in _json_str and _log
-  refactor: consolidate 6 find calls in _do_cleanup into single ry-* glob
-  fix: add --needed to all 3 user-facing pacman -S suggestions
-  docs: add TODO comment for --root-override flag at root detection gate
-
-3.2.6 (2026-02-28)
--------------------
-
-  refactor: add 63 function comments — 81/81 functions documented
-  refactor: add 9 section headers for major code regions
-  refactor: combine multiline comment blocks to single line
-  refactor: combine file header + global flags section header
-  fix: add --gaming to README modifiers table and --diagnose sub-options
-  fix: add exit 141 (SIGPIPE) to README exit codes table
-  fix: add --gaming tab-completion to do_completions
-  refactor: remove redundant combined entries from README utilities
-    section — --watch --interval, --diagnose --stress, --diagnose
-    --gaming now documented only in modifiers table
-
-3.2.5 (2026-02-28)
--------------------
-
-  refactor: remove dead globals MODULES_LOAD and _LOCK_METHOD
-  refactor: simplify _log by removing timestamp cache — direct date
-    call per invocation, ~1ms trade-off negligible vs /proc/uptime read
-  fix: correct string match -- separator in verify_runtime cmdline check
-  fix: trap SIGPIPE with dedicated handler and exit code 141
-  feat: validate KERNEL_PARAMS against /proc/config.gz — warns if
-    cmdline params reference kernel features not compiled in
-  feat: add boot sanity gate after initramfs/bootloader rebuild —
-    verifies vmlinuz exists, initramfs non-zero, and boot entry valid
-  refactor: _gather_temps reads sysfs hwmon instead of forking sensors
-  refactor: extract gaming diagnostics behind --gaming flag — moves
-    Vulkan, session, media codecs, and Steam/Proton checks into
-    _diagnose_gaming; enabled via --diagnose --gaming or --all
-
-3.2.4 (2026-02-28)
--------------------
-
-  (skipped — changes merged into v3.2.5)
-
-3.2.3 (2026-02-28)
--------------------
-
-  fix: footer double-write race — set _FOOTER_WRITTEN before printf
-  fix: log rotation race — gate rotation with _has_lock flag; only
-    write modes rotate under lock; read-only modes defer
-  fix: backup rotation sort locale — add LC_ALL=C to ISO-date sort
-  fix: log rotation sort locale — add LC_ALL=C to log file sort
-
-3.2.2 (2026-02-28)
--------------------
-
-  fix: orphan log files on 3 early exit paths — add LOG_FILE cleanup
-    before exit 2
-
-3.2.1 (2026-02-28)
--------------------
-
-  remove: --json flag (--diagnose stdout JSON blob); NDJSON log pipeline
-    unaffected
-  remove: --once flag (--watch single snapshot); --watch now requires
-    interactive tty unconditionally
-  remove: JSON_OUTPUT and WATCH_ONCE globals, arg parser cases,
-    validation blocks, completions, help text, examples
-
-3.2.0 (2026-02-28)
--------------------
-
-  feat: add /etc/sysctl.d/99-ry-sysctl.conf — BBR+fq congestion control,
-    tcp_fastopen=3, inotify max_user_watches=524288; complements cachyos
-    vendor 70-cachyos-settings.conf with no overlap; embedded files
-    16 → 17, system destinations 11 → 12
-  feat: add verify_static/verify_runtime/do_diagnose sysctl sections
-  feat: add sysctl --system reload in _install_configure_services and
-    do_install_file
-
-3.1.4 (2026-02-28)
--------------------
-
-  fix: cat missing -- in _run output capture
-  fix: _install_finalize always returning 0 — now propagates
-    INSTALL_HAD_ERRORS
-  refactor: collapse 24 multiline comment blocks to single line
-  refactor: move 13 inline comments above their code line
-  refactor: condense 5 section headers from 3-line box to single decorated line
-  docs: add 17 comments above dense code blocks
-
-3.1.3 (2026-02-28)
--------------------
-
-  docs: add 71 inline comments across all major code sections: section
-    headers, magic number annotations, design rationale for lock
-    acquisition, credential lifecycle, atomic writes, hex normalization,
-    vfat permission skip, NM/IWD package gate, GKeyFile escape sequence
-
-3.1.2 (2026-02-27)
--------------------
-
-  docs: add --description to all 68 helper functions
-  docs: add explanatory comments for printf list expansion in do_diff and
-    verify_static
-  docs: add credential lifecycle comment at WIFI_PASS assignment
-
-3.1.1 (2026-02-27)
--------------------
-
-  fix: stale modprobe blacklist comment count (4→3) after sp5100_tco
-    removal
-  fix: add -- terminator to touch "$LOG_FILE" and grep -q pattern arg
-  refactor: replace 2 inline sudo find pacnew calls with _find_pacnew_files
-    helper
-  chore: apply fish_indent canonical formatting on 2 lines
-
-3.1.0 (2026-02-27)
--------------------
-
-  refactor: add KVER/KVER_MAJOR/KVER_MINOR globals; remove 3 per-function
-    uname -r calls
-  refactor: add _ntsync_state helper returning 5 states; replace NTSYNC_SUPPORTED
-    global and 9 inline checks
-  remove: sp5100_tco from MODPROBE_BLACKLIST — nowatchdog cmdline and
-    CachyOS vendor blacklist handle it
-  remove: btusb.enable_autosuspend=n cmdline, USB udev rule, btusb sysfs
-    verify — usbcore.autosuspend=-1 handles globally; kernel params
-    19 → 18
-  remove: modules-load.d destination — CachyOS vendor ships ntsync.conf;
-    keep udev MODE=0666 only; embedded files 17 → 16
-  fix: zswap warning to cite CachyOS 30-zram.rules
-  feat: add --existence-only flag to validate_mkinitcpio_hooks; deduplicate
-    verify_static hook checker
-  refactor: add _verify_unit_syntax helper with --user auto-detect
-  refactor: add _check_service_active_enabled helper for amdgpu-performance and
-    cpupower-epp
-  fix: split_lock_detect comment — detection off makes sysctl moot
-  refactor: move power-profiles-daemon from PKGS_DEL to MASK — prevents dep
-    reinstallation conflicts; packages removed 8 → 7, masked 8 → 9
-  refactor: add _find_pacnew_files helper; replace 4 identical sudo find calls
-  refactor: add _get_boot_time helper; deduplicate boot time parsing
+  feat: batch & parallel processing (B-1..B-9). Parallel collector
+    pattern with deterministic output ordering.
+
+  feat: _pregenerate_content_files, _ensure_sudo_cached,
+    _parse_systemctl_show helpers.
+
+3.6.0-3.6.4 (2026-03-08)
+-------------------------
+
+  feat: --profile multi-machine support. Profile functions with
+    _validate_profile (25+ required globals), external profile loading,
+    syntax validation.
+
+  feat: --check silent idempotency probe (exit 0=clean, 10=drift).
+    do_check verifies service state (active+enabled, masked).
+
+  feat: structured exit codes (0-5, 10-11).
+
+  feat: manifest-based orphan tracking. Progress step count runtime
+    assertion. Exhaustive get_file_content cross-reference.
+
+  feat: flock(1) atomic lock reclaim. _kconfig_cache lazy loader.
+    Hardware mismatch early warning. fish_indent promoted to FAIL
+    in do_lint.
+
+  fix: fish version gate 3.3+ -> 3.4+ (string join0). Remove bat/eza
+    from PKGS_ADD (hard deps of cachyos-fish-config).
+
+  fix: root UUID cached once in _load_profile as _ROOT_UUID.
+    Abort remaining steps on boot rebuild failure. do_check false drift
+    on vfat ESP.
+
+  fix: SYSTEM_UPGRADED premature-true. do_diff blank-line fidelity.
+    _json_str control char deletion -> ? placeholder.
+
+3.5.0-3.5.2 (2026-03-07)
+-------------------------
+
+  refactor: decompose do_diagnose (604L -> orchestrator + 6 helpers)
+    and do_logs (285L -> dispatcher + 2 helpers).
+
+  fix: wireless-regdom pipeline logging. --logs typo fuzzy-match.
+    basename Fish 3.5+ -> string replace compat.
+
+  fix: symmetric log marker START/END pairs. Dead _has_lock variable.
+    _log guard prevents orphan log stubs on lock contention.
+
+  remove: backup system remnants.
+
+  docs: 27 inline comments, README BIOS version P110.
+
+3.4.0-3.4.1 (2026-03-05 -- 2026-03-06)
+----------------------------------------
+
+  remove: --no-color flag (NO_COLOR env is sole control), --no-log
+    (logging always-on), --clean mode (344 lines), _GPU_BUSY_PCT.
+
+  fix: do_test_all completions validation reads installed file.
+
+  chore: trim CHANGELOG to 3.0.0+.
+
+3.3.0-3.3.7 (2026-03-02 -- 2026-03-04)
+----------------------------------------
+
+  fix: 2 infinite loops in _install_finalize (reload_wait, wifi_retry
+    counters stuck at 0 due to scope shadow).
+
+  fix: do_diff --fix never triggered for content drift. install_file
+    skip-unchanged broken for 14/17 sudo-path files.
+
+  fix: 268 scope fixes across 33+ functions, including exit_code
+    dispatch (every mode exited 0), MODE dispatch (all modes fell
+    through to install), and arg parser infinite loop (22 set -g on
+    local loop variables).
+
+  fix: 96+ bare cat/rm/mv/chmod/mkdir/cp/find/kill calls wrapped with
+    command prefix to bypass aliases.
+
+  feat: hardware fingerprint drift detection. GKeyFile-safe WiFi
+    credential escaping. --logs list/last/all subcommands with JSONL
+    footer parsing. NDJSON log header/footer. Scope shadow lint check.
+
+  fix: --diff --fix boot rebuild and service reload automation. _log
+    deduplication. Journal view limit 1000. Credential redaction 9
+    patterns. _run PIPESTATUS captures. mkinitcpio HOOKS ordering
+    validation. CPU governor expect powersave. Reject '%' in WiFi
+    passphrase. LC_ALL=C on NVMe sort.
+
+3.2.0-3.2.10 (2026-02-28 -- 2026-03-02)
+-----------------------------------------
+
+  feat: /etc/sysctl.d/99-ry-sysctl.conf -- BBR+fq, tcp_fastopen=3,
+    inotify watches 524288.
+
+  feat: --test-all parallel+sequential test suite. --completions
+    dynamic tab-completion generation. Reverse dep check before
+    package removal.
+
+  feat: validate KERNEL_PARAMS against /proc/config.gz. Boot sanity
+    gate after initramfs rebuild.
+
+  fix: 24 scope fixes (4 caused incorrect behavior). SIGPIPE handler
+    (exit 141). Footer double-write race. Orphan log files on 3 early
+    exits. Atomic mkdir lock improvements.
+
+  remove: --json, --once flags. Dead globals MODULES_LOAD, _LOCK_METHOD.
+
+  refactor: 63 function comments (81/81 documented). _json_str and _log
+    explicit set -l scoping.
+
+3.1.0-3.1.4 (2026-02-27 -- 2026-02-28)
+----------------------------------------
+
+  refactor: KVER globals, _ntsync_state helper (5 states).
+
+  remove: sp5100_tco blacklist, btusb.enable_autosuspend cmdline,
+    modules-load.d destination. Kernel params 19->18, files 17->16.
+
+  feat: --existence-only hook validation, _verify_unit_syntax with
+    --user auto-detect.
+
+  refactor: power-profiles-daemon from PKGS_DEL to MASK.
+
+  fix: _install_finalize propagates INSTALL_HAD_ERRORS.
+
+  docs: --description on all 68 functions. 71 inline comments.
 
 3.0.0 (2026-02-27)
 -------------------
 
-  fix: temp file pattern ry-diff.XXXXXX → ry-diff-XXXXXX to match
-    _do_cleanup glob
-  fix: sudo tee missing -- sentinel
-  fix: kill -0 missing -- sentinel on keepalive PID check
-  refactor: sudo keepalive — replace string escape interpolation with argv
-  refactor: _log default event=message when level omitted
-  fix: show_help add SSID % restriction to NOTES section
-  fix: credential redaction — word-boundary globs prevent false matches
-  chore: apply fish_indent canonical formatting
-  docs: rewrite README with structured tables
-  chore: adopt kernel.org style
+  fix: temp file pattern, sudo tee -- separator, kill -0 -- separator.
+
+  refactor: sudo keepalive argv, _log default event. Credential
+    redaction word-boundary globs.
+
+  docs: README rewrite with structured tables.
+
+  chore: adopt kernel.org changelog style.

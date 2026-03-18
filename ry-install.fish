@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.31 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.31"
+# ry-install v3.7.32 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.32"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -228,7 +228,7 @@ end
 # Emit paths of *.pacnew and *.pacsave files in /etc and /boot via elevated find
 function _find_pacnew_files --description "Find pacnew/pacsave files in /etc /boot"
     if command -q sudo
-        sudo find /etc /boot \( -name '*.pacnew' -o -name '*.pacsave' \) 2>/dev/null
+        sudo -n find /etc /boot \( -name '*.pacnew' -o -name '*.pacsave' \) 2>/dev/null
     end
 end
 
@@ -268,7 +268,7 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
     for dir in $sys_dirs
         for f in (command find "$dir" -maxdepth 1 -name '.ry-install.*' -type f 2>/dev/null)
             if command -q sudo
-                sudo rm -f -- "$f" 2>/dev/null
+                sudo -n rm -f -- "$f" 2>/dev/null
             end
         end
     end
@@ -2547,17 +2547,10 @@ function do_diff --argument-names target_file --description "Show diffs between 
         get_file_content "$dst" >"$diff_batch_dir/expected_$safe" 2>/dev/null
     end
 
-    # Phase 2: parallel installed-file reads + diff status
-    # Skip iwd/NM configs when iwd not installed (avoids wasted forks + sudo calls)
-    set -l diff_pids
-    set -l diff_fork_count 0
-    set -l diff_batch_limit (nproc 2>/dev/null)
-    if test -z "$diff_batch_limit"; or not string match -qr '^\d+$' -- "$diff_batch_limit"
-        set diff_batch_limit 8
-    end
-    if test "$diff_batch_limit" -gt 16
-        set diff_batch_limit 16
-    end
+    # Phase 2: sequential installed-file reads + diff computation (parent process)
+    # Runs in parent to inherit cached sudo credential — sudo timestamp_type=ppid
+    # (default since sudo 1.9) does NOT propagate to backgrounded fish -c children.
+    # Files are small configs (<1KB); sequential I/O adds negligible latency.
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         # Skip non-target files when single-file diff requested
         if test -n "$target_file"; and test "$dst" != "$target_file"
@@ -2570,28 +2563,15 @@ function do_diff --argument-names target_file --description "Show diffs between 
             end
         end
         set -l safe (string replace -a '/' '_' -- "$dst")
-        fish -c '
-            set -l dst $argv[1]; set -l my_home $argv[2]; set -l batch_dir $argv[3]; set -l safe $argv[4]
-            if string match -q "$my_home/*" -- "$dst"
-                command cat -- "$dst" > "$batch_dir/installed_$safe" 2>/dev/null
-            else
-                sudo -n cat -- "$dst" > "$batch_dir/installed_$safe" 2>/dev/null
-            end
-            set -l read_rc $status
-            printf "%d\n" $read_rc > "$batch_dir/readok_$safe"
-            diff -u --label "embedded: $dst" --label "installed: $dst" -- "$batch_dir/expected_$safe" "$batch_dir/installed_$safe" > "$batch_dir/diff_$safe" 2>&1
-            set -l diff_rc $status
-            printf "%d\n" $diff_rc > "$batch_dir/diffstatus_$safe"
-        ' -- "$dst" "$my_home" "$diff_batch_dir" "$safe" 2>"$diff_batch_dir/stderr_$safe" &
-        set -a diff_pids $last_pid
-        set diff_fork_count (math $diff_fork_count + 1)
-        # Batch throttle: wait for current batch before forking more (prevents oversubscription)
-        if test (math "$diff_fork_count % $diff_batch_limit") -eq 0
-            wait $diff_pids
-            set diff_pids
+        if string match -q "$my_home/*" -- "$dst"
+            command cat -- "$dst" >"$diff_batch_dir/installed_$safe" 2>/dev/null
+        else
+            sudo -n cat -- "$dst" >"$diff_batch_dir/installed_$safe" 2>/dev/null
         end
+        printf "%d\n" $status >"$diff_batch_dir/readok_$safe"
+        diff -u --label "embedded: $dst" --label "installed: $dst" -- "$diff_batch_dir/expected_$safe" "$diff_batch_dir/installed_$safe" >"$diff_batch_dir/diff_$safe" 2>&1
+        printf "%d\n" $status >"$diff_batch_dir/diffstatus_$safe"
     end
-    test (count $diff_pids) -gt 0; and wait $diff_pids
 
     # Phase 3: sequential display + optional fix (reads pre-computed files)
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
@@ -3519,7 +3499,40 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     printf '%s\n' $EXPECTED_SERVICES >"$result_dir/exp_svcs"
     printf '%s\n' $MASK >"$result_dir/mask_units"
 
-    # ── Job 1: file content hashes (parallel) ──
+    # Pre-serialize installed file hashes + permissions in PARENT process.
+    # sudo timestamp_type=ppid (default since sudo 1.9) does NOT propagate to
+    # backgrounded fish -c children. All sudo reads must run here.
+    for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
+        if test "$skip_iwd" = true
+            if string match -q '*nm.conf' -- "$dst"; or string match -q '*/iwd/*' -- "$dst"
+                continue
+            end
+        end
+        set -l safe (string replace -a '/' '_' -- "$dst")
+        if string match -q "$my_home/*" -- "$dst"
+            if test -r "$dst"
+                sha256sum <"$dst" 2>/dev/null | string split -- ' ' | head -n 1 >"$result_dir/hash_$safe"
+                stat -c '%a %U:%G' -- "$dst" 2>/dev/null >"$result_dir/perm_$safe"
+            end
+        else
+            if sudo -n test -r "$dst" 2>/dev/null
+                sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ' | head -n 1 >"$result_dir/hash_$safe"
+            end
+            if sudo -n test -e "$dst" 2>/dev/null
+                sudo -n stat -c '%a %U:%G' -- "$dst" 2>/dev/null >"$result_dir/perm_$safe"
+            end
+        end
+    end
+
+    # Pre-serialize LVM state (sudo pvs) in parent for Job 4
+    set -l _has_lvm false
+    set -l pvs_output (sudo -n pvs --noheadings 2>/dev/null | string trim --)
+    if test -n "$pvs_output"
+        set _has_lvm true
+    end
+    echo $_has_lvm >"$result_dir/has_lvm"
+
+    # ── Job 1: file content hashes (parallel) — reads pre-serialized hashes from parent ──
     fish -c '
         set -l result_dir $argv[1]; set -l content_dir $argv[2]; set -l skip_iwd $argv[3]; set -l my_home $argv[4]
         set -l drift false
@@ -3538,19 +3551,10 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
                 continue
             end
             set -l expected_hash (sha256sum < "$content_dir/$safe" | string split -- " ")[1]
-            set -l installed_hash
-            if string match -q "$my_home/*" -- "$dst"
-                if not test -r "$dst"
-                    set drift true
-                    continue
-                end
-                set installed_hash (sha256sum < "$dst" 2>/dev/null | string split -- " ")[1]
-            else
-                if not sudo -n test -r "$dst" 2>/dev/null
-                    set drift true
-                    continue
-                end
-                set installed_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- " ")[1]
+            set -l installed_hash (string trim -- (command cat -- "$result_dir/hash_$safe" 2>/dev/null))
+            if test -z "$installed_hash"
+                set drift true
+                continue
             end
             if test "$expected_hash" != "$installed_hash"
                 set drift true
@@ -3562,7 +3566,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     ' -- "$result_dir" "$content_dir" "$skip_iwd" "$my_home" 2>"$result_dir/hash.stderr" &
     set -l pid_hash $last_pid
 
-    # ── Job 2: file permissions (parallel) ──
+    # ── Job 2: file permissions (parallel) — reads pre-serialized perms from parent ──
     fish -c '
         set -l result_dir $argv[1]; set -l boot_fstype $argv[2]; set -l my_user $argv[3]; set -l my_group $argv[4]
         set -l drift false
@@ -3570,7 +3574,9 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         set -l svc_dsts (command cat -- "$result_dir/svc_dsts")
         set -l usr_dsts (command cat -- "$result_dir/usr_dsts")
         for dst in $sys_dsts $svc_dsts
-            if not sudo -n test -e "$dst" 2>/dev/null
+            set -l safe (string replace -a "/" "_" -- "$dst")
+            set -l perms (string trim -- (command cat -- "$result_dir/perm_$safe" 2>/dev/null))
+            if test -z "$perms"
                 continue
             end
             if string match -q "/boot/*" -- "$dst"
@@ -3578,17 +3584,17 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
                     continue
                 end
             end
-            set -l perms (sudo -n stat -c "%a %U:%G" -- "$dst" 2>/dev/null)
-            if test -n "$perms"; and test "$perms" != "644 root:root"
+            if test "$perms" != "644 root:root"
                 set drift true
             end
         end
         for dst in $usr_dsts
-            if not test -e "$dst"
+            set -l safe (string replace -a "/" "_" -- "$dst")
+            set -l perms (string trim -- (command cat -- "$result_dir/perm_$safe" 2>/dev/null))
+            if test -z "$perms"
                 continue
             end
-            set -l perms (stat -c "%a %U:%G" -- "$dst" 2>/dev/null)
-            if test -n "$perms"; and test "$perms" != "600 $my_user:$my_group"
+            if test "$perms" != "600 $my_user:$my_group"
                 set drift true
             end
         end
@@ -3598,7 +3604,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
 
     printf '%s\n' $KERNEL_PARAMS >"$result_dir/kparams"
 
-    # ── Job 3: kernel params (parallel) ──
+    # ── Job 3: kernel params (parallel) — no sudo needed ──
     fish -c '
         set -l result_dir $argv[1]
         set -l drift false
@@ -3615,7 +3621,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     ' -- "$result_dir" 2>"$result_dir/kparam.stderr" &
     set -l pid_kparam $last_pid
 
-    # ── Job 4: service state — batch systemctl show (parallel) ──
+    # ── Job 4: service state — batch systemctl show (parallel); LVM pre-serialized by parent ──
     fish -c '
         set -l result_dir $argv[1]
         set -l drift false
@@ -3658,12 +3664,8 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
             end
         end
 
-        # LVM check for mask filtering (consistent with _install_configure_services: sudo pvs)
-        set -l has_lvm false
-        set -l pvs_output (sudo -n pvs --noheadings 2>/dev/null | string trim --)
-        if test -n "$pvs_output"
-            set has_lvm true
-        end
+        # LVM state pre-serialized by parent (sudo pvs requires parent credential)
+        set -l has_lvm (string trim -- (command cat -- "$result_dir/has_lvm" 2>/dev/null))
 
         # Check masked services (remaining results)
         for i in (seq 1 (count $mask_units))

@@ -1,3 +1,23 @@
+3.7.30 (2026-03-17)
+-------------------
+
+  fix(comments): inline comments on code lines moved above the line.
+    Two "end" statements in verify_runtime had trailing "# guard:" inline
+    comments. Moved each to its own line above the "end" keyword.
+
+  fix(comments): multiline comment merged to single line. Two-line
+    comment block in do_check ("Pre-cache sudo for parallel children" /
+    "Avoid if not sudo -n true ...") fit 119 chars — merged into one
+    comment line.
+
+  fix(comments): removed four stale orphan comments. do_diff line 2787
+    "# Summary: report diff results..." sat inside the FIX block with no
+    referent. do_diff line 2899 "# Supplemental checks..." sat inside an
+    else branch describing the code that already followed it.
+    verify_runtime line 4146 "# Verify installed file permissions..."
+    and line 4185 "# Verify parent directories..." each duplicated the
+    section header that immediately followed.
+
 3.7.29 (2026-03-18)
 -------------------
 

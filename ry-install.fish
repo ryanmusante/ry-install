@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.29 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.29"
+# ry-install v3.7.30 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.30"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -2784,7 +2784,6 @@ function do_diff --argument-names target_file --description "Show diffs between 
                     end
                 end
             end
-            # Summary: report diff results and optionally auto-fix drifted files
         end
     end
 
@@ -2896,7 +2895,6 @@ function do_diff --argument-names target_file --description "Show diffs between 
                 end
             else
                 _info "  Install pacman-contrib for pacdiff, or merge manually"
-                # Supplemental checks: pacnew/pacsave files, coredumps, boot entries
             end
         end
 
@@ -3451,8 +3449,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     set -l drift false
     set -l checked 0
 
-    # Pre-cache sudo for parallel children
-    # Avoid "if not sudo -n true" — Fish's "not" on unknown commands silently inverts
+    # Pre-cache sudo for parallel children; avoid "if not sudo -n true" — Fish's "not" on unknown commands silently inverts
     set -l _sudo_ok false
     if command -q sudo; and sudo -n true 2>/dev/null
         set _sudo_ok true
@@ -3968,7 +3965,8 @@ function verify_runtime --description "Verify runtime kernel params, services, a
             _fail "  NetworkManager-dispatcher: $rec[3] (expected: enabled)"
         end
 
-    end # guard: (count $parsed) -lt 5
+    # guard: (count $parsed) -lt 5
+    end
 
     # User scope: 1 batch call for ssh-agent
     set -l user_show (systemctl --user show --property=LoadState,ActiveState,UnitFileState -- ssh-agent.service 2>/dev/null | string collect --no-trim-newlines)
@@ -3988,7 +3986,8 @@ function verify_runtime --description "Verify runtime kernel params, services, a
         else
             _warn "  ssh-agent.service: not installed"
         end
-    end # guard: (count $user_parsed) -lt 1
+    # guard: (count $user_parsed) -lt 1
+    end
 
     if set -q SSH_AUTH_SOCK; and test -S "$SSH_AUTH_SOCK"
         if string match -q '*ssh-agent*' -- "$SSH_AUTH_SOCK"
@@ -4143,7 +4142,6 @@ function verify_runtime --description "Verify runtime kernel params, services, a
         else
             _warn "  ~/.ssh directory: $perms (should be 700)"
         end
-        # Verify installed file permissions and ownership match expected values
     end
     _echo
 
@@ -4182,7 +4180,6 @@ function verify_runtime --description "Verify runtime kernel params, services, a
         _ok "  All $perm_checked installed files: correct permissions and ownership"
     else if test $perm_checked -eq 0
         _warn "  No installed files found to check"
-        # Verify parent directories of managed files have correct permissions
     end
     _echo
 

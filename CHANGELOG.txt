@@ -1,3 +1,92 @@
+3.7.28 (2026-03-17)
+-------------------
+
+  fix(profile): removed dead globals DISK_ROOT_CRIT and DISK_ROOT_WARN
+    from profile_gtr9_pro. These percentage-based thresholds were
+    replaced by ROOT_AVAIL_CRIT/ROOT_AVAIL_WARN (GB-based) but never
+    cleaned up. They were set, type-checked, and never read.
+
+  fix(validate): added BOOT_SPACE_CRIT, BOOT_SPACE_WARN,
+    ROOT_AVAIL_CRIT, ROOT_AVAIL_WARN to _validate_profile required
+    list. External profiles omitting these caused unguarded $variable
+    expansion in check_disk_space (test "$x" -lt $UNSET → error).
+
+  fix(validate): expanded conditional required globals to cover
+    RESOLVED_MDNS, UDEV_RULES, IWD_DNS_SERVICE, IWD_DRIVER_QUIRKS.
+    These are used in get_file_content but were not validated, so
+    external profiles omitting them silently emitted empty config
+    values (e.g., "MulticastDNS=" instead of "MulticastDNS=no").
+
+  doc(readme): updated required globals count from 21+ to 25+.
+    Removed dead DISK_ROOT_CRIT/DISK_ROOT_WARN from count.
+
+3.7.27 (2026-03-17)
+-------------------
+
+  fix(install_file): skip-unchanged comparison used Fish variable
+    equality (test "$a" = "$b") which flattens newlines to spaces.
+    Files with content "a\nb" falsely matched "a b", causing silent
+    skip of legitimate reinstalls. Replaced with SHA256 hash comparison
+    for correctness across all content shapes.
+
+  fix(kconfig_cache): printf '%s\n' on empty Fish list emitted a
+    spurious empty line. Added count guard to return early when
+    /proc/config.gz is absent or unreadable.
+
+  fix(diff): color fallback path (no delta, no NO_COLOR) redundantly
+    re-ran diff instead of using pre-computed unified diff from Phase 2.
+    Replaced with sed-based ANSI colorizer on the pre-computed output.
+
+  fix(progress_skip): _progress_skip incremented the step counter but
+    never redrew the progress bar, causing visual stall when boot-
+    critical failure skipped Finalize/NM restart/WiFi steps. Now renders
+    the bar with "(skip)" suffix, consistent with _progress.
+
+  fix(check): do_check Job 4 LVM detection used unprivileged lvs which
+    silently returned incomplete results. Changed to sudo -n pvs for
+    consistency with _install_configure_services.
+
+  doc(readme): added Prerequisites table with 12-step pre-install
+    checklist for fully automated --all mode (BIOS, disk space, sudo,
+    network, snapshot, CachyOS news, WiFi credentials). Removed
+    redundant inline Prerequisites paragraph from Quick Start. Fixed
+    SSID forbidden char list to match script (15 chars, not 4). Added
+    note that WiFi credential prompts are interactive even with --all.
+
+3.7.26 (2026-03-17)
+-------------------
+
+  fix(wifi): awk syntax in _install_collect_wifi used Fish keywords
+    (and/or/semicolons) instead of awk operators (&&/||). iwctl device
+    list parsing produced wrong interface names or empty results. Fixed
+    to valid awk: NR > 4 && /station/, if/|| guards, braced print+exit.
+
+  fix(log): header JSONL entry lost on log file rename. install -m 0600
+    /dev/null truncated the file that command mv had just placed. Now
+    only creates fresh file when mv did not produce one; header appends
+    (>>) instead of truncates (>).
+
+  fix(log): _log truncation step-back calculation could produce math
+    error when regex match was empty. Guard _esc_match with test -n
+    before computing string length.
+
+  fix(wifi): md5sum availability not checked before WiFi UUID
+    generation. Added command -q md5sum guard with fallback to
+    /proc/sys/kernel/random/uuid; fatal error if both unavailable.
+
+  fix(security): sudo -l could re-prompt after credential cache
+    expired between sudo true and sudo -l. Changed to sudo -n -l
+    (non-interactive).
+
+  fix(cleanup): _do_cleanup fallback sweep used find -delete without
+    -type f, could race with directory cleanup. Split into -type f
+    -delete then -type d -empty -delete.
+
+  fix(validate): parallel validation jobs (2-5) used unquoted $f in
+    test -s, grep, cp, rm. Fish doesn't word-split but quoting
+    prevents issues with paths starting with - or containing glob
+    chars. Quoted all variable references in child fish -c scripts.
+
 3.7.25 (2026-03-17)
 -------------------
 

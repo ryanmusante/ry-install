@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.25 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.25"
+# ry-install v3.7.28 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.28"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -128,6 +128,8 @@ function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy
             set -g _KCONFIG_DATA
         end
     end
+    # Guard: empty list → no output (prevents spurious empty line to grep callers)
+    test (count $_KCONFIG_DATA) -eq 0; and return 0
     printf '%s\n' $_KCONFIG_DATA
 end
 
@@ -382,7 +384,8 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     set --erase _TRACKED_TMPFILES
     # Fallback sweep: find -user $_MY_UID catches ry-* tmpfiles missed by the tracked list (e.g., crash before tracking)
     set -l _tmpdir (set -q TMPDIR; and echo "$TMPDIR"; or echo /tmp)
-    command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -user $_MY_UID -delete 2>/dev/null
+    command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -type f -user $_MY_UID -delete 2>/dev/null
+    command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -type d -empty -user $_MY_UID -delete 2>/dev/null
     # Credential erase on every exit path — defense-in-depth against WIFI_PASS lingering in memory
     set --erase WIFI_PASS
     # Free cached data (harmless but consistent with cleanup discipline)
@@ -578,8 +581,6 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g EXPECTED_SERVICES amdgpu-performance cpupower-epp fstrim.timer NetworkManager
 
     # ── Thresholds ──
-    set -g DISK_ROOT_CRIT 90
-    set -g DISK_ROOT_WARN 80
     set -g BOOT_SPACE_CRIT 200
     set -g BOOT_SPACE_WARN 500
     set -g ROOT_AVAIL_CRIT 2
@@ -619,16 +620,28 @@ function _validate_profile --description "Verify loaded profile has all required
         SDBOOT_REMOVE_OBSOLETE \
         EXPECTED_SERVICES \
         ENV_VARS \
-        LOGIND_IGNORE_KEYS
+        LOGIND_IGNORE_KEYS \
+        BOOT_SPACE_CRIT \
+        BOOT_SPACE_WARN \
+        ROOT_AVAIL_CRIT \
+        ROOT_AVAIL_WARN
 
     # Conditionally required — needed only when profile includes corresponding destinations
     for dst in $SYSTEM_DESTINATIONS
         switch "$dst"
             case '*/iwd/*' '*/nm.conf'
-                for nw_var in IWD_ENABLE_NETWORK_CONFIG NM_WIFI_BACKEND NM_WIFI_POWERSAVE NM_LOG_LEVEL
+                for nw_var in IWD_ENABLE_NETWORK_CONFIG IWD_DNS_SERVICE IWD_DRIVER_QUIRKS NM_WIFI_BACKEND NM_WIFI_POWERSAVE NM_LOG_LEVEL
                     if not contains -- $nw_var $required
                         set -a required $nw_var
                     end
+                end
+            case '*/resolved.conf.d/*'
+                if not contains -- RESOLVED_MDNS $required
+                    set -a required RESOLVED_MDNS
+                end
+            case '*/udev/rules.d/*'
+                if not contains -- UDEV_RULES $required
+                    set -a required UDEV_RULES
                 end
         end
     end
@@ -657,7 +670,7 @@ function _validate_profile --description "Verify loaded profile has all required
     end
 
     # Type-check numeric globals
-    for num_var in LOADER_TIMEOUT DISK_ROOT_CRIT DISK_ROOT_WARN \
+    for num_var in LOADER_TIMEOUT \
         BOOT_SPACE_CRIT BOOT_SPACE_WARN ROOT_AVAIL_CRIT \
         ROOT_AVAIL_WARN BOOT_TIME_TARGET
         if set -q $num_var
@@ -1160,8 +1173,12 @@ function _log --description "Append a timestamped message to the log file"
         set -l cut 4093
         # If we'd cut inside a backslash escape, step back to before the backslash
         set -l tail3 (string sub -s (math $cut - 5) -l 6 -- "$data")
-        if string match -qr '\\\\[tnrbfu]?[0-9a-fA-F]{0,4}$' -- "$tail3"
-            set cut (math $cut - (string length -- (string match -r '\\\\[tnrbfu]?[0-9a-fA-F]{0,4}$' -- "$tail3" | head -n 1)))
+        set -l _esc_match (string match -r '\\\\[tnrbfu]?[0-9a-fA-F]{0,4}$' -- "$tail3" | head -n 1)
+        if test -n "$_esc_match"
+            set -l _esc_len (string length -- "$_esc_match")
+            if test "$_esc_len" -gt 0
+                set cut (math $cut - $_esc_len)
+            end
         end
         set data (string sub -l $cut -- "$data")"..."
     end
@@ -1431,6 +1448,26 @@ function _progress_skip --description "Advance progress counter for a skipped st
     set -g _STEP_PREV_NAME "$argv[1]"
     set -g _STEP_PREV_START (date +%s)
     set -g PROGRESS_CURRENT (math "min($PROGRESS_CURRENT + 1, $PROGRESS_TOTAL)")
+    # Render progress bar to avoid visual stall on skipped steps
+    if test "$ALL" = true; and test "$DRY" = false; and test "$PROGRESS_TOTAL" -gt 0 2>/dev/null
+        set -l pct (math "floor($PROGRESS_CURRENT * 100 / $PROGRESS_TOTAL)")
+        set -l filled (math "floor($PROGRESS_CURRENT * $PROGRESS_WIDTH / $PROGRESS_TOTAL)")
+        set -l empty (math "$PROGRESS_WIDTH - $filled")
+        set -l bar ""
+        for _si in (seq 1 $filled)
+            set bar "$bar█"
+        end
+        for _si in (seq 1 $empty)
+            set bar "$bar░"
+        end
+        set -l desc
+        if test (string length -- "$argv[1]") -gt 25
+            set desc (string sub -l 22 -- "$argv[1]")"..."
+        else
+            set desc (string sub -l 25 -- "$argv[1]                              ")
+        end
+        printf '\r[%s] %3d%% %s (skip)' "$bar" "$pct" "$desc" >&2
+    end
     _log "PROGRESS_SKIP: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $argv[1]"
 end
 
@@ -2005,13 +2042,13 @@ function validate_configs --description "Run all embedded config validators"
         end
         for unit_key in _etc_systemd_system_amdgpu-performance.service _etc_systemd_system_cpupower-epp.service
             set -l f "$content_dir/$unit_key"
-            if test -s $f
+            if test -s "$f"
                 set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service)
-                command cp -- $f $tmp
-                if not systemd-analyze verify $tmp 2>/dev/null
+                command cp -- "$f" "$tmp"
+                if not systemd-analyze verify "$tmp" 2>/dev/null
                     set errs (math $errs + 1)
                 end
-                command rm -f -- $tmp
+                command rm -f -- "$tmp"
             else
                 set errs (math $errs + 1)
             end
@@ -2019,13 +2056,13 @@ function validate_configs --description "Run all embedded config validators"
         # ssh-agent.service (user unit — verify with --user scope)
         set -l ssh_key (string replace -a -- "/" "_" "$my_home/.config/systemd/user/ssh-agent.service")
         set -l f "$content_dir/$ssh_key"
-        if test -s $f
+        if test -s "$f"
             set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service)
-            command cp -- $f $tmp
-            if not systemd-analyze --user verify $tmp 2>/dev/null
+            command cp -- "$f" "$tmp"
+            if not systemd-analyze --user verify "$tmp" 2>/dev/null
                 set errs (math $errs + 1)
             end
-            command rm -f -- $tmp
+            command rm -f -- "$tmp"
         else
             set errs (math $errs + 1)
         end
@@ -2041,8 +2078,8 @@ function validate_configs --description "Run all embedded config validators"
         set -l my_home $argv[3]
         set -l fish_key (string replace -a -- "/" "_" "$my_home/.config/fish/conf.d/10-ssh-auth-sock.fish")
         set -l f "$content_dir/$fish_key"
-        if test -s $f
-            if not fish --no-execute $f 2>/dev/null
+        if test -s "$f"
+            if not fish --no-execute "$f" 2>/dev/null
                 set errs (math $errs + 1)
             end
         else
@@ -2051,11 +2088,11 @@ function validate_configs --description "Run all embedded config validators"
         # environment.d check
         set -l env_key (string replace -a -- "/" "_" "$my_home/.config/environment.d/10-environment.conf")
         set -l ef "$content_dir/$env_key"
-        if test -s $ef
-            if not grep -q -- "^SSH_AUTH_SOCK=" $ef
+        if test -s "$ef"
+            if not grep -q -- "^SSH_AUTH_SOCK=" "$ef"
                 set errs (math $errs + 1)
             end
-            if grep -q -- "%t" $ef
+            if grep -q -- "%t" "$ef"
                 set errs (math $errs + 1)
             end
         else
@@ -2080,12 +2117,12 @@ function validate_configs --description "Run all embedded config validators"
             set -l sections_str (string split "|" -- $check)[2]
             set -l sections (string split "," -- $sections_str)
             set -l f "$content_dir/$key"
-            if not test -s $f
+            if not test -s "$f"
                 set errs (math $errs + 1)
                 continue
             end
             for section in $sections
-                if not grep -qF -- $section $f
+                if not grep -qF -- "$section" "$f"
                     set errs (math $errs + 1)
                 end
             end
@@ -2101,9 +2138,9 @@ function validate_configs --description "Run all embedded config validators"
         set -l val_dir $argv[2]
         # loader.conf
         set -l f "$content_dir/_boot_loader_loader.conf"
-        if test -s $f
+        if test -s "$f"
             for key in default timeout console-mode editor
-                if not grep -qE -- "^$key " $f
+                if not grep -qE -- "^$key " "$f"
                     set errs (math $errs + 1)
                 end
             end
@@ -2112,9 +2149,9 @@ function validate_configs --description "Run all embedded config validators"
         end
         # sdboot-manage.conf
         set -l f "$content_dir/_etc_sdboot-manage.conf"
-        if test -s $f
+        if test -s "$f"
             for key in LINUX_OPTIONS LINUX_FALLBACK_OPTIONS DEFAULT_ENTRY REMOVE_EXISTING OVERWRITE_EXISTING REMOVE_OBSOLETE
-                if not grep -qE -- "^$key=" $f
+                if not grep -qE -- "^$key=" "$f"
                     set errs (math $errs + 1)
                 end
             end
@@ -2123,9 +2160,9 @@ function validate_configs --description "Run all embedded config validators"
         end
         # udev rules
         set -l f "$content_dir/_etc_udev_rules.d_99-cachyos-udev.rules"
-        if test -s $f
-            if grep -qE -- "[A-Z]+=[^=]" $f 2>/dev/null
-                if grep -qE -- "==[[:space:]]*\$" $f 2>/dev/null
+        if test -s "$f"
+            if grep -qE -- "[A-Z]+=[^=]" "$f" 2>/dev/null
+                if grep -qE -- "==[[:space:]]*\$" "$f" 2>/dev/null
                     set errs (math $errs + 1)
                 end
             end
@@ -2220,16 +2257,18 @@ function install_file --argument-names dst use_sudo --description "Install a sin
         return 0
     end
 
-    # Skip unchanged: compare generated content against installed file
-    set -l _new_content (get_file_content "$dst" 2>/dev/null)
-    if test $status -eq 0; and test -n "$_new_content"
-        set -l _cur_content
+    # Skip unchanged: compare generated content hash against installed file hash
+    # NOTE: Fish variable comparison flattens newlines to spaces ("a\nb" == "a b"),
+    # so we use SHA256 hash comparison for correctness across all content shapes.
+    set -l _new_hash (get_file_content "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+    if test -n "$_new_hash"
+        set -l _cur_hash
         if test "$use_sudo" = true
-            set _cur_content (sudo cat -- "$dst" 2>/dev/null)
+            set _cur_hash (sudo cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
         else
-            set _cur_content (command cat -- "$dst" 2>/dev/null)
+            set _cur_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
         end
-        if test "$_new_content" = "$_cur_content"
+        if test -n "$_cur_hash"; and test "$_new_hash" = "$_cur_hash"
             _ok "→ $dst (unchanged)"
             return 0
         end
@@ -2574,7 +2613,8 @@ function do_diff --argument-names target_file --description "Show diffs between 
                     else if test "$HAS_DELTA" = true
                         delta <"$diff_tmp"
                     else
-                        diff -u --label "embedded: $dst" --label "installed: $dst" --color=always -- "$tmp" "$tmp_installed"
+                        # Colorize pre-computed unified diff via sed (avoids redundant diff re-computation)
+                        sed -e 's/^-.*$/\x1b[31m&\x1b[0m/' -e 's/^+.*$/\x1b[32m&\x1b[0m/' -e 's/^@.*$/\x1b[36m&\x1b[0m/' -- "$diff_tmp"
                     end
                 end >&2
                 while read -l dline
@@ -3559,13 +3599,11 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
             end
         end
 
-        # LVM check for mask filtering
+        # LVM check for mask filtering (consistent with _install_configure_services: sudo pvs)
         set -l has_lvm false
-        if command -q lvs
-            set -l lv_count (lvs --noheadings 2>/dev/null | wc -l | string trim --)
-            if test -n "$lv_count"; and string match -qr "^\d+\$" -- "$lv_count"; and test "$lv_count" -gt 0
-                set has_lvm true
-            end
+        set -l pvs_output (sudo -n pvs --noheadings 2>/dev/null | string trim --)
+        if test -n "$pvs_output"
+            set has_lvm true
         end
 
         # Check masked services (remaining results)
@@ -5042,11 +5080,11 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
                 set -l iwctl_output (iwctl device list 2>/dev/null)
                 if test -n "$iwctl_output"
                     set wlan_iface (printf '%s\n' $iwctl_output | awk '
-                        NR > 4; and /station/ {
+                        NR > 4 && /station/ {
                             for(i=1; i<=NF; i++) {
-                                if($i ~ /^wl/; or $i ~ /^wlan/) { print $i; exit }
+                                if($i ~ /^wl/ || $i ~ /^wlan/) { print $i; exit }
                             }
-                            if($2 !~ /^-+$/) print $2; exit
+                            if($2 !~ /^-+$/) { print $2; exit }
                         }' | head -n 1)
                     if test -n "$wlan_iface"; and not test -d "/sys/class/net/$wlan_iface"
                         _warn "Iwctl reported interface '$wlan_iface' not found in /sys/class/net — falling back"
@@ -5153,7 +5191,7 @@ function _install_preflight --description "Run all preflight checks before insta
             _err "Sudo required for installation"
             return $EXIT_PREFLIGHT
         end
-        set -l sudo_all (sudo -l 2>/dev/null | grep -v '^\s*#' | grep -c '(ALL.*) ALL')
+        set -l sudo_all (sudo -n -l 2>/dev/null | grep -v '^\s*#' | grep -c '(ALL.*) ALL')
         or set sudo_all 0
         if test "$sudo_all" -eq 0
             if test "$ALL" = true
@@ -5819,63 +5857,77 @@ function _install_finalize --description "Run post-install verification, cleanup
                 set -g INSTALL_HAD_ERRORS true
             else
                 # Generate deterministic NM connection UUID from SSID+interface via MD5 (not security-critical)
-                set -l _hex (printf '%s-%s' "$WIFI_SSID" "$WIFI_IFACE" | md5sum | string split -- ' ')[1]
-                set -l conn_uuid (string sub -l 8 -- $_hex)-(string sub -s 9 -l 4 -- $_hex)-(string sub -s 13 -l 4 -- $_hex)-(string sub -s 17 -l 4 -- $_hex)-(string sub -s 21 -l 12 -- $_hex)
-                # GKeyFile escapes via consolidated helper (single source of truth)
-                set -l safe_pass (_gkeyfile_escape "$WIFI_PASS")
-                set -l safe_ssid (_gkeyfile_escape "$WIFI_SSID")
-                # Inside DRY=false gate (line 6374); credential write only occurs on live runs
-                if printf '%s\n' "[connection]" "id=$safe_ssid" "uuid=$conn_uuid" "type=wifi" "interface-name=$WIFI_IFACE" "autoconnect=true" "[wifi]" "mode=infrastructure" "ssid=$safe_ssid" "[wifi-security]" "key-mgmt=wpa-psk" "psk=$safe_pass" "[ipv4]" "method=auto" "[ipv6]" "method=disabled" | sudo tee -- "$tmpfile" >/dev/null
-                    set --erase WIFI_PASS
-                    if not _run sudo chmod -- 0600 "$tmpfile"
-                        sudo rm -f -- "$tmpfile" 2>/dev/null
-                        _err "Failed to set permissions on WiFi credential file"
-                        set -g INSTALL_HAD_ERRORS true
-                    else if not _run sudo mv -- "$tmpfile" "$conn_file"
-                        sudo rm -f -- "$tmpfile" 2>/dev/null
-                        _err "WiFi connection profile creation failed"
-                        set -g INSTALL_HAD_ERRORS true
-                    else
-                        _run sudo chown -- root:root "$conn_file" 2>/dev/null
-                        _run sudo nmcli connection load "$conn_file" 2>/dev/null
-                        # NM may take up to 10s to register .nmconnection; rescan every 3s
-                        set -l reload_wait 0
-                        while test $reload_wait -lt 10
-                            if nmcli connection show "$WIFI_SSID" >/dev/null 2>&1
-                                break
-                            end
-                            set reload_wait (math $reload_wait + 1)
-                            sleep $WIFI_CONNECT_WAIT
-                            if test (math "$reload_wait % 3") -eq 0
-                                _run sudo nmcli connection load "$conn_file" 2>/dev/null
-                                nmcli device wifi rescan ifname "$WIFI_IFACE" 2>/dev/null
-                            end
-                        end
-                        set -l wifi_retry 0
-                        set -l wifi_connected false
-                        while test $wifi_retry -lt 3; and test "$wifi_connected" = false
-                            if _run nmcli connection up id "$WIFI_SSID"
-                                set wifi_connected true
-                                _ok "WiFi connection established"
-                            else
-                                set wifi_retry (math $wifi_retry + 1)
-                                if test $wifi_retry -lt 3
-                                    _info "WiFi connection attempt $wifi_retry failed, retrying in "$WIFI_RETRY_DELAY"s..."
-                                    sleep $WIFI_RETRY_DELAY
-                                    _run sudo nmcli connection load "$conn_file" 2>/dev/null
-                                end
-                            end
-                        end
-                        if test "$wifi_connected" = false
-                            _err "WiFi connection failed after 3 attempts"
-                            set -g INSTALL_HAD_ERRORS true
-                        end
-                    end
-                else
+                set -l _hex ""
+                if command -q md5sum
+                    set _hex (printf '%s-%s' "$WIFI_SSID" "$WIFI_IFACE" | md5sum | string split -- ' ')[1]
+                end
+                if test -z "$_hex"; or not string match -qr '^[0-9a-f]{32}$' -- "$_hex"
+                    # Fallback: use /proc/sys/kernel/random/uuid if md5sum unavailable or failed
+                    set _hex (string replace -a '-' '' -- (command cat -- /proc/sys/kernel/random/uuid 2>/dev/null))
+                end
+                if test -z "$_hex"; or test (string length -- "$_hex") -lt 32
                     set --erase WIFI_PASS
                     sudo rm -f -- "$tmpfile" 2>/dev/null
-                    _err "WiFi connection profile write failed"
+                    _err "Failed to generate UUID for WiFi connection (md5sum and /proc/sys/kernel/random/uuid unavailable)"
                     set -g INSTALL_HAD_ERRORS true
+                else
+                    set -l conn_uuid (string sub -l 8 -- $_hex)-(string sub -s 9 -l 4 -- $_hex)-(string sub -s 13 -l 4 -- $_hex)-(string sub -s 17 -l 4 -- $_hex)-(string sub -s 21 -l 12 -- $_hex)
+                    # GKeyFile escapes via consolidated helper (single source of truth)
+                    set -l safe_pass (_gkeyfile_escape "$WIFI_PASS")
+                    set -l safe_ssid (_gkeyfile_escape "$WIFI_SSID")
+                    # Inside DRY=false gate (line 6374); credential write only occurs on live runs
+                    if printf '%s\n' "[connection]" "id=$safe_ssid" "uuid=$conn_uuid" "type=wifi" "interface-name=$WIFI_IFACE" "autoconnect=true" "[wifi]" "mode=infrastructure" "ssid=$safe_ssid" "[wifi-security]" "key-mgmt=wpa-psk" "psk=$safe_pass" "[ipv4]" "method=auto" "[ipv6]" "method=disabled" | sudo tee -- "$tmpfile" >/dev/null
+                        set --erase WIFI_PASS
+                        if not _run sudo chmod -- 0600 "$tmpfile"
+                            sudo rm -f -- "$tmpfile" 2>/dev/null
+                            _err "Failed to set permissions on WiFi credential file"
+                            set -g INSTALL_HAD_ERRORS true
+                        else if not _run sudo mv -- "$tmpfile" "$conn_file"
+                            sudo rm -f -- "$tmpfile" 2>/dev/null
+                            _err "WiFi connection profile creation failed"
+                            set -g INSTALL_HAD_ERRORS true
+                        else
+                            _run sudo chown -- root:root "$conn_file" 2>/dev/null
+                            _run sudo nmcli connection load "$conn_file" 2>/dev/null
+                            # NM may take up to 10s to register .nmconnection; rescan every 3s
+                            set -l reload_wait 0
+                            while test $reload_wait -lt 10
+                                if nmcli connection show "$WIFI_SSID" >/dev/null 2>&1
+                                    break
+                                end
+                                set reload_wait (math $reload_wait + 1)
+                                sleep $WIFI_CONNECT_WAIT
+                                if test (math "$reload_wait % 3") -eq 0
+                                    _run sudo nmcli connection load "$conn_file" 2>/dev/null
+                                    nmcli device wifi rescan ifname "$WIFI_IFACE" 2>/dev/null
+                                end
+                            end
+                            set -l wifi_retry 0
+                            set -l wifi_connected false
+                            while test $wifi_retry -lt 3; and test "$wifi_connected" = false
+                                if _run nmcli connection up id "$WIFI_SSID"
+                                    set wifi_connected true
+                                    _ok "WiFi connection established"
+                                else
+                                    set wifi_retry (math $wifi_retry + 1)
+                                    if test $wifi_retry -lt 3
+                                        _info "WiFi connection attempt $wifi_retry failed, retrying in "$WIFI_RETRY_DELAY"s..."
+                                        sleep $WIFI_RETRY_DELAY
+                                        _run sudo nmcli connection load "$conn_file" 2>/dev/null
+                                    end
+                                end
+                            end
+                            if test "$wifi_connected" = false
+                                _err "WiFi connection failed after 3 attempts"
+                                set -g INSTALL_HAD_ERRORS true
+                            end
+                        end
+                    else
+                        set --erase WIFI_PASS
+                        sudo rm -f -- "$tmpfile" 2>/dev/null
+                        _err "WiFi connection profile write failed"
+                        set -g INSTALL_HAD_ERRORS true
+                    end
                 end
             end
         else
@@ -6696,17 +6748,22 @@ if test -f "$LOG_FILE"; and test "$LOG_FILE" != "$new_log"
     command mv -- "$LOG_FILE" "$new_log" 2>/dev/null
 end
 set -g LOG_FILE "$new_log"
-command install -m 0600 /dev/null "$LOG_FILE" 2>/dev/null
-or begin
-    command touch -- "$LOG_FILE" 2>/dev/null
-    command chmod -- 600 "$LOG_FILE" 2>/dev/null; or _warn "Chmod 600 failed on $LOG_FILE"
+# Only create fresh file if it doesn't already exist (mv above may have placed it); preserve pre-existing content from _load_profile
+if not test -f "$LOG_FILE"
+    command install -m 0600 /dev/null "$LOG_FILE" 2>/dev/null
+    or begin
+        command touch -- "$LOG_FILE" 2>/dev/null
+        command chmod -- 600 "$LOG_FILE" 2>/dev/null; or _warn "Chmod 600 failed on $LOG_FILE"
+    end
+else
+    command chmod -- 600 "$LOG_FILE" 2>/dev/null; or true
 end
 
 set -l _init_cmd (string join -- " " (status filename) $argv)
 set -l _init_cmd (_json_str "$_init_cmd")
 printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","dry_run":%s,"all":%s,"verbose":%s,"command":"%s"}\n' \
     (date '+%Y-%m-%dT%H:%M:%S') "$VERSION" "$PROFILE_NAME" "$MODE" "$DRY" "$ALL" \
-    (test "$QUIET" = false; and echo true; or echo false) "$_init_cmd" >"$LOG_FILE"
+    (test "$QUIET" = false; and echo true; or echo false) "$_init_cmd" >>"$LOG_FILE"
 
 # Lock policy: write modes (install, diff --fix) acquire; read modes skip
 switch $MODE

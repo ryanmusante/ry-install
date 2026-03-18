@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.25-blue)
+![Version](https://img.shields.io/badge/version-3.7.28-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -20,6 +20,34 @@ Self-contained CachyOS configuration manager with profile support. Default profi
 
 Check [Beelink](https://dr.bee-link.cn/) for BIOS, kernel bugzilla / Mesa GitLab for gfx1151 issues.
 
+## Prerequisites
+
+Before running the fully automated install (`--all`), complete these steps on a fresh CachyOS system:
+
+| # | Step | Command / Action | Why |
+|---|------|-----------------|-----|
+| 1 | **CachyOS installed** | systemd-boot, btrfs or ext4 root, working internet | Script assumes CachyOS base with systemd-boot (not GRUB) |
+| 2 | **Fish shell 3.4+** | `fish --version` (CachyOS ships 4.5) | Required for `string-collect`, `argparse` enhancements |
+| 3 | **Kernel 6.14+** | `uname -r` | ntsync, gfx1151 fixes, mt7925e.disable_aspm |
+| 4 | **Unrestricted sudo** | `sudo -l` must show `(ALL) ALL` | `--all` aborts if sudo is restricted |
+| 5 | **2 GB root free** | `df -h /` | Packages + initramfs + cache headroom |
+| 6 | **200 MB /boot free** | `df -h /boot` | Kernel images + initramfs + boot entries |
+| 7 | **Network connectivity** | `curl -sf --head https://archlinux.org` | Package sync and installation |
+| 8 | **BIOS current** | Check [Beelink](https://dr.bee-link.cn/) downloads | P110+ for ACPI and Strix Halo stability |
+| 9 | **Snapshot rootfs** | `sudo btrfs subvolume snapshot -r / /.snapshots/pre-ry-install` | Rollback point (btrfs only; script creates one automatically) |
+| 10 | **Review masked services** | See [Masked Services](#masked-services-9) | Sleep/hibernate/suspend targets will be masked — confirm this is a desktop, not a laptop |
+| 11 | **WiFi SSID/passphrase ready** | SSID: 1-32 bytes, no shell metacharacters (`` /\;`$(){}|<>'"% ``), no leading/trailing spaces. Passphrase: WPA2, 8-63 chars, no `%` | WiFi credential prompts are interactive even with `--all` (type SSID + passphrase at the end); skipped on non-TTY |
+| 12 | **Check CachyOS news** | [wiki.cachyos.org](https://wiki.cachyos.org/) and [archlinux.org/news](https://archlinux.org/news/) | Known upgrade issues before `-Syu` |
+
+**Minimal automated run:**
+
+```fish
+./ry-install.fish --dry-run --all   # Preview everything first
+./ry-install.fish --all             # Unattended install (prompts auto-yes, progress bar)
+```
+
+**After install:** Reboot → `--verify-static` → `--verify-runtime` → `sudo pacdiff` → test WiFi + gaming.
+
 ## Quick Start
 
 ```fish
@@ -28,8 +56,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 ./ry-install.fish --dry-run    # Preview changes
 ./ry-install.fish --help       # All options
 ```
-
-**Prerequisites:** CachyOS, systemd-boot, fish 3.4+ (CachyOS ships 4.5), kernel 6.14+ (ntsync, gfx1151, mt7925e), 2 GB root + 200 MB `/boot` free. Network for install only. SSIDs and passphrases containing `%` rejected (GKeyFile parse safety).
 
 ## Options
 
@@ -290,7 +316,7 @@ Machine-specific globals (kernel params, packages, services, thresholds, destina
 | `~/.config/ry-install/default-profile` | Persistent default (single line: profile name) |
 | `gtr9_pro` | Hardcoded fallback |
 
-External profiles must define a `function profile_<name>` setting all required globals. Files are syntax-checked (`fish --no-execute`) before sourcing. Profile validation enforces 21+ required globals, name consistency, and numeric types.
+External profiles must define a `function profile_<name>` setting all required globals. Files are syntax-checked (`fish --no-execute`) before sourcing. Profile validation enforces 25+ required globals, name consistency, and numeric types.
 
 ### Adapting
 

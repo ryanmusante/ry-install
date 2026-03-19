@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.38-blue)
+![Version](https://img.shields.io/badge/version-3.7.39-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -27,7 +27,7 @@ Before running the fully automated install (`--all`), complete these steps on a 
 | # | Step | Command / Action | Why |
 |---|------|-----------------|-----|
 | 1 | **CachyOS installed** | systemd-boot, btrfs or ext4 root, working internet | Script assumes CachyOS base with systemd-boot (not GRUB) |
-| 2 | **Fish shell 3.4+** | `fish --version` (CachyOS ships 4.5) | Required for `string-collect`, `argparse` enhancements |
+| 2 | **Fish shell 3.4+** | `fish --version` (CachyOS ships 4.5) | Required for `$()` syntax, `set --function`, `string collect --allow-empty` |
 | 3 | **Kernel 6.14+** | `uname -r` | ntsync, gfx1151 fixes, mt7925e.disable_aspm |
 | 4 | **Unrestricted sudo** | `sudo -l` must show `(ALL) ALL` | `--all` aborts if sudo is restricted |
 | 5 | **2 GB root free** | `df -h /` | Packages + initramfs + cache headroom |
@@ -109,20 +109,17 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 ## Configuration
 
-### Kernel Parameters (18)
+### Kernel Parameters (15)
 
 | Parameter | Purpose |
 |-----------|---------|
-| `amd_iommu=off` | Disable IOMMU (no VMs, reduces overhead) |
-| `amd_pstate=active` | Enable amd_pstate active mode |
-| `amdgpu.aspm=0` | Disable GPU ASPM power saving |
-| `amdgpu.cwsr_enable=0` | Disable compute wave save/restore |
-| `amdgpu.gpu_recovery=1` | Enable GPU hang recovery |
-| `amdgpu.modeset=1` | Enable kernel modesetting |
-| `amdgpu.ppfeaturemask=0xfffd3fff` | Disable TDC/GFXOFF/stutter |
-| `amdgpu.runpm=0` | Disable GPU runtime PM |
+| `amd_pstate=active` | Enable amd_pstate active mode (default since 6.5; explicit) |
+| `amdgpu.cwsr_enable=0` | Disable compute wave save/restore (Strix Halo MES hang workaround) |
+| `amdgpu.gpu_recovery=1` | Enable GPU hang recovery (default auto; explicit) |
+| `amdgpu.ppfeaturemask=0xfffd3fff` | Disable overdrive/GFXOFF/stutter (bits 14,15,17) |
 | `audit=0` | Disable audit subsystem |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
+| `iommu=pt` | IOMMU passthrough (DMA protection with near-zero overhead) |
 | `mt7925e.disable_aspm=1` | Disable WiFi ASPM |
 | `nowatchdog` | Disable watchdog timers |
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
@@ -145,7 +142,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Key | Value |
 |-----|-------|
-| `LINUX_OPTIONS` | See [Kernel Parameters](#kernel-parameters-18) |
+| `LINUX_OPTIONS` | See [Kernel Parameters](#kernel-parameters-15) |
 | `LINUX_FALLBACK_OPTIONS` | `"quiet"` |
 | `DEFAULT_ENTRY` | `"manual"` |
 | `REMOVE_EXISTING` | `"yes"` |
@@ -166,9 +163,9 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 |------|---------|
 | `udev rules` | `ntsync` MODE=0666 |
 | `resolved.conf.d` | MulticastDNS=no |
-| `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys |
+| `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press variants (7 keys) |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks: DefaultInterface/PowerSaveDisable · NameResolvingService=systemd |
-| `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=ERR |
+| `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
 
 ### Sysctl Overrides
 
@@ -180,7 +177,6 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | `net.core.default_qdisc` | `fq` | Fair queue pacing for BBR |
 | `net.ipv4.tcp_congestion_control` | `bbr` | BBR congestion control |
 | `net.ipv4.tcp_fastopen` | `3` | TCP Fast Open client + server |
-| `fs.inotify.max_user_watches` | `524288` | Inotify watches for IDEs/build tools |
 
 ### Environment Variables
 
@@ -205,7 +201,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | Action | Packages |
 |--------|----------|
 | **Add (12)** | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
-| **Remove (7)** | plymouth, cachyos-plymouth-bootanimation, ufw, octopi, micro, cachyos-micro-settings, btop |
+| **Remove (8)** | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
 
 ### Masked Services (9)
 
@@ -225,7 +221,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 
 | Unit | Description |
 |------|-------------|
-| `amdgpu-performance.service` | Write `high` to `power_dpm_force_performance_level` sysfs after graphical.target (retry loop, multi-GPU) |
+| `amdgpu-performance.service` | Write `high` to `power_dpm_force_performance_level` sysfs after multi-user.target (retry loop, multi-GPU) |
 | `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` sysfs after cpupower.service |
 
 ## Embedded Files (15)
@@ -331,5 +327,29 @@ Create `~/.config/ry-install/profiles/<name>.fish` with a `profile_<name>` funct
 | [MT7925](https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek) | MediaTek WiFi 7 |
 | [gfx1151](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) | Mesa GPU issues |
 | [ppfeaturemask](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter) | AMDGPU feature mask |
+
+### Known Hardware Issues
+
+#### Strix Halo (gfx1151) GPU
+
+- **CWSR hang**: `amdgpu.cwsr_enable=0` is required. CWSR causes MES firmware hang on gfx1151 (ROCm [#5590](https://github.com/ROCm/ROCm/issues/5590), [#5724](https://github.com/ROCm/ROCm/issues/5724)). Do not remove.
+- **MES firmware page faults**: MES FW 0x83 may trigger page faults. Pin `linux-firmware` to a known-good version if affected.
+- **ROCm VRAM**: VRAM allocation is limited. Use `ttm.pages_limit` on kernel 6.14+ to adjust.
+- **Black screen regression**: Kernel 6.19.0 has a black screen regression; 6.18.9 is the last known-good version.
+- **ROCm environment**: Set `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.0` for ROCm workloads.
+
+#### MediaTek MT7925 WiFi
+
+- **Kernel panics**: NULL dereference in `mt7925_mac_reset_work`. Install `mt76-mt7925-dkms` from AUR (`paru -S mt76-mt7925-dkms`) for the fix. Pacman cannot install AUR packages — use `paru` or `yay`.
+- **TX power locked**: TX power is locked to 3 dBm due to a driver bug. Currently unfixable upstream.
+- **Random deauth cycles**: Connection drops and reassociates unpredictably.
+- **Fallback**: Replace with Intel AX210 or AX211 for a stable WiFi experience.
+
+#### NetworkManager + iwd
+
+- **Boot connectivity**: WiFi may not connect on boot. Workaround: `nmcli radio wifi off && nmcli radio wifi on`.
+- **DefaultInterface=\***: Intermittent drops on some drivers.
+- **WPA2/WPA3 Enterprise**: GUI configuration is broken with iwd backend.
+- **Monitor mode**: No recovery without a full reboot.
 
 ## [Changelog](CHANGELOG.txt) · License: MIT

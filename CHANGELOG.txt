@@ -1,3 +1,41 @@
+3.7.39 (2026-03-19)
+-------------------
+  fix(security): amd_iommu=off → iommu=pt. Disabling IOMMU removed DMA
+    protection on all PCIe/USB4 devices with zero perf benefit on Zen 5.
+    iommu=pt retains protection with near-zero overhead. Updated
+    _validate_kernel_params config map (CONFIG_IOMMU_SUPPORT).
+  fix(kernel): remove amdgpu.modeset=1 — not a valid amdgpu parameter.
+    KMS is always-on for amdgpu. Cargo-culted from nvidia-drm.modeset=1.
+  fix(logind): add HandleSuspendKeyLongPress (defaults hibernate) and
+    HandleRebootKeyLongPress (defaults poweroff). Both fire despite
+    "ignore all" intent. Added in systemd v249+.
+  fix(nm): NM_LOG_LEVEL ERR → WARN. MT7925 has active kernel panics,
+    deauth cycles, TX power bugs. ERR suppresses needed WiFi diagnostics.
+  fix(service): amdgpu-performance.service After=graphical.target →
+    multi-user.target. DRM sysfs available before graphical.target;
+    ExecStart retries handle late availability.
+  fix(sysctl): remove fs.inotify.max_user_watches=524288. Kernel 5.11+
+    auto-sets to 1% of RAM (capped 1,048,576). On 128 GB, default is
+    max — setting 524,288 actually reduces it. Removed from
+    get_file_content, verify_static, and do_lint.
+  fix(code): bare return → return 0 in WiFi non-interactive path.
+  fix(code): close stale TODO (root-override for chroot/CI).
+  remove: amdgpu.aspm=0 (ASPM is PCIe link PM; Strix Halo iGPU uses
+    SoC fabric, not external PCIe link — no-op on APU-only system).
+  remove: amdgpu.runpm=0 (runtime PM targets discrete GPUs; APU iGPU
+    shares CPU power domain — no-op).
+  remove: EXPECTED_GPU_PCI dead global and comment (never consumed).
+  add: PKGS_DEL += cachyos-plymouth-theme (recent CachyOS ISOs).
+  add: comment blocks documenting cwsr_enable, ppfeaturemask bit layout,
+    amd_pstate/gpu_recovery defaults, BBR version, mkinitcpio hooks
+    resume behavior, mkinitcpio-firmware AUR note, REMOVE_EXISTING risk,
+    ssh-agent.service custom vs system unit (<OWNER: fill in>).
+  add: Fish version gate comment corrected (3.4 features: $() syntax,
+    set --function, string collect --allow-empty).
+  doc: kernel params 18 → 15. Known hardware issues section: Strix Halo
+    GPU (CWSR, MES, ROCm, black screen), MT7925 WiFi (panics, TX power,
+    deauth, mt76-mt7925-dkms AUR fix), NM+iwd edge cases.
+
 3.7.38 (2026-03-18)
 -------------------
   fix(changelog): 3.7.36 date was 2026-03-19 (future date, postdated

@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.38 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.38"
+# ry-install v3.7.39 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.39"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -31,12 +31,12 @@ set -g HAS_DELTA (command -q delta; and echo true; or echo false)
 
 set -g _IS_ROOT false
 if test (id -u) -eq 0
-    # Running as root forces --dry-run; TODO: --root-override for chroot/CI with confirmation
+    # Running as root forces --dry-run (run as normal user; uses sudo internally)
     set -g _IS_ROOT true
     set -g DRY true
 end
 
-# ── Fish version gate (3.4+ required for string-collect, string-join0, argparse enhancements) ──
+# ── Fish version gate (3.4+ required for $() syntax, set --function, string collect --allow-empty) ──
 set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n 1)
 if test -z "$fish_ver"
     echo "Error: Could not determine fish version" >&2
@@ -164,7 +164,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
     set -l param_config_map \
         "amd_pstate=CONFIG_X86_AMD_PSTATE" \
         "zswap.=CONFIG_ZSWAP" \
-        "amd_iommu=CONFIG_AMD_IOMMU" \
+        "iommu=CONFIG_IOMMU_SUPPORT" \
         "amdgpu.=CONFIG_DRM_AMDGPU" \
         "split_lock_detect=CONFIG_X86_SPLIT_LOCK_DETECT"
 
@@ -518,21 +518,28 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g LOADER_CONSOLE_MODE keep
     set -g LOADER_EDITOR no
     set -g SDBOOT_OVERWRITE yes
+    # REMOVE_EXISTING=yes deletes ALL boot entries before regen —
+    # manual entries (rescue, Windows) will be lost. CachyOS default="no".
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # ── Kernel (18 params) ──
+    # ── Kernel (15 params) ──
+    # amdgpu.cwsr_enable=0 — Strix Halo workaround (ROCm #5590, #5724)
+    # CWSR causes MES firmware hang on gfx1151. Do not remove.
+    # amdgpu.ppfeaturemask=0xfffd3fff disables:
+    #   bit 14 PP_OVERDRIVE_MASK — no sysfs OC (iGPU, not needed)
+    #   bit 15 PP_GFXOFF_MASK   — prevents idle GPU fence-timeout hangs
+    #   bit 17 PP_STUTTER_MODE  — prevents display flicker on idle
+    # amd_pstate=active — default since kernel 6.5 for Zen 2+; explicit for clarity
+    # amdgpu.gpu_recovery=1 — default is -1 (auto, enables GFX8+); explicit for clarity
     set -g KERNEL_PARAMS \
-        amd_iommu=off \
         amd_pstate=active \
-        amdgpu.aspm=0 \
         amdgpu.cwsr_enable=0 \
         amdgpu.gpu_recovery=1 \
-        amdgpu.modeset=1 \
         amdgpu.ppfeaturemask=0xfffd3fff \
-        amdgpu.runpm=0 \
         audit=0 \
         initcall_blacklist=simpledrm_platform_driver_init \
+        iommu=pt \
         mt7925e.disable_aspm=1 \
         nowatchdog \
         nvme_core.default_ps_max_latency_us=0 \
@@ -544,6 +551,8 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     # ── Initramfs ──
     set -g MKINITCPIO_MODULES amdgpu nvme
+    # systemd hooks — no resume hook needed (systemd handles hibernate
+    # resume automatically; sleep/suspend/hibernate targets are masked)
     set -g MKINITCPIO_HOOKS \
         base \
         systemd \
@@ -568,14 +577,16 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         HandlePowerKey \
         HandlePowerKeyLongPress \
         HandleSuspendKey \
+        HandleSuspendKeyLongPress \
         HandleHibernateKey \
-        HandleRebootKey
+        HandleRebootKey \
+        HandleRebootKeyLongPress
     set -g IWD_ENABLE_NETWORK_CONFIG false
     set -g IWD_DRIVER_QUIRKS "DefaultInterface=*" "PowerSaveDisable=*"
     set -g IWD_DNS_SERVICE systemd
     set -g NM_WIFI_BACKEND iwd
     set -g NM_WIFI_POWERSAVE 2
-    set -g NM_LOG_LEVEL ERR
+    set -g NM_LOG_LEVEL WARN
 
     # ── Environment ──
     set -g ENV_VARS \
@@ -585,8 +596,9 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "PROTON_NO_WM_DECORATION=1"
 
     # ── Packages ──
+    # mkinitcpio-firmware may be AUR-only. If pacman -S fails, use paru.
     set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications fd sd dust procs bottom git-delta lm_sensors
-    set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation ufw octopi micro cachyos-micro-settings btop
+    set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme ufw octopi micro cachyos-micro-settings btop
 
     # ── Services ──
     set -g MASK \
@@ -610,7 +622,6 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     # ── Hardware fingerprint expectations (optional) ──
     set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
-    set -g EXPECTED_GPU_PCI "1002:150e"
     return 0
 end
 
@@ -652,7 +663,6 @@ function _validate_profile --description "Verify loaded profile has all required
     #   PKGS_DEL              — for-loop no-op when empty/unset
     #   BOOT_TIME_TARGET      — type-checked if set (L703); verify_runtime safe via test fallthrough
     #   EXPECTED_CPU_MATCH    — guarded by set -q in _load_profile (L770)
-    #   EXPECTED_GPU_PCI      — reserved for future use (not yet consumed)
 
     # Conditionally required — needed only when profile includes corresponding destinations
     for dst in $SYSTEM_DESTINATIONS
@@ -976,15 +986,13 @@ function get_file_content --argument-names dst --description "Return embedded co
         case "/etc/sysctl.d/99-ry-sysctl.conf"
             printf '%s\n' "# Network and security sysctl -- complements cachyos vendor 70-cachyos-settings.conf"
             printf '%s\n' ""
+            printf '%s\n' "# BBR: mainline=v1; CachyOS kernel may ship v3 (check: modinfo tcp_bbr)"
             printf '%s\n' "# TCP BBR congestion control + fq qdisc for pacing"
             printf '%s\n' "net.core.default_qdisc = fq"
             printf '%s\n' "net.ipv4.tcp_congestion_control = bbr"
             printf '%s\n' ""
             printf '%s\n' "# TCP Fast Open: 3 = client + server"
             printf '%s\n' "net.ipv4.tcp_fastopen = 3"
-            printf '%s\n' ""
-            printf '%s\n' "# Inotify watches for file watchers (IDEs, build tools)"
-            printf '%s\n' "fs.inotify.max_user_watches = 524288"
 
         case "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish"
             printf '%s\n' '# SSH agent socket for fish shell -- priority: forwarded > gcr > systemd
@@ -1004,6 +1012,8 @@ end'
                 printf '%s\n' "$var"
             end
 
+        # Custom unit vs Arch's /usr/lib/systemd/user/ssh-agent.service
+        # (openssh ≥9.4p1-3). Custom preferred because: <OWNER: fill in>
         case "$HOME/.config/systemd/user/ssh-agent.service"
             printf '%s\n' '[Unit]
 Description=SSH authentication agent
@@ -1018,10 +1028,10 @@ RestartSec=5
 WantedBy=default.target'
 
         case "/etc/systemd/system/amdgpu-performance.service"
-            # After=graphical.target for DRM settle (Arch #72655); ExecStart: 5 retries, 2s delay, exit 1 if no writable sysfs
+            # After=multi-user.target for DRM settle (Arch #72655); ExecStart: 5 retries, 2s delay, exit 1 if no writable sysfs
             printf '%s\n' '[Unit]' \
                 'Description=Set AMDGPU power_dpm_force_performance_level to high' \
-                'After=graphical.target' \
+                'After=multi-user.target' \
                 'ConditionPathIsDirectory=/sys/class/drm' \
                 '' \
                 '[Service]' \
@@ -3180,7 +3190,6 @@ function verify_static --description "Verify installed configs match embedded ch
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.core.default_qdisc = fq" "default_qdisc = fq"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.ipv4.tcp_congestion_control = bbr" "tcp_congestion_control = bbr"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.ipv4.tcp_fastopen = 3" "tcp_fastopen = 3"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "fs.inotify.max_user_watches = 524288" "inotify max_user_watches = 524288"
     end
     _echo
 
@@ -4079,8 +4088,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     set -l _sysctl_checks \
         "net.core.default_qdisc=fq" \
         "net.ipv4.tcp_congestion_control=bbr" \
-        "net.ipv4.tcp_fastopen=3" \
-        "fs.inotify.max_user_watches=524288"
+        "net.ipv4.tcp_fastopen=3"
     for _sc in $_sysctl_checks
         set -l _key (string split '=' -- "$_sc")[1]
         set -l _expected (string split '=' -- "$_sc")[2]
@@ -5182,7 +5190,7 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
         # Non-interactive: skip interface detection + credential prompts (avoids wasted nmcli/iwctl/sysfs I/O in --all pipe mode)
         if not isatty stdin
             _info "Non-interactive — skipping WiFi setup"
-            return
+            return 0
         end
         if not command -q nmcli
             _warn "Nmcli not found - WiFi reconnection will be skipped"

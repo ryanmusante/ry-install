@@ -1,3 +1,16 @@
+3.7.36 (2026-03-19)
+-------------------
+  fix(snapshot): _btrfs_pre_snapshot bare sudo mkdir and sudo btrfs
+    bypassed _run. Routed both through _run for structured JSONL
+    logging of command+exit+stdout/stderr. Removed redundant manual
+    _log on success (now captured by _run EXIT event).
+  fix(verify): verify_runtime inline sudo true replaced with
+    _ensure_sudo_cached for consistent stderr-reason logging
+    (matches verify_static and do_diff).
+  style: unquote /etc/kernel/cmdline in SYSTEM_DESTINATIONS
+    (fish_indent compliance -- reverses 3.7.35 style change).
+  doc: sync README, CHANGELOG.
+
 3.7.35 (2026-03-18)
 -------------------
   fix(lock): _do_cleanup unconditionally deleted LOCK_DIR even when
@@ -11,7 +24,7 @@
 -------------------
   fix(logs): _analyze_log header/footer reads used positional line
     numbers. Changed to grep -m1 for header, all 3 footer reads.
-  fix(logs): --logs all/list showed ✓ for incomplete logs. Now ?.
+  fix(logs): --logs all/list showed pass for incomplete logs. Now ?.
   fix(timestamps): all 9 date sites now include %z timezone offset.
   fix(indent): 2 guard comments at wrong indent level.
   doc: sync README, CHANGELOG, show_help. --logs lists <service>.
@@ -28,7 +41,7 @@
 -------------------
   fix(diff,test): cap parallel fork limit at 16 (was unbounded).
   fix(verify): masked-service batch fallback to per-unit query.
-  fix(diff): diffstatus validated as numeric; unparseable → fail-safe.
+  fix(diff): diffstatus validated as numeric; unparseable -> fail-safe.
   fix(wifi): sanitize SSID in .nmconnection filename.
   fix(batch): _pregenerate_content_files logs failures.
   fix(verify): command -q sudo guard for /boot paths.
@@ -54,7 +67,7 @@
     Converted to single-quoted bodies with $argv.
   fix(check): do_check false-clean on unreadable managed files.
   fix: replaced 202 Bash-style &&/|| with Fish "; and"/"; or".
-  fix(verify): unbounded fork storm → 4 batched workers. skip_iwd
+  fix(verify): unbounded fork storm -> 4 batched workers. skip_iwd
     filter for false checksum MISMATCH when iwd not installed.
   fix: 8 set scope leaks in verify_runtime and do_diff.
   fix(check): Job 3/4 serialized lists to files (was interpolation).
@@ -67,12 +80,12 @@
   fix: fallback lock reclaim yield + second PID verify. sudo -n -l.
   fix(run): stderr unconditionally logged. stdout capped at 50 lines.
   fix(log): _log truncation avoids splitting mid-escape-sequence.
-  fix(log): LOG_FILE creation race → atomic install -m 0600 /dev/null.
+  fix(log): LOG_FILE creation race -> atomic install -m 0600 /dev/null.
   fix: argument count guards on 7 functions. 4 unguarded wait calls.
   fix: _kconfig_cache empty list guard. _progress_skip renders bar.
   fix(wifi): SSID allows '!'/'&'. md5sum fallback for UUID generation.
   fix(profile): removed dead globals. Added 8 to _validate_profile.
-  fix: validate_configs children — command prefix, quoted variables.
+  fix: validate_configs children -- command prefix, quoted variables.
   fix: _ensure_sudo_cached explicit if/else with stderr capture.
   fix(cleanup): find -delete split into -type f then -type d -empty.
   fix(cli): --install-file validates absolute path at parse time.
@@ -83,7 +96,7 @@
 ---------------------------------------
   fix: enforce kernel 6.14+ minimum (returns 1, was always 0).
   fix: PROGRESS_STEPS ordering after syu reorder. do_test_all nested
-    parallelism guard (<8 cores → sequential).
+    parallelism guard (<8 cores -> sequential).
   fix: validate_configs ssh-agent --user flag. _ensure_sudo_cached
     consistency. Manifest gated on EXIT_BOOT_CRIT.
   fix: -- separator on 13 bare cat/contains/dirname/touch/string calls.
@@ -109,18 +122,18 @@
   feat: manifest-based orphan tracking. Progress step count assertion.
   feat: flock(1) atomic lock reclaim. _kconfig_cache lazy loader.
     Hardware mismatch early warning. fish_indent promoted to FAIL.
-  fix: fish version gate 3.3+ → 3.4+. Remove bat/eza from PKGS_ADD.
+  fix: fish version gate 3.3+ -> 3.4+. Remove bat/eza from PKGS_ADD.
   fix: root UUID cached once as _ROOT_UUID. Abort on boot rebuild
     failure. do_check false drift on vfat ESP.
   fix: SYSTEM_UPGRADED premature-true. do_diff blank-line fidelity.
-    _json_str control char → ? placeholder.
+    _json_str control char -> ? placeholder.
 
 3.5.0-3.5.2 (2026-03-07)
 ------------------------
-  refactor: decompose do_diagnose (604L → orchestrator + 6 helpers)
-    and do_logs (285L → dispatcher + 2 helpers).
+  refactor: decompose do_diagnose (604L -> orchestrator + 6 helpers)
+    and do_logs (285L -> dispatcher + 2 helpers).
   fix: wireless-regdom pipeline logging. --logs typo fuzzy-match.
-    basename Fish 3.5+ → string replace compat.
+    basename Fish 3.5+ -> string replace compat.
   fix: symmetric log marker START/END. Dead _has_lock variable.
     _log guard prevents orphan log stubs on lock contention.
   remove: backup system remnants.
@@ -139,7 +152,7 @@
     broken for 14/17 sudo-path files.
   fix: 268 scope fixes across 33+ functions, including exit_code
     dispatch, MODE dispatch, and arg parser infinite loop.
-  fix: 96+ bare cat/rm/mv/chmod/mkdir/cp/find/kill → command prefix.
+  fix: 96+ bare cat/rm/mv/chmod/mkdir/cp/find/kill -> command prefix.
   feat: hardware fingerprint. GKeyFile WiFi escaping. --logs
     list/last/all. NDJSON header/footer. Scope shadow lint check.
   fix: --diff --fix boot rebuild automation. Credential redaction 9
@@ -147,7 +160,7 @@
 
 3.2.0-3.2.10 (2026-02-28 -- 2026-03-02)
 ---------------------------------------
-  feat: /etc/sysctl.d/99-ry-sysctl.conf — BBR+fq, tcp_fastopen=3,
+  feat: /etc/sysctl.d/99-ry-sysctl.conf -- BBR+fq, tcp_fastopen=3,
     inotify watches 524288.
   feat: --test-all parallel+sequential suite. --completions dynamic
     generation. Reverse dep check before package removal.
@@ -162,7 +175,7 @@
 --------------------------------------
   refactor: KVER globals, _ntsync_state helper (5 states).
   remove: sp5100_tco blacklist, btusb.enable_autosuspend cmdline,
-    modules-load.d destination. Kernel params 19→18, files 17→16.
+    modules-load.d destination. Kernel params 19->18, files 17->16.
   feat: --existence-only hook validation, _verify_unit_syntax --user.
   refactor: power-profiles-daemon from PKGS_DEL to MASK.
   fix: _install_finalize propagates INSTALL_HAD_ERRORS.

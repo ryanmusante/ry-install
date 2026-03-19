@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.35 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.35"
+# ry-install v3.7.36 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.36"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -481,7 +481,7 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # ── Managed file destinations — 1:1 map to get_file_content(); system=0644, user=0600 ──
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        "/etc/kernel/cmdline" \
+        /etc/kernel/cmdline \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/udev/rules.d/99-cachyos-udev.rules" \
@@ -858,14 +858,13 @@ function _btrfs_pre_snapshot --description "Create a btrfs snapshot of rootfs be
         return 0
     end
 
-    if not command -q sudo; or not sudo mkdir -p -- "$snap_parent" 2>/dev/null
+    if not command -q sudo; or not _run sudo mkdir -p -- "$snap_parent"
         _warn "Cannot create snapshot directory $snap_parent — skipping"
         return 0
     end
 
-    if sudo btrfs subvolume snapshot -r / "$snap_parent/$snap_name" >/dev/null 2>&1
+    if _run sudo btrfs subvolume snapshot -r / "$snap_parent/$snap_name"
         _ok "Pre-install snapshot: $snap_parent/$snap_name"
-        _log "SNAPSHOT: path=$snap_parent/$snap_name subvol=$root_subvol"
     else
         _warn "Btrfs snapshot failed — continuing without rollback point"
         _log "SNAPSHOT_FAILED: target=$snap_parent/$snap_name"
@@ -3751,11 +3750,7 @@ end
 function verify_runtime --description "Verify runtime kernel params, services, and modules"
     _log "=== RUNTIME VERIFICATION START ==="
 
-    if not command -q sudo
-        _err "Sudo required for verification"
-        return 1
-    end
-    sudo true 2>/dev/null; or begin
+    _ensure_sudo_cached; or begin
         _err "Sudo required for verification"
         return 1
     end

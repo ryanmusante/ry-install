@@ -1,333 +1,177 @@
+3.7.35 (2026-03-18)
+-------------------
+  fix(lock): _do_cleanup unconditionally deleted LOCK_DIR even when
+    current process did not own the lock. _acquire_lock sets LOCK_DIR
+    as a global before mkdir; on failure the global still points at
+    another instance's lock. Fix: verify PID ownership before delete.
+  style: quote /etc/kernel/cmdline in SYSTEM_DESTINATIONS.
+  doc: sync README, CHANGELOG.
+
 3.7.34 (2026-03-18)
 -------------------
-
-  fix(logs): _analyze_log header read used head -n 1 but _load_profile
-    warnings push the header to line 3-4. Changed to grep -m1 for
-    the header event. Same fix applied to all 3 footer reads (--logs
-    list, --logs all, _analyze_log) where cleanup_tmpfiles can land
-    after the footer, causing tail -n 1 to miss it.
-
-  fix(logs): --logs all and --logs list showed ✓ or blank for
-    incomplete logs (no footer). Now shows ? (incomplete) when
-    exit_code is empty and run was not interrupted.
-
-  fix(timestamps): header, 4 footer sites, 3 step-timer sites, and
-    _msg bug fallback used date without %z. All 9 sites now include
-    timezone offset, consistent with _log timestamps.
-
-  fix(indent): 2 guard comments at wrong indent level (lines 3998,
-    4019). Pre-existing since v3.7.33. fish_indent --check now passes.
-
-  doc: sync README, CHANGELOG, and show_help.
-
-  doc(help): --logs <target> now lists <service> as a valid target.
-
-  doc(help): log file path format includes timezone (+ZZZZ).
+  fix(logs): _analyze_log header/footer reads used positional line
+    numbers. Changed to grep -m1 for header, all 3 footer reads.
+  fix(logs): --logs all/list showed ✓ for incomplete logs. Now ?.
+  fix(timestamps): all 9 date sites now include %z timezone offset.
+  fix(indent): 2 guard comments at wrong indent level.
+  doc: sync README, CHANGELOG, show_help. --logs lists <service>.
 
 3.7.33 (2026-03-18)
 -------------------
-
-  (no functional changes; introduced indent regression fixed in 3.7.34)
+  (no functional changes; indent regression fixed in 3.7.34)
 
 3.7.32 (2026-03-18)
 -------------------
-
-  fix(sudo): _find_pacnew_files used interactive sudo find, triggering
-    credential prompts in dry-run and read-only contexts. Changed to
-    sudo -n (non-interactive) -- silently returns nothing when
-    credentials are not cached.
+  fix(sudo): _find_pacnew_files changed to sudo -n (non-interactive).
 
 3.7.31 (2026-03-18)
 -------------------
-
-  fix(diff,test): cap parallel fork limit at 16; worst case now 256
-    processes (was unbounded nproc squared).
-
-  fix(verify): masked-service index alignment -- fall back to per-unit
-    query when systemctl show returns incomplete batch data. Unverifiable
-    units now count as FAIL.
-
-  fix(diff): diffstatus from parallel children validated as numeric;
-    unparseable values treated as "diff exists" (fail-safe).
-
-  fix(wifi): sanitize SSID in .nmconnection filename to prevent path
-    traversal. NM matches by ssid= field, not filename.
-
-  fix(batch): _pregenerate_content_files logs get_file_content failures
-    instead of suppressing stderr.
-
-  fix(verify): added command -q sudo guard to _chk_file/_chk_grep for
-    /boot paths.
-
-  fix(network): check_network HTTPS probes skip gracefully when curl
-    is not installed.
-
-  fix(log): _log timestamp now includes timezone (%z).
-
-  fix(help): clarified -- description to "remaining arguments ignored".
-
-  style: added explicit return 0 to 3 functions.
+  fix(diff,test): cap parallel fork limit at 16 (was unbounded).
+  fix(verify): masked-service batch fallback to per-unit query.
+  fix(diff): diffstatus validated as numeric; unparseable → fail-safe.
+  fix(wifi): sanitize SSID in .nmconnection filename.
+  fix(batch): _pregenerate_content_files logs failures.
+  fix(verify): command -q sudo guard for /boot paths.
+  fix(network): check_network skips gracefully without curl.
+  fix(log): _log timestamp includes timezone (%z).
+  fix(help): clarified -- description.
+  style: explicit return 0 on 3 functions.
 
 3.7.30 (2026-03-17)
 -------------------
-
-  fix(comments): moved 2 inline comments above "end" statements in
-    verify_runtime. Merged 1 two-line comment to single line. Removed
-    4 stale orphan comments in do_diff and verify_runtime.
+  fix(comments): moved 2 inline comments above end statements.
+    Merged 1 two-line comment. Removed 4 stale orphan comments.
 
 3.7.29 (2026-03-16)
 -------------------
-
-  fix(run): _run stdout replay leaked to fd1. Added >&2 to cat/head
-    replay paths, preserving stdout-reserved-for-pipeable-data contract.
-
-  fix(sudo): Fish "if not <unknown_cmd>" inversion bug across 8 call
-    sites. Added command -q sudo gates and explicit $status capture.
+  fix(run): _run stdout replay leaked to fd1. Added >&2.
+  fix(sudo): Fish "if not <cmd>" inversion bug across 8 sites.
 
 3.7.17-3.7.28 (2026-03-16 -- 2026-03-17)
-------------------------------------------
-
-  fix(check): do_check brace interpolation -- Fish {$phase} produced
-    literal braces, result files never found. Fixed to concatenation.
-
-  fix: 12 double-quoted fish -c blocks across validate_configs,
-    verify_static, do_diff, do_check, do_test_all interpolated caller
-    variables. Converted to single-quoted bodies with $argv args.
-
-  fix(check): do_check reported clean when managed files were
-    unreadable. Now sets drift=true on missing or unreadable files.
-
+----------------------------------------
+  fix(check): Fish {$phase} brace interpolation; result files missing.
+  fix: 12 double-quoted fish -c blocks interpolated caller variables.
+    Converted to single-quoted bodies with $argv.
+  fix(check): do_check false-clean on unreadable managed files.
   fix: replaced 202 Bash-style &&/|| with Fish "; and"/"; or".
-    Restored 9 legitimate non-Fish contexts (awk, bash -c).
-
-  fix(verify): verify_static unbounded fork storm replaced with 4
-    batched workers. False checksum MISMATCH for iwd/NM when iwd not
-    installed -- added skip_iwd filter.
-
+  fix(verify): unbounded fork storm → 4 batched workers. skip_iwd
+    filter for false checksum MISMATCH when iwd not installed.
   fix: 8 set scope leaks in verify_runtime and do_diff.
-
-  fix(check): do_check Job 3/4 serialized service/mask/kernel-param
-    lists to files (was direct interpolation into fish -c strings).
-
-  fix(verify): _verify_summary counter off-by-one -- CI line and JSONL
-    footer now snapshot counters before calling _fail/_warn/_ok.
-
+  fix(check): Job 3/4 serialized lists to files (was interpolation).
+  fix(verify): _verify_summary counter snapshot before _fail/_warn/_ok.
   fix: validate_configs Job 1 false-pass on empty content directory.
-
-  fix(diff): Phases 1-2 skip filtered files (iwd/NM, single-file
-    target). Reuses pre-computed iwd skip flag.
-
-  fix: install_file skip-unchanged comparison used Fish variable
-    equality which flattens newlines. Replaced with SHA256 hash.
-    Post-write integrity check now hashes tmpfile before mv.
-
-  fix: install_file added post-write symlink re-check before chmod/mv
-    (both sudo and user paths).
-
-  fix: fallback lock reclaim added yield + second PID verify in
-    non-flock path. sudo -l changed to sudo -n -l (non-interactive).
-
-  fix(run): _run stderr now unconditionally logged in verbose mode.
-    stdout display capped at 50 lines. mktemp degradation warning
-    logged once.
-
-  fix(log): _log JSON truncation avoids splitting mid-escape-sequence.
-
-  fix(log): LOG_FILE creation race -- replaced touch+chmod with atomic
-    install -m 0600 /dev/null. Header preserved on log file rename.
-
-  fix: added argument count guards to 7 functions. 4 unguarded wait
-    calls fixed (empty PID lists waited for ALL background jobs).
-
+  fix(diff): Phases 1-2 skip filtered files. Reuses iwd skip flag.
+  fix: install_file skip-unchanged replaced with SHA256 hash. Post-
+    write integrity check hashes tmpfile before mv.
+  fix: install_file post-write symlink re-check (both paths).
+  fix: fallback lock reclaim yield + second PID verify. sudo -n -l.
+  fix(run): stderr unconditionally logged. stdout capped at 50 lines.
+  fix(log): _log truncation avoids splitting mid-escape-sequence.
+  fix(log): LOG_FILE creation race → atomic install -m 0600 /dev/null.
+  fix: argument count guards on 7 functions. 4 unguarded wait calls.
   fix: _kconfig_cache empty list guard. _progress_skip renders bar.
-    6 echo|string split pipes replaced with direct string split.
-
-  fix(wifi): SSID validation no longer rejects '!' and '&'. md5sum
-    fallback to /proc/sys/kernel/random/uuid for WiFi UUID generation.
-
-  fix(profile): removed dead DISK_ROOT_CRIT/DISK_ROOT_WARN globals.
-    Added 8 missing globals to _validate_profile required list.
-
-  fix: validate_configs parallel children -- added command prefix to
-    4 bare cp/rm calls, quoted all variable references in child scripts.
-
-  fix: _ensure_sudo_cached replaced fragile inline substitution with
-    explicit if/else and stderr capture to JSONL.
-
+  fix(wifi): SSID allows '!'/'&'. md5sum fallback for UUID generation.
+  fix(profile): removed dead globals. Added 8 to _validate_profile.
+  fix: validate_configs children — command prefix, quoted variables.
+  fix: _ensure_sudo_cached explicit if/else with stderr capture.
   fix(cleanup): find -delete split into -type f then -type d -empty.
-
   fix(cli): --install-file validates absolute path at parse time.
-    --diff stat moved into per-branch paths (user vs system).
-
-  remove: --profile flag. Profile selection now exclusively file-based
-    via ~/.config/ry-install/default-profile.
-
-  doc: added 12-step Prerequisites table for --all mode.
+  remove: --profile flag. Profile selection now file-based only.
+  doc: 12-step Prerequisites table for --all mode.
 
 3.7.1-3.7.16 (2026-03-09 -- 2026-03-16)
------------------------------------------
-
+---------------------------------------
   fix: enforce kernel 6.14+ minimum (returns 1, was always 0).
-
   fix: PROGRESS_STEPS ordering after syu reorder. do_test_all nested
-    parallelism guard (<8 cores -> sequential).
-
-  fix: validate_configs ssh-agent verify uses --user flag. Consistent
-    _ensure_sudo_cached usage. Manifest gated on EXIT_BOOT_CRIT.
-
-  fix: added -- separator to 13 bare cat/contains/dirname/touch/string
-    replace calls.
-
-  fix: _msg bug-logging escaped via _json_str. 6 parallel work dirs
-    guarded against mktemp failure.
-
-  fix: do_diagnose children -- kernel version globals not exported.
-    Stress tests moved to sequential section (interactive prompt dead
-    in forks). WiFi credential prompts guard with isatty stdin.
-
-  fix: LOG_FILE creation race. Log rotation and --logs all exclude
-    current LOG_FILE.
-
-  doc: README Install Flow order matches PROGRESS_STEPS.
+    parallelism guard (<8 cores → sequential).
+  fix: validate_configs ssh-agent --user flag. _ensure_sudo_cached
+    consistency. Manifest gated on EXIT_BOOT_CRIT.
+  fix: -- separator on 13 bare cat/contains/dirname/touch/string calls.
+  fix: _msg bug-logging escaped via _json_str. 6 parallel dirs guarded.
+  fix: do_diagnose children kernel globals. Stress tests sequential.
+    WiFi credential prompts guard with isatty stdin.
+  fix: LOG_FILE creation race. Log rotation excludes current LOG_FILE.
+  doc: README Install Flow matches PROGRESS_STEPS.
 
 3.7.0 (2026-03-08)
--------------------
-
+------------------
   feat: batch & parallel processing (B-1..B-9). Parallel collector
     pattern with deterministic output ordering.
-
   feat: _pregenerate_content_files, _ensure_sudo_cached,
     _parse_systemctl_show helpers.
 
 3.6.0-3.6.4 (2026-03-08)
--------------------------
-
+------------------------
   feat: --profile multi-machine support. Profile functions with
-    _validate_profile (25+ required globals), external profile loading,
-    syntax validation.
-
+    _validate_profile (25+ required globals), external loading.
   feat: --check silent idempotency probe (exit 0=clean, 10=drift).
-    do_check verifies service state (active+enabled, masked).
-
   feat: structured exit codes (0-5, 10-11).
-
-  feat: manifest-based orphan tracking. Progress step count runtime
-    assertion. Exhaustive get_file_content cross-reference.
-
+  feat: manifest-based orphan tracking. Progress step count assertion.
   feat: flock(1) atomic lock reclaim. _kconfig_cache lazy loader.
-    Hardware mismatch early warning. fish_indent promoted to FAIL
-    in do_lint.
-
-  fix: fish version gate 3.3+ -> 3.4+ (string join0). Remove bat/eza
-    from PKGS_ADD (hard deps of cachyos-fish-config).
-
-  fix: root UUID cached once in _load_profile as _ROOT_UUID.
-    Abort remaining steps on boot rebuild failure. do_check false drift
-    on vfat ESP.
-
+    Hardware mismatch early warning. fish_indent promoted to FAIL.
+  fix: fish version gate 3.3+ → 3.4+. Remove bat/eza from PKGS_ADD.
+  fix: root UUID cached once as _ROOT_UUID. Abort on boot rebuild
+    failure. do_check false drift on vfat ESP.
   fix: SYSTEM_UPGRADED premature-true. do_diff blank-line fidelity.
-    _json_str control char deletion -> ? placeholder.
+    _json_str control char → ? placeholder.
 
 3.5.0-3.5.2 (2026-03-07)
--------------------------
-
-  refactor: decompose do_diagnose (604L -> orchestrator + 6 helpers)
-    and do_logs (285L -> dispatcher + 2 helpers).
-
+------------------------
+  refactor: decompose do_diagnose (604L → orchestrator + 6 helpers)
+    and do_logs (285L → dispatcher + 2 helpers).
   fix: wireless-regdom pipeline logging. --logs typo fuzzy-match.
-    basename Fish 3.5+ -> string replace compat.
-
-  fix: symmetric log marker START/END pairs. Dead _has_lock variable.
+    basename Fish 3.5+ → string replace compat.
+  fix: symmetric log marker START/END. Dead _has_lock variable.
     _log guard prevents orphan log stubs on lock contention.
-
   remove: backup system remnants.
-
   docs: 27 inline comments, README BIOS version P110.
 
 3.4.0-3.4.1 (2026-03-05 -- 2026-03-06)
-----------------------------------------
-
-  remove: --no-color flag (NO_COLOR env is sole control), --no-log
-    (logging always-on), --clean mode (344 lines), _GPU_BUSY_PCT.
-
+--------------------------------------
+  remove: --no-color, --no-log, --clean mode (344 lines), _GPU_BUSY_PCT.
   fix: do_test_all completions validation reads installed file.
-
   chore: trim CHANGELOG to 3.0.0+.
 
 3.3.0-3.3.7 (2026-03-02 -- 2026-03-04)
-----------------------------------------
-
-  fix: 2 infinite loops in _install_finalize (reload_wait, wifi_retry
-    counters stuck at 0 due to scope shadow).
-
-  fix: do_diff --fix never triggered for content drift. install_file
-    skip-unchanged broken for 14/17 sudo-path files.
-
+--------------------------------------
+  fix: 2 infinite loops in _install_finalize (scope shadow on counters).
+  fix: do_diff --fix never triggered. install_file skip-unchanged
+    broken for 14/17 sudo-path files.
   fix: 268 scope fixes across 33+ functions, including exit_code
-    dispatch (every mode exited 0), MODE dispatch (all modes fell
-    through to install), and arg parser infinite loop (22 set -g on
-    local loop variables).
-
-  fix: 96+ bare cat/rm/mv/chmod/mkdir/cp/find/kill calls wrapped with
-    command prefix to bypass aliases.
-
-  feat: hardware fingerprint drift detection. GKeyFile-safe WiFi
-    credential escaping. --logs list/last/all subcommands with JSONL
-    footer parsing. NDJSON log header/footer. Scope shadow lint check.
-
-  fix: --diff --fix boot rebuild and service reload automation. _log
-    deduplication. Journal view limit 1000. Credential redaction 9
-    patterns. _run PIPESTATUS captures. mkinitcpio HOOKS ordering
-    validation. CPU governor expect powersave. Reject '%' in WiFi
-    passphrase. LC_ALL=C on NVMe sort.
+    dispatch, MODE dispatch, and arg parser infinite loop.
+  fix: 96+ bare cat/rm/mv/chmod/mkdir/cp/find/kill → command prefix.
+  feat: hardware fingerprint. GKeyFile WiFi escaping. --logs
+    list/last/all. NDJSON header/footer. Scope shadow lint check.
+  fix: --diff --fix boot rebuild automation. Credential redaction 9
+    patterns. mkinitcpio HOOKS ordering. Reject '%' in WiFi passphrase.
 
 3.2.0-3.2.10 (2026-02-28 -- 2026-03-02)
------------------------------------------
-
-  feat: /etc/sysctl.d/99-ry-sysctl.conf -- BBR+fq, tcp_fastopen=3,
+---------------------------------------
+  feat: /etc/sysctl.d/99-ry-sysctl.conf — BBR+fq, tcp_fastopen=3,
     inotify watches 524288.
-
-  feat: --test-all parallel+sequential test suite. --completions
-    dynamic tab-completion generation. Reverse dep check before
-    package removal.
-
+  feat: --test-all parallel+sequential suite. --completions dynamic
+    generation. Reverse dep check before package removal.
   feat: validate KERNEL_PARAMS against /proc/config.gz. Boot sanity
     gate after initramfs rebuild.
-
-  fix: 24 scope fixes (4 caused incorrect behavior). SIGPIPE handler
-    (exit 141). Footer double-write race. Orphan log files on 3 early
-    exits. Atomic mkdir lock improvements.
-
-  remove: --json, --once flags. Dead globals MODULES_LOAD, _LOCK_METHOD.
-
-  refactor: 63 function comments (81/81 documented). _json_str and _log
-    explicit set -l scoping.
+  fix: 24 scope fixes. SIGPIPE handler. Footer double-write race.
+    Orphan log files. Atomic mkdir lock improvements.
+  remove: --json, --once flags. Dead globals.
+  refactor: 63 function comments (81/81). _json_str/_log set -l scoping.
 
 3.1.0-3.1.4 (2026-02-27 -- 2026-02-28)
-----------------------------------------
-
+--------------------------------------
   refactor: KVER globals, _ntsync_state helper (5 states).
-
   remove: sp5100_tco blacklist, btusb.enable_autosuspend cmdline,
-    modules-load.d destination. Kernel params 19->18, files 17->16.
-
-  feat: --existence-only hook validation, _verify_unit_syntax with
-    --user auto-detect.
-
+    modules-load.d destination. Kernel params 19→18, files 17→16.
+  feat: --existence-only hook validation, _verify_unit_syntax --user.
   refactor: power-profiles-daemon from PKGS_DEL to MASK.
-
   fix: _install_finalize propagates INSTALL_HAD_ERRORS.
-
   docs: --description on all 68 functions. 71 inline comments.
 
 3.0.0 (2026-02-27)
--------------------
-
-  fix: temp file pattern, sudo tee -- separator, kill -0 -- separator.
-
+------------------
+  fix: temp file pattern, sudo tee --, kill -0 -- separators.
   refactor: sudo keepalive argv, _log default event. Credential
     redaction word-boundary globs.
-
   docs: README rewrite with structured tables.
-
   chore: adopt kernel.org changelog style.

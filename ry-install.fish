@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.34 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.34"
+# ry-install v3.7.35 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.35"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -393,9 +393,15 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     set --erase WIFI_PASS
     # Free cached data (harmless but consistent with cleanup discipline)
     set --erase _KCONFIG_DATA
-    # Release LOCK_DIR mutex and PID file
+    # Release LOCK_DIR mutex and PID file — verify PID ownership first to avoid
+    # deleting another instance's lock when _acquire_lock failed (LOCK_DIR is set
+    # as a global before the mkdir attempt; on failure we don't own the lock)
     if set -q LOCK_DIR; and test -d "$LOCK_DIR"
-        command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
+        set -l _lock_pid (command cat -- "$LOCK_DIR/pid" 2>/dev/null)
+        set -l _my_pid %self
+        if test "$_lock_pid" = "$_my_pid"
+            command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
+        end
     end
     _kill_sudo_keepalive
 end
@@ -475,7 +481,7 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # ── Managed file destinations — 1:1 map to get_file_content(); system=0644, user=0600 ──
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        /etc/kernel/cmdline \
+        "/etc/kernel/cmdline" \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/udev/rules.d/99-cachyos-udev.rules" \

@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.34-blue)
+![Version](https://img.shields.io/badge/version-3.7.35-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -36,7 +36,7 @@ Before running the fully automated install (`--all`), complete these steps on a 
 | 8 | **BIOS current** | Check [Beelink](https://dr.bee-link.cn/) downloads | P110+ for ACPI and Strix Halo stability |
 | 9 | **Snapshot rootfs** | `sudo btrfs subvolume snapshot -r / /.snapshots/pre-ry-install` | Rollback point (btrfs only; script creates one automatically) |
 | 10 | **Review masked services** | See [Masked Services](#masked-services-9) | Sleep/hibernate/suspend targets will be masked — confirm this is a desktop, not a laptop |
-| 11 | **WiFi SSID/passphrase ready** | SSID: 1-32 bytes, no shell metacharacters (`` /\;`$(){}|<>'"% ``), no leading/trailing spaces. Passphrase: WPA2, 8-63 chars, no `%` | WiFi credential prompts are interactive even with `--all` (type SSID + passphrase at the end); skipped on non-TTY |
+| 11 | **WiFi SSID/passphrase ready** | SSID: 1-32 bytes, no shell metacharacters (`` /\;`$(){}\|<>'"% ``), no leading/trailing spaces. Passphrase: WPA2, 8-63 chars, no `%` | WiFi credential prompts are interactive even with `--all` (type SSID + passphrase at the end); skipped on non-TTY |
 | 12 | **Check CachyOS news** | [wiki.cachyos.org](https://wiki.cachyos.org/) and [archlinux.org/news](https://archlinux.org/news/) | Known upgrade issues before `-Syu` |
 
 **Minimal automated run:**

@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.36 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.36"
+# ry-install v3.7.38 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.38"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -429,17 +429,29 @@ end
 set -g VERIFY_OK 0
 set -g VERIFY_FAIL 0
 set -g VERIFY_WARN 0
-# _cleanup (signals) writes footer + exit 130; _cleanup_on_exit (fish_exit) is fallback — _CLEANUP_DONE prevents double-run
+# _cleanup (signals) writes footer + exit 128+signum; _cleanup_on_exit (fish_exit) is fallback — _CLEANUP_DONE prevents double-run
 function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal QUIT --description "Signal handler: clean up on INT/TERM/HUP/QUIT"
     echo "" >&2
     echo "[WARN] Interrupted - cleaning up..." >&2
     set -g _CLEANUP_DONE true
+    # Fish passes signal name as $argv[1]; map to 128+signum exit code
+    set -l _sig_exit 130
+    switch "$argv[1]"
+        case SIGHUP
+            set _sig_exit 129
+        case SIGINT
+            set _sig_exit 130
+        case SIGQUIT
+            set _sig_exit 131
+        case SIGTERM
+            set _sig_exit 143
+    end
     if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
         set -l _mode_esc (_json_str "$MODE")
-        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":130,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
+        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$_sig_exit" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
     end
     _do_cleanup
-    exit 130
+    exit $_sig_exit
 end
 
 # SIGPIPE handler: skip stderr (pipe broken), write JSONL footer, run _do_cleanup, exit 141
@@ -635,6 +647,12 @@ function _validate_profile --description "Verify loaded profile has all required
         BOOT_SPACE_WARN \
         ROOT_AVAIL_CRIT \
         ROOT_AVAIL_WARN
+
+    # Intentionally optional — consumers handle unset/empty safely:
+    #   PKGS_DEL              — for-loop no-op when empty/unset
+    #   BOOT_TIME_TARGET      — type-checked if set (L703); verify_runtime safe via test fallthrough
+    #   EXPECTED_CPU_MATCH    — guarded by set -q in _load_profile (L770)
+    #   EXPECTED_GPU_PCI      — reserved for future use (not yet consumed)
 
     # Conditionally required — needed only when profile includes corresponding destinations
     for dst in $SYSTEM_DESTINATIONS
@@ -1695,6 +1713,7 @@ EXIT CODES:
   10  Drift detected (--check mode)
   11  Lint errors found (--lint mode)
   130  Interrupted (SIGINT)
+  129/131/143  Interrupted (SIGHUP/SIGQUIT/SIGTERM)
   141  Broken pipe (SIGPIPE)
 
 EXAMPLES:
@@ -2965,6 +2984,12 @@ function verify_static --description "Verify installed configs match embedded ch
     set -g VERIFY_FAIL 0
     set -g VERIFY_WARN 0
 
+    # Pre-compute iwd state once (avoids 3 independent pacman -Qi calls and TOCTOU between them)
+    set -l _skip_iwd false
+    if not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1
+        set _skip_iwd true
+    end
+
     _info "Static verification (config files)..."
     _echo
 
@@ -3121,7 +3146,7 @@ function verify_static --description "Verify installed configs match embedded ch
     _echo
 
     _echo "── iwd ──"
-    if not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1
+    if test "$_skip_iwd" = true
         _info "  Skipping (iwd not installed)"
     else if _chk_file /etc/iwd/main.conf
         _chk_grep /etc/iwd/main.conf "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG"
@@ -3134,7 +3159,7 @@ function verify_static --description "Verify installed configs match embedded ch
     _echo
 
     _echo "── NetworkManager ──"
-    if not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1
+    if test "$_skip_iwd" = true
         _info "  Skipping iwd-backend config (iwd not installed)"
     else if _chk_file /etc/NetworkManager/conf.d/99-cachyos-nm.conf
         _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.backend=$NM_WIFI_BACKEND" "wifi backend $NM_WIFI_BACKEND"
@@ -3338,14 +3363,10 @@ function verify_static --description "Verify installed configs match embedded ch
     set -ga _TRACKED_TMPFILES "$hash_dir"
     set -l my_home "$HOME"
 
-    # Filter destinations: skip iwd/NM configs when iwd not installed (consistent with install_file/do_diff)
-    set -l skip_iwd false
-    if not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1
-        set skip_iwd true
-    end
+    # Filter destinations: skip iwd/NM configs when iwd not installed (uses pre-computed _skip_iwd)
     set -l hash_dsts
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
-        if test "$skip_iwd" = true
+        if test "$_skip_iwd" = true
             if string match -q '*nm.conf' -- "$dst"; or string match -q '*/iwd/*' -- "$dst"
                 set -l safe (string replace -a '/' '_' -- "$dst")
                 echo skip >"$hash_dir/result_$safe"
@@ -4712,8 +4733,8 @@ function _analyze_log --argument-names log_path --description "Parse and summari
     if test -n "$exit_code"
         if test "$exit_code" = 0
             _ok "  Exit: 0 (success)"
-        else if test "$exit_code" = 130
-            _warn "  Exit: 130 (interrupted)"
+        else if test "$exit_code" = 129; or test "$exit_code" = 130; or test "$exit_code" = 131; or test "$exit_code" = 141; or test "$exit_code" = 143
+            _warn "  Exit: $exit_code (interrupted)"
         else
             _fail "  Exit: $exit_code (failure)"
         end
@@ -5251,8 +5272,8 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
                                 _err "Invalid passphrase: contains '%' (GKeyFile parse safety)"
                                 set -g WIFI_SSID ""
                                 set wifi_pass ""
-                            else if test (string length -- "$wifi_pass") -lt 8; or test (string length -- "$wifi_pass") -gt 63
-                                _err "Invalid passphrase: WPA2 requires 8-63 characters"
+                            else if test (printf '%s' "$wifi_pass" | wc -c) -lt 8; or test (printf '%s' "$wifi_pass" | wc -c) -gt 63
+                                _err "Invalid passphrase: WPA2 requires 8-63 bytes"
                                 set -g WIFI_SSID ""
                                 set wifi_pass ""
                             else
@@ -5287,7 +5308,7 @@ function _install_preflight --description "Run all preflight checks before insta
             _err "Sudo required for installation"
             return $EXIT_PREFLIGHT
         end
-        set -l sudo_all (sudo -n -l 2>/dev/null | grep -v '^\s*#' | grep -c '(ALL.*) ALL')
+        set -l sudo_all (sudo -n -l 2>/dev/null | grep -v '^\s*#' | grep -cE '\(ALL.*\) .*ALL$')
         or set sudo_all 0
         if test "$sudo_all" -eq 0
             if test "$ALL" = true

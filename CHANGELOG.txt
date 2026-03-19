@@ -1,4 +1,34 @@
-3.7.36 (2026-03-19)
+3.7.38 (2026-03-18)
+-------------------
+  fix(changelog): 3.7.36 date was 2026-03-19 (future date, postdated
+    3.7.37). Corrected to 2026-03-18 (same day as neighbors).
+  fix(validate): document PKGS_DEL, BOOT_TIME_TARGET,
+    EXPECTED_CPU_MATCH, EXPECTED_GPU_PCI as intentionally optional
+    in _validate_profile. Consumers handle unset/empty safely
+    (for-loop no-op or set -q guards); adding to required list
+    would break profiles with zero packages to remove.
+  fix(verify): verify_static checked iwd state 3 times independently
+    via pacman -Qi iwd (L3137, L3150, L3356). Pre-computed once at
+    function entry into _skip_iwd (consistent with do_diff and
+    do_check). Eliminates TOCTOU between the three checks.
+  doc: sync README, CHANGELOG.
+
+3.7.37 (2026-03-18)
+-------------------
+  fix(wifi): passphrase length check used string length (codepoints)
+    instead of byte count. WPA2 spec is 8-63 bytes. Now uses
+    printf '%s' | wc -c (consistent with SSID check).
+  fix(sudo): restricted-sudo detection regex '(ALL.*) ALL' missed
+    NOPASSWD entries like '(ALL : ALL) NOPASSWD: ALL'. Replaced
+    with ERE '\(ALL.*\) .*ALL$'. NOPASSWD users were blocked from
+    --all mode with EXIT_PREFLIGHT.
+  fix(signal): _cleanup handler hardcoded exit 130 for all signals.
+    Now uses $argv[1] (signal name) to map to 128+signum: SIGHUP=129,
+    SIGINT=130, SIGQUIT=131, SIGTERM=143. JSONL footer records the
+    correct exit code.
+  doc: sync README, CHANGELOG, show_help exit codes.
+
+3.7.36 (2026-03-18)
 -------------------
   fix(snapshot): _btrfs_pre_snapshot bare sudo mkdir and sudo btrfs
     bypassed _run. Routed both through _run for structured JSONL

@@ -1,5 +1,22 @@
-3.7.33 (2026-03-18)
+3.7.34 (2026-03-18)
 -------------------
+
+  fix(logs): _analyze_log header read used head -n 1 but _load_profile
+    warnings push the header to line 3-4. Changed to grep -m1 for
+    the header event. Same fix applied to all 3 footer reads (--logs
+    list, --logs all, _analyze_log) where cleanup_tmpfiles can land
+    after the footer, causing tail -n 1 to miss it.
+
+  fix(logs): --logs all and --logs list showed ✓ or blank for
+    incomplete logs (no footer). Now shows ? (incomplete) when
+    exit_code is empty and run was not interrupted.
+
+  fix(timestamps): header, 4 footer sites, 3 step-timer sites, and
+    _msg bug fallback used date without %z. All 9 sites now include
+    timezone offset, consistent with _log timestamps.
+
+  fix(indent): 2 guard comments at wrong indent level (lines 3998,
+    4019). Pre-existing since v3.7.33. fish_indent --check now passes.
 
   doc: sync README, CHANGELOG, and show_help.
 
@@ -7,11 +24,10 @@
 
   doc(help): log file path format includes timezone (+ZZZZ).
 
-  doc(readme): --diff description matches show_help (delta or
-    diff --color).
+3.7.33 (2026-03-18)
+-------------------
 
-  doc(readme): -- modifier description matches show_help (remaining
-    arguments ignored).
+  (no functional changes; introduced indent regression fixed in 3.7.34)
 
 3.7.32 (2026-03-18)
 -------------------

@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.33 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.33"
+# ry-install v3.7.34 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.34"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -430,7 +430,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     set -g _CLEANUP_DONE true
     if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
         set -l _mode_esc (_json_str "$MODE")
-        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":130,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
+        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":130,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
     end
     _do_cleanup
     exit 130
@@ -442,7 +442,7 @@ function _cleanup_pipe --on-signal PIPE --description "Signal handler: clean up 
     set -g _CLEANUP_DONE true
     if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
         set -l _mode_esc (_json_str "$MODE")
-        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":141,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE" 2>/dev/null
+        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":141,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE" 2>/dev/null
     end
     _do_cleanup
     exit 141
@@ -460,7 +460,7 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
     end
     if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
         set -l _mode_esc (_json_str "$MODE")
-        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s,"cleanup_exit":true}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$_exit_status" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
+        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s,"cleanup_exit":true}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$_exit_status" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
     end
     _do_cleanup
 end
@@ -1217,7 +1217,7 @@ function _msg --argument-names level --description "Format and print a leveled s
     set -l valid_levels INFO WARN ERR FAIL OK DRY
     if not contains -- "$level" $valid_levels
         echo "[BUG] _msg called with invalid level: '$level'" >&2
-        printf '{"ts":"%s","event":"bug","data":"_msg called with invalid level: %s"}\n' (date '+%Y-%m-%dT%H:%M:%S') (_json_str "$level") >>"$LOG_FILE"
+        printf '{"ts":"%s","event":"bug","data":"_msg called with invalid level: %s"}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (_json_str "$level") >>"$LOG_FILE"
         set level ERR
     end
     # Route level to JSONL event + increment verify counters for summary
@@ -1405,7 +1405,7 @@ function _progress --description "Advance and display the current progress step"
         set -l _step_elapsed (math "$_step_now - $_STEP_PREV_START")
         set -l _step_name_esc (_json_str "$_STEP_PREV_NAME")
         printf '{"ts":"%s","event":"step_time","data":"%s","elapsed_s":%d}\n' \
-            (date '+%Y-%m-%dT%H:%M:%S') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
+            (date '+%Y-%m-%dT%H:%M:%S%z') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
     end
     set -g _STEP_PREV_NAME "$argv[1]"
     set -g _STEP_PREV_START (date +%s)
@@ -1462,7 +1462,7 @@ function _progress_skip --description "Advance progress counter for a skipped st
         set -l _step_elapsed (math "$_step_now - $_STEP_PREV_START")
         set -l _step_name_esc (_json_str "$_STEP_PREV_NAME")
         printf '{"ts":"%s","event":"step_time","data":"%s","elapsed_s":%d}\n' \
-            (date '+%Y-%m-%dT%H:%M:%S') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
+            (date '+%Y-%m-%dT%H:%M:%S%z') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
     end
     set -g _STEP_PREV_NAME "$argv[1]"
     set -g _STEP_PREV_START (date +%s)
@@ -1498,7 +1498,7 @@ function _progress_done --description "Finalize and close the progress display"
         set -l _step_elapsed (math "$_step_now - $_STEP_PREV_START")
         set -l _step_name_esc (_json_str "$_STEP_PREV_NAME")
         printf '{"ts":"%s","event":"step_time","data":"%s","elapsed_s":%d}\n' \
-            (date '+%Y-%m-%dT%H:%M:%S') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
+            (date '+%Y-%m-%dT%H:%M:%S%z') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
     end
     set -g _STEP_PREV_NAME ""
     set -g _STEP_PREV_START 0
@@ -3995,7 +3995,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
             _fail "  NetworkManager-dispatcher: $rec[3] (expected: enabled)"
         end
 
-    # guard: (count $parsed) -lt 5
+        # guard: (count $parsed) -lt 5
     end
 
     # User scope: 1 batch call for ssh-agent
@@ -4016,7 +4016,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
         else
             _warn "  ssh-agent.service: not installed"
         end
-    # guard: (count $user_parsed) -lt 1
+        # guard: (count $user_parsed) -lt 1
     end
 
     if set -q SSH_AUTH_SOCK; and test -S "$SSH_AUTH_SOCK"
@@ -4608,12 +4608,12 @@ function _logs_list --description "List available ry-install log files"
         set -l size (stat -c '%s' -- "$f" 2>/dev/null; or echo 0)
         set -l size_k (math "ceil($size / 1024)")
 
-        set -l footer (tail -n 1 "$f" 2>/dev/null)
+        set -l footer (grep -m1 '"event":"footer"' "$f" 2>/dev/null)
         set -l exit_code ""
         set -l pass ""
         set -l fail ""
         set -l warn ""
-        if string match -q '*"event":"footer"*' -- "$footer"
+        if test -n "$footer"
             set exit_code (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
             set pass (printf '%s' "$footer" | grep -oE '"pass":[0-9]+' | sed 's/.*://')
             set fail (printf '%s' "$footer" | grep -oE '"fail":[0-9]+' | sed 's/.*://')
@@ -4630,6 +4630,8 @@ function _logs_list --description "List available ry-install log files"
             if test -n "$pass"; or test -n "$fail"
                 set summary "$summary pass=$pass fail=$fail warn=$warn"
             end
+        else
+            set summary "  ? (incomplete)"
         end
 
         _echo "  $fdir/$fname  ($size_k KB)$summary"
@@ -4649,13 +4651,13 @@ function _analyze_log --argument-names log_path --description "Parse and summari
     _info "Analyzing: $fname"
     _echo
 
-    set -l header (head -n 1 "$log_path" 2>/dev/null)
+    set -l header (grep -m1 '"event":"header"' "$log_path" 2>/dev/null)
     set -l mode ""
     set -l log_version ""
     set -l command ""
     set -l header_ts ""
     set -l dry_run ""
-    if string match -q '*"event":"header"*' -- "$header"
+    if test -n "$header"
         set mode (printf '%s' "$header" | grep -oE '"mode":"[^"]+"' | cut -d'"' -f4)
         set log_version (printf '%s' "$header" | grep -oE '"version":"[^"]+"' | cut -d'"' -f4)
         set command (printf '%s' "$header" | grep -oE '"command":"[^"]+"' | cut -d'"' -f4)
@@ -4663,14 +4665,14 @@ function _analyze_log --argument-names log_path --description "Parse and summari
         set dry_run (printf '%s' "$header" | grep -oE '"dry_run":[a-z]+' | sed 's/.*://')
     end
 
-    set -l footer (tail -n 1 "$log_path" 2>/dev/null)
+    set -l footer (grep -m1 '"event":"footer"' "$log_path" 2>/dev/null)
     set -l exit_code ""
     set -l pass 0
     set -l fail 0
     set -l warn_count 0
     set -l footer_ts ""
     set -l interrupted false
-    if string match -q '*"event":"footer"*' -- "$footer"
+    if test -n "$footer"
         set exit_code (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
         set pass (printf '%s' "$footer" | grep -oE '"pass":[0-9]+' | sed 's/.*://')
         set fail (printf '%s' "$footer" | grep -oE '"fail":[0-9]+' | sed 's/.*://')
@@ -4875,13 +4877,13 @@ function _logs_file_ops --argument-names target --description "Log viewer: analy
                 set -l fname (basename -- "$f")
                 set -l fdir (basename (dirname -- "$f"))
 
-                set -l footer (tail -n 1 "$f" 2>/dev/null)
+                set -l footer (grep -m1 '"event":"footer"' "$f" 2>/dev/null)
                 set -l exit_code ""
                 set -l pass 0
                 set -l fail 0
                 set -l warn_c 0
                 set -l interrupted false
-                if string match -q '*"event":"footer"*' -- "$footer"
+                if test -n "$footer"
                     set exit_code (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
                     set pass (printf '%s' "$footer" | grep -oE '"pass":[0-9]+' | sed 's/.*://')
                     set fail (printf '%s' "$footer" | grep -oE '"fail":[0-9]+' | sed 's/.*://')
@@ -4897,7 +4899,11 @@ function _logs_file_ops --argument-names target --description "Log viewer: analy
                 set -l all_fails (grep -E '"event":"fail"' "$f" 2>/dev/null | grep -oE '"data":"[^"]+"' | cut -d'"' -f4)
 
                 set -l mark "✓"
-                if test -n "$exit_code"; and test "$exit_code" != 0
+                set -l incomplete false
+                if test -z "$exit_code"; and test "$interrupted" != true
+                    set mark "?"
+                    set incomplete true
+                else if test -n "$exit_code"; and test "$exit_code" != 0
                     set mark "✗"
                     set -a failed_runs "$fdir/$fname"
                 end
@@ -4905,7 +4911,11 @@ function _logs_file_ops --argument-names target --description "Log viewer: analy
                     set mark "⚡"
                 end
 
-                set -l summary (printf '%s %-50s exit=%-3s pass=%-3s fail=%-3s warn=%s' "$mark" "$fdir/$fname" "$exit_code" "$pass" "$fail" "$warn_c")
+                set -l suffix ""
+                if test "$incomplete" = true
+                    set suffix " (incomplete)"
+                end
+                set -l summary (printf '%s %-50s exit=%-3s pass=%-3s fail=%-3s warn=%s%s' "$mark" "$fdir/$fname" "$exit_code" "$pass" "$fail" "$warn_c" "$suffix")
                 _echo "  $summary"
 
                 if test (count $all_fails) -gt 0
@@ -6862,7 +6872,7 @@ end
 set -l _init_cmd (string join -- " " (status filename) $argv)
 set -l _init_cmd (_json_str "$_init_cmd")
 printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","dry_run":%s,"all":%s,"verbose":%s,"command":"%s"}\n' \
-    (date '+%Y-%m-%dT%H:%M:%S') "$VERSION" "$PROFILE_NAME" "$MODE" "$DRY" "$ALL" \
+    (date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$DRY" "$ALL" \
     (test "$QUIET" = false; and echo true; or echo false) "$_init_cmd" >>"$LOG_FILE"
 
 # Lock policy: write modes (install, diff --fix) acquire; read modes skip
@@ -6953,7 +6963,7 @@ set -g _INTENDED_EXIT_CODE $exit_code
 # Set flag BEFORE write to prevent signal-handler race (SIGINT between printf and flag would double-write)
 set -g _FOOTER_WRITTEN true
 set -l _mode_esc (_json_str "$MODE")
-printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s}\n' (date '+%Y-%m-%dT%H:%M:%S') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
+printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
 
 if test "$MODE" != check
     echo "[i] Log file: $LOG_FILE" >&2

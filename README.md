@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.33-blue)
+![Version](https://img.shields.io/badge/version-3.7.34-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -63,46 +63,46 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Flag | Description |
 |------|-------------|
-| `-a, --all` | Install without prompts (requires unrestricted sudo) |
-| `-f, --force` | Auto-yes without progress bar |
-| `-V, --verbose` | Show command output on terminal |
-| `-n, --dry-run` | Preview changes (no writes) |
+| `-a, --all` | Install without prompts (unattended mode) |
+| `-f, --force` | Auto-yes prompts, no progress bar |
+| `-V, --verbose` | Show output on terminal (default: silent, log only) |
+| `-n, --dry-run` | Preview changes without modifying system |
 
 ### Verification
 
 | Flag | Description |
 |------|-------------|
 | `--diff` | Per-file unified diff (`delta` or `diff --color`) |
-| `--diff <path>` | Single file diff |
-| `--diff --fix` | Re-install drifted files |
-| `--verify-static` | Check configs exist with correct content |
-| `--verify-runtime` | Check live system state |
-| `--lint` | Fish syntax and anti-pattern checks |
-| `--check` | Silent idempotency probe (exit 0 = clean, 10 = drift) |
-| `--test-all` | Run all safe modes, generate NDJSON logs |
+| `--diff <path>` | Diff a single managed file (absolute path required) |
+| `--diff --fix` | Show diffs and re-install drifted files (per-file prompt) |
+| `--verify-static` | Check config files exist with correct content |
+| `--verify-runtime` | Check live system state (run after reboot) |
+| `--lint` | Run fish syntax and anti-pattern checks |
+| `--check` | Silent idempotency probe (exit 0 = clean, exit 10 = drift) |
+| `--test-all` | Run all safe modes and generate NDJSON logs (test suite) |
 
 ### Utilities
 
 | Flag | Description |
 |------|-------------|
-| `--install-file <path>` | Re-deploy single managed file |
-| `--completions` | Install tab-completions |
+| `--install-file <path>` | Re-deploy a single managed file |
+| `--completions` | Install fish tab-completions for ry-install |
 
 ### Logs
 
 | Flag | Description |
 |------|-------------|
-| `--logs <target>` | View logs (system, gpu, wifi, boot, audio, usb, kernel, `<service>`) |
-| `--logs analyze [file]` | Parse NDJSON log |
-| `--logs last` | Analyze most recent log |
-| `--logs all` | Combined summary |
-| `--logs list` | List recent logs with summaries |
+| `--logs <target>` | View logs (system gpu wifi boot audio usb kernel `<service>`) |
+| `--logs analyze [file]` | Parse NDJSON log, show human-readable results |
+| `--logs last` | Analyze most recent log file |
+| `--logs all` | Analyze all logs, show combined summary |
+| `--logs list` | List recent log files with summaries |
 
 ### Modifiers
 
 | Flag | Requires | Description |
 |------|----------|-------------|
-| `--fix` | `--diff` | Re-install drifted files |
+| `--fix` | `--diff` | Re-install drifted files (use with --diff) |
 | `--` | — | End of options (remaining arguments ignored) |
 | `-h, --help` | — | Show help |
 | `-v, --version` | — | Show version |

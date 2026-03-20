@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.43 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.43"
+# ry-install v3.7.44 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.44"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -3383,6 +3383,22 @@ function verify_static --description "Verify installed configs match embedded ch
         get_file_content "$dst" >"$hash_dir/expected_$safe" 2>/dev/null
     end
 
+    # Pre-serialize installed file hashes in PARENT process.
+    # sudo timestamp_type=ppid (default since sudo 1.9) does NOT propagate to
+    # backgrounded fish -c children. All sudo reads must run here.
+    for dst in $hash_dsts
+        set -l safe (string replace -a '/' '_' -- "$dst")
+        if string match -q "$my_home/*" -- "$dst"
+            if test -r "$dst"
+                sha256sum <"$dst" 2>/dev/null | string split -- ' ' | head -n 1 >"$hash_dir/installed_$safe"
+            end
+        else
+            if sudo -n test -r "$dst" 2>/dev/null
+                sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ' | head -n 1 >"$hash_dir/installed_$safe"
+            end
+        end
+    end
+
     # Serialize destination list for children; batch into min(4, nproc) workers
     printf '%s\n' $hash_dsts >"$hash_dir/dst_list"
     set -l total_dsts (count $hash_dsts)
@@ -3408,9 +3424,8 @@ function verify_static --description "Verify installed configs match embedded ch
         end
         fish -c '
             set -l hash_dir $argv[1]
-            set -l my_home $argv[2]
-            set -l start_idx $argv[3]
-            set -l end_idx $argv[4]
+            set -l start_idx $argv[2]
+            set -l end_idx $argv[3]
             set -l all_dsts (command cat -- "$hash_dir/dst_list")
             for idx in (seq $start_idx $end_idx)
                 set -l dst $all_dsts[$idx]
@@ -3421,16 +3436,7 @@ function verify_static --description "Verify installed configs match embedded ch
                     continue
                 end
                 set -l expected_hash (sha256sum < "$hash_dir/expected_$safe" | string split -- " ")[1]
-                set -l installed_hash
-                if string match -q "$my_home/*" -- "$dst"
-                    if not test -r "$dst"
-                        echo skip > "$hash_dir/result_$safe"
-                        continue
-                    end
-                    set installed_hash (sha256sum < "$dst" 2>/dev/null | string split -- " ")[1]
-                else
-                    set installed_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- " ")[1]
-                end
+                set -l installed_hash (string trim -- (command cat -- "$hash_dir/installed_$safe" 2>/dev/null))
                 if test -z "$installed_hash"
                     echo skip > "$hash_dir/result_$safe"
                 else if test "$expected_hash" = "$installed_hash"
@@ -3439,7 +3445,7 @@ function verify_static --description "Verify installed configs match embedded ch
                     echo fail > "$hash_dir/result_$safe"
                 end
             end
-        ' -- "$hash_dir" "$my_home" "$start_idx" "$end_idx" 2>"$hash_dir/worker_$worker.stderr" &
+        ' -- "$hash_dir" "$start_idx" "$end_idx" 2>"$hash_dir/worker_$worker.stderr" &
         set -a hash_pids $last_pid
     end
 
@@ -3950,6 +3956,27 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     if test (count $parsed) -lt 5
         _warn "  systemctl show returned incomplete data ("(count $parsed)" of 5 records)"
         _log "SYSTEMCTL_SHOW_PARTIAL: got="(count $parsed)" expected=5"
+        # Fallback: per-unit query to avoid positional misattribution
+        for _svc in $sys_units
+            set -l _unit_raw (systemctl show --property=LoadState,ActiveState,UnitFileState -- "$_svc" 2>/dev/null | string collect --no-trim-newlines)
+            set -l _unit_parsed (_parse_systemctl_show "$_unit_raw")
+            if test (count $_unit_parsed) -lt 1
+                _warn "  $_svc: cannot query"
+                continue
+            end
+            set -l _rec (string split -- ':' -- "$_unit_parsed[1]")
+            if test "$_rec[1]" = not-found
+                _info "  $_svc: unit not found (may not be installed)"
+            else if test "$_rec[2]" = active; or test "$_rec[2]" = exited
+                if test "$_rec[3]" = enabled
+                    _ok "  $_svc: $_rec[2] (enabled)"
+                else
+                    _warn "  $_svc: $_rec[2] but $_rec[3] (won't persist)"
+                end
+            else
+                _fail "  $_svc: $_rec[2] (expected: active)"
+            end
+        end
     else
 
         # amdgpu-performance.service

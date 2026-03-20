@@ -1,3 +1,18 @@
+3.7.44 (2026-03-19)
+-------------------
+  fix(verify): verify_static hash workers called sudo -n inside fish -c
+    children. sudo timestamp_type=ppid (default since 1.9) does not
+    propagate to backgrounded children — sudo -n fails silently, empty
+    stdin to sha256sum produces hash-of-empty, causing false "checksum
+    MISMATCH" on all ~10 system files. Fix: pre-serialize installed file
+    hashes in parent process before forking workers (matches do_check
+    pattern at L3529). Children now compare pre-computed hashes only.
+  fix(verify): verify_runtime service state section (5 units) had no
+    per-unit fallback when systemctl show returned < 5 records — all
+    checks silently skipped with only a _warn. Added per-unit query
+    fallback matching the masked-services pattern (L3293).
+  doc: sync README, CHANGELOG.
+
 3.7.43 (2026-03-19)
 -------------------
   fix(kernel): remove 3 redundant kernel params from KERNEL_PARAMS.
@@ -20,7 +35,7 @@
   doc: sync README kernel param table (15 -> 12), update CWSR
     troubleshooting entry (fixed upstream), fix anchor link.
 
-3.7.42 (2026-03-20)
+3.7.42 (2026-03-19)
 -------------------
   style(get_file_content): fix comment indentation between
     environment.d and ssh-agent.service case branches — 3 comment lines

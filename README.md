@@ -109,10 +109,12 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 ## Configuration
 
-### Kernel Parameters (12)
+### Kernel Parameters (15)
 
 | Parameter | Purpose |
 |-----------|---------|
+| `amdgpu.dcdebugmask=0x10` | Disable PSR (Panel Self Refresh) — fixes screen freeze on static content |
+| `amdgpu.gttsize=126976` | Cap GTT unified memory to 124 GiB (126976 MiB) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Disable overdrive/GFXOFF/stutter (bits 14,15,17) |
 | `audit=0` | Disable audit subsystem |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
@@ -123,6 +125,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `pci=pcie_bus_perf` | PCIe performance tuning |
 | `quiet` | Suppress boot messages |
 | `split_lock_detect=off` | Disable split lock detection |
+| `ttm.pages_limit=32505856` | Cap pinned memory to 124 GiB (32505856 × 4 KiB) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
 | `zswap.enabled=0` | Disable zswap (zram preferred) |
 
@@ -139,7 +142,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Key | Value |
 |-----|-------|
-| `LINUX_OPTIONS` | See [Kernel Parameters](#kernel-parameters-12) |
+| `LINUX_OPTIONS` | See [Kernel Parameters](#kernel-parameters-15) |
 | `LINUX_FALLBACK_OPTIONS` | `"quiet"` |
 | `DEFAULT_ENTRY` | `"manual"` |
 | `REMOVE_EXISTING` | `"yes"` |
@@ -331,7 +334,7 @@ Create `~/.config/ry-install/profiles/<name>.fish` with a `profile_<name>` funct
 
 - **CWSR hang** (fixed): Root cause was incorrect VGPR count for gfx1151 (`cf326449637a5`, kernel 6.18+). CWSR is compute-only (KFD/ROCm); no gaming impact. ROCm users on pre-6.18 kernels may still need `amdgpu.cwsr_enable=0`.
 - **MES firmware page faults**: MES FW 0x83 may trigger page faults. Pin `linux-firmware` to a known-good version if affected.
-- **ROCm VRAM**: VRAM allocation is limited. Use `ttm.pages_limit` on kernel 6.14+ to adjust.
+- **ROCm VRAM**: VRAM allocation is limited. `ttm.pages_limit=32505856` and `amdgpu.gttsize=126976` cap pinned/GTT memory to 124 GiB (kernel 6.14+).
 - **Black screen regression**: Kernel 6.19.0 has a black screen regression; 6.18.9 is the last known-good version.
 - **ROCm environment**: Set `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.0` for ROCm workloads.
 

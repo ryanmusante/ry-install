@@ -1,3 +1,18 @@
+3.7.45 (2026-03-19)
+-------------------
+  feat(kernel): add 3 kernel params (12→15):
+    - amdgpu.dcdebugmask=0x10: disable PSR (Panel Self Refresh) — fixes
+      screen freeze / black screen on static content (terminal, browsing).
+      Bit 4 in DC debug bitmask disables DMCUB PSR.
+    - amdgpu.gttsize=126976: cap GTT unified memory to 124 GiB
+      (126976 MiB ÷ 1024). Strix Halo iGPU shared memory control.
+    - ttm.pages_limit=32505856: cap pinned memory to 124 GiB
+      (32505856 × 4 KiB = 126976 MiB = 124 GiB).
+  feat(verify): add sysfs checks for dcdebugmask, gttsize, ttm.pages_limit.
+  feat(verify): add ttm.=CONFIG_DRM_TTM to _validate_kernel_params map.
+  doc: sync README kernel params table (12→15), update LINUX_OPTIONS
+    anchor, update ROCm VRAM known-issue note.
+
 3.7.44 (2026-03-19)
 -------------------
   fix(verify): verify_static hash workers called sudo -n inside fish -c

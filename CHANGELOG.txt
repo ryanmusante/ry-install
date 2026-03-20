@@ -1,3 +1,19 @@
+3.7.41 (2026-03-19)
+-------------------
+  fix(wifi): bare nmcli calls in WiFi reconnect poll loop bypassed _run
+    logging and command prefix. Added command prefix on read-only probe
+    (nmcli connection show, runs up to 10×). Routed nmcli device wifi
+    rescan through _run for JSONL audit trail (mutation, not probe).
+  fix(verify): verify_runtime ntsync builtin case claimed "/dev/ntsync
+    exists" without verifying. Split loaded/builtin case arms; builtin
+    now checks test -c /dev/ntsync and warns if missing despite
+    CONFIG_NTSYNC=y (udev rule or module issue).
+  style(banner): removed redundant set -l text $argv[1] — already
+    bound by --argument-names on function declaration.
+  style(completions): removed orphaned comment between _fail and
+    return 1 in symlink-abort guard (leftover from refactor).
+  doc: sync README, CHANGELOG.
+
 3.7.40 (2026-03-19)
 -------------------
   fix(verify): verify_runtime checked 3 ghost amdgpu sysfs params

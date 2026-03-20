@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.40 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.40"
+# ry-install v3.7.41 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.41"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -1331,7 +1331,6 @@ function _banner --argument-names text --description "Print the ry-install start
     if test (count $argv) -lt 1
         return 0
     end
-    set -l text $argv[1]
     set -l border "┌──────────────────────────────────────────────────────────────────┐"
     set -l bottom "└──────────────────────────────────────────────────────────────────┘"
     set -l inner 66
@@ -4108,8 +4107,14 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     _echo "── ntsync support ──"
     set -l _ns (_ntsync_state)
     switch $_ns
-        case loaded builtin
+        case loaded
             _ok "ntsync: /dev/ntsync exists"
+        case builtin
+            if test -c /dev/ntsync
+                _ok "ntsync: built-in, /dev/ntsync exists"
+            else
+                _warn "ntsync: built-in (CONFIG_NTSYNC=y) but /dev/ntsync missing — check udev rules"
+            end
         case loaded_nodev
             _warn "ntsync: module loaded but /dev/ntsync missing"
         case unavailable
@@ -6025,14 +6030,14 @@ function _install_finalize --description "Run post-install verification, cleanup
                             # NM may take up to 10s to register .nmconnection; rescan every 3s
                             set -l reload_wait 0
                             while test $reload_wait -lt 10
-                                if nmcli connection show "$WIFI_SSID" >/dev/null 2>&1
+                                if command nmcli connection show "$WIFI_SSID" >/dev/null 2>&1
                                     break
                                 end
                                 set reload_wait (math $reload_wait + 1)
                                 sleep $WIFI_CONNECT_WAIT
                                 if test (math "$reload_wait % 3") -eq 0
                                     _run sudo nmcli connection load "$conn_file" 2>/dev/null
-                                    nmcli device wifi rescan ifname "$WIFI_IFACE" 2>/dev/null
+                                    _run nmcli device wifi rescan ifname "$WIFI_IFACE"
                                 end
                             end
                             set -l wifi_retry 0
@@ -6445,7 +6450,6 @@ function do_completions --description "Generate fish shell completions for ry-in
     if test -L "$tmpfile"
         command rm -f -- "$tmpfile" 2>/dev/null
         _fail "Temp file is symlink — aborting completions install"
-        # Emit fish completion script: flags, modes, --install-file targets, --logs subcommands
         return 1
     end
 

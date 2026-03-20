@@ -1,3 +1,33 @@
+3.7.47 (2026-03-20)
+-------------------
+  fix(verify): verify_runtime SERVICE STATE section was missing
+    NetworkManager.service active/enabled check. EXPECTED_SERVICES
+    includes NetworkManager but sys_units batch query only checked
+    5 units (amdgpu-perf, cpupower-epp, fstrim, resolved,
+    nm-dispatcher). do_check Job 4 used EXPECTED_SERVICES and caught
+    NM drift; verify_runtime did not. Added NetworkManager.service
+    as 6th unit in batch query with parsed[6] handler.
+  fix(security): _run metacharacter injection guard regex was
+    missing \t (tab) and \r (carriage return). Internal callers
+    never pass these, but defense-in-depth dictates covering them.
+    Updated regex from '[;|&`\$\n]' to '[;|&`\$\n\t\r]'.
+  fix(tmpfile): validate_configs Job 2 unit tmpfiles created with
+    mktemp -t in /tmp were not tracked in _TRACKED_TMPFILES. On
+    child kill/hang, files leaked until next non-dry invocation.
+    Changed to mktemp -p "$val_dir" so files live inside the
+    already-tracked val_dir and are cleaned with it.
+  fix(tmpfile): do_completions tmpfile and install_files argparse
+    tmpfile were not tracked in _TRACKED_TMPFILES. Added tracking
+    for both. Crash-leak window was narrow (inline rm -f on all
+    error paths) but tracking closes the gap.
+  fix(help): show_help hardcoded "Beelink GTR9 Pro (Strix Halo)"
+    despite profile system supporting arbitrary machines. Now uses
+    PROFILE_DESC if loaded, falls back to default text.
+  style: add --argument-names step_name to _progress and
+    _progress_skip; replace $argv[1] with $step_name throughout
+    both function bodies for consistency with project convention.
+  doc: sync README, CHANGELOG.
+
 3.7.46 (2026-03-20)
 -------------------
   feat(kernel): add ttm.pages_limit=32505856 (12→13). Cap pinned

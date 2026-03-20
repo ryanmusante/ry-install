@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.46 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.46"
+# ry-install v3.7.47 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.47"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -1423,7 +1423,7 @@ function _progress_init --description "Initialize the step progress counter"
 end
 
 # Advance to next step: emit timing for previous step, display [N/M] progress bar to stderr
-function _progress --description "Advance and display the current progress step"
+function _progress --argument-names step_name --description "Advance and display the current progress step"
     # Emit timing for the previous step
     if test -n "$_STEP_PREV_NAME"; and test "$_STEP_PREV_START" -gt 0
         set -l _step_now (date +%s)
@@ -1432,7 +1432,7 @@ function _progress --description "Advance and display the current progress step"
         printf '{"ts":"%s","event":"step_time","data":"%s","elapsed_s":%d}\n' \
             (date '+%Y-%m-%dT%H:%M:%S%z') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
     end
-    set -g _STEP_PREV_NAME "$argv[1]"
+    set -g _STEP_PREV_NAME "$step_name"
     set -g _STEP_PREV_START (date +%s)
 
     if test "$ALL" = true; and test "$DRY" = false
@@ -1468,19 +1468,19 @@ function _progress --description "Advance and display the current progress step"
         set -g PROGRESS_STEP_START $now
 
         set -l desc
-        if test (string length -- "$argv[1]") -gt 25
-            set desc (string sub -l 22 -- "$argv[1]")"..."
+        if test (string length -- "$step_name") -gt 25
+            set desc (string sub -l 22 -- "$step_name")"..."
         else
-            set desc (string sub -l 25 -- "$argv[1]                              ")
+            set desc (string sub -l 25 -- "$step_name                              ")
         end
 
         printf '\r[%s] %3d%% %s%s' "$bar" "$pct" "$desc" "$step_elapsed" >&2
     end
-    _log "PROGRESS: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $argv[1]"
+    _log "PROGRESS: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $step_name"
 end
 
 # Record a skipped progress step to keep counter synchronized with PROGRESS_TOTAL
-function _progress_skip --description "Advance progress counter for a skipped step"
+function _progress_skip --argument-names step_name --description "Advance progress counter for a skipped step"
     # Emit timing for the previous step (consistent with _progress)
     if test -n "$_STEP_PREV_NAME"; and test "$_STEP_PREV_START" -gt 0
         set -l _step_now (date +%s)
@@ -1489,7 +1489,7 @@ function _progress_skip --description "Advance progress counter for a skipped st
         printf '{"ts":"%s","event":"step_time","data":"%s","elapsed_s":%d}\n' \
             (date '+%Y-%m-%dT%H:%M:%S%z') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
     end
-    set -g _STEP_PREV_NAME "$argv[1]"
+    set -g _STEP_PREV_NAME "$step_name"
     set -g _STEP_PREV_START (date +%s)
     set -g PROGRESS_CURRENT (math "min($PROGRESS_CURRENT + 1, $PROGRESS_TOTAL)")
     # Render progress bar to avoid visual stall on skipped steps
@@ -1505,14 +1505,14 @@ function _progress_skip --description "Advance progress counter for a skipped st
             set bar "$bar░"
         end
         set -l desc
-        if test (string length -- "$argv[1]") -gt 25
-            set desc (string sub -l 22 -- "$argv[1]")"..."
+        if test (string length -- "$step_name") -gt 25
+            set desc (string sub -l 22 -- "$step_name")"..."
         else
-            set desc (string sub -l 25 -- "$argv[1]                              ")
+            set desc (string sub -l 25 -- "$step_name                              ")
         end
         printf '\r[%s] %3d%% %s (skip)' "$bar" "$pct" "$desc" >&2
     end
-    _log "PROGRESS_SKIP: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $argv[1]"
+    _log "PROGRESS_SKIP: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $step_name"
 end
 
 # Close progress display: emit final step timing, fill bar to 100%, reset state
@@ -1563,9 +1563,9 @@ function _run --description "Execute a command with logging, dry-run support, an
         return 1
     end
     # SECURITY ASSERTION: _run must only be called with known-safe internal commands.
-    # Reject argv[1] containing shell metacharacters (;|&`$\n) to prevent injection if
+    # Reject argv[1] containing shell metacharacters (;|&`$\n\t\r) to prevent injection if
     # a future caller accidentally passes untrusted input.
-    if string match -qr '[;|&`\$\n]' -- "$argv[1]"
+    if string match -qr '[;|&`\$\n\t\r]' -- "$argv[1]"
         _log "BUG: _run argv[1] contains shell metacharacters — refusing to execute: $argv[1]"
         return 1
     end
@@ -1666,9 +1666,13 @@ function show_help --description "Display usage information and available subcom
     if test -z "$_file_count"
         set _file_count (sed -n -- '/^function get_file_content/,/^end$/p' (status filename) | grep -cE "case [\"']?(/|[*]/\.|\\\$HOME/)")
     end
+    set -l _profile_desc "Beelink GTR9 Pro (Strix Halo)"
+    if set -q PROFILE_DESC; and test -n "$PROFILE_DESC"
+        set _profile_desc "$PROFILE_DESC"
+    end
     echo "
 ry-install v$VERSION
-Self-contained CachyOS configuration for Beelink GTR9 Pro (Strix Halo)
+Self-contained CachyOS configuration for $_profile_desc
 Single fish script, $_file_count embedded configs, no external dependencies.
 
 Usage: "(status filename)" [OPTIONS]
@@ -2098,7 +2102,7 @@ function validate_configs --description "Run all embedded config validators"
         for unit_key in _etc_systemd_system_amdgpu-performance.service _etc_systemd_system_cpupower-epp.service
             set -l f "$content_dir/$unit_key"
             if test -s "$f"
-                set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service)
+                set -l tmp (mktemp -p "$val_dir" --suffix=.service ry-val-unit.XXXXXX)
                 command cp -- "$f" "$tmp"
                 if not systemd-analyze verify "$tmp" 2>/dev/null
                     set errs (math $errs + 1)
@@ -2112,7 +2116,7 @@ function validate_configs --description "Run all embedded config validators"
         set -l ssh_key (string replace -a -- "/" "_" "$my_home/.config/systemd/user/ssh-agent.service")
         set -l f "$content_dir/$ssh_key"
         if test -s "$f"
-            set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service)
+            set -l tmp (mktemp -p "$val_dir" --suffix=.service ry-val-unit.XXXXXX)
             command cp -- "$f" "$tmp"
             if not systemd-analyze --user verify "$tmp" 2>/dev/null
                 set errs (math $errs + 1)
@@ -2445,6 +2449,7 @@ end
 
 function install_files --description "Install multiple embedded configs with argparse options"
     set -l _argparse_tmp (mktemp -t ry-argparse.XXXXXX 2>/dev/null; or echo /dev/null)
+    test "$_argparse_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$_argparse_tmp"
     argparse s/sudo 'd/desc=' -- $argv 2>$_argparse_tmp
     or begin
         set -l _argparse_err (string trim -- (command cat -- "$_argparse_tmp" 2>/dev/null))
@@ -3957,14 +3962,15 @@ function verify_runtime --description "Verify runtime kernel params, services, a
 
     # B-8a: Batch systemctl show — 1 system call replaces 9 individual calls
     set -l sys_units amdgpu-performance.service cpupower-epp.service \
-        fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service
+        fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service \
+        NetworkManager.service
     set -l show_output (systemctl show --property=LoadState,ActiveState,UnitFileState -- $sys_units 2>/dev/null | string collect --no-trim-newlines)
     set -l parsed (_parse_systemctl_show "$show_output")
 
-    # Index into parsed (LoadState:ActiveState:UnitFileState): 1=amdgpu-performance, 2=cpupower-epp, 3=fstrim, 4=resolved, 5=nm-dispatcher
-    if test (count $parsed) -lt 5
-        _warn "  systemctl show returned incomplete data ("(count $parsed)" of 5 records)"
-        _log "SYSTEMCTL_SHOW_PARTIAL: got="(count $parsed)" expected=5"
+    # Index into parsed (LoadState:ActiveState:UnitFileState): 1=amdgpu-performance, 2=cpupower-epp, 3=fstrim, 4=resolved, 5=nm-dispatcher, 6=NetworkManager
+    if test (count $parsed) -lt 6
+        _warn "  systemctl show returned incomplete data ("(count $parsed)" of 6 records)"
+        _log "SYSTEMCTL_SHOW_PARTIAL: got="(count $parsed)" expected=6"
         # Fallback: per-unit query to avoid positional misattribution
         for _svc in $sys_units
             set -l _unit_raw (systemctl show --property=LoadState,ActiveState,UnitFileState -- "$_svc" 2>/dev/null | string collect --no-trim-newlines)
@@ -4054,7 +4060,19 @@ function verify_runtime --description "Verify runtime kernel params, services, a
             _fail "  NetworkManager-dispatcher: $rec[3] (expected: enabled)"
         end
 
-        # guard: (count $parsed) -lt 5
+        # NetworkManager
+        set -l rec (string split -- ':' -- "$parsed[6]")
+        if test "$rec[2]" = active
+            if test "$rec[3]" = enabled
+                _ok "  NetworkManager.service: active (enabled)"
+            else
+                _warn "  NetworkManager.service: active but $rec[3] (won't persist)"
+            end
+        else
+            _fail "  NetworkManager.service: $rec[2] (expected: active)"
+        end
+
+        # guard: (count $parsed) -lt 6
     end
 
     # User scope: 1 batch call for ssh-agent
@@ -6475,6 +6493,7 @@ function do_completions --description "Generate fish shell completions for ry-in
         _fail "Failed to create temp file for completions"
         return 1
     end
+    set -ga _TRACKED_TMPFILES "$tmpfile"
     if test -L "$tmpfile"
         command rm -f -- "$tmpfile" 2>/dev/null
         _fail "Temp file is symlink — aborting completions install"

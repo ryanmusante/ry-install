@@ -335,6 +335,7 @@ Create `~/.config/ry-install/profiles/<name>.fish` with a `profile_<name>` funct
 - **CWSR hang** (fixed): Root cause was incorrect VGPR count for gfx1151 (`cf326449637a5`, kernel 6.18+). CWSR is compute-only (KFD/ROCm); no gaming impact. ROCm users on pre-6.18 kernels may still need `amdgpu.cwsr_enable=0`.
 - **MES firmware page faults**: MES FW 0x83 may trigger page faults. Pin `linux-firmware` to a known-good version if affected.
 - **ROCm VRAM**: VRAM allocation is limited. `ttm.pages_limit=32505856` and `amdgpu.gttsize=126976` cap pinned/GTT memory to 124 GiB (kernel 6.14+).
+- **PSR screen freeze**: Buggy DMCUB firmware causes screen freeze / black screen on static content (terminal, browsing). `amdgpu.dcdebugmask=0x10` disables Panel Self Refresh. Symptom: `[drm] dc_dmub_srv_log_diagnostic_data` in journal.
 - **Black screen regression**: Kernel 6.19.0 has a black screen regression; 6.18.9 is the last known-good version.
 - **ROCm environment**: Set `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.0` for ROCm workloads.
 

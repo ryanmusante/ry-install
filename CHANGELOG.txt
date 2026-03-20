@@ -11,7 +11,8 @@
   feat(verify): add sysfs checks for dcdebugmask, gttsize, ttm.pages_limit.
   feat(verify): add ttm.=CONFIG_DRM_TTM to _validate_kernel_params map.
   doc: sync README kernel params table (12→15), update LINUX_OPTIONS
-    anchor, update ROCm VRAM known-issue note.
+    anchor, update ROCm VRAM known-issue note, add PSR screen freeze
+    to known hardware issues.
 
 3.7.44 (2026-03-19)
 -------------------

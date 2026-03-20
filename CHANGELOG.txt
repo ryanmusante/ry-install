@@ -1,3 +1,11 @@
+3.7.42 (2026-03-20)
+-------------------
+  style(get_file_content): fix comment indentation between
+    environment.d and ssh-agent.service case branches — 3 comment lines
+    at switch-level (8 spaces) corrected to case-body-level (12 spaces).
+    fish_indent --check now passes; --lint exits 0.
+  doc: sync README, CHANGELOG.
+
 3.7.41 (2026-03-19)
 -------------------
   fix(wifi): bare nmcli calls in WiFi reconnect poll loop bypassed _run

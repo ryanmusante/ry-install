@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.41 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.41"
+# ry-install v3.7.42 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.42"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -1012,9 +1012,9 @@ end'
                 printf '%s\n' "$var"
             end
 
-        # Custom unit vs Arch's /usr/lib/systemd/user/ssh-agent.service
-        # (openssh ≥9.4p1-3). Custom preferred: adds Restart=on-failure
-        # (crash recovery) and lives in ~/.config/ (survives package upgrades).
+            # Custom unit vs Arch's /usr/lib/systemd/user/ssh-agent.service
+            # (openssh ≥9.4p1-3). Custom preferred: adds Restart=on-failure
+            # (crash recovery) and lives in ~/.config/ (survives package upgrades).
         case "$HOME/.config/systemd/user/ssh-agent.service"
             printf '%s\n' '[Unit]
 Description=SSH authentication agent

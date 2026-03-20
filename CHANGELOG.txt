@@ -1,3 +1,25 @@
+3.7.43 (2026-03-19)
+-------------------
+  fix(kernel): remove 3 redundant kernel params from KERNEL_PARAMS.
+    - amdgpu.cwsr_enable=0: compute-only (KFD/ROCm); zero gaming
+      impact. CWSR operates on compute queues, not GFX ring queues
+      used by Vulkan/OpenGL. Root cause (incorrect VGPR count for
+      gfx1151) fixed in kernel 6.18+ (cf326449637a5).
+    - amdgpu.gpu_recovery=1: default is -1 (auto), which enables
+      recovery for all GPUs >= GFX8 since kernel 5.1. Explicit =1
+      produces identical behavior on gfx1151.
+    - amd_pstate=active: CachyOS kernel CONFIG_X86_AMD_PSTATE_
+      DEFAULT_MODE=3 (active/EPP). Boot param overrides config to
+      same value. Also upstream default since kernel 6.5 for Zen 2+.
+  fix(verify): remove cwsr_enable:0 and gpu_recovery:1 from
+    verify_runtime amdgpu sysfs check loop. These params are no
+    longer managed; checking against removed expectations would
+    produce false FAILs (defaults differ from old explicit values).
+  fix(validate): remove dead amd_pstate entry from
+    _validate_kernel_params param_config_map.
+  doc: sync README kernel param table (15 -> 12), update CWSR
+    troubleshooting entry (fixed upstream), fix anchor link.
+
 3.7.42 (2026-03-20)
 -------------------
   style(get_file_content): fix comment indentation between

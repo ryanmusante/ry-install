@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.42 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.42"
+# ry-install v3.7.43 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.43"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -162,7 +162,6 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
 
     # Map: cmdline param prefix → CONFIG_ symbol; nowatchdog excluded (no-op without CONFIG_WATCHDOG)
     set -l param_config_map \
-        "amd_pstate=CONFIG_X86_AMD_PSTATE" \
         "zswap.=CONFIG_ZSWAP" \
         "iommu=CONFIG_IOMMU_SUPPORT" \
         "amdgpu.=CONFIG_DRM_AMDGPU" \
@@ -179,7 +178,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         set -l prefix (string split '=' -- "$entry")[1]
         set -l config_sym (string split '=' -- "$entry")[2]
 
-        # Check if any KERNEL_PARAM starts with _cfg_prefix (e.g., "amd_pstate" matches "amd_pstate=active")
+        # Check if any KERNEL_PARAM starts with _cfg_prefix (e.g., "zswap." matches "zswap.enabled=0")
         set -l found false
         for param in $KERNEL_PARAMS
             if string match -q -- "$prefix*" "$param"
@@ -523,19 +522,12 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # ── Kernel (15 params) ──
-    # amdgpu.cwsr_enable=0 — Strix Halo workaround (ROCm #5590, #5724)
-    # CWSR causes MES firmware hang on gfx1151. Do not remove.
+    # ── Kernel (12 params) ──
     # amdgpu.ppfeaturemask=0xfffd3fff disables:
     #   bit 14 PP_OVERDRIVE_MASK — no sysfs OC (iGPU, not needed)
     #   bit 15 PP_GFXOFF_MASK   — prevents idle GPU fence-timeout hangs
     #   bit 17 PP_STUTTER_MODE  — prevents display flicker on idle
-    # amd_pstate=active — default since kernel 6.5 for Zen 2+; explicit for clarity
-    # amdgpu.gpu_recovery=1 — default is -1 (auto, enables GFX8+); explicit for clarity
     set -g KERNEL_PARAMS \
-        amd_pstate=active \
-        amdgpu.cwsr_enable=0 \
-        amdgpu.gpu_recovery=1 \
         amdgpu.ppfeaturemask=0xfffd3fff \
         audit=0 \
         initcall_blacklist=simpledrm_platform_driver_init \
@@ -3910,7 +3902,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
 
     if test -d /sys/module/amdgpu/parameters
         # Hex→decimal normalization: sysfs may return 0xfffd3fff or 4294705151
-        for pair in "cwsr_enable:0" "gpu_recovery:1" "ppfeaturemask:0xfffd3fff"
+        for pair in "ppfeaturemask:0xfffd3fff"
             set -l pname (string split ':' -- "$pair")[1]
             set -l expected (string split ':' -- "$pair")[2]
             set -l ppath /sys/module/amdgpu/parameters/$pname

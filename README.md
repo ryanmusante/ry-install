@@ -109,13 +109,10 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 ## Configuration
 
-### Kernel Parameters (15)
+### Kernel Parameters (12)
 
 | Parameter | Purpose |
 |-----------|---------|
-| `amd_pstate=active` | Enable amd_pstate active mode (default since 6.5; explicit) |
-| `amdgpu.cwsr_enable=0` | Disable compute wave save/restore (Strix Halo MES hang workaround) |
-| `amdgpu.gpu_recovery=1` | Enable GPU hang recovery (default auto; explicit) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Disable overdrive/GFXOFF/stutter (bits 14,15,17) |
 | `audit=0` | Disable audit subsystem |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
@@ -142,7 +139,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Key | Value |
 |-----|-------|
-| `LINUX_OPTIONS` | See [Kernel Parameters](#kernel-parameters-15) |
+| `LINUX_OPTIONS` | See [Kernel Parameters](#kernel-parameters-12) |
 | `LINUX_FALLBACK_OPTIONS` | `"quiet"` |
 | `DEFAULT_ENTRY` | `"manual"` |
 | `REMOVE_EXISTING` | `"yes"` |
@@ -332,7 +329,7 @@ Create `~/.config/ry-install/profiles/<name>.fish` with a `profile_<name>` funct
 
 #### Strix Halo (gfx1151) GPU
 
-- **CWSR hang**: `amdgpu.cwsr_enable=0` is required. CWSR causes MES firmware hang on gfx1151 (ROCm [#5590](https://github.com/ROCm/ROCm/issues/5590), [#5724](https://github.com/ROCm/ROCm/issues/5724)). Do not remove.
+- **CWSR hang** (fixed): Root cause was incorrect VGPR count for gfx1151 (`cf326449637a5`, kernel 6.18+). CWSR is compute-only (KFD/ROCm); no gaming impact. ROCm users on pre-6.18 kernels may still need `amdgpu.cwsr_enable=0`.
 - **MES firmware page faults**: MES FW 0x83 may trigger page faults. Pin `linux-firmware` to a known-good version if affected.
 - **ROCm VRAM**: VRAM allocation is limited. Use `ttm.pages_limit` on kernel 6.14+ to adjust.
 - **Black screen regression**: Kernel 6.19.0 has a black screen regression; 6.18.9 is the last known-good version.

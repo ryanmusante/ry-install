@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.45-blue)
+![Version](https://img.shields.io/badge/version-3.7.46-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -109,12 +109,10 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 ## Configuration
 
-### Kernel Parameters (15)
+### Kernel Parameters (13)
 
 | Parameter | Purpose |
 |-----------|---------|
-| `amdgpu.dcdebugmask=0x10` | Disable PSR (Panel Self Refresh) — fixes screen freeze on static content |
-| `amdgpu.gttsize=126976` | Cap GTT unified memory to 124 GiB (126976 MiB) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Disable overdrive/GFXOFF/stutter (bits 14,15,17) |
 | `audit=0` | Disable audit subsystem |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
@@ -142,7 +140,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Key | Value |
 |-----|-------|
-| `LINUX_OPTIONS` | See [Kernel Parameters](#kernel-parameters-15) |
+| `LINUX_OPTIONS` | See [Kernel Parameters](#kernel-parameters-13) |
 | `LINUX_FALLBACK_OPTIONS` | `"quiet"` |
 | `DEFAULT_ENTRY` | `"manual"` |
 | `REMOVE_EXISTING` | `"yes"` |
@@ -211,11 +209,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | `power-profiles-daemon.service` | Conflicts with cpupower-epp; masked to prevent dep reinstall |
 | `lvm2-monitor.service` | Skipped if LVM detected |
 | `NetworkManager-wait-online.service` | Unnecessary boot delay |
-| `sleep.target` | Desktop — no sleep |
-| `suspend.target` | Desktop — no suspend |
-| `hibernate.target` | Desktop — no hibernate |
-| `hybrid-sleep.target` | Desktop — no hybrid sleep |
-| `suspend-then-hibernate.target` | Desktop — no suspend-then-hibernate |
+| `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` | Desktop — no sleep/suspend/hibernate |
 
 ### Services (2)
 
@@ -290,10 +284,6 @@ Dependencies → Sync → Packages → System files → User files → AMDGPU se
 | `~/ry-install/.hardware-fingerprint` | Hardware drift detection |
 | `~/ry-install/.manifest` | Orphan tracking (version, profile, destinations) |
 
-## After Install
-
-Reboot → `--verify-static` → `--verify-runtime` → `sudo pacdiff` → test WiFi + gaming
-
 ## Troubleshooting
 
 | Problem | Command |
@@ -313,11 +303,7 @@ Machine-specific globals (kernel params, packages, services, thresholds, destina
 | `~/.config/ry-install/default-profile` | Persistent default (single line: profile name) |
 | `gtr9_pro` | Hardcoded fallback |
 
-External profiles must define a `function profile_<name>` setting all required globals. Files are syntax-checked (`fish --no-execute`) before sourcing. Profile validation enforces 25+ required globals, name consistency, and numeric types.
-
-### Adapting
-
-Create `~/.config/ry-install/profiles/<name>.fish` with a `profile_<name>` function. Copy `profile_gtr9_pro` as a starting point and adjust `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, `PKGS_ADD`/`PKGS_DEL`, `MASK`, `EXPECTED_SERVICES`, `ENV_VARS`, service destinations, and threshold globals. Set the profile name in `~/.config/ry-install/default-profile` and run `./ry-install.fish --check` to validate.
+External profiles must define a `function profile_<name>` setting all required globals. Files are syntax-checked (`fish --no-execute`) before sourcing. Profile validation enforces 25+ required globals, name consistency, and numeric types. To create a new profile, copy `profile_gtr9_pro` as a starting point, adjust `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, `PKGS_ADD`/`PKGS_DEL`, `MASK`, `EXPECTED_SERVICES`, `ENV_VARS`, service destinations, and threshold globals, set the name in `~/.config/ry-install/default-profile`, and run `./ry-install.fish --check` to validate.
 
 ### References
 
@@ -334,10 +320,10 @@ Create `~/.config/ry-install/profiles/<name>.fish` with a `profile_<name>` funct
 
 - **CWSR hang** (fixed): Root cause was incorrect VGPR count for gfx1151 (`cf326449637a5`, kernel 6.18+). CWSR is compute-only (KFD/ROCm); no gaming impact. ROCm users on pre-6.18 kernels may still need `amdgpu.cwsr_enable=0`.
 - **MES firmware page faults**: MES FW 0x83 may trigger page faults. Pin `linux-firmware` to a known-good version if affected.
-- **ROCm VRAM**: VRAM allocation is limited. `ttm.pages_limit=32505856` and `amdgpu.gttsize=126976` cap pinned/GTT memory to 124 GiB (kernel 6.14+).
-- **PSR screen freeze**: Buggy DMCUB firmware causes screen freeze / black screen on static content (terminal, browsing). `amdgpu.dcdebugmask=0x10` disables Panel Self Refresh. Symptom: `[drm] dc_dmub_srv_log_diagnostic_data` in journal.
+- **ROCm VRAM**: VRAM allocation is limited. `ttm.pages_limit=32505856` caps pinned/GTT memory to 124 GiB (kernel 6.14+). `amdgpu.gttsize` is deprecated; use `ttm.pages_limit` only.
+- **PSR screen freeze** (eDP only): Buggy DMCUB firmware causes screen freeze on static content. Add `amdgpu.dcdebugmask=0x10` if driving an eDP panel. Not needed for external HDMI/DP monitors. Symptom: `[drm] dc_dmub_srv_log_diagnostic_data` in journal.
 - **Black screen regression**: Kernel 6.19.0 has a black screen regression; 6.18.9 is the last known-good version.
-- **ROCm environment**: Set `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.0` for ROCm workloads.
+- **ROCm environment**: Set `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.1` for ROCm workloads.
 
 #### MediaTek MT7925 WiFi
 

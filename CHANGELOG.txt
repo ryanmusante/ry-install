@@ -1,18 +1,19 @@
-3.7.45 (2026-03-19)
+3.7.46 (2026-03-20)
 -------------------
-  feat(kernel): add 3 kernel params (12→15):
-    - amdgpu.dcdebugmask=0x10: disable PSR (Panel Self Refresh) — fixes
-      screen freeze / black screen on static content (terminal, browsing).
-      Bit 4 in DC debug bitmask disables DMCUB PSR.
-    - amdgpu.gttsize=126976: cap GTT unified memory to 124 GiB
-      (126976 MiB ÷ 1024). Strix Halo iGPU shared memory control.
-    - ttm.pages_limit=32505856: cap pinned memory to 124 GiB
-      (32505856 × 4 KiB = 126976 MiB = 124 GiB).
-  feat(verify): add sysfs checks for dcdebugmask, gttsize, ttm.pages_limit.
-  feat(verify): add ttm.=CONFIG_DRM_TTM to _validate_kernel_params map.
-  doc: sync README kernel params table (12→15), update LINUX_OPTIONS
-    anchor, update ROCm VRAM known-issue note, add PSR screen freeze
-    to known hardware issues.
+  feat(kernel): add ttm.pages_limit=32505856 (12→13). Cap pinned
+    memory to 124 GiB (32505856 × 4 KiB). Replaces deprecated
+    amdgpu.gttsize (~6.14). amdgpu.dcdebugmask not added (PSR is
+    eDP-only; no effect on HDMI/DP).
+  feat(verify): add sysfs check for ttm.pages_limit. Add
+    ttm.=CONFIG_DRM_TTM to _validate_kernel_params map.
+  fix(doc): README HSA_OVERRIDE_GFX_VERSION 11.5.0→11.5.1. gfx1151
+    maps to 11.5.1 (stepping=1); 11.5.0 is gfx1150 (wrong chip).
+  style(comment): condense kernel params comment block. Document
+    ppfeaturemask overdrive trade-off (0xfffd7fff for CoreCtrl/LACT).
+  remove(comment): stale mkinitcpio-firmware AUR-only comment.
+    Package is in CachyOS repos (1.6.0-1).
+  doc: sync README kernel params table (12→13), update LINUX_OPTIONS
+    anchor, add ROCm VRAM and PSR eDP-only known-issue notes.
 
 3.7.44 (2026-03-19)
 -------------------

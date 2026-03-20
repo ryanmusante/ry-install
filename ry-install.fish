@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.45 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.45"
+# ry-install v3.7.46 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.46"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -523,18 +523,11 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # ── Kernel (15 params) ──
-    # amdgpu.ppfeaturemask=0xfffd3fff disables:
-    #   bit 14 PP_OVERDRIVE_MASK — no sysfs OC (iGPU, not needed)
-    #   bit 15 PP_GFXOFF_MASK   — prevents idle GPU fence-timeout hangs
-    #   bit 17 PP_STUTTER_MODE  — prevents display flicker on idle
-    # amdgpu.dcdebugmask=0x10: bit 4 disables PSR (Panel Self Refresh)
-    #   — fixes screen freeze / black screen on static images (terminal, browsing)
-    # amdgpu.gttsize=126976: cap GTT (unified) memory to 124 GiB (126976 MiB)
+    # ── Kernel (13 params) ──
+    # ppfeaturemask=0xfffd3fff: disables bits 14 (overdrive), 15 (GFXOFF), 17 (stutter). For overdrive/CoreCtrl/LACT: 0xfffd7fff.
     # ttm.pages_limit=32505856: cap pinned memory to 124 GiB (32505856 × 4 KiB)
+    # Not added: amdgpu.gttsize (deprecated ~6.14; ttm.pages_limit sufficient), amdgpu.dcdebugmask (PSR is eDP-only)
     set -g KERNEL_PARAMS \
-        amdgpu.dcdebugmask=0x10 \
-        amdgpu.gttsize=126976 \
         amdgpu.ppfeaturemask=0xfffd3fff \
         audit=0 \
         initcall_blacklist=simpledrm_platform_driver_init \
@@ -596,7 +589,6 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "PROTON_NO_WM_DECORATION=1"
 
     # ── Packages ──
-    # mkinitcpio-firmware may be AUR-only. If pacman -S fails, use paru.
     set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications fd sd dust procs bottom git-delta lm_sensors
     set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme ufw octopi micro cachyos-micro-settings btop
 
@@ -3916,7 +3908,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
 
     if test -d /sys/module/amdgpu/parameters
         # Hex→decimal normalization: sysfs may return 0xfffd3fff or 4294705151
-        for pair in "dcdebugmask:0x10" "gttsize:126976" "ppfeaturemask:0xfffd3fff"
+        for pair in "ppfeaturemask:0xfffd3fff"
             set -l pname (string split ':' -- "$pair")[1]
             set -l expected (string split ':' -- "$pair")[2]
             set -l ppath /sys/module/amdgpu/parameters/$pname

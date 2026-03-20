@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.39-blue)
+![Version](https://img.shields.io/badge/version-3.7.40-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -194,7 +194,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 |------|---------|
 | `fish/conf.d/10-ssh-auth-sock.fish` | SSH socket priority: forwarded > gcr > systemd user agent |
 | `environment.d/10-environment.conf` | Environment variables for systemd user services and graphical sessions |
-| `systemd/user/ssh-agent.service` | Persistent `ssh-agent -D` with socket at `%t/ssh-agent.socket` |
+| `systemd/user/ssh-agent.service` | Persistent `ssh-agent -D` with crash recovery (`Restart=on-failure`) at `%t/ssh-agent.socket` |
 
 ### Packages
 

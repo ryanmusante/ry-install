@@ -1,3 +1,14 @@
+3.7.40 (2026-03-19)
+-------------------
+  fix(verify): verify_runtime checked 3 ghost amdgpu sysfs params
+    (aspm:0, modeset:1, runpm:0) removed from KERNEL_PARAMS in 3.7.39.
+    Kernel defaults (-1 auto) differ from expected values, producing
+    false FAILs on every --verify-runtime run. Removed from check loop.
+  fix(comment): ssh-agent.service placeholder "<OWNER: fill in>"
+    replaced with actual justification (Restart=on-failure crash
+    recovery + ~/.config/ survives package upgrades).
+  doc: sync README, CHANGELOG.
+
 3.7.39 (2026-03-19)
 -------------------
   fix(security): amd_iommu=off → iommu=pt. Disabling IOMMU removed DMA

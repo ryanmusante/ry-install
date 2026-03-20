@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.39 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.39"
+# ry-install v3.7.40 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.40"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -1013,7 +1013,8 @@ end'
             end
 
         # Custom unit vs Arch's /usr/lib/systemd/user/ssh-agent.service
-        # (openssh ≥9.4p1-3). Custom preferred because: <OWNER: fill in>
+        # (openssh ≥9.4p1-3). Custom preferred: adds Restart=on-failure
+        # (crash recovery) and lives in ~/.config/ (survives package upgrades).
         case "$HOME/.config/systemd/user/ssh-agent.service"
             printf '%s\n' '[Unit]
 Description=SSH authentication agent
@@ -3910,7 +3911,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
 
     if test -d /sys/module/amdgpu/parameters
         # Hex→decimal normalization: sysfs may return 0xfffd3fff or 4294705151
-        for pair in "aspm:0" "cwsr_enable:0" "gpu_recovery:1" "modeset:1" "ppfeaturemask:0xfffd3fff" "runpm:0"
+        for pair in "cwsr_enable:0" "gpu_recovery:1" "ppfeaturemask:0xfffd3fff"
             set -l pname (string split ':' -- "$pair")[1]
             set -l expected (string split ':' -- "$pair")[2]
             set -l ppath /sys/module/amdgpu/parameters/$pname

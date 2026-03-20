@@ -1,3 +1,17 @@
+3.7.48 (2026-03-20)
+-------------------
+  fix(log): _get_boot_time _log call missing `: ` separator — JSONL
+    event classified as generic "message" instead of "boot_time_check".
+    Added colon-space to match structured log convention.
+  fix(signal): Log file rename race in CLI dispatch — signal between
+    `mv LOG_FILE` and `set -g LOG_FILE` caused footer write to target
+    deleted path (silently lost via _log guard). Set LOG_FILE global
+    before mv so signal handlers always target the current path.
+  refactor(verify): Removed NM-dispatcher systemctl runtime query from
+    verify_static — violated static/runtime boundary. verify_runtime
+    already checks NM-dispatcher enable state at L4045 via batch
+    systemctl show. No coverage loss.
+
 3.7.47 (2026-03-20)
 -------------------
   fix(verify): verify_runtime SERVICE STATE section was missing

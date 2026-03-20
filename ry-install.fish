@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.47 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.47"
+# ry-install v3.7.48 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.48"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -234,7 +234,7 @@ end
 
 # Parse systemd-analyze output for total boot time in seconds; return 1 if unavailable
 function _get_boot_time --description "Print boot time in seconds, or return 1"
-    _log BOOT_TIME_CHECK
+    _log "BOOT_TIME_CHECK: querying systemd-analyze"
     command -q systemd-analyze; or return 1
     set -l line (systemd-analyze 2>/dev/null | head -n 1)
     set -l sec (printf '%s\n' "$line" | string match -r -- '= ([0-9.]+)s' | tail -n 1)
@@ -3173,13 +3173,7 @@ function verify_static --description "Verify installed configs match embedded ch
         _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.powersave=$NM_WIFI_POWERSAVE" "WiFi powersave $NM_WIFI_POWERSAVE"
         _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "level=$NM_LOG_LEVEL" "logging level $NM_LOG_LEVEL"
     end
-    set -l _nm_disp_show (systemctl show --property=UnitFileState -- NetworkManager-dispatcher.service 2>/dev/null)
-    set -l nm_disp_state (printf '%s\n' $_nm_disp_show | string replace -- 'UnitFileState=' '')
-    if test "$nm_disp_state" = enabled
-        _ok "  NetworkManager-dispatcher.service: enabled"
-    else
-        _fail "  NetworkManager-dispatcher.service: $nm_disp_state (expected: enabled)"
-    end
+    # NM-dispatcher enable state: checked in verify_runtime (batch systemctl show) — not a static config file check
     _echo
 
     _echo "── sysctl overrides ──"
@@ -6936,10 +6930,12 @@ if test "$ALL" = true; and test "$MODE" != test-all
     set mode_label "$mode_label-all"
 end
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"
-if test -f "$LOG_FILE"; and test "$LOG_FILE" != "$new_log"
-    command mv -- "$LOG_FILE" "$new_log" 2>/dev/null
-end
+set -l old_log "$LOG_FILE"
+# Update LOG_FILE BEFORE mv — signal handlers between mv and set would target the old (deleted) path, silently losing the JSONL footer
 set -g LOG_FILE "$new_log"
+if test -f "$old_log"; and test "$old_log" != "$new_log"
+    command mv -- "$old_log" "$new_log" 2>/dev/null
+end
 # Only create fresh file if it doesn't already exist (mv above may have placed it); preserve pre-existing content from _load_profile
 if not test -f "$LOG_FILE"
     command install -m 0600 /dev/null "$LOG_FILE" 2>/dev/null

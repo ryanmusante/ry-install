@@ -1,10 +1,10 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.48-blue)
+![Version](https://img.shields.io/badge/version-3.7.49-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
-Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 15 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 16 embedded configs, no external dependencies.
 
 ## Hardware
 
@@ -27,7 +27,7 @@ Before running the fully automated install (`--all`), complete these steps on a 
 | # | Step | Command / Action | Why |
 |---|------|-----------------|-----|
 | 1 | **CachyOS installed** | systemd-boot, btrfs or ext4 root, working internet | Script assumes CachyOS base with systemd-boot (not GRUB) |
-| 2 | **Fish shell 3.4+** | `fish --version` (CachyOS ships 4.5) | Required for `$()` syntax, `set --function`, `string collect --allow-empty` |
+| 2 | **Fish shell 3.4+** | `fish --version` (CachyOS ships 4.5) | Required for `$()` syntax, `set --function`, `string collect --allow-empty`; `string collect --no-trim-newlines` confirmed from 3.6 (fish 4.x recommended) |
 | 3 | **Kernel 6.14+** | `uname -r` | ntsync, gfx1151 fixes, mt7925e.disable_aspm |
 | 4 | **Unrestricted sudo** | `sudo -l` must show `(ALL) ALL` | `--all` aborts if sudo is restricted |
 | 5 | **2 GB root free** | `df -h /` | Packages + initramfs + cache headroom |
@@ -109,10 +109,11 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 ## Configuration
 
-### Kernel Parameters (13)
+### Kernel Parameters (14)
 
 | Parameter | Purpose |
 |-----------|---------|
+| `amdgpu.cwsr_enable=0` | Disable CWSR (gfx1151 hang workaround; remove on kernel 6.18+) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Disable overdrive/GFXOFF/stutter (bits 14,15,17) |
 | `audit=0` | Disable audit subsystem |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
@@ -122,9 +123,9 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
 | `pci=pcie_bus_perf` | PCIe performance tuning |
 | `quiet` | Suppress boot messages |
-| `split_lock_detect=off` | Disable split lock detection |
 | `ttm.pages_limit=32505856` | Cap pinned memory to 124 GiB (32505856 × 4 KiB) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
+| `workqueue.power_efficient=0` | Disable power-efficient workqueue remapping |
 | `zswap.enabled=0` | Disable zswap (zram preferred) |
 
 ### loader.conf
@@ -160,7 +161,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | File | Setting |
 |------|---------|
 | `udev rules` | `ntsync` MODE=0666 |
-| `resolved.conf.d` | MulticastDNS=no |
+| `resolved.conf.d` | MulticastDNS=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press variants (7 keys) |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks: DefaultInterface/PowerSaveDisable · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
@@ -175,6 +176,12 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | `net.core.default_qdisc` | `fq` | Fair queue pacing for BBR |
 | `net.ipv4.tcp_congestion_control` | `bbr` | BBR congestion control |
 | `net.ipv4.tcp_fastopen` | `3` | TCP Fast Open client + server |
+| `vm.compaction_proactiveness` | `0` | Disable proactive compaction (reduce jitter) |
+| `vm.watermark_boost_factor` | `1` | Minimize aggressive reclaim |
+| `vm.page_lock_unfairness` | `1` | Improve interactive responsiveness |
+| `vm.zone_reclaim_mode` | `0` | UMA safety net (already default) |
+| `fs.inotify.max_user_watches` | `524288` | IDEs monitoring large source trees |
+| `fs.inotify.max_user_instances` | `1024` | Parallel build tools and file watchers |
 
 ### Environment Variables
 
@@ -218,7 +225,7 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | `amdgpu-performance.service` | Write `high` to `power_dpm_force_performance_level` sysfs after multi-user.target (retry loop, multi-GPU) |
 | `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` sysfs after cpupower.service |
 
-## Embedded Files (15)
+## Embedded Files (16)
 
 | # | Scope | Path |
 |---|-------|------|
@@ -232,11 +239,12 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | 8 | System | `/etc/iwd/main.conf` |
 | 9 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
 | 10 | System | `/etc/sysctl.d/99-ry-sysctl.conf` |
-| 11 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
-| 12 | User | `~/.config/environment.d/10-environment.conf` |
-| 13 | User | `~/.config/systemd/user/ssh-agent.service` |
-| 14 | Service | `/etc/systemd/system/amdgpu-performance.service` |
-| 15 | Service | `/etc/systemd/system/cpupower-epp.service` |
+| 11 | System | `/etc/modprobe.d/99-ry-modprobe.conf` |
+| 12 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
+| 13 | User | `~/.config/environment.d/10-environment.conf` |
+| 14 | User | `~/.config/systemd/user/ssh-agent.service` |
+| 15 | Service | `/etc/systemd/system/amdgpu-performance.service` |
+| 16 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
 ## Safety
 

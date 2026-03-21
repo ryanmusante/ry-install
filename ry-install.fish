@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.48 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.48"
+# ry-install v3.7.49 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.49"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -23,7 +23,7 @@ set -g NO_COLOR false
 set -g FIX false
 
 # ── Environment detection: NO_COLOR (no-color.org), delta, root check, privilege-escalation dry-run safety ──
-if set -qx NO_COLOR; or test "$TERM" = dumb
+if set -q NO_COLOR; or test "$TERM" = dumb
     set -g NO_COLOR true
 end
 
@@ -36,7 +36,7 @@ if test (id -u) -eq 0
     set -g DRY true
 end
 
-# ── Fish version gate (3.4+ required for $() syntax, set --function, string collect --allow-empty) ──
+# ── Fish version gate (3.4+ required for $() syntax, set --function, string collect --allow-empty; string collect --no-trim-newlines requires fish ≥3.4 and was confirmed available by 3.6) ──
 set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n 1)
 if test -z "$fish_ver"
     echo "Error: Could not determine fish version" >&2
@@ -165,7 +165,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         "zswap.=CONFIG_ZSWAP" \
         "iommu=CONFIG_IOMMU_SUPPORT" \
         "amdgpu.=CONFIG_DRM_AMDGPU" \
-        "split_lock_detect=CONFIG_X86_SPLIT_LOCK_DETECT" \
+        "workqueue.=CONFIG_WQ_POWER_EFFICIENT_DEFAULT" \
         "ttm.=CONFIG_DRM_TTM"
 
     set -l config_data (_kconfig_cache)
@@ -434,16 +434,16 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     echo "" >&2
     echo "[WARN] Interrupted - cleaning up..." >&2
     set -g _CLEANUP_DONE true
-    # Fish passes signal name as $argv[1]; map to 128+signum exit code
+    # Fish passes signal name WITHOUT "SIG" prefix as $argv[1] (e.g., "INT", not "SIGINT")
     set -l _sig_exit 130
     switch "$argv[1]"
-        case SIGHUP
+        case HUP
             set _sig_exit 129
-        case SIGINT
+        case INT
             set _sig_exit 130
-        case SIGQUIT
+        case QUIT
             set _sig_exit 131
-        case SIGTERM
+        case TERM
             set _sig_exit 143
     end
     if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
@@ -470,7 +470,9 @@ end
 function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensure cleanup runs on fish_exit"
     set -l _exit_status $status
     if set -q _INTENDED_EXIT_CODE
-        # set (no -l) targets the outer _exit_status; adding -l here would create a new local that shadows the outer one
+        # Intentional: set without -l re-binds the outer _exit_status local declared above.
+        # Adding -l here would create a NEW local that shadows the outer one (incorrect).
+        # This is flagged as a scope-shadow by do_lint's awk check — it is a false positive.
         set _exit_status $_INTENDED_EXIT_CODE
     end
     if test "$_CLEANUP_DONE" = true
@@ -501,7 +503,8 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        "/etc/sysctl.d/99-ry-sysctl.conf"
+        "/etc/sysctl.d/99-ry-sysctl.conf" \
+        "/etc/modprobe.d/99-ry-modprobe.conf"
 
     set -g USER_DESTINATIONS \
         "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
@@ -523,11 +526,14 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # ── Kernel (13 params) ──
+    # ── Kernel (14 params) ──
     # ppfeaturemask=0xfffd3fff: disables bits 14 (overdrive), 15 (GFXOFF), 17 (stutter). For overdrive/CoreCtrl/LACT: 0xfffd7fff.
     # ttm.pages_limit=32505856: cap pinned memory to 124 GiB (32505856 × 4 KiB)
+    # cwsr_enable=0: GPU hang workaround for gfx1151 (ROCm#5590); remove on kernel 6.18+ (fixed: 1fb710793ce2)
     # Not added: amdgpu.gttsize (deprecated ~6.14; ttm.pages_limit sufficient), amdgpu.dcdebugmask (PSR is eDP-only)
+    # Not added: split_lock_detect=off (cachyos-gaming-meta handles via 99-splitlock.conf sysctl)
     set -g KERNEL_PARAMS \
+        amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
         audit=0 \
         initcall_blacklist=simpledrm_platform_driver_init \
@@ -537,9 +543,9 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         nvme_core.default_ps_max_latency_us=0 \
         pci=pcie_bus_perf \
         quiet \
-        split_lock_detect=off \
         ttm.pages_limit=32505856 \
         usbcore.autosuspend=-1 \
+        workqueue.power_efficient=0 \
         zswap.enabled=0
 
     # ── Initramfs ──
@@ -943,6 +949,8 @@ function get_file_content --argument-names dst --description "Return embedded co
             printf '%s\n' "# systemd-resolved configuration"
             printf '%s\n' "[Resolve]"
             printf '%s\n' "MulticastDNS=$RESOLVED_MDNS"
+            printf '%s\n' "DNSOverTLS=opportunistic"
+            printf '%s\n' "DNSSEC=allow-downgrade"
 
         case "/etc/systemd/logind.conf.d/99-cachyos-logind.conf"
             printf '%s\n' "# systemd-logind configuration - desktop power handling"
@@ -976,7 +984,7 @@ function get_file_content --argument-names dst --description "Return embedded co
             printf '%s\n' "level=$NM_LOG_LEVEL"
 
         case "/etc/sysctl.d/99-ry-sysctl.conf"
-            printf '%s\n' "# Network and security sysctl -- complements cachyos vendor 70-cachyos-settings.conf"
+            printf '%s\n' "# Sysctl overrides -- complements cachyos vendor 70-cachyos-settings.conf"
             printf '%s\n' ""
             printf '%s\n' "# BBR: mainline=v1; CachyOS kernel may ship v3 (check: modinfo tcp_bbr)"
             printf '%s\n' "# TCP BBR congestion control + fq qdisc for pacing"
@@ -985,6 +993,35 @@ function get_file_content --argument-names dst --description "Return embedded co
             printf '%s\n' ""
             printf '%s\n' "# TCP Fast Open: 3 = client + server"
             printf '%s\n' "net.ipv4.tcp_fastopen = 3"
+            printf '%s\n' ""
+            printf '%s\n' "# VM gaming tunables -- reduce jitter/latency with 128 GB RAM"
+            printf '%s\n' "# Disable proactive compaction (eliminates page migration jitter)"
+            printf '%s\n' "vm.compaction_proactiveness = 0"
+            printf '%s\n' "# Minimize aggressive reclaim (default 15000 causes kswapd wake-ups)"
+            printf '%s\n' "vm.watermark_boost_factor = 1"
+            printf '%s\n' "# Reduce unfair page lock acquisition (default 5; lower = more responsive)"
+            printf '%s\n' "vm.page_lock_unfairness = 1"
+            printf '%s\n' "# Explicit UMA safety net (already default; prevents future kernel change)"
+            printf '%s\n' "vm.zone_reclaim_mode = 0"
+            printf '%s\n' ""
+            printf '%s\n' "# inotify -- IDEs and build tools monitoring large source trees"
+            printf '%s\n' "fs.inotify.max_user_watches = 524288"
+            printf '%s\n' "fs.inotify.max_user_instances = 1024"
+
+        case "/etc/modprobe.d/99-ry-modprobe.conf"
+            printf '%s\n' "# Module blacklists and options -- complements CachyOS /usr/lib/modprobe.d/"
+            printf '%s\n' ""
+            printf '%s\n' "# Silence PC speaker beep (not blacklisted by CachyOS)"
+            printf '%s\n' "blacklist pcspkr"
+            printf '%s\n' ""
+            printf '%s\n' "# ACPI watchdog -- complements nowatchdog cmdline (CachyOS covers iTCO/sp5100 only)"
+            printf '%s\n' "blacklist wdat_wdt"
+            printf '%s\n' ""
+            printf '%s\n' "# Disable NVMe multipath on single-drive desktop"
+            printf '%s\n' "options nvme_core multipath=N"
+            printf '%s\n' ""
+            printf '%s\n' "# MT7925 WiFi ASPM -- redundant backup for cmdline mt7925e.disable_aspm=1"
+            printf '%s\n' "options mt7925e disable_aspm=1"
 
         case "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish"
             printf '%s\n' '# SSH agent socket for fish shell -- priority: forwarded > gcr > systemd
@@ -1328,7 +1365,7 @@ function _banner --argument-names text --description "Print the ry-install start
     set -l inner 66
     set -l prefix "│  "
     set -l suffix " │"
-    set -l max_text (math "$inner - 3")
+    set -l max_text (math "$inner - 5")
     if test (string length -- "$text") -gt $max_text
         set text (string sub -l $max_text -- "$text")
     end
@@ -3141,6 +3178,8 @@ function verify_static --description "Verify installed configs match embedded ch
     _echo "── resolved ──"
     if _chk_file /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
         _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "MulticastDNS=$RESOLVED_MDNS" "MulticastDNS=$RESOLVED_MDNS"
+        _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "DNSOverTLS=opportunistic" "DNSOverTLS=opportunistic"
+        _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "DNSSEC=allow-downgrade" "DNSSEC=allow-downgrade"
     end
     _echo
 
@@ -3181,6 +3220,21 @@ function verify_static --description "Verify installed configs match embedded ch
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.core.default_qdisc = fq" "default_qdisc = fq"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.ipv4.tcp_congestion_control = bbr" "tcp_congestion_control = bbr"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.ipv4.tcp_fastopen = 3" "tcp_fastopen = 3"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.compaction_proactiveness = 0" "compaction_proactiveness = 0"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.watermark_boost_factor = 1" "watermark_boost_factor = 1"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.page_lock_unfairness = 1" "page_lock_unfairness = 1"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.zone_reclaim_mode = 0" "zone_reclaim_mode = 0"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "fs.inotify.max_user_watches = 524288" "max_user_watches = 524288"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "fs.inotify.max_user_instances = 1024" "max_user_instances = 1024"
+    end
+    _echo
+
+    _echo "── modprobe overrides ──"
+    if _chk_file /etc/modprobe.d/99-ry-modprobe.conf
+        _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "blacklist pcspkr" "blacklist pcspkr"
+        _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "blacklist wdat_wdt" "blacklist wdat_wdt"
+        _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "options nvme_core multipath=N" "nvme_core multipath=N"
+        _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "options mt7925e disable_aspm=1" "mt7925e disable_aspm=1"
     end
     _echo
 
@@ -3905,9 +3959,18 @@ function verify_runtime --description "Verify runtime kernel params, services, a
         end
     end
 
+    if test -f /sys/module/nvme_core/parameters/multipath
+        set -l sysfs_val (command cat -- /sys/module/nvme_core/parameters/multipath 2>/dev/null)
+        if test "$sysfs_val" = N
+            _ok "  nvme_core.multipath: $sysfs_val"
+        else
+            _fail "  nvme_core.multipath: $sysfs_val (expected: N)"
+        end
+    end
+
     if test -d /sys/module/amdgpu/parameters
         # Hex→decimal normalization: sysfs may return 0xfffd3fff or 4294705151
-        for pair in "ppfeaturemask:0xfffd3fff"
+        for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0"
             set -l pname (string split ':' -- "$pair")[1]
             set -l expected (string split ':' -- "$pair")[2]
             set -l ppath /sys/module/amdgpu/parameters/$pname
@@ -4128,7 +4191,13 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     set -l _sysctl_checks \
         "net.core.default_qdisc=fq" \
         "net.ipv4.tcp_congestion_control=bbr" \
-        "net.ipv4.tcp_fastopen=3"
+        "net.ipv4.tcp_fastopen=3" \
+        "vm.compaction_proactiveness=0" \
+        "vm.watermark_boost_factor=1" \
+        "vm.page_lock_unfairness=1" \
+        "vm.zone_reclaim_mode=0" \
+        "fs.inotify.max_user_watches=524288" \
+        "fs.inotify.max_user_instances=1024"
     for _sc in $_sysctl_checks
         set -l _key (string split '=' -- "$_sc")[1]
         set -l _expected (string split '=' -- "$_sc")[2]
@@ -5820,15 +5889,17 @@ end
 # Post-rebuild safety gate: verify vmlinuz exists, initramfs non-zero, boot entry valid; block reboot on failure
 function _preflight_boot_sanity --description "Verify boot artifacts are viable after rebuild"
     set -l errors 0
+    # /boot (ESP, vfat) is typically mounted 700 root:root — non-root cannot glob or stat it.
+    # Use sudo for all /boot access, consistent with _chk_file and verify_static boot checks.
 
     # 1. At least one vmlinuz must exist
-    set -l vmlinuz_files /boot/vmlinuz-*
-    if test (count $vmlinuz_files) -eq 0; or not test -f "$vmlinuz_files[1]"
+    set -l vmlinuz_files (sudo find /boot -maxdepth 1 -name 'vmlinuz-*' -type f 2>/dev/null)
+    if test (count $vmlinuz_files) -eq 0
         _err "No vmlinuz found in /boot/"
         set errors (math $errors + 1)
     else
         for f in $vmlinuz_files
-            if not test -s "$f"
+            if not sudo test -s "$f" 2>/dev/null
                 _err "Zero-byte kernel image: $f"
                 set errors (math $errors + 1)
             end
@@ -5836,24 +5907,24 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     end
 
     # 2. Every initramfs must be non-zero
-    for f in /boot/initramfs-*.img
-        test -f "$f"; or continue
-        if not test -s "$f"
+    set -l initrd_files (sudo find /boot -maxdepth 1 -name 'initramfs-*.img' -type f 2>/dev/null)
+    for f in $initrd_files
+        if not sudo test -s "$f" 2>/dev/null
             _err "Zero-byte initramfs: $f"
             set errors (math $errors + 1)
         end
     end
 
     # 3. At least one boot entry .conf must reference an existing kernel
-    set -l confs /boot/loader/entries/*.conf
-    if test (count $confs) -eq 0; or not test -f "$confs[1]"
+    set -l confs (sudo find /boot/loader/entries -maxdepth 1 -name '*.conf' -type f 2>/dev/null)
+    if test (count $confs) -eq 0
         _err "No boot loader entries in /boot/loader/entries/"
         set errors (math $errors + 1)
     else
         set -l valid_entry false
         for conf in $confs
-            set -l linux_line (grep -m1 '^linux ' -- "$conf" 2>/dev/null | string replace 'linux ' '' | string trim --)
-            if test -n "$linux_line"; and test -f "/boot$linux_line"
+            set -l linux_line (sudo grep -m1 '^linux ' -- "$conf" 2>/dev/null | string replace 'linux ' '' | string trim --)
+            if test -n "$linux_line"; and sudo test -f "/boot$linux_line" 2>/dev/null
                 set valid_entry true
                 break
             end

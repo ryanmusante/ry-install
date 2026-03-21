@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.50 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.50"
+# ry-install v3.7.51 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.51"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -375,8 +375,7 @@ end
 # Master teardown: tmpfiles → lock release → credential keepalive termination; idempotent via _CLEANUP_DONE
 function _do_cleanup --description "Master cleanup: remove tmpfiles, release lock, kill keepalive"
     _cleanup_tmpfiles
-    # _TRACKED_TMPFILES stores absolute paths so cleanup works even if TMPDIR changed since file creation
-    # Entries include both files (mktemp) and directories (mktemp -d); test -e covers both
+    # _TRACKED_TMPFILES stores absolute paths (files and directories); cleanup works even if TMPDIR changed
     for _tf in $_TRACKED_TMPFILES
         if test -d "$_tf"
             command rm -rf --preserve-root -- "$_tf" 2>/dev/null
@@ -393,9 +392,7 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     set --erase WIFI_PASS
     # Free cached data (harmless but consistent with cleanup discipline)
     set --erase _KCONFIG_DATA
-    # Release LOCK_DIR mutex and PID file — verify PID ownership first to avoid
-    # deleting another instance's lock when _acquire_lock failed (LOCK_DIR is set
-    # as a global before the mkdir attempt; on failure we don't own the lock)
+    # Release LOCK_DIR mutex — verify PID ownership first (LOCK_DIR global is set before mkdir; on failure we don't own it)
     if set -q LOCK_DIR; and test -d "$LOCK_DIR"
         set -l _lock_pid (command cat -- "$LOCK_DIR/pid" 2>/dev/null)
         set -l _my_pid %self
@@ -470,9 +467,7 @@ end
 function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensure cleanup runs on fish_exit"
     set -l _exit_status $status
     if set -q _INTENDED_EXIT_CODE
-        # Intentional: set without -l re-binds the outer _exit_status local declared above.
-        # Adding -l here would create a NEW local that shadows the outer one (incorrect).
-        # This is flagged as a scope-shadow by do_lint's awk check — it is a false positive.
+        # Intentional: bare set re-binds outer _exit_status (not -l); do_lint scope-shadow false positive
         set _exit_status $_INTENDED_EXIT_CODE
     end
     if test "$_CLEANUP_DONE" = true
@@ -521,16 +516,12 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g LOADER_CONSOLE_MODE keep
     set -g LOADER_EDITOR no
     set -g SDBOOT_OVERWRITE yes
-    # REMOVE_EXISTING=yes deletes ALL boot entries before regen —
-    # manual entries (rescue, Windows) will be lost. CachyOS default="no".
+    # REMOVE_EXISTING=yes deletes ALL boot entries before regen — manual entries (rescue, Windows) will be lost
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
     # ── Kernel (14 params) ──
-    # ppfeaturemask=0xfffd3fff: disables bits 14 (overdrive), 15 (GFXOFF), 17 (stutter). For overdrive/CoreCtrl/LACT: 0xfffd7fff.
-    # ttm.pages_limit=32505856: cap pinned memory to 124 GiB (32505856 × 4 KiB)
-    # cwsr_enable=0: GPU hang workaround for gfx1151 (ROCm#5590); remove on kernel 6.18+ (fixed: cf326449637a5)
-    # Not added: amdgpu.gttsize (deprecated ~6.14), amdgpu.dcdebugmask (eDP-only), split_lock_detect (99-splitlock.conf sysctl)
+    # ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 workaround (remove 6.18+). ttm.pages_limit: 124 GiB cap
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
@@ -655,10 +646,7 @@ function _validate_profile --description "Verify loaded profile has all required
         ROOT_AVAIL_CRIT \
         ROOT_AVAIL_WARN
 
-    # Intentionally optional — consumers handle unset/empty safely:
-    #   PKGS_DEL              — for-loop no-op when empty/unset
-    #   BOOT_TIME_TARGET      — type-checked if set (L709); verify_runtime safe via test fallthrough
-    #   EXPECTED_CPU_MATCH    — guarded by set -q in _load_profile (L776)
+    # Intentionally optional (consumers handle unset safely): PKGS_DEL, BOOT_TIME_TARGET, EXPECTED_CPU_MATCH
 
     # Conditionally required — needed only when profile includes corresponding destinations
     for dst in $SYSTEM_DESTINATIONS
@@ -1038,9 +1026,7 @@ end'
                 printf '%s\n' "$var"
             end
 
-            # Custom unit vs Arch's /usr/lib/systemd/user/ssh-agent.service
-            # (openssh ≥9.4p1-3). Custom preferred: adds Restart=on-failure
-            # (crash recovery) and lives in ~/.config/ (survives package upgrades).
+            # Custom unit preferred over Arch openssh ≥9.4p1-3: adds Restart=on-failure, survives package upgrades
         case "$HOME/.config/systemd/user/ssh-agent.service"
             printf '%s\n' '[Unit]
 Description=SSH authentication agent
@@ -1123,8 +1109,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     end
     set -l _sudo_err (mktemp -t ry-sudo-err.XXXXXX 2>/dev/null; or echo /dev/null)
     test "$_sudo_err" != /dev/null; and set -ga _TRACKED_TMPFILES "$_sudo_err"
-    # Avoid "if not sudo true" — Fish's "not" on unknown/failing commands can silently
-    # invert status, causing the if-body to be skipped. Explicit status capture is safe.
+    # Avoid "if not sudo true" — Fish "not" can silently invert status; explicit capture is safe
     sudo true 2>"$_sudo_err"
     set -l _rc $status
     if test $_rc -ne 0
@@ -1202,15 +1187,15 @@ function _json_str --description "Escape a string for safe JSON embedding"
     printf '%s\n' "$val"
 end
 
-# Escape a string for GKeyFile format (NetworkManager .nmconnection files)
-# Handles: backslash, semicolon, leading #, leading/trailing space
-# Single source of truth — called from _install_finalize WiFi write path
+# GKeyFile escape for NM .nmconnection: backslash, tab, newline, semicolon, leading #, leading/trailing space
 function _gkeyfile_escape --argument-names raw --description "Escape a string for GKeyFile (NM keyfile) format"
     if test (count $argv) -ne 1
         _err "_gkeyfile_escape: expected 1 arg (raw), got "(count $argv)
         return 1
     end
     set -l val (string replace -a '\\' '\\\\' -- "$raw")
+    set -l val (string replace -a \t '\\t' -- "$val")
+    set -l val (string replace -a \n '\\n' -- "$val")
     set -l val (string replace -a ';' '\\;' -- "$val")
     if string match -q '#*' -- "$val"
         set val '\\#'(string sub -s 2 -- "$val")
@@ -1245,12 +1230,10 @@ function _log --description "Append a timestamped message to the log file"
     # Sanitize event field: strip non-alphanumeric/underscore to prevent JSON injection in JSONL output
     set -l event (string replace -ra '[^a-z0-9_]' '' -- "$event")
     set -l data (_json_str "$data")
-    # Cap $data at 4096 chars to prevent pathological log lines from long paths/SSIDs
-    # Step back from cut point if inside a JSON escape sequence (\\ \n \t \r \b \f \uXXXX) to avoid malformed JSON
+    # Cap $data at 4096 chars; step back from cut point if inside a JSON escape sequence to avoid malformed output
     if test (string length -- "$data") -gt 4096
         set -l cut 4093
-        # If we'd cut inside a backslash escape, step back to before the backslash
-        # Window must be ≥8 chars to catch \\uXXXX (6 chars) starting 1 byte before a 6-char window
+        # Step back from cut point if inside a backslash escape (≥8 char window catches \\uXXXX)
         set -l tail3 (string sub -s (math $cut - 7) -l 8 -- "$data")
         set -l _esc_match (string match -r '\\\\[tnrbfu]?[0-9a-fA-F]{0,4}$' -- "$tail3" | head -n 1)
         if test -n "$_esc_match"
@@ -1384,9 +1367,7 @@ function _verify_summary --description "Print verification pass/fail/warn summar
     _echo "VERIFICATION SUMMARY"
     _echo
 
-    # Snapshot counters and disable VERIFY_MODE before _fail/_warn/_ok
-    # (which route through _msg and increment VERIFY_* when VERIFY_MODE=true)
-    # This keeps both the CI line and the JSONL footer in sync with stderr
+    # Snapshot counters and disable VERIFY_MODE before _fail/_warn/_ok to keep CI line and JSONL footer in sync
     set -l snap_ok $VERIFY_OK
     set -l snap_fail $VERIFY_FAIL
     set -l snap_warn $VERIFY_WARN
@@ -1571,7 +1552,7 @@ function _progress_done --description "Finalize and close the progress display"
     # Runtime assertion: catch step count drift (lint also checks at build time); only meaningful with --all without --dry-run
     if test "$ALL" = true; and test "$DRY" = false
         if test "$PROGRESS_CURRENT" -ne "$PROGRESS_TOTAL" 2>/dev/null
-            _log "WARN: progress step mismatch: emitted $PROGRESS_CURRENT of $PROGRESS_TOTAL expected"
+            _warn "Progress step mismatch: emitted $PROGRESS_CURRENT of $PROGRESS_TOTAL expected"
         end
     end
 
@@ -1602,9 +1583,7 @@ function _run --description "Execute a command with logging, dry-run support, an
         _log "BUG: _run called with no arguments"
         return 1
     end
-    # SECURITY ASSERTION: _run must only be called with known-safe internal commands.
-    # Reject argv[1] containing shell metacharacters (;|&`$\n\t\r) to prevent injection if
-    # a future caller accidentally passes untrusted input.
+    # SECURITY: reject argv[1] with shell metacharacters (;|&`$\n\t\r) to prevent injection from untrusted input
     if string match -qr '[;|&`\$\n\t\r]' -- "$argv[1]"
         _log "BUG: _run argv[1] contains shell metacharacters — refusing to execute: $argv[1]"
         return 1
@@ -2356,9 +2335,7 @@ function install_file --argument-names dst use_sudo --description "Install a sin
         return 0
     end
 
-    # Skip unchanged: compare generated content hash against installed file hash
-    # NOTE: Fish variable comparison flattens newlines to spaces ("a\nb" == "a b"),
-    # so we use SHA256 hash comparison for correctness across all content shapes.
+    # Skip unchanged: SHA256 hash comparison (Fish variable comparison flattens newlines to spaces)
     set -l _new_hash (get_file_content "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
     if test -n "$_new_hash"
         set -l _cur_hash
@@ -2618,10 +2595,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
         get_file_content "$dst" >"$diff_batch_dir/expected_$safe" 2>/dev/null
     end
 
-    # Phase 2: sequential installed-file reads + diff computation (parent process)
-    # Runs in parent to inherit cached sudo credential — sudo timestamp_type=ppid
-    # (default since sudo 1.9) does NOT propagate to backgrounded fish -c children.
-    # Files are small configs (<1KB); sequential I/O adds negligible latency.
+    # Phase 2: sequential installed-file reads in parent (sudo ppid doesn't propagate to children; configs <1KB)
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         # Skip non-target files when single-file diff requested
         if test -n "$target_file"; and test "$dst" != "$target_file"
@@ -2667,18 +2641,11 @@ function do_diff --argument-names target_file --description "Show diffs between 
             continue
         end
 
-        # Crash detection: missing readok file means child died before writing results
+        # Guard: missing readok file means Phase 2 failed to process this destination
         if not test -f "$diff_batch_dir/readok_$safe"
             set has_diff true
-            _warn "$dst: diff child crashed without writing results"
-            if test -s "$diff_batch_dir/stderr_$safe"
-                _log "DIFF_CHILD_STDERR($dst): "(head -n 5 "$diff_batch_dir/stderr_$safe")
-            end
+            _warn "$dst: diff processing failed (readok missing)"
             continue
-        end
-        # Log stderr from ALL children (sudo warnings, diff errors) — not just crashes
-        if test -s "$diff_batch_dir/stderr_$safe"
-            _log "DIFF_STDERR($dst): "(head -n 5 "$diff_batch_dir/stderr_$safe")
         end
         set -l read_ok (command cat -- "$diff_batch_dir/readok_$safe" 2>/dev/null)
         if test -z "$read_ok"
@@ -3339,8 +3306,7 @@ function verify_static --description "Verify installed configs match embedded ch
     _echo
 
     _echo "── Masked services ──"
-    # Batch: single systemctl show replaces N individual is-enabled + cat calls
-    # string collect preserves blank-line record delimiters (bare command substitution strips them)
+    # Batch systemctl show replaces N individual is-enabled+cat calls; string collect preserves blank-line delimiters
     set -l _mask_raw (systemctl show --property=LoadState,UnitFileState -- $MASK 2>/dev/null | string collect --no-trim-newlines)
     set -l _mask_parsed (_parse_systemctl_show "$_mask_raw")
     if test (count $_mask_parsed) -lt (count $MASK)
@@ -3438,9 +3404,7 @@ function verify_static --description "Verify installed configs match embedded ch
         get_file_content "$dst" >"$hash_dir/expected_$safe" 2>/dev/null
     end
 
-    # Pre-serialize installed file hashes in PARENT process.
-    # sudo timestamp_type=ppid (default since sudo 1.9) does NOT propagate to
-    # backgrounded fish -c children. All sudo reads must run here.
+    # Pre-serialize installed file hashes in parent (sudo timestamp_type=ppid doesn't propagate to children)
     for dst in $hash_dsts
         set -l safe (string replace -a '/' '_' -- "$dst")
         if string match -q "$my_home/*" -- "$dst"
@@ -3587,9 +3551,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     printf '%s\n' $EXPECTED_SERVICES >"$result_dir/exp_svcs"
     printf '%s\n' $MASK >"$result_dir/mask_units"
 
-    # Pre-serialize installed file hashes + permissions in PARENT process.
-    # sudo timestamp_type=ppid (default since sudo 1.9) does NOT propagate to
-    # backgrounded fish -c children. All sudo reads must run here.
+    # Pre-serialize installed file hashes+permissions in parent (sudo timestamp_type=ppid doesn't propagate to children)
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         if test "$skip_iwd" = true
             if string match -q '*nm.conf' -- "$dst"; or string match -q '*/iwd/*' -- "$dst"
@@ -3614,7 +3576,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
 
     # Pre-serialize LVM state (sudo pvs) in parent for Job 4
     set -l _has_lvm false
-    set -l pvs_output (sudo -n pvs --noheadings 2>/dev/null | string trim --)
+    set -l pvs_output (timeout 5 sudo -n pvs --noheadings 2>/dev/null | string trim --)
     if test -n "$pvs_output"
         set _has_lvm true
     end
@@ -3726,7 +3688,10 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         set -l results
         for line in (string split -- \n "$show_collected")
             if test -z "$line"
-                set -a results "$current_load:$current_active:$current_unitfile"
+                # Emit only if at least one property was accumulated (guards against leading blank lines)
+                if test -n "$current_load"; or test -n "$current_active"; or test -n "$current_unitfile"
+                    set -a results "$current_load:$current_active:$current_unitfile"
+                end
                 set current_load ""
                 set current_active ""
                 set current_unitfile ""
@@ -5900,8 +5865,7 @@ end
 # Post-rebuild safety gate: verify vmlinuz exists, initramfs non-zero, boot entry valid; block reboot on failure
 function _preflight_boot_sanity --description "Verify boot artifacts are viable after rebuild"
     set -l errors 0
-    # /boot (ESP, vfat) is typically mounted 700 root:root — non-root cannot glob or stat it.
-    # Use sudo for all /boot access, consistent with _chk_file and verify_static boot checks.
+    # /boot (ESP, vfat) typically 700 root:root — use sudo for all access, consistent with _chk_file/verify_static
 
     # 1. At least one vmlinuz must exist
     set -l vmlinuz_files (sudo find /boot -maxdepth 1 -name 'vmlinuz-*' -type f 2>/dev/null)
@@ -6679,8 +6643,7 @@ function do_test_all --description "Run the full test suite across all subcomman
         "--diff --fix --dry-run --all" \
         "--install-file /etc/kernel/cmdline --dry-run"
 
-    # Nested parallelism guard: children fork parallel work (verify-static:17, check:4, diff:17)
-    # <8 cores: fully sequential; 8-15 cores: batch parallel in groups of nproc; 16+: full parallel
+    # Nested parallelism guard: <8 cores→sequential, 8-15→batch nproc, 16+→full parallel
     set -l nproc_val (nproc 2>/dev/null)
     set -l par_batch_size 0
     if test -n "$nproc_val"; and string match -qr '^\d+$' -- "$nproc_val"

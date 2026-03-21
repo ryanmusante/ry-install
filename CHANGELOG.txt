@@ -1,3 +1,27 @@
+3.7.51 (2026-03-20)
+-------------------
+  fix(check): do_check pvs call missing timeout 5. _install_configure_
+    services wraps pvs with timeout 5 (L5736/5745) but do_check did not.
+    pvs can hang on LVM metadata lock, causing --check to block
+    indefinitely. Added timeout 5 to match.
+  fix(check): do_check Job 4 inline systemctl parser lacked leading-
+    blank-line guard. _parse_systemctl_show guards against leading blank
+    lines (emit only if properties accumulated); Job 4 inline parser
+    unconditionally appended empty record on any blank line. Added
+    matching guard to prevent positional misattribution.
+  fix(wifi): _gkeyfile_escape missing tab and newline escapes. GKeyFile
+    interprets \t and \n as escape sequences. Added string replace for
+    both after backslash escape (escape order preserved).
+  fix(ui): _progress_done step count drift assertion was _log only.
+    Promoted to _warn so interactive users see the mismatch without
+    requiring --logs analyze.
+  fix(diff): do_diff Phase 3 referenced stderr_$safe files at 4 sites
+    (dead code from parallelization refactor). Phase 2 runs sequentially
+    and never creates stderr files. Removed 4 dead references.
+  style: condense 20 multiline comment blocks to single lines. No
+    semantic changes; all comments preserved in condensed form.
+  docs: sync README badge, CHANGELOG.
+
 3.7.50 (2026-03-20)
 -------------------
   fix(check): do_check Job 4 false drift on not-found masked services.

@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.53 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.53"
+# ry-install v3.7.54 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.54"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -500,7 +500,8 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
         "/etc/sysctl.d/99-ry-sysctl.conf" \
-        "/etc/modprobe.d/99-ry-modprobe.conf"
+        "/etc/modprobe.d/99-ry-modprobe.conf" \
+        "/etc/drirc"
 
     set -g USER_DESTINATIONS \
         "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
@@ -579,7 +580,7 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     # ── Environment ──
     set -g ENV_VARS \
-        "AMD_VULKAN_ICD=RADV" \
+        "ENABLE_LAYER_MESA_ANTI_LAG=1" \
         "MESA_SHADER_CACHE_MAX_SIZE=8G" \
         "PROTON_USE_NTSYNC=1" \
         "PROTON_NO_WM_DECORATION=1"
@@ -972,24 +973,20 @@ function get_file_content --argument-names dst --description "Return embedded co
 
         case "/etc/sysctl.d/99-ry-sysctl.conf"
             printf '%s\n' "# Sysctl overrides -- complements cachyos vendor 70-cachyos-settings.conf"
-            printf '%s\n' ""
-            printf '%s\n' "# BBR: mainline=v1; CachyOS kernel may ship v3 (check: modinfo tcp_bbr)"
-            printf '%s\n' "# TCP BBR congestion control + fq qdisc for pacing"
-            printf '%s\n' "net.core.default_qdisc = fq"
-            printf '%s\n' "net.ipv4.tcp_congestion_control = bbr"
+            printf '%s\n' "# DO NOT override default_qdisc or tcp_congestion -- CachyOS sets cake/bbr2"
             printf '%s\n' ""
             printf '%s\n' "# TCP Fast Open: 3 = client + server"
             printf '%s\n' "net.ipv4.tcp_fastopen = 3"
             printf '%s\n' ""
             printf '%s\n' "# VM gaming tunables -- reduce jitter/latency with 128 GB RAM"
-            printf '%s\n' "# Disable proactive compaction (eliminates page migration jitter)"
-            printf '%s\n' "vm.compaction_proactiveness = 0"
+            printf '%s\n' "# SteamOS value: many AAA titles via DXVK/Proton need high map counts"
+            printf '%s\n' "vm.max_map_count = 2147483642"
+            printf '%s\n' "# Minimal proactive compaction (0 causes synchronous storms; 1 = kcompactd light)"
+            printf '%s\n' "vm.compaction_proactiveness = 1"
             printf '%s\n' "# Minimize aggressive reclaim (default 15000 causes kswapd wake-ups)"
             printf '%s\n' "vm.watermark_boost_factor = 1"
-            printf '%s\n' "# Reduce unfair page lock acquisition (default 5; lower = more responsive)"
-            printf '%s\n' "vm.page_lock_unfairness = 1"
-            printf '%s\n' "# Explicit UMA safety net (already default; prevents future kernel change)"
-            printf '%s\n' "vm.zone_reclaim_mode = 0"
+            printf '%s\n' "# Page lock unfairness (Phoronix AMD benchmarks: 4-5 optimal; Torvalds range 1-5)"
+            printf '%s\n' "vm.page_lock_unfairness = 5"
             printf '%s\n' ""
             printf '%s\n' "# inotify -- IDEs and build tools monitoring large source trees"
             printf '%s\n' "fs.inotify.max_user_instances = 1024"
@@ -1043,20 +1040,24 @@ WantedBy=default.target'
 
         case "/etc/systemd/system/amdgpu-performance.service"
             # After=multi-user.target for DRM settle (Arch #72655); ExecStart: 5 retries, 2s delay, exit 1 if no writable sysfs
+            # "auto" not "high": shared-TDP APU wastes CPU headroom at fixed max; GameMode sets "high" dynamically when gaming
             printf '%s\n' '[Unit]' \
-                'Description=Set AMDGPU power_dpm_force_performance_level to high' \
+                'Description=Set AMDGPU power_dpm_force_performance_level to auto' \
                 'After=multi-user.target' \
                 'ConditionPathIsDirectory=/sys/class/drm' \
                 '' \
                 '[Service]' \
                 'Type=oneshot' \
                 'RemainAfterExit=yes' \
-                'ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; retries=5; delay=2; written=0; for attempt in $(seq 1 $retries); do for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do [ -f "$f" ] && [ -w "$f" ] && { echo high > "$f" && written=$((written+1)); }; done; [ "$written" -gt 0 ] && break; [ "$attempt" -lt "$retries" ] && sleep $delay; done; [ "$written" -gt 0 ]'\''' \
+                'ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; retries=5; delay=2; written=0; for attempt in $(seq 1 $retries); do for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do [ -f "$f" ] && [ -w "$f" ] && { echo auto > "$f" && written=$((written+1)); }; done; [ "$written" -gt 0 ] && break; [ "$attempt" -lt "$retries" ] && sleep $delay; done; [ "$written" -gt 0 ]'\''' \
                 '' \
                 '[Install]' \
                 'WantedBy=graphical.target'
 
         case "/etc/systemd/system/cpupower-epp.service"
+            # Tradeoff: permanent EPP=performance + masks power-profiles-daemon.
+            # This breaks CachyOS game-performance wrapper + PPD integration (auto EPP/sched-ext switching).
+            # Alternative: unmask PPD, remove this service, use powerprofilesctl for dynamic switching.
             printf '%s\n' '[Unit]
 Description=Set CPU EPP to performance (amd_pstate=active: powersave governor + performance EPP)
 After=cpupower.service
@@ -1071,6 +1072,17 @@ ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system
 
 [Install]
 WantedBy=multi-user.target'
+
+        case "/etc/drirc"
+            # RADV unified VRAM heap: prevents games from misallocating via artificial two-heap split on UMA APUs
+            printf '%s\n' '<driconf>' \
+                '  <device>' \
+                '    <application name="Default">' \
+                '      <option name="radv_enable_unified_heap_on_apu"' \
+                '              value="true" />' \
+                '    </application>' \
+                '  </device>' \
+                '</driconf>'
 
         case '*'
             return 1
@@ -1979,6 +1991,15 @@ function check_kernel_version --description "Verify running kernel version meets
         _warn "Kernel $kver: ntsync not available (expected builtin or module)"
     else
         _ok "Kernel $kver: ntsync $_ns"
+    end
+
+    # CHK-03: Kernel 6.19.0 black screen regression on Strix Halo (CachyOS #23042)
+    if test "$major" -eq 6; and test "$minor" -eq 19
+        set -l kver_patch (string replace -r '[^0-9].*' '' -- "$KVER_PARTS[3]")
+        if test -z "$kver_patch"; or test "$kver_patch" = 0
+            _warn "Kernel 6.19.0: black screen regression on Strix Halo (CachyOS #23042)"
+            _warn "  Recommend: downgrade to 6.18.x or upgrade to 6.19.1+"
+        end
     end
 
     return 0
@@ -3198,13 +3219,11 @@ function verify_static --description "Verify installed configs match embedded ch
 
     _echo "── sysctl overrides ──"
     if _chk_file /etc/sysctl.d/99-ry-sysctl.conf
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.core.default_qdisc = fq" "default_qdisc = fq"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.ipv4.tcp_congestion_control = bbr" "tcp_congestion_control = bbr"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.ipv4.tcp_fastopen = 3" "tcp_fastopen = 3"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.compaction_proactiveness = 0" "compaction_proactiveness = 0"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.max_map_count = 2147483642" "max_map_count = 2147483642"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.compaction_proactiveness = 1" "compaction_proactiveness = 1"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.watermark_boost_factor = 1" "watermark_boost_factor = 1"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.page_lock_unfairness = 1" "page_lock_unfairness = 1"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.zone_reclaim_mode = 0" "zone_reclaim_mode = 0"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.page_lock_unfairness = 5" "page_lock_unfairness = 5"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "fs.inotify.max_user_instances = 1024" "max_user_instances = 1024"
     end
     _echo
@@ -3215,6 +3234,12 @@ function verify_static --description "Verify installed configs match embedded ch
         _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "blacklist wdat_wdt" "blacklist wdat_wdt"
         _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "options nvme_core multipath=N" "nvme_core multipath=N"
         _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "options mt7925e disable_aspm=1" "mt7925e disable_aspm=1"
+    end
+    _echo
+
+    _echo "── RADV driconf ──"
+    if _chk_file /etc/drirc
+        _chk_grep /etc/drirc "radv_enable_unified_heap_on_apu" "unified_heap_on_apu"
     end
     _echo
 
@@ -3899,11 +3924,11 @@ function verify_runtime --description "Verify runtime kernel params, services, a
         if test -f "$f"
             set found_gpu true
             set -l level (command cat -- "$f" 2>/dev/null)
-            if test "$level" = high
+            if test "$level" = auto
                 _ok "  $f: $level"
                 set gpu_ok true
             else
-                _fail "  $f: $level (expected: high)"
+                _fail "  $f: $level (expected: auto)"
             end
         end
     end
@@ -3911,7 +3936,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     if test "$found_gpu" = false
         _warn "  No GPU DPM sysfs entries found"
     else if test "$gpu_ok" = false
-        _warn "  GPU not at 'high' - enable amdgpu-performance.service"
+        _warn "  GPU not at 'auto' - enable amdgpu-performance.service"
     end
     _echo
 
@@ -4218,13 +4243,11 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     _echo "── sysctl overrides ──"
     # Verify runtime values from /etc/sysctl.d/99-ry-sysctl.conf
     set -l _sysctl_checks \
-        "net.core.default_qdisc=fq" \
-        "net.ipv4.tcp_congestion_control=bbr" \
         "net.ipv4.tcp_fastopen=3" \
-        "vm.compaction_proactiveness=0" \
+        "vm.max_map_count=2147483642" \
+        "vm.compaction_proactiveness=1" \
         "vm.watermark_boost_factor=1" \
-        "vm.page_lock_unfairness=1" \
-        "vm.zone_reclaim_mode=0" \
+        "vm.page_lock_unfairness=5" \
         "fs.inotify.max_user_instances=1024"
     for _sc in $_sysctl_checks
         set -l _key (string split '=' -- "$_sc")[1]
@@ -4237,6 +4260,18 @@ function verify_runtime --description "Verify runtime kernel params, services, a
             _fail "  $_key: $_actual (expected: $_expected)"
         else
             _warn "  $_key: cannot read /proc/sys/$_proc_path"
+        end
+    end
+    _echo
+
+    _echo "── filesystem ──"
+    # CHK-04: btrfs noatime — avoids expensive COW metadata writes on every file access
+    set -l root_opts (findmnt -no OPTIONS / 2>/dev/null)
+    if string match -q '*btrfs*' -- (findmnt -no FSTYPE / 2>/dev/null)
+        if not string match -q '*noatime*' -- "$root_opts"
+            _warn "btrfs root missing noatime — add to /etc/fstab"
+        else
+            _ok "btrfs noatime: present"
         end
     end
     _echo
@@ -6253,6 +6288,27 @@ function _check_hardware_fingerprint --description "Verify hardware matches expe
         set cur_wifi (lspci -nn 2>/dev/null | grep -i 'Network\|Wireless' | head -n 1 | grep -oE '\[[0-9a-f]{4}:[0-9a-f]{4}\]')
     end
     set -l cur_ram (grep -- MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}')
+
+    # CHK-01: Intel E610-XT2 10GbE — crashes under GPU load (board v1 only; v2.2+ uses Realtek)
+    if command -q lspci
+        if lspci -nn 2>/dev/null | grep -qi 'E610'
+            _warn "Intel E610-XT2 10GbE detected — known instability"
+            _warn "  Crashes under GPU load (Steam, games, compute)"
+            _warn "  Disable via BIOS or: sudo ip link set <iface> down"
+            _warn "  Board v2.2+ uses stable Realtek NICs"
+        end
+    end
+
+    # CHK-02: BIOS VRAM allocation — default 512 MB is too low for gaming on UMA APU
+    set -l vram_bytes (command cat /sys/class/drm/card0/device/mem_info_vram_total 2>/dev/null)
+    if test -n "$vram_bytes"
+        set -l vram_gb (math "floor($vram_bytes / 1073741824)")
+        if test "$vram_gb" -lt 4
+            _warn "GPU VRAM: $vram_gb GB — set UMA to 16 GB in BIOS"
+        else
+            _ok "GPU VRAM: $vram_gb GB"
+        end
+    end
 
     if test "$DRY" = true
         if test -f "$fp_file"

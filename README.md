@@ -1,10 +1,10 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.53-blue)
+![Version](https://img.shields.io/badge/version-3.7.54-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
-Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 16 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 17 embedded configs, no external dependencies.
 
 ## Hardware
 
@@ -166,21 +166,20 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks: DefaultInterface/PowerSaveDisable · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
 | `modprobe.d` | Blacklist pcspkr, wdat_wdt · nvme_core multipath=N · mt7925e disable_aspm=1 |
+| `drirc` | RADV unified VRAM heap on APU (`radv_enable_unified_heap_on_apu=true`) |
 
 ### Sysctl Overrides
 
-Complements CachyOS vendor `70-cachyos-settings.conf` — no overlap.
+Complements CachyOS vendor `70-cachyos-settings.conf` — no overlap. CachyOS manages `default_qdisc` (cake) and `tcp_congestion_control` (bbr2).
 Verify: `sysctl --system 2>&1 | rg cachyos`
 
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
-| `net.core.default_qdisc` | `fq` | Fair queue pacing for BBR |
-| `net.ipv4.tcp_congestion_control` | `bbr` | BBR congestion control |
 | `net.ipv4.tcp_fastopen` | `3` | TCP Fast Open client + server |
-| `vm.compaction_proactiveness` | `0` | Disable proactive compaction (reduce jitter) |
+| `vm.max_map_count` | `2147483642` | SteamOS value for DXVK/Proton AAA titles |
+| `vm.compaction_proactiveness` | `1` | Minimal proactive compaction (0 causes synchronous storms) |
 | `vm.watermark_boost_factor` | `1` | Minimize aggressive reclaim |
-| `vm.page_lock_unfairness` | `1` | Improve interactive responsiveness |
-| `vm.zone_reclaim_mode` | `0` | UMA safety net (already default) |
+| `vm.page_lock_unfairness` | `5` | Optimal throughput (Phoronix AMD benchmarks, Torvalds range 1–5) |
 | `fs.inotify.max_user_instances` | `1024` | Parallel build tools and file watchers |
 
 ### Modprobe Overrides
@@ -199,7 +198,7 @@ Complements CachyOS vendor `/usr/lib/modprobe.d/` — no overlap.
 | Variable | Value |
 |----------|-------|
 | `SSH_AUTH_SOCK` | `${XDG_RUNTIME_DIR}/ssh-agent.socket` (systemd expansion) |
-| `AMD_VULKAN_ICD` | `RADV` |
+| `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `8G` |
 | `PROTON_USE_NTSYNC` | `1` |
 | `PROTON_NO_WM_DECORATION` | `1` |
@@ -233,10 +232,10 @@ Complements CachyOS vendor `/usr/lib/modprobe.d/` — no overlap.
 
 | Unit | Description |
 |------|-------------|
-| `amdgpu-performance.service` | Write `high` to `power_dpm_force_performance_level` sysfs after multi-user.target (retry loop, multi-GPU) |
+| `amdgpu-performance.service` | Write `auto` to `power_dpm_force_performance_level` sysfs after multi-user.target (retry loop, multi-GPU). GameMode sets `high` dynamically when gaming. |
 | `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` sysfs after cpupower.service |
 
-## Embedded Files (16)
+## Embedded Files (17)
 
 | # | Scope | Path |
 |---|-------|------|
@@ -251,11 +250,12 @@ Complements CachyOS vendor `/usr/lib/modprobe.d/` — no overlap.
 | 9 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
 | 10 | System | `/etc/sysctl.d/99-ry-sysctl.conf` |
 | 11 | System | `/etc/modprobe.d/99-ry-modprobe.conf` |
-| 12 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
-| 13 | User | `~/.config/environment.d/10-environment.conf` |
-| 14 | User | `~/.config/systemd/user/ssh-agent.service` |
-| 15 | Service | `/etc/systemd/system/amdgpu-performance.service` |
-| 16 | Service | `/etc/systemd/system/cpupower-epp.service` |
+| 12 | System | `/etc/drirc` |
+| 13 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
+| 14 | User | `~/.config/environment.d/10-environment.conf` |
+| 15 | User | `~/.config/systemd/user/ssh-agent.service` |
+| 16 | Service | `/etc/systemd/system/amdgpu-performance.service` |
+| 17 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
 ## Safety
 
@@ -350,6 +350,12 @@ External profiles must define a `function profile_<name>` setting all required g
 - **TX power locked**: TX power is locked to 3 dBm due to a driver bug. Currently unfixable upstream.
 - **Random deauth cycles**: Connection drops and reassociates unpredictably.
 - **Fallback**: Replace with Intel AX210 or AX211 for a stable WiFi experience.
+
+#### Intel E610 10GbE NIC (Board v1 only)
+
+- **GPU load crash**: Null pointer dereference under GPU load (Steam, games, compute). Blue screen on Windows. Only a full power cycle recovers. NVM firmware v1.30 is a partial fix.
+- **Board v2.2+**: Uses stable Realtek NICs instead. Check board revision before purchasing.
+- **Workaround**: Disable via BIOS or `sudo ip link set <iface> down` before gaming.
 
 #### NetworkManager + iwd
 

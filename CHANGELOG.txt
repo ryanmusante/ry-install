@@ -1,3 +1,34 @@
+3.7.54 (2026-03-21)
+-------------------
+  fix(sysctl): remove fq/bbr overrides — CachyOS ships cake/bbr2 via
+    70-cachyos-settings.conf; script was downgrading to BBRv1/fq.
+  fix(sysctl): add vm.max_map_count=2147483642 (SteamOS value). Many
+    AAA titles via DXVK/Proton crash without high map counts.
+  fix(sysctl): change vm.page_lock_unfairness 1→5 (Phoronix AMD
+    benchmarks show 4–5 optimal; Torvalds confirmed range 1–5).
+  fix(sysctl): change vm.compaction_proactiveness 0→1. Value 0
+    eliminates kcompactd but causes synchronous compaction storms.
+  fix(sysctl): remove vm.zone_reclaim_mode=0 (already default on
+    single-NUMA; Strix Halo is single-NUMA).
+  fix(env): remove AMD_VULKAN_ICD=RADV (AMDVLK discontinued Sept
+    2025, removed from Arch repos — no-op).
+  fix(service): change amdgpu DPM level high→auto. On shared-TDP APU,
+    "high" locks GPU to max power permanently, wasting CPU headroom.
+    GameMode sets "high" dynamically when gaming.
+  feat(drirc): add /etc/drirc with radv_enable_unified_heap_on_apu.
+    Forces single VRAM heap on UMA, preventing game misallocation.
+  feat(env): add ENABLE_LAYER_MESA_ANTI_LAG=1 (Mesa 25.3 anti-lag
+    implicit layer; reduces input-to-display latency on RDNA 3.5).
+  feat(preflight): add Intel E610-XT2 10GbE NIC detection + warning.
+    Board v1: null pointer dereference under GPU load.
+  feat(preflight): add BIOS VRAM allocation check via sysfs. Warns
+    when GPU VRAM < 4 GB (default 512 MB too low for gaming).
+  feat(kernel): add kernel 6.19.0 black screen regression warning for
+    Strix Halo (CachyOS #23042).
+  feat(verify): add btrfs noatime validation — COW metadata writes on
+    every file access degrade gaming performance without noatime.
+  chore(service): document cpupower-epp.service vs PPD tradeoff.
+
 3.7.53 (2026-03-21)
 -------------------
   fix(color): NO_COLOR environment detection was dead code. Line 21

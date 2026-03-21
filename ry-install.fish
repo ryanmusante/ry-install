@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.49 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.49"
+# ry-install v3.7.50 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.50"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -36,7 +36,7 @@ if test (id -u) -eq 0
     set -g DRY true
 end
 
-# ── Fish version gate (3.4+ required for $() syntax, set --function, string collect --allow-empty; string collect --no-trim-newlines requires fish ≥3.4 and was confirmed available by 3.6) ──
+# ── Fish version gate (3.4+ required for $() syntax, set --function, string collect --allow-empty; string collect --no-trim-newlines available since fish 3.1) ──
 set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n 1)
 if test -z "$fish_ver"
     echo "Error: Could not determine fish version" >&2
@@ -657,8 +657,8 @@ function _validate_profile --description "Verify loaded profile has all required
 
     # Intentionally optional — consumers handle unset/empty safely:
     #   PKGS_DEL              — for-loop no-op when empty/unset
-    #   BOOT_TIME_TARGET      — type-checked if set (L703); verify_runtime safe via test fallthrough
-    #   EXPECTED_CPU_MATCH    — guarded by set -q in _load_profile (L770)
+    #   BOOT_TIME_TARGET      — type-checked if set (L709); verify_runtime safe via test fallthrough
+    #   EXPECTED_CPU_MATCH    — guarded by set -q in _load_profile (L776)
 
     # Conditionally required — needed only when profile includes corresponding destinations
     for dst in $SYSTEM_DESTINATIONS
@@ -1003,7 +1003,6 @@ function get_file_content --argument-names dst --description "Return embedded co
             printf '%s\n' "vm.zone_reclaim_mode = 0"
             printf '%s\n' ""
             printf '%s\n' "# inotify -- IDEs and build tools monitoring large source trees"
-            printf '%s\n' "fs.inotify.max_user_watches = 524288"
             printf '%s\n' "fs.inotify.max_user_instances = 1024"
 
         case "/etc/modprobe.d/99-ry-modprobe.conf"
@@ -1459,6 +1458,9 @@ end
 
 # Advance to next step: emit timing for previous step, display [N/M] progress bar to stderr
 function _progress --argument-names step_name --description "Advance and display the current progress step"
+    if test (count $argv) -lt 1
+        return 0
+    end
     # Emit timing for the previous step
     if test -n "$_STEP_PREV_NAME"; and test "$_STEP_PREV_START" -gt 0
         set -l _step_now (date +%s)
@@ -1516,6 +1518,9 @@ end
 
 # Record a skipped progress step to keep counter synchronized with PROGRESS_TOTAL
 function _progress_skip --argument-names step_name --description "Advance progress counter for a skipped step"
+    if test (count $argv) -lt 1
+        return 0
+    end
     # Emit timing for the previous step (consistent with _progress)
     if test -n "$_STEP_PREV_NAME"; and test "$_STEP_PREV_START" -gt 0
         set -l _step_now (date +%s)
@@ -3222,7 +3227,6 @@ function verify_static --description "Verify installed configs match embedded ch
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.watermark_boost_factor = 1" "watermark_boost_factor = 1"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.page_lock_unfairness = 1" "page_lock_unfairness = 1"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.zone_reclaim_mode = 0" "zone_reclaim_mode = 0"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "fs.inotify.max_user_watches = 524288" "max_user_watches = 524288"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "fs.inotify.max_user_instances = 1024" "max_user_instances = 1024"
     end
     _echo
@@ -3715,35 +3719,41 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         # B-3a: batch query all expected + masked units in 1 call
         set -l all_units $exp_svcs $mask_units
         # string collect preserves blank-line record delimiters (bare command substitution strips them)
-        set -l show_collected (systemctl show --property=ActiveState,UnitFileState -- $all_units 2>/dev/null | string collect --no-trim-newlines)
+        set -l show_collected (systemctl show --property=LoadState,ActiveState,UnitFileState -- $all_units 2>/dev/null | string collect --no-trim-newlines)
+        set -l current_load ""
         set -l current_active ""
         set -l current_unitfile ""
         set -l results
         for line in (string split -- \n "$show_collected")
             if test -z "$line"
-                set -a results "$current_active:$current_unitfile"
+                set -a results "$current_load:$current_active:$current_unitfile"
+                set current_load ""
                 set current_active ""
                 set current_unitfile ""
                 continue
             end
             switch "$line"
+                case "LoadState=*"
+                    set current_load (string replace -- "LoadState=" "" "$line")
                 case "ActiveState=*"
                     set current_active (string replace -- "ActiveState=" "" "$line")
                 case "UnitFileState=*"
                     set current_unitfile (string replace -- "UnitFileState=" "" "$line")
             end
         end
-        if test -n "$current_active"; or test -n "$current_unitfile"
-            set -a results "$current_active:$current_unitfile"
+        if test -n "$current_load"; or test -n "$current_active"; or test -n "$current_unitfile"
+            set -a results "$current_load:$current_active:$current_unitfile"
         end
 
         # Check expected services (first N results)
         set -l exp_count (count $exp_svcs)
         for i in (seq 1 $exp_count)
             set -l rec (string split -- ":" $results[$i])
-            if test "$rec[1]" != active; and test "$rec[1]" != exited
+            if test "$rec[1]" = not-found
                 set drift true
-            else if test "$rec[2]" != enabled
+            else if test "$rec[2]" != active; and test "$rec[2]" != exited
+                set drift true
+            else if test "$rec[3]" != enabled
                 set drift true
             end
         end
@@ -3758,7 +3768,11 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
                 continue
             end
             set -l rec (string split -- ":" $results[$ri])
-            if test "$rec[2]" != masked
+            # Unit not found (package removed) is not drift — matches verify_static behavior
+            if test "$rec[1]" = not-found
+                continue
+            end
+            if test "$rec[3]" != masked
                 set drift true
             end
         end
@@ -3967,7 +3981,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     end
 
     if test -d /sys/module/amdgpu/parameters
-        # Hex→decimal normalization: sysfs may return 0xfffd3fff or 4294705151
+        # Hex→decimal normalization: sysfs may return 0xfffd3fff or 4294787071
         for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0"
             set -l pname (string split ':' -- "$pair")[1]
             set -l expected (string split ':' -- "$pair")[2]
@@ -4194,7 +4208,6 @@ function verify_runtime --description "Verify runtime kernel params, services, a
         "vm.watermark_boost_factor=1" \
         "vm.page_lock_unfairness=1" \
         "vm.zone_reclaim_mode=0" \
-        "fs.inotify.max_user_watches=524288" \
         "fs.inotify.max_user_instances=1024"
     for _sc in $_sysctl_checks
         set -l _key (string split '=' -- "$_sc")[1]
@@ -5897,7 +5910,8 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
         set errors (math $errors + 1)
     else
         for f in $vmlinuz_files
-            if not sudo test -s "$f" 2>/dev/null
+            sudo test -s "$f" 2>/dev/null
+            if test $status -ne 0
                 _err "Zero-byte kernel image: $f"
                 set errors (math $errors + 1)
             end
@@ -5907,7 +5921,8 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     # 2. Every initramfs must be non-zero
     set -l initrd_files (sudo find /boot -maxdepth 1 -name 'initramfs-*.img' -type f 2>/dev/null)
     for f in $initrd_files
-        if not sudo test -s "$f" 2>/dev/null
+        sudo test -s "$f" 2>/dev/null
+        if test $status -ne 0
             _err "Zero-byte initramfs: $f"
             set errors (math $errors + 1)
         end

@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.49-blue)
+![Version](https://img.shields.io/badge/version-3.7.50-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -181,7 +181,6 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | `vm.watermark_boost_factor` | `1` | Minimize aggressive reclaim |
 | `vm.page_lock_unfairness` | `1` | Improve interactive responsiveness |
 | `vm.zone_reclaim_mode` | `0` | UMA safety net (already default) |
-| `fs.inotify.max_user_watches` | `524288` | IDEs monitoring large source trees |
 | `fs.inotify.max_user_instances` | `1024` | Parallel build tools and file watchers |
 
 ### Modprobe Overrides

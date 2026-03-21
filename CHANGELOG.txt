@@ -1,3 +1,39 @@
+3.7.50 (2026-03-20)
+-------------------
+  fix(check): do_check Job 4 false drift on not-found masked services.
+    When a masked unit's package is removed (e.g., power-profiles-daemon
+    via PKGS_DEL or manual uninstall), systemctl show returns LoadState=
+    not-found with empty UnitFileState. Job 4 only queried ActiveState
+    and UnitFileState — empty != "masked" triggered false drift (exit 10)
+    on a correctly-configured system. verify_static handled this via
+    LoadState=not-found → _info, but --check disagreed. Fix: add
+    LoadState to Job 4 inline parser; skip masked units where LoadState=
+    not-found. Expected services still report drift when not-found.
+  fix(sysctl): remove fs.inotify.max_user_watches=524288. Kernel 5.11+
+    auto-sets min(1% RAM, 1048576). On 128 GB, default is 1048576 —
+    setting 524288 REDUCES it. Originally removed in 3.7.39 for this
+    reason; re-added in 3.7.49 without addressing the 128 GB issue.
+    Removed from get_file_content, verify_static, verify_runtime (3
+    sites). fs.inotify.max_user_instances=1024 retained (increase from
+    kernel default 128).
+  fix(boot): _preflight_boot_sanity used 'if not sudo test -s' at 2
+    sites — same pattern fixed across 8 sites in 3.7.29. Fish 'not'
+    inverts sudo failure → enters if-block with wrong diagnostic
+    ("Zero-byte kernel image" instead of "sudo failed"). Replaced with
+    explicit status capture (sudo test; if test $status -ne 0).
+  fix(comment): ppfeaturemask decimal value in verify_runtime comment
+    was 4294705151 (0xfffbffff) — should be 4294787071 (0xfffd3fff).
+    Code unaffected; normalizes hex→decimal at runtime.
+  fix(comment): stale line refs in _validate_profile — BOOT_TIME_TARGET
+    L703→L709, EXPECTED_CPU_MATCH L770→L776 (off by 6 from insertions).
+  fix(comment): fish version gate comment claimed --no-trim-newlines
+    requires fish 3.6. fish 3.1.2 docs confirm it exists since 3.1.
+    Gate at 3.4 is correct; comment was wrong.
+  style: add argv count guard to _progress and _progress_skip. Both
+    had --argument-names but no count validation. Internal callers only;
+    consistency with 22 other guarded functions.
+  docs(readme): remove max_user_watches from sysctl table (8 entries).
+
 3.7.49 (2026-03-20)
 -------------------
   fix(signal): Correct signal handler case arms — Fish passes signal name

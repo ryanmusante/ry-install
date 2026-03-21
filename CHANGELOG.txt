@@ -1,3 +1,55 @@
+3.7.53 (2026-03-21)
+-------------------
+  fix(color): NO_COLOR environment detection was dead code. Line 21
+    set -g NO_COLOR false created a Fish variable, making set -q
+    NO_COLOR on line 26 always true. Colors never rendered in any
+    invocation. Fixed by checking the environment variable (set -qx)
+    before setting the global default. Matches no-color.org spec.
+  fix(validate): Job 2 parallel validation hardcoded service unit
+    filenames (amdgpu-performance.service, cpupower-epp.service).
+    A new profile with different SERVICE_DESTINATIONS would silently
+    skip validation for its units. Replaced with dynamic derivation
+    from SERVICE_DESTINATIONS and USER_DESTINATIONS, matching the
+    string replace -a '/' '_' pattern used elsewhere. User-scope
+    units auto-detected via $HOME prefix for --user flag.
+
+3.7.52 (2026-03-21)
+-------------------
+  fix(lint): show_help and do_lint case-count regex miscounted
+    get_file_content branches (13 instead of 16). Fish double-quote
+    expansion of $HOME in the grep regex caused 3 user-path case
+    branches to be missed. show_help always displayed 13; do_lint
+    cross-check always failed. Replaced regex with simple non-wildcard
+    case line count minus 1.
+  fix(log): LOG_FILE rename race between set and mv. The global was
+    updated before the mv, so a signal between them would cause the
+    cleanup handler to write to a nonexistent file, losing the JSONL
+    footer. Swapped order: mv first (preserves content), then set.
+  fix(verify): verify_runtime hardcoded magic number 6 for sys_units
+    batch check. Adding or removing a unit from sys_units without
+    updating the constant silently broke batch/fallback logic. Replaced
+    with (count $sys_units) and updated stale guard comment.
+  fix(check): do_check Job 4 applied exited-state check uniformly to
+    all EXPECTED_SERVICES including fstrim.timer. Timer units never
+    show ActiveState=exited; the check was dead code. Added timer-
+    aware branch: timers accept only active, services accept active
+    or exited (oneshot+RemainAfterExit). Both paths check enabled.
+  fix(security): _run shell metacharacter rejection only validated
+    argv[1]. Extended to all argv elements via for loop. Fish does
+    not eval $argv (each element is a separate token) so this is
+    defense-in-depth for log integrity and future external profile
+    sourcing.
+  fix(cleanup): _cleanup_on_exit used bare set to rebind _exit_status
+    inside if-block. Changed to set -l for clarity. Fish set -l inside
+    an if-block targets function scope (identical behavior), but the
+    bare set read as a scoping bug.
+  fix(validate): validate_configs Job 2 suppressed systemd-analyze
+    verify stderr via 2>/dev/null. Diagnostics for structural unit
+    issues (missing [Install], unknown directives) were lost. Removed
+    suppression; stderr now flows to val_dir/units.stderr which the
+    parent merge loop already logs.
+  docs: sync README badge, CHANGELOG.
+
 3.7.51 (2026-03-20)
 -------------------
   fix(check): do_check pvs call missing timeout 5. _install_configure_

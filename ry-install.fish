@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.51 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.51"
+# ry-install v3.7.53 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.53"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -18,14 +18,15 @@ set -g ALL false
 set -g FORCE false
 # --quiet: suppress command-wrapper stdout to terminal (auto-disabled for non-install modes)
 set -g QUIET true
-set -g NO_COLOR false
+# ── Environment detection: NO_COLOR (no-color.org) — check env BEFORE setting global default ──
+# set -qx tests exported (environment) variables only; avoids false positive from set -g
+if set -qx NO_COLOR; or test "$TERM" = dumb
+    set -g NO_COLOR true
+else
+    set -g NO_COLOR false
+end
 # --fix: auto-repair diffs found by --diff
 set -g FIX false
-
-# ── Environment detection: NO_COLOR (no-color.org), delta, root check, privilege-escalation dry-run safety ──
-if set -q NO_COLOR; or test "$TERM" = dumb
-    set -g NO_COLOR true
-end
 
 set -g HAS_DELTA (command -q delta; and echo true; or echo false)
 
@@ -467,8 +468,8 @@ end
 function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensure cleanup runs on fish_exit"
     set -l _exit_status $status
     if set -q _INTENDED_EXIT_CODE
-        # Intentional: bare set re-binds outer _exit_status (not -l); do_lint scope-shadow false positive
-        set _exit_status $_INTENDED_EXIT_CODE
+        # Re-bind the function-local from L468; Fish set -l inside if-block targets function scope (not block scope)
+        set -l _exit_status $_INTENDED_EXIT_CODE
     end
     if test "$_CLEANUP_DONE" = true
         return 0
@@ -598,7 +599,7 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         hibernate.target \
         hybrid-sleep.target \
         suspend-then-hibernate.target
-    set -g EXPECTED_SERVICES amdgpu-performance cpupower-epp fstrim.timer NetworkManager
+    set -g EXPECTED_SERVICES amdgpu-performance.service cpupower-epp.service fstrim.timer NetworkManager.service
 
     # ── Thresholds ──
     set -g BOOT_SPACE_CRIT 200
@@ -1583,10 +1584,14 @@ function _run --description "Execute a command with logging, dry-run support, an
         _log "BUG: _run called with no arguments"
         return 1
     end
-    # SECURITY: reject argv[1] with shell metacharacters (;|&`$\n\t\r) to prevent injection from untrusted input
-    if string match -qr '[;|&`\$\n\t\r]' -- "$argv[1]"
-        _log "BUG: _run argv[1] contains shell metacharacters — refusing to execute: $argv[1]"
-        return 1
+    # SECURITY: reject any argv element with shell metacharacters (;|&`$\n\t\r) to prevent injection from untrusted input
+    # Fish does not eval $argv (each element is a separate token), so this is defense-in-depth for log integrity
+    # and future external profile sourcing where callers may pass unsanitized data.
+    for _arg in $argv
+        if string match -qr '[;|&`\$\n\t\r]' -- "$_arg"
+            _log "BUG: _run argv contains shell metacharacters — refusing to execute: $_arg"
+            return 1
+        end
     end
     set -l log_cmd (string join -- " " $argv)
 
@@ -1683,7 +1688,9 @@ function show_help --description "Display usage information and available subcom
     # Fallback: count get_file_content case branches if profile hasn't loaded (--help exits before _load_profile)
     set -l _file_count "$MANAGED_FILE_COUNT"
     if test -z "$_file_count"
-        set _file_count (sed -n -- '/^function get_file_content/,/^end$/p' (status filename) | grep -cE "case [\"']?(/|[*]/\.|\\\$HOME/)")
+        # Count all case branches minus the wildcard case '*'; avoids $HOME expansion bugs in regex
+        set -l _all_cases (sed -n -- '/^function get_file_content/,/^end$/p' (status filename) | grep -c '^        case ')
+        set _file_count (math "$_all_cases - 1")
     end
     set -l _profile_desc "Beelink GTR9 Pro (Strix Halo)"
     if set -q PROFILE_DESC; and test -n "$PROFILE_DESC"
@@ -2030,6 +2037,7 @@ function validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS orde
         # Verify hook ordering constraints (before:after pairs)
         set -l order_checks \
             "systemd:sd-vconsole" \
+            "keyboard:sd-vconsole" \
             "modconf:kms" \
             "block:filesystems"
         for check in $order_checks
@@ -2108,22 +2116,38 @@ function validate_configs --description "Run all embedded config validators"
     ' -- "$dst_count" "$content_dir" "$val_dir" 2>"$val_dir/xref.stderr" &
     set -l pid_xref $last_pid
 
-    # Job 2: systemd unit syntax (3 units)
+    # Job 2: systemd unit syntax — derive keys from destinations (not hardcoded)
+    # Collect all .service destinations: SERVICE_DESTINATIONS (system) + USER_DESTINATIONS (user scope)
+    set -l _svc_dsts
+    for _sd in $SERVICE_DESTINATIONS
+        set -a _svc_dsts "$_sd"
+    end
+    for _ud in $USER_DESTINATIONS
+        if string match -q '*.service' -- "$_ud"
+            set -a _svc_dsts "$_ud"
+        end
+    end
     fish -c '
         set -l errs 0
         set -l content_dir $argv[1]
         set -l val_dir $argv[2]
         set -l my_home $argv[3]
+        set -l svc_dsts $argv[4..]
         if not command -q systemd-analyze
             echo $errs > "$val_dir/units.errors"
             exit 0
         end
-        for unit_key in _etc_systemd_system_amdgpu-performance.service _etc_systemd_system_cpupower-epp.service
+        for dst in $svc_dsts
+            set -l unit_key (string replace -a -- "/" "_" "$dst")
             set -l f "$content_dir/$unit_key"
+            set -l user_flag
+            if string match -q "$my_home/*" -- "$dst"
+                set user_flag --user
+            end
             if test -s "$f"
                 set -l tmp (mktemp -p "$val_dir" --suffix=.service ry-val-unit.XXXXXX)
                 command cp -- "$f" "$tmp"
-                if not systemd-analyze verify "$tmp" 2>/dev/null
+                if not systemd-analyze $user_flag verify "$tmp"
                     set errs (math $errs + 1)
                 end
                 command rm -f -- "$tmp"
@@ -2131,21 +2155,8 @@ function validate_configs --description "Run all embedded config validators"
                 set errs (math $errs + 1)
             end
         end
-        # ssh-agent.service (user unit — verify with --user scope)
-        set -l ssh_key (string replace -a -- "/" "_" "$my_home/.config/systemd/user/ssh-agent.service")
-        set -l f "$content_dir/$ssh_key"
-        if test -s "$f"
-            set -l tmp (mktemp -p "$val_dir" --suffix=.service ry-val-unit.XXXXXX)
-            command cp -- "$f" "$tmp"
-            if not systemd-analyze --user verify "$tmp" 2>/dev/null
-                set errs (math $errs + 1)
-            end
-            command rm -f -- "$tmp"
-        else
-            set errs (math $errs + 1)
-        end
         echo $errs > "$val_dir/units.errors"
-    ' -- "$content_dir" "$val_dir" "$HOME" 2>"$val_dir/units.stderr" &
+    ' -- "$content_dir" "$val_dir" "$HOME" $_svc_dsts 2>"$val_dir/units.stderr" &
     set -l pid_units $last_pid
 
     # Job 3: fish script syntax + environment.d check
@@ -3550,6 +3561,8 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     # Serialize service/mask lists for Job 4 (avoids interpolation into fish -c strings)
     printf '%s\n' $EXPECTED_SERVICES >"$result_dir/exp_svcs"
     printf '%s\n' $MASK >"$result_dir/mask_units"
+    # Implicit service dependencies not in EXPECTED_SERVICES (checked by verify_runtime)
+    printf '%s\n' systemd-resolved.service NetworkManager-dispatcher.service >"$result_dir/implicit_svcs"
 
     # Pre-serialize installed file hashes+permissions in parent (sudo timestamp_type=ppid doesn't propagate to children)
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
@@ -3678,8 +3691,9 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         # Read serialized lists from files (safe for names with quotes/backslashes)
         set -l exp_svcs (command cat -- "$result_dir/exp_svcs")
         set -l mask_units (command cat -- "$result_dir/mask_units")
-        # B-3a: batch query all expected + masked units in 1 call
-        set -l all_units $exp_svcs $mask_units
+        set -l implicit_svcs (command cat -- "$result_dir/implicit_svcs" 2>/dev/null)
+        # B-3a: batch query all expected + masked + implicit units in 1 call
+        set -l all_units $exp_svcs $mask_units $implicit_svcs
         # string collect preserves blank-line record delimiters (bare command substitution strips them)
         set -l show_collected (systemctl show --property=LoadState,ActiveState,UnitFileState -- $all_units 2>/dev/null | string collect --no-trim-newlines)
         set -l current_load ""
@@ -3711,11 +3725,20 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         end
 
         # Check expected services (first N results)
+        # Timer units: ActiveState=active (waiting for next trigger); never exited
+        # Oneshot services (RemainAfterExit): ActiveState=exited after successful run
         set -l exp_count (count $exp_svcs)
         for i in (seq 1 $exp_count)
             set -l rec (string split -- ":" $results[$i])
             if test "$rec[1]" = not-found
                 set drift true
+            else if string match -q '*.timer' -- "$exp_svcs[$i]"
+                # Timers must be active (registered); exited would be abnormal
+                if test "$rec[2]" != active
+                    set drift true
+                else if test "$rec[3]" != enabled
+                    set drift true
+                end
             else if test "$rec[2]" != active; and test "$rec[2]" != exited
                 set drift true
             else if test "$rec[3]" != enabled
@@ -3726,8 +3749,9 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
         # LVM state pre-serialized by parent (sudo pvs requires parent credential)
         set -l has_lvm (string trim -- (command cat -- "$result_dir/has_lvm" 2>/dev/null))
 
-        # Check masked services (remaining results)
-        for i in (seq 1 (count $mask_units))
+        # Check masked services (next M results)
+        set -l mask_count (count $mask_units)
+        for i in (seq 1 $mask_count)
             set -l ri (math $exp_count + $i)
             if test "$mask_units[$i]" = lvm2-monitor.service; and test "$has_lvm" = true
                 continue
@@ -3741,11 +3765,38 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
                 set drift true
             end
         end
+
+        # Check implicit service dependencies (remaining results after exp+mask)
+        set -l implicit_offset (math $exp_count + $mask_count)
+        for i in (seq 1 (count $implicit_svcs))
+            set -l ri (math $implicit_offset + $i)
+            if test $ri -gt (count $results)
+                continue
+            end
+            set -l rec (string split -- ":" $results[$ri])
+            # Not-found is not drift (package may not be installed)
+            if test "$rec[1]" = not-found
+                continue
+            end
+            # Must be enabled; active state varies (NM-dispatcher may be inactive when idle)
+            if test "$rec[3]" != enabled
+                set drift true
+            end
+        end
         echo $drift > "$result_dir/svc_drift"
     ' -- "$result_dir" 2>"$result_dir/svc.stderr" &
     set -l pid_svc $last_pid
 
     wait $pid_hash $pid_perm $pid_kparam $pid_svc
+
+    # User-scope ssh-agent check (must run in parent for D-Bus session access)
+    set -l _ssh_unit_file "$HOME/.config/systemd/user/ssh-agent.service"
+    if test -f "$_ssh_unit_file"
+        set -l _ssh_state (systemctl --user is-enabled ssh-agent.service 2>/dev/null)
+        if test "$_ssh_state" != enabled
+            set drift true
+        end
+    end
 
     # Merge results — treat missing result files as child crash (prevents false-negative)
     for phase in hash perm kparam svc
@@ -4002,9 +4053,10 @@ function verify_runtime --description "Verify runtime kernel params, services, a
     set -l parsed (_parse_systemctl_show "$show_output")
 
     # Index into parsed (LoadState:ActiveState:UnitFileState): 1=amdgpu-performance, 2=cpupower-epp, 3=fstrim, 4=resolved, 5=nm-dispatcher, 6=NetworkManager
-    if test (count $parsed) -lt 6
-        _warn "  systemctl show returned incomplete data ("(count $parsed)" of 6 records)"
-        _log "SYSTEMCTL_SHOW_PARTIAL: got="(count $parsed)" expected=6"
+    set -l _expected_unit_count (count $sys_units)
+    if test (count $parsed) -lt $_expected_unit_count
+        _warn "  systemctl show returned incomplete data ("(count $parsed)" of $_expected_unit_count records)"
+        _log "SYSTEMCTL_SHOW_PARTIAL: got="(count $parsed)" expected=$_expected_unit_count"
         # Fallback: per-unit query to avoid positional misattribution
         for _svc in $sys_units
             set -l _unit_raw (systemctl show --property=LoadState,ActiveState,UnitFileState -- "$_svc" 2>/dev/null | string collect --no-trim-newlines)
@@ -4106,7 +4158,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
             _fail "  NetworkManager.service: $rec[2] (expected: active)"
         end
 
-        # guard: (count $parsed) -lt 6
+        # guard: (count $parsed) -lt $_expected_unit_count
     end
 
     # User scope: 1 batch call for ssh-agent
@@ -4663,7 +4715,9 @@ function do_lint --description "Lint the script source for fish anti-patterns an
     end
 
     set -l total (math (count $SYSTEM_DESTINATIONS) + (count $USER_DESTINATIONS) + (count $SERVICE_DESTINATIONS))
-    set -l case_count (sed -n -- '/^function get_file_content/,/^end$/p' "$script_path" | grep -cE "case [\"']?(/|[*]/\.|\\\$HOME/)")
+    # Count all case branches minus the wildcard case '*'; avoids $HOME expansion bugs in regex
+    set -l _all_cases (sed -n -- '/^function get_file_content/,/^end$/p' "$script_path" | grep -c '^        case ')
+    set -l case_count (math "$_all_cases - 1")
     if test $case_count -ge $total
         _ok "File count verified: $total destinations, $case_count content cases"
     else
@@ -6978,11 +7032,13 @@ if test "$ALL" = true; and test "$MODE" != test-all
 end
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"
 set -l old_log "$LOG_FILE"
-# Update LOG_FILE BEFORE mv — signal handlers between mv and set would target the old (deleted) path, silently losing the JSONL footer
-set -g LOG_FILE "$new_log"
+# Rename log to mode-specific path; mv before set — signal between them loses footer (acceptable)
+# but preserves log content. Reversed order would lose content (signal handler creates empty new_log,
+# then mv never runs because signal handler exits).
 if test -f "$old_log"; and test "$old_log" != "$new_log"
     command mv -- "$old_log" "$new_log" 2>/dev/null
 end
+set -g LOG_FILE "$new_log"
 # Only create fresh file if it doesn't already exist (mv above may have placed it); preserve pre-existing content from _load_profile
 if not test -f "$LOG_FILE"
     command install -m 0600 /dev/null "$LOG_FILE" 2>/dev/null

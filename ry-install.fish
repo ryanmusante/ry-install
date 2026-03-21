@@ -529,9 +529,8 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # ── Kernel (14 params) ──
     # ppfeaturemask=0xfffd3fff: disables bits 14 (overdrive), 15 (GFXOFF), 17 (stutter). For overdrive/CoreCtrl/LACT: 0xfffd7fff.
     # ttm.pages_limit=32505856: cap pinned memory to 124 GiB (32505856 × 4 KiB)
-    # cwsr_enable=0: GPU hang workaround for gfx1151 (ROCm#5590); remove on kernel 6.18+ (fixed: 1fb710793ce2)
-    # Not added: amdgpu.gttsize (deprecated ~6.14; ttm.pages_limit sufficient), amdgpu.dcdebugmask (PSR is eDP-only)
-    # Not added: split_lock_detect=off (cachyos-gaming-meta handles via 99-splitlock.conf sysctl)
+    # cwsr_enable=0: GPU hang workaround for gfx1151 (ROCm#5590); remove on kernel 6.18+ (fixed: cf326449637a5)
+    # Not added: amdgpu.gttsize (deprecated ~6.14), amdgpu.dcdebugmask (eDP-only), split_lock_detect (99-splitlock.conf sysctl)
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
@@ -550,8 +549,7 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     # ── Initramfs ──
     set -g MKINITCPIO_MODULES amdgpu nvme
-    # systemd hooks — no resume hook needed (systemd handles hibernate
-    # resume automatically; sleep/suspend/hibernate targets are masked)
+    # systemd hooks — no resume hook (targets masked)
     set -g MKINITCPIO_HOOKS \
         base \
         systemd \

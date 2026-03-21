@@ -4,8 +4,7 @@
     WITHOUT the SIG prefix (e.g., "INT" not "SIGINT"). All four case arms
     were dead code; every signal exited with hardcoded 130 regardless of
     which signal fired. SIGHUP/SIGQUIT/SIGTERM now produce correct exit
-    codes 129/131/143. Cases changed: SIGHUP→HUP, SIGINT→INT,
-    SIGQUIT→QUIT, SIGTERM→TERM.
+    codes 129/131/143.
   fix(meta): Sync header comment version 3.7.48 → 3.7.49. Mismatch caused
     do_lint and --test-all to fail on every run.
   fix(boot): _preflight_boot_sanity now uses sudo for all /boot access.
@@ -20,16 +19,14 @@
     to set -q (checks if set). A fish-global NO_COLOR set in config.fish
     without export would previously be silently ignored.
   chore(compat): Version gate comment updated — string collect
-    --no-trim-newlines is confirmed available from fish 3.6, not 3.4
-    (3.4 only added --allow-empty). README prerequisite table updated
-    to reflect this distinction.
+    --no-trim-newlines requires fish 3.6, not 3.4. README updated.
   chore(lint): _cleanup_on_exit intentional set-without-l comment expanded
     to suppress false positive from do_lint scope-shadow awk check.
   chore(meta): chmod +x applied to ry-install.fish (was 644; shebang
     requires executable bit for ./ry-install.fish invocation style).
   feat(kernel): Add amdgpu.cwsr_enable=0 — GPU hang workaround for
     gfx1151 mixed compute/graphics (ROCm#5590). Remove on kernel 6.18+
-    (fixed: 1fb710793ce2).
+    (fixed: cf326449637a5).
   feat(kernel): Add workqueue.power_efficient=0 — prevent WQ_UNBOUND
     remapping to power-efficient variants on desktop.
   feat(kernel): Remove split_lock_detect=off — cachyos-gaming-meta
@@ -56,7 +53,8 @@
     from _validate_kernel_params config map (dead code after cmdline removal).
     Add workqueue.→CONFIG_WQ_POWER_EFFICIENT_DEFAULT mapping.
   docs(readme): Update kernel params (13→14), sysctl table (3→9 entries),
-    resolved.conf settings, embedded files (15→16).
+    resolved.conf settings, modprobe overrides section, embedded files
+    (15→16).
 
 3.7.48 (2026-03-20)
 -------------------
@@ -85,21 +83,14 @@
     missing \t (tab) and \r (carriage return). Internal callers
     never pass these, but defense-in-depth dictates covering them.
     Updated regex from '[;|&`\$\n]' to '[;|&`\$\n\t\r]'.
-  fix(tmpfile): validate_configs Job 2 unit tmpfiles created with
-    mktemp -t in /tmp were not tracked in _TRACKED_TMPFILES. On
-    child kill/hang, files leaked until next non-dry invocation.
-    Changed to mktemp -p "$val_dir" so files live inside the
-    already-tracked val_dir and are cleaned with it.
-  fix(tmpfile): do_completions tmpfile and install_files argparse
-    tmpfile were not tracked in _TRACKED_TMPFILES. Added tracking
-    for both. Crash-leak window was narrow (inline rm -f on all
-    error paths) but tracking closes the gap.
+  fix(tmpfile): 3 tmpfiles not tracked in _TRACKED_TMPFILES
+    (validate_configs Job 2, do_completions, install_files argparse).
+    Moved to tracked dirs or added explicit tracking.
   fix(help): show_help hardcoded "Beelink GTR9 Pro (Strix Halo)"
     despite profile system supporting arbitrary machines. Now uses
     PROFILE_DESC if loaded, falls back to default text.
   style: add --argument-names step_name to _progress and
-    _progress_skip; replace $argv[1] with $step_name throughout
-    both function bodies for consistency with project convention.
+    _progress_skip; replace $argv[1] with $step_name.
   doc: sync README, CHANGELOG.
 
 3.7.46 (2026-03-20)
@@ -141,6 +132,7 @@
       impact. CWSR operates on compute queues, not GFX ring queues
       used by Vulkan/OpenGL. Root cause (incorrect VGPR count for
       gfx1151) fixed in kernel 6.18+ (cf326449637a5).
+      Re-added in 3.7.49 for pre-6.18 ROCm users.
     - amdgpu.gpu_recovery=1: default is -1 (auto), which enables
       recovery for all GPUs >= GFX8 since kernel 5.1. Explicit =1
       produces identical behavior on gfx1151.

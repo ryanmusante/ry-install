@@ -27,7 +27,7 @@ Before running the fully automated install (`--all`), complete these steps on a 
 | # | Step | Command / Action | Why |
 |---|------|-----------------|-----|
 | 1 | **CachyOS installed** | systemd-boot, btrfs or ext4 root, working internet | Script assumes CachyOS base with systemd-boot (not GRUB) |
-| 2 | **Fish shell 3.4+** | `fish --version` (CachyOS ships 4.5) | Required for `$()` syntax, `set --function`, `string collect --allow-empty`; `string collect --no-trim-newlines` confirmed from 3.6 (fish 4.x recommended) |
+| 2 | **Fish shell 3.4+** | `fish --version` (CachyOS ships 4.5) | Required syntax features (fish 4.x recommended) |
 | 3 | **Kernel 6.14+** | `uname -r` | ntsync, gfx1151 fixes, mt7925e.disable_aspm |
 | 4 | **Unrestricted sudo** | `sudo -l` must show `(ALL) ALL` | `--all` aborts if sudo is restricted |
 | 5 | **2 GB root free** | `df -h /` | Packages + initramfs + cache headroom |
@@ -36,7 +36,7 @@ Before running the fully automated install (`--all`), complete these steps on a 
 | 8 | **BIOS current** | Check [Beelink](https://dr.bee-link.cn/) downloads | P110+ for ACPI and Strix Halo stability |
 | 9 | **Snapshot rootfs** | `sudo btrfs subvolume snapshot -r / /.snapshots/pre-ry-install` | Rollback point (btrfs only; script creates one automatically) |
 | 10 | **Review masked services** | See [Masked Services](#masked-services-9) | Sleep/hibernate/suspend targets will be masked — confirm this is a desktop, not a laptop |
-| 11 | **WiFi SSID/passphrase ready** | SSID: 1-32 bytes, no shell metacharacters (`` /\;`$(){}\|<>'"% ``), no leading/trailing spaces. Passphrase: WPA2, 8-63 bytes, no `%` | WiFi credential prompts are interactive even with `--all` (type SSID + passphrase at the end); skipped on non-TTY |
+| 11 | **WiFi SSID/passphrase ready** | SSID: 1-32 bytes, no shell metacharacters or `%`. Passphrase: WPA2, 8-63 bytes, no `%` | Interactive even with `--all`; skipped on non-TTY |
 | 12 | **Check CachyOS news** | [wiki.cachyos.org](https://wiki.cachyos.org/) and [archlinux.org/news](https://archlinux.org/news/) | Known upgrade issues before `-Syu` |
 
 **Minimal automated run:**
@@ -141,7 +141,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Key | Value |
 |-----|-------|
-| `LINUX_OPTIONS` | See [Kernel Parameters](#kernel-parameters-13) |
+| `LINUX_OPTIONS` | See [Kernel Parameters](#kernel-parameters-14) |
 | `LINUX_FALLBACK_OPTIONS` | `"quiet"` |
 | `DEFAULT_ENTRY` | `"manual"` |
 | `REMOVE_EXISTING` | `"yes"` |
@@ -165,6 +165,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press variants (7 keys) |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks: DefaultInterface/PowerSaveDisable · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
+| `modprobe.d` | Blacklist pcspkr, wdat_wdt · nvme_core multipath=N · mt7925e disable_aspm=1 |
 
 ### Sysctl Overrides
 
@@ -182,6 +183,17 @@ Verify: `sysctl --system 2>&1 | rg cachyos`
 | `vm.zone_reclaim_mode` | `0` | UMA safety net (already default) |
 | `fs.inotify.max_user_watches` | `524288` | IDEs monitoring large source trees |
 | `fs.inotify.max_user_instances` | `1024` | Parallel build tools and file watchers |
+
+### Modprobe Overrides
+
+Complements CachyOS vendor `/usr/lib/modprobe.d/` — no overlap.
+
+| Type | Module | Setting | Purpose |
+|------|--------|---------|---------|
+| blacklist | `pcspkr` | — | Silence PC speaker beep |
+| blacklist | `wdat_wdt` | — | ACPI watchdog (complements `nowatchdog` cmdline) |
+| options | `nvme_core` | `multipath=N` | Disable NVMe multipath on single-drive desktop |
+| options | `mt7925e` | `disable_aspm=1` | Redundant backup for cmdline `mt7925e.disable_aspm=1` |
 
 ### Environment Variables
 
@@ -311,7 +323,7 @@ Machine-specific globals (kernel params, packages, services, thresholds, destina
 | `~/.config/ry-install/default-profile` | Persistent default (single line: profile name) |
 | `gtr9_pro` | Hardcoded fallback |
 
-External profiles must define a `function profile_<name>` setting all required globals. Files are syntax-checked (`fish --no-execute`) before sourcing. Profile validation enforces 25+ required globals, name consistency, and numeric types. To create a new profile, copy `profile_gtr9_pro` as a starting point, adjust `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, `PKGS_ADD`/`PKGS_DEL`, `MASK`, `EXPECTED_SERVICES`, `ENV_VARS`, service destinations, and threshold globals, set the name in `~/.config/ry-install/default-profile`, and run `./ry-install.fish --check` to validate.
+External profiles must define a `function profile_<name>` setting all required globals. Files are syntax-checked (`fish --no-execute`) before sourcing. Profile validation enforces 25+ required globals, name consistency, and numeric types. To create a new profile, copy `profile_gtr9_pro`, adjust globals, set the name in `~/.config/ry-install/default-profile`, and run `./ry-install.fish --check` to validate.
 
 ### References
 

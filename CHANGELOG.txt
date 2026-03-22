@@ -1,3 +1,16 @@
+3.7.56 (2026-03-21)
+-------------------
+  fix(logs): add sudo guard with non-sudo fallback to gpu/usb/kernel
+    dmesg calls in _logs_journal, consistent with system case.
+  fix(validate): add drirc XML structure check to validate_configs
+    Job 5 (all 17 embedded files now have format-specific validation).
+  fix(hardware): use card* glob for VRAM check instead of hardcoded
+    card0 (consistent with DPM glob at line 3924).
+  fix(logs): handle escaped quotes in JSONL data field extraction
+    via _jsonl_data helper (--logs analyze display correctness).
+  chore(lint): add _dry/_info/_fail/_err/_echo to $() exclusion list.
+  docs: clarify _chk_file sudo scope, sudo pattern, test total.
+
 3.7.55 (2026-03-21)
 -------------------
   fix(logind): add HandleHibernateKeyLongPress to LOGIND_IGNORE_KEYS.

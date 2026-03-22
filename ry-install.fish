@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.55 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.55"
+# ry-install v3.7.56 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.56"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -184,7 +184,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         set -l found false
         for param in $KERNEL_PARAMS
             if string match -q -- "$prefix*" "$param"
-                set found true
+                set -l found true
                 break
             end
         end
@@ -193,7 +193,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         # Check if config_sym (e.g., CONFIG_AMD_PSTATE) is =y or =m in /proc/config.gz
         if not printf '%s\n' $config_data | grep -q -- "^$config_sym=[ym]"
             _warn "  $prefix* requires $config_sym but not enabled in running kernel"
-            set mismatches (math $mismatches + 1)
+            set -l mismatches (math $mismatches + 1)
         end
     end
 
@@ -436,13 +436,13 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     set -l _sig_exit 130
     switch "$argv[1]"
         case HUP
-            set _sig_exit 129
+            set -l _sig_exit 129
         case INT
-            set _sig_exit 130
+            set -l _sig_exit 130
         case QUIT
-            set _sig_exit 131
+            set -l _sig_exit 131
         case TERM
-            set _sig_exit 143
+            set -l _sig_exit 143
     end
     if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
         set -l _mode_esc (_json_str "$MODE")
@@ -716,10 +716,10 @@ function _load_profile --description "Determine, load, and validate the active p
     set -l name
     set -l default_file "$HOME/.config/ry-install/default-profile"
     if test -f "$default_file"
-        set name (string trim < "$default_file")
+        set -l name (string trim < "$default_file")
     end
     if test -z "$name"
-        set name gtr9_pro
+        set -l name gtr9_pro
     end
 
     # 2. Validate name format
@@ -865,7 +865,7 @@ function _btrfs_pre_snapshot --description "Create a btrfs snapshot of rootfs be
     # Place snapshots in /.snapshots if it exists (snapper convention), else /.ry-snapshots
     set -l snap_parent "/.snapshots"
     if not test -d "$snap_parent"
-        set snap_parent "/.ry-snapshots"
+        set -l snap_parent "/.ry-snapshots"
     end
 
     if test "$DRY" = true
@@ -1100,7 +1100,7 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
     end
     # Must run after _load_profile — needs profile globals for get_file_content
     if test -z "$out_dir"
-        set out_dir (mktemp -d -t ry-content.XXXXXX)
+        set -l out_dir (mktemp -d -t ry-content.XXXXXX)
     end
     if not test -d "$out_dir"
         return 1
@@ -1157,9 +1157,9 @@ function _parse_systemctl_show --argument-names raw_output --description "Parse 
             if test -n "$current_active"; or test -n "$current_unitfile"; or test -n "$current_load"
                 printf '%s\n' "$current_load:$current_active:$current_unitfile"
             end
-            set current_active ""
-            set current_unitfile ""
-            set current_load ""
+            set -l current_active ""
+            set -l current_unitfile ""
+            set -l current_load ""
             continue
         end
         switch "$line"
@@ -1223,6 +1223,16 @@ function _gkeyfile_escape --argument-names raw --description "Escape a string fo
     printf '%s\n' "$val"
 end
 
+# Extract "data" field value from a JSONL line, handling escaped quotes
+# PCRE2: [^"\\] matches non-quote non-backslash; \\. matches escaped char
+# Fish single-quotes pass content literally to PCRE (no escape processing)
+function _jsonl_data --description "Extract data field from JSONL line"
+    if test (count $argv) -ne 1
+        return 1
+    end
+    string match -r --groups-only -- '"data":"((?:[^"\\]|\\.)*)"' "$argv[1]"
+end
+
 # ── Structured NDJSON logging — self-contained JSON per line, event classification (section/prefix/message), _json_str escapes+caps at 4096 chars ──
 
 # Append JSONL event to LOG_FILE with ISO timestamp
@@ -1235,7 +1245,7 @@ function _log --description "Append a timestamped message to the log file"
     set -l event message
     set -l data "$raw"
     if string match -qr '^=== .* ===$' -- "$raw"
-        set event section
+        set -l event section
         set data (string replace -ar '=+ *' '' -- "$raw" | string trim --)
     else if string match -qr '^[A-Z][A-Z_]*: ' -- "$raw"
         set event (string lower (string match -r '^[A-Z][A-Z_]*' -- "$raw"))
@@ -1253,7 +1263,7 @@ function _log --description "Append a timestamped message to the log file"
         if test -n "$_esc_match"
             set -l _esc_len (string length -- "$_esc_match")
             if test "$_esc_len" -gt 0
-                set cut (math $cut - $_esc_len)
+                set -l cut (math $cut - $_esc_len)
             end
         end
         set data (string sub -l $cut -- "$data")"..."
@@ -1275,7 +1285,7 @@ function _msg --argument-names level --description "Format and print a leveled s
     if not contains -- "$level" $valid_levels
         echo "[BUG] _msg called with invalid level: '$level'" >&2
         printf '{"ts":"%s","event":"bug","data":"_msg called with invalid level: %s"}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (_json_str "$level") >>"$LOG_FILE"
-        set level ERR
+        set -l level ERR
     end
     # Route level to JSONL event + increment verify counters for summary
     set -l msg (string join -- " " $argv[2..])
@@ -1366,7 +1376,7 @@ function _banner --argument-names text --description "Print the ry-install start
     set -l text_len (string length -- "$text")
     set -l pad (math "$max_text - $text_len")
     if test $pad -lt 0
-        set pad 0
+        set -l pad 0
     end
     set -l spaces (string repeat -n $pad -- " ")
     _echo $border
@@ -1479,10 +1489,10 @@ function _progress --argument-names step_name --description "Advance and display
 
         set -l bar ""
         for i in (seq 1 $filled)
-            set bar "$bar█"
+            set -l bar "$bar█"
         end
         for i in (seq 1 $empty)
-            set bar "$bar░"
+            set -l bar "$bar░"
         end
 
         set -l step_elapsed ""
@@ -1492,9 +1502,9 @@ function _progress --argument-names step_name --description "Advance and display
             if test "$step_secs" -ge 60
                 set -l sm (math "floor($step_secs / 60)")
                 set -l ss (math "$step_secs % 60")
-                set step_elapsed (printf ' %dm%02ds' $sm $ss)
+                set -l step_elapsed (printf ' %dm%02ds' $sm $ss)
             else if test "$step_secs" -gt 0
-                set step_elapsed (printf ' %ds' $step_secs)
+                set -l step_elapsed (printf ' %ds' $step_secs)
             end
         end
         set -g PROGRESS_STEP_START $now
@@ -1534,10 +1544,10 @@ function _progress_skip --argument-names step_name --description "Advance progre
         set -l empty (math "$PROGRESS_WIDTH - $filled")
         set -l bar ""
         for _si in (seq 1 $filled)
-            set bar "$bar█"
+            set -l bar "$bar█"
         end
         for _si in (seq 1 $empty)
-            set bar "$bar░"
+            set -l bar "$bar░"
         end
         set -l desc
         if test (string length -- "$step_name") -gt 25
@@ -1580,9 +1590,9 @@ function _progress_done --description "Finalize and close the progress display"
             if test "$elapsed" -ge 60
                 set -l el_m (math "floor($elapsed / 60)")
                 set -l el_s (math "$elapsed % 60")
-                set elapsed_str (printf ' (%dm%02ds)' $el_m $el_s)
+                set -l elapsed_str (printf ' (%dm%02ds)' $el_m $el_s)
             else
-                set elapsed_str (printf ' (%ds)' $elapsed)
+                set -l elapsed_str (printf ' (%ds)' $elapsed)
             end
         end
         printf '\r[%s] 100%% Done%-25s%s\n' "$bar" "" "$elapsed_str" >&2
@@ -1703,11 +1713,11 @@ function show_help --description "Display usage information and available subcom
     if test -z "$_file_count"
         # Count all case branches minus the wildcard case '*'; avoids $HOME expansion bugs in regex
         set -l _all_cases (sed -n -- '/^function get_file_content/,/^end$/p' (status filename) | grep -c '^        case ')
-        set _file_count (math "$_all_cases - 1")
+        set -l _file_count (math "$_all_cases - 1")
     end
     set -l _profile_desc "Beelink GTR9 Pro (Strix Halo)"
     if set -q PROFILE_DESC; and test -n "$PROFILE_DESC"
-        set _profile_desc "$PROFILE_DESC"
+        set -l _profile_desc "$PROFILE_DESC"
     end
     echo "
 ry-install v$VERSION
@@ -1793,7 +1803,8 @@ NOTES:
 end
 
 # Verify a managed file exists at dst; uses elevated test for /boot paths, logs OK/FAIL with context
-function _chk_file --argument-names filepath --description "Verify a file exists (with sudo for /boot paths)"
+# System files are 0644 (world-readable) — only /boot/* needs sudo (ESP may be root-only vfat)
+function _chk_file --argument-names filepath --description "Verify a file exists (sudo for /boot, direct for /etc)"
     if test (count $argv) -lt 1
         _err "_chk_file: missing argument"
         return 1
@@ -2014,7 +2025,7 @@ function validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS orde
     set -l hooks
     # Verify mkinitcpio hook ordering and presence
     if test (count $argv) -gt 0; and test "$argv[1]" = --existence-only
-        set existence_only true
+        set -l existence_only true
         set hooks $argv[2..]
     else if test (count $argv) -gt 0
         set hooks $argv
@@ -2274,6 +2285,17 @@ function validate_configs --description "Run all embedded config validators"
         if test -s "$f"
             if grep -qE -- "[A-Z]+=[^=]" "$f" 2>/dev/null
                 if grep -qE -- "==[[:space:]]*\$" "$f" 2>/dev/null
+                    set errs (math $errs + 1)
+                end
+            end
+        else
+            set errs (math $errs + 1)
+        end
+        # drirc XML structure
+        set -l f "$content_dir/_etc_drirc"
+        if test -s "$f"
+            for tag in "<driconf>" "<device>" "<application" "radv_enable_unified_heap_on_apu"
+                if not grep -qF -- "$tag" "$f"
                     set errs (math $errs + 1)
                 end
             end
@@ -4596,7 +4618,7 @@ function do_lint --description "Lint the script source for fish anti-patterns an
     set -l clean_content (sed '/^[[:space:]]*#/d' "$script_path")
 
     # Exclude embedded bash in systemd ExecStart= (bash syntax is correct there)
-    set -l bash_subst (printf '%s\n' $clean_content | grep -n '\$(' 2>/dev/null | grep -vE "ExecStart|/bin/bash|fish --version|'\\\$\\('|_warn|_ok" | head -n 20|| true)
+    set -l bash_subst (printf '%s\n' $clean_content | grep -n '\$(' 2>/dev/null | grep -vE "ExecStart|/bin/bash|fish --version|'\\\$\\('|_warn|_ok|_dry|_info|_fail|_err|_echo" | head -n 20|| true)
     if test -n "$bash_subst"
         _warn "Possible bash-style \$() found:"
         set -l lint_out (printf '%s\n' $bash_subst | sed 's/^/  /')
@@ -4937,10 +4959,26 @@ function _analyze_log --argument-names log_path --description "Parse and summari
     end
     _echo
 
-    set -l all_fails (grep -E '"event":"fail"' "$log_path" 2>/dev/null | grep -oE '"data":"[^"]+"' | cut -d'"' -f4)
-    set -l all_warns (grep -E '"event":"warn"' "$log_path" 2>/dev/null | grep -oE '"data":"[^"]+"' | cut -d'"' -f4)
-    set -l all_errs (grep -E '"event":"err"' "$log_path" 2>/dev/null | grep -oE '"data":"[^"]+"' | cut -d'"' -f4)
-    set -l stderr_lines (grep -E '"event":"stderr"' "$log_path" 2>/dev/null | grep -oE '"data":"[^"]+"' | cut -d'"' -f4)
+    set -l all_fails
+    for _jline in (grep -E '"event":"fail"' "$log_path" 2>/dev/null)
+        set -l _val (_jsonl_data "$_jline")
+        test -n "$_val"; and set -a all_fails "$_val"
+    end
+    set -l all_warns
+    for _jline in (grep -E '"event":"warn"' "$log_path" 2>/dev/null)
+        set -l _val (_jsonl_data "$_jline")
+        test -n "$_val"; and set -a all_warns "$_val"
+    end
+    set -l all_errs
+    for _jline in (grep -E '"event":"err"' "$log_path" 2>/dev/null)
+        set -l _val (_jsonl_data "$_jline")
+        test -n "$_val"; and set -a all_errs "$_val"
+    end
+    set -l stderr_lines
+    for _jline in (grep -E '"event":"stderr"' "$log_path" 2>/dev/null)
+        set -l _val (_jsonl_data "$_jline")
+        test -n "$_val"; and set -a stderr_lines "$_val"
+    end
 
     if test (count $all_fails) -gt 0
         _echo "── Failures ──"
@@ -4979,7 +5017,7 @@ function _analyze_log --argument-names log_path --description "Parse and summari
         _echo "── Step Timing ──"
         set -l total_step_s 0
         for line in $step_lines
-            set -l sname (printf '%s' "$line" | grep -oE '"data":"[^"]+"' | cut -d'"' -f4)
+            set -l sname (_jsonl_data "$line")
             set -l selap (printf '%s' "$line" | grep -oE '"elapsed_s":[0-9]+' | sed 's/.*://')
             test -z "$selap"; and set selap 0
             set total_step_s (math "$total_step_s + $selap")
@@ -4990,8 +5028,18 @@ function _analyze_log --argument-names log_path --description "Parse and summari
     end
 
     if test "$mode" = test-all
-        set -l test_ok (grep '"event":"ok"' "$log_path" 2>/dev/null | grep -oE '"data":"[^"]+"' | cut -d'"' -f4)
-        set -l test_warns_ta (grep '"event":"warn"' "$log_path" 2>/dev/null | grep -oE '"data":"[^"]+"' | cut -d'"' -f4 | grep 'exit code')
+        set -l test_ok
+        for _jline in (grep '"event":"ok"' "$log_path" 2>/dev/null)
+            set -l _val (_jsonl_data "$_jline")
+            test -n "$_val"; and set -a test_ok "$_val"
+        end
+        set -l test_warns_ta
+        for _jline in (grep '"event":"warn"' "$log_path" 2>/dev/null)
+            set -l _val (_jsonl_data "$_jline")
+            if test -n "$_val"; and string match -q '*exit code*' -- "$_val"
+                set -a test_warns_ta "$_val"
+            end
+        end
         if test (count $test_ok) -gt 0; or test (count $test_warns_ta) -gt 0
             _echo "── Per-Mode Results ──"
             for line in $test_ok
@@ -5006,7 +5054,15 @@ function _analyze_log --argument-names log_path --description "Parse and summari
 
     set -l diff_lines (grep -- '"event":"diff"' "$log_path" 2>/dev/null)
     if test (count $diff_lines) -gt 0
-        set -l diff_files (printf '%s\n' $diff_lines | grep -oE '"data":"DIFF: [^:]+' | sed 's/"data":"DIFF: //' | LC_ALL=C sort -u)
+        set -l diff_files
+        for _jline in $diff_lines
+            set -l _val (_jsonl_data "$_jline")
+            if string match -q 'DIFF: *' -- "$_val"
+                set -l _path (string replace -- 'DIFF: ' '' "$_val" | string split -- ':')[1]
+                test -n "$_path"; and set -a diff_files "$_path"
+            end
+        end
+        set diff_files (printf '%s\n' $diff_files | LC_ALL=C sort -u)
         if test (count $diff_files) -gt 0
             _echo "── Drifted Files ──"
             for f in $diff_files
@@ -5107,7 +5163,11 @@ function _logs_file_ops --argument-names target --description "Log viewer: analy
                 test -n "$fail"; and string match -qr '^\d+$' -- "$fail"; and set total_fail (math "$total_fail + $fail")
                 test -n "$warn_c"; and string match -qr '^\d+$' -- "$warn_c"; and set total_warn (math "$total_warn + $warn_c")
 
-                set -l all_fails (grep -E '"event":"fail"' "$f" 2>/dev/null | grep -oE '"data":"[^"]+"' | cut -d'"' -f4)
+                set -l all_fails
+                for _jline in (grep -E '"event":"fail"' "$f" 2>/dev/null)
+                    set -l _val (_jsonl_data "$_jline")
+                    test -n "$_val"; and set -a all_fails "$_val"
+                end
 
                 set -l mark "✓"
                 set -l incomplete false
@@ -5197,7 +5257,11 @@ function _logs_journal --argument-names target --description "Log viewer: system
         case gpu
             _info "AMDGPU logs:"
             _echo
-            set _log_lines (sudo dmesg 2>/dev/null | grep -iE "amdgpu|drm|radeon|gfx" | tail -n 50)
+            if command -q sudo
+                set _log_lines (sudo dmesg 2>/dev/null | grep -iE "amdgpu|drm|radeon|gfx" | tail -n 50)
+            else
+                set _log_lines (dmesg 2>/dev/null | grep -iE "amdgpu|drm|radeon|gfx" | tail -n 50)
+            end
             if test (count $_log_lines) -gt 0
                 for line in $_log_lines
                     _echo "$line"
@@ -5249,7 +5313,11 @@ function _logs_journal --argument-names target --description "Log viewer: system
         case usb
             _info "USB events:"
             _echo
-            set _log_lines (sudo dmesg 2>/dev/null | grep -iE "usb|hub" | grep -v "amdgpu" | tail -n 30)
+            if command -q sudo
+                set _log_lines (sudo dmesg 2>/dev/null | grep -iE "usb|hub" | grep -v "amdgpu" | tail -n 30)
+            else
+                set _log_lines (dmesg 2>/dev/null | grep -iE "usb|hub" | grep -v "amdgpu" | tail -n 30)
+            end
             if test (count $_log_lines) -gt 0
                 for line in $_log_lines
                     _echo "$line"
@@ -5262,7 +5330,11 @@ function _logs_journal --argument-names target --description "Log viewer: system
             _info "Kernel errors and warnings:"
             _echo
             _echo "── dmesg errors ──"
-            set _log_lines (sudo dmesg --level=err 2>/dev/null | tail -n 30)
+            if command -q sudo
+                set _log_lines (sudo dmesg --level=err 2>/dev/null | tail -n 30)
+            else
+                set _log_lines (dmesg --level=err 2>/dev/null | tail -n 30)
+            end
             if test (count $_log_lines) -gt 0
                 for line in $_log_lines
                     _echo "$line"
@@ -5272,7 +5344,11 @@ function _logs_journal --argument-names target --description "Log viewer: system
             end
             _echo
             _echo "── dmesg warnings ──"
-            set _log_lines (sudo dmesg --level=warn 2>/dev/null | tail -n 30)
+            if command -q sudo
+                set _log_lines (sudo dmesg --level=warn 2>/dev/null | tail -n 30)
+            else
+                set _log_lines (dmesg --level=warn 2>/dev/null | tail -n 30)
+            end
             if test (count $_log_lines) -gt 0
                 for line in $_log_lines
                     _echo "$line"
@@ -5497,6 +5573,8 @@ function _install_preflight --description "Run all preflight checks before insta
             _err "Sudo required for installation"
             return $EXIT_PREFLIGHT
         end
+        # Matches: (ALL : ALL) ALL, (ALL) ALL, (ALL) NOPASSWD: ALL
+        # Does NOT match: (root) ALL — which IS genuinely restricted
         set -l sudo_all (sudo -n -l 2>/dev/null | grep -v '^\s*#' | grep -cE '\(ALL.*\) .*ALL$')
         or set sudo_all 0
         if test "$sudo_all" -eq 0
@@ -6301,7 +6379,13 @@ function _check_hardware_fingerprint --description "Verify hardware matches expe
     end
 
     # CHK-02: BIOS VRAM allocation — default 512 MB is too low for gaming on UMA APU
-    set -l vram_bytes (command cat /sys/class/drm/card0/device/mem_info_vram_total 2>/dev/null)
+    set -l vram_bytes
+    for _vram_path in /sys/class/drm/card*/device/mem_info_vram_total
+        if test -f "$_vram_path"
+            set vram_bytes (command cat -- "$_vram_path" 2>/dev/null)
+            test -n "$vram_bytes"; and break
+        end
+    end
     if test -n "$vram_bytes"
         set -l vram_gb (math "floor($vram_bytes / 1073741824)")
         if test "$vram_gb" -lt 4
@@ -6771,6 +6855,7 @@ function do_test_all --description "Run the full test suite across all subcomman
         end
     end
 
+    # +1 for the completions validation block (line ~6865)
     set -l total (math (count $parallel_modes) + (count $sequential_modes) + 1)
     set -l passed 0
     set -l failed 0

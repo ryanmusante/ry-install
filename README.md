@@ -22,28 +22,24 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS, kernel bugzilla / Mesa GitLab
 
 ## Prerequisites
 
-Before running the fully automated install (`--all`), complete these steps on a fresh CachyOS system:
-
 | # | Step | Command / Action | Why |
 |---|------|-----------------|-----|
-| 1 | **CachyOS installed** | systemd-boot, btrfs or ext4 root, working internet | Script assumes CachyOS base with systemd-boot (not GRUB) |
-| 2 | **Fish shell 3.4+** | `fish --version` (CachyOS ships 4.5) | Required syntax features (fish 4.x recommended) |
+| 1 | **CachyOS installed** | systemd-boot, btrfs or ext4, internet | Assumes CachyOS with systemd-boot |
+| 2 | **Fish 3.4+** | `fish --version` (CachyOS ships 4.5) | Required syntax features |
 | 3 | **Kernel 6.14+** | `uname -r` | ntsync, gfx1151 fixes, mt7925e.disable_aspm |
-| 4 | **Unrestricted sudo** | `sudo -l` must show `(ALL) ALL` | `--all` aborts if sudo is restricted |
-| 5 | **2 GB root free** | `df -h /` | Packages + initramfs + cache headroom |
-| 6 | **200 MB /boot free** | `df -h /boot` | Kernel images + initramfs + boot entries |
-| 7 | **Network connectivity** | `curl -sf --head https://archlinux.org` | Package sync and installation |
-| 8 | **BIOS current** | Check [Beelink](https://dr.bee-link.cn/) downloads | P110+ for ACPI and Strix Halo stability |
-| 9 | **Snapshot rootfs** | `sudo btrfs subvolume snapshot -r / /.snapshots/pre-ry-install` | Rollback point (btrfs only; script creates one automatically) |
-| 10 | **Review masked services** | See [Masked Services](#masked-services-9) | Sleep/hibernate/suspend targets will be masked — confirm this is a desktop, not a laptop |
-| 11 | **WiFi SSID/passphrase ready** | SSID: 1-32 bytes, no shell metacharacters or `%`. Passphrase: WPA2, 8-63 bytes, no `%` | Interactive even with `--all`; skipped on non-TTY |
-| 12 | **Check CachyOS news** | [wiki.cachyos.org](https://wiki.cachyos.org/) and [archlinux.org/news](https://archlinux.org/news/) | Known upgrade issues before `-Syu` |
-
-**Minimal automated run:**
+| 4 | **Unrestricted sudo** | `sudo -l` → `(ALL) ALL` | `--all` aborts if restricted |
+| 5 | **2 GB root free** | `df -h /` | Packages + initramfs + cache |
+| 6 | **200 MB /boot free** | `df -h /boot` | Kernel images + initramfs |
+| 7 | **Network** | `curl -sf --head https://archlinux.org` | Package sync |
+| 8 | **BIOS current** | [Beelink](https://dr.bee-link.cn/) | P110+ for Strix Halo stability |
+| 9 | **Snapshot rootfs** | `sudo btrfs subvolume snapshot -r / /.snapshots/pre-ry-install` | Rollback point (btrfs; auto-created) |
+| 10 | **Review masked services** | See [Masked Services](#masked-services-9) | Confirm desktop, not laptop |
+| 11 | **WiFi ready** | SSID 1-32 bytes, passphrase 8-63 bytes, no `%` | Interactive even with `--all` |
+| 12 | **CachyOS news** | [wiki.cachyos.org](https://wiki.cachyos.org/) / [archlinux.org/news](https://archlinux.org/news/) | Known issues before `-Syu` |
 
 ```fish
-./ry-install.fish --dry-run --all   # Preview everything first
-./ry-install.fish --all             # Unattended install (prompts auto-yes, progress bar)
+./ry-install.fish --dry-run --all   # Preview
+./ry-install.fish --all             # Unattended install
 ```
 
 **After install:** Reboot → `--verify-static` → `--verify-runtime` → `sudo pacdiff` → test WiFi + gaming.
@@ -59,53 +55,29 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 ## Options
 
-### Installation
-
 | Flag | Description |
 |------|-------------|
-| `-a, --all` | Install without prompts (unattended mode) |
+| `-a, --all` | Unattended mode |
 | `-f, --force` | Auto-yes prompts, no progress bar |
-| `-V, --verbose` | Show output on terminal (default: silent, log only) |
-| `-n, --dry-run` | Preview changes without modifying system |
-
-### Verification
-
-| Flag | Description |
-|------|-------------|
-| `--diff` | Per-file unified diff (`delta` or `diff --color`) |
-| `--diff <path>` | Diff a single managed file (absolute path required) |
-| `--diff --fix` | Show diffs and re-install drifted files (per-file prompt) |
-| `--verify-static` | Check config files exist with correct content |
-| `--verify-runtime` | Check live system state (run after reboot) |
-| `--lint` | Run fish syntax and anti-pattern checks |
-| `--check` | Silent idempotency probe (exit 0 = clean, exit 10 = drift) |
-| `--test-all` | Run all safe modes and generate NDJSON logs (test suite) |
-
-### Utilities
-
-| Flag | Description |
-|------|-------------|
+| `-V, --verbose` | Show output on terminal |
+| `-n, --dry-run` | Preview without modifying system |
+| `--diff [path]` | Per-file unified diff (`delta` or `diff --color`) |
+| `--diff --fix` | Show diffs and re-install drifted files |
+| `--verify-static` | Check config files match embedded content |
+| `--verify-runtime` | Check live system state (after reboot) |
+| `--lint` | Fish syntax and anti-pattern checks |
+| `--check` | Silent idempotency probe (exit 0=clean, 10=drift) |
+| `--test-all` | Run all safe modes, generate NDJSON logs |
 | `--install-file <path>` | Re-deploy a single managed file |
-| `--completions` | Install fish tab-completions for ry-install |
-
-### Logs
-
-| Flag | Description |
-|------|-------------|
+| `--completions` | Install fish tab-completions |
 | `--logs <target>` | View logs (system gpu wifi boot audio usb kernel `<service>`) |
-| `--logs analyze [file]` | Parse NDJSON log, show human-readable results |
-| `--logs last` | Analyze most recent log file |
-| `--logs all` | Analyze all logs, show combined summary |
-| `--logs list` | List recent log files with summaries |
-
-### Modifiers
-
-| Flag | Requires | Description |
-|------|----------|-------------|
-| `--fix` | `--diff` | Re-install drifted files (use with --diff) |
-| `--` | — | End of options (remaining arguments ignored) |
-| `-h, --help` | — | Show help |
-| `-v, --version` | — | Show version |
+| `--logs analyze [file]` | Parse NDJSON log |
+| `--logs last` | Analyze most recent log |
+| `--logs all` | Analyze all logs |
+| `--logs list` | List recent log files |
+| `-h, --help` | Show help |
+| `-v, --version` | Show version |
+| `--` | End of options |
 
 ## Configuration
 
@@ -113,40 +85,35 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Parameter | Purpose |
 |-----------|---------|
-| `amdgpu.cwsr_enable=0` | Disable CWSR (gfx1151 hang workaround; remove on kernel 6.18+) |
-| `amdgpu.ppfeaturemask=0xfffd3fff` | Disable overdrive/GFXOFF/stutter (bits 14,15,17) |
+| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 hang workaround (remove on 6.18+) |
+| `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14,15,17 off (overdrive/GFXOFF/stutter) |
 | `audit=0` | Disable audit subsystem |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
-| `iommu=pt` | IOMMU passthrough (DMA protection with near-zero overhead) |
+| `iommu=pt` | IOMMU passthrough (DMA protection, near-zero overhead) |
 | `mt7925e.disable_aspm=1` | Disable WiFi ASPM |
 | `nowatchdog` | Disable watchdog timers |
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
 | `pci=pcie_bus_perf` | PCIe performance tuning |
 | `quiet` | Suppress boot messages |
-| `ttm.pages_limit=32505856` | Cap pinned memory to 124 GiB (32505856 × 4 KiB) |
+| `ttm.pages_limit=32505856` | Cap pinned memory to 124 GiB |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
 | `workqueue.power_efficient=0` | Disable power-efficient workqueue remapping |
 | `zswap.enabled=0` | Disable zswap (zram preferred) |
 
-### loader.conf
+### Boot
 
-| Key | Value |
-|-----|-------|
-| `default` | `@saved` |
-| `timeout` | `0` |
-| `console-mode` | `keep` |
-| `editor` | `no` (prevents bootloader editing at boot) |
-
-### sdboot-manage
-
-| Key | Value |
-|-----|-------|
-| `LINUX_OPTIONS` | See [Kernel Parameters](#kernel-parameters-14) |
-| `LINUX_FALLBACK_OPTIONS` | `"quiet"` |
-| `DEFAULT_ENTRY` | `"manual"` |
-| `REMOVE_EXISTING` | `"yes"` |
-| `OVERWRITE_EXISTING` | `"yes"` |
-| `REMOVE_OBSOLETE` | `"yes"` |
+| File | Key | Value |
+|------|-----|-------|
+| `loader.conf` | default | `@saved` |
+| | timeout | `0` |
+| | console-mode | `keep` |
+| | editor | `no` |
+| `sdboot-manage.conf` | LINUX_OPTIONS | See [Kernel Parameters](#kernel-parameters-14) |
+| | LINUX_FALLBACK_OPTIONS | `"quiet"` |
+| | DEFAULT_ENTRY | `"manual"` |
+| | REMOVE_EXISTING | `"yes"` |
+| | OVERWRITE_EXISTING | `"yes"` |
+| | REMOVE_OBSOLETE | `"yes"` |
 
 ### mkinitcpio
 
@@ -162,42 +129,30 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 |------|---------|
 | `udev rules` | `ntsync` MODE=0666 |
 | `resolved.conf.d` | MulticastDNS=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
-| `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press variants (8 keys) |
-| `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks: DefaultInterface/PowerSaveDisable · NameResolvingService=systemd |
+| `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
+| `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
 | `modprobe.d` | Blacklist pcspkr, wdat_wdt · nvme_core multipath=N · mt7925e disable_aspm=1 |
-| `drirc` | RADV unified VRAM heap on APU (`radv_enable_unified_heap_on_apu=true`) |
+| `drirc` | RADV unified VRAM heap on APU |
 
 ### Sysctl Overrides
 
-Complements CachyOS vendor `70-cachyos-settings.conf` — no overlap. CachyOS manages `default_qdisc` (cake) and `tcp_congestion_control` (bbr2).
-Verify: `sysctl --system 2>&1 | rg cachyos`
+Complements CachyOS `70-cachyos-settings.conf` (no overlap).
 
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
 | `net.ipv4.tcp_fastopen` | `3` | TCP Fast Open client + server |
-| `vm.max_map_count` | `2147483642` | SteamOS value for DXVK/Proton AAA titles |
-| `vm.compaction_proactiveness` | `1` | Minimal proactive compaction (0 causes synchronous storms) |
+| `vm.max_map_count` | `2147483642` | SteamOS value for DXVK/Proton |
+| `vm.compaction_proactiveness` | `1` | Minimal proactive compaction |
 | `vm.watermark_boost_factor` | `1` | Minimize aggressive reclaim |
-| `vm.page_lock_unfairness` | `5` | Optimal throughput (Phoronix AMD benchmarks, Torvalds range 1–5) |
+| `vm.page_lock_unfairness` | `5` | Optimal throughput (AMD benchmarks) |
 | `fs.inotify.max_user_instances` | `1024` | Parallel build tools and file watchers |
-
-### Modprobe Overrides
-
-Complements CachyOS vendor `/usr/lib/modprobe.d/` — no overlap.
-
-| Type | Module | Setting | Purpose |
-|------|--------|---------|---------|
-| blacklist | `pcspkr` | — | Silence PC speaker beep |
-| blacklist | `wdat_wdt` | — | ACPI watchdog (complements `nowatchdog` cmdline) |
-| options | `nvme_core` | `multipath=N` | Disable NVMe multipath on single-drive desktop |
-| options | `mt7925e` | `disable_aspm=1` | Redundant backup for cmdline `mt7925e.disable_aspm=1` |
 
 ### Environment Variables
 
 | Variable | Value |
 |----------|-------|
-| `SSH_AUTH_SOCK` | `${XDG_RUNTIME_DIR}/ssh-agent.socket` (systemd expansion) |
+| `SSH_AUTH_SOCK` | `${XDG_RUNTIME_DIR}/ssh-agent.socket` |
 | `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `8G` |
 | `PROTON_USE_NTSYNC` | `1` |
@@ -207,9 +162,9 @@ Complements CachyOS vendor `/usr/lib/modprobe.d/` — no overlap.
 
 | File | Purpose |
 |------|---------|
-| `fish/conf.d/10-ssh-auth-sock.fish` | SSH socket priority: forwarded > gcr > systemd user agent |
-| `environment.d/10-environment.conf` | Environment variables for systemd user services and graphical sessions |
-| `systemd/user/ssh-agent.service` | Persistent `ssh-agent -D` with crash recovery (`Restart=on-failure`) at `%t/ssh-agent.socket` |
+| `fish/conf.d/10-ssh-auth-sock.fish` | SSH socket priority: forwarded > gcr > systemd agent |
+| `environment.d/10-environment.conf` | Environment variables for systemd user services |
+| `systemd/user/ssh-agent.service` | Persistent `ssh-agent -D` with crash recovery |
 
 ### Packages
 
@@ -222,8 +177,8 @@ Complements CachyOS vendor `/usr/lib/modprobe.d/` — no overlap.
 
 | Service | Note |
 |---------|------|
-| `ananicy-cpp.service` | CachyOS scheduler — masked for manual tuning |
-| `power-profiles-daemon.service` | Conflicts with cpupower-epp; masked to prevent dep reinstall |
+| `ananicy-cpp.service` | Masked for manual tuning |
+| `power-profiles-daemon.service` | Conflicts with cpupower-epp |
 | `lvm2-monitor.service` | Skipped if LVM detected |
 | `NetworkManager-wait-online.service` | Unnecessary boot delay |
 | `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` | Desktop — no sleep/suspend/hibernate |
@@ -232,8 +187,8 @@ Complements CachyOS vendor `/usr/lib/modprobe.d/` — no overlap.
 
 | Unit | Description |
 |------|-------------|
-| `amdgpu-performance.service` | Write `auto` to `power_dpm_force_performance_level` sysfs after multi-user.target (retry loop, multi-GPU). GameMode sets `high` dynamically when gaming. |
-| `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` sysfs after cpupower.service |
+| `amdgpu-performance.service` | Write `auto` to `power_dpm_force_performance_level` sysfs (retry loop, multi-GPU). GameMode sets `high` dynamically. |
+| `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` sysfs |
 
 ## Embedded Files (17)
 
@@ -261,15 +216,15 @@ Complements CachyOS vendor `/usr/lib/modprobe.d/` — no overlap.
 
 | Feature | Detail |
 |---------|--------|
-| Atomic writes | Write to tmp → chmod → mv (same filesystem) |
-| Root detection | Forces `--dry-run` when run as root |
-| Instance lock | Atomic mkdir with PID verification and stale reclaim |
-| Credentials | WiFi passphrase: read -s, 0600, erased on all exit paths, redacted in logs |
-| Signal handling | Traps SIGINT/SIGTERM/SIGHUP/SIGQUIT (exit 128+signum) and SIGPIPE (exit 141); cleanup runs once via `_CLEANUP_DONE` guard |
-| Logging | NDJSON in `~/ry-install/logs/YYYY-MM-DD/*.jsonl` (`jq` queryable) |
-| Boot safety | Initramfs/bootloader rebuild aborts on failure |
-| LVM-aware | Skips lvm2-monitor masking when LVM detected |
-| Orphan tracking | Manifest records installed destinations; warns on version or profile change |
+| Atomic writes | tmp → chmod → mv (same filesystem) |
+| Root detection | Forces `--dry-run` as root |
+| Instance lock | Atomic mkdir, PID verification, stale reclaim |
+| Credentials | WiFi: read -s, 0600, erased on exit, redacted in logs |
+| Signal handling | INT/TERM/HUP/QUIT → 128+signum; SIGPIPE → 141 |
+| Logging | NDJSON `~/ry-install/logs/YYYY-MM-DD/*.jsonl` |
+| Boot safety | Abort on initramfs/bootloader rebuild failure |
+| LVM-aware | Skip lvm2-monitor mask when LVM detected |
+| Orphan tracking | Manifest warns on version/profile change |
 
 ### Exit Codes
 
@@ -278,17 +233,15 @@ Complements CachyOS vendor `/usr/lib/modprobe.d/` — no overlap.
 | `0` | Success |
 | `1` | Non-critical failure |
 | `2` | Usage error |
-| `3` | Preflight check failed |
-| `4` | Boot-critical failure (mkinitcpio, sdboot-manage, vmlinuz missing) |
-| `5` | Lock acquisition failed |
-| `10` | Drift detected (`--check`) |
-| `11` | Lint errors (`--lint`) |
-| `130` | Interrupted (SIGINT) |
-| `129/131/143` | Interrupted (SIGHUP/SIGQUIT/SIGTERM) |
-| `141` | Broken pipe (SIGPIPE) |
+| `3` | Preflight failed |
+| `4` | Boot-critical failure |
+| `5` | Lock failed |
+| `10` | Drift (`--check`) |
+| `11` | Lint errors |
+| `129/130/131/143` | Signal (HUP/INT/QUIT/TERM) |
+| `141` | SIGPIPE |
 
-> `--diff` and `--verify-*` return exit 1 when differences or failures are found.
-> This is expected behavior for scripting: `./ry-install.fish --diff || echo "diffs found"`.
+> `--diff` and `--verify-*` return exit 1 on differences (expected for scripting).
 
 ### Install Flow (19 steps)
 
@@ -298,10 +251,10 @@ Dependencies → Sync → Packages → System files → User files → AMDGPU se
 
 | Path | Contents |
 |------|----------|
-| `~/ry-install/logs/YYYY-MM-DD/` | NDJSON log files (*.jsonl) |
-| `~/ry-install/.lock/` | Instance guard (atomic mkdir) |
+| `~/ry-install/logs/YYYY-MM-DD/` | NDJSON logs (*.jsonl) |
+| `~/ry-install/.lock/` | Instance guard |
 | `~/ry-install/.hardware-fingerprint` | Hardware drift detection |
-| `~/ry-install/.manifest` | Orphan tracking (version, profile, destinations) |
+| `~/ry-install/.manifest` | Orphan tracking |
 
 ## Troubleshooting
 
@@ -310,25 +263,25 @@ Dependencies → Sync → Packages → System files → User files → AMDGPU se
 | Query errors | `jq 'select(.event == "err")' ~/ry-install/logs/**/*.jsonl` |
 | GPU perf level | `cat /sys/class/drm/card*/device/power_dpm_force_performance_level` |
 | WiFi backend | `nmcli -t -f TYPE,FILENAME connection show --active` |
-| ntsync check | Kernel 6.14+ · `ls /dev/ntsync` |
+| ntsync | Kernel 6.14+ · `ls /dev/ntsync` |
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` |
 
 ### Profiles
 
-Machine-specific globals (kernel params, packages, services, thresholds, destinations) are encapsulated in profile functions. The built-in default is `profile_gtr9_pro`. External profiles load from `~/.config/ry-install/profiles/<name>.fish`.
+Machine-specific globals in profile functions. Default: `profile_gtr9_pro`. External: `~/.config/ry-install/profiles/<n>.fish`.
 
-| Source | Resolution order |
-|--------|-----------------|
-| `~/.config/ry-install/default-profile` | Persistent default (single line: profile name) |
+| Source | Resolution |
+|--------|-----------|
+| `~/.config/ry-install/default-profile` | Persistent default (single line: name) |
 | `gtr9_pro` | Hardcoded fallback |
 
-External profiles must define a `function profile_<name>` setting all required globals. Files are syntax-checked (`fish --no-execute`) before sourcing. Profile validation enforces 25+ required globals, name consistency, and numeric types. To create a new profile, copy `profile_gtr9_pro`, adjust globals, set the name in `~/.config/ry-install/default-profile`, and run `./ry-install.fish --check` to validate.
+External profiles must define `function profile_<n>` with all required globals. Syntax-checked before sourcing. Validation enforces 25+ globals, name consistency, numeric types.
 
 ### References
 
 | Link | Topic |
 |------|-------|
-| [NM iwd](https://wiki.archlinux.org/title/NetworkManager#Using_iwd_as_the_Wi-Fi_backend) | NetworkManager + iwd backend |
+| [NM iwd](https://wiki.archlinux.org/title/NetworkManager#Using_iwd_as_the_Wi-Fi_backend) | NetworkManager + iwd |
 | [MT7925](https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek) | MediaTek WiFi 7 |
 | [gfx1151](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) | Mesa GPU issues |
 | [ppfeaturemask](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter) | AMDGPU feature mask |
@@ -337,31 +290,31 @@ External profiles must define a `function profile_<name>` setting all required g
 
 #### Strix Halo (gfx1151) GPU
 
-- **CWSR hang** (fixed): Root cause was incorrect VGPR count for gfx1151 (`cf326449637a5`, kernel 6.18+). CWSR is compute-only (KFD/ROCm); no gaming impact. ROCm users on pre-6.18 kernels may still need `amdgpu.cwsr_enable=0`.
-- **MES firmware page faults**: MES FW 0x83 may trigger page faults. Pin `linux-firmware` to a known-good version if affected.
-- **ROCm VRAM**: VRAM allocation is limited. `ttm.pages_limit=32505856` caps pinned/GTT memory to 124 GiB (kernel 6.14+). `amdgpu.gttsize` is deprecated; use `ttm.pages_limit` only.
-- **PSR screen freeze** (eDP only): Buggy DMCUB firmware causes screen freeze on static content. Add `amdgpu.dcdebugmask=0x10` if driving an eDP panel. Not needed for external HDMI/DP monitors. Symptom: `[drm] dc_dmub_srv_log_diagnostic_data` in journal.
-- **Black screen regression**: Kernel 6.19.0 has a black screen regression; 6.18.9 is the last known-good version.
-- **ROCm environment**: Set `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.1` for ROCm workloads.
+- **CWSR hang** (fixed 6.18+): Incorrect VGPR count (`cf326449637a5`). Compute-only. Pre-6.18: `amdgpu.cwsr_enable=0`.
+- **MES page faults**: FW 0x83 may fault. Pin `linux-firmware` if affected.
+- **ROCm VRAM**: `ttm.pages_limit=32505856` caps GTT to 124 GiB. `amdgpu.gttsize` deprecated.
+- **PSR freeze** (eDP only): Add `amdgpu.dcdebugmask=0x10`. Not needed for HDMI/DP.
+- **Black screen**: Kernel 6.19.0 regression; 6.18.9 last known-good.
+- **ROCm env**: `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.1`.
 
 #### MediaTek MT7925 WiFi
 
-- **Kernel panics**: NULL dereference in `mt7925_mac_reset_work`. Install `mt76-mt7925-dkms` from AUR (`paru -S mt76-mt7925-dkms`) for the fix. Pacman cannot install AUR packages — use `paru` or `yay`.
-- **TX power locked**: TX power is locked to 3 dBm due to a driver bug. Currently unfixable upstream.
-- **Random deauth cycles**: Connection drops and reassociates unpredictably.
-- **Fallback**: Replace with Intel AX210 or AX211 for a stable WiFi experience.
+- **Kernel panics**: NULL deref in `mt7925_mac_reset_work`. Fix: `paru -S mt76-mt7925-dkms`.
+- **TX power locked**: 3 dBm driver bug. Unfixable.
+- **Random deauth**: Unpredictable drops.
+- **Fallback**: Intel AX210/AX211.
 
 #### Intel E610 10GbE NIC (Board v1 only)
 
-- **GPU load crash**: Null pointer dereference under GPU load (Steam, games, compute). Blue screen on Windows. Only a full power cycle recovers. NVM firmware v1.30 is a partial fix.
-- **Board v2.2+**: Uses stable Realtek NICs instead. Check board revision before purchasing.
-- **Workaround**: Disable via BIOS or `sudo ip link set <iface> down` before gaming.
+- **GPU load crash**: Null deref under load. Power cycle to recover. NVM v1.30 partial fix.
+- **Board v2.2+**: Stable Realtek NICs. Check revision.
+- **Workaround**: BIOS disable or `sudo ip link set <iface> down`.
 
 #### NetworkManager + iwd
 
-- **Boot connectivity**: WiFi may not connect on boot. Workaround: `nmcli radio wifi off && nmcli radio wifi on`.
-- **DefaultInterface=\***: Intermittent drops on some drivers.
-- **WPA2/WPA3 Enterprise**: GUI configuration is broken with iwd backend.
-- **Monitor mode**: No recovery without a full reboot.
+- **Boot connectivity**: Fix: `nmcli radio wifi off && nmcli radio wifi on`.
+- **DefaultInterface=\***: Intermittent drops.
+- **WPA2/3 Enterprise**: GUI broken with iwd.
+- **Monitor mode**: Requires full reboot.
 
 ## [Changelog](CHANGELOG.txt) · License: MIT

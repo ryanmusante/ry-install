@@ -1,607 +1,150 @@
 3.7.56 (2026-03-21)
 -------------------
-  fix(logs): add sudo guard with non-sudo fallback to gpu/usb/kernel
-    dmesg calls in _logs_journal, consistent with system case.
+  fix(scope): add explicit -l flag to 28 bare set rebinds inside
+    functions. No behavioral change. Eliminates do_lint scope warnings.
+  fix(logs): sudo guard with non-sudo fallback on gpu/usb/kernel
+    dmesg calls in _logs_journal.
   fix(validate): add drirc XML structure check to validate_configs
-    Job 5 (all 17 embedded files now have format-specific validation).
-  fix(hardware): use card* glob for VRAM check instead of hardcoded
-    card0 (consistent with DPM glob at line 3924).
+    (all 17 embedded files now have format-specific validation).
+  fix(hardware): use card* glob for VRAM check instead of card0.
   fix(logs): handle escaped quotes in JSONL data field extraction
-    via _jsonl_data helper (--logs analyze display correctness).
+    via _jsonl_data helper.
   chore(lint): add _dry/_info/_fail/_err/_echo to $() exclusion list.
-  docs: clarify _chk_file sudo scope, sudo pattern, test total.
 
-3.7.55 (2026-03-21)
--------------------
-  fix(logind): add HandleHibernateKeyLongPress to LOGIND_IGNORE_KEYS.
-    Completes all 4 key pairs (Power/Suspend/Hibernate/Reboot × short/
-    long-press). Default is already "ignore" (same as HandlePowerKey-
-    LongPress which was included), but explicit ignore is consistent
-    with the other 3 pairs. 7 → 8 keys. README count updated.
-
-3.7.54 (2026-03-21)
--------------------
-  fix(sysctl): remove fq/bbr overrides — CachyOS ships cake/bbr2 via
-    70-cachyos-settings.conf; script was downgrading to BBRv1/fq.
-  fix(sysctl): add vm.max_map_count=2147483642 (SteamOS value). Many
-    AAA titles via DXVK/Proton crash without high map counts.
-  fix(sysctl): change vm.page_lock_unfairness 1→5 (Phoronix AMD
-    benchmarks show 4–5 optimal; Torvalds confirmed range 1–5).
-  fix(sysctl): change vm.compaction_proactiveness 0→1. Value 0
-    eliminates kcompactd but causes synchronous compaction storms.
-  fix(sysctl): remove vm.zone_reclaim_mode=0 (already default on
-    single-NUMA; Strix Halo is single-NUMA).
-  fix(env): remove AMD_VULKAN_ICD=RADV (AMDVLK discontinued Sept
-    2025, removed from Arch repos — no-op).
-  fix(service): change amdgpu DPM level high→auto. On shared-TDP APU,
-    "high" locks GPU to max power permanently, wasting CPU headroom.
-    GameMode sets "high" dynamically when gaming.
+3.7.50-3.7.55 (2026-03-20 -- 2026-03-21)
+-----------------------------------------
+  fix(check): false drift on not-found masked services — add LoadState
+    to inline parser; skip masked units where LoadState=not-found.
+  fix(check): pvs call missing timeout 5 (hangs on LVM metadata lock).
+  fix(check): inline systemctl parser lacked leading-blank-line guard.
+  fix(check): timer-aware branch for fstrim.timer (accept only active).
+  fix(color): NO_COLOR detection dead code — check env before global.
+  fix(validate): Job 2 hardcoded filenames → dynamic derivation.
+  fix(lint): case-count regex miscounted get_file_content branches.
+  fix(log): LOG_FILE rename race — mv first, then set global.
+  fix(verify): hardcoded magic number 6 → (count).
+  fix(security): _run metacharacter rejection extended to all argv.
+  fix(validate): removed stderr suppression from systemd-analyze verify.
+  fix(wifi): _gkeyfile_escape missing tab and newline escapes.
+  fix(diff): removed 4 dead stderr_$safe references from Phase 3.
+  fix(sysctl): remove max_user_watches, fq/bbr overrides, zone_reclaim.
+    Add vm.max_map_count=2147483642. Tune page_lock_unfairness,
+    compaction_proactiveness.
+  fix(env): remove AMD_VULKAN_ICD=RADV (AMDVLK discontinued Sept 2025).
+  fix(service): amdgpu DPM level high→auto. GameMode sets "high".
+  fix(logind): add HandleHibernateKeyLongPress — completes all 8 keys.
+  fix(boot): _preflight_boot_sanity explicit status capture.
   feat(drirc): add /etc/drirc with radv_enable_unified_heap_on_apu.
-    Forces single VRAM heap on UMA, preventing game misallocation.
-  feat(env): add ENABLE_LAYER_MESA_ANTI_LAG=1 (Mesa 25.3 anti-lag
-    implicit layer; reduces input-to-display latency on RDNA 3.5).
-  feat(preflight): add Intel E610-XT2 10GbE NIC detection + warning.
-    Board v1: null pointer dereference under GPU load.
-  feat(preflight): add BIOS VRAM allocation check via sysfs. Warns
-    when GPU VRAM < 4 GB (default 512 MB too low for gaming).
-  feat(kernel): add kernel 6.19.0 black screen regression warning for
-    Strix Halo (CachyOS #23042).
-  feat(verify): add btrfs noatime validation — COW metadata writes on
-    every file access degrade gaming performance without noatime.
-  chore(service): document cpupower-epp.service vs PPD tradeoff.
+  feat(env): add ENABLE_LAYER_MESA_ANTI_LAG=1 (Mesa 25.3).
+  feat(preflight): Intel E610-XT2 10GbE detection + GPU-load warning.
+  feat(preflight): BIOS VRAM allocation check via sysfs.
+  feat(kernel): 6.19.0 black screen regression warning.
+  feat(verify): btrfs noatime validation.
 
-3.7.53 (2026-03-21)
--------------------
-  fix(color): NO_COLOR environment detection was dead code. Line 21
-    set -g NO_COLOR false created a Fish variable, making set -q
-    NO_COLOR on line 26 always true. Colors never rendered in any
-    invocation. Fixed by checking the environment variable (set -qx)
-    before setting the global default. Matches no-color.org spec.
-  fix(validate): Job 2 parallel validation hardcoded service unit
-    filenames (amdgpu-performance.service, cpupower-epp.service).
-    A new profile with different SERVICE_DESTINATIONS would silently
-    skip validation for its units. Replaced with dynamic derivation
-    from SERVICE_DESTINATIONS and USER_DESTINATIONS, matching the
-    string replace -a '/' '_' pattern used elsewhere. User-scope
-    units auto-detected via $HOME prefix for --user flag.
+3.7.46-3.7.49 (2026-03-20)
+---------------------------
+  feat(kernel): add cwsr_enable=0 (gfx1151 hang; remove on 6.18+),
+    workqueue.power_efficient=0, ttm.pages_limit=32505856 (124 GiB).
+    Remove split_lock_detect=off.
+  feat(sysctl): VM gaming tunables, max_user_instances.
+  feat(resolved): DNSOverTLS=opportunistic, DNSSEC=allow-downgrade.
+  feat(modprobe): 99-ry-modprobe.conf — pcspkr, wdat_wdt, nvme_core,
+    mt7925e.
+  fix(signal): Fish signal name without SIG prefix — 4 dead case arms.
+  fix(boot): _preflight_boot_sanity sudo for /boot.
+  fix(ui): _banner max_text off-by-2.
+  fix(verify): missing NetworkManager.service in batch query.
+  fix(security): _run metacharacter regex missing \t and \r.
+  fix(tmpfile): 3 tmpfiles not tracked in _TRACKED_TMPFILES.
+  fix(help): hardcoded profile name → PROFILE_DESC.
 
-3.7.52 (2026-03-21)
--------------------
-  fix(lint): show_help and do_lint case-count regex miscounted
-    get_file_content branches (13 instead of 16). Fish double-quote
-    expansion of $HOME in the grep regex caused 3 user-path case
-    branches to be missed. show_help always displayed 13; do_lint
-    cross-check always failed. Replaced regex with simple non-wildcard
-    case line count minus 1.
-  fix(log): LOG_FILE rename race between set and mv. The global was
-    updated before the mv, so a signal between them would cause the
-    cleanup handler to write to a nonexistent file, losing the JSONL
-    footer. Swapped order: mv first (preserves content), then set.
-  fix(verify): verify_runtime hardcoded magic number 6 for sys_units
-    batch check. Adding or removing a unit from sys_units without
-    updating the constant silently broke batch/fallback logic. Replaced
-    with (count $sys_units) and updated stale guard comment.
-  fix(check): do_check Job 4 applied exited-state check uniformly to
-    all EXPECTED_SERVICES including fstrim.timer. Timer units never
-    show ActiveState=exited; the check was dead code. Added timer-
-    aware branch: timers accept only active, services accept active
-    or exited (oneshot+RemainAfterExit). Both paths check enabled.
-  fix(security): _run shell metacharacter rejection only validated
-    argv[1]. Extended to all argv elements via for loop. Fish does
-    not eval $argv (each element is a separate token) so this is
-    defense-in-depth for log integrity and future external profile
-    sourcing.
-  fix(cleanup): _cleanup_on_exit used bare set to rebind _exit_status
-    inside if-block. Changed to set -l for clarity. Fish set -l inside
-    an if-block targets function scope (identical behavior), but the
-    bare set read as a scoping bug.
-  fix(validate): validate_configs Job 2 suppressed systemd-analyze
-    verify stderr via 2>/dev/null. Diagnostics for structural unit
-    issues (missing [Install], unknown directives) were lost. Removed
-    suppression; stderr now flows to val_dir/units.stderr which the
-    parent merge loop already logs.
-  docs: sync README badge, CHANGELOG.
+3.7.39-3.7.44 (2026-03-19)
+---------------------------
+  fix(security): amd_iommu=off → iommu=pt (DMA protection restored).
+  fix(kernel): remove 6 no-op/redundant params. 18→12.
+  fix(verify): hash workers failed — pre-serialize in parent.
+  fix(logind): add HandleSuspendKeyLongPress, HandleRebootKeyLongPress.
+  fix(nm): NM_LOG_LEVEL ERR→WARN (MT7925 diagnostics).
+  fix(service): amdgpu After=graphical→multi-user.target.
+  fix(wifi): bare nmcli → _run for JSONL audit trail.
+  fix(verify): ntsync builtin — verify /dev/ntsync exists.
+  fix(lock): verify PID ownership before lock delete.
+  add: PKGS_DEL += cachyos-plymouth-theme.
 
-3.7.51 (2026-03-20)
--------------------
-  fix(check): do_check pvs call missing timeout 5. _install_configure_
-    services wraps pvs with timeout 5 (L5736/5745) but do_check did not.
-    pvs can hang on LVM metadata lock, causing --check to block
-    indefinitely. Added timeout 5 to match.
-  fix(check): do_check Job 4 inline systemctl parser lacked leading-
-    blank-line guard. _parse_systemctl_show guards against leading blank
-    lines (emit only if properties accumulated); Job 4 inline parser
-    unconditionally appended empty record on any blank line. Added
-    matching guard to prevent positional misattribution.
-  fix(wifi): _gkeyfile_escape missing tab and newline escapes. GKeyFile
-    interprets \t and \n as escape sequences. Added string replace for
-    both after backslash escape (escape order preserved).
-  fix(ui): _progress_done step count drift assertion was _log only.
-    Promoted to _warn so interactive users see the mismatch without
-    requiring --logs analyze.
-  fix(diff): do_diff Phase 3 referenced stderr_$safe files at 4 sites
-    (dead code from parallelization refactor). Phase 2 runs sequentially
-    and never creates stderr files. Removed 4 dead references.
-  style: condense 20 multiline comment blocks to single lines. No
-    semantic changes; all comments preserved in condensed form.
-  docs: sync README badge, CHANGELOG.
-
-3.7.50 (2026-03-20)
--------------------
-  fix(check): do_check Job 4 false drift on not-found masked services.
-    When a masked unit's package is removed (e.g., power-profiles-daemon
-    via PKGS_DEL or manual uninstall), systemctl show returns LoadState=
-    not-found with empty UnitFileState. Job 4 only queried ActiveState
-    and UnitFileState — empty != "masked" triggered false drift (exit 10)
-    on a correctly-configured system. verify_static handled this via
-    LoadState=not-found → _info, but --check disagreed. Fix: add
-    LoadState to Job 4 inline parser; skip masked units where LoadState=
-    not-found. Expected services still report drift when not-found.
-  fix(sysctl): remove fs.inotify.max_user_watches=524288. Kernel 5.11+
-    auto-sets min(1% RAM, 1048576). On 128 GB, default is 1048576 —
-    setting 524288 REDUCES it. Originally removed in 3.7.39 for this
-    reason; re-added in 3.7.49 without addressing the 128 GB issue.
-    Removed from get_file_content, verify_static, verify_runtime (3
-    sites). fs.inotify.max_user_instances=1024 retained (increase from
-    kernel default 128).
-  fix(boot): _preflight_boot_sanity used 'if not sudo test -s' at 2
-    sites — same pattern fixed across 8 sites in 3.7.29. Fish 'not'
-    inverts sudo failure → enters if-block with wrong diagnostic
-    ("Zero-byte kernel image" instead of "sudo failed"). Replaced with
-    explicit status capture (sudo test; if test $status -ne 0).
-  fix(comment): ppfeaturemask decimal value in verify_runtime comment
-    was 4294705151 (0xfffbffff) — should be 4294787071 (0xfffd3fff).
-    Code unaffected; normalizes hex→decimal at runtime.
-  fix(comment): stale line refs in _validate_profile — BOOT_TIME_TARGET
-    L703→L709, EXPECTED_CPU_MATCH L770→L776 (off by 6 from insertions).
-  fix(comment): fish version gate comment claimed --no-trim-newlines
-    requires fish 3.6. fish 3.1.2 docs confirm it exists since 3.1.
-    Gate at 3.4 is correct; comment was wrong.
-  style: add argv count guard to _progress and _progress_skip. Both
-    had --argument-names but no count validation. Internal callers only;
-    consistency with 22 other guarded functions.
-  docs(readme): remove max_user_watches from sysctl table (8 entries).
-
-3.7.49 (2026-03-20)
--------------------
-  fix(signal): Correct signal handler case arms — Fish passes signal name
-    WITHOUT the SIG prefix (e.g., "INT" not "SIGINT"). All four case arms
-    were dead code; every signal exited with hardcoded 130 regardless of
-    which signal fired. SIGHUP/SIGQUIT/SIGTERM now produce correct exit
-    codes 129/131/143.
-  fix(meta): Sync header comment version 3.7.48 → 3.7.49. Mismatch caused
-    do_lint and --test-all to fail on every run.
-  fix(boot): _preflight_boot_sanity now uses sudo for all /boot access.
-    ESP is typically mounted 700 root:root; non-root glob expansion against
-    /boot/* silently produces the literal string, making all checks fail.
-    Replaced glob+test patterns with sudo find/sudo test/sudo grep,
-    consistent with _chk_file and verify_static boot entry checks.
-  fix(ui): _banner max_text calculation corrected from inner-3 to inner-5.
-    Overhead is prefix(3)+suffix(2)=5 chars, not 3. A 62-char title
-    previously wrote 1-2 chars past the right border.
-  fix(env): NO_COLOR detection changed from set -qx (checks if exported)
-    to set -q (checks if set). A fish-global NO_COLOR set in config.fish
-    without export would previously be silently ignored.
-  chore(compat): Version gate comment updated — string collect
-    --no-trim-newlines requires fish 3.6, not 3.4. README updated.
-  chore(lint): _cleanup_on_exit intentional set-without-l comment expanded
-    to suppress false positive from do_lint scope-shadow awk check.
-  chore(meta): chmod +x applied to ry-install.fish (was 644; shebang
-    requires executable bit for ./ry-install.fish invocation style).
-  feat(kernel): Add amdgpu.cwsr_enable=0 — GPU hang workaround for
-    gfx1151 mixed compute/graphics (ROCm#5590). Remove on kernel 6.18+
-    (fixed: cf326449637a5).
-  feat(kernel): Add workqueue.power_efficient=0 — prevent WQ_UNBOUND
-    remapping to power-efficient variants on desktop.
-  feat(kernel): Remove split_lock_detect=off — cachyos-gaming-meta
-    handles via 99-splitlock.conf sysctl (kernel.split_lock_mitigate=0).
-  feat(sysctl): Add VM gaming tunables — vm.compaction_proactiveness=0,
-    vm.watermark_boost_factor=1, vm.page_lock_unfairness=1,
-    vm.zone_reclaim_mode=0. Reduces jitter and kswapd wake-ups with
-    128 GB RAM. Complements CachyOS 70-cachyos-settings.conf (no overlap).
-  feat(sysctl): Add inotify tunables — fs.inotify.max_user_watches=524288,
-    fs.inotify.max_user_instances=1024. Supports IDEs and build tools
-    monitoring large source trees.
-  feat(resolved): Add DNSOverTLS=opportunistic and DNSSEC=allow-downgrade
-    to systemd-resolved. Zero latency impact; graceful fallback.
-  feat(modprobe): Add /etc/modprobe.d/99-ry-modprobe.conf — blacklist
-    pcspkr, wdat_wdt; options nvme_core multipath=N, mt7925e disable_aspm=1.
-    Complements CachyOS /usr/lib/modprobe.d/ (no overlap).
-  feat(verify): Add verify_static checks for all new sysctl, resolved,
-    and modprobe entries. Add verify_runtime checks for new sysctl values.
-  fix(verify): Add amdgpu.cwsr_enable=0 to verify_runtime amdgpu param
-    loop — was only checking ppfeaturemask.
-  fix(verify): Add nvme_core.multipath=N to verify_runtime — validates
-    modprobe.d option is active at runtime.
-  fix(validate): Remove stale split_lock_detect→CONFIG_X86_SPLIT_LOCK_DETECT
-    from _validate_kernel_params config map (dead code after cmdline removal).
-    Add workqueue.→CONFIG_WQ_POWER_EFFICIENT_DEFAULT mapping.
-  docs(readme): Update kernel params (13→14), sysctl table (3→9 entries),
-    resolved.conf settings, modprobe overrides section, embedded files
-    (15→16).
-
-3.7.48 (2026-03-20)
--------------------
-  fix(log): _get_boot_time _log call missing `: ` separator — JSONL
-    event classified as generic "message" instead of "boot_time_check".
-    Added colon-space to match structured log convention.
-  fix(signal): Log file rename race in CLI dispatch — signal between
-    `mv LOG_FILE` and `set -g LOG_FILE` caused footer write to target
-    deleted path (silently lost via _log guard). Set LOG_FILE global
-    before mv so signal handlers always target the current path.
-  refactor(verify): Removed NM-dispatcher systemctl runtime query from
-    verify_static — violated static/runtime boundary. verify_runtime
-    already checks NM-dispatcher enable state at L4045 via batch
-    systemctl show. No coverage loss.
-
-3.7.47 (2026-03-20)
--------------------
-  fix(verify): verify_runtime SERVICE STATE section was missing
-    NetworkManager.service active/enabled check. EXPECTED_SERVICES
-    includes NetworkManager but sys_units batch query only checked
-    5 units (amdgpu-perf, cpupower-epp, fstrim, resolved,
-    nm-dispatcher). do_check Job 4 used EXPECTED_SERVICES and caught
-    NM drift; verify_runtime did not. Added NetworkManager.service
-    as 6th unit in batch query with parsed[6] handler.
-  fix(security): _run metacharacter injection guard regex was
-    missing \t (tab) and \r (carriage return). Internal callers
-    never pass these, but defense-in-depth dictates covering them.
-    Updated regex from '[;|&`\$\n]' to '[;|&`\$\n\t\r]'.
-  fix(tmpfile): 3 tmpfiles not tracked in _TRACKED_TMPFILES
-    (validate_configs Job 2, do_completions, install_files argparse).
-    Moved to tracked dirs or added explicit tracking.
-  fix(help): show_help hardcoded "Beelink GTR9 Pro (Strix Halo)"
-    despite profile system supporting arbitrary machines. Now uses
-    PROFILE_DESC if loaded, falls back to default text.
-  style: add --argument-names step_name to _progress and
-    _progress_skip; replace $argv[1] with $step_name.
-  doc: sync README, CHANGELOG.
-
-3.7.46 (2026-03-20)
--------------------
-  feat(kernel): add ttm.pages_limit=32505856 (12→13). Cap pinned
-    memory to 124 GiB (32505856 × 4 KiB). Replaces deprecated
-    amdgpu.gttsize (~6.14). amdgpu.dcdebugmask not added (PSR is
-    eDP-only; no effect on HDMI/DP).
-  feat(verify): add sysfs check for ttm.pages_limit. Add
-    ttm.=CONFIG_DRM_TTM to _validate_kernel_params map.
-  fix(doc): README HSA_OVERRIDE_GFX_VERSION 11.5.0→11.5.1. gfx1151
-    maps to 11.5.1 (stepping=1); 11.5.0 is gfx1150 (wrong chip).
-  style(comment): condense kernel params comment block. Document
-    ppfeaturemask overdrive trade-off (0xfffd7fff for CoreCtrl/LACT).
-  remove(comment): stale mkinitcpio-firmware AUR-only comment.
-    Package is in CachyOS repos (1.6.0-1).
-  doc: sync README kernel params table (12→13), update LINUX_OPTIONS
-    anchor, add ROCm VRAM and PSR eDP-only known-issue notes.
-
-3.7.44 (2026-03-19)
--------------------
-  fix(verify): verify_static hash workers called sudo -n inside fish -c
-    children. sudo timestamp_type=ppid (default since 1.9) does not
-    propagate to backgrounded children — sudo -n fails silently, empty
-    stdin to sha256sum produces hash-of-empty, causing false "checksum
-    MISMATCH" on all ~10 system files. Fix: pre-serialize installed file
-    hashes in parent process before forking workers (matches do_check
-    pattern at L3529). Children now compare pre-computed hashes only.
-  fix(verify): verify_runtime service state section (5 units) had no
-    per-unit fallback when systemctl show returned < 5 records — all
-    checks silently skipped with only a _warn. Added per-unit query
-    fallback matching the masked-services pattern (L3293).
-  doc: sync README, CHANGELOG.
-
-3.7.43 (2026-03-19)
--------------------
-  fix(kernel): remove 3 redundant kernel params from KERNEL_PARAMS.
-    - amdgpu.cwsr_enable=0: compute-only (KFD/ROCm); zero gaming
-      impact. CWSR operates on compute queues, not GFX ring queues
-      used by Vulkan/OpenGL. Root cause (incorrect VGPR count for
-      gfx1151) fixed in kernel 6.18+ (cf326449637a5).
-      Re-added in 3.7.49 for pre-6.18 ROCm users.
-    - amdgpu.gpu_recovery=1: default is -1 (auto), which enables
-      recovery for all GPUs >= GFX8 since kernel 5.1. Explicit =1
-      produces identical behavior on gfx1151.
-    - amd_pstate=active: CachyOS kernel CONFIG_X86_AMD_PSTATE_
-      DEFAULT_MODE=3 (active/EPP). Boot param overrides config to
-      same value. Also upstream default since kernel 6.5 for Zen 2+.
-  fix(verify): remove cwsr_enable:0 and gpu_recovery:1 from
-    verify_runtime amdgpu sysfs check loop. These params are no
-    longer managed; checking against removed expectations would
-    produce false FAILs (defaults differ from old explicit values).
-  fix(validate): remove dead amd_pstate entry from
-    _validate_kernel_params param_config_map.
-  doc: sync README kernel param table (15 -> 12), update CWSR
-    troubleshooting entry (fixed upstream), fix anchor link.
-
-3.7.42 (2026-03-19)
--------------------
-  style(get_file_content): fix comment indentation between
-    environment.d and ssh-agent.service case branches — 3 comment lines
-    at switch-level (8 spaces) corrected to case-body-level (12 spaces).
-    fish_indent --check now passes; --lint exits 0.
-  doc: sync README, CHANGELOG.
-
-3.7.41 (2026-03-19)
--------------------
-  fix(wifi): bare nmcli calls in WiFi reconnect poll loop bypassed _run
-    logging and command prefix. Added command prefix on read-only probe
-    (nmcli connection show, runs up to 10×). Routed nmcli device wifi
-    rescan through _run for JSONL audit trail (mutation, not probe).
-  fix(verify): verify_runtime ntsync builtin case claimed "/dev/ntsync
-    exists" without verifying. Split loaded/builtin case arms; builtin
-    now checks test -c /dev/ntsync and warns if missing despite
-    CONFIG_NTSYNC=y (udev rule or module issue).
-  style(banner): removed redundant set -l text $argv[1] — already
-    bound by --argument-names on function declaration.
-  style(completions): removed orphaned comment between _fail and
-    return 1 in symlink-abort guard (leftover from refactor).
-  doc: sync README, CHANGELOG.
-
-3.7.40 (2026-03-19)
--------------------
-  fix(verify): verify_runtime checked 3 ghost amdgpu sysfs params
-    (aspm:0, modeset:1, runpm:0) removed from KERNEL_PARAMS in 3.7.39.
-    Kernel defaults (-1 auto) differ from expected values, producing
-    false FAILs on every --verify-runtime run. Removed from check loop.
-  fix(comment): ssh-agent.service placeholder "<OWNER: fill in>"
-    replaced with actual justification (Restart=on-failure crash
-    recovery + ~/.config/ survives package upgrades).
-  doc: sync README, CHANGELOG.
-
-3.7.39 (2026-03-19)
--------------------
-  fix(security): amd_iommu=off → iommu=pt. Disabling IOMMU removed DMA
-    protection on all PCIe/USB4 devices with zero perf benefit on Zen 5.
-    iommu=pt retains protection with near-zero overhead. Updated
-    _validate_kernel_params config map (CONFIG_IOMMU_SUPPORT).
-  fix(kernel): remove amdgpu.modeset=1 — not a valid amdgpu parameter.
-    KMS is always-on for amdgpu. Cargo-culted from nvidia-drm.modeset=1.
-  fix(logind): add HandleSuspendKeyLongPress (defaults hibernate) and
-    HandleRebootKeyLongPress (defaults poweroff). Both fire despite
-    "ignore all" intent. Added in systemd v249+.
-  fix(nm): NM_LOG_LEVEL ERR → WARN. MT7925 has active kernel panics,
-    deauth cycles, TX power bugs. ERR suppresses needed WiFi diagnostics.
-  fix(service): amdgpu-performance.service After=graphical.target →
-    multi-user.target. DRM sysfs available before graphical.target;
-    ExecStart retries handle late availability.
-  fix(sysctl): remove fs.inotify.max_user_watches=524288. Kernel 5.11+
-    auto-sets to 1% of RAM (capped 1,048,576). On 128 GB, default is
-    max — setting 524,288 actually reduces it. Removed from
-    get_file_content, verify_static, and do_lint.
-  fix(code): bare return → return 0 in WiFi non-interactive path.
-  fix(code): close stale TODO (root-override for chroot/CI).
-  remove: amdgpu.aspm=0 (ASPM is PCIe link PM; Strix Halo iGPU uses
-    SoC fabric, not external PCIe link — no-op on APU-only system).
-  remove: amdgpu.runpm=0 (runtime PM targets discrete GPUs; APU iGPU
-    shares CPU power domain — no-op).
-  remove: EXPECTED_GPU_PCI dead global and comment (never consumed).
-  add: PKGS_DEL += cachyos-plymouth-theme (recent CachyOS ISOs).
-  add: comment blocks documenting cwsr_enable, ppfeaturemask bit layout,
-    amd_pstate/gpu_recovery defaults, BBR version, mkinitcpio hooks
-    resume behavior, mkinitcpio-firmware AUR note, REMOVE_EXISTING risk,
-    ssh-agent.service custom vs system unit (<OWNER: fill in>).
-  add: Fish version gate comment corrected (3.4 features: $() syntax,
-    set --function, string collect --allow-empty).
-  doc: kernel params 18 → 15. Known hardware issues section: Strix Halo
-    GPU (CWSR, MES, ROCm, black screen), MT7925 WiFi (panics, TX power,
-    deauth, mt76-mt7925-dkms AUR fix), NM+iwd edge cases.
-
-3.7.38 (2026-03-18)
--------------------
-  fix(changelog): 3.7.36 date was 2026-03-19 (future date, postdated
-    3.7.37). Corrected to 2026-03-18 (same day as neighbors).
-  fix(validate): document PKGS_DEL, BOOT_TIME_TARGET,
-    EXPECTED_CPU_MATCH, EXPECTED_GPU_PCI as intentionally optional
-    in _validate_profile. Consumers handle unset/empty safely
-    (for-loop no-op or set -q guards); adding to required list
-    would break profiles with zero packages to remove.
-  fix(verify): verify_static checked iwd state 3 times independently
-    via pacman -Qi iwd (L3137, L3150, L3356). Pre-computed once at
-    function entry into _skip_iwd (consistent with do_diff and
-    do_check). Eliminates TOCTOU between the three checks.
-  doc: sync README, CHANGELOG.
-
-3.7.37 (2026-03-18)
--------------------
-  fix(wifi): passphrase length check used string length (codepoints)
-    instead of byte count. WPA2 spec is 8-63 bytes. Now uses
-    printf '%s' | wc -c (consistent with SSID check).
-  fix(sudo): restricted-sudo detection regex '(ALL.*) ALL' missed
-    NOPASSWD entries like '(ALL : ALL) NOPASSWD: ALL'. Replaced
-    with ERE '\(ALL.*\) .*ALL$'. NOPASSWD users were blocked from
-    --all mode with EXIT_PREFLIGHT.
-  fix(signal): _cleanup handler hardcoded exit 130 for all signals.
-    Now uses $argv[1] (signal name) to map to 128+signum: SIGHUP=129,
-    SIGINT=130, SIGQUIT=131, SIGTERM=143. JSONL footer records the
-    correct exit code.
-  doc: sync README, CHANGELOG, show_help exit codes.
-
-3.7.36 (2026-03-18)
--------------------
-  fix(snapshot): _btrfs_pre_snapshot bare sudo mkdir and sudo btrfs
-    bypassed _run. Routed both through _run for structured JSONL
-    logging of command+exit+stdout/stderr. Removed redundant manual
-    _log on success (now captured by _run EXIT event).
-  fix(verify): verify_runtime inline sudo true replaced with
-    _ensure_sudo_cached for consistent stderr-reason logging
-    (matches verify_static and do_diff).
-  style: unquote /etc/kernel/cmdline in SYSTEM_DESTINATIONS
-    (fish_indent compliance -- reverses 3.7.35 style change).
-  doc: sync README, CHANGELOG.
-
-3.7.35 (2026-03-18)
--------------------
-  fix(lock): _do_cleanup unconditionally deleted LOCK_DIR even when
-    current process did not own the lock. _acquire_lock sets LOCK_DIR
-    as a global before mkdir; on failure the global still points at
-    another instance's lock. Fix: verify PID ownership before delete.
-  style: quote /etc/kernel/cmdline in SYSTEM_DESTINATIONS.
-  doc: sync README, CHANGELOG.
-
-3.7.34 (2026-03-18)
--------------------
-  fix(logs): _analyze_log header/footer reads used positional line
-    numbers. Changed to grep -m1 for header, all 3 footer reads.
-  fix(logs): --logs all/list showed pass for incomplete logs. Now ?.
-  fix(timestamps): all 9 date sites now include %z timezone offset.
-  fix(indent): 2 guard comments at wrong indent level.
-  doc: sync README, CHANGELOG, show_help. --logs lists <service>.
-
-3.7.33 (2026-03-18)
--------------------
-  (no functional changes; indent regression fixed in 3.7.34)
-
-3.7.32 (2026-03-18)
--------------------
-  fix(sudo): _find_pacnew_files changed to sudo -n (non-interactive).
-
-3.7.31 (2026-03-18)
--------------------
-  fix(diff,test): cap parallel fork limit at 16 (was unbounded).
+3.7.31-3.7.38 (2026-03-18)
+---------------------------
+  fix(snapshot): bare sudo → _run for JSONL logging.
+  fix(verify): inline sudo → _ensure_sudo_cached. Pre-computed iwd
+    state once (was 3× pacman -Qi).
+  fix(lock): _do_cleanup deleted other instance's lock. Added PID check.
+  fix(wifi): passphrase length: string length → wc -c (WPA2 = bytes).
+  fix(sudo): restricted-sudo regex missed NOPASSWD entries.
+  fix(signal): _cleanup hardcoded exit 130 → 128+signum.
+  fix(diff,test): cap parallel fork limit at 16.
   fix(verify): masked-service batch fallback to per-unit query.
-  fix(diff): diffstatus validated as numeric; unparseable -> fail-safe.
-  fix(wifi): sanitize SSID in .nmconnection filename.
-  fix(batch): _pregenerate_content_files logs failures.
-  fix(verify): command -q sudo guard for /boot paths.
-  fix(network): check_network skips gracefully without curl.
-  fix(log): _log timestamp includes timezone (%z).
-  fix(help): clarified -- description.
-  style: explicit return 0 on 3 functions.
+  fix(timestamps): all 9 date sites include %z timezone.
 
-3.7.30 (2026-03-17)
--------------------
-  fix(comments): moved 2 inline comments above end statements.
-    Merged 1 two-line comment. Removed 4 stale orphan comments.
-
-3.7.29 (2026-03-16)
--------------------
-  fix(run): _run stdout replay leaked to fd1. Added >&2.
-  fix(sudo): Fish "if not <cmd>" inversion bug across 8 sites.
-
-3.7.17-3.7.28 (2026-03-16 -- 2026-03-17)
-----------------------------------------
-  fix(check): Fish {$phase} brace interpolation; result files missing.
+3.7.17-3.7.30 (2026-03-16 -- 2026-03-17)
+-----------------------------------------
+  fix: 202 Bash-style &&/|| → Fish "; and"/"; or".
   fix: 12 double-quoted fish -c blocks interpolated caller variables.
-    Converted to single-quoted bodies with $argv.
-  fix(check): do_check false-clean on unreadable managed files.
-  fix: replaced 202 Bash-style &&/|| with Fish "; and"/"; or".
-  fix(verify): unbounded fork storm -> 4 batched workers. skip_iwd
-    filter for false checksum MISMATCH when iwd not installed.
+  fix(check): Fish {$phase} brace interpolation; false-clean on
+    unreadable files.
+  fix(verify): unbounded fork → 4 batched workers. skip_iwd filter.
   fix: 8 set scope leaks in verify_runtime and do_diff.
-  fix(check): Job 3/4 serialized lists to files (was interpolation).
-  fix(verify): _verify_summary counter snapshot before _fail/_warn/_ok.
-  fix: validate_configs Job 1 false-pass on empty content directory.
-  fix(diff): Phases 1-2 skip filtered files. Reuses iwd skip flag.
-  fix: install_file skip-unchanged replaced with SHA256 hash. Post-
-    write integrity check hashes tmpfile before mv.
-  fix: install_file post-write symlink re-check (both paths).
-  fix: fallback lock reclaim yield + second PID verify. sudo -n -l.
-  fix(run): stderr unconditionally logged. stdout capped at 50 lines.
-  fix(log): _log truncation avoids splitting mid-escape-sequence.
-  fix(log): LOG_FILE creation race -> atomic install -m 0600 /dev/null.
-  fix: argument count guards on 7 functions. 4 unguarded wait calls.
-  fix: _kconfig_cache empty list guard. _progress_skip renders bar.
-  fix(wifi): SSID allows '!'/'&'. md5sum fallback for UUID generation.
+  fix: install_file SHA256 hash. Post-write integrity check.
+  fix(run): stderr logged unconditionally. stdout capped 50 lines.
+    Stdout replay leaked to fd1 — added >&2.
+  fix(log): truncation avoids mid-escape split. LOG_FILE race →
+    atomic install -m 0600 /dev/null.
+  fix: argument count guards on 7 functions.
+  fix(wifi): SSID allows '!'/'&'. md5sum fallback for UUID.
   fix(profile): removed dead globals. Added 8 to _validate_profile.
-  fix: validate_configs children -- command prefix, quoted variables.
-  fix: _ensure_sudo_cached explicit if/else with stderr capture.
-  fix(cleanup): find -delete split into -type f then -type d -empty.
-  fix(cli): --install-file validates absolute path at parse time.
+  fix(sudo): Fish "if not <cmd>" inversion bug across 8 sites.
   remove: --profile flag. Profile selection now file-based only.
-  doc: 12-step Prerequisites table for --all mode.
 
-3.7.1-3.7.16 (2026-03-09 -- 2026-03-16)
----------------------------------------
-  fix: enforce kernel 6.14+ minimum (returns 1, was always 0).
-  fix: PROGRESS_STEPS ordering after syu reorder. do_test_all nested
-    parallelism guard (<8 cores -> sequential).
-  fix: validate_configs ssh-agent --user flag. _ensure_sudo_cached
-    consistency. Manifest gated on EXIT_BOOT_CRIT.
-  fix: -- separator on 13 bare cat/contains/dirname/touch/string calls.
-  fix: _msg bug-logging escaped via _json_str. 6 parallel dirs guarded.
-  fix: do_diagnose children kernel globals. Stress tests sequential.
-    WiFi credential prompts guard with isatty stdin.
-  fix: LOG_FILE creation race. Log rotation excludes current LOG_FILE.
-  doc: README Install Flow matches PROGRESS_STEPS.
-
-3.7.0 (2026-03-08)
-------------------
+3.7.0-3.7.16 (2026-03-08 -- 2026-03-16)
+-----------------------------------------
   feat: batch & parallel processing (B-1..B-9). Parallel collector
-    pattern with deterministic output ordering.
+    with deterministic output ordering.
   feat: _pregenerate_content_files, _ensure_sudo_cached,
     _parse_systemctl_show helpers.
+  fix: kernel 6.14+ minimum enforcement. PROGRESS_STEPS ordering.
+  fix: validate_configs ssh-agent --user. Manifest gate EXIT_BOOT_CRIT.
+  fix: -- separator on 13 bare cat/contains/dirname/touch/string calls.
+  fix: do_diagnose children kernel globals. WiFi prompts isatty guard.
+  fix: LOG_FILE creation race. Log rotation excludes current LOG_FILE.
 
-3.6.0-3.6.4 (2026-03-08)
-------------------------
-  feat: --profile multi-machine support. Profile functions with
-    _validate_profile (25+ required globals), external loading.
+3.5.0-3.6.4 (2026-03-07 -- 2026-03-08)
+----------------------------------------
+  feat: --profile multi-machine support. _validate_profile (25+
+    required globals), external loading.
   feat: --check silent idempotency probe (exit 0=clean, 10=drift).
-  feat: structured exit codes (0-5, 10-11).
-  feat: manifest-based orphan tracking. Progress step count assertion.
-  feat: flock(1) atomic lock reclaim. _kconfig_cache lazy loader.
-    Hardware mismatch early warning. fish_indent promoted to FAIL.
-  fix: fish version gate 3.3+ -> 3.4+. Remove bat/eza from PKGS_ADD.
-  fix: root UUID cached once as _ROOT_UUID. Abort on boot rebuild
-    failure. do_check false drift on vfat ESP.
-  fix: SYSTEM_UPGRADED premature-true. do_diff blank-line fidelity.
-    _json_str control char -> ? placeholder.
-
-3.5.0-3.5.2 (2026-03-07)
-------------------------
-  refactor: decompose do_diagnose (604L -> orchestrator + 6 helpers)
-    and do_logs (285L -> dispatcher + 2 helpers).
-  fix: wireless-regdom pipeline logging. --logs typo fuzzy-match.
-    basename Fish 3.5+ -> string replace compat.
-  fix: symmetric log marker START/END. Dead _has_lock variable.
-    _log guard prevents orphan log stubs on lock contention.
+  feat: structured exit codes (0-5, 10-11). Manifest-based orphan
+    tracking. Hardware mismatch warning.
+  refactor: decompose do_diagnose (604L → orchestrator + 6 helpers)
+    and do_logs (285L → dispatcher + 2 helpers).
+  fix: fish version gate 3.3+→3.4+. Root UUID cached once. Abort on
+    boot rebuild failure. do_check false drift on vfat ESP.
   remove: backup system remnants.
-  docs: 27 inline comments, README BIOS version P110.
 
-3.4.0-3.4.1 (2026-03-05 -- 2026-03-06)
---------------------------------------
-  remove: --no-color, --no-log, --clean mode (344 lines), _GPU_BUSY_PCT.
-  fix: do_test_all completions validation reads installed file.
-  chore: trim CHANGELOG to 3.0.0+.
-
-3.3.0-3.3.7 (2026-03-02 -- 2026-03-04)
---------------------------------------
-  fix: 2 infinite loops in _install_finalize (scope shadow on counters).
-  fix: do_diff --fix never triggered. install_file skip-unchanged
-    broken for 14/17 sudo-path files.
-  fix: 268 scope fixes across 33+ functions, including exit_code
-    dispatch, MODE dispatch, and arg parser infinite loop.
-  fix: 96+ bare cat/rm/mv/chmod/mkdir/cp/find/kill -> command prefix.
-  feat: hardware fingerprint. GKeyFile WiFi escaping. --logs
-    list/last/all. NDJSON header/footer. Scope shadow lint check.
-  fix: --diff --fix boot rebuild automation. Credential redaction 9
-    patterns. mkinitcpio HOOKS ordering. Reject '%' in WiFi passphrase.
-
-3.2.0-3.2.10 (2026-02-28 -- 2026-03-02)
----------------------------------------
-  feat: /etc/sysctl.d/99-ry-sysctl.conf -- BBR+fq, tcp_fastopen=3,
-    inotify watches 524288.
-  feat: --test-all parallel+sequential suite. --completions dynamic
-    generation. Reverse dep check before package removal.
-  feat: validate KERNEL_PARAMS against /proc/config.gz. Boot sanity
-    gate after initramfs rebuild.
-  fix: 24 scope fixes. SIGPIPE handler. Footer double-write race.
-    Orphan log files. Atomic mkdir lock improvements.
-  remove: --json, --once flags. Dead globals.
-  refactor: 63 function comments (81/81). _json_str/_log set -l scoping.
-
-3.1.0-3.1.4 (2026-02-27 -- 2026-02-28)
---------------------------------------
-  refactor: KVER globals, _ntsync_state helper (5 states).
-  remove: sp5100_tco blacklist, btusb.enable_autosuspend cmdline,
-    modules-load.d destination. Kernel params 19->18, files 17->16.
-  feat: --existence-only hook validation, _verify_unit_syntax --user.
-  refactor: power-profiles-daemon from PKGS_DEL to MASK.
-  fix: _install_finalize propagates INSTALL_HAD_ERRORS.
-  docs: --description on all 68 functions. 71 inline comments.
-
-3.0.0 (2026-02-27)
-------------------
-  fix: temp file pattern, sudo tee --, kill -0 -- separators.
-  refactor: sudo keepalive argv, _log default event. Credential
-    redaction word-boundary globs.
+3.0.0-3.4.1 (2026-02-27 -- 2026-03-06)
+----------------------------------------
+  feat: sysctl.d/99-ry-sysctl.conf. --test-all suite. --completions.
+    KERNEL_PARAMS validation against /proc/config.gz. Boot sanity.
+    --existence-only hook validation. _verify_unit_syntax --user.
+  refactor: KVER globals, _ntsync_state (5 states). power-profiles-
+    daemon from PKGS_DEL to MASK. Sudo keepalive, _log default event.
+  fix: 292+ scope fixes across 33+ functions. 96+ bare cat/rm/mv/chmod
+    → command prefix. SIGPIPE handler. Footer double-write race. Temp
+    file pattern, sudo tee --, kill -0 -- separators. 2 infinite loops
+    in _install_finalize. do_diff --fix never triggered. install_file
+    skip-unchanged broken for 14/17 sudo-path files. Credential
+    redaction 9 patterns.
+  feat: hardware fingerprint. GKeyFile WiFi escaping. --logs list/last/
+    all. NDJSON header/footer. Scope shadow lint check.
+  remove: sp5100_tco blacklist, btusb.enable_autosuspend, modules-load.d.
+    --no-color, --no-log, --clean (344 lines), _GPU_BUSY_PCT, --json,
+    --once. Kernel params 19→18, files 17→16.
   docs: README rewrite with structured tables.
-  chore: adopt kernel.org changelog style.
+  chore: adopt kernel.org changelog style. Trim CHANGELOG to 3.0.0+.

@@ -1,6 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.7.56 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.56"
+# ry-install v3.7.59 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# Guard: prevent duplicate event handler registration if sourced twice in same session
+set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
+set -g _RY_INSTALL_LOADED true
+set -g VERSION "3.7.59"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -184,7 +187,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         set -l found false
         for param in $KERNEL_PARAMS
             if string match -q -- "$prefix*" "$param"
-                set -l found true
+                set found true
                 break
             end
         end
@@ -193,7 +196,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         # Check if config_sym (e.g., CONFIG_AMD_PSTATE) is =y or =m in /proc/config.gz
         if not printf '%s\n' $config_data | grep -q -- "^$config_sym=[ym]"
             _warn "  $prefix* requires $config_sym but not enabled in running kernel"
-            set -l mismatches (math $mismatches + 1)
+            set mismatches (math $mismatches + 1)
         end
     end
 
@@ -436,13 +439,13 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     set -l _sig_exit 130
     switch "$argv[1]"
         case HUP
-            set -l _sig_exit 129
+            set _sig_exit 129
         case INT
-            set -l _sig_exit 130
+            set _sig_exit 130
         case QUIT
-            set -l _sig_exit 131
+            set _sig_exit 131
         case TERM
-            set -l _sig_exit 143
+            set _sig_exit 143
     end
     if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
         set -l _mode_esc (_json_str "$MODE")
@@ -468,8 +471,8 @@ end
 function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensure cleanup runs on fish_exit"
     set -l _exit_status $status
     if set -q _INTENDED_EXIT_CODE
-        # Re-bind the function-local from L468; Fish set -l inside if-block targets function scope (not block scope)
-        set -l _exit_status $_INTENDED_EXIT_CODE
+        # Re-bind the function-local; bare set (no -l) targets enclosing function scope
+        set _exit_status $_INTENDED_EXIT_CODE
     end
     if test "$_CLEANUP_DONE" = true
         return 0
@@ -483,12 +486,12 @@ end
 
 # ═══ PROFILES — machine-specific configuration ═══
 
-function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
+function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # ── Identity ──
     set -g PROFILE_NAME gtr9_pro
     set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
 
-    # ── Managed file destinations — 1:1 map to get_file_content(); system=0644, user=0600 ──
+    # ── Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600 ──
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
         /etc/kernel/cmdline \
@@ -610,7 +613,7 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g ROOT_AVAIL_WARN 5
     set -g BOOT_TIME_TARGET 15
 
-    # ── Hardware fingerprint expectations (optional) ──
+    # ── Hardware expectations (optional) ──
     set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
     return 0
 end
@@ -690,7 +693,7 @@ function _validate_profile --description "Verify loaded profile has all required
 
     # Verify PROFILE_NAME matches the function that was called
     if test -n "$expected_name"; and test "$PROFILE_NAME" != "$expected_name"
-        _err "Profile function profile_$expected_name set PROFILE_NAME='$PROFILE_NAME' (expected '$expected_name')"
+        _err "Profile function _ry_profile_$expected_name set PROFILE_NAME='$PROFILE_NAME' (expected '$expected_name')"
         return 1
     end
 
@@ -716,10 +719,10 @@ function _load_profile --description "Determine, load, and validate the active p
     set -l name
     set -l default_file "$HOME/.config/ry-install/default-profile"
     if test -f "$default_file"
-        set -l name (string trim < "$default_file")
+        set name (string trim < "$default_file")
     end
     if test -z "$name"
-        set -l name gtr9_pro
+        set name gtr9_pro
     end
 
     # 2. Validate name format
@@ -732,19 +735,24 @@ function _load_profile --description "Determine, load, and validate the active p
     set -l profile_dir "$HOME/.config/ry-install/profiles"
     set -l profile_path "$profile_dir/$name.fish"
 
-    if functions -q "profile_$name"
-        profile_$name
+    if functions -q "_ry_profile_$name"
+        _ry_profile_$name
     else if test -f "$profile_path"
         if not fish --no-execute "$profile_path" 2>/dev/null
             _err "Profile file has syntax errors: $profile_path"
             exit $EXIT_USAGE
         end
         source "$profile_path"
-        if not functions -q "profile_$name"
-            _err "Profile file does not define function profile_$name: $profile_path"
+        if functions -q "_ry_profile_$name"
+            _ry_profile_$name
+        else if functions -q "profile_$name"
+            # Backward compatibility: accept old profile_<name> convention with deprecation warning
+            _warn "Profile uses deprecated naming: profile_$name → rename to _ry_profile_$name"
+            profile_$name
+        else
+            _err "Profile file does not define function _ry_profile_$name: $profile_path"
             exit $EXIT_USAGE
         end
-        profile_$name
     else
         _err "Unknown profile: $name"
         exit $EXIT_USAGE
@@ -757,13 +765,13 @@ function _load_profile --description "Determine, load, and validate the active p
     # 5. Derived globals
     set -g MANAGED_FILE_COUNT (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
 
-    # 6. Cache root UUID — findmnt called once here; eliminates TOCTOU between install_file's comparison and write paths
+    # 6. Cache root UUID — findmnt called once here; eliminates TOCTOU between _ry_install_file's comparison and write paths
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
     if test -z "$_ROOT_UUID"
         _warn "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline generation will fail"
     end
 
-    # 7. Lightweight hardware sanity — /proc/cpuinfo only, no lspci/sudo; full fingerprint check in _install_preflight
+    # 7. Lightweight hardware sanity — /proc/cpuinfo only, no lspci/sudo
     if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
         set -l _cpu_model (grep -m1 -- 'model name' /proc/cpuinfo 2>/dev/null | sed 's/.*: //')
         if test -n "$_cpu_model"; and not string match -q -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"
@@ -838,59 +846,10 @@ function _manifest_check_orphans --description "Warn about files from previous i
     return 0
 end
 
-# Create a read-only btrfs snapshot of / before install; non-fatal on failure
-function _btrfs_pre_snapshot --description "Create a btrfs snapshot of rootfs before install"
-    # Only attempt if / is btrfs
-    set -l root_fstype (findmnt -no FSTYPE / 2>/dev/null | string trim --)
-    if test "$root_fstype" != btrfs
-        _info "Root filesystem is $root_fstype (not btrfs) — skipping pre-install snapshot"
-        return 0
-    end
-
-    # Require btrfs tool
-    if not command -q btrfs
-        _warn "btrfs command not found — skipping pre-install snapshot"
-        return 0
-    end
-
-    # Identify the subvolume mount for /
-    set -l root_subvol (btrfs subvolume show / 2>/dev/null | head -1 | string trim --)
-    if test -z "$root_subvol"
-        _warn "Cannot identify root btrfs subvolume — skipping snapshot"
-        return 0
-    end
-
-    # Snapshot naming: ry-install-pre-<version>-<timestamp>
-    set -l snap_name "ry-install-pre-$VERSION-$TIMESTAMP"
-    # Place snapshots in /.snapshots if it exists (snapper convention), else /.ry-snapshots
-    set -l snap_parent "/.snapshots"
-    if not test -d "$snap_parent"
-        set -l snap_parent "/.ry-snapshots"
-    end
-
-    if test "$DRY" = true
-        _dry "btrfs subvolume snapshot -r / $snap_parent/$snap_name"
-        return 0
-    end
-
-    if not command -q sudo; or not _run sudo mkdir -p -- "$snap_parent"
-        _warn "Cannot create snapshot directory $snap_parent — skipping"
-        return 0
-    end
-
-    if _run sudo btrfs subvolume snapshot -r / "$snap_parent/$snap_name"
-        _ok "Pre-install snapshot: $snap_parent/$snap_name"
-    else
-        _warn "Btrfs snapshot failed — continuing without rollback point"
-        _log "SNAPSHOT_FAILED: target=$snap_parent/$snap_name"
-    end
-    return 0
-end
-
 # Generate config file content by destination path — INVARIANT: content emitted via printf/echo only, NEVER eval'd
-function get_file_content --argument-names dst --description "Return embedded config content for a given destination path"
+function _ry_get_file_content --argument-names dst --description "Return embedded config content for a given destination path"
     if test (count $argv) -ne 1
-        _err "get_file_content: expected 1 argument, got "(count $argv)
+        _err "_ry_get_file_content: expected 1 argument, got "(count $argv)
         return 1
     end
     switch "$argv[1]"
@@ -904,7 +863,7 @@ function get_file_content --argument-names dst --description "Return embedded co
 
         case /etc/kernel/cmdline
             if test -z "$_ROOT_UUID"
-                _err "get_file_content: root UUID not cached (_load_profile may not have run)"
+                _err "_ry_get_file_content: root UUID not cached (_load_profile may not have run)"
                 return 1
             end
             printf '%s\n' "rw root=UUID=$_ROOT_UUID "(string join -- " " $KERNEL_PARAMS)
@@ -1098,7 +1057,7 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
         _err "_pregenerate_content_files: expected 0-1 args (out_dir), got "(count $argv)
         return 1
     end
-    # Must run after _load_profile — needs profile globals for get_file_content
+    # Must run after _load_profile — needs profile globals for _ry_get_file_content
     if test -z "$out_dir"
         set -l out_dir (mktemp -d -t ry-content.XXXXXX)
     end
@@ -1108,7 +1067,7 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
     set -ga _TRACKED_TMPFILES "$out_dir"
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         set -l safe (string replace -a '/' '_' -- "$dst")
-        get_file_content "$dst" >"$out_dir/$safe" 2>/dev/null
+        _ry_get_file_content "$dst" >"$out_dir/$safe" 2>/dev/null
         or _log "CONTENT_GEN_FAIL: dst=$dst"
     end
     printf '%s\n' "$out_dir"
@@ -1157,9 +1116,9 @@ function _parse_systemctl_show --argument-names raw_output --description "Parse 
             if test -n "$current_active"; or test -n "$current_unitfile"; or test -n "$current_load"
                 printf '%s\n' "$current_load:$current_active:$current_unitfile"
             end
-            set -l current_active ""
-            set -l current_unitfile ""
-            set -l current_load ""
+            set current_active ""
+            set current_unitfile ""
+            set current_load ""
             continue
         end
         switch "$line"
@@ -1241,11 +1200,11 @@ function _log --description "Append a timestamped message to the log file"
     test -f "$LOG_FILE"; or return 0
     set -l _ts (date '+%Y-%m-%dT%H:%M:%S%z')
     set -l raw (string join -- " " $argv)
-    # Inside if/else, bare set (no -l) re-binds outer event/data; after block, set -l re-binds at outer scope
+    # Inside if/else, bare set (no -l) re-binds outer event/data at function scope
     set -l event message
     set -l data "$raw"
     if string match -qr '^=== .* ===$' -- "$raw"
-        set -l event section
+        set event section
         set data (string replace -ar '=+ *' '' -- "$raw" | string trim --)
     else if string match -qr '^[A-Z][A-Z_]*: ' -- "$raw"
         set event (string lower (string match -r '^[A-Z][A-Z_]*' -- "$raw"))
@@ -1263,7 +1222,7 @@ function _log --description "Append a timestamped message to the log file"
         if test -n "$_esc_match"
             set -l _esc_len (string length -- "$_esc_match")
             if test "$_esc_len" -gt 0
-                set -l cut (math $cut - $_esc_len)
+                set cut (math $cut - $_esc_len)
             end
         end
         set data (string sub -l $cut -- "$data")"..."
@@ -1376,7 +1335,7 @@ function _banner --argument-names text --description "Print the ry-install start
     set -l text_len (string length -- "$text")
     set -l pad (math "$max_text - $text_len")
     if test $pad -lt 0
-        set -l pad 0
+        set pad 0
     end
     set -l spaces (string repeat -n $pad -- " ")
     _echo $border
@@ -1489,10 +1448,10 @@ function _progress --argument-names step_name --description "Advance and display
 
         set -l bar ""
         for i in (seq 1 $filled)
-            set -l bar "$bar█"
+            set bar "$bar█"
         end
         for i in (seq 1 $empty)
-            set -l bar "$bar░"
+            set bar "$bar░"
         end
 
         set -l step_elapsed ""
@@ -1502,9 +1461,9 @@ function _progress --argument-names step_name --description "Advance and display
             if test "$step_secs" -ge 60
                 set -l sm (math "floor($step_secs / 60)")
                 set -l ss (math "$step_secs % 60")
-                set -l step_elapsed (printf ' %dm%02ds' $sm $ss)
+                set step_elapsed (printf ' %dm%02ds' $sm $ss)
             else if test "$step_secs" -gt 0
-                set -l step_elapsed (printf ' %ds' $step_secs)
+                set step_elapsed (printf ' %ds' $step_secs)
             end
         end
         set -g PROGRESS_STEP_START $now
@@ -1544,10 +1503,10 @@ function _progress_skip --argument-names step_name --description "Advance progre
         set -l empty (math "$PROGRESS_WIDTH - $filled")
         set -l bar ""
         for _si in (seq 1 $filled)
-            set -l bar "$bar█"
+            set bar "$bar█"
         end
         for _si in (seq 1 $empty)
-            set -l bar "$bar░"
+            set bar "$bar░"
         end
         set -l desc
         if test (string length -- "$step_name") -gt 25
@@ -1590,9 +1549,9 @@ function _progress_done --description "Finalize and close the progress display"
             if test "$elapsed" -ge 60
                 set -l el_m (math "floor($elapsed / 60)")
                 set -l el_s (math "$elapsed % 60")
-                set -l elapsed_str (printf ' (%dm%02ds)' $el_m $el_s)
+                set elapsed_str (printf ' (%dm%02ds)' $el_m $el_s)
             else
-                set -l elapsed_str (printf ' (%ds)' $elapsed)
+                set elapsed_str (printf ' (%ds)' $elapsed)
             end
         end
         printf '\r[%s] 100%% Done%-25s%s\n' "$bar" "" "$elapsed_str" >&2
@@ -1707,17 +1666,17 @@ function _ask --description "Prompt the user for yes/no confirmation"
 end
 
 # Display full usage, options, exit codes, and examples to stdout
-function show_help --description "Display usage information and available subcommands"
-    # Fallback: count get_file_content case branches if profile hasn't loaded (--help exits before _load_profile)
+function _ry_show_help --description "Display usage information and available subcommands"
+    # Fallback: count _ry_get_file_content case branches if profile hasn't loaded (--help exits before _load_profile)
     set -l _file_count "$MANAGED_FILE_COUNT"
     if test -z "$_file_count"
         # Count all case branches minus the wildcard case '*'; avoids $HOME expansion bugs in regex
-        set -l _all_cases (sed -n -- '/^function get_file_content/,/^end$/p' (status filename) | grep -c '^        case ')
-        set -l _file_count (math "$_all_cases - 1")
+        set -l _all_cases (sed -n -- '/^function _ry_get_file_content/,/^end$/p' (status filename) | grep -c '^        case ')
+        set _file_count (math "$_all_cases - 1")
     end
     set -l _profile_desc "Beelink GTR9 Pro (Strix Halo)"
     if set -q PROFILE_DESC; and test -n "$PROFILE_DESC"
-        set -l _profile_desc "$PROFILE_DESC"
+        set _profile_desc "$PROFILE_DESC"
     end
     echo "
 ry-install v$VERSION
@@ -1870,7 +1829,7 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
 end
 
 # Verify all required external commands are available via command -q
-function check_deps --description "Verify required packages are installed"
+function _ry_check_deps --description "Verify required packages are installed"
     _log "Checking dependencies..."
     set -l missing
 
@@ -1910,7 +1869,7 @@ function check_deps --description "Verify required packages are installed"
 end
 
 # Test HTTPS connectivity to archlinux.org and DNS resolution before package operations
-function check_network --description "Verify network connectivity and DNS resolution"
+function _ry_check_network --description "Verify network connectivity and DNS resolution"
     _log "Checking network connectivity..."
 
     _info "Checking HTTPS connectivity..."
@@ -1947,7 +1906,7 @@ function check_network --description "Verify network connectivity and DNS resolu
 end
 
 # Ensure root and /boot have sufficient free space; warn/fail at configurable thresholds
-function check_disk_space --description "Verify sufficient free disk space for installation"
+function _ry_check_disk_space --description "Verify sufficient free disk space for installation"
     _log "Checking disk space..."
 
     set -l root_avail (LC_ALL=C df -BG / 2>/dev/null | tail -n 1 | awk '{print $4}' | tr -d 'G')
@@ -1982,7 +1941,7 @@ function check_disk_space --description "Verify sufficient free disk space for i
 end
 
 # Verify running kernel meets minimum version and report ntsync availability
-function check_kernel_version --description "Verify running kernel version meets minimum requirement"
+function _ry_check_kernel_version --description "Verify running kernel version meets minimum requirement"
     set -l kver $KVER
     set -l major $KVER_MAJOR
     set -l minor $KVER_MINOR
@@ -2020,12 +1979,12 @@ end
 # ── Config validation pipeline — pre-flight checks on embedded content: hooks ordering, modprobe resolve, systemd-analyze verify, fish --no-execute; aborts on any error ──
 
 # Validate HOOKS ordering (base first, keyboard before sd-vconsole, etc.) and hook existence
-function validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS ordering and presence"
+function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS ordering and presence"
     set -l existence_only false
     set -l hooks
     # Verify mkinitcpio hook ordering and presence
     if test (count $argv) -gt 0; and test "$argv[1]" = --existence-only
-        set -l existence_only true
+        set existence_only true
         set hooks $argv[2..]
     else if test (count $argv) -gt 0
         set hooks $argv
@@ -2094,7 +2053,7 @@ function validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS orde
     end
     return 1
 end
-function validate_mkinitcpio_modules --description "Validate mkinitcpio MODULES array entries"
+function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODULES array entries"
     if not command -q modprobe
         return 0
     end
@@ -2107,16 +2066,16 @@ function validate_mkinitcpio_modules --description "Validate mkinitcpio MODULES 
 end
 
 # Run all embedded config validators: hooks, modules, units, modprobe, fish; abort on errors
-function validate_configs --description "Run all embedded config validators"
+function _ry_validate_configs --description "Run all embedded config validators"
     _info "Validating configuration syntax..."
 
     set -l errors 0
 
     # Phase 1 (sequential): fast in-memory checks + content pre-generation
-    if not validate_mkinitcpio_hooks
+    if not _ry_validate_mkinitcpio_hooks
         set errors (math $errors + 1)
     end
-    validate_mkinitcpio_modules
+    _ry_validate_mkinitcpio_modules
 
     # B-1: Pre-generate all content files for parallel validation
     set -l content_dir (_pregenerate_content_files)
@@ -2344,12 +2303,12 @@ function validate_configs --description "Run all embedded config validators"
     return 0
 end
 
-# ── Atomic file installation — get_file_content → mktemp → validate → chmod/chown → mv; hash comparison skips unchanged files; skips NM/IWD if iwd not installed ──
+# ── Atomic file installation — _ry_get_file_content → mktemp → validate → chmod/chown → mv; hash comparison skips unchanged files; skips NM/IWD if iwd not installed ──
 
 # Deploy a single embedded config: get content → mktemp → validate → chmod → atomic mv to dst
-function install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination"
+function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination"
     if test (count $argv) -ne 2
-        _err "install_file: expected 2 args (dst use_sudo), got "(count $argv)
+        _err "_ry_install_file: expected 2 args (dst use_sudo), got "(count $argv)
         return 1
     end
     set -l dst $argv[1]
@@ -2391,7 +2350,7 @@ function install_file --argument-names dst use_sudo --description "Install a sin
     end
 
     # Skip unchanged: SHA256 hash comparison (Fish variable comparison flattens newlines to spaces)
-    set -l _new_hash (get_file_content "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+    set -l _new_hash (_ry_get_file_content "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
     if test -n "$_new_hash"
         set -l _cur_hash
         if test "$use_sudo" = true
@@ -2419,7 +2378,7 @@ function install_file --argument-names dst use_sudo --description "Install a sin
             return 1
         end
         # DRY=true returns at line above; this code only runs when DRY=false
-        get_file_content "$dst" | sudo tee -- "$tmpfile" >/dev/null
+        _ry_get_file_content "$dst" | sudo tee -- "$tmpfile" >/dev/null
         set -l _ps $pipestatus
         if test $_ps[1] -ne 0
             sudo rm -f -- "$tmpfile" 2>/dev/null
@@ -2442,7 +2401,7 @@ function install_file --argument-names dst use_sudo --description "Install a sin
             _fail "→ $dst (chmod failed)"
             return 1
         end
-        # Capture expected hash from tmpfile before mv (single get_file_content call; no redundant re-generation)
+        # Capture expected hash from tmpfile before mv (single _ry_get_file_content call; no redundant re-generation)
         set -l _expected_hash (sudo cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
         if not _run sudo mv -- "$tmpfile" "$dst"
             sudo rm -f -- "$tmpfile" 2>/dev/null
@@ -2474,7 +2433,7 @@ function install_file --argument-names dst use_sudo --description "Install a sin
             return 1
         end
         # DRY=true returns at line above; this code only runs when DRY=false
-        get_file_content "$dst" | tee -- "$tmpfile" >/dev/null
+        _ry_get_file_content "$dst" | tee -- "$tmpfile" >/dev/null
         set -l _ps $pipestatus
         if test $_ps[1] -ne 0
             command rm -f -- "$tmpfile" 2>/dev/null
@@ -2497,7 +2456,7 @@ function install_file --argument-names dst use_sudo --description "Install a sin
             _fail "→ $dst (chmod failed)"
             return 1
         end
-        # Capture expected hash from tmpfile before mv (single get_file_content call; no redundant re-generation)
+        # Capture expected hash from tmpfile before mv (single _ry_get_file_content call; no redundant re-generation)
         set -l _expected_hash (command cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
         if not command mv -- "$tmpfile" "$dst"
             command rm -f -- "$tmpfile" 2>/dev/null
@@ -2519,7 +2478,7 @@ end
 
 # ═══ FILE OPERATIONS — diff, install, verify ═══
 
-function install_files --description "Install multiple embedded configs with argparse options"
+function _ry_install_files --description "Install multiple embedded configs with argparse options"
     set -l _argparse_tmp (mktemp -t ry-argparse.XXXXXX 2>/dev/null; or echo /dev/null)
     test "$_argparse_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$_argparse_tmp"
     argparse s/sudo 'd/desc=' -- $argv 2>$_argparse_tmp
@@ -2530,7 +2489,7 @@ function install_files --description "Install multiple embedded configs with arg
         if test -n "$_argparse_err"
             set _err_suffix ": $_argparse_err"
         end
-        _err "install_files: invalid arguments$_err_suffix"
+        _err "_ry_install_files: invalid arguments$_err_suffix"
         return 1
     end
     command rm -f -- "$_argparse_tmp" 2>/dev/null
@@ -2543,7 +2502,7 @@ function install_files --description "Install multiple embedded configs with arg
         set desc "$_flag_desc"
     end
     if test (count $argv) -eq 0
-        _err "install_files: no destinations provided"
+        _err "_ry_install_files: no destinations provided"
         return 1
     end
     set -l destinations $argv
@@ -2551,7 +2510,7 @@ function install_files --description "Install multiple embedded configs with arg
     _log "INSTALL $desc"
     set -l had_failure false
     for dst in $destinations
-        if not install_file "$dst" $use_sudo
+        if not _ry_install_file "$dst" $use_sudo
             _err "Failed to install: $dst"
             set had_failure true
         end
@@ -2561,7 +2520,7 @@ function install_files --description "Install multiple embedded configs with arg
 end
 
 # Compare embedded content against installed files; --fix repairs in-place; exit 1 when drift found.
-function do_diff --argument-names target_file --description "Show diffs between embedded and installed configs"
+function _ry_do_diff --argument-names target_file --description "Show diffs between embedded and installed configs"
     _log "=== DIFF START ==="
 
     # Check for orphaned files from previous install or profile switch
@@ -2647,7 +2606,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
             end
         end
         set -l safe (string replace -a '/' '_' -- "$dst")
-        get_file_content "$dst" >"$diff_batch_dir/expected_$safe" 2>/dev/null
+        _ry_get_file_content "$dst" >"$diff_batch_dir/expected_$safe" 2>/dev/null
     end
 
     # Phase 2: sequential installed-file reads in parent (sudo ppid doesn't propagate to children; configs <1KB)
@@ -2846,7 +2805,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
                     if string match -q "$HOME/*" -- "$dst"
                         set use_sudo false
                     end
-                    if install_file "$dst" $use_sudo
+                    if _ry_install_file "$dst" $use_sudo
                         set fixed_count (math $fixed_count + 1)
                         if string match -q '/boot/*' -- "$dst"; or string match -q '/etc/mkinitcpio*' -- "$dst"; or string match -q '/etc/sdboot*' -- "$dst"; or string match -q /etc/kernel/cmdline -- "$dst"
                             set boot_files_fixed true
@@ -3041,7 +3000,7 @@ function do_diff --argument-names target_file --description "Show diffs between 
 end
 
 # Checksum verification: sha256 of embedded content vs installed file; exit 1 when drifted.
-function verify_static --description "Verify installed configs match embedded checksums"
+function _ry_verify_static --description "Verify installed configs match embedded checksums"
     _log "=== STATIC VERIFICATION START ==="
     _ensure_sudo_cached; or begin
         _err "Sudo required for verification"
@@ -3076,7 +3035,7 @@ function verify_static --description "Verify installed configs match embedded ch
     _echo "── sdboot-manage.conf ──"
     if _chk_file /etc/sdboot-manage.conf
         set -l opts (grep -- '^LINUX_OPTIONS=' /etc/sdboot-manage.conf 2>/dev/null \
-            | string replace -r -- '^LINUX_OPTIONS="?(.*?)"?\s*$' '$1')
+            | string replace -r -- '^LINUX_OPTIONS="([^"]*)"' '$1')
 
         for param in $KERNEL_PARAMS
             if string match -q -- "* $param *" " $opts "
@@ -3237,7 +3196,7 @@ function verify_static --description "Verify installed configs match embedded ch
         _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.powersave=$NM_WIFI_POWERSAVE" "WiFi powersave $NM_WIFI_POWERSAVE"
         _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "level=$NM_LOG_LEVEL" "logging level $NM_LOG_LEVEL"
     end
-    # NM-dispatcher enable state: checked in verify_runtime (batch systemctl show) — not a static config file check
+    # NM-dispatcher enable state: checked in _ry_verify_runtime (batch systemctl show) — not a static config file check
     _echo
 
     _echo "── sysctl overrides ──"
@@ -3405,7 +3364,7 @@ function verify_static --description "Verify installed configs match embedded ch
     set -l hooks_line (grep -E '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^#' | head -n 1)
     if test -n "$hooks_line"
         set -l hooks_str (string replace -r '.*HOOKS=\(([^)]*)\).*' '$1' -- "$hooks_line")
-        validate_mkinitcpio_hooks --existence-only (string split ' ' -- "$hooks_str")
+        _ry_validate_mkinitcpio_hooks --existence-only (string split ' ' -- "$hooks_str")
     else
         _warn "  Could not parse HOOKS from mkinitcpio.conf"
     end
@@ -3460,7 +3419,7 @@ function verify_static --description "Verify installed configs match embedded ch
     # Pre-generate expected content files (fast sequential printf)
     for dst in $hash_dsts
         set -l safe (string replace -a '/' '_' -- "$dst")
-        get_file_content "$dst" >"$hash_dir/expected_$safe" 2>/dev/null
+        _ry_get_file_content "$dst" >"$hash_dir/expected_$safe" 2>/dev/null
     end
 
     # Pre-serialize installed file hashes in parent (sudo timestamp_type=ppid doesn't propagate to children)
@@ -3564,7 +3523,7 @@ function verify_static --description "Verify installed configs match embedded ch
 end
 
 # Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted
-function do_check --description "Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted"
+function _ry_do_check --description "Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted"
     set -l drift false
     set -l checked 0
 
@@ -3609,7 +3568,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
     # Serialize service/mask lists for Job 4 (avoids interpolation into fish -c strings)
     printf '%s\n' $EXPECTED_SERVICES >"$result_dir/exp_svcs"
     printf '%s\n' $MASK >"$result_dir/mask_units"
-    # Implicit service dependencies not in EXPECTED_SERVICES (checked by verify_runtime)
+    # Implicit service dependencies not in EXPECTED_SERVICES (checked by _ry_verify_runtime)
     printf '%s\n' systemd-resolved.service NetworkManager-dispatcher.service >"$result_dir/implicit_svcs"
 
     # Pre-serialize installed file hashes+permissions in parent (sudo timestamp_type=ppid doesn't propagate to children)
@@ -3805,7 +3764,7 @@ function do_check --description "Silent idempotency probe — exit 0 if clean, E
                 continue
             end
             set -l rec (string split -- ":" $results[$ri])
-            # Unit not found (package removed) is not drift — matches verify_static behavior
+            # Unit not found (package removed) is not drift — matches _ry_verify_static behavior
             if test "$rec[1]" = not-found
                 continue
             end
@@ -3904,7 +3863,7 @@ end
 
 
 # ═══ RUNTIME VERIFICATION — live sysfs/procfs state checks; exit 1 when state doesn't match config.
-function verify_runtime --description "Verify runtime kernel params, services, and modules"
+function _ry_verify_runtime --description "Verify runtime kernel params, services, and modules"
     _log "=== RUNTIME VERIFICATION START ==="
 
     _ensure_sudo_cached; or begin
@@ -4575,7 +4534,7 @@ function verify_runtime --description "Verify runtime kernel params, services, a
 end
 
 # ═══ LINT, CLEAN — development and maintenance tools ═══
-function do_lint --description "Lint the script source for fish anti-patterns and style issues"
+function _ry_do_lint --description "Lint the script source for fish anti-patterns and style issues"
     _log "=== LINT START ==="
     _info "Running fish syntax check..."
     _echo
@@ -4774,7 +4733,7 @@ function do_lint --description "Lint the script source for fish anti-patterns an
 
     set -l total (math (count $SYSTEM_DESTINATIONS) + (count $USER_DESTINATIONS) + (count $SERVICE_DESTINATIONS))
     # Count all case branches minus the wildcard case '*'; avoids $HOME expansion bugs in regex
-    set -l _all_cases (sed -n -- '/^function get_file_content/,/^end$/p' "$script_path" | grep -c '^        case ')
+    set -l _all_cases (sed -n -- '/^function _ry_get_file_content/,/^end$/p' "$script_path" | grep -c '^        case ')
     set -l case_count (math "$_all_cases - 1")
     if test $case_count -ge $total
         _ok "File count verified: $total destinations, $case_count content cases"
@@ -4784,11 +4743,11 @@ function do_lint --description "Lint the script source for fish anti-patterns an
     end
 
     set -l steps_count (count $PROGRESS_STEPS)
-    set -l progress_calls (sed -n -- '/^function _install_/,/^end$/p; /^function do_install/,/^end$/p' "$script_path" | grep -c '_progress "')
+    set -l progress_calls (sed -n -- '/^function _install_/,/^end$/p; /^function _ry_do_install/,/^end$/p' "$script_path" | grep -c '_progress "')
     if test $steps_count -eq $progress_calls
         _ok "Progress steps verified: $steps_count steps = $progress_calls calls"
     else
-        _fail "Progress mismatch: PROGRESS_STEPS has $steps_count, but do_install has $progress_calls _progress calls"
+        _fail "Progress mismatch: PROGRESS_STEPS has $steps_count, but _ry_do_install has $progress_calls _progress calls"
         set has_errors true
     end
 
@@ -5360,9 +5319,9 @@ function _logs_journal --argument-names target --description "Log viewer: system
 end
 
 # Dispatch --logs to file operations (analyze/last/list/all) or journal targets; fuzzy-match on typos
-function do_logs --argument-names target --description "Browse, search, and analyze ry-install log files"
+function _ry_do_logs --argument-names target --description "Browse, search, and analyze ry-install log files"
     if test (count $argv) -gt 2
-        _err "do_logs: expected 0-2 args (target [arg]), got "(count $argv)
+        _err "_ry_do_logs: expected 0-2 args (target [arg]), got "(count $argv)
         return 2
     end
     set -l target $argv[1]
@@ -5556,7 +5515,7 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
     return 0
 end
 
-# Pipeline phase 1: deps, disk, network, hardware fingerprint, kernel version, config validation
+# Pipeline phase 1: deps, disk, network, kernel version, config validation
 function _install_preflight --description "Run all preflight checks before installation"
     _progress "Checking dependencies"
 
@@ -5598,38 +5557,33 @@ function _install_preflight --description "Run all preflight checks before insta
             disown $SUDO_KEEPALIVE_PID 2>/dev/null
         end
 
-        check_deps; or begin
+        _ry_check_deps; or begin
             _kill_sudo_keepalive
             return $EXIT_PREFLIGHT
         end
 
-        check_disk_space; or begin
+        _ry_check_disk_space; or begin
             _kill_sudo_keepalive
             return $EXIT_PREFLIGHT
         end
 
-        _check_hardware_fingerprint; or begin
-            _kill_sudo_keepalive
-            return $EXIT_PREFLIGHT
-        end
-
-        check_network; or begin
+        _ry_check_network; or begin
             _err "Network required for package installation — aborting"
             _kill_sudo_keepalive
             return $EXIT_PREFLIGHT
         end
     else
-        _info "(dry-run) Skipping: sudo, disk space, hardware fingerprint, network checks"
+        _info "(dry-run) Skipping: sudo, disk space, network checks"
         _info "(dry-run) Skipping: LVM detection (no sudo credentials)"
     end
 
-    if not check_kernel_version
+    if not _ry_check_kernel_version
         _warn "Kernel version below 6.14 — some features will not work"
         set -g INSTALL_HAD_ERRORS true
     end
 
     _echo
-    validate_configs; or begin
+    _ry_validate_configs; or begin
         _err "Configuration validation failed - aborting"
         _kill_sudo_keepalive
         return $EXIT_PREFLIGHT
@@ -5655,7 +5609,7 @@ function _install_packages --description "Install and remove managed packages vi
     if _ask "Sync databases, upgrade system, and install packages? ($pkgs_to_install)"
 
         if test "$DRY" = false
-            if not install_file "/etc/mkinitcpio.conf" true
+            if not _ry_install_file "/etc/mkinitcpio.conf" true
                 _err "Failed to pre-deploy mkinitcpio.conf before package install"
                 _err "Aborting package installation — mkinitcpio.conf must be in place before -Syu"
                 set -g INSTALL_HAD_ERRORS true
@@ -5709,14 +5663,14 @@ function _install_packages --description "Install and remove managed packages vi
     return 0
 end
 
-# Pipeline phase 4: deploy all SYSTEM/USER/SERVICE files via install_file with privilege elevation as needed
+# Pipeline phase 4: deploy all SYSTEM/USER/SERVICE files via _ry_install_file with privilege elevation as needed
 function _install_system_files --description "Deploy all embedded config files to the system"
     _check_sudo_keepalive
     set -l _fn_err false
     _progress "Installing system files"
     _echo
     _info "Installing system configuration files..."
-    if not install_files --sudo --desc "SYSTEM FILES" $SYSTEM_DESTINATIONS
+    if not _ry_install_files --sudo --desc "SYSTEM FILES" $SYSTEM_DESTINATIONS
         _err "System file installation failed"
         set -g INSTALL_HAD_ERRORS true
         set _fn_err true
@@ -5725,7 +5679,7 @@ function _install_system_files --description "Deploy all embedded config files t
     _progress "Installing user files"
     _echo
     _info "Installing user configuration files..."
-    if not install_files --desc "USER FILES" $USER_DESTINATIONS
+    if not _ry_install_files --desc "USER FILES" $USER_DESTINATIONS
         _err "User file installation failed"
         set -g INSTALL_HAD_ERRORS true
         set _fn_err true
@@ -5737,7 +5691,7 @@ function _install_system_files --description "Deploy all embedded config files t
     _info "  Udev rule may fail due to timing (Arch bug #72655)"
 
     if _ask "Install amdgpu-performance.service?"
-        if not install_file "/etc/systemd/system/amdgpu-performance.service" true
+        if not _ry_install_file "/etc/systemd/system/amdgpu-performance.service" true
             _err "Failed to install amdgpu-performance.service"
             set -g INSTALL_HAD_ERRORS true
             set _fn_err true
@@ -5927,7 +5881,7 @@ function _install_configure_services --description "Enable, start, and configure
         end
 
         # cpupower-epp: install file + daemon-reload first
-        if not install_file "/etc/systemd/system/cpupower-epp.service" true
+        if not _ry_install_file "/etc/systemd/system/cpupower-epp.service" true
             _err "Failed to install cpupower-epp.service"
             set -g INSTALL_HAD_ERRORS true
             set _fn_err true
@@ -5986,7 +5940,7 @@ function _install_configure_services --description "Enable, start, and configure
         end
 
         if _ask "Install and enable cpupower-epp.service? (REQUIRED for performance mode)"
-            if not install_file "/etc/systemd/system/cpupower-epp.service" true
+            if not _ry_install_file "/etc/systemd/system/cpupower-epp.service" true
                 _err "Failed to install cpupower-epp.service"
                 set -g INSTALL_HAD_ERRORS true
                 set _fn_err true
@@ -6033,7 +5987,7 @@ end
 # Post-rebuild safety gate: verify vmlinuz exists, initramfs non-zero, boot entry valid; block reboot on failure
 function _preflight_boot_sanity --description "Verify boot artifacts are viable after rebuild"
     set -l errors 0
-    # /boot (ESP, vfat) typically 700 root:root — use sudo for all access, consistent with _chk_file/verify_static
+    # /boot (ESP, vfat) typically 700 root:root — use sudo for all access, consistent with _chk_file/_ry_verify_static
 
     # 1. At least one vmlinuz must exist
     set -l vmlinuz_files (sudo find /boot -maxdepth 1 -name 'vmlinuz-*' -type f 2>/dev/null)
@@ -6269,10 +6223,15 @@ function _install_finalize --description "Run post-install verification, cleanup
                     # GKeyFile escapes via consolidated helper (single source of truth)
                     set -l safe_pass (_gkeyfile_escape "$WIFI_PASS")
                     set -l safe_ssid (_gkeyfile_escape "$WIFI_SSID")
-                    # Inside DRY=false gate (line 6374); credential write only occurs on live runs
+                    # Inside DRY=false gate; credential write only occurs on live runs
                     if printf '%s\n' "[connection]" "id=$safe_ssid" "uuid=$conn_uuid" "type=wifi" "interface-name=$WIFI_IFACE" "autoconnect=true" "[wifi]" "mode=infrastructure" "ssid=$safe_ssid" "[wifi-security]" "key-mgmt=wpa-psk" "psk=$safe_pass" "[ipv4]" "method=auto" "[ipv6]" "method=disabled" | sudo tee -- "$tmpfile" >/dev/null
                         set --erase WIFI_PASS
-                        if not _run sudo chmod -- 0600 "$tmpfile"
+                        # Post-write symlink re-check: closes TOCTOU between pre-write test -L and tee
+                        if sudo test -L "$tmpfile"
+                            sudo rm -f -- "$tmpfile" 2>/dev/null
+                            _err "Temp file replaced with symlink during write — aborting WiFi connection creation"
+                            set -g INSTALL_HAD_ERRORS true
+                        else if not _run sudo chmod -- 0600 "$tmpfile"
                             sudo rm -f -- "$tmpfile" 2>/dev/null
                             _err "Failed to set permissions on WiFi credential file"
                             set -g INSTALL_HAD_ERRORS true
@@ -6340,144 +6299,13 @@ function _install_finalize --description "Run post-install verification, cleanup
     set --erase WIFI_SSID
     set --erase WIFI_PASS
     set --erase WIFI_IFACE
-    # Return 1 on partial failure so do_install can detect and report errors
+    # Return 1 on partial failure so _ry_do_install can detect and report errors
     test "$INSTALL_HAD_ERRORS" = true; and return 1
     return 0
 end
 
-# Detect hardware changes since last install (CPU/GPU/NVMe/RAM/MAC)
-function _check_hardware_fingerprint --description "Verify hardware matches expected Beelink GTR9 Pro specs"
-    set -l fp_dir "$HOME/ry-install"
-    set -l fp_file "$fp_dir/.hardware-fingerprint"
-
-    set -l cur_cpu (grep -m1 -- 'model name' /proc/cpuinfo 2>/dev/null | sed 's/.*: //')
-    set -l cur_gpu ""
-    if command -q lspci
-        set cur_gpu (lspci -nn 2>/dev/null | grep -i 'VGA\|Display' | head -n 1 | grep -oE '\[[0-9a-f]{4}:[0-9a-f]{4}\]')
-    end
-    set -l cur_nvme ""
-    for m in /sys/block/nvme*/device/model
-        test -f "$m"; or continue
-        set cur_nvme (string trim -- (command cat -- "$m" 2>/dev/null))
-        break
-    end
-    set -l cur_wifi ""
-    # Compare current hardware against saved fingerprint
-    if command -q lspci
-        set cur_wifi (lspci -nn 2>/dev/null | grep -i 'Network\|Wireless' | head -n 1 | grep -oE '\[[0-9a-f]{4}:[0-9a-f]{4}\]')
-    end
-    set -l cur_ram (grep -- MemTotal /proc/meminfo 2>/dev/null | awk '{print $2}')
-
-    # CHK-01: Intel E610-XT2 10GbE — crashes under GPU load (board v1 only; v2.2+ uses Realtek)
-    if command -q lspci
-        if lspci -nn 2>/dev/null | grep -qi 'E610'
-            _warn "Intel E610-XT2 10GbE detected — known instability"
-            _warn "  Crashes under GPU load (Steam, games, compute)"
-            _warn "  Disable via BIOS or: sudo ip link set <iface> down"
-            _warn "  Board v2.2+ uses stable Realtek NICs"
-        end
-    end
-
-    # CHK-02: BIOS VRAM allocation — default 512 MB is too low for gaming on UMA APU
-    set -l vram_bytes
-    for _vram_path in /sys/class/drm/card*/device/mem_info_vram_total
-        if test -f "$_vram_path"
-            set vram_bytes (command cat -- "$_vram_path" 2>/dev/null)
-            test -n "$vram_bytes"; and break
-        end
-    end
-    if test -n "$vram_bytes"
-        set -l vram_gb (math "floor($vram_bytes / 1073741824)")
-        if test "$vram_gb" -lt 4
-            _warn "GPU VRAM: $vram_gb GB — set UMA to 16 GB in BIOS"
-        else
-            _ok "GPU VRAM: $vram_gb GB"
-        end
-    end
-
-    if test "$DRY" = true
-        if test -f "$fp_file"
-            _dry "Would compare hardware fingerprint against: $fp_file"
-        else
-            _dry "Would save hardware fingerprint to: $fp_file"
-        end
-        return 0
-    end
-
-    # BIOS version (informational only — not part of fingerprint comparison)
-    if command -q dmidecode
-        set -l bios_ver (sudo dmidecode -s bios-version 2>/dev/null)
-        set -l bios_date (sudo dmidecode -s bios-release-date 2>/dev/null)
-        if test -n "$bios_ver"
-            _info "BIOS: $bios_ver ($bios_date)"
-        end
-    end
-
-    if not test -f "$fp_file"
-        if not command mkdir -p -- "$fp_dir" 2>/dev/null
-            _warn "Cannot create fingerprint dir: $fp_dir"
-            return 0
-        end
-        printf 'cpu=%s\ngpu=%s\nnvme=%s\nwifi=%s\nram=%s\n' \
-            "$cur_cpu" "$cur_gpu" "$cur_nvme" "$cur_wifi" "$cur_ram" >"$fp_file" 2>/dev/null
-        command chmod -- 0600 "$fp_file" 2>/dev/null; or _warn "Cannot set permissions on $fp_file"
-        _info "Hardware fingerprint saved"
-        return 0
-    end
-
-    set -l changed false
-    set -l changes
-
-    set -l prev_cpu (grep -- '^cpu=' "$fp_file" 2>/dev/null | sed 's/^cpu=//')
-    set -l prev_gpu (grep -- '^gpu=' "$fp_file" 2>/dev/null | sed 's/^gpu=//')
-    set -l prev_nvme (grep -- '^nvme=' "$fp_file" 2>/dev/null | sed 's/^nvme=//')
-    set -l prev_wifi (grep -- '^wifi=' "$fp_file" 2>/dev/null | sed 's/^wifi=//')
-    set -l prev_ram (grep -- '^ram=' "$fp_file" 2>/dev/null | sed 's/^ram=//')
-
-    if test "$cur_cpu" != "$prev_cpu"
-        set changed true
-        set -a changes "  CPU: $prev_cpu → $cur_cpu"
-    end
-    if test -n "$cur_gpu"; and test "$cur_gpu" != "$prev_gpu"
-        set changed true
-        set -a changes "  GPU: $prev_gpu → $cur_gpu"
-    end
-    if test "$cur_nvme" != "$prev_nvme"
-        set changed true
-        set -a changes "  NVMe: $prev_nvme → $cur_nvme"
-    end
-    if test -n "$cur_wifi"; and test "$cur_wifi" != "$prev_wifi"
-        set changed true
-        set -a changes "  WiFi: $prev_wifi → $cur_wifi"
-    end
-    if test "$cur_ram" != "$prev_ram"
-        set changed true
-        set -a changes "  RAM: "$prev_ram"kB → "$cur_ram"kB"
-    end
-
-    if test "$changed" = true
-        _warn "Hardware has changed since last install"
-        for c in $changes
-            _warn "$c"
-        end
-        _warn "This script is tuned for Beelink GTR9 Pro (Strix Halo)"
-        if test "$FORCE" = true; or test "$ALL" = true
-            _info "Continuing (--force/--all)"
-        else
-            if not _ask "Continue anyway?"
-                return 1
-            end
-        end
-        printf 'cpu=%s\ngpu=%s\nnvme=%s\nwifi=%s\nram=%s\n' \
-            "$cur_cpu" "$cur_gpu" "$cur_nvme" "$cur_wifi" "$cur_ram" >"$fp_file" 2>/dev/null
-        command chmod -- 0600 "$fp_file" 2>/dev/null; or _warn "Cannot set permissions on $fp_file"
-    end
-
-    return 0
-end
-
 # Orchestrator: runs all pipeline phases, collecting errors without aborting
-function do_install --description "Full installation: preflight, packages, configs, services, boot"
+function _ry_do_install --description "Full installation: preflight, packages, configs, services, boot"
     _log "=== INSTALLATION START ==="
     _log "VERSION: $VERSION"
     _log "DRY: $DRY"
@@ -6497,9 +6325,6 @@ function do_install --description "Full installation: preflight, packages, confi
 
     # Check for orphaned files from previous install or profile switch
     _manifest_check_orphans
-
-    # Pre-install btrfs snapshot (non-fatal; skips gracefully on non-btrfs)
-    _btrfs_pre_snapshot
 
     _progress_init
 
@@ -6542,7 +6367,7 @@ function do_install --description "Full installation: preflight, packages, confi
         end
     end
 
-    do_completions 2>/dev/null; or _warn "Completions install failed (run --completions manually)"
+    _ry_do_completions 2>/dev/null; or _warn "Completions install failed (run --completions manually)"
 
     _progress_done
 
@@ -6586,9 +6411,9 @@ function do_install --description "Full installation: preflight, packages, confi
 end
 
 # Single-file install: deploy one managed config by destination path
-function do_install_file --argument-names target --description "Install a single named config file interactively"
+function _ry_do_install_file --argument-names target --description "Install a single named config file interactively"
     if test (count $argv) -gt 1
-        _err "do_install_file: expected 0-1 args (target), got "(count $argv)
+        _err "_ry_do_install_file: expected 0-1 args (target), got "(count $argv)
         return 2
     end
     set -l target $argv[1]
@@ -6642,7 +6467,7 @@ function do_install_file --argument-names target --description "Install a single
         end
     end
 
-    if install_file "$target" $use_sudo
+    if _ry_install_file "$target" $use_sudo
         # Post-install: rebuild boot entries if target is a boot-related config
         _echo
         _ok "Installed: $target"
@@ -6710,7 +6535,7 @@ function do_install_file --argument-names target --description "Install a single
 end
 
 # Tab completions: dynamically generated from SYSTEM/USER/SERVICE_DESTINATIONS
-function do_completions --description "Generate fish shell completions for ry-install"
+function _ry_do_completions --description "Generate fish shell completions for ry-install"
     set -l comp_dir "$HOME/.config/fish/completions"
     set -l comp_dst "$comp_dir/ry-install.fish"
 
@@ -6797,7 +6622,7 @@ function do_completions --description "Generate fish shell completions for ry-in
 end
 
 # Smoke test: runs diff, verify-static, verify-runtime, lint in sequence
-function do_test_all --description "Run the full test suite across all subcommands"
+function _ry_do_test_all --description "Run the full test suite across all subcommands"
     _banner "ry-install v$VERSION - Full Test Suite"
 
     set -l script_path (status filename)
@@ -7097,7 +6922,7 @@ while test $i -le (count $argv)
                 end
             end
         case -h --help
-            show_help
+            _ry_show_help
             command rm -f -- "$LOG_FILE" 2>/dev/null
             exit 0
         case -v --version
@@ -7109,7 +6934,7 @@ while test $i -le (count $argv)
         case '*'
             echo "[ERR] Unknown option: $arg" >&2
             echo >&2
-            show_help >&2
+            _ry_show_help >&2
             command rm -f -- "$LOG_FILE" 2>/dev/null
             exit $EXIT_USAGE
     end
@@ -7242,34 +7067,34 @@ set -g exit_code 0
 # ── Main dispatch: route MODE to handler, capture exit code ──
 switch $MODE
     case diff
-        do_diff "$DIFF_TARGET"
+        _ry_do_diff "$DIFF_TARGET"
         set exit_code $status
     case verify-static
-        verify_static
+        _ry_verify_static
         set exit_code $status
     case verify-runtime
-        verify_runtime
+        _ry_verify_runtime
         set exit_code $status
     case lint
-        do_lint
+        _ry_do_lint
         set exit_code $status
     case check
-        do_check
+        _ry_do_check
         set exit_code $status
     case test-all
-        do_test_all
+        _ry_do_test_all
         set exit_code $status
     case logs
-        do_logs "$LOG_TARGET" "$LOG_TARGET_ARG"
+        _ry_do_logs "$LOG_TARGET" "$LOG_TARGET_ARG"
         set exit_code $status
     case completions
-        do_completions
+        _ry_do_completions
         set exit_code $status
     case install-file
-        do_install_file "$INSTALL_FILE_TARGET"
+        _ry_do_install_file "$INSTALL_FILE_TARGET"
         set exit_code $status
     case install
-        do_install
+        _ry_do_install
         set -l install_status $status
         if test $install_status -ne 0
             set exit_code $install_status

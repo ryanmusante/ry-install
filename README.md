@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.56-blue)
+![Version](https://img.shields.io/badge/version-3.7.59-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -32,7 +32,7 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS, kernel bugzilla / Mesa GitLab
 | 6 | **200 MB /boot free** | `df -h /boot` | Kernel images + initramfs |
 | 7 | **Network** | `curl -sf --head https://archlinux.org` | Package sync |
 | 8 | **BIOS current** | [Beelink](https://dr.bee-link.cn/) | P110+ for Strix Halo stability |
-| 9 | **Snapshot rootfs** | `sudo btrfs subvolume snapshot -r / /.snapshots/pre-ry-install` | Rollback point (btrfs; auto-created) |
+| 9 | **Snapshot rootfs** | `sudo btrfs subvolume snapshot -r / /.snapshots/pre-ry-install` | Rollback point (btrfs) |
 | 10 | **Review masked services** | See [Masked Services](#masked-services-9) | Confirm desktop, not laptop |
 | 11 | **WiFi ready** | SSID 1-32 bytes, passphrase 8-63 bytes, no `%` | Interactive even with `--all` |
 | 12 | **CachyOS news** | [wiki.cachyos.org](https://wiki.cachyos.org/) / [archlinux.org/news](https://archlinux.org/news/) | Known issues before `-Syu` |
@@ -253,7 +253,6 @@ Dependencies → Sync → Packages → System files → User files → AMDGPU se
 |------|----------|
 | `~/ry-install/logs/YYYY-MM-DD/` | NDJSON logs (*.jsonl) |
 | `~/ry-install/.lock/` | Instance guard |
-| `~/ry-install/.hardware-fingerprint` | Hardware drift detection |
 | `~/ry-install/.manifest` | Orphan tracking |
 
 ## Troubleshooting
@@ -268,14 +267,14 @@ Dependencies → Sync → Packages → System files → User files → AMDGPU se
 
 ### Profiles
 
-Machine-specific globals in profile functions. Default: `profile_gtr9_pro`. External: `~/.config/ry-install/profiles/<n>.fish`.
+Machine-specific globals in profile functions. Default: `_ry_profile_gtr9_pro`. External: `~/.config/ry-install/profiles/<n>.fish`.
 
 | Source | Resolution |
 |--------|-----------|
 | `~/.config/ry-install/default-profile` | Persistent default (single line: name) |
 | `gtr9_pro` | Hardcoded fallback |
 
-External profiles must define `function profile_<n>` with all required globals. Syntax-checked before sourcing. Validation enforces 25+ globals, name consistency, numeric types.
+External profiles should define `function _ry_profile_<n>` with all required globals. Legacy `profile_<n>` naming is still accepted (with deprecation warning). Syntax-checked before sourcing. Validation enforces 25+ globals, name consistency, numeric types.
 
 ### References
 

@@ -1,3 +1,55 @@
+3.7.59 (2026-03-22)
+-------------------
+  refactor(naming): prefix 22 public functions with _ry_ to prevent
+    autoloaded function collisions. Renamed: profile_gtr9_pro,
+    get_file_content, show_help, check_deps, check_network,
+    check_disk_space, check_kernel_version, validate_mkinitcpio_hooks,
+    validate_mkinitcpio_modules, validate_configs, install_file,
+    install_files, do_diff, verify_static, do_check, verify_runtime,
+    do_lint, do_logs, do_install, do_install_file, do_completions,
+    do_test_all. Dynamic profile_$name calls updated to
+    _ry_profile_$name. Error messages, sed patterns, and lint
+    self-checks updated. External profiles accept both _ry_profile_<n>
+    (preferred) and legacy profile_<n> (deprecated, emits warning).
+  fix(regex): sdboot-manage.conf LINUX_OPTIONS extraction — replace
+    lazy '(.*?)"?' with strict '"([^"]*)"' to prevent trailing-quote
+    capture with inline comments.
+  fix(security): add post-write symlink re-check to WiFi NM
+    connection tmpfile write path (closes TOCTOU gap, consistent with
+    install_file dual-check pattern).
+  fix(comment): remove stale line number reference in WiFi credential
+    write comment.
+  docs: sync README (version badge, profiles section).
+
+3.7.58 (2026-03-22)
+-------------------
+  fix(scope): 16 block-scoped set -l shadows across 10 functions.
+    Fish set -l inside if/for/switch/while creates block-local that is
+    destroyed on block exit. Affected: _load_profile ($name — profile
+    always empty), _cleanup ($_sig_exit — exit code always 130),
+    _cleanup_on_exit ($_exit_status), _validate_kernel_params ($found,
+    $mismatches), _parse_systemctl_show (accumulator reset), _log
+    ($event, $cut), _banner ($pad), _progress/$_progress_skip ($bar),
+    _progress ($step_elapsed), _progress_done ($elapsed_str),
+    show_help ($_file_count, $_profile_desc),
+    validate_mkinitcpio_hooks ($existence_only).
+    Fix: remove -l from 26 inner set statements. 16 behavioral tests.
+  fix(comment): 2 stale comments claiming set -l inside if-block
+    targets function scope — corrected to block scope.
+  feat(guard): re-source guard prevents duplicate event handler
+    registration if script sourced twice in same fish session.
+  docs: sync README (version badge). Audit reports included.
+
+3.7.57 (2026-03-21)
+-------------------
+  remove(preflight): _check_hardware_fingerprint (131 lines). E610-XT2
+    detection, VRAM check, BIOS version, fingerprint save/compare all
+    removed. Lightweight EXPECTED_CPU_MATCH check in _load_profile
+    retained.
+  remove(install): _btrfs_pre_snapshot (49 lines). User is responsible
+    for rootfs snapshots before running install.
+  docs: sync README (version badge, prerequisite, data directory).
+
 3.7.56 (2026-03-21)
 -------------------
   fix(scope): add explicit -l flag to 28 bare set rebinds inside

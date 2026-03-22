@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.7.54 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-set -g VERSION "3.7.54"
+# ry-install v3.7.55 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+set -g VERSION "3.7.55"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -569,6 +569,7 @@ function profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         HandleSuspendKey \
         HandleSuspendKeyLongPress \
         HandleHibernateKey \
+        HandleHibernateKeyLongPress \
         HandleRebootKey \
         HandleRebootKeyLongPress
     set -g IWD_ENABLE_NETWORK_CONFIG false

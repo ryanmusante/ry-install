@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.54-blue)
+![Version](https://img.shields.io/badge/version-3.7.55-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -162,7 +162,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 |------|---------|
 | `udev rules` | `ntsync` MODE=0666 |
 | `resolved.conf.d` | MulticastDNS=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
-| `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press variants (7 keys) |
+| `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press variants (8 keys) |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks: DefaultInterface/PowerSaveDisable · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
 | `modprobe.d` | Blacklist pcspkr, wdat_wdt · nvme_core multipath=N · mt7925e disable_aspm=1 |

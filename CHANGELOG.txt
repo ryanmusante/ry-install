@@ -1,3 +1,11 @@
+3.7.55 (2026-03-21)
+-------------------
+  fix(logind): add HandleHibernateKeyLongPress to LOGIND_IGNORE_KEYS.
+    Completes all 4 key pairs (Power/Suspend/Hibernate/Reboot × short/
+    long-press). Default is already "ignore" (same as HandlePowerKey-
+    LongPress which was included), but explicit ignore is consistent
+    with the other 3 pairs. 7 → 8 keys. README count updated.
+
 3.7.54 (2026-03-21)
 -------------------
   fix(sysctl): remove fq/bbr overrides — CachyOS ships cake/bbr2 via

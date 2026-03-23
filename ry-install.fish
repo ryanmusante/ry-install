@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.7.59 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.8.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.7.59"
+set -g VERSION "3.8.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -525,12 +525,13 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # ── Kernel (14 params) ──
+    # ── Kernel (15 params) ──
     # ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 workaround (remove 6.18+). ttm.pages_limit: 124 GiB cap
+    # wbrf=0: disable WiFi RFI memory clock throttling (P1 — devastating for UMA bandwidth). tsc=reliable: skip TSC validation on Zen 5 (P2)
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
-        audit=0 \
+        amdgpu.wbrf=0 \
         initcall_blacklist=simpledrm_platform_driver_init \
         iommu=pt \
         mt7925e.disable_aspm=1 \
@@ -538,6 +539,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         nvme_core.default_ps_max_latency_us=0 \
         pci=pcie_bus_perf \
         quiet \
+        tsc=reliable \
         ttm.pages_limit=32505856 \
         usbcore.autosuspend=-1 \
         workqueue.power_efficient=0 \
@@ -562,7 +564,8 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     # ── Udev ──
     set -g UDEV_RULES \
-        'KERNEL=="ntsync", MODE="0666"'
+        'KERNEL=="ntsync", MODE="0666"' \
+        'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ATTR{queue/rq_affinity}="2", ATTR{queue/read_ahead_kb}="128"'
 
     # ── Network ──
     set -g RESOLVED_MDNS no
@@ -584,6 +587,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     # ── Environment ──
     set -g ENV_VARS \
+        "DXVK_LOG_LEVEL=none" \
         "ENABLE_LAYER_MESA_ANTI_LAG=1" \
         "MESA_SHADER_CACHE_MAX_SIZE=8G" \
         "PROTON_USE_NTSYNC=1" \
@@ -603,7 +607,8 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         suspend.target \
         hibernate.target \
         hybrid-sleep.target \
-        suspend-then-hibernate.target
+        suspend-then-hibernate.target \
+        systemd-zram-setup@zram0.service
     set -g EXPECTED_SERVICES amdgpu-performance.service cpupower-epp.service fstrim.timer NetworkManager.service
 
     # ── Thresholds ──
@@ -950,6 +955,13 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' ""
             printf '%s\n' "# inotify -- IDEs and build tools monitoring large source trees"
             printf '%s\n' "fs.inotify.max_user_instances = 1024"
+            printf '%s\n' ""
+            printf '%s\n' "# Network -- cap TCP send buffer to prevent buffer bloat for game packets"
+            printf '%s\n' "net.ipv4.tcp_notsent_lowat = 131072"
+            printf '%s\n' ""
+            printf '%s\n' "# Dirty page writeback -- reduce flusher wakeups (CachyOS sets dirty_bytes=256MB)"
+            printf '%s\n' "vm.dirty_expire_centisecs = 6000"
+            printf '%s\n' "vm.dirty_writeback_centisecs = 1500"
 
         case "/etc/modprobe.d/99-ry-modprobe.conf"
             printf '%s\n' "# Module blacklists and options -- complements CachyOS /usr/lib/modprobe.d/"
@@ -965,6 +977,9 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' ""
             printf '%s\n' "# MT7925 WiFi ASPM -- redundant backup for cmdline mt7925e.disable_aspm=1"
             printf '%s\n' "options mt7925e disable_aspm=1"
+            printf '%s\n' ""
+            printf '%s\n' "# MT7925 WiFi power save -- complements NM wifi.powersave=2 and cmdline disable_aspm"
+            printf '%s\n' "options mt7925_common power_save=0"
 
         case "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish"
             printf '%s\n' '# SSH agent socket for fish shell -- priority: forwarded > gcr > systemd
@@ -3155,6 +3170,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo "── Udev rules ──"
     if _chk_file /etc/udev/rules.d/99-cachyos-udev.rules
         _chk_grep /etc/udev/rules.d/99-cachyos-udev.rules ntsync "ntsync rule"
+        _chk_grep /etc/udev/rules.d/99-cachyos-udev.rules rq_affinity "NVMe rq_affinity rule"
         # USB power/control rule removed — usbcore.autosuspend=-1 handles globally
     end
     _echo
@@ -3207,6 +3223,9 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.watermark_boost_factor = 1" "watermark_boost_factor = 1"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.page_lock_unfairness = 5" "page_lock_unfairness = 5"
         _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "fs.inotify.max_user_instances = 1024" "max_user_instances = 1024"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.ipv4.tcp_notsent_lowat = 131072" "tcp_notsent_lowat = 131072"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.dirty_expire_centisecs = 6000" "dirty_expire_centisecs = 6000"
+        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.dirty_writeback_centisecs = 1500" "dirty_writeback_centisecs = 1500"
     end
     _echo
 
@@ -3216,6 +3235,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "blacklist wdat_wdt" "blacklist wdat_wdt"
         _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "options nvme_core multipath=N" "nvme_core multipath=N"
         _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "options mt7925e disable_aspm=1" "mt7925e disable_aspm=1"
+        _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "options mt7925_common power_save=0" "mt7925_common power_save=0"
     end
     _echo
 
@@ -3948,6 +3968,26 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     _echo
 
+    _echo "── BIOS VRAM carveout ──"
+    set -l _vram_bytes 0
+    for f in /sys/class/drm/card*/device/mem_info_vram_total
+        if test -f "$f"
+            set _vram_bytes (command cat -- "$f" 2>/dev/null | string trim --)
+            break
+        end
+    end
+    if test "$_vram_bytes" -gt 0 2>/dev/null
+        set -l _vram_mb (math "$_vram_bytes / 1048576")
+        if test "$_vram_mb" -le 1024
+            _ok "  VRAM carveout: $_vram_mb MB"
+        else
+            _warn "  VRAM carveout: $_vram_mb MB (recommended: ≤1024 MB for UMA — check BIOS)"
+        end
+    else
+        _info "  VRAM carveout: cannot read mem_info_vram_total"
+    end
+    _echo
+
     _echo "── CPU performance ──"
     _gather_cpu_state
     if test -z "$_CPU_PATH"
@@ -3966,6 +4006,38 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             else
                 _fail "  $parts[3]: $sysfs_val (expected: $parts[2])"
             end
+        end
+    end
+    _echo
+
+    _echo "── amd_pstate / CPU boost ──"
+    # §10 #7: amd_pstate status (complements scaling_driver check above)
+    if test -f /sys/devices/system/cpu/amd_pstate/status
+        set -l _pstate_status (command cat -- /sys/devices/system/cpu/amd_pstate/status 2>/dev/null | string trim --)
+        if test "$_pstate_status" = active
+            _ok "  amd_pstate status: $_pstate_status"
+        else
+            _fail "  amd_pstate status: $_pstate_status (expected: active)"
+        end
+    else
+        _info "  amd_pstate status: sysfs not available"
+    end
+    # §10 #8: prefcore
+    if test -f /sys/devices/system/cpu/amd_pstate/prefcore
+        set -l _prefcore (command cat -- /sys/devices/system/cpu/amd_pstate/prefcore 2>/dev/null | string trim --)
+        if test "$_prefcore" = enabled
+            _ok "  amd_pstate prefcore: $_prefcore"
+        else
+            _fail "  amd_pstate prefcore: $_prefcore (expected: enabled)"
+        end
+    end
+    # §10 #9: CPU boost
+    if test -f /sys/devices/system/cpu/cpufreq/boost
+        set -l _boost (command cat -- /sys/devices/system/cpu/cpufreq/boost 2>/dev/null | string trim --)
+        if test "$_boost" = 1
+            _ok "  CPU boost: $_boost"
+        else
+            _fail "  CPU boost: $_boost (expected: 1)"
         end
     end
     _echo
@@ -4223,14 +4295,18 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     _echo "── sysctl overrides ──"
-    # Verify runtime values from /etc/sysctl.d/99-ry-sysctl.conf
+    # Verify runtime values from /etc/sysctl.d/99-ry-sysctl.conf + vendor configs
     set -l _sysctl_checks \
         "net.ipv4.tcp_fastopen=3" \
+        "net.ipv4.tcp_notsent_lowat=131072" \
         "vm.max_map_count=2147483642" \
         "vm.compaction_proactiveness=1" \
         "vm.watermark_boost_factor=1" \
         "vm.page_lock_unfairness=5" \
-        "fs.inotify.max_user_instances=1024"
+        "vm.dirty_expire_centisecs=6000" \
+        "vm.dirty_writeback_centisecs=1500" \
+        "fs.inotify.max_user_instances=1024" \
+        "kernel.split_lock_mitigate=0"
     for _sc in $_sysctl_checks
         set -l _key (string split '=' -- "$_sc")[1]
         set -l _expected (string split '=' -- "$_sc")[2]
@@ -4246,6 +4322,56 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     _echo
 
+    _echo "── THP / KSM / ZRAM ──"
+    # §10 #2: THP enabled
+    if test -f /sys/kernel/mm/transparent_hugepage/enabled
+        set -l _thp (command cat -- /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null)
+        if string match -q '*\[madvise\]*' -- "$_thp"
+            _ok "  THP enabled: madvise"
+        else
+            set -l _active (string match -r '\[(\w+)\]' -- "$_thp")[2]
+            _warn "  THP enabled: $_active (recommended: madvise — see README)"
+        end
+    end
+    # §10 #3: THP defrag
+    if test -f /sys/kernel/mm/transparent_hugepage/defrag
+        set -l _defrag (command cat -- /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null)
+        if string match -q '*\[defer+madvise\]*' -- "$_defrag"
+            _ok "  THP defrag: defer+madvise"
+        else
+            set -l _active (string match -r '\[(\S+)\]' -- "$_defrag")[2]
+            _warn "  THP defrag: $_active (recommended: defer+madvise)"
+        end
+    end
+    # §10 #4: THP shrink_underused
+    if test -f /sys/kernel/mm/transparent_hugepage/shrink_underused
+        set -l _shrink (command cat -- /sys/kernel/mm/transparent_hugepage/shrink_underused 2>/dev/null | string trim --)
+        if test "$_shrink" = 0
+            _ok "  THP shrink_underused: 0"
+        else
+            _warn "  THP shrink_underused: $_shrink (recommended: 0)"
+        end
+    end
+    # §10 #5: KSM run state
+    if test -f /sys/kernel/mm/ksm/run
+        set -l _ksm (command cat -- /sys/kernel/mm/ksm/run 2>/dev/null | string trim --)
+        if test "$_ksm" = 0
+            _ok "  KSM run: 0 (disabled)"
+        else
+            _warn "  KSM run: $_ksm (recommended: 0 — breaks THP, wastes CPU with 128 GB)"
+        end
+    end
+    # §10 #6: ZRAM service state
+    set -l _zram_state (systemctl is-enabled systemd-zram-setup@zram0.service 2>/dev/null | string trim --)
+    if test "$_zram_state" = masked
+        _ok "  ZRAM service: masked"
+    else if test -n "$_zram_state"
+        _warn "  ZRAM service: $_zram_state (expected: masked — 128 GB makes ZRAM pointless)"
+    else
+        _ok "  ZRAM service: not found (OK)"
+    end
+    _echo
+
     _echo "── filesystem ──"
     # CHK-04: btrfs noatime — avoids expensive COW metadata writes on every file access
     set -l root_opts (findmnt -no OPTIONS / 2>/dev/null)
@@ -4254,6 +4380,22 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             _warn "btrfs root missing noatime — add to /etc/fstab"
         else
             _ok "btrfs noatime: present"
+        end
+    end
+    # §10 #11: NVMe I/O scheduler
+    for nvme_dev in /sys/block/nvme*
+        if test -d "$nvme_dev"
+            set -l _devname (basename -- "$nvme_dev")
+            set -l _sched_file "$nvme_dev/queue/scheduler"
+            if test -f "$_sched_file"
+                set -l _sched (command cat -- "$_sched_file" 2>/dev/null)
+                if string match -q '*\[none\]*' -- "$_sched"
+                    _ok "  $_devname scheduler: none"
+                else
+                    set -l _active (string match -r '\[(\w+)\]' -- "$_sched")[2]
+                    _warn "  $_devname scheduler: $_active (expected: none)"
+                end
+            end
         end
     end
     _echo
@@ -4313,6 +4455,42 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             _warn "  WiFi device: $wifi_state (not connected)"
         end
     end
+
+    # §10 #1: E610 NVM firmware version (P0 — hang-under-load if < 1.30)
+    _echo
+    _echo "── E610 NVM firmware ──"
+    if command -q ethtool
+        set -l _e610_found false
+        for iface_path in /sys/class/net/*/device/driver
+            set -l _driver (basename (readlink -f "$iface_path" 2>/dev/null) 2>/dev/null)
+            if test "$_driver" = ice
+                set -l _iface (basename (dirname (dirname -- "$iface_path")))
+                set -l _fw_ver (ethtool -i "$_iface" 2>/dev/null | grep '^firmware-version:' | string replace -r '^firmware-version:\s+' '')
+                if test -n "$_fw_ver"
+                    set _e610_found true
+                    # Extract NVM version (format varies: "X.YY 0xABCDEF..." or similar)
+                    set -l _nvm_major (string match -r '^(\d+)\.' -- "$_fw_ver")[2]
+                    set -l _nvm_minor (string match -r '^\d+\.(\d+)' -- "$_fw_ver")[2]
+                    if test -n "$_nvm_major" -a -n "$_nvm_minor"
+                        set -l _nvm_combined (math "$_nvm_major * 100 + $_nvm_minor")
+                        if test "$_nvm_combined" -ge 130
+                            _ok "  $_iface E610 NVM: $_fw_ver (≥ 1.30)"
+                        else
+                            _fail "  $_iface E610 NVM: $_fw_ver (REQUIRED: ≥ 1.30 — update via Intel NVM Package or BIOS ≥ v1.08)"
+                        end
+                    else
+                        _info "  $_iface E610 firmware: $_fw_ver (cannot parse NVM version)"
+                    end
+                end
+            end
+        end
+        if test "$_e610_found" = false
+            _info "  E610 NIC: not detected (ice driver not found)"
+        end
+    else
+        _info "  ethtool not available for E610 NVM check"
+    end
+    _echo
 
     _echo "FILE PERMISSIONS"
     _echo

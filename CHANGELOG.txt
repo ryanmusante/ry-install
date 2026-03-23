@@ -1,3 +1,31 @@
+3.8.0 (2026-03-22)
+------------------
+  feat(kernel): add amdgpu.wbrf=0 (P1 — disable WiFi RFI memory clock
+    throttling on UMA) and tsc=reliable (P2 — skip TSC validation on
+    Zen 5). KERNEL_PARAMS now 15.
+  feat(env): add DXVK_LOG_LEVEL=none to ENV_VARS (eliminate DXVK log
+    I/O in production). ENV_VARS 4 → 5.
+  feat(mask): add systemd-zram-setup@zram0.service — 128 GB makes ZRAM
+    compression overhead pointless. MASK 9 → 10.
+  feat(udev): add NVMe rq_affinity=2 + read_ahead_kb=128 rule for
+    gaming random-read locality. UDEV_RULES 1 → 2.
+  feat(sysctl): add tcp_notsent_lowat=131072 (buffer bloat),
+    dirty_expire_centisecs=6000, dirty_writeback_centisecs=1500 (reduce
+    flusher wakeups). Sysctl entries 6 → 9.
+  feat(modprobe): add options mt7925_common power_save=0 — complements
+    NM wifi.powersave=2 and cmdline disable_aspm. Modprobe entries 4 → 5.
+  feat(verify): add 12 new _ry_verify_runtime checks — E610 NVM
+    firmware ≥ 1.30 (P0), THP enabled/defrag/shrink_underused (P1/P2),
+    KSM run state (P3), ZRAM service masked (P2), amd_pstate
+    status/prefcore (P2), CPU boost (P2), kernel.split_lock_mitigate=0
+    (P2), NVMe I/O scheduler=none (P2), BIOS VRAM carveout ≤ 1 GB (P1).
+    Add sysctl runtime checks for 3 new entries + split_lock_mitigate.
+  feat(static): add _chk_grep for 3 new sysctl entries, mt7925_common
+    modprobe, NVMe udev rq_affinity.
+  docs: sync README — kernel params (15), sysctl (9), add
+    DXVK_LOG_LEVEL, NVMe udev, mt7925_common modprobe, ZRAM mask,
+    version badge 3.8.0.
+
 3.7.59 (2026-03-22)
 -------------------
   refactor(naming): prefix 22 public functions with _ry_ to prevent
@@ -38,7 +66,7 @@
     targets function scope — corrected to block scope.
   feat(guard): re-source guard prevents duplicate event handler
     registration if script sourced twice in same fish session.
-  docs: sync README (version badge). Audit reports included.
+  docs: sync README (version badge).
 
 3.7.57 (2026-03-21)
 -------------------
@@ -118,7 +146,7 @@
   fix(logind): add HandleSuspendKeyLongPress, HandleRebootKeyLongPress.
   fix(nm): NM_LOG_LEVEL ERR→WARN (MT7925 diagnostics).
   fix(service): amdgpu After=graphical→multi-user.target.
-  fix(wifi): bare nmcli → _run for JSONL audit trail.
+  fix(wifi): bare nmcli → _run for JSONL logging.
   fix(verify): ntsync builtin — verify /dev/ntsync exists.
   fix(lock): verify PID ownership before lock delete.
   add: PKGS_DEL += cachyos-plymouth-theme.

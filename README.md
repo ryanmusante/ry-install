@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.7.59-blue)
+![Version](https://img.shields.io/badge/version-3.8.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -33,7 +33,7 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS, kernel bugzilla / Mesa GitLab
 | 7 | **Network** | `curl -sf --head https://archlinux.org` | Package sync |
 | 8 | **BIOS current** | [Beelink](https://dr.bee-link.cn/) | P110+ for Strix Halo stability |
 | 9 | **Snapshot rootfs** | `sudo btrfs subvolume snapshot -r / /.snapshots/pre-ry-install` | Rollback point (btrfs) |
-| 10 | **Review masked services** | See [Masked Services](#masked-services-9) | Confirm desktop, not laptop |
+| 10 | **Review masked services** | See [Masked Services](#masked-services-10) | Confirm desktop, not laptop |
 | 11 | **WiFi ready** | SSID 1-32 bytes, passphrase 8-63 bytes, no `%` | Interactive even with `--all` |
 | 12 | **CachyOS news** | [wiki.cachyos.org](https://wiki.cachyos.org/) / [archlinux.org/news](https://archlinux.org/news/) | Known issues before `-Syu` |
 
@@ -81,13 +81,13 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 ## Configuration
 
-### Kernel Parameters (14)
+### Kernel Parameters (15)
 
 | Parameter | Purpose |
 |-----------|---------|
 | `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 hang workaround (remove on 6.18+) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14,15,17 off (overdrive/GFXOFF/stutter) |
-| `audit=0` | Disable audit subsystem |
+| `amdgpu.wbrf=0` | Disable WiFi RFI memory clock throttling (UMA bandwidth) |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
 | `iommu=pt` | IOMMU passthrough (DMA protection, near-zero overhead) |
 | `mt7925e.disable_aspm=1` | Disable WiFi ASPM |
@@ -95,10 +95,11 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
 | `pci=pcie_bus_perf` | PCIe performance tuning |
 | `quiet` | Suppress boot messages |
+| `tsc=reliable` | Trust Zen 5 TSC clocksource, skip validation |
 | `ttm.pages_limit=32505856` | Cap pinned memory to 124 GiB |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
 | `workqueue.power_efficient=0` | Disable power-efficient workqueue remapping |
-| `zswap.enabled=0` | Disable zswap (zram preferred) |
+| `zswap.enabled=0` | Disable zswap (ZRAM masked separately) |
 
 ### Boot
 
@@ -108,7 +109,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | | timeout | `0` |
 | | console-mode | `keep` |
 | | editor | `no` |
-| `sdboot-manage.conf` | LINUX_OPTIONS | See [Kernel Parameters](#kernel-parameters-14) |
+| `sdboot-manage.conf` | LINUX_OPTIONS | See [Kernel Parameters](#kernel-parameters-15) |
 | | LINUX_FALLBACK_OPTIONS | `"quiet"` |
 | | DEFAULT_ENTRY | `"manual"` |
 | | REMOVE_EXISTING | `"yes"` |
@@ -127,12 +128,12 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | File | Setting |
 |------|---------|
-| `udev rules` | `ntsync` MODE=0666 |
+| `udev rules` | `ntsync` MODE=0666 · NVMe `rq_affinity=2`, `read_ahead_kb=128` |
 | `resolved.conf.d` | MulticastDNS=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
-| `modprobe.d` | Blacklist pcspkr, wdat_wdt · nvme_core multipath=N · mt7925e disable_aspm=1 |
+| `modprobe.d` | Blacklist pcspkr, wdat_wdt · nvme_core multipath=N · mt7925e disable_aspm=1 · mt7925_common power_save=0 |
 | `drirc` | RADV unified VRAM heap on APU |
 
 ### Sysctl Overrides
@@ -142,10 +143,13 @@ Complements CachyOS `70-cachyos-settings.conf` (no overlap).
 | Parameter | Value | Purpose |
 |-----------|-------|---------|
 | `net.ipv4.tcp_fastopen` | `3` | TCP Fast Open client + server |
+| `net.ipv4.tcp_notsent_lowat` | `131072` | Cap TCP send buffer 128 KB — prevent buffer bloat |
 | `vm.max_map_count` | `2147483642` | SteamOS value for DXVK/Proton |
 | `vm.compaction_proactiveness` | `1` | Minimal proactive compaction |
 | `vm.watermark_boost_factor` | `1` | Minimize aggressive reclaim |
 | `vm.page_lock_unfairness` | `5` | Optimal throughput (AMD benchmarks) |
+| `vm.dirty_expire_centisecs` | `6000` | 60s dirty page expiry — reduce flusher wakeups |
+| `vm.dirty_writeback_centisecs` | `1500` | 15s writeback interval — reduce flusher frequency |
 | `fs.inotify.max_user_instances` | `1024` | Parallel build tools and file watchers |
 
 ### Environment Variables
@@ -153,6 +157,7 @@ Complements CachyOS `70-cachyos-settings.conf` (no overlap).
 | Variable | Value |
 |----------|-------|
 | `SSH_AUTH_SOCK` | `${XDG_RUNTIME_DIR}/ssh-agent.socket` |
+| `DXVK_LOG_LEVEL` | `none` |
 | `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `8G` |
 | `PROTON_USE_NTSYNC` | `1` |
@@ -173,7 +178,7 @@ Complements CachyOS `70-cachyos-settings.conf` (no overlap).
 | **Add (12)** | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove (8)** | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
 
-### Masked Services (9)
+### Masked Services (10)
 
 | Service | Note |
 |---------|------|
@@ -181,6 +186,7 @@ Complements CachyOS `70-cachyos-settings.conf` (no overlap).
 | `power-profiles-daemon.service` | Conflicts with cpupower-epp |
 | `lvm2-monitor.service` | Skipped if LVM detected |
 | `NetworkManager-wait-online.service` | Unnecessary boot delay |
+| `systemd-zram-setup@zram0.service` | 128 GB makes ZRAM overhead pointless |
 | `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` | Desktop — no sleep/suspend/hibernate |
 
 ### Services (2)

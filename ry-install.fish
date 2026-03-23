@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.8.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.8.1 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.8.0"
+set -g VERSION "3.8.1"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -494,7 +494,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # ── Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600 ──
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        /etc/kernel/cmdline \
+        "/etc/kernel/cmdline" \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/udev/rules.d/99-cachyos-udev.rules" \
@@ -1074,7 +1074,7 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
     end
     # Must run after _load_profile — needs profile globals for _ry_get_file_content
     if test -z "$out_dir"
-        set -l out_dir (mktemp -d -t ry-content.XXXXXX)
+        set out_dir (mktemp -d -t ry-content.XXXXXX)
     end
     if not test -d "$out_dir"
         return 1

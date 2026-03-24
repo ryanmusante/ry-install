@@ -1,3 +1,15 @@
+3.8.9 (2026-03-24)
+------------------
+  fix(lint): remove 2>&1 from fish -n syntax check in _ry_do_lint.
+    Syntax error diagnostics leaked to stdout, breaking the
+    stdout=machine/stderr=human contract. stderr now stays on fd 2.
+  refactor(logs): rename local exit_code to _log_exit in _logs_list,
+    _analyze_log, _logs_file_ops. Eliminates scope shadow against the
+    global exit_code used by main dispatch (L7296). No runtime bug
+    (set -l properly scoped), but improves grep-based reasoning.
+    JSON key "exit_code" in grep patterns preserved.
+  docs: sync README (version badge 3.8.9), CHANGELOG.
+
 3.8.8 (2026-03-24)
 ------------------
   feat(lint): add inline # lint:ignore suppression. Lines annotated with

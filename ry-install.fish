@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.8.8 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.8.9 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.8.8"
+set -g VERSION "3.8.9"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -4774,7 +4774,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
     set -l _output_funcs '_fail|_ok|_warn|_info|_echo|_err|_dry|_msg'
 
     _echo "── Fish Syntax Check ──"
-    if fish -n "$script_path" 2>&1
+    if fish -n "$script_path"
         _ok "ry-install.fish: syntax valid"
     else
         set has_errors true
@@ -5028,24 +5028,24 @@ function _logs_list --description "List available ry-install log files"
         set -l size_k (math "ceil($size / 1024)")
 
         set -l footer (grep -m1 '"event":"footer"' "$f" 2>/dev/null)
-        set -l exit_code ""
+        set -l _log_exit ""
         set -l pass ""
         set -l fail ""
         set -l warn ""
         if test -n "$footer"
-            set exit_code (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
+            set _log_exit (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
             set pass (printf '%s' "$footer" | grep -oE '"pass":[0-9]+' | sed 's/.*://')
             set fail (printf '%s' "$footer" | grep -oE '"fail":[0-9]+' | sed 's/.*://')
             set warn (printf '%s' "$footer" | grep -oE '"warn":[0-9]+' | sed 's/.*://')
         end
 
         set -l summary ""
-        if test -n "$exit_code"
+        if test -n "$_log_exit"
             set -l result_mark "✓"
-            if test "$exit_code" != 0
+            if test "$_log_exit" != 0
                 set result_mark "✗"
             end
-            set summary (printf '  %s exit=%s' "$result_mark" "$exit_code")
+            set summary (printf '  %s exit=%s' "$result_mark" "$_log_exit")
             if test -n "$pass"; or test -n "$fail"
                 set summary "$summary pass=$pass fail=$fail warn=$warn"
             end
@@ -5085,14 +5085,14 @@ function _analyze_log --argument-names log_path --description "Parse and summari
     end
 
     set -l footer (grep -m1 '"event":"footer"' "$log_path" 2>/dev/null)
-    set -l exit_code ""
+    set -l _log_exit ""
     set -l pass 0
     set -l fail 0
     set -l warn_count 0
     set -l footer_ts ""
     set -l interrupted false
     if test -n "$footer"
-        set exit_code (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
+        set _log_exit (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
         set pass (printf '%s' "$footer" | grep -oE '"pass":[0-9]+' | sed 's/.*://')
         set fail (printf '%s' "$footer" | grep -oE '"fail":[0-9]+' | sed 's/.*://')
         set warn_count (printf '%s' "$footer" | grep -oE '"warn":[0-9]+' | sed 's/.*://')
@@ -5127,13 +5127,13 @@ function _analyze_log --argument-names log_path --description "Parse and summari
     _echo
 
     _echo "── Results ──"
-    if test -n "$exit_code"
-        if test "$exit_code" = 0
+    if test -n "$_log_exit"
+        if test "$_log_exit" = 0
             _ok "  Exit: 0 (success)"
-        else if test "$exit_code" = 129; or test "$exit_code" = 130; or test "$exit_code" = 131; or test "$exit_code" = 141; or test "$exit_code" = 143
-            _warn "  Exit: $exit_code (interrupted)"
+        else if test "$_log_exit" = 129; or test "$_log_exit" = 130; or test "$_log_exit" = 131; or test "$_log_exit" = 141; or test "$_log_exit" = 143
+            _warn "  Exit: $_log_exit (interrupted)"
         else
-            _fail "  Exit: $exit_code (failure)"
+            _fail "  Exit: $_log_exit (failure)"
         end
     else
         # Aggregate timing data and error counts
@@ -5264,7 +5264,7 @@ function _analyze_log --argument-names log_path --description "Parse and summari
     set -l size (stat -c '%s' -- "$log_path" 2>/dev/null; or echo 0)
     _echo "  $line_count events, "(math "ceil($size / 1024)")" KB"
 
-    test -n "$exit_code"; and return "$exit_code"
+    test -n "$_log_exit"; and return "$_log_exit"
     return 0
 end
 
@@ -5331,13 +5331,13 @@ function _logs_file_ops --argument-names target --description "Log viewer: analy
                 set -l fdir (basename (dirname -- "$f"))
 
                 set -l footer (grep -m1 '"event":"footer"' "$f" 2>/dev/null)
-                set -l exit_code ""
+                set -l _log_exit ""
                 set -l pass 0
                 set -l fail 0
                 set -l warn_c 0
                 set -l interrupted false
                 if test -n "$footer"
-                    set exit_code (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
+                    set _log_exit (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
                     set pass (printf '%s' "$footer" | grep -oE '"pass":[0-9]+' | sed 's/.*://')
                     set fail (printf '%s' "$footer" | grep -oE '"fail":[0-9]+' | sed 's/.*://')
                     set warn_c (printf '%s' "$footer" | grep -oE '"warn":[0-9]+' | sed 's/.*://')
@@ -5357,10 +5357,10 @@ function _logs_file_ops --argument-names target --description "Log viewer: analy
 
                 set -l mark "✓"
                 set -l incomplete false
-                if test -z "$exit_code"; and test "$interrupted" != true
+                if test -z "$_log_exit"; and test "$interrupted" != true
                     set mark "?"
                     set incomplete true
-                else if test -n "$exit_code"; and test "$exit_code" != 0
+                else if test -n "$_log_exit"; and test "$_log_exit" != 0
                     set mark "✗"
                     set -a failed_runs "$fdir/$fname"
                 end
@@ -5372,7 +5372,7 @@ function _logs_file_ops --argument-names target --description "Log viewer: analy
                 if test "$incomplete" = true
                     set suffix " (incomplete)"
                 end
-                set -l summary (printf '%s %-50s exit=%-3s pass=%-3s fail=%-3s warn=%s%s' "$mark" "$fdir/$fname" "$exit_code" "$pass" "$fail" "$warn_c" "$suffix")
+                set -l summary (printf '%s %-50s exit=%-3s pass=%-3s fail=%-3s warn=%s%s' "$mark" "$fdir/$fname" "$_log_exit" "$pass" "$fail" "$warn_c" "$suffix")
                 _echo "  $summary"
 
                 if test (count $all_fails) -gt 0

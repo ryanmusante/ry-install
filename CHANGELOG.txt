@@ -1,3 +1,35 @@
+3.8.5 (2026-03-24)
+------------------
+  fix(scope): _msg set -l level ERR inside if-block shadows
+    --argument-names level. Block-local destroyed on end; _log,
+    switch/case, set_color used original invalid level string. Fix:
+    bare set (rebinds function-scope). 18th block-scope shadow
+    (v3.7.58=16, v3.8.1=1, v3.8.5=1).
+  docs: sync README (version badge 3.8.5), CHANGELOG.
+
+3.8.4 (2026-03-24)
+------------------
+  fix(logging): rm LOG_FILE before _load_profile exits. Prevents orphan
+    footer-only log on profile configuration errors (matches arg-parsing
+    cleanup pattern).
+  fix(diff): add missing sysctl reload in --diff --fix. Re-installing
+    /etc/sysctl.d/99-ry-sysctl.conf now offers sysctl --system reload,
+    matching --install-file behavior.
+  refactor(install): extract _atomic_write_file helper. Deduplicates
+    sudo/non-sudo atomic write logic in _ry_install_file (~80 lines).
+    Non-sudo chmod/mv now logged via _run for consistency.
+  refactor(check): pre-serialize systemctl show output in parent.
+    Eliminates duplicated _parse_systemctl_show in fish -c child.
+  refactor(profile): extract SYSCTL_CHECKS variable. Single source of
+    truth for sysctl runtime verification values. Conditionally required
+    when profile includes sysctl.d destination.
+  refactor(completions): replace nested single-quote escaping with
+    data-driven echo loop. Same output, maintainable entries.
+  refactor(lint): centralize output function exclusion list. Single
+    _output_funcs variable for 5 grep -vE filters. Adds _dry/_msg to
+    previously incomplete exclusions.
+  docs: sync README (version badge 3.8.4), CHANGELOG.
+
 3.8.3 (2026-03-23)
 ------------------
   refactor(diff): remove delta (Rust) as preferred diff colorizer. Diff

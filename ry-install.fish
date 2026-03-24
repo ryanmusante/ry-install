@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.8.3 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.8.5 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.8.3"
+set -g VERSION "3.8.5"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -591,6 +591,18 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "PROTON_USE_NTSYNC=1" \
         "PROTON_NO_WM_DECORATION=1"
 
+    # ── Sysctl verification (must match _ry_get_file_content sysctl case) ──
+    set -g SYSCTL_CHECKS \
+        "net.ipv4.tcp_fastopen=3" \
+        "net.ipv4.tcp_notsent_lowat=131072" \
+        "vm.max_map_count=2147483642" \
+        "vm.compaction_proactiveness=1" \
+        "vm.watermark_boost_factor=1" \
+        "vm.page_lock_unfairness=5" \
+        "vm.dirty_expire_centisecs=6000" \
+        "vm.dirty_writeback_centisecs=1500" \
+        "fs.inotify.max_user_instances=1024"
+
     # ── Packages ──
     set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications fd sd dust procs bottom git-delta lm_sensors
     set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme ufw octopi micro cachyos-micro-settings btop
@@ -674,6 +686,10 @@ function _validate_profile --description "Verify loaded profile has all required
                 if not contains -- UDEV_RULES $required
                     set -a required UDEV_RULES
                 end
+            case '*/sysctl.d/*'
+                if not contains -- SYSCTL_CHECKS $required
+                    set -a required SYSCTL_CHECKS
+                end
         end
     end
 
@@ -731,6 +747,7 @@ function _load_profile --description "Determine, load, and validate the active p
     # 2. Validate name format
     if not string match -qr '^[a-z0-9][a-z0-9_-]*$' -- "$name"
         _err "Invalid profile name: '$name' (must be lowercase alphanumeric, starting with [a-z0-9])"
+        command rm -f -- "$LOG_FILE" 2>/dev/null
         exit $EXIT_USAGE
     end
 
@@ -743,6 +760,7 @@ function _load_profile --description "Determine, load, and validate the active p
     else if test -f "$profile_path"
         if not fish --no-execute "$profile_path" 2>/dev/null
             _err "Profile file has syntax errors: $profile_path"
+            command rm -f -- "$LOG_FILE" 2>/dev/null
             exit $EXIT_USAGE
         end
         source "$profile_path"
@@ -754,16 +772,20 @@ function _load_profile --description "Determine, load, and validate the active p
             profile_$name
         else
             _err "Profile file does not define function _ry_profile_$name: $profile_path"
+            command rm -f -- "$LOG_FILE" 2>/dev/null
             exit $EXIT_USAGE
         end
     else
         _err "Unknown profile: $name"
+        command rm -f -- "$LOG_FILE" 2>/dev/null
         exit $EXIT_USAGE
     end
 
     # 4. Validate
-    _validate_profile "$name"
-    or exit $EXIT_USAGE
+    if not _validate_profile "$name"
+        command rm -f -- "$LOG_FILE" 2>/dev/null
+        exit $EXIT_USAGE
+    end
 
     # 5. Derived globals
     set -g MANAGED_FILE_COUNT (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
@@ -1257,7 +1279,7 @@ function _msg --argument-names level --description "Format and print a leveled s
     if not contains -- "$level" $valid_levels
         echo "[BUG] _msg called with invalid level: '$level'" >&2
         printf '{"ts":"%s","event":"bug","data":"_msg called with invalid level: %s"}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (_json_str "$level") >>"$LOG_FILE"
-        set -l level ERR
+        set level ERR
     end
     # Route level to JSONL event + increment verify counters for summary
     set -l msg (string join -- " " $argv[2..])
@@ -2316,6 +2338,148 @@ function _ry_validate_configs --description "Run all embedded config validators"
     return 0
 end
 
+# ── Atomic file write helper — shared by _ry_install_file (deduplicates sudo/non-sudo paths) ──
+
+# Atomic write: mktemp→symlink-check→write→symlink-recheck→chmod→hash→mv→verify→chown
+function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write with symlink and integrity checks"
+    if test (count $argv) -ne 3
+        _err "_atomic_write_file: expected 3 args (dst perms use_sudo), got "(count $argv)
+        return 1
+    end
+
+    set -l dst_dir (dirname -- "$dst")
+    set -l tmpfile
+    if test "$use_sudo" = true
+        set tmpfile (sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
+    else
+        set tmpfile (mktemp -p "$dst_dir" .ry-install.XXXXXX)
+    end
+    if test -z "$tmpfile"
+        _fail "→ $dst (mktemp failed)"
+        return 1
+    end
+
+    # Pre-write symlink check
+    if test "$use_sudo" = true
+        if sudo test -L "$tmpfile"
+            sudo rm -f -- "$tmpfile" 2>/dev/null
+            _fail "→ $dst (temp file is symlink — aborting)"
+            return 1
+        end
+    else
+        if test -L "$tmpfile"
+            command rm -f -- "$tmpfile" 2>/dev/null
+            _fail "→ $dst (temp file is symlink — aborting)"
+            return 1
+        end
+    end
+
+    # Write content via pipe
+    if test "$use_sudo" = true
+        _ry_get_file_content "$dst" | sudo tee -- "$tmpfile" >/dev/null
+    else
+        _ry_get_file_content "$dst" | tee -- "$tmpfile" >/dev/null
+    end
+    set -l _ps $pipestatus
+    if test $_ps[1] -ne 0
+        if test "$use_sudo" = true
+            sudo rm -f -- "$tmpfile" 2>/dev/null
+        else
+            command rm -f -- "$tmpfile" 2>/dev/null
+        end
+        _err "No content defined for: $dst"
+        return 1
+    end
+    if test $_ps[2] -ne 0
+        if test "$use_sudo" = true
+            sudo rm -f -- "$tmpfile" 2>/dev/null
+        else
+            command rm -f -- "$tmpfile" 2>/dev/null
+        end
+        _fail "→ $dst (write to temp failed)"
+        return 1
+    end
+
+    # Post-write symlink re-check: closes TOCTOU between pre-write test -L and tee
+    if test "$use_sudo" = true
+        if sudo test -L "$tmpfile"
+            sudo rm -f -- "$tmpfile" 2>/dev/null
+            _fail "→ $dst (temp file replaced with symlink during write — aborting)"
+            return 1
+        end
+    else
+        if test -L "$tmpfile"
+            command rm -f -- "$tmpfile" 2>/dev/null
+            _fail "→ $dst (temp file replaced with symlink during write — aborting)"
+            return 1
+        end
+    end
+
+    # chmod
+    if test "$use_sudo" = true
+        if not _run sudo chmod -- $perms "$tmpfile"
+            sudo rm -f -- "$tmpfile" 2>/dev/null
+            _fail "→ $dst (chmod failed)"
+            return 1
+        end
+    else
+        if not _run command chmod -- $perms "$tmpfile"
+            command rm -f -- "$tmpfile" 2>/dev/null
+            _fail "→ $dst (chmod failed)"
+            return 1
+        end
+    end
+
+    # Capture expected hash from tmpfile before mv (single _ry_get_file_content call; no redundant re-generation)
+    set -l _expected_hash
+    if test "$use_sudo" = true
+        set _expected_hash (sudo cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
+    else
+        set _expected_hash (command cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
+    end
+
+    # Atomic mv
+    if test "$use_sudo" = true
+        if not _run sudo mv -- "$tmpfile" "$dst"
+            sudo rm -f -- "$tmpfile" 2>/dev/null
+            _fail "→ $dst (atomic move failed)"
+            return 1
+        end
+    else
+        if not _run command mv -- "$tmpfile" "$dst"
+            command rm -f -- "$tmpfile" 2>/dev/null
+            _fail "→ $dst (atomic move failed)"
+            return 1
+        end
+    end
+
+    # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs)
+    set -l _actual_hash
+    if test "$use_sudo" = true
+        set _actual_hash (sudo cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+    else
+        set _actual_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+    end
+    if test -n "$_expected_hash"; and test "$_expected_hash" != "$_actual_hash"
+        _fail "→ $dst (post-write checksum mismatch)"
+        _log "HASH_MISMATCH: expected=$_expected_hash actual=$_actual_hash dst=$dst"
+        return 1
+    end
+
+    # chown + success message
+    if test "$use_sudo" = true
+        if not _run sudo chown -- root:root "$dst"
+            _warn "→ $dst (chown failed, check ownership)"
+            set -g INSTALL_HAD_ERRORS true
+        else
+            _ok "→ $dst"
+        end
+    else
+        _ok "→ $dst"
+    end
+    return 0
+end
+
 # ── Atomic file installation — _ry_get_file_content → mktemp → validate → chmod/chown → mv; hash comparison skips unchanged files; skips NM/IWD if iwd not installed ──
 
 # Deploy a single embedded config: get content → mktemp → validate → chmod → atomic mv to dst
@@ -2377,114 +2541,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
         end
     end
 
-    if test "$use_sudo" = true
-        # Atomic: mktemp in dst_dir (same fs) → chmod → mv; symlink check prevents TOCTOU
-        set -l dst_dir (dirname -- "$dst")
-        set -l tmpfile (sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
-        if test -z "$tmpfile"
-            _fail "→ $dst (mktemp failed)"
-            return 1
-        end
-        if sudo test -L "$tmpfile"
-            sudo rm -f -- "$tmpfile" 2>/dev/null
-            _fail "→ $dst (temp file is symlink — aborting)"
-            return 1
-        end
-        # DRY=true returns at line above; this code only runs when DRY=false
-        _ry_get_file_content "$dst" | sudo tee -- "$tmpfile" >/dev/null
-        set -l _ps $pipestatus
-        if test $_ps[1] -ne 0
-            sudo rm -f -- "$tmpfile" 2>/dev/null
-            _err "No content defined for: $dst"
-            return 1
-        end
-        if test $_ps[2] -ne 0
-            sudo rm -f -- "$tmpfile" 2>/dev/null
-            _fail "→ $dst (write to temp failed)"
-            return 1
-        end
-        # Post-write symlink re-check: closes TOCTOU between pre-write test -L and tee
-        if sudo test -L "$tmpfile"
-            sudo rm -f -- "$tmpfile" 2>/dev/null
-            _fail "→ $dst (temp file replaced with symlink during write — aborting)"
-            return 1
-        end
-        if not _run sudo chmod -- $perms "$tmpfile"
-            sudo rm -f -- "$tmpfile" 2>/dev/null
-            _fail "→ $dst (chmod failed)"
-            return 1
-        end
-        # Capture expected hash from tmpfile before mv (single _ry_get_file_content call; no redundant re-generation)
-        set -l _expected_hash (sudo cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
-        if not _run sudo mv -- "$tmpfile" "$dst"
-            sudo rm -f -- "$tmpfile" 2>/dev/null
-            _fail "→ $dst (atomic move failed)"
-            return 1
-        end
-        # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs)
-        set -l _actual_hash (sudo cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
-        if test -n "$_expected_hash"; and test "$_expected_hash" != "$_actual_hash"
-            _fail "→ $dst (post-write checksum mismatch)"
-            _log "HASH_MISMATCH: expected=$_expected_hash actual=$_actual_hash dst=$dst"
-            return 1
-        end
-        if not _run sudo chown -- root:root "$dst"
-            _warn "→ $dst (chown failed, check ownership)"
-            set -g INSTALL_HAD_ERRORS true
-        else
-            _ok "→ $dst"
-        end
-    else
-        set -l tmpfile (mktemp -p (dirname -- "$dst") .ry-install.XXXXXX)
-        if test -z "$tmpfile"
-            _fail "→ $dst (mktemp failed)"
-            return 1
-        end
-        if test -L "$tmpfile"
-            command rm -f -- "$tmpfile" 2>/dev/null
-            _fail "→ $dst (temp file is symlink — aborting)"
-            return 1
-        end
-        # DRY=true returns at line above; this code only runs when DRY=false
-        _ry_get_file_content "$dst" | tee -- "$tmpfile" >/dev/null
-        set -l _ps $pipestatus
-        if test $_ps[1] -ne 0
-            command rm -f -- "$tmpfile" 2>/dev/null
-            _err "No content defined for: $dst"
-            return 1
-        end
-        if test $_ps[2] -ne 0
-            command rm -f -- "$tmpfile" 2>/dev/null
-            _fail "→ $dst (write to temp failed)"
-            return 1
-        end
-        # Post-write symlink re-check: closes TOCTOU between pre-write test -L and tee
-        if test -L "$tmpfile"
-            command rm -f -- "$tmpfile" 2>/dev/null
-            _fail "→ $dst (temp file replaced with symlink during write — aborting)"
-            return 1
-        end
-        if not command chmod -- $perms "$tmpfile"
-            command rm -f -- "$tmpfile" 2>/dev/null
-            _fail "→ $dst (chmod failed)"
-            return 1
-        end
-        # Capture expected hash from tmpfile before mv (single _ry_get_file_content call; no redundant re-generation)
-        set -l _expected_hash (command cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
-        if not command mv -- "$tmpfile" "$dst"
-            command rm -f -- "$tmpfile" 2>/dev/null
-            _fail "→ $dst (atomic move failed)"
-            return 1
-        end
-        # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs)
-        set -l _actual_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
-        if test -n "$_expected_hash"; and test "$_expected_hash" != "$_actual_hash"
-            _fail "→ $dst (post-write checksum mismatch)"
-            _log "HASH_MISMATCH: expected=$_expected_hash actual=$_actual_hash dst=$dst"
-            return 1
-        end
-        _ok "→ $dst"
-    end
+    _atomic_write_file "$dst" $perms $use_sudo
 
     return 0
 end
@@ -2575,6 +2632,7 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
     set -l resolved_files_fixed false
     set -l nm_config_fixed false
     set -l logind_files_fixed false
+    set -l sysctl_files_fixed false
     set -l _boot_fstype (findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
 
     if test "$FIX" = true; and test "$DRY" = false
@@ -2841,6 +2899,9 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
                         if string match -q '*/logind.conf.d/*' -- "$dst"
                             set logind_files_fixed true
                         end
+                        if string match -q '*/sysctl.d/*' -- "$dst"
+                            set sysctl_files_fixed true
+                        end
                     else
                         set fix_errors true
                     end
@@ -2893,6 +2954,12 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
         end
         if test "$logind_files_fixed" = true
             _info "Logind config changed — reboot required (restarting logind kills all sessions)"
+        end
+        if test "$sysctl_files_fixed" = true; and test "$DRY" = false
+            _echo
+            if _ask "Sysctl config changed — reload?"
+                _run sudo sysctl --system; or _warn "Sysctl --system failed"
+            end
         end
         if test (count $fixed_user_services) -gt 0; and test "$DRY" = false
             _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
@@ -3708,6 +3775,11 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     set -l pid_kparam $last_pid
 
     # ── Job 4: service state — batch systemctl show (parallel); LVM pre-serialized by parent ──
+    # Pre-parse systemctl show in parent (child can't call _parse_systemctl_show)
+    set -l _all_check_units (command cat -- "$result_dir/exp_svcs") (command cat -- "$result_dir/mask_units") (command cat -- "$result_dir/implicit_svcs" 2>/dev/null)
+    set -l _check_show (systemctl show --property=LoadState,ActiveState,UnitFileState -- $_all_check_units 2>/dev/null | string collect --no-trim-newlines)
+    set -l _check_parsed (_parse_systemctl_show "$_check_show")
+    printf '%s\n' $_check_parsed >"$result_dir/parsed_units"
     fish -c '
         set -l result_dir $argv[1]
         set -l drift false
@@ -3715,37 +3787,8 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         set -l exp_svcs (command cat -- "$result_dir/exp_svcs")
         set -l mask_units (command cat -- "$result_dir/mask_units")
         set -l implicit_svcs (command cat -- "$result_dir/implicit_svcs" 2>/dev/null)
-        # B-3a: batch query all expected + masked + implicit units in 1 call
-        set -l all_units $exp_svcs $mask_units $implicit_svcs
-        # string collect preserves blank-line record delimiters (bare command substitution strips them)
-        set -l show_collected (systemctl show --property=LoadState,ActiveState,UnitFileState -- $all_units 2>/dev/null | string collect --no-trim-newlines)
-        set -l current_load ""
-        set -l current_active ""
-        set -l current_unitfile ""
-        set -l results
-        for line in (string split -- \n "$show_collected")
-            if test -z "$line"
-                # Emit only if at least one property was accumulated (guards against leading blank lines)
-                if test -n "$current_load"; or test -n "$current_active"; or test -n "$current_unitfile"
-                    set -a results "$current_load:$current_active:$current_unitfile"
-                end
-                set current_load ""
-                set current_active ""
-                set current_unitfile ""
-                continue
-            end
-            switch "$line"
-                case "LoadState=*"
-                    set current_load (string replace -- "LoadState=" "" "$line")
-                case "ActiveState=*"
-                    set current_active (string replace -- "ActiveState=" "" "$line")
-                case "UnitFileState=*"
-                    set current_unitfile (string replace -- "UnitFileState=" "" "$line")
-            end
-        end
-        if test -n "$current_load"; or test -n "$current_active"; or test -n "$current_unitfile"
-            set -a results "$current_load:$current_active:$current_unitfile"
-        end
+        # Read pre-parsed results from parent (eliminates duplicated _parse_systemctl_show)
+        set -l results (command cat -- "$result_dir/parsed_units" 2>/dev/null)
 
         # Check expected services (first N results)
         # Timer units: ActiveState=active (waiting for next trigger); never exited
@@ -4292,17 +4335,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
 
     _echo "── sysctl overrides ──"
     # Verify runtime values from /etc/sysctl.d/99-ry-sysctl.conf (ry-install managed)
-    set -l _sysctl_checks \
-        "net.ipv4.tcp_fastopen=3" \
-        "net.ipv4.tcp_notsent_lowat=131072" \
-        "vm.max_map_count=2147483642" \
-        "vm.compaction_proactiveness=1" \
-        "vm.watermark_boost_factor=1" \
-        "vm.page_lock_unfairness=5" \
-        "vm.dirty_expire_centisecs=6000" \
-        "vm.dirty_writeback_centisecs=1500" \
-        "fs.inotify.max_user_instances=1024"
-    for _sc in $_sysctl_checks
+    for _sc in $SYSCTL_CHECKS
         set -l _key (string split '=' -- "$_sc")[1]
         set -l _expected (string split '=' -- "$_sc")[2]
         set -l _proc_path (string replace -a '.' '/' -- "$_key")
@@ -4736,6 +4769,9 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
 
     set -l has_errors false
 
+    # Output function exclusions for anti-pattern checks (update when adding output functions)
+    set -l _output_funcs '_fail|_ok|_warn|_info|_echo|_err|_dry|_msg'
+
     _echo "── Fish Syntax Check ──"
     if fish -n "$script_path" 2>&1
         _ok "ry-install.fish: syntax valid"
@@ -4766,7 +4802,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
     set -l clean_content (sed '/^[[:space:]]*#/d' "$script_path")
 
     # Exclude embedded bash in systemd ExecStart= (bash syntax is correct there)
-    set -l bash_subst (printf '%s\n' $clean_content | grep -n '\$(' 2>/dev/null | grep -vE "ExecStart|/bin/bash|fish --version|'\\\$\\('|_warn|_ok|_dry|_info|_fail|_err|_echo" | head -n 20|| true)
+    set -l bash_subst (printf '%s\n' $clean_content | grep -n '\$(' 2>/dev/null | grep -vE "ExecStart|/bin/bash|fish --version|'\\\$\\('|$_output_funcs" | head -n 20|| true)
     if test -n "$bash_subst"
         _warn "Possible bash-style \$() found:"
         set -l lint_out (printf '%s\n' $bash_subst | sed 's/^/  /')
@@ -4779,7 +4815,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
         _info "  Note: ExecStart and embedded bash lines excluded"
     end
 
-    set -l bash_cond (printf '%s\n' $clean_content | grep -nE '(^|[[:space:];])\[\[[[:space:]]' 2>/dev/null | grep -vE '_fail|_ok|_warn|_info|_echo'|| true)
+    set -l bash_cond (printf '%s\n' $clean_content | grep -nE '(^|[[:space:];])\[\[[[:space:]]' 2>/dev/null | grep -vE "$_output_funcs"|| true)
     if test -n "$bash_cond"
         _fail "Bash-style [[ ]] found:"
         set -l lint_out (printf '%s\n' $bash_cond | sed 's/^/  /')
@@ -4805,7 +4841,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
         _ok "No bash-style 'export' found"
     end
 
-    set -l bash_logic (printf '%s\n' $clean_content | grep -nE '[^|]\|\|[^|]|[^&]&&[^&]' 2>/dev/null | grep -vE "printf|awk|sed|_warn|_ok|_fail|_info|_echo|'.*&&|'.*\|\||NR >|~ /|/\\^"|| true)
+    set -l bash_logic (printf '%s\n' $clean_content | grep -nE '[^|]\|\|[^|]|[^&]&&[^&]' 2>/dev/null | grep -vE "printf|awk|sed|$_output_funcs|'.*&&|'.*\|\||NR >|~ /|/\\^"|| true)
     if test -n "$bash_logic"
         _warn "Possible bash-style &&/|| found:"
         set -l lint_out (printf '%s\n' $bash_logic | sed 's/^/  /')
@@ -4817,7 +4853,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
         _ok "No bash-style &&/|| operators found"
     end
 
-    set -l bash_varexp (printf '%s\n' $clean_content | grep -nE '\$\{[a-zA-Z_]' 2>/dev/null | grep -vE '_warn|_ok|_fail|_info|_echo|_err|printf'|| true)
+    set -l bash_varexp (printf '%s\n' $clean_content | grep -nE '\$\{[a-zA-Z_]' 2>/dev/null | grep -vE "$_output_funcs|printf"|| true)
     if test -n "$bash_varexp"
         _fail "Bash-style \${var} found:"
         set -l lint_out (printf '%s\n' $bash_varexp | sed 's/^/  /')
@@ -4830,7 +4866,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
         _ok "No bash-style \${var} expansion found"
     end
 
-    set -l dead_pipe (printf '%s\n' $clean_content | grep -nE 'grep\s+-[a-zA-Z]*q[a-zA-Z]*\s.*\|' 2>/dev/null | grep -vE '_fail|_ok|_warn|_info|_echo|_err'; or true)
+    set -l dead_pipe (printf '%s\n' $clean_content | grep -nE 'grep\s+-[a-zA-Z]*q[a-zA-Z]*\s.*\|' 2>/dev/null | grep -vE "$_output_funcs"; or true)
     if test -n "$dead_pipe"
         _warn "Possible dead pipe (grep -q suppresses stdout):"
         set -l lint_out (printf '%s\n' $dead_pipe | sed 's/^/  /')
@@ -6754,41 +6790,42 @@ function _ry_do_completions --description "Generate fish shell completions for r
     # Build --install-file destination list at generation time
     set -l _install_file_targets (string join ' ' $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
 
-    printf '%s\n' \
-        '# Fish completions for ry-install v'"$VERSION" \
-        '# Generated by: ./ry-install.fish --completions' \
-        '' \
-        '# Both "ry-install" (renamed) and "ry-install.fish" (direct)' \
-        'for cmd in ry-install ry-install.fish' \
-        '    complete -c $cmd -f' \
-        '' \
-        '    # Installation' \
-        '    complete -c $cmd -s a -l all -d '"'"'Install without prompts (unattended mode)'"'"'' \
-        '    complete -c $cmd -s f -l force -d '"'"'Auto-yes prompts without progress bar (for --diff --fix, etc.)'"'"'' \
-        '    complete -c $cmd -s V -l verbose -d '"'"'Show output on terminal'"'"'' \
-        '    complete -c $cmd -s n -l dry-run -d '"'"'Preview changes without modifying system'"'"'' \
-        '' \
-        '    # Verification' \
-        '    complete -c $cmd -l diff -d '"'"'Compare embedded files against installed system (use absolute path for single file)'"'"'' \
-        '    complete -c $cmd -l verify-static -d '"'"'Check config files exist with correct content'"'"'' \
-        '    complete -c $cmd -l verify-runtime -d '"'"'Check live system state (run after reboot)'"'"'' \
-        '    complete -c $cmd -l lint -d '"'"'Run fish syntax and anti-pattern checks'"'"'' \
-        '    complete -c $cmd -l check -d '"'"'Silent idempotency probe (exit 0 = clean, exit 10 = drift)'"'"'' \
-        '    complete -c $cmd -l test-all -d '"'"'Run all safe modes and generate NDJSON logs (test suite)'"'"'' \
-        '' \
-        '    # Utilities' \
-        '    complete -c $cmd -l logs -d '"'"'View logs (system, gpu, wifi, boot, audio, usb, kernel, or service name)'"'"'' \
-        '    complete -c $cmd -l install-file -d '"'"'Re-deploy a single managed file'"'"' -rxa '"'"$_install_file_targets"'"'' \
-        '    complete -c $cmd -l completions -d '"'"'Install fish tab-completions for ry-install itself'"'"'' \
-        '' \
-        '    # Other' \
-        '    complete -c $cmd -l fix -d '"'"'Re-install drifted files (use with --diff)'"'"'' \
-        '    complete -c $cmd -s h -l help -d '"'"'Show help'"'"'' \
-        '    complete -c $cmd -s v -l version -d '"'"'Show version'"'"'' \
-        '' \
-        '    # Completions for --logs subcommands' \
-        '    complete -c $cmd -l logs -xa '"'"'analyze last all list system gpu wifi boot audio usb kernel'"'"'' \
-        end >"$tmpfile"
+    # Header
+    echo '# Fish completions for ry-install v'"$VERSION" >"$tmpfile"
+    echo '# Generated by: ./ry-install.fish --completions' >>"$tmpfile"
+    echo 'for cmd in ry-install ry-install.fish' >>"$tmpfile"
+    echo '    complete -c $cmd -f' >>"$tmpfile"
+
+    # Flag completions: "flags|description"
+    set -l _comp_entries \
+        '-s a -l all|Install without prompts (unattended mode)' \
+        '-s f -l force|Auto-yes prompts without progress bar' \
+        '-s V -l verbose|Show output on terminal' \
+        '-s n -l dry-run|Preview changes without modifying system' \
+        '-l diff|Compare embedded files against installed system' \
+        '-l verify-static|Check config files exist with correct content' \
+        '-l verify-runtime|Check live system state (run after reboot)' \
+        '-l lint|Run fish syntax and anti-pattern checks' \
+        '-l check|Silent idempotency probe (exit 0 = clean, exit 10 = drift)' \
+        '-l test-all|Run all safe modes and generate NDJSON logs (test suite)' \
+        '-l logs|View logs (system, gpu, wifi, boot, audio, usb, kernel, or service name)' \
+        '-l completions|Install fish tab-completions for ry-install itself' \
+        '-l fix|Re-install drifted files (use with --diff)' \
+        '-s h -l help|Show help' \
+        '-s v -l version|Show version'
+    for _ce in $_comp_entries
+        set -l _flags (string split '|' -- "$_ce")[1]
+        set -l _desc (string split '|' -- "$_ce")[2]
+        echo "    complete -c \$cmd $_flags -d '$_desc'" >>"$tmpfile"
+    end
+
+    # --install-file with destination completions
+    echo "    complete -c \$cmd -l install-file -d 'Re-deploy a single managed file' -rxa '$_install_file_targets'" >>"$tmpfile"
+
+    # --logs subcommand completions
+    echo "    complete -c \$cmd -l logs -xa 'analyze last all list system gpu wifi boot audio usb kernel'" >>"$tmpfile"
+
+    echo 'end' >>"$tmpfile"
 
     if test $status -ne 0
         command rm -f -- "$tmpfile" 2>/dev/null

@@ -1,3 +1,18 @@
+3.8.6 (2026-03-24)
+------------------
+  fix(wifi): check $pipestatus on WiFi credential printf|tee pipe.
+    Consistent with _atomic_write_file pattern (line 2383). Old
+    structure used "if printf|tee" which only checked tee exit;
+    refactored to explicit $pipestatus[1] and $pipestatus[2] check
+    with separate error/success paths. Removes orphaned else block.
+  fix(verify): use sudo dmesg for ReBAR/SAM check in
+    _ry_verify_runtime. Sudo already cached by _ensure_sudo_cached
+    at function entry; unprivileged dmesg fails when
+    kernel.dmesg_restrict=1.
+  fix(verify): replace deprecated test -a with "; and test" in E610
+    NVM version check (line 4518). Single remaining instance.
+  docs: sync README (version badge 3.8.6), CHANGELOG.
+
 3.8.5 (2026-03-24)
 ------------------
   fix(scope): _msg set -l level ERR inside if-block shadows

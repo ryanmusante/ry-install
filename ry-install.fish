@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.8.5 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.8.6 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.8.5"
+set -g VERSION "3.8.6"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -3982,7 +3982,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     _echo "── ReBAR/SAM status ──"
-    set -l rebar_status (dmesg 2>/dev/null | grep -i 'BAR' | grep -i -E 'resize|rebar|large|above.4g' | head -n 1)
+    set -l rebar_status (sudo dmesg 2>/dev/null | grep -i 'BAR' | grep -i -E 'resize|rebar|large|above.4g' | head -n 1)
     if test -n "$rebar_status"
         if string match -qi '*enabled*' -- "$rebar_status"; or string match -qi '*resiz*' -- "$rebar_status"
             _ok "  ReBAR/SAM: enabled"
@@ -4515,7 +4515,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
                     # Extract NVM version (format varies: "X.YY 0xABCDEF..." or similar)
                     set -l _nvm_major (string match -r '^(\d+)\.' -- "$_fw_ver")[2]
                     set -l _nvm_minor (string match -r '^\d+\.(\d+)' -- "$_fw_ver")[2]
-                    if test -n "$_nvm_major" -a -n "$_nvm_minor"
+                    if test -n "$_nvm_major"; and test -n "$_nvm_minor"
                         set -l _nvm_combined (math "$_nvm_major * 100 + $_nvm_minor")
                         if test "$_nvm_combined" -ge 130
                             _ok "  $_iface E610 NVM: $_fw_ver (≥ 1.30)"
@@ -6449,7 +6449,14 @@ function _install_finalize --description "Run post-install verification, cleanup
                     set -l safe_pass (_gkeyfile_escape "$WIFI_PASS")
                     set -l safe_ssid (_gkeyfile_escape "$WIFI_SSID")
                     # Inside DRY=false gate; credential write only occurs on live runs
-                    if printf '%s\n' "[connection]" "id=$safe_ssid" "uuid=$conn_uuid" "type=wifi" "interface-name=$WIFI_IFACE" "autoconnect=true" "[wifi]" "mode=infrastructure" "ssid=$safe_ssid" "[wifi-security]" "key-mgmt=wpa-psk" "psk=$safe_pass" "[ipv4]" "method=auto" "[ipv6]" "method=disabled" | sudo tee -- "$tmpfile" >/dev/null
+                    printf '%s\n' "[connection]" "id=$safe_ssid" "uuid=$conn_uuid" "type=wifi" "interface-name=$WIFI_IFACE" "autoconnect=true" "[wifi]" "mode=infrastructure" "ssid=$safe_ssid" "[wifi-security]" "key-mgmt=wpa-psk" "psk=$safe_pass" "[ipv4]" "method=auto" "[ipv6]" "method=disabled" | sudo tee -- "$tmpfile" >/dev/null
+                    set -l _wifi_ps $pipestatus
+                    if test $_wifi_ps[1] -ne 0; or test $_wifi_ps[2] -ne 0
+                        set --erase WIFI_PASS
+                        sudo rm -f -- "$tmpfile" 2>/dev/null
+                        _err "WiFi connection profile write failed"
+                        set -g INSTALL_HAD_ERRORS true
+                    else
                         set --erase WIFI_PASS
                         # Post-write symlink re-check: closes TOCTOU between pre-write test -L and tee
                         if sudo test -L "$tmpfile"
@@ -6500,11 +6507,6 @@ function _install_finalize --description "Run post-install verification, cleanup
                                 set -g INSTALL_HAD_ERRORS true
                             end
                         end
-                    else
-                        set --erase WIFI_PASS
-                        sudo rm -f -- "$tmpfile" 2>/dev/null
-                        _err "WiFi connection profile write failed"
-                        set -g INSTALL_HAD_ERRORS true
                     end
                 end
             end

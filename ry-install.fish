@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.8.6 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.8.7 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.8.6"
+set -g VERSION "3.8.7"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -492,7 +492,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # ── Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600 ──
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        "/etc/kernel/cmdline" \
+        /etc/kernel/cmdline \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/udev/rules.d/99-cachyos-udev.rules" \
@@ -502,7 +502,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
         "/etc/sysctl.d/99-ry-sysctl.conf" \
         "/etc/modprobe.d/99-ry-modprobe.conf" \
-        "/etc/drirc"
+        /etc/drirc
 
     set -g USER_DESTINATIONS \
         "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
@@ -1068,7 +1068,7 @@ ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system
 [Install]
 WantedBy=multi-user.target'
 
-        case "/etc/drirc"
+        case /etc/drirc
             # RADV unified VRAM heap: prevents games from misallocating via artificial two-heap split on UMA APUs
             printf '%s\n' '<driconf>' \
                 '  <device>' \
@@ -1219,12 +1219,13 @@ end
 
 # Extract "data" field value from a JSONL line, handling escaped quotes
 # PCRE2: [^"\\] matches non-quote non-backslash; \\. matches escaped char
-# Fish single-quotes pass content literally to PCRE (no escape processing)
+# Fish single-quotes process \\ → \ and \' → ' (NOT fully literal like bash)
+# So source \\\\ → fish \\ → PCRE2 escaped-backslash
 function _jsonl_data --description "Extract data field from JSONL line"
     if test (count $argv) -ne 1
         return 1
     end
-    string match -r --groups-only -- '"data":"((?:[^"\\]|\\.)*)"' "$argv[1]"
+    string match -r --groups-only -- '"data":"((?:[^"\\\\]|\\\\.)*)\"' "$argv[1]"
 end
 
 # ── Structured NDJSON logging — self-contained JSON per line, event classification (section/prefix/message), _json_str escapes+caps at 4096 chars ──
@@ -3304,7 +3305,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
 
     _echo "── RADV driconf ──"
     if _chk_file /etc/drirc
-        _chk_grep /etc/drirc "radv_enable_unified_heap_on_apu" "unified_heap_on_apu"
+        _chk_grep /etc/drirc radv_enable_unified_heap_on_apu unified_heap_on_apu
     end
     _echo
 
@@ -6827,7 +6828,7 @@ function _ry_do_completions --description "Generate fish shell completions for r
     # --logs subcommand completions
     echo "    complete -c \$cmd -l logs -xa 'analyze last all list system gpu wifi boot audio usb kernel'" >>"$tmpfile"
 
-    echo 'end' >>"$tmpfile"
+    echo end >>"$tmpfile"
 
     if test $status -ne 0
         command rm -f -- "$tmpfile" 2>/dev/null

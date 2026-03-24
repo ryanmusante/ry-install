@@ -1,3 +1,16 @@
+3.8.8 (2026-03-24)
+------------------
+  feat(lint): add inline # lint:ignore suppression. Lines annotated with
+    # lint:ignore are excluded from all anti-pattern checks (&&/||, $(),
+    [[ ]], export, ${var}, dead grep -q) and scope shadow detection.
+    Suppresses 5 false positives: 2 POSIX shell ||/&& in flock /bin/sh -c
+    lock reclaim (lines 326-327), 1 awk && in scope shadow checker (line
+    4897), 2 set -l in fish -c subshells (lines 2236, 6934). Works via
+    sed '/# lint:ignore/d' on clean_content and awk /# lint:ignore/ { next }
+    on scope shadow scanner. Comment syntax is safe in all three contexts:
+    fish (#), POSIX sh (#), awk (#).
+  docs: sync README (version badge 3.8.8, lint description), CHANGELOG.
+
 3.8.7 (2026-03-24)
 ------------------
   fix(logs): _jsonl_data PCRE2 regex compile error on fish 3.7. Character

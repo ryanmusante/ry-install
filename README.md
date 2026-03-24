@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.8.7-blue)
+![Version](https://img.shields.io/badge/version-3.8.8-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -65,7 +65,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `--diff --fix` | Show diffs and re-install drifted files |
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |
-| `--lint` | Fish syntax and anti-pattern checks |
+| `--lint` | Fish syntax, anti-pattern, and scope shadow checks (`# lint:ignore` to suppress) |
 | `--check` | Silent idempotency probe (exit 0=clean, 10=drift) |
 | `--test-all` | Run all safe modes, generate NDJSON logs |
 | `--install-file <path>` | Re-deploy a single managed file |

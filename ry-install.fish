@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.8.7 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.8.8 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.8.7"
+set -g VERSION "3.8.8"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -323,8 +323,8 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         flock -n -E 5 "$_reclaim_parent" /bin/sh -c '
             rm -f -- "$1/pid" 2>/dev/null
             find "$1" -maxdepth 1 -type f -delete 2>/dev/null
-            rmdir -- "$1" 2>/dev/null || true
-            mkdir -- "$1" 2>/dev/null || exit 1
+            rmdir -- "$1" 2>/dev/null || true  # lint:ignore
+            mkdir -- "$1" 2>/dev/null || exit 1  # lint:ignore
             echo "$2" > "$1/pid"
         ' _ "$LOCK_DIR" %self 2>/dev/null
         set -l _flock_rc $status
@@ -2233,7 +2233,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
             set -l key (string split "|" -- $check)[1]
             set -l sections_str (string split "|" -- $check)[2]
             set -l sections (string split "," -- $sections_str)
-            set -l f "$content_dir/$key"
+            set -l f "$content_dir/$key" # lint:ignore
             if not test -s "$f"
                 set errs (math $errs + 1)
                 continue
@@ -4800,7 +4800,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
 
     _echo "── Anti-pattern Check ──"
 
-    set -l clean_content (sed '/^[[:space:]]*#/d' "$script_path")
+    set -l clean_content (sed '/^[[:space:]]*#/d; /# lint:ignore/d' "$script_path")
 
     # Exclude embedded bash in systemd ExecStart= (bash syntax is correct there)
     set -l bash_subst (printf '%s\n' $clean_content | grep -n '\$(' 2>/dev/null | grep -vE "ExecStart|/bin/bash|fish --version|'\\\$\\('|$_output_funcs" | head -n 20|| true)
@@ -4882,6 +4882,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
 
     # Scope shadow check: set -l in blocks can shadow outer vars; mawk-compatible, tracks piped while, anchored ^set -l filters false positives
     set -l shadow_hits (awk '
+        /# lint:ignore/ { next }
         /^[[:space:]]*function / { in_func=1; depth=0; delete vars; next }
         !in_func { next }
         /^[[:space:]]*end($|[[:space:]])/ { if (depth > 0) depth--; else in_func=0; next }
@@ -4893,7 +4894,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
                 rest = substr($0, i + 7)
                 sub(/[^a-zA-Z0-9_].*/, "", rest)
                 if (rest != "") {
-                    if (depth > 0 && rest in vars) print NR": "$0
+                    if (depth > 0 && rest in vars) print NR": "$0  # lint:ignore
                     if (depth == 0) vars[rest] = 1
                 }
             }
@@ -6930,7 +6931,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         set -l mode_args (string split ' ' -- $parallel_modes[$i])
         set -l label (string replace -a ' ' '_' -- $parallel_modes[$i] | string replace -a '/' '_' | string replace -a '-' '')
         fish -c '
-            set -l script_path $argv[1]; set -l stderr_file $argv[2]; set -l exit_file $argv[3]
+            set -l script_path $argv[1]; set -l stderr_file $argv[2]; set -l exit_file $argv[3] # lint:ignore
             set -l mode_args $argv[4..]
             env NO_COLOR=1 fish "$script_path" $mode_args --verbose </dev/null >/dev/null 2>"$stderr_file"
             set -l rc $status

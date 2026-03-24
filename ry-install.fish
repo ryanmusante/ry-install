@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.8.1 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.8.3 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.8.1"
+set -g VERSION "3.8.3"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -30,8 +30,6 @@ else
 end
 # --fix: auto-repair diffs found by --diff
 set -g FIX false
-
-set -g HAS_DELTA (command -q delta; and echo true; or echo false)
 
 set -g _IS_ROOT false
 if test (id -u) -eq 0
@@ -1708,7 +1706,7 @@ INSTALLATION:
   -n, --dry-run     Preview changes without modifying system
 
 VERIFICATION:
-  --diff            Per-file unified diff (delta or diff --color)
+  --diff            Per-file unified diff (colorized)
   --diff <path>     Diff a single managed file (absolute path required)
   --diff --fix      Show diffs and re-install drifted files (per-file prompt)
   --verify-static   Check config files exist with correct content
@@ -2695,12 +2693,10 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
                 # Use pre-computed diff for display
                 set -l diff_tmp "$diff_batch_dir/diff_$safe"
                 begin
-                    if test "$NO_COLOR" = true
+                    if test "$NO_COLOR" = true; or not isatty 2
                         command cat -- "$diff_tmp"
-                    else if test "$HAS_DELTA" = true
-                        delta <"$diff_tmp"
                     else
-                        # Colorize pre-computed unified diff via sed (avoids redundant diff re-computation)
+                        # Colorize pre-computed unified diff via sed (standard tool)
                         sed -e 's/^-.*$/\x1b[31m&\x1b[0m/' -e 's/^+.*$/\x1b[32m&\x1b[0m/' -e 's/^@.*$/\x1b[36m&\x1b[0m/' -- "$diff_tmp"
                     end
                 end >&2
@@ -4295,7 +4291,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     _echo "── sysctl overrides ──"
-    # Verify runtime values from /etc/sysctl.d/99-ry-sysctl.conf + vendor configs
+    # Verify runtime values from /etc/sysctl.d/99-ry-sysctl.conf (ry-install managed)
     set -l _sysctl_checks \
         "net.ipv4.tcp_fastopen=3" \
         "net.ipv4.tcp_notsent_lowat=131072" \
@@ -4305,8 +4301,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         "vm.page_lock_unfairness=5" \
         "vm.dirty_expire_centisecs=6000" \
         "vm.dirty_writeback_centisecs=1500" \
-        "fs.inotify.max_user_instances=1024" \
-        "kernel.split_lock_mitigate=0"
+        "fs.inotify.max_user_instances=1024"
     for _sc in $_sysctl_checks
         set -l _key (string split '=' -- "$_sc")[1]
         set -l _expected (string split '=' -- "$_sc")[2]
@@ -4318,6 +4313,22 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             _fail "  $_key: $_actual (expected: $_expected)"
         else
             _warn "  $_key: cannot read /proc/sys/$_proc_path"
+        end
+    end
+    # Vendor-managed sysctl values (CachyOS 70-cachyos-settings.conf) — _warn on mismatch, not _fail
+    set -l _sysctl_vendor \
+        "kernel.split_lock_mitigate=0"
+    for _sc in $_sysctl_vendor
+        set -l _key (string split '=' -- "$_sc")[1]
+        set -l _expected (string split '=' -- "$_sc")[2]
+        set -l _proc_path (string replace -a '.' '/' -- "$_key")
+        set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim --)
+        if test "$_actual" = "$_expected"
+            _ok "  $_key: $_actual (vendor)"
+        else if test -n "$_actual"
+            _warn "  $_key: $_actual (expected: $_expected, vendor-managed)"
+        else
+            _info "  $_key: not available"
         end
     end
     _echo

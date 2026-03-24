@@ -1,3 +1,22 @@
+3.8.3 (2026-03-23)
+------------------
+  refactor(diff): remove delta (Rust) as preferred diff colorizer. Diff
+    display now uses sed colorization (standard tool, always available).
+    Delta remains in PKGS_ADD for user's interactive use (git diff, etc.)
+    but is no longer invoked by ry-install internally. Removes HAS_DELTA
+    global. Consistent with policy: script uses standard tools only,
+    Rust tools are installed for user convenience.
+  docs: sync README (version badge 3.8.3, diff description), CHANGELOG.
+
+3.8.2 (2026-03-23)
+------------------
+  fix(verify): split vendor-managed sysctl checks from ry-install-managed.
+    kernel.split_lock_mitigate=0 (CachyOS 70-cachyos-settings.conf) now
+    uses _warn on mismatch instead of _fail. Prevents false FAIL in
+    --verify-runtime on systems where CachyOS hasn't set the value.
+    ry-install-managed checks (9 from 99-ry-sysctl.conf) remain _fail.
+  docs: sync README (version badge 3.8.2), CHANGELOG.
+
 3.8.1 (2026-03-22)
 ------------------
   fix(scope): _pregenerate_content_files set -l out_dir inside if block

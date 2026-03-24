@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.8.1-blue)
+![Version](https://img.shields.io/badge/version-3.8.3-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -61,7 +61,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `-f, --force` | Auto-yes prompts, no progress bar |
 | `-V, --verbose` | Show output on terminal |
 | `-n, --dry-run` | Preview without modifying system |
-| `--diff [path]` | Per-file unified diff (`delta` or `diff --color`) |
+| `--diff [path]` | Per-file unified diff (colorized) |
 | `--diff --fix` | Show diffs and re-install drifted files |
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |

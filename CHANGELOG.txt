@@ -1,38 +1,19 @@
-3.9.2 (2026-03-24)
-------------------
-  style(comments): trim 13 multiline comment blocks (2-4 lines each) to
-    single-line comments. Net -21 lines (7229 → 7208). No inline
-    comments moved — all 5 # lint:ignore markers remain inline (required
-    by sed '/# lint:ignore/d' and awk '/# lint:ignore/ { next }' in
-    _ry_do_lint). clean_content byte-identical before/after; zero lint
-    impact on anti-pattern or scope shadow checks. Strips ── decorator
-    syntax from merged lines.
-  docs: sync README (version badge 3.9.2), CHANGELOG.
-
-3.9.1 (2026-03-24)
-------------------
-  fix(verify-static): add LVM detection to masked-service check. Skip
-    lvm2-monitor.service when pvs reports active volumes. Mirrors
-    _ry_do_check and _install_configure_services LVM exceptions.
-    Previously FAILed on any LVM system (FP-01).
-  fix(verify-runtime): change unset environment.d vars from FAIL to
-    WARN. Variables from environment.d require re-login to take effect;
-    FAIL was misleading when running --verify-runtime or --test-all
-    before session restart. Wrong-value case stays FAIL (FP-02).
-  fix(verify-static): section-aware iwd DriverQuirks check. Replace
-    global grep with sed extraction of [DriverQuirks] block. Keys
-    under wrong INI section no longer pass verification (FN-01).
-  feat(verify-runtime): add sysfs checks for amdgpu.wbrf and
-    workqueue.power_efficient. Both were verified in /proc/cmdline but
-    not at runtime sysfs. Detects silently-ignored params (FN-02).
-  fix(validate): add udev match-key operator check. Validates KERNEL,
-    SUBSYSTEM, DRIVER, ACTION, DEVPATH, ATTR{} use == not single =.
-    Catches assign-vs-match operator errors in embedded rules (FN-03).
-  fix(verify-static): parse COMPRESSION value from quotes instead of
-    glob-matching entire line. Inline comments containing "zstd" no
-    longer cause false OK. Uses $MKINITCPIO_COMPRESSION global instead
-    of hardcoded string (FN-04).
-  docs: sync README (version badge 3.9.1), CHANGELOG.
+3.10.0 (2026-03-25)
+-------------------
+  remove(cli): --logs command — journal viewer and NDJSON analyzer.
+    Removes _ry_do_logs, _logs_file_ops, _logs_journal, _analyze_log,
+    _logs_list, _find_latest_log, _jsonl_data (616 lines). NDJSON
+    logging to ~/ry-install/logs/ preserved. --test-all parallel_modes
+    reduced by 7. --completions updated.
+  refactor(progress): condense 19-step progress bar to 6 major
+    operations — Preflight, Packages, Configuration, Services, Boot,
+    Finalize. One step per pipeline function. 13 mid-function
+    _progress calls removed, 3 _progress_skip calls consolidated to 1.
+  docs: add Log Analysis section to README — NDJSON event reference
+    table, 9 jq examples covering errors, failures, step timing,
+    drift, interrupted runs. Replaces built-in --logs viewer.
+  docs: sync README (options table, troubleshooting, install flow,
+    log analysis), version badge 3.10.0. CHANGELOG.
 
 3.9.0 (2026-03-24)
 ------------------

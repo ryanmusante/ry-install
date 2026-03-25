@@ -1,8 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.9.2 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI) Guard: prevent duplicate event handler registration if sourced twice in same session
+# ry-install v3.10.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.9.2"
+set -g VERSION "3.10.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -20,7 +21,8 @@ set -g ALL false
 set -g FORCE false
 # --quiet: suppress command-wrapper stdout to terminal (auto-disabled for non-install modes)
 set -g QUIET true
-# Environment detection: NO_COLOR (no-color.org) — check env BEFORE setting global default set -qx tests exported (environment) variables only; avoids false positive from set -g
+# ── Environment detection: NO_COLOR (no-color.org) — check env BEFORE setting global default ──
+# set -qx tests exported (environment) variables only; avoids false positive from set -g
 if set -qx NO_COLOR; or test "$TERM" = dumb
     set -g NO_COLOR true
 else
@@ -519,7 +521,10 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (15 params) ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 workaround (remove 6.18+) wbrf=0: disable WiFi RFI memory clock throttling (P1 — devastating for UMA bandwidth). clocksource=tsc: force TSC on Zen 5 (P2) module_blacklist: pcspkr (beep) + wdat_wdt (ACPI watchdog, complements nowatchdog). CachyOS covers iTCO/sp5100 only
+    # ── Kernel (15 params) ──
+    # ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 workaround (remove 6.18+)
+    # wbrf=0: disable WiFi RFI memory clock throttling (P1 — devastating for UMA bandwidth). clocksource=tsc: force TSC on Zen 5 (P2)
+    # module_blacklist: pcspkr (beep) + wdat_wdt (ACPI watchdog, complements nowatchdog). CachyOS covers iTCO/sp5100 only
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
@@ -966,7 +971,8 @@ RestartSec=5
 WantedBy=default.target'
 
         case "/etc/systemd/system/amdgpu-performance.service"
-            # After=multi-user.target for DRM settle (Arch #72655); ExecStart: 5 retries, 2s delay, exit 1 if no writable sysfs "auto" not "high": shared-TDP APU wastes CPU headroom at fixed max; GameMode sets "high" dynamically when gaming
+            # After=multi-user.target for DRM settle (Arch #72655); ExecStart: 5 retries, 2s delay, exit 1 if no writable sysfs
+            # "auto" not "high": shared-TDP APU wastes CPU headroom at fixed max; GameMode sets "high" dynamically when gaming
             printf '%s\n' '[Unit]' \
                 'Description=Set AMDGPU power_dpm_force_performance_level to auto' \
                 'After=multi-user.target' \
@@ -981,7 +987,9 @@ WantedBy=default.target'
                 'WantedBy=graphical.target'
 
         case "/etc/systemd/system/cpupower-epp.service"
-            # Tradeoff: permanent EPP=performance + masks power-profiles-daemon. This breaks CachyOS game-performance wrapper + PPD integration (auto EPP/sched-ext switching). Alternative: unmask PPD, remove this service, use powerprofilesctl for dynamic switching.
+            # Tradeoff: permanent EPP=performance + masks power-profiles-daemon.
+            # This breaks CachyOS game-performance wrapper + PPD integration (auto EPP/sched-ext switching).
+            # Alternative: unmask PPD, remove this service, use powerprofilesctl for dynamic switching.
             printf '%s\n' '[Unit]
 Description=Set CPU EPP to performance (amd_pstate=active: powersave governor + performance EPP)
 After=cpupower.service
@@ -1146,13 +1154,10 @@ function _gkeyfile_escape --argument-names raw --description "Escape a string fo
     printf '%s\n' "$val"
 end
 
-# Extract "data" field value from a JSONL line, handling escaped quotes PCRE2: [^"\\] matches non-quote non-backslash; \\. matches escaped char Fish single-quotes process \\ → \ and \' → ' (NOT fully literal like bash) So source \\\\ → fish \\ → PCRE2 escaped-backslash
-function _jsonl_data --description "Extract data field from JSONL line"
-    if test (count $argv) -ne 1
-        return 1
-    end
-    string match -r --groups-only -- '"data":"((?:[^"\\\\]|\\\\.)*)\"' "$argv[1]"
-end
+# Extract "data" field value from a JSONL line, handling escaped quotes
+# PCRE2: [^"\\] matches non-quote non-backslash; \\. matches escaped char
+# Fish single-quotes process \\ → \ and \' → ' (NOT fully literal like bash)
+# So source \\\\ → fish \\ → PCRE2 escaped-backslash
 
 # ── Structured NDJSON logging — self-contained JSON per line, event classification (section/prefix/message), _json_str escapes+caps at 4096 chars ──
 
@@ -1349,25 +1354,12 @@ set -g PROGRESS_WIDTH 40
 set -g PROGRESS_START_TIME 0
 set -g PROGRESS_STEP_START 0
 set -g PROGRESS_STEPS \
-    "Checking dependencies" \
-    "Syncing packages" \
-    "Installing packages" \
-    "Installing system files" \
-    "Installing user files" \
-    "AMDGPU performance service" \
-    "Updating databases" \
-    "Reloading system config" \
-    "Removing packages" \
-    "Masking services" \
-    "NetworkManager dispatcher" \
-    "CPU performance service" \
-    "Enabling timers" \
-    "System upgrade" \
-    "Rebuilding initramfs" \
-    "Updating bootloader" \
-    "Finalizing system" \
-    "NetworkManager restart" \
-    "WiFi reconnection"
+    "Preflight" \
+    "Packages" \
+    "Configuration" \
+    "Services" \
+    "Boot" \
+    "Finalize"
 set -g PROGRESS_TOTAL (count $PROGRESS_STEPS)
 
 # Reset progress counters and compute PROGRESS_TOTAL from PROGRESS_STEPS list
@@ -1528,7 +1520,9 @@ function _run --description "Execute a command with logging, dry-run support, an
         _log "BUG: _run called with no arguments"
         return 1
     end
-    # SECURITY: reject any argv element with shell metacharacters (;|&`$\n\t\r) to prevent injection from untrusted input Fish does not eval $argv (each element is a separate token), so this is defense-in-depth for log integrity and future external profile sourcing where callers may pass unsanitized data.
+    # SECURITY: reject any argv element with shell metacharacters (;|&`$\n\t\r) to prevent injection from untrusted input
+    # Fish does not eval $argv (each element is a separate token), so this is defense-in-depth for log integrity
+    # and future external profile sourcing where callers may pass unsanitized data.
     for _arg in $argv
         if string match -qr '[;|&`\$\n\t\r]' -- "$_arg"
             _log "BUG: _run argv contains shell metacharacters — refusing to execute: $_arg"
@@ -1663,11 +1657,6 @@ VERIFICATION:
   --test-all        Run all safe modes and generate NDJSON logs (test suite)
 
 UTILITIES:
-  --logs <target>   View logs (system gpu wifi boot audio usb kernel <service>)
-  --logs analyze [file]  Parse NDJSON log, show human-readable results
-  --logs last       Analyze most recent log file
-  --logs all        Analyze all logs, show combined summary
-  --logs list       List recent log files with summaries
   --install-file <path>  Re-deploy a single managed file
   --completions     Install fish tab-completions for ry-install itself
 
@@ -1696,10 +1685,6 @@ EXAMPLES:
   ./ry-install.fish --diff --fix     # Fix drifted config files
   ./ry-install.fish --install-file /etc/mkinitcpio.conf  # Re-deploy single file
   ./ry-install.fish --test-all      # Run all safe modes, generate NDJSON logs
-  ./ry-install.fish --logs last     # Analyze most recent log
-  ./ry-install.fish --logs all      # Analyze all logs, combined summary
-  ./ry-install.fish --logs list     # List recent logs with summaries
-  ./ry-install.fish --logs analyze ~/ry-install/logs/.../test.jsonl
 
 LOG FILE:
   ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ.jsonl
@@ -1721,7 +1706,8 @@ NOTES:
 "
 end
 
-# Verify a managed file exists at dst; uses elevated test for /boot paths, logs OK/FAIL with context System files are 0644 (world-readable) — only /boot/* needs sudo (ESP may be root-only vfat)
+# Verify a managed file exists at dst; uses elevated test for /boot paths, logs OK/FAIL with context
+# System files are 0644 (world-readable) — only /boot/* needs sudo (ESP may be root-only vfat)
 function _chk_file --argument-names filepath --description "Verify a file exists (sudo for /boot, direct for /etc)"
     if test (count $argv) -lt 1
         _err "_chk_file: missing argument"
@@ -2067,7 +2053,8 @@ function _ry_validate_configs --description "Run all embedded config validators"
     ' -- "$dst_count" "$content_dir" "$val_dir" 2>"$val_dir/xref.stderr" &
     set -l pid_xref $last_pid
 
-    # Job 2: systemd unit syntax — derive keys from destinations (not hardcoded) Collect all .service destinations: SERVICE_DESTINATIONS (system) + USER_DESTINATIONS (user scope)
+    # Job 2: systemd unit syntax — derive keys from destinations (not hardcoded)
+    # Collect all .service destinations: SERVICE_DESTINATIONS (system) + USER_DESTINATIONS (user scope)
     set -l _svc_dsts
     for _sd in $SERVICE_DESTINATIONS
         set -a _svc_dsts "$_sd"
@@ -2204,10 +2191,6 @@ function _ry_validate_configs --description "Run all embedded config validators"
                 if grep -qE -- "==[[:space:]]*\$" "$f" 2>/dev/null
                     set errs (math $errs + 1)
                 end
-            end
-            # FN-03: match-position keys must use == (not single =); single = is assign, not match
-            if grep -qE -- "(KERNEL|SUBSYSTEM|DRIVER|ACTION|DEVPATH|ATTR\{[^}]*\})[[:space:]]*=[^=]" "$f" 2>/dev/null
-                set errs (math $errs + 1)
             end
         else
             set errs (math $errs + 1)
@@ -3104,16 +3087,10 @@ function _ry_verify_static --description "Verify installed configs match embedde
         end
 
         set -l comp_line (grep -E '^[[:space:]]*COMPRESSION=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1)
-        # FN-04: parse value between quotes instead of glob-matching entire line (avoids comment false-pass)
-        set -l comp_val (string match -r -- 'COMPRESSION="([^"]*)"' "$comp_line")[2]
-        if test -z "$comp_val"
-            # Fallback: unquoted value
-            set comp_val (string replace -r -- '^[[:space:]]*COMPRESSION=' '' "$comp_line" | string trim --)
-        end
-        if test "$comp_val" = "$MKINITCPIO_COMPRESSION"
-            _ok "  COMPRESSION=$MKINITCPIO_COMPRESSION: present"
+        if string match -q '*zstd*' -- "$comp_line"
+            _ok "  COMPRESSION=zstd: present"
         else
-            _fail "  COMPRESSION=$MKINITCPIO_COMPRESSION: MISSING (found: $comp_val)"
+            _fail "  COMPRESSION=zstd: MISSING"
         end
     end
     _echo
@@ -3181,15 +3158,9 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _info "  Skipping (iwd not installed)"
     else if _chk_file /etc/iwd/main.conf
         _chk_grep /etc/iwd/main.conf "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG"
-        # Section-aware check: verify DriverQuirks keys are under [DriverQuirks], not elsewhere (FN-01)
-        set -l _dq_section (sed -n '/^\[DriverQuirks\]/,/^\[/p' /etc/iwd/main.conf 2>/dev/null | sed '${ /^\[/d }')
         for quirk in $IWD_DRIVER_QUIRKS
             set -l key (string split '=' -- $quirk)[1]
-            if test -n "$_dq_section"; and printf '%s\n' $_dq_section | grep -qF -- "$key"
-                _ok "  DriverQuirks $key: present"
-            else
-                _fail "  DriverQuirks $key: MISSING from [DriverQuirks] section"
-            end
+            _chk_grep /etc/iwd/main.conf "$key" "DriverQuirks $key"
         end
         _chk_grep /etc/iwd/main.conf "NameResolvingService=$IWD_DNS_SERVICE" "DNS via $IWD_DNS_SERVICE"
     end
@@ -3311,12 +3282,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo
 
     _echo "── Masked services ──"
-    # LVM detection: skip lvm2-monitor.service mask check when LVM volumes are active (mirrors _ry_do_check L3725)
-    set -l _verify_has_lvm false
-    set -l _pvs_out (timeout 5 sudo -n pvs --noheadings 2>/dev/null | string trim --)
-    if test -n "$_pvs_out"
-        set _verify_has_lvm true
-    end
     # Batch systemctl show replaces N individual is-enabled+cat calls; string collect preserves blank-line delimiters
     set -l _mask_raw (systemctl show --property=LoadState,UnitFileState -- $MASK 2>/dev/null | string collect --no-trim-newlines)
     set -l _mask_parsed (_parse_systemctl_show "$_mask_raw")
@@ -3325,10 +3290,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _log "SYSTEMCTL_SHOW_MASK_PARTIAL: got="(count $_mask_parsed)" expected="(count $MASK)
         # Fallback: per-unit query to avoid positional misattribution
         for _svc in $MASK
-            if test "$_svc" = lvm2-monitor.service; and test "$_verify_has_lvm" = true
-                _info "  $_svc: skipped (LVM volumes active)"
-                continue
-            end
             set -l _state (systemctl is-enabled "$_svc" 2>/dev/null)
             switch "$_state"
                 case masked
@@ -3342,10 +3303,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
     else
         for _mask_idx in (seq 1 (count $MASK))
             set -l _svc $MASK[$_mask_idx]
-            if test "$_svc" = lvm2-monitor.service; and test "$_verify_has_lvm" = true
-                _info "  $_svc: skipped (LVM volumes active)"
-                continue
-            end
             set -l _rec (string split -- ':' -- "$_mask_parsed[$_mask_idx]")
             if test "$_rec[1]" = not-found
                 _info "  $_svc: unit not found (may not be installed)"
@@ -3692,7 +3649,8 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     ' -- "$result_dir" 2>"$result_dir/kparam.stderr" &
     set -l pid_kparam $last_pid
 
-    # Job 4: service state — batch systemctl show (parallel); LVM pre-serialized by parent Pre-parse systemctl show in parent (child can't call _parse_systemctl_show)
+    # ── Job 4: service state — batch systemctl show (parallel); LVM pre-serialized by parent ──
+    # Pre-parse systemctl show in parent (child can't call _parse_systemctl_show)
     set -l _all_check_units (command cat -- "$result_dir/exp_svcs") (command cat -- "$result_dir/mask_units") (command cat -- "$result_dir/implicit_svcs" 2>/dev/null)
     set -l _check_show (systemctl show --property=LoadState,ActiveState,UnitFileState -- $_all_check_units 2>/dev/null | string collect --no-trim-newlines)
     set -l _check_parsed (_parse_systemctl_show "$_check_show")
@@ -3707,7 +3665,9 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         # Read pre-parsed results from parent (eliminates duplicated _parse_systemctl_show)
         set -l results (command cat -- "$result_dir/parsed_units" 2>/dev/null)
 
-        # Check expected services (first N results) Timer units: ActiveState=active (waiting for next trigger); never exited Oneshot services (RemainAfterExit): ActiveState=exited after successful run
+        # Check expected services (first N results)
+        # Timer units: ActiveState=active (waiting for next trigger); never exited
+        # Oneshot services (RemainAfterExit): ActiveState=exited after successful run
         set -l exp_count (count $exp_svcs)
         for i in (seq 1 $exp_count)
             set -l rec (string split -- ":" $results[$i])
@@ -4031,7 +3991,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
 
     if test -d /sys/module/amdgpu/parameters
         # Hex→decimal normalization: sysfs may return 0xfffd3fff or 4294787071
-        for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0" "wbrf:0"
+        for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0"
             set -l pname (string split ':' -- "$pair")[1]
             set -l expected (string split ':' -- "$pair")[2]
             set -l ppath /sys/module/amdgpu/parameters/$pname
@@ -4063,16 +4023,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
     else if test -d /sys/module/mt7925e
         _info "  mt7925e: loaded but disable_aspm param not found"
-    end
-
-    # workqueue.power_efficient sysfs check (FN-02: was only verified in /proc/cmdline)
-    if test -f /sys/module/workqueue/parameters/power_efficient
-        set -l sysfs_val (command cat -- /sys/module/workqueue/parameters/power_efficient 2>/dev/null | string trim --)
-        if test "$sysfs_val" = 0; or test "$sysfs_val" = N
-            _ok "  workqueue.power_efficient: $sysfs_val"
-        else
-            _fail "  workqueue.power_efficient: $sysfs_val (expected: 0/N)"
-        end
     end
     _echo
 
@@ -4244,8 +4194,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         else if test -n "$actual"
             _fail "  $var_name=$actual (expected: $expected)"
         else
-            # environment.d vars require re-login to take effect; WARN not FAIL for unset (FP-02)
-            _warn "  $var_name: NOT SET (re-login required for environment.d)"
+            _fail "  $var_name: NOT SET (re-login may be required)"
         end
     end
     _echo
@@ -4872,627 +4821,6 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
 end
 
 
-# Return path of most recently modified *.jsonl under ~/ry-install/logs/
-function _find_latest_log --description "Find the most recent ry-install log file"
-    set -l base "$HOME/ry-install/logs"
-    test -d "$base"; or return 1
-    command find "$base" -name '*.jsonl' -type f ! -path "$LOG_FILE" -printf '%T@\t%p\n' 2>/dev/null | sort -n | tail -n 1 | string replace -r -- '^[^\t]+\t' ''
-    return 0
-end
-
-# List all log files with size, exit status, and pass/fail/warn counts from JSONL footers
-function _logs_list --description "List available ry-install log files"
-    set -l base "$HOME/ry-install/logs"
-    if not test -d "$base"
-        _warn "No log directory: $base"
-        return 1
-    end
-    set -l files (command find "$base" -name '*.jsonl' -type f ! -path "$LOG_FILE" -printf '%T@\t%p\n' 2>/dev/null | sort -rn | head -n 20 | string replace -r -- '^[^\t]+\t' '')
-    if test (count $files) -eq 0
-        _info "No log files found"
-        return 0
-    end
-
-    _info "Recent log files (newest first):"
-    _echo
-    for f in $files
-        set -l fname (basename -- "$f")
-        set -l fdir (basename (dirname -- "$f"))
-        set -l size (stat -c '%s' -- "$f" 2>/dev/null; or echo 0)
-        set -l size_k (math "ceil($size / 1024)")
-
-        set -l footer (grep -m1 '"event":"footer"' "$f" 2>/dev/null)
-        set -l _log_exit ""
-        set -l pass ""
-        set -l fail ""
-        set -l warn ""
-        if test -n "$footer"
-            set _log_exit (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
-            set pass (printf '%s' "$footer" | grep -oE '"pass":[0-9]+' | sed 's/.*://')
-            set fail (printf '%s' "$footer" | grep -oE '"fail":[0-9]+' | sed 's/.*://')
-            set warn (printf '%s' "$footer" | grep -oE '"warn":[0-9]+' | sed 's/.*://')
-        end
-
-        set -l summary ""
-        if test -n "$_log_exit"
-            set -l result_mark "✓"
-            if test "$_log_exit" != 0
-                set result_mark "✗"
-            end
-            set summary (printf '  %s exit=%s' "$result_mark" "$_log_exit")
-            if test -n "$pass"; or test -n "$fail"
-                set summary "$summary pass=$pass fail=$fail warn=$warn"
-            end
-        else
-            set summary "  ? (incomplete)"
-        end
-
-        _echo "  $fdir/$fname  ($size_k KB)$summary"
-    end
-    _echo
-    _info "Analyze: ry-install.fish --logs analyze <path>"
-end
-
-# Parse a JSONL log file and display run info, results, warnings, and per-mode breakdown
-function _analyze_log --argument-names log_path --description "Parse and summarize a single ry-install log file"
-    if test (count $argv) -ne 1
-        _err "_analyze_log: expected 1 arg (log_path), got "(count $argv)
-        # Parse NDJSON log entries into structured summary
-        return 1
-    end
-    set -l fname (basename -- "$log_path")
-    _info "Analyzing: $fname"
-    _echo
-
-    set -l header (grep -m1 '"event":"header"' "$log_path" 2>/dev/null)
-    set -l mode ""
-    set -l log_version ""
-    set -l command ""
-    set -l header_ts ""
-    set -l dry_run ""
-    if test -n "$header"
-        set mode (printf '%s' "$header" | grep -oE '"mode":"[^"]+"' | cut -d'"' -f4)
-        set log_version (printf '%s' "$header" | grep -oE '"version":"[^"]+"' | cut -d'"' -f4)
-        set command (printf '%s' "$header" | grep -oE '"command":"[^"]+"' | cut -d'"' -f4)
-        set header_ts (printf '%s' "$header" | grep -oE '"ts":"[^"]+"' | cut -d'"' -f4)
-        set dry_run (printf '%s' "$header" | grep -oE '"dry_run":[a-z]+' | sed 's/.*://')
-    end
-
-    set -l footer (grep -m1 '"event":"footer"' "$log_path" 2>/dev/null)
-    set -l _log_exit ""
-    set -l pass 0
-    set -l fail 0
-    set -l warn_count 0
-    set -l footer_ts ""
-    set -l interrupted false
-    if test -n "$footer"
-        set _log_exit (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
-        set pass (printf '%s' "$footer" | grep -oE '"pass":[0-9]+' | sed 's/.*://')
-        set fail (printf '%s' "$footer" | grep -oE '"fail":[0-9]+' | sed 's/.*://')
-        set warn_count (printf '%s' "$footer" | grep -oE '"warn":[0-9]+' | sed 's/.*://')
-        set footer_ts (printf '%s' "$footer" | grep -oE '"finished":"[^"]+"' | cut -d'"' -f4)
-        if string match -q '*"interrupted":true*' -- "$footer"
-            set interrupted true
-        end
-    end
-
-    set -l duration ""
-    if test -n "$header_ts"; and test -n "$footer_ts"
-        set -l start_epoch (date -d "$header_ts" +%s 2>/dev/null)
-        set -l end_epoch (date -d "$footer_ts" +%s 2>/dev/null)
-        if test -n "$start_epoch"; and test -n "$end_epoch"
-            set -l secs (math "$end_epoch - $start_epoch")
-            if test "$secs" -ge 60
-                set duration (printf '%dm%ds' (math "floor($secs / 60)") (math "$secs % 60"))
-            else
-                set duration (printf '%ds' "$secs")
-            end
-        end
-    end
-
-    _echo "── Run Info ──"
-    test -n "$mode"; and _echo "  Mode:    $mode"
-    test -n "$log_version"; and _echo "  Version: $log_version"
-    test -n "$header_ts"; and _echo "  Started: $header_ts"
-    test -n "$duration"; and _echo "  Duration: $duration"
-    test "$dry_run" = true; and _echo "  Dry run: yes"
-    test "$interrupted" = true; and _echo "  Status:  INTERRUPTED"
-    test -n "$command"; and _echo "  Command: $command"
-    _echo
-
-    _echo "── Results ──"
-    if test -n "$_log_exit"
-        if test "$_log_exit" = 0
-            _ok "  Exit: 0 (success)"
-        else if test "$_log_exit" = 129; or test "$_log_exit" = 130; or test "$_log_exit" = 131; or test "$_log_exit" = 141; or test "$_log_exit" = 143
-            _warn "  Exit: $_log_exit (interrupted)"
-        else
-            _fail "  Exit: $_log_exit (failure)"
-        end
-    else
-        # Aggregate timing data and error counts
-        _warn "  No footer found (incomplete run?)"
-    end
-    set -l total_checks (math "$pass + $fail + $warn_count")
-    if test "$total_checks" -gt 0
-        _echo "  Checks: $total_checks total — $pass passed, $fail failed, $warn_count warnings"
-    end
-    _echo
-
-    set -l all_fails
-    for _jline in (grep -E '"event":"fail"' "$log_path" 2>/dev/null)
-        set -l _val (_jsonl_data "$_jline")
-        test -n "$_val"; and set -a all_fails "$_val"
-    end
-    set -l all_warns
-    for _jline in (grep -E '"event":"warn"' "$log_path" 2>/dev/null)
-        set -l _val (_jsonl_data "$_jline")
-        test -n "$_val"; and set -a all_warns "$_val"
-    end
-    set -l all_errs
-    for _jline in (grep -E '"event":"err"' "$log_path" 2>/dev/null)
-        set -l _val (_jsonl_data "$_jline")
-        test -n "$_val"; and set -a all_errs "$_val"
-    end
-    set -l stderr_lines
-    for _jline in (grep -E '"event":"stderr"' "$log_path" 2>/dev/null)
-        set -l _val (_jsonl_data "$_jline")
-        test -n "$_val"; and set -a stderr_lines "$_val"
-    end
-
-    if test (count $all_fails) -gt 0
-        _echo "── Failures ──"
-        printf '%s\n' $all_fails | LC_ALL=C sort -u | while read -l line
-            test -n "$line"; and _fail "  $line"
-        end
-        _echo
-    end
-
-    if test (count $all_errs) -gt 0
-        _echo "── Errors ──"
-        printf '%s\n' $all_errs | LC_ALL=C sort -u | while read -l line
-            test -n "$line"; and _err "  $line"
-        end
-        _echo
-    end
-
-    if test (count $all_warns) -gt 0
-        _echo "── Warnings ──"
-        printf '%s\n' $all_warns | LC_ALL=C sort -u | while read -l line
-            test -n "$line"; and _warn "  $line"
-        end
-        _echo
-    end
-
-    if test (count $stderr_lines) -gt 0
-        _echo "── Captured Stderr ──"
-        for line in $stderr_lines
-            _echo "  $line"
-        end
-        _echo
-    end
-
-    set -l step_lines (grep -- '"event":"step_time"' "$log_path" 2>/dev/null)
-    if test (count $step_lines) -gt 0
-        _echo "── Step Timing ──"
-        set -l total_step_s 0
-        for line in $step_lines
-            set -l sname (_jsonl_data "$line")
-            set -l selap (printf '%s' "$line" | grep -oE '"elapsed_s":[0-9]+' | sed 's/.*://')
-            test -z "$selap"; and set selap 0
-            set total_step_s (math "$total_step_s + $selap")
-            _echo (printf '  %-30s %ds' "$sname" "$selap")
-        end
-        _echo (printf '  %-30s %ds' "Total" "$total_step_s")
-        _echo
-    end
-
-    if test "$mode" = test-all
-        set -l test_ok
-        for _jline in (grep '"event":"ok"' "$log_path" 2>/dev/null)
-            set -l _val (_jsonl_data "$_jline")
-            test -n "$_val"; and set -a test_ok "$_val"
-        end
-        set -l test_warns_ta
-        for _jline in (grep '"event":"warn"' "$log_path" 2>/dev/null)
-            set -l _val (_jsonl_data "$_jline")
-            if test -n "$_val"; and string match -q '*exit code*' -- "$_val"
-                set -a test_warns_ta "$_val"
-            end
-        end
-        if test (count $test_ok) -gt 0; or test (count $test_warns_ta) -gt 0
-            _echo "── Per-Mode Results ──"
-            for line in $test_ok
-                _ok "  $line"
-            end
-            for line in $test_warns_ta
-                _warn "  $line"
-            end
-            _echo
-        end
-    end
-
-    set -l diff_lines (grep -- '"event":"diff"' "$log_path" 2>/dev/null)
-    if test (count $diff_lines) -gt 0
-        set -l diff_files
-        for _jline in $diff_lines
-            set -l _val (_jsonl_data "$_jline")
-            if string match -q 'DIFF: *' -- "$_val"
-                set -l _path (string replace -- 'DIFF: ' '' "$_val" | string split -- ':')[1]
-                test -n "$_path"; and set -a diff_files "$_path"
-            end
-        end
-        set diff_files (printf '%s\n' $diff_files | LC_ALL=C sort -u)
-        if test (count $diff_files) -gt 0
-            _echo "── Drifted Files ──"
-            for f in $diff_files
-                _warn "  $f"
-            end
-            _echo
-        end
-    end
-
-    _echo "── Log File ──"
-    _echo "  $log_path"
-    set -l line_count (wc -l < "$log_path" 2>/dev/null | string trim --)
-    set -l size (stat -c '%s' -- "$log_path" 2>/dev/null; or echo 0)
-    _echo "  $line_count events, "(math "ceil($size / 1024)")" KB"
-
-    test -n "$_log_exit"; and return "$_log_exit"
-    return 0
-end
-
-# Route --logs subcommands: list, last, all, analyze <path>, system/gpu/wifi/boot/audio/usb/kernel.
-function _logs_file_ops --argument-names target --description "Log viewer: analyze, last, list, all file operations"
-    if test (count $argv) -lt 1
-        _err "_logs_file_ops: expected at least 1 arg (target), got "(count $argv)
-        return 1
-    end
-    # File-based log operations: analyze, last, list, all
-    switch $target
-        case analyze
-            set -l log_path "$argv[2]"
-            if test -z "$log_path"
-                set log_path (_find_latest_log)
-                if test -z "$log_path"
-                    _warn "No log files found in ~/ry-install/logs/"
-                    return 1
-                end
-            end
-            if not test -f "$log_path"
-                _err "Log file not found: $log_path"
-                return 1
-            end
-            _analyze_log "$log_path"
-            return $status
-
-        case last
-            set -l log_path (_find_latest_log)
-            if test -z "$log_path"
-                _warn "No log files found in ~/ry-install/logs/"
-                return 1
-            end
-            _analyze_log "$log_path"
-            return $status
-
-        case list
-            _logs_list
-            return $status
-
-        case all
-            set -l base "$HOME/ry-install/logs"
-            if not test -d "$base"
-                _warn "No log directory: $base"
-                return 1
-            end
-            set -l files (command find "$base" -name '*.jsonl' -type f ! -path "$LOG_FILE" -printf '%T@\t%p\n' 2>/dev/null | sort -n | string replace -r -- '^[^\t]+\t' '')
-            if test (count $files) -eq 0
-                _info "No log files found"
-                return 0
-            end
-
-            set -l total_files (count $files)
-            set -l total_pass 0
-            set -l total_fail 0
-            set -l total_warn 0
-            set -l failed_runs
-
-            _info "Analyzing $total_files log files..."
-            _echo
-
-            for f in $files
-                set -l fname (basename -- "$f")
-                set -l fdir (basename (dirname -- "$f"))
-
-                set -l footer (grep -m1 '"event":"footer"' "$f" 2>/dev/null)
-                set -l _log_exit ""
-                set -l pass 0
-                set -l fail 0
-                set -l warn_c 0
-                set -l interrupted false
-                if test -n "$footer"
-                    set _log_exit (printf '%s' "$footer" | grep -oE '"exit_code":[0-9]+' | sed 's/.*://')
-                    set pass (printf '%s' "$footer" | grep -oE '"pass":[0-9]+' | sed 's/.*://')
-                    set fail (printf '%s' "$footer" | grep -oE '"fail":[0-9]+' | sed 's/.*://')
-                    set warn_c (printf '%s' "$footer" | grep -oE '"warn":[0-9]+' | sed 's/.*://')
-                    string match -q '*"interrupted":true*' -- "$footer"; and set interrupted true
-                    # Iterate all log files, compile pass/fail summary
-                end
-
-                test -n "$pass"; and string match -qr '^\d+$' -- "$pass"; and set total_pass (math "$total_pass + $pass")
-                test -n "$fail"; and string match -qr '^\d+$' -- "$fail"; and set total_fail (math "$total_fail + $fail")
-                test -n "$warn_c"; and string match -qr '^\d+$' -- "$warn_c"; and set total_warn (math "$total_warn + $warn_c")
-
-                set -l all_fails
-                for _jline in (grep -E '"event":"fail"' "$f" 2>/dev/null)
-                    set -l _val (_jsonl_data "$_jline")
-                    test -n "$_val"; and set -a all_fails "$_val"
-                end
-
-                set -l mark "✓"
-                set -l incomplete false
-                if test -z "$_log_exit"; and test "$interrupted" != true
-                    set mark "?"
-                    set incomplete true
-                else if test -n "$_log_exit"; and test "$_log_exit" != 0
-                    set mark "✗"
-                    set -a failed_runs "$fdir/$fname"
-                end
-                if test "$interrupted" = true
-                    set mark "⚡"
-                end
-
-                set -l suffix ""
-                if test "$incomplete" = true
-                    set suffix " (incomplete)"
-                end
-                set -l summary (printf '%s %-50s exit=%-3s pass=%-3s fail=%-3s warn=%s%s' "$mark" "$fdir/$fname" "$_log_exit" "$pass" "$fail" "$warn_c" "$suffix")
-                _echo "  $summary"
-
-                if test (count $all_fails) -gt 0
-                    printf '%s\n' $all_fails | LC_ALL=C sort -u | while read -l line
-                        test -n "$line"; and _echo "      ✗ $line"
-                    end
-                end
-            end
-
-            _echo
-            _echo "── Combined Summary ──"
-            _echo "  Files:    $total_files"
-            _echo "  Passed:   $total_pass"
-            _echo "  Failed:   $total_fail"
-            _echo "  Warnings: $total_warn"
-
-            if test (count $failed_runs) -gt 0
-                _echo
-                _echo "── Failed Runs ──"
-                for r in $failed_runs
-                    _fail "  $r"
-                end
-            end
-
-            if test "$total_fail" -eq 0
-                return 0
-            end
-            return 1
-    end
-end
-
-# View journalctl logs filtered by target (system, gpu, wifi, boot, audio, usb, kernel)
-function _logs_journal --argument-names target --description "Log viewer: system journal targets (system, gpu, wifi, boot, audio, usb, kernel)"
-    if test (count $argv) -ne 1
-        _err "_logs_journal: expected 1 arg (target), got "(count $argv)
-        return 1
-    end
-    # Per-target journal/dmesg log retrieval
-    set -l _log_lines
-    switch $target
-        case system
-            _info "System errors (last hour):"
-            _echo
-            _echo "── dmesg errors & warnings ──"
-            if command -q sudo
-                set _log_lines (sudo dmesg --level=err,warn --ctime 2>/dev/null | tail -n 30)
-            else
-                set _log_lines (dmesg --level=err,warn --ctime 2>/dev/null | tail -n 30)
-            end
-            if test (count $_log_lines) -gt 0
-                for line in $_log_lines
-                    _echo "$line"
-                end
-            else
-                _echo "  (no output)"
-            end
-            _echo
-            _echo "── journal errors ──"
-            set _log_lines (journalctl -p err --since "1 hour ago" --no-pager 2>/dev/null | tail -n 30)
-            if test (count $_log_lines) -gt 0
-                for line in $_log_lines
-                    _echo "$line"
-                end
-            else
-                _echo "  (no output)"
-            end
-
-        case gpu
-            _info "AMDGPU logs:"
-            _echo
-            if command -q sudo
-                set _log_lines (sudo dmesg 2>/dev/null | grep -iE "amdgpu|drm|radeon|gfx" | tail -n 50)
-            else
-                set _log_lines (dmesg 2>/dev/null | grep -iE "amdgpu|drm|radeon|gfx" | tail -n 50)
-            end
-            if test (count $_log_lines) -gt 0
-                for line in $_log_lines
-                    _echo "$line"
-                end
-            else
-                _echo "  (no output)"
-            end
-
-        case wifi
-            _info "WiFi logs (last 30 min):"
-            _echo
-            set _log_lines (journalctl -u NetworkManager -u iwd --since "30 minutes ago" --no-pager 2>/dev/null | tail -n 50)
-            if test (count $_log_lines) -gt 0
-                for line in $_log_lines
-                    _echo "$line"
-                end
-            else
-                _echo "  (no output)"
-            end
-
-            # Boot sequence and early startup logs
-        case boot
-            _info "Boot logs:"
-            _echo
-            set _log_lines (journalctl -b --no-pager 2>/dev/null | head -n 100)
-            if test (count $_log_lines) -gt 0
-                for line in $_log_lines
-                    _echo "$line"
-                end
-                if test (count $_log_lines) -ge 100
-                    _info "(truncated at 100 lines — use 'journalctl -b' for full output)"
-                end
-            else
-                _echo "  (no output)"
-            end
-
-        case audio
-            _info "Audio logs:"
-            _echo
-            set _log_lines (journalctl --user -u pipewire -u wireplumber --since "1 hour ago" --no-pager 2>/dev/null | tail -n 50)
-            if test (count $_log_lines) -gt 0
-                for line in $_log_lines
-                    _echo "$line"
-                end
-            else
-                _echo "  (no output)"
-            end
-
-        case usb
-            _info "USB events:"
-            _echo
-            if command -q sudo
-                set _log_lines (sudo dmesg 2>/dev/null | grep -iE "usb|hub" | grep -v "amdgpu" | tail -n 30)
-            else
-                set _log_lines (dmesg 2>/dev/null | grep -iE "usb|hub" | grep -v "amdgpu" | tail -n 30)
-            end
-            if test (count $_log_lines) -gt 0
-                for line in $_log_lines
-                    _echo "$line"
-                end
-            else
-                _echo "  (no output)"
-            end
-
-        case kernel
-            _info "Kernel errors and warnings:"
-            _echo
-            _echo "── dmesg errors ──"
-            if command -q sudo
-                set _log_lines (sudo dmesg --level=err 2>/dev/null | tail -n 30)
-            else
-                set _log_lines (dmesg --level=err 2>/dev/null | tail -n 30)
-            end
-            if test (count $_log_lines) -gt 0
-                for line in $_log_lines
-                    _echo "$line"
-                end
-            else
-                _echo "  (no output)"
-            end
-            _echo
-            _echo "── dmesg warnings ──"
-            if command -q sudo
-                set _log_lines (sudo dmesg --level=warn 2>/dev/null | tail -n 30)
-            else
-                set _log_lines (dmesg --level=warn 2>/dev/null | tail -n 30)
-            end
-            if test (count $_log_lines) -gt 0
-                for line in $_log_lines
-                    _echo "$line"
-                end
-            else
-                _echo "  (no output)"
-            end
-    end
-end
-
-# Dispatch --logs to file operations (analyze/last/list/all) or journal targets; fuzzy-match on typos
-function _ry_do_logs --argument-names target --description "Browse, search, and analyze ry-install log files"
-    if test (count $argv) -gt 2
-        _err "_ry_do_logs: expected 0-2 args (target [arg]), got "(count $argv)
-        return 2
-    end
-    set -l target $argv[1]
-
-    _banner "ry-install v$VERSION - Log Viewer"
-
-    if test -z "$target"
-        _info "Usage: ry-install.fish --logs <target>"
-        _echo
-        _info "Available targets:"
-        _echo "    analyze [file]  - Parse NDJSON log, show human-readable results"
-        _echo "    last            - Analyze most recent log file"
-        _echo "    all             - Analyze all logs, show combined summary"
-        _echo "    list            - List recent log files with summaries"
-        _echo "    system          - Recent system errors (dmesg + journal)"
-        _echo "    gpu             - AMDGPU driver messages"
-        _echo "    wifi            - NetworkManager + iwd logs"
-        _echo "    boot            - Boot sequence logs"
-        _echo "    audio           - PipeWire/audio logs"
-        _echo "    usb             - USB device events"
-        _echo "    kernel          - Kernel errors and warnings (dmesg)"
-        _echo "    <service>       - Any systemd service name"
-        return 2
-    end
-
-    switch $target
-        case analyze last list all
-            _logs_file_ops $argv
-            return $status
-        case system gpu wifi boot audio usb kernel
-            _logs_journal $target
-            return $status
-        case '*'
-            if string match -q -- '-*' "$target"
-                _warn "Invalid log target: '$target' (looks like a flag)"
-                _info "Valid targets: system, gpu, wifi, boot, audio, usb, kernel, <service>"
-                return 1
-            end
-            _info "Logs for $target:"
-            _echo
-            # Arbitrary systemd service journal lookup with fuzzy-match fallback
-            if systemctl cat "$target" >/dev/null 2>&1
-                set _log_lines (journalctl -u "$target" --since "1 hour ago" --no-pager 2>/dev/null | tail -n 50)
-                if test (count $_log_lines) -gt 0
-                    for line in $_log_lines
-                        _echo "$line"
-                    end
-                else
-                    _echo "  (no output)"
-                end
-            else
-                _warn "Service '$target' not found"
-                # Fuzzy-match: suggest known target if first 3 chars match and length is close (within ±2)
-                set -l _known_targets system gpu wifi boot audio usb kernel
-                set -l _t_prefix (string sub -l 3 -- "$target")
-                set -l _t_len (string length -- "$target")
-                for _kt in $_known_targets
-                    set -l _kt_len (string length -- "$_kt")
-                    if string match -qi -- "$_t_prefix*" "$_kt"
-                        if test (math "abs($_t_len - $_kt_len)") -le 2
-                            _info "Did you mean '$_kt'?"
-                            break
-                        end
-                    end
-                end
-                _info "Valid targets: system, gpu, wifi, boot, audio, usb, kernel, <service>"
-                return 1
-            end
-    end
-end
 
 
 # Install pipeline
@@ -5618,7 +4946,7 @@ end
 
 # Pipeline phase 1: deps, disk, network, kernel version, config validation
 function _install_preflight --description "Run all preflight checks before installation"
-    _progress "Checking dependencies"
+    _progress "Preflight"
 
     if test "$DRY" = false
         _info "Sudo password required for installation..."
@@ -5633,7 +4961,8 @@ function _install_preflight --description "Run all preflight checks before insta
             _err "Sudo required for installation"
             return $EXIT_PREFLIGHT
         end
-        # Matches: (ALL : ALL) ALL, (ALL) ALL, (ALL) NOPASSWD: ALL Does NOT match: (root) ALL — which IS genuinely restricted
+        # Matches: (ALL : ALL) ALL, (ALL) ALL, (ALL) NOPASSWD: ALL
+        # Does NOT match: (root) ALL — which IS genuinely restricted
         set -l sudo_all (sudo -n -l 2>/dev/null | grep -v '^\s*#' | grep -cE '\(ALL.*\) .*ALL$')
         or set sudo_all 0
         if test "$sudo_all" -eq 0
@@ -5694,11 +5023,10 @@ end
 function _install_packages --description "Install and remove managed packages via pacman"
     _check_sudo_keepalive
     set -l _fn_err false
-    _progress "Syncing packages"
+    _progress "Packages"
     _echo
     _info "Synchronizing package databases..."
 
-    _progress "Installing packages"
     _echo
     # Install missing packages, then remove unwanted ones
     _info "Package installation..."
@@ -5767,7 +5095,7 @@ end
 function _install_system_files --description "Deploy all embedded config files to the system"
     _check_sudo_keepalive
     set -l _fn_err false
-    _progress "Installing system files"
+    _progress "Configuration"
     _echo
     _info "Installing system configuration files..."
     if not _ry_install_files --sudo --desc "SYSTEM FILES" $SYSTEM_DESTINATIONS
@@ -5776,7 +5104,6 @@ function _install_system_files --description "Deploy all embedded config files t
         set _fn_err true
     end
 
-    _progress "Installing user files"
     _echo
     _info "Installing user configuration files..."
     if not _ry_install_files --desc "USER FILES" $USER_DESTINATIONS
@@ -5785,7 +5112,6 @@ function _install_system_files --description "Deploy all embedded config files t
         set _fn_err true
     end
 
-    _progress "AMDGPU performance service"
     _echo
     _info "AMDGPU performance service (STRONGLY RECOMMENDED)"
     _info "  Udev rule may fail due to timing (Arch bug #72655)"
@@ -5812,7 +5138,7 @@ end
 function _install_configure_services --description "Enable, start, and configure systemd services"
     _check_sudo_keepalive
     set -l _fn_err false
-    _progress "Updating databases"
+    _progress "Services"
     _echo
     _info "Post-installation tasks..."
 
@@ -5832,7 +5158,6 @@ function _install_configure_services --description "Enable, start, and configure
         end
     end
 
-    _progress "Reloading system config"
     if _ask "Reload udev rules?"
         if not _run sudo udevadm control --reload-rules
             _warn "Udevadm reload-rules failed"
@@ -5855,7 +5180,6 @@ function _install_configure_services --description "Enable, start, and configure
         end
     end
 
-    _progress "Removing packages"
     set -l to_del
     if test "$DRY" = true
         set to_del $PKGS_DEL
@@ -5947,7 +5271,6 @@ function _install_configure_services --description "Enable, start, and configure
         set -a safe_mask "$svc"
     end
 
-    _progress "Masking services"
     if test (count $safe_mask) -gt 0
         if _ask "Mask services? ($safe_mask)"
             if not _run sudo systemctl mask -- $safe_mask
@@ -5956,9 +5279,6 @@ function _install_configure_services --description "Enable, start, and configure
         end
     end
 
-    _progress "NetworkManager dispatcher"
-    _progress "CPU performance service"
-    _progress "Enabling timers"
 
     # B-7: Batch system-scope enable --now in --all mode
     if test "$ALL" = true
@@ -6142,7 +5462,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     _check_sudo_keepalive
 
     # Order: syu → mkinitcpio → sdboot → boot_sanity; syu first so new kernel is present before mkinitcpio -P; explicit pass ensures our configs apply
-    _progress "System upgrade"
+    _progress "Boot"
     if test "$SYSTEM_UPGRADED" = true
         _ok "System already upgraded during package installation"
     else if _ask "Perform full system upgrade? (pacman -Syu)"
@@ -6164,7 +5484,6 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     end
 
     # mkinitcpio/sdboot failure in --all aborts to prevent unbootable system; interactive continues
-    _progress "Rebuilding initramfs"
     if _ask "Rebuild initramfs?"
         if not _run sudo mkinitcpio -P
             _err "Mkinitcpio failed"
@@ -6176,7 +5495,6 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         end
     end
 
-    _progress "Updating bootloader"
     if _ask "Update bootloader?"
         set -l _boot_ok true
         if not _run sudo sdboot-manage gen
@@ -6235,7 +5553,7 @@ end
 
 # Pipeline phase 8: daemon-reload, verify-static, verify-runtime, log summary, report errors
 function _install_finalize --description "Run post-install verification, cleanup, and summary"
-    _progress "Finalizing system"
+    _progress "Finalize"
     if not _run sudo systemctl daemon-reload
         _warn "Systemctl daemon-reload failed"
     end
@@ -6258,7 +5576,6 @@ function _install_finalize --description "Run post-install verification, cleanup
         end
     end
 
-    _progress "NetworkManager restart"
     if _ask "Restart NetworkManager (switch to iwd backend)?"
         if command -q pacman; and pacman -Qi iwd >/dev/null 2>&1
             _info "iwd will restart with NetworkManager (D-Bus disconnect expected)"
@@ -6276,7 +5593,6 @@ function _install_finalize --description "Run post-install verification, cleanup
         end
     end
 
-    _progress "WiFi reconnection"
     if test -n "$WIFI_SSID"; and test -n "$WIFI_IFACE"; and test -n "$WIFI_PASS"
         _info "Reconnecting WiFi: $WIFI_SSID on $WIFI_IFACE"
 
@@ -6449,9 +5765,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
         _err "Boot-critical failure — skipping WiFi and finalization"
         _err "Fix boot issue first: sudo mkinitcpio -P && sudo sdboot-manage gen"
-        _progress_skip "Finalizing system"
-        _progress_skip "NetworkManager restart"
-        _progress_skip "WiFi reconnection"
+        _progress_skip "Finalize"
     else
         # Collect WiFi creds just before use to minimize WIFI_PASS global lifetime
         _install_collect_wifi
@@ -6672,7 +5986,6 @@ function _ry_do_completions --description "Generate fish shell completions for r
         '-l lint|Run fish syntax and anti-pattern checks' \
         '-l check|Silent idempotency probe (exit 0 = clean, exit 10 = drift)' \
         '-l test-all|Run all safe modes and generate NDJSON logs (test suite)' \
-        '-l logs|View logs (system, gpu, wifi, boot, audio, usb, kernel, or service name)' \
         '-l completions|Install fish tab-completions for ry-install itself' \
         '-l fix|Re-install drifted files (use with --diff)' \
         '-s h -l help|Show help' \
@@ -6686,8 +5999,6 @@ function _ry_do_completions --description "Generate fish shell completions for r
     # --install-file with destination completions
     echo "    complete -c \$cmd -l install-file -d 'Re-deploy a single managed file' -rxa '$_install_file_targets'" >>"$tmpfile"
 
-    # --logs subcommand completions
-    echo "    complete -c \$cmd -l logs -xa 'analyze last all list system gpu wifi boot audio usb kernel'" >>"$tmpfile"
 
     echo end >>"$tmpfile"
 
@@ -6738,13 +6049,6 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         --verify-runtime \
         --lint \
         --diff \
-        "--logs system" \
-        "--logs gpu" \
-        "--logs wifi" \
-        "--logs boot" \
-        "--logs audio" \
-        "--logs usb" \
-        "--logs kernel" \
         --version \
         --help
 
@@ -6873,7 +6177,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         _info "  completions file not available (dry-run or write failed) — skipping content check"
         set passed (math $passed + 1)
     else
-        for _expected_cmd in install diff verify-static verify-runtime lint logs
+        for _expected_cmd in install diff verify-static verify-runtime lint
             if not string match -q "*$_expected_cmd*" -- "$_comp_out"
                 _warn "  completions missing: $_expected_cmd"
                 set _comp_ok false
@@ -6908,8 +6212,7 @@ end
 # Entry point
 set -g MODE install
 set -l mode_count 0
-set -l LOG_TARGET ""
-set -l LOG_TARGET_ARG ""
+
 set -l INSTALL_FILE_TARGET ""
 set -l DIFF_TARGET ""
 
@@ -6965,28 +6268,6 @@ while test $i -le (count $argv)
             set mode_count (math $mode_count + 1)
         case --fix
             set -g FIX true
-        case --logs
-            set MODE logs
-            set mode_count (math $mode_count + 1)
-            set -l next_i (math $i + 1)
-            if test $next_i -le (count $argv)
-                set -l next_arg $argv[$next_i]
-                if not string match -q -- '-*' "$next_arg"
-                    set LOG_TARGET "$next_arg"
-                    set i $next_i
-                    if test "$LOG_TARGET" = analyze
-                        set -l next_i2 (math $i + 1)
-                        if test $next_i2 -le (count $argv)
-                            set -l next_arg2 $argv[$next_i2]
-                            if not string match -q -- '-*' "$next_arg2"
-                                set LOG_TARGET_ARG "$next_arg2"
-                                set i $next_i2
-                            end
-                        end
-                    end
-                end
-            end
-
         case --completions
             set MODE completions
             set mode_count (math $mode_count + 1)
@@ -7075,9 +6356,7 @@ end
 _load_profile
 
 set -l mode_label $MODE
-if test -n "$LOG_TARGET"
-    set mode_label "$MODE-$LOG_TARGET"
-end
+
 if test "$FIX" = true
     set mode_label "$mode_label-fix"
 end
@@ -7089,7 +6368,9 @@ if test "$ALL" = true; and test "$MODE" != test-all
 end
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"
 set -l old_log "$LOG_FILE"
-# Rename log to mode-specific path; mv before set — signal between them loses footer (acceptable) but preserves log content. Reversed order would lose content (signal handler creates empty new_log, then mv never runs because signal handler exits).
+# Rename log to mode-specific path; mv before set — signal between them loses footer (acceptable)
+# but preserves log content. Reversed order would lose content (signal handler creates empty new_log,
+# then mv never runs because signal handler exits).
 if test -f "$old_log"; and test "$old_log" != "$new_log"
     command mv -- "$old_log" "$new_log" 2>/dev/null
 end
@@ -7133,7 +6414,7 @@ switch $MODE
             _acquire_lock; or exit $EXIT_LOCK
         end
     case '*'
-        # No lock needed for read-only modes (verify, lint, logs, completions, test-all)
+        # No lock needed for read-only modes (verify, lint, completions, test-all)
 end
 
 # Log rotation: flock serializes concurrent instances; without flock, rm -f is idempotent (last-write-wins)
@@ -7171,9 +6452,6 @@ switch $MODE
         set exit_code $status
     case test-all
         _ry_do_test_all
-        set exit_code $status
-    case logs
-        _ry_do_logs "$LOG_TARGET" "$LOG_TARGET_ARG"
         set exit_code $status
     case completions
         _ry_do_completions

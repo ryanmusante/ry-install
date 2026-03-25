@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.9.2-blue)
+![Version](https://img.shields.io/badge/version-3.10.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -70,11 +70,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `--test-all` | Run all safe modes, generate NDJSON logs |
 | `--install-file <path>` | Re-deploy a single managed file |
 | `--completions` | Install fish tab-completions |
-| `--logs <target>` | View logs (system gpu wifi boot audio usb kernel `<service>`) |
-| `--logs analyze [file]` | Parse NDJSON log |
-| `--logs last` | Analyze most recent log |
-| `--logs all` | Analyze all logs |
-| `--logs list` | List recent log files |
 | `-h, --help` | Show help |
 | `-v, --version` | Show version |
 | `--` | End of options |
@@ -230,9 +225,9 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 > `--diff` and `--verify-*` return exit 1 on differences (expected for scripting).
 
-### Install Flow (19 steps)
+### Install Flow (6 steps)
 
-Dependencies → Sync → Packages → System files → User files → AMDGPU service → Databases → Reload → Remove packages → Mask services → NM dispatcher → CPU service → Timers → Upgrade → Initramfs → Bootloader → Finalize → NM restart → WiFi
+Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ### Data Directory
 
@@ -242,11 +237,63 @@ Dependencies → Sync → Packages → System files → User files → AMDGPU se
 | `~/ry-install/.lock/` | Instance guard |
 | `~/ry-install/.manifest` | Orphan tracking |
 
+### Log Analysis
+
+Every mode writes structured NDJSON to `~/ry-install/logs/`. Each line is a self-contained JSON object. Analyze with `jq`.
+
+**Log structure:**
+
+| Event | Fields | When |
+|-------|--------|------|
+| `header` | `version`, `profile`, `mode`, `dry_run`, `all`, `verbose`, `command` | Run start |
+| `footer` | `exit_code`, `pass`, `fail`, `warn`, `interrupted` | Run end |
+| `ok` | `data` | Verification pass |
+| `fail` | `data` | Verification failure |
+| `warn` | `data` | Non-fatal issue |
+| `err` | `data` | Blocking error |
+| `step_time` | `data`, `elapsed_s` | Install step completed |
+| `run` | `data` | Command executed |
+| `stderr` | `data` | Captured stderr |
+| `section` | `data` | Phase boundary |
+| `diff` | `data` | File drift detected |
+
+All events include `ts` (ISO 8601 timestamp).
+
+**Examples:**
+
+```fish
+# All errors from most recent log
+jq 'select(.event == "err")' ~/ry-install/logs/**/*.jsonl | tail -20
+
+# Failures from a specific run
+jq 'select(.event == "fail")' ~/ry-install/logs/2026-03-25/install-20260325-140000+0000.jsonl
+
+# Run summary (exit code, pass/fail/warn counts)
+jq 'select(.event == "footer")' ~/ry-install/logs/**/*.jsonl
+
+# Step timing for install runs
+jq 'select(.event == "step_time") | {step: .data, seconds: .elapsed_s}' ~/ry-install/logs/**/*.jsonl
+
+# All unique warnings across all runs
+jq -r 'select(.event == "warn") | .data' ~/ry-install/logs/**/*.jsonl | sort -u
+
+# Commands that failed (non-zero exit)
+jq -r 'select(.event == "run") | .data' ~/ry-install/logs/**/*.jsonl | grep '^EXIT: [^0]'
+
+# Interrupted runs
+jq 'select(.event == "footer" and .interrupted == true)' ~/ry-install/logs/**/*.jsonl
+
+# Drift check history
+jq 'select(.event == "footer" and .mode == "check") | {ts: .ts, exit: .exit_code}' ~/ry-install/logs/**/*.jsonl
+
+# List all runs with mode and exit code
+jq -r 'select(.event == "footer") | [.ts, .mode, .exit_code] | @tsv' ~/ry-install/logs/**/*.jsonl
+```
+
 ## Troubleshooting
 
 | Problem | Command |
 |---------|---------|
-| Query errors | `jq 'select(.event == "err")' ~/ry-install/logs/**/*.jsonl` |
 | GPU perf level | `cat /sys/class/drm/card*/device/power_dpm_force_performance_level` |
 | WiFi backend | `nmcli -t -f TYPE,FILENAME connection show --active` |
 | ntsync | Kernel 6.14+ · `ls /dev/ntsync` |

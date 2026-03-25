@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.8.9 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.9.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.8.9"
+set -g VERSION "3.9.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -500,8 +500,6 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        "/etc/sysctl.d/99-ry-sysctl.conf" \
-        "/etc/modprobe.d/99-ry-modprobe.conf" \
         /etc/drirc
 
     set -g USER_DESTINATIONS \
@@ -523,22 +521,20 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # ── Kernel (15 params) ──
-    # ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 workaround (remove 6.18+). ttm.pages_limit: 124 GiB cap
-    # wbrf=0: disable WiFi RFI memory clock throttling (P1 — devastating for UMA bandwidth). tsc=reliable: skip TSC validation on Zen 5 (P2)
+    # ── Kernel (13 params) ──
+    # ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 workaround (remove 6.18+)
+    # wbrf=0: disable WiFi RFI memory clock throttling (P1 — devastating for UMA bandwidth). clocksource=tsc: force TSC on Zen 5 (P2)
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
         amdgpu.wbrf=0 \
+        clocksource=tsc \
         initcall_blacklist=simpledrm_platform_driver_init \
         iommu=pt \
         mt7925e.disable_aspm=1 \
         nowatchdog \
         nvme_core.default_ps_max_latency_us=0 \
-        pci=pcie_bus_perf \
         quiet \
-        tsc=reliable \
-        ttm.pages_limit=32505856 \
         usbcore.autosuspend=-1 \
         workqueue.power_efficient=0 \
         zswap.enabled=0
@@ -562,8 +558,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     # ── Udev ──
     set -g UDEV_RULES \
-        'KERNEL=="ntsync", MODE="0666"' \
-        'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ATTR{queue/rq_affinity}="2", ATTR{queue/read_ahead_kb}="128"'
+        'KERNEL=="ntsync", MODE="0666"'
 
     # ── Network ──
     set -g RESOLVED_MDNS no
@@ -590,18 +585,6 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "MESA_SHADER_CACHE_MAX_SIZE=8G" \
         "PROTON_USE_NTSYNC=1" \
         "PROTON_NO_WM_DECORATION=1"
-
-    # ── Sysctl verification (must match _ry_get_file_content sysctl case) ──
-    set -g SYSCTL_CHECKS \
-        "net.ipv4.tcp_fastopen=3" \
-        "net.ipv4.tcp_notsent_lowat=131072" \
-        "vm.max_map_count=2147483642" \
-        "vm.compaction_proactiveness=1" \
-        "vm.watermark_boost_factor=1" \
-        "vm.page_lock_unfairness=5" \
-        "vm.dirty_expire_centisecs=6000" \
-        "vm.dirty_writeback_centisecs=1500" \
-        "fs.inotify.max_user_instances=1024"
 
     # ── Packages ──
     set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications fd sd dust procs bottom git-delta lm_sensors
@@ -685,10 +668,6 @@ function _validate_profile --description "Verify loaded profile has all required
             case '*/udev/rules.d/*'
                 if not contains -- UDEV_RULES $required
                     set -a required UDEV_RULES
-                end
-            case '*/sysctl.d/*'
-                if not contains -- SYSCTL_CHECKS $required
-                    set -a required SYSCTL_CHECKS
                 end
         end
     end
@@ -955,51 +934,6 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' ""
             printf '%s\n' "[logging]"
             printf '%s\n' "level=$NM_LOG_LEVEL"
-
-        case "/etc/sysctl.d/99-ry-sysctl.conf"
-            printf '%s\n' "# Sysctl overrides -- complements cachyos vendor 70-cachyos-settings.conf"
-            printf '%s\n' "# DO NOT override default_qdisc or tcp_congestion -- CachyOS sets cake/bbr2"
-            printf '%s\n' ""
-            printf '%s\n' "# TCP Fast Open: 3 = client + server"
-            printf '%s\n' "net.ipv4.tcp_fastopen = 3"
-            printf '%s\n' ""
-            printf '%s\n' "# VM gaming tunables -- reduce jitter/latency with 128 GB RAM"
-            printf '%s\n' "# SteamOS value: many AAA titles via DXVK/Proton need high map counts"
-            printf '%s\n' "vm.max_map_count = 2147483642"
-            printf '%s\n' "# Minimal proactive compaction (0 causes synchronous storms; 1 = kcompactd light)"
-            printf '%s\n' "vm.compaction_proactiveness = 1"
-            printf '%s\n' "# Minimize aggressive reclaim (default 15000 causes kswapd wake-ups)"
-            printf '%s\n' "vm.watermark_boost_factor = 1"
-            printf '%s\n' "# Page lock unfairness (Phoronix AMD benchmarks: 4-5 optimal; Torvalds range 1-5)"
-            printf '%s\n' "vm.page_lock_unfairness = 5"
-            printf '%s\n' ""
-            printf '%s\n' "# inotify -- IDEs and build tools monitoring large source trees"
-            printf '%s\n' "fs.inotify.max_user_instances = 1024"
-            printf '%s\n' ""
-            printf '%s\n' "# Network -- cap TCP send buffer to prevent buffer bloat for game packets"
-            printf '%s\n' "net.ipv4.tcp_notsent_lowat = 131072"
-            printf '%s\n' ""
-            printf '%s\n' "# Dirty page writeback -- reduce flusher wakeups (CachyOS sets dirty_bytes=256MB)"
-            printf '%s\n' "vm.dirty_expire_centisecs = 6000"
-            printf '%s\n' "vm.dirty_writeback_centisecs = 1500"
-
-        case "/etc/modprobe.d/99-ry-modprobe.conf"
-            printf '%s\n' "# Module blacklists and options -- complements CachyOS /usr/lib/modprobe.d/"
-            printf '%s\n' ""
-            printf '%s\n' "# Silence PC speaker beep (not blacklisted by CachyOS)"
-            printf '%s\n' "blacklist pcspkr"
-            printf '%s\n' ""
-            printf '%s\n' "# ACPI watchdog -- complements nowatchdog cmdline (CachyOS covers iTCO/sp5100 only)"
-            printf '%s\n' "blacklist wdat_wdt"
-            printf '%s\n' ""
-            printf '%s\n' "# Disable NVMe multipath on single-drive desktop"
-            printf '%s\n' "options nvme_core multipath=N"
-            printf '%s\n' ""
-            printf '%s\n' "# MT7925 WiFi ASPM -- redundant backup for cmdline mt7925e.disable_aspm=1"
-            printf '%s\n' "options mt7925e disable_aspm=1"
-            printf '%s\n' ""
-            printf '%s\n' "# MT7925 WiFi power save -- complements NM wifi.powersave=2 and cmdline disable_aspm"
-            printf '%s\n' "options mt7925_common power_save=0"
 
         case "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish"
             printf '%s\n' '# SSH agent socket for fish shell -- priority: forwarded > gcr > systemd
@@ -2633,7 +2567,6 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
     set -l resolved_files_fixed false
     set -l nm_config_fixed false
     set -l logind_files_fixed false
-    set -l sysctl_files_fixed false
     set -l _boot_fstype (findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
 
     if test "$FIX" = true; and test "$DRY" = false
@@ -2900,9 +2833,6 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
                         if string match -q '*/logind.conf.d/*' -- "$dst"
                             set logind_files_fixed true
                         end
-                        if string match -q '*/sysctl.d/*' -- "$dst"
-                            set sysctl_files_fixed true
-                        end
                     else
                         set fix_errors true
                     end
@@ -2955,12 +2885,6 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
         end
         if test "$logind_files_fixed" = true
             _info "Logind config changed — reboot required (restarting logind kills all sessions)"
-        end
-        if test "$sysctl_files_fixed" = true; and test "$DRY" = false
-            _echo
-            if _ask "Sysctl config changed — reload?"
-                _run sudo sysctl --system; or _warn "Sysctl --system failed"
-            end
         end
         if test (count $fixed_user_services) -gt 0; and test "$DRY" = false
             _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
@@ -3234,7 +3158,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo "── Udev rules ──"
     if _chk_file /etc/udev/rules.d/99-cachyos-udev.rules
         _chk_grep /etc/udev/rules.d/99-cachyos-udev.rules ntsync "ntsync rule"
-        _chk_grep /etc/udev/rules.d/99-cachyos-udev.rules rq_affinity "NVMe rq_affinity rule"
         # USB power/control rule removed — usbcore.autosuspend=-1 handles globally
     end
     _echo
@@ -3277,30 +3200,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "level=$NM_LOG_LEVEL" "logging level $NM_LOG_LEVEL"
     end
     # NM-dispatcher enable state: checked in _ry_verify_runtime (batch systemctl show) — not a static config file check
-    _echo
-
-    _echo "── sysctl overrides ──"
-    if _chk_file /etc/sysctl.d/99-ry-sysctl.conf
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.ipv4.tcp_fastopen = 3" "tcp_fastopen = 3"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.max_map_count = 2147483642" "max_map_count = 2147483642"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.compaction_proactiveness = 1" "compaction_proactiveness = 1"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.watermark_boost_factor = 1" "watermark_boost_factor = 1"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.page_lock_unfairness = 5" "page_lock_unfairness = 5"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "fs.inotify.max_user_instances = 1024" "max_user_instances = 1024"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "net.ipv4.tcp_notsent_lowat = 131072" "tcp_notsent_lowat = 131072"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.dirty_expire_centisecs = 6000" "dirty_expire_centisecs = 6000"
-        _chk_grep /etc/sysctl.d/99-ry-sysctl.conf "vm.dirty_writeback_centisecs = 1500" "dirty_writeback_centisecs = 1500"
-    end
-    _echo
-
-    _echo "── modprobe overrides ──"
-    if _chk_file /etc/modprobe.d/99-ry-modprobe.conf
-        _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "blacklist pcspkr" "blacklist pcspkr"
-        _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "blacklist wdat_wdt" "blacklist wdat_wdt"
-        _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "options nvme_core multipath=N" "nvme_core multipath=N"
-        _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "options mt7925e disable_aspm=1" "mt7925e disable_aspm=1"
-        _chk_grep /etc/modprobe.d/99-ry-modprobe.conf "options mt7925_common power_save=0" "mt7925_common power_save=0"
-    end
     _echo
 
     _echo "── RADV driconf ──"
@@ -4106,15 +4005,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
     end
 
-    if test -f /sys/module/nvme_core/parameters/multipath
-        set -l sysfs_val (command cat -- /sys/module/nvme_core/parameters/multipath 2>/dev/null)
-        if test "$sysfs_val" = N
-            _ok "  nvme_core.multipath: $sysfs_val"
-        else
-            _fail "  nvme_core.multipath: $sysfs_val (expected: N)"
-        end
-    end
-
     if test -d /sys/module/amdgpu/parameters
         # Hex→decimal normalization: sysfs may return 0xfffd3fff or 4294787071
         for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0"
@@ -4149,15 +4039,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
     else if test -d /sys/module/mt7925e
         _info "  mt7925e: loaded but disable_aspm param not found"
-    end
-
-    if test -f /sys/module/ttm/parameters/pages_limit
-        set -l sysfs_val (command cat -- /sys/module/ttm/parameters/pages_limit 2>/dev/null)
-        if test "$sysfs_val" = 32505856
-            _ok "  ttm.pages_limit: $sysfs_val"
-        else
-            _fail "  ttm.pages_limit: $sysfs_val (expected: 32505856)"
-        end
     end
     _echo
 
@@ -4334,21 +4215,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     _echo
 
-    _echo "── sysctl overrides ──"
-    # Verify runtime values from /etc/sysctl.d/99-ry-sysctl.conf (ry-install managed)
-    for _sc in $SYSCTL_CHECKS
-        set -l _key (string split '=' -- "$_sc")[1]
-        set -l _expected (string split '=' -- "$_sc")[2]
-        set -l _proc_path (string replace -a '.' '/' -- "$_key")
-        set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim --)
-        if test "$_actual" = "$_expected"
-            _ok "  $_key: $_actual"
-        else if test -n "$_actual"
-            _fail "  $_key: $_actual (expected: $_expected)"
-        else
-            _warn "  $_key: cannot read /proc/sys/$_proc_path"
-        end
-    end
+    _echo "── sysctl (vendor) ──"
     # Vendor-managed sysctl values (CachyOS 70-cachyos-settings.conf) — _warn on mismatch, not _fail
     set -l _sysctl_vendor \
         "kernel.split_lock_mitigate=0"
@@ -4414,34 +4281,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         _warn "  ZRAM service: $_zram_state (expected: masked — 128 GB makes ZRAM pointless)"
     else
         _ok "  ZRAM service: not found (OK)"
-    end
-    _echo
-
-    _echo "── filesystem ──"
-    # CHK-04: btrfs noatime — avoids expensive COW metadata writes on every file access
-    set -l root_opts (findmnt -no OPTIONS / 2>/dev/null)
-    if string match -q '*btrfs*' -- (findmnt -no FSTYPE / 2>/dev/null)
-        if not string match -q '*noatime*' -- "$root_opts"
-            _warn "btrfs root missing noatime — add to /etc/fstab"
-        else
-            _ok "btrfs noatime: present"
-        end
-    end
-    # §10 #11: NVMe I/O scheduler
-    for nvme_dev in /sys/block/nvme*
-        if test -d "$nvme_dev"
-            set -l _devname (basename -- "$nvme_dev")
-            set -l _sched_file "$nvme_dev/queue/scheduler"
-            if test -f "$_sched_file"
-                set -l _sched (command cat -- "$_sched_file" 2>/dev/null)
-                if string match -q '*\[none\]*' -- "$_sched"
-                    _ok "  $_devname scheduler: none"
-                else
-                    set -l _active (string match -r '\[(\w+)\]' -- "$_sched")[2]
-                    _warn "  $_devname scheduler: $_active (expected: none)"
-                end
-            end
-        end
     end
     _echo
 
@@ -5982,14 +5821,6 @@ function _install_configure_services --description "Enable, start, and configure
         end
     end
 
-    if test -f /etc/sysctl.d/99-ry-sysctl.conf
-        if _ask "Reload sysctl settings?"
-            if not _run sudo sysctl --system
-                _warn "Sysctl --system failed"
-            end
-        end
-    end
-
     _progress "Removing packages"
     set -l to_del
     if test "$DRY" = true
@@ -6745,11 +6576,6 @@ function _ry_do_install_file --argument-names target --description "Install a si
                 _echo
                 if _ask "NetworkManager config changed — restart NetworkManager?"
                     _run sudo systemctl restart NetworkManager; or _warn "NetworkManager restart failed"
-                end
-            else if string match -q '*/sysctl.d/*' -- "$target"
-                _echo
-                if _ask "Reload sysctl settings?"
-                    _run sudo sysctl --system; or _warn "Sysctl --system failed"
                 end
             end
         end

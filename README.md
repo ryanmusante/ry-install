@@ -1,10 +1,10 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.8.9-blue)
+![Version](https://img.shields.io/badge/version-3.9.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
-Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 17 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 15 embedded configs, no external dependencies.
 
 ## Hardware
 
@@ -81,22 +81,20 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 ## Configuration
 
-### Kernel Parameters (15)
+### Kernel Parameters (13)
 
 | Parameter | Purpose |
 |-----------|---------|
 | `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 hang workaround (remove on 6.18+) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14,15,17 off (overdrive/GFXOFF/stutter) |
 | `amdgpu.wbrf=0` | Disable WiFi RFI memory clock throttling (UMA bandwidth) |
+| `clocksource=tsc` | Force TSC clocksource on Zen 5 |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
 | `iommu=pt` | IOMMU passthrough (DMA protection, near-zero overhead) |
 | `mt7925e.disable_aspm=1` | Disable WiFi ASPM |
 | `nowatchdog` | Disable watchdog timers |
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
-| `pci=pcie_bus_perf` | PCIe performance tuning |
 | `quiet` | Suppress boot messages |
-| `tsc=reliable` | Trust Zen 5 TSC clocksource, skip validation |
-| `ttm.pages_limit=32505856` | Cap pinned memory to 124 GiB |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
 | `workqueue.power_efficient=0` | Disable power-efficient workqueue remapping |
 | `zswap.enabled=0` | Disable zswap (ZRAM masked separately) |
@@ -109,7 +107,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | | timeout | `0` |
 | | console-mode | `keep` |
 | | editor | `no` |
-| `sdboot-manage.conf` | LINUX_OPTIONS | See [Kernel Parameters](#kernel-parameters-15) |
+| `sdboot-manage.conf` | LINUX_OPTIONS | See [Kernel Parameters](#kernel-parameters-13) |
 | | LINUX_FALLBACK_OPTIONS | `"quiet"` |
 | | DEFAULT_ENTRY | `"manual"` |
 | | REMOVE_EXISTING | `"yes"` |
@@ -128,29 +126,12 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | File | Setting |
 |------|---------|
-| `udev rules` | `ntsync` MODE=0666 · NVMe `rq_affinity=2`, `read_ahead_kb=128` |
+| `udev rules` | `ntsync` MODE=0666 |
 | `resolved.conf.d` | MulticastDNS=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
-| `modprobe.d` | Blacklist pcspkr, wdat_wdt · nvme_core multipath=N · mt7925e disable_aspm=1 · mt7925_common power_save=0 |
 | `drirc` | RADV unified VRAM heap on APU |
-
-### Sysctl Overrides
-
-Complements CachyOS `70-cachyos-settings.conf` (no overlap).
-
-| Parameter | Value | Purpose |
-|-----------|-------|---------|
-| `net.ipv4.tcp_fastopen` | `3` | TCP Fast Open client + server |
-| `net.ipv4.tcp_notsent_lowat` | `131072` | Cap TCP send buffer 128 KB — prevent buffer bloat |
-| `vm.max_map_count` | `2147483642` | SteamOS value for DXVK/Proton |
-| `vm.compaction_proactiveness` | `1` | Minimal proactive compaction |
-| `vm.watermark_boost_factor` | `1` | Minimize aggressive reclaim |
-| `vm.page_lock_unfairness` | `5` | Optimal throughput (AMD benchmarks) |
-| `vm.dirty_expire_centisecs` | `6000` | 60s dirty page expiry — reduce flusher wakeups |
-| `vm.dirty_writeback_centisecs` | `1500` | 15s writeback interval — reduce flusher frequency |
-| `fs.inotify.max_user_instances` | `1024` | Parallel build tools and file watchers |
 
 ### Environment Variables
 
@@ -196,7 +177,7 @@ Complements CachyOS `70-cachyos-settings.conf` (no overlap).
 | `amdgpu-performance.service` | Write `auto` to `power_dpm_force_performance_level` sysfs (retry loop, multi-GPU). GameMode sets `high` dynamically. |
 | `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` sysfs |
 
-## Embedded Files (17)
+## Embedded Files (15)
 
 | # | Scope | Path |
 |---|-------|------|
@@ -209,14 +190,12 @@ Complements CachyOS `70-cachyos-settings.conf` (no overlap).
 | 7 | System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
 | 8 | System | `/etc/iwd/main.conf` |
 | 9 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
-| 10 | System | `/etc/sysctl.d/99-ry-sysctl.conf` |
-| 11 | System | `/etc/modprobe.d/99-ry-modprobe.conf` |
-| 12 | System | `/etc/drirc` |
-| 13 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
-| 14 | User | `~/.config/environment.d/10-environment.conf` |
-| 15 | User | `~/.config/systemd/user/ssh-agent.service` |
-| 16 | Service | `/etc/systemd/system/amdgpu-performance.service` |
-| 17 | Service | `/etc/systemd/system/cpupower-epp.service` |
+| 10 | System | `/etc/drirc` |
+| 11 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
+| 12 | User | `~/.config/environment.d/10-environment.conf` |
+| 13 | User | `~/.config/systemd/user/ssh-agent.service` |
+| 14 | Service | `/etc/systemd/system/amdgpu-performance.service` |
+| 15 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
 ## Safety
 
@@ -297,7 +276,7 @@ External profiles should define `function _ry_profile_<n>` with all required glo
 
 - **CWSR hang** (fixed 6.18+): Incorrect VGPR count (`cf326449637a5`). Compute-only. Pre-6.18: `amdgpu.cwsr_enable=0`.
 - **MES page faults**: FW 0x83 may fault. Pin `linux-firmware` if affected.
-- **ROCm VRAM**: `ttm.pages_limit=32505856` caps GTT to 124 GiB. `amdgpu.gttsize` deprecated.
+- **ROCm VRAM**: `amdgpu.gttsize` deprecated. Use ROCm env vars for GTT management.
 - **PSR freeze** (eDP only): Add `amdgpu.dcdebugmask=0x10`. Not needed for HDMI/DP.
 - **Black screen**: Kernel 6.19.0 regression; 6.18.9 last known-good.
 - **ROCm env**: `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.1`.

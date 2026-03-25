@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.9.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.9.1 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.9.0"
+set -g VERSION "3.9.1"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -2220,6 +2220,10 @@ function _ry_validate_configs --description "Run all embedded config validators"
                     set errs (math $errs + 1)
                 end
             end
+            # FN-03: match-position keys must use == (not single =); single = is assign, not match
+            if grep -qE -- "(KERNEL|SUBSYSTEM|DRIVER|ACTION|DEVPATH|ATTR\{[^}]*\})[[:space:]]*=[^=]" "$f" 2>/dev/null
+                set errs (math $errs + 1)
+            end
         else
             set errs (math $errs + 1)
         end
@@ -3115,10 +3119,16 @@ function _ry_verify_static --description "Verify installed configs match embedde
         end
 
         set -l comp_line (grep -E '^[[:space:]]*COMPRESSION=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1)
-        if string match -q '*zstd*' -- "$comp_line"
-            _ok "  COMPRESSION=zstd: present"
+        # FN-04: parse value between quotes instead of glob-matching entire line (avoids comment false-pass)
+        set -l comp_val (string match -r -- 'COMPRESSION="([^"]*)"' "$comp_line")[2]
+        if test -z "$comp_val"
+            # Fallback: unquoted value
+            set comp_val (string replace -r -- '^[[:space:]]*COMPRESSION=' '' "$comp_line" | string trim --)
+        end
+        if test "$comp_val" = "$MKINITCPIO_COMPRESSION"
+            _ok "  COMPRESSION=$MKINITCPIO_COMPRESSION: present"
         else
-            _fail "  COMPRESSION=zstd: MISSING"
+            _fail "  COMPRESSION=$MKINITCPIO_COMPRESSION: MISSING (found: $comp_val)"
         end
     end
     _echo
@@ -3186,9 +3196,15 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _info "  Skipping (iwd not installed)"
     else if _chk_file /etc/iwd/main.conf
         _chk_grep /etc/iwd/main.conf "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG"
+        # Section-aware check: verify DriverQuirks keys are under [DriverQuirks], not elsewhere (FN-01)
+        set -l _dq_section (sed -n '/^\[DriverQuirks\]/,/^\[/p' /etc/iwd/main.conf 2>/dev/null | sed '${ /^\[/d }')
         for quirk in $IWD_DRIVER_QUIRKS
             set -l key (string split '=' -- $quirk)[1]
-            _chk_grep /etc/iwd/main.conf "$key" "DriverQuirks $key"
+            if test -n "$_dq_section"; and printf '%s\n' $_dq_section | grep -qF -- "$key"
+                _ok "  DriverQuirks $key: present"
+            else
+                _fail "  DriverQuirks $key: MISSING from [DriverQuirks] section"
+            end
         end
         _chk_grep /etc/iwd/main.conf "NameResolvingService=$IWD_DNS_SERVICE" "DNS via $IWD_DNS_SERVICE"
     end
@@ -3310,6 +3326,12 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo
 
     _echo "── Masked services ──"
+    # LVM detection: skip lvm2-monitor.service mask check when LVM volumes are active (mirrors _ry_do_check L3725)
+    set -l _verify_has_lvm false
+    set -l _pvs_out (timeout 5 sudo -n pvs --noheadings 2>/dev/null | string trim --)
+    if test -n "$_pvs_out"
+        set _verify_has_lvm true
+    end
     # Batch systemctl show replaces N individual is-enabled+cat calls; string collect preserves blank-line delimiters
     set -l _mask_raw (systemctl show --property=LoadState,UnitFileState -- $MASK 2>/dev/null | string collect --no-trim-newlines)
     set -l _mask_parsed (_parse_systemctl_show "$_mask_raw")
@@ -3318,6 +3340,10 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _log "SYSTEMCTL_SHOW_MASK_PARTIAL: got="(count $_mask_parsed)" expected="(count $MASK)
         # Fallback: per-unit query to avoid positional misattribution
         for _svc in $MASK
+            if test "$_svc" = lvm2-monitor.service; and test "$_verify_has_lvm" = true
+                _info "  $_svc: skipped (LVM volumes active)"
+                continue
+            end
             set -l _state (systemctl is-enabled "$_svc" 2>/dev/null)
             switch "$_state"
                 case masked
@@ -3331,6 +3357,10 @@ function _ry_verify_static --description "Verify installed configs match embedde
     else
         for _mask_idx in (seq 1 (count $MASK))
             set -l _svc $MASK[$_mask_idx]
+            if test "$_svc" = lvm2-monitor.service; and test "$_verify_has_lvm" = true
+                _info "  $_svc: skipped (LVM volumes active)"
+                continue
+            end
             set -l _rec (string split -- ':' -- "$_mask_parsed[$_mask_idx]")
             if test "$_rec[1]" = not-found
                 _info "  $_svc: unit not found (may not be installed)"
@@ -4019,7 +4049,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
 
     if test -d /sys/module/amdgpu/parameters
         # Hex→decimal normalization: sysfs may return 0xfffd3fff or 4294787071
-        for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0"
+        for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0" "wbrf:0"
             set -l pname (string split ':' -- "$pair")[1]
             set -l expected (string split ':' -- "$pair")[2]
             set -l ppath /sys/module/amdgpu/parameters/$pname
@@ -4051,6 +4081,16 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
     else if test -d /sys/module/mt7925e
         _info "  mt7925e: loaded but disable_aspm param not found"
+    end
+
+    # workqueue.power_efficient sysfs check (FN-02: was only verified in /proc/cmdline)
+    if test -f /sys/module/workqueue/parameters/power_efficient
+        set -l sysfs_val (command cat -- /sys/module/workqueue/parameters/power_efficient 2>/dev/null | string trim --)
+        if test "$sysfs_val" = 0; or test "$sysfs_val" = N
+            _ok "  workqueue.power_efficient: $sysfs_val"
+        else
+            _fail "  workqueue.power_efficient: $sysfs_val (expected: 0/N)"
+        end
     end
     _echo
 
@@ -4222,7 +4262,8 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         else if test -n "$actual"
             _fail "  $var_name=$actual (expected: $expected)"
         else
-            _fail "  $var_name: NOT SET (re-login may be required)"
+            # environment.d vars require re-login to take effect; WARN not FAIL for unset (FP-02)
+            _warn "  $var_name: NOT SET (re-login required for environment.d)"
         end
     end
     _echo

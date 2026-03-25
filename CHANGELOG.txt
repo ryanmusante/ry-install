@@ -1,3 +1,28 @@
+3.9.1 (2026-03-24)
+------------------
+  fix(verify-static): add LVM detection to masked-service check. Skip
+    lvm2-monitor.service when pvs reports active volumes. Mirrors
+    _ry_do_check and _install_configure_services LVM exceptions.
+    Previously FAILed on any LVM system (FP-01).
+  fix(verify-runtime): change unset environment.d vars from FAIL to
+    WARN. Variables from environment.d require re-login to take effect;
+    FAIL was misleading when running --verify-runtime or --test-all
+    before session restart. Wrong-value case stays FAIL (FP-02).
+  fix(verify-static): section-aware iwd DriverQuirks check. Replace
+    global grep with sed extraction of [DriverQuirks] block. Keys
+    under wrong INI section no longer pass verification (FN-01).
+  feat(verify-runtime): add sysfs checks for amdgpu.wbrf and
+    workqueue.power_efficient. Both were verified in /proc/cmdline but
+    not at runtime sysfs. Detects silently-ignored params (FN-02).
+  fix(validate): add udev match-key operator check. Validates KERNEL,
+    SUBSYSTEM, DRIVER, ACTION, DEVPATH, ATTR{} use == not single =.
+    Catches assign-vs-match operator errors in embedded rules (FN-03).
+  fix(verify-static): parse COMPRESSION value from quotes instead of
+    glob-matching entire line. Inline comments containing "zstd" no
+    longer cause false OK. Uses $MKINITCPIO_COMPRESSION global instead
+    of hardcoded string (FN-04).
+  docs: sync README (version badge 3.9.1), CHANGELOG.
+
 3.9.0 (2026-03-24)
 ------------------
   remove(kernel): ttm.pages_limit=32505856 — OOM risk, leaves ~2.2 GiB

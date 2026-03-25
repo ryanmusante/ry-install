@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.10.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.10.1 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.10.0"
+set -g VERSION "3.10.1"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -218,10 +218,20 @@ function _verify_unit_syntax --argument-names unit_path label --description "Ver
     if string match -q '*/.config/systemd/user/*' -- "$unit_path"
         set user_flag --user
     end
-    if systemd-analyze $user_flag verify "$unit_path" 2>/dev/null
+    set -l _verify_err (mktemp -t ry-verify-unit.XXXXXX 2>/dev/null; or echo /dev/null)
+    test "$_verify_err" != /dev/null; and set -ga _TRACKED_TMPFILES "$_verify_err"
+    if systemd-analyze $user_flag verify "$unit_path" 2>"$_verify_err"
+        if test "$_verify_err" != /dev/null; and test -s "$_verify_err"
+            _log "VERIFY_UNIT_WARN($label): "(head -n 5 "$_verify_err")
+        end
+        command rm -f -- "$_verify_err" 2>/dev/null
         _ok "  $label: syntax OK"
         return 0
     else
+        if test "$_verify_err" != /dev/null; and test -s "$_verify_err"
+            _log "VERIFY_UNIT_ERR($label): "(head -n 5 "$_verify_err")
+        end
+        command rm -f -- "$_verify_err" 2>/dev/null
         _fail "  $label: INVALID SYNTAX"
         return 1
     end
@@ -1292,7 +1302,7 @@ function _banner --argument-names text --description "Print the ry-install start
     end
     set -l border "┌──────────────────────────────────────────────────────────────────┐"
     set -l bottom "└──────────────────────────────────────────────────────────────────┘"
-    set -l inner 66
+    set -l inner 68
     set -l prefix "│  "
     set -l suffix " │"
     set -l max_text (math "$inner - 5")
@@ -6002,7 +6012,8 @@ function _ry_do_completions --description "Generate fish shell completions for r
 
     echo end >>"$tmpfile"
 
-    if test $status -ne 0
+    # Verify all writes succeeded: $status only catches the last echo; check file has closing 'end' keyword
+    if test $status -ne 0; or not test -s "$tmpfile"; or not grep -q '^end$' -- "$tmpfile"
         command rm -f -- "$tmpfile" 2>/dev/null
         _fail "Failed to write completions"
         return 1

@@ -1,3 +1,14 @@
+3.10.1 (2026-03-25)
+-------------------
+  fix(banner): inner width 66→68 — middle line now matches 68-char
+    border. Was 2 chars short, causing misaligned right edge.
+  fix(verify): _verify_unit_syntax captures systemd-analyze stderr
+    to tmpfile and logs first 5 lines. Warnings were silently
+    discarded via 2>/dev/null. Follows parallel job pattern (L2087).
+  fix(completions): write verification now checks file is non-empty
+    and contains closing 'end' keyword, not just $status of last
+    echo. Catches intermediate write failures on full filesystem.
+
 3.10.0 (2026-03-25)
 -------------------
   remove(cli): --logs command — journal viewer and NDJSON analyzer.

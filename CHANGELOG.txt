@@ -6,6 +6,11 @@
     bypasses TSC watchdog unnecessarily. KERNEL_PARAMS 15 → 13.
   feat(kernel): add clocksource=tsc — forces TSC without disabling
     instability detection. Replaces tsc=reliable.
+  feat(kernel): add nvme_core.multipath=N — replaces modprobe option
+    with kernel param for single-drive desktop.
+  feat(kernel): add module_blacklist=pcspkr,wdat_wdt — replaces modprobe
+    blacklists with kernel param. CachyOS covers iTCO/sp5100 only, not
+    wdat_wdt or pcspkr. KERNEL_PARAMS 13 → 15.
   remove(sysctl): /etc/sysctl.d/99-ry-sysctl.conf — entire file
     redundant with CachyOS 70-cachyos-settings.conf. Removes
     SYSCTL_CHECKS global, _validate_profile sysctl case,
@@ -14,17 +19,24 @@
     flag + match + reload prompt, --fix sysctl reload, --install-file
     sysctl reload. Vendor sysctl loop (split_lock_mitigate) preserved.
   remove(modprobe): /etc/modprobe.d/99-ry-modprobe.conf — pcspkr,
-    wdat_wdt, nvme_core multipath=N, mt7925e disable_aspm=1, mt7925_common
-    power_save=0. Kernel param mt7925e.disable_aspm=1 covers WiFi ASPM.
-    Removes _ry_get_file_content modprobe case, verify-static block
-    (5 checks). SYSTEM_DESTINATIONS 12 → 10. Embedded files 17 → 15.
+    wdat_wdt, nvme_core multipath=N migrated to kernel params.
+    mt7925e disable_aspm=1 covered by existing kernel param.
+    mt7925_common power_save=0 dropped (NM powersave=2 + cmdline cover
+    main paths). Removes _ry_get_file_content modprobe case,
+    verify-static block (5 checks). SYSTEM_DESTINATIONS 12 → 10.
+    Embedded files 17 → 15.
   remove(udev): NVMe rq_affinity=2 + read_ahead_kb=128 rule. Removes
     verify-static rq_affinity _chk_grep. UDEV_RULES 2 → 1.
-  remove(verify): nvme_core.multipath sysfs check, NVMe I/O scheduler
-    loop, btrfs noatime check (out of scope — fstab concern).
-  docs: sync README — kernel params (13), embedded files (15), remove
+  remove(verify): NVMe I/O scheduler loop, btrfs noatime check (out of
+    scope — fstab concern). nvme_core.multipath sysfs check preserved
+    (now verifies kernel param).
+  remove(dep): sysctl binary from dependency check — all sysctl --system
+    calls removed; vendor loop reads /proc/sys via cat.
+  docs: sync README — kernel params (15), embedded files (15), remove
     sysctl overrides section, remove modprobe row, update udev summary,
-    fix anchor link, version badge 3.9.0. CHANGELOG.
+    fix anchor link, ROCm VRAM note, IWD DriverQuirks detail, MES
+    firmware warning, Strix Halo Toolboxes + Ollama references,
+    version badge 3.9.0. CHANGELOG.
 
 3.8.9 (2026-03-24)
 ------------------

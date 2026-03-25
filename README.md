@@ -81,7 +81,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 ## Configuration
 
-### Kernel Parameters (13)
+### Kernel Parameters (15)
 
 | Parameter | Purpose |
 |-----------|---------|
@@ -91,9 +91,11 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `clocksource=tsc` | Force TSC clocksource on Zen 5 |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
 | `iommu=pt` | IOMMU passthrough (DMA protection, near-zero overhead) |
+| `module_blacklist=pcspkr,wdat_wdt` | Silence PC speaker beep, block ACPI watchdog |
 | `mt7925e.disable_aspm=1` | Disable WiFi ASPM |
-| `nowatchdog` | Disable watchdog timers |
+| `nowatchdog` | Disable software watchdog timers |
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
+| `nvme_core.multipath=N` | Disable NVMe multipath on single-drive desktop |
 | `quiet` | Suppress boot messages |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
 | `workqueue.power_efficient=0` | Disable power-efficient workqueue remapping |
@@ -107,7 +109,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | | timeout | `0` |
 | | console-mode | `keep` |
 | | editor | `no` |
-| `sdboot-manage.conf` | LINUX_OPTIONS | See [Kernel Parameters](#kernel-parameters-13) |
+| `sdboot-manage.conf` | LINUX_OPTIONS | See [Kernel Parameters](#kernel-parameters-15) |
 | | LINUX_FALLBACK_OPTIONS | `"quiet"` |
 | | DEFAULT_ENTRY | `"manual"` |
 | | REMOVE_EXISTING | `"yes"` |
@@ -129,7 +131,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `udev rules` | `ntsync` MODE=0666 |
 | `resolved.conf.d` | MulticastDNS=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
-| `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks · NameResolvingService=systemd |
+| `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks=`DefaultInterface=*`,`PowerSaveDisable=*` · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
 | `drirc` | RADV unified VRAM heap on APU |
 
@@ -269,14 +271,16 @@ External profiles should define `function _ry_profile_<n>` with all required glo
 | [MT7925](https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek) | MediaTek WiFi 7 |
 | [gfx1151](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) | Mesa GPU issues |
 | [ppfeaturemask](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter) | AMDGPU feature mask |
+| [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes) | ROCm containers + benchmarks for gfx1151 |
+| [Ollama gfx1151](https://github.com/ollama/ollama/issues/14855) | Working LLM setup for Strix Halo |
 
 ### Known Hardware Issues
 
 #### Strix Halo (gfx1151) GPU
 
 - **CWSR hang** (fixed 6.18+): Incorrect VGPR count (`cf326449637a5`). Compute-only. Pre-6.18: `amdgpu.cwsr_enable=0`.
-- **MES page faults**: FW 0x83 may fault. Pin `linux-firmware` if affected.
-- **ROCm VRAM**: `amdgpu.gttsize` deprecated. Use ROCm env vars for GTT management.
+- **MES page faults**: FW 0x83 may fault. Avoid `linux-firmware-20251125` (breaks ROCm). Pin if affected.
+- **ROCm VRAM**: Kernel 6.16+ handles GTT automatically — no `ttm.pages_limit` or `amdgpu.gttsize` needed.
 - **PSR freeze** (eDP only): Add `amdgpu.dcdebugmask=0x10`. Not needed for HDMI/DP.
 - **Black screen**: Kernel 6.19.0 regression; 6.18.9 last known-good.
 - **ROCm env**: `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.1`.

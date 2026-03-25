@@ -521,9 +521,10 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # ── Kernel (13 params) ──
+    # ── Kernel (15 params) ──
     # ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 workaround (remove 6.18+)
     # wbrf=0: disable WiFi RFI memory clock throttling (P1 — devastating for UMA bandwidth). clocksource=tsc: force TSC on Zen 5 (P2)
+    # module_blacklist: pcspkr (beep) + wdat_wdt (ACPI watchdog, complements nowatchdog). CachyOS covers iTCO/sp5100 only
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
@@ -531,9 +532,11 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         clocksource=tsc \
         initcall_blacklist=simpledrm_platform_driver_init \
         iommu=pt \
+        module_blacklist=pcspkr,wdat_wdt \
         mt7925e.disable_aspm=1 \
         nowatchdog \
         nvme_core.default_ps_max_latency_us=0 \
+        nvme_core.multipath=N \
         quiet \
         usbcore.autosuspend=-1 \
         workqueue.power_efficient=0 \
@@ -1828,7 +1831,7 @@ function _ry_check_deps --description "Verify required packages are installed"
         _warn "Systemd version $systemd_ver detected; some features require 250+"
     end
 
-    for cmd in journalctl dmesg modinfo pgrep free uptime sysctl
+    for cmd in journalctl dmesg modinfo pgrep free uptime
         if not command -q $cmd
             _warn "Expected tool not found: $cmd (from base packages)"
         end
@@ -4002,6 +4005,15 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             _ok "  nvme_core.default_ps_max_latency_us: $sysfs_val"
         else
             _fail "  nvme_core.default_ps_max_latency_us: $sysfs_val (expected: 0)"
+        end
+    end
+
+    if test -f /sys/module/nvme_core/parameters/multipath
+        set -l sysfs_val (command cat -- /sys/module/nvme_core/parameters/multipath 2>/dev/null)
+        if test "$sysfs_val" = N
+            _ok "  nvme_core.multipath: $sysfs_val"
+        else
+            _fail "  nvme_core.multipath: $sysfs_val (expected: N)"
         end
     end
 

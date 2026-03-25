@@ -1,3 +1,14 @@
+3.9.2 (2026-03-24)
+------------------
+  style(comments): trim 13 multiline comment blocks (2-4 lines each) to
+    single-line comments. Net -21 lines (7229 → 7208). No inline
+    comments moved — all 5 # lint:ignore markers remain inline (required
+    by sed '/# lint:ignore/d' and awk '/# lint:ignore/ { next }' in
+    _ry_do_lint). clean_content byte-identical before/after; zero lint
+    impact on anti-pattern or scope shadow checks. Strips ── decorator
+    syntax from merged lines.
+  docs: sync README (version badge 3.9.2), CHANGELOG.
+
 3.9.1 (2026-03-24)
 ------------------
   fix(verify-static): add LVM detection to masked-service check. Skip

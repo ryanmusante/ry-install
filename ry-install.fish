@@ -1,9 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v3.9.1 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-# Guard: prevent duplicate event handler registration if sourced twice in same session
+# ry-install v3.9.2 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI) Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.9.1"
+set -g VERSION "3.9.2"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -21,8 +20,7 @@ set -g ALL false
 set -g FORCE false
 # --quiet: suppress command-wrapper stdout to terminal (auto-disabled for non-install modes)
 set -g QUIET true
-# ── Environment detection: NO_COLOR (no-color.org) — check env BEFORE setting global default ──
-# set -qx tests exported (environment) variables only; avoids false positive from set -g
+# Environment detection: NO_COLOR (no-color.org) — check env BEFORE setting global default set -qx tests exported (environment) variables only; avoids false positive from set -g
 if set -qx NO_COLOR; or test "$TERM" = dumb
     set -g NO_COLOR true
 else
@@ -521,10 +519,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # ── Kernel (15 params) ──
-    # ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 workaround (remove 6.18+)
-    # wbrf=0: disable WiFi RFI memory clock throttling (P1 — devastating for UMA bandwidth). clocksource=tsc: force TSC on Zen 5 (P2)
-    # module_blacklist: pcspkr (beep) + wdat_wdt (ACPI watchdog, complements nowatchdog). CachyOS covers iTCO/sp5100 only
+    # Kernel (15 params) ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 workaround (remove 6.18+) wbrf=0: disable WiFi RFI memory clock throttling (P1 — devastating for UMA bandwidth). clocksource=tsc: force TSC on Zen 5 (P2) module_blacklist: pcspkr (beep) + wdat_wdt (ACPI watchdog, complements nowatchdog). CachyOS covers iTCO/sp5100 only
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
@@ -971,8 +966,7 @@ RestartSec=5
 WantedBy=default.target'
 
         case "/etc/systemd/system/amdgpu-performance.service"
-            # After=multi-user.target for DRM settle (Arch #72655); ExecStart: 5 retries, 2s delay, exit 1 if no writable sysfs
-            # "auto" not "high": shared-TDP APU wastes CPU headroom at fixed max; GameMode sets "high" dynamically when gaming
+            # After=multi-user.target for DRM settle (Arch #72655); ExecStart: 5 retries, 2s delay, exit 1 if no writable sysfs "auto" not "high": shared-TDP APU wastes CPU headroom at fixed max; GameMode sets "high" dynamically when gaming
             printf '%s\n' '[Unit]' \
                 'Description=Set AMDGPU power_dpm_force_performance_level to auto' \
                 'After=multi-user.target' \
@@ -987,9 +981,7 @@ WantedBy=default.target'
                 'WantedBy=graphical.target'
 
         case "/etc/systemd/system/cpupower-epp.service"
-            # Tradeoff: permanent EPP=performance + masks power-profiles-daemon.
-            # This breaks CachyOS game-performance wrapper + PPD integration (auto EPP/sched-ext switching).
-            # Alternative: unmask PPD, remove this service, use powerprofilesctl for dynamic switching.
+            # Tradeoff: permanent EPP=performance + masks power-profiles-daemon. This breaks CachyOS game-performance wrapper + PPD integration (auto EPP/sched-ext switching). Alternative: unmask PPD, remove this service, use powerprofilesctl for dynamic switching.
             printf '%s\n' '[Unit]
 Description=Set CPU EPP to performance (amd_pstate=active: powersave governor + performance EPP)
 After=cpupower.service
@@ -1154,10 +1146,7 @@ function _gkeyfile_escape --argument-names raw --description "Escape a string fo
     printf '%s\n' "$val"
 end
 
-# Extract "data" field value from a JSONL line, handling escaped quotes
-# PCRE2: [^"\\] matches non-quote non-backslash; \\. matches escaped char
-# Fish single-quotes process \\ → \ and \' → ' (NOT fully literal like bash)
-# So source \\\\ → fish \\ → PCRE2 escaped-backslash
+# Extract "data" field value from a JSONL line, handling escaped quotes PCRE2: [^"\\] matches non-quote non-backslash; \\. matches escaped char Fish single-quotes process \\ → \ and \' → ' (NOT fully literal like bash) So source \\\\ → fish \\ → PCRE2 escaped-backslash
 function _jsonl_data --description "Extract data field from JSONL line"
     if test (count $argv) -ne 1
         return 1
@@ -1539,9 +1528,7 @@ function _run --description "Execute a command with logging, dry-run support, an
         _log "BUG: _run called with no arguments"
         return 1
     end
-    # SECURITY: reject any argv element with shell metacharacters (;|&`$\n\t\r) to prevent injection from untrusted input
-    # Fish does not eval $argv (each element is a separate token), so this is defense-in-depth for log integrity
-    # and future external profile sourcing where callers may pass unsanitized data.
+    # SECURITY: reject any argv element with shell metacharacters (;|&`$\n\t\r) to prevent injection from untrusted input Fish does not eval $argv (each element is a separate token), so this is defense-in-depth for log integrity and future external profile sourcing where callers may pass unsanitized data.
     for _arg in $argv
         if string match -qr '[;|&`\$\n\t\r]' -- "$_arg"
             _log "BUG: _run argv contains shell metacharacters — refusing to execute: $_arg"
@@ -1734,8 +1721,7 @@ NOTES:
 "
 end
 
-# Verify a managed file exists at dst; uses elevated test for /boot paths, logs OK/FAIL with context
-# System files are 0644 (world-readable) — only /boot/* needs sudo (ESP may be root-only vfat)
+# Verify a managed file exists at dst; uses elevated test for /boot paths, logs OK/FAIL with context System files are 0644 (world-readable) — only /boot/* needs sudo (ESP may be root-only vfat)
 function _chk_file --argument-names filepath --description "Verify a file exists (sudo for /boot, direct for /etc)"
     if test (count $argv) -lt 1
         _err "_chk_file: missing argument"
@@ -2081,8 +2067,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     ' -- "$dst_count" "$content_dir" "$val_dir" 2>"$val_dir/xref.stderr" &
     set -l pid_xref $last_pid
 
-    # Job 2: systemd unit syntax — derive keys from destinations (not hardcoded)
-    # Collect all .service destinations: SERVICE_DESTINATIONS (system) + USER_DESTINATIONS (user scope)
+    # Job 2: systemd unit syntax — derive keys from destinations (not hardcoded) Collect all .service destinations: SERVICE_DESTINATIONS (system) + USER_DESTINATIONS (user scope)
     set -l _svc_dsts
     for _sd in $SERVICE_DESTINATIONS
         set -a _svc_dsts "$_sd"
@@ -3707,8 +3692,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     ' -- "$result_dir" 2>"$result_dir/kparam.stderr" &
     set -l pid_kparam $last_pid
 
-    # ── Job 4: service state — batch systemctl show (parallel); LVM pre-serialized by parent ──
-    # Pre-parse systemctl show in parent (child can't call _parse_systemctl_show)
+    # Job 4: service state — batch systemctl show (parallel); LVM pre-serialized by parent Pre-parse systemctl show in parent (child can't call _parse_systemctl_show)
     set -l _all_check_units (command cat -- "$result_dir/exp_svcs") (command cat -- "$result_dir/mask_units") (command cat -- "$result_dir/implicit_svcs" 2>/dev/null)
     set -l _check_show (systemctl show --property=LoadState,ActiveState,UnitFileState -- $_all_check_units 2>/dev/null | string collect --no-trim-newlines)
     set -l _check_parsed (_parse_systemctl_show "$_check_show")
@@ -3723,9 +3707,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         # Read pre-parsed results from parent (eliminates duplicated _parse_systemctl_show)
         set -l results (command cat -- "$result_dir/parsed_units" 2>/dev/null)
 
-        # Check expected services (first N results)
-        # Timer units: ActiveState=active (waiting for next trigger); never exited
-        # Oneshot services (RemainAfterExit): ActiveState=exited after successful run
+        # Check expected services (first N results) Timer units: ActiveState=active (waiting for next trigger); never exited Oneshot services (RemainAfterExit): ActiveState=exited after successful run
         set -l exp_count (count $exp_svcs)
         for i in (seq 1 $exp_count)
             set -l rec (string split -- ":" $results[$i])
@@ -5651,8 +5633,7 @@ function _install_preflight --description "Run all preflight checks before insta
             _err "Sudo required for installation"
             return $EXIT_PREFLIGHT
         end
-        # Matches: (ALL : ALL) ALL, (ALL) ALL, (ALL) NOPASSWD: ALL
-        # Does NOT match: (root) ALL — which IS genuinely restricted
+        # Matches: (ALL : ALL) ALL, (ALL) ALL, (ALL) NOPASSWD: ALL Does NOT match: (root) ALL — which IS genuinely restricted
         set -l sudo_all (sudo -n -l 2>/dev/null | grep -v '^\s*#' | grep -cE '\(ALL.*\) .*ALL$')
         or set sudo_all 0
         if test "$sudo_all" -eq 0
@@ -7108,9 +7089,7 @@ if test "$ALL" = true; and test "$MODE" != test-all
 end
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"
 set -l old_log "$LOG_FILE"
-# Rename log to mode-specific path; mv before set — signal between them loses footer (acceptable)
-# but preserves log content. Reversed order would lose content (signal handler creates empty new_log,
-# then mv never runs because signal handler exits).
+# Rename log to mode-specific path; mv before set — signal between them loses footer (acceptable) but preserves log content. Reversed order would lose content (signal handler creates empty new_log, then mv never runs because signal handler exits).
 if test -f "$old_log"; and test "$old_log" != "$new_log"
     command mv -- "$old_log" "$new_log" 2>/dev/null
 end

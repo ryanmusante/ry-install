@@ -883,7 +883,7 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
                 _err "_ry_get_file_content: root UUID not cached (_load_profile may not have run)"
                 return 1
             end
-            printf '%s\n' "rw root=UUID=$_ROOT_UUID "(string join -- " " $KERNEL_PARAMS)
+            printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
 
         case "/etc/sdboot-manage.conf"
             printf '%s\n' "# sdboot-manage configuration"
@@ -4047,6 +4047,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     set -l parsed (_parse_systemctl_show "$show_output")
 
     # Index into parsed (LoadState:ActiveState:UnitFileState): 1=amdgpu-performance, 2=cpupower-epp, 3=fstrim, 4=resolved, 5=nm-dispatcher, 6=NetworkManager
+    # MAINTENANCE: parsed[] indices below are positionally coupled to sys_units order above — update both together
     set -l _expected_unit_count (count $sys_units)
     if test (count $parsed) -lt $_expected_unit_count
         _warn "  systemctl show returned incomplete data ("(count $parsed)" of $_expected_unit_count records)"
@@ -5834,7 +5835,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
         _err "_ry_do_install_file: expected 0-1 args (target), got "(count $argv)
         return 2
     end
-    set -l target $argv[1]
+    # target bound by --argument-names; empty string when 0 args (handled by test -z below)
     _log "=== INSTALL-FILE START ==="
 
     if test -z "$target"

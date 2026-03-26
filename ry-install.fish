@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.10.1 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.10.2 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.10.1"
+set -g VERSION "3.10.2"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -3329,9 +3329,9 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo
 
     _echo "── mkinitcpio hooks ──"
-    set -l hooks_line (grep -E '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^#' | head -n 1)
-    if test -n "$hooks_line"
-        set -l hooks_str (string replace -r '.*HOOKS=\(([^)]*)\).*' '$1' -- "$hooks_line")
+    set -l hooks_syntax_line (grep -E '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^#' | head -n 1)
+    if test -n "$hooks_syntax_line"
+        set -l hooks_str (string replace -r '.*HOOKS=\(([^)]*)\).*' '$1' -- "$hooks_syntax_line")
         _ry_validate_mkinitcpio_hooks --existence-only (string split ' ' -- "$hooks_str")
     else
         _warn "  Could not parse HOOKS from mkinitcpio.conf"

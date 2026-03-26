@@ -1,3 +1,12 @@
+3.10.2 (2026-03-26)
+-------------------
+  style(verify-static): rename hooks_line → hooks_syntax_line in
+    SYNTAX VALIDATION section (L3332). Eliminates scope shadow with
+    same-named variable in CHECKSUM VERIFICATION section (L3088).
+    Both are set -l in _ry_verify_static, 244 lines apart. No
+    behavioral change — Fish scoping made this safe, but unique
+    names improve grep-ability and audit clarity.
+
 3.10.1 (2026-03-25)
 -------------------
   fix(banner): inner width 66→68 — middle line now matches 68-char

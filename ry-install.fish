@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.10.2 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.10.3 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.10.2"
+set -g VERSION "3.10.3"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -1302,6 +1302,7 @@ function _banner --argument-names text --description "Print the ry-install start
     end
     set -l border "┌──────────────────────────────────────────────────────────────────┐"
     set -l bottom "└──────────────────────────────────────────────────────────────────┘"
+    # inner = border width in codepoints; max_text = inner - len(prefix) - len(suffix) = 68 - 3 - 2 = 63
     set -l inner 68
     set -l prefix "│  "
     set -l suffix " │"
@@ -2201,6 +2202,14 @@ function _ry_validate_configs --description "Run all embedded config validators"
                 if grep -qE -- "==[[:space:]]*\$" "$f" 2>/dev/null
                     set errs (math $errs + 1)
                 end
+            end
+            # Operator correctness: assignment keys (MODE,GROUP,OWNER) must use =, not ==
+            if grep -qE -- '(MODE|GROUP|OWNER)==' "$f" 2>/dev/null
+                set errs (math $errs + 1)
+            end
+            # Operator correctness: match keys (KERNEL,SUBSYSTEM,DRIVER,ACTION) must use ==, not single =
+            if grep -qE -- '(KERNEL|SUBSYSTEM|DRIVER|ACTION)=[^=]' "$f" 2>/dev/null
+                set errs (math $errs + 1)
             end
         else
             set errs (math $errs + 1)
@@ -4836,7 +4845,7 @@ end
 
 # Install pipeline
 
-# ═══ INSTALL PIPELINE — preflight → wifi → packages → files → services → boot → finalize ═══
+# ═══ INSTALL PIPELINE — preflight → packages → files → services → boot → wifi → finalize ═══
 function _install_collect_wifi --description "Interactively collect WiFi credentials for iwd setup"
     set -g WIFI_SSID ""
     set -g WIFI_PASS ""
@@ -5030,7 +5039,7 @@ function _install_preflight --description "Run all preflight checks before insta
     end
 end
 
-# Pipeline phase 3: pacman -Syu, install PKGS_ADD, remove PKGS_DEL with --needed idempotency
+# Pipeline phase 2: pacman -Syu, install PKGS_ADD, remove PKGS_DEL with --needed idempotency
 function _install_packages --description "Install and remove managed packages via pacman"
     _check_sudo_keepalive
     set -l _fn_err false
@@ -5102,7 +5111,7 @@ function _install_packages --description "Install and remove managed packages vi
     return 0
 end
 
-# Pipeline phase 4: deploy all SYSTEM/USER/SERVICE files via _ry_install_file with privilege elevation as needed
+# Pipeline phase 3: deploy all SYSTEM/USER/SERVICE files via _ry_install_file with privilege elevation as needed
 function _install_system_files --description "Deploy all embedded config files to the system"
     _check_sudo_keepalive
     set -l _fn_err false
@@ -5145,7 +5154,7 @@ function _install_system_files --description "Deploy all embedded config files t
     return 0
 end
 
-# Pipeline phase 5: daemon-reload, enable/start services, configure systemd-resolved, mask units
+# Pipeline phase 4: daemon-reload, enable/start services, configure systemd-resolved, mask units
 function _install_configure_services --description "Enable, start, and configure systemd services"
     _check_sudo_keepalive
     set -l _fn_err false
@@ -5468,7 +5477,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     return 0
 end
 
-# Pipeline phase 7: mkinitcpio -P, sdboot-manage gen, bootctl install; abort --all on failure
+# Pipeline phase 5: mkinitcpio -P, sdboot-manage gen, bootctl install; abort --all on failure
 function _install_rebuild_boot --description "Regenerate initramfs and bootloader entries"
     _check_sudo_keepalive
 
@@ -5562,7 +5571,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     return 0
 end
 
-# Pipeline phase 8: daemon-reload, verify-static, verify-runtime, log summary, report errors
+# Pipeline phase 6: daemon-reload, verify-static, verify-runtime, log summary, report errors
 function _install_finalize --description "Run post-install verification, cleanup, and summary"
     _progress "Finalize"
     if not _run sudo systemctl daemon-reload

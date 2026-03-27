@@ -1,3 +1,20 @@
+3.10.3 (2026-03-27)
+-------------------
+  fix(docs): renumber pipeline phase comments 1,3,4,5,7,8 → 1–6.
+    Phases 2 and 6 were gaps left from earlier refactors when WiFi
+    collection moved from phase 2 to between boot and finalize.
+    Pipeline header updated: preflight → packages → files →
+    services → boot → wifi → finalize (was: preflight → wifi
+    → packages → files → services → boot → finalize).
+  fix(docs): add _banner layout math comment. Documents inner (68)
+    = border codepoint width, max_text = inner - prefix(3) - suffix(2)
+    = 63. Aids future maintainers modifying box dimensions.
+  fix(validate): add udev operator correctness checks to Job 5.
+    Assignment keys (MODE, GROUP, OWNER) must use single = not ==.
+    Match keys (KERNEL, SUBSYSTEM, DRIVER, ACTION) must use == not
+    single =. Previous validation only checked for empty trailing ==
+    and assignment presence.
+
 3.10.2 (2026-03-26)
 -------------------
   style(verify-static): rename hooks_line → hooks_syntax_line in

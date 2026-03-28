@@ -1,3 +1,21 @@
+3.10.4 (2026-03-27)
+-------------------
+  fix(install): propagate _atomic_write_file return code in
+    _ry_install_file. Previously always returned 0 after the atomic
+    write call (line 2473), silently swallowing failures from mktemp,
+    chmod, mv, or post-write hash mismatch. All 9 callers already use
+    "if not _ry_install_file" — failures are now visible. Fix: replace
+    bare "return 0" with "return $status".
+  fix(completions): add fish --no-execute syntax validation on
+    generated completions file before mv. Previous check only verified
+    closing 'end' keyword was present. Catches template generation bugs
+    that produce syntactically invalid Fish. Failure path cleans tmpfile.
+  fix(docs): add security comment documenting why _run is intentionally
+    bypassed for WiFi credential write (line 5653). printf|sudo tee
+    prevents psk= from appearing in JSONL logs; tee stdout→/dev/null
+    ensures credential never reaches _run's output capture path.
+  docs: sync README (version badge 3.10.4), CHANGELOG.
+
 3.10.3 (2026-03-27)
 -------------------
   fix(docs): renumber pipeline phase comments 1,3,4,5,7,8 → 1–6.

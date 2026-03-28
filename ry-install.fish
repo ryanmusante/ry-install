@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.10.3 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.10.4 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.10.3"
+set -g VERSION "3.10.4"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -2471,8 +2471,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     end
 
     _atomic_write_file "$dst" $perms $use_sudo
-
-    return 0
+    return $status
 end
 
 # ═══ FILE OPERATIONS — diff, install, verify ═══
@@ -5652,6 +5651,8 @@ function _install_finalize --description "Run post-install verification, cleanup
                     set -l safe_pass (_gkeyfile_escape "$WIFI_PASS")
                     set -l safe_ssid (_gkeyfile_escape "$WIFI_SSID")
                     # Inside DRY=false gate; credential write only occurs on live runs
+                    # SECURITY: printf|sudo tee used INSTEAD of _run to prevent psk= from appearing in JSONL logs;
+                    # tee stdout→/dev/null so credential never reaches _run's output capture path
                     printf '%s\n' "[connection]" "id=$safe_ssid" "uuid=$conn_uuid" "type=wifi" "interface-name=$WIFI_IFACE" "autoconnect=true" "[wifi]" "mode=infrastructure" "ssid=$safe_ssid" "[wifi-security]" "key-mgmt=wpa-psk" "psk=$safe_pass" "[ipv4]" "method=auto" "[ipv6]" "method=disabled" | sudo tee -- "$tmpfile" >/dev/null
                     set -l _wifi_ps $pipestatus
                     if test $_wifi_ps[1] -ne 0; or test $_wifi_ps[2] -ne 0
@@ -6026,6 +6027,13 @@ function _ry_do_completions --description "Generate fish shell completions for r
     if test $status -ne 0; or not test -s "$tmpfile"; or not grep -q '^end$' -- "$tmpfile"
         command rm -f -- "$tmpfile" 2>/dev/null
         _fail "Failed to write completions"
+        return 1
+    end
+
+    # Syntax-check generated completions before deploying — catches generation bugs
+    if not fish --no-execute "$tmpfile" 2>/dev/null
+        command rm -f -- "$tmpfile" 2>/dev/null
+        _fail "Failed to install completions (generated file has syntax errors)"
         return 1
     end
 

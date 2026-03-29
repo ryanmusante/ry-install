@@ -1117,7 +1117,9 @@ end
 # Escape string for JSON embedding; function-scope reassignments use explicit set -l
 function _json_str --description "Escape a string for safe JSON embedding"
     if test (count $argv) -ne 1
-        _log "BUG: _json_str: expected 1 arg, got "(count $argv)
+        if test -f "$LOG_FILE"
+            printf '{"ts":"%s","event":"bug","data":"_json_str: expected 1 arg, got %d"}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (count $argv) >>"$LOG_FILE"
+        end
         printf '\n'
         return 1
     end

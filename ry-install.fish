@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.10.4 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.11.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.10.4"
+set -g VERSION "3.11.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -505,7 +505,6 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/kernel/cmdline" \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
-        "/etc/udev/rules.d/99-cachyos-udev.rules" \
         "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
         "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
         "/etc/iwd/main.conf" \
@@ -570,8 +569,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g MKINITCPIO_COMPRESSION zstd
 
     # ── Udev ──
-    set -g UDEV_RULES \
-        'KERNEL=="ntsync", MODE="0666"'
+    # ntsync rule handled by ntsync-common package (in PKGS_ADD)
 
     # ── Network ──
     set -g RESOLVED_MDNS no
@@ -596,11 +594,12 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "DXVK_LOG_LEVEL=none" \
         "ENABLE_LAYER_MESA_ANTI_LAG=1" \
         "MESA_SHADER_CACHE_MAX_SIZE=8G" \
+        "PROTON_DXVK_LOWLATENCY=1" \
         "PROTON_USE_NTSYNC=1" \
         "PROTON_NO_WM_DECORATION=1"
 
     # ── Packages ──
-    set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications fd sd dust procs bottom git-delta lm_sensors
+    set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications ntsync-common fd sd dust procs bottom git-delta lm_sensors
     set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme ufw octopi micro cachyos-micro-settings btop
 
     # ── Services ──
@@ -677,10 +676,6 @@ function _validate_profile --description "Verify loaded profile has all required
             case '*/resolved.conf.d/*'
                 if not contains -- RESOLVED_MDNS $required
                     set -a required RESOLVED_MDNS
-                end
-            case '*/udev/rules.d/*'
-                if not contains -- UDEV_RULES $required
-                    set -a required UDEV_RULES
                 end
         end
     end
@@ -903,12 +898,6 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' "FILES=()"
             printf '%s\n' "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")"
             printf '%s\n' "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
-
-        case "/etc/udev/rules.d/99-cachyos-udev.rules"
-            printf '%s\n' "# udev rules"
-            for rule in $UDEV_RULES
-                printf '%s\n' "$rule"
-            end
 
         case "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf"
             printf '%s\n' "# systemd-resolved configuration"
@@ -2195,25 +2184,6 @@ function _ry_validate_configs --description "Run all embedded config validators"
         else
             set errs (math $errs + 1)
         end
-        # udev rules
-        set -l f "$content_dir/_etc_udev_rules.d_99-cachyos-udev.rules"
-        if test -s "$f"
-            if grep -qE -- "[A-Z]+=[^=]" "$f" 2>/dev/null
-                if grep -qE -- "==[[:space:]]*\$" "$f" 2>/dev/null
-                    set errs (math $errs + 1)
-                end
-            end
-            # Operator correctness: assignment keys (MODE,GROUP,OWNER) must use =, not ==
-            if grep -qE -- '(MODE|GROUP|OWNER)==' "$f" 2>/dev/null
-                set errs (math $errs + 1)
-            end
-            # Operator correctness: match keys (KERNEL,SUBSYSTEM,DRIVER,ACTION) must use ==, not single =
-            if grep -qE -- '(KERNEL|SUBSYSTEM|DRIVER|ACTION)=[^=]' "$f" 2>/dev/null
-                set errs (math $errs + 1)
-            end
-        else
-            set errs (math $errs + 1)
-        end
         # drirc XML structure
         set -l f "$content_dir/_etc_drirc"
         if test -s "$f"
@@ -3149,9 +3119,10 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo
 
     _echo "── Udev rules ──"
-    if _chk_file /etc/udev/rules.d/99-cachyos-udev.rules
-        _chk_grep /etc/udev/rules.d/99-cachyos-udev.rules ntsync "ntsync rule"
-        # USB power/control rule removed — usbcore.autosuspend=-1 handles globally
+    if pacman -Qi ntsync-common &>/dev/null
+        _ok "  ntsync-common: installed (handles udev + module loading)"
+    else
+        _warn "  ntsync-common: not installed — ntsync udev rule may be missing"
     end
     _echo
 
@@ -3910,10 +3881,10 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     if test "$_vram_bytes" -gt 0 2>/dev/null
         set -l _vram_mb (math "$_vram_bytes / 1048576")
-        if test "$_vram_mb" -le 1024
+        if test "$_vram_mb" -le 512
             _ok "  VRAM carveout: $_vram_mb MB"
         else
-            _warn "  VRAM carveout: $_vram_mb MB (recommended: ≤1024 MB for UMA — check BIOS)"
+            _warn "  VRAM carveout: $_vram_mb MB (recommended: ≤512 MB for UMA — check BIOS)"
         end
     else
         _info "  VRAM carveout: cannot read mem_info_vram_total"

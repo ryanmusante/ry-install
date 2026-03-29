@@ -1,10 +1,10 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.10.4-blue)
+![Version](https://img.shields.io/badge/version-3.11.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
-Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 15 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Default profile: **Beelink GTR9 Pro** (AMD Ryzen AI Max+ 395 / Strix Halo). Single fish script, 14 embedded configs, no external dependencies.
 
 ## Hardware
 
@@ -123,7 +123,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | File | Setting |
 |------|---------|
-| `udev rules` | `ntsync` MODE=0666 |
 | `resolved.conf.d` | MulticastDNS=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks=`DefaultInterface=*`,`PowerSaveDisable=*` · NameResolvingService=systemd |
@@ -138,6 +137,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `DXVK_LOG_LEVEL` | `none` |
 | `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `8G` |
+| `PROTON_DXVK_LOWLATENCY` | `1` |
 | `PROTON_USE_NTSYNC` | `1` |
 | `PROTON_NO_WM_DECORATION` | `1` |
 
@@ -153,7 +153,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Action | Packages |
 |--------|----------|
-| **Add (12)** | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
+| **Add (13)** | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, ntsync-common, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove (8)** | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
 
 ### Masked Services (10)
@@ -174,7 +174,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `amdgpu-performance.service` | Write `auto` to `power_dpm_force_performance_level` sysfs (retry loop, multi-GPU). GameMode sets `high` dynamically. |
 | `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` sysfs |
 
-## Embedded Files (15)
+## Embedded Files (14)
 
 | # | Scope | Path |
 |---|-------|------|
@@ -182,17 +182,16 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | 2 | System | `/etc/kernel/cmdline` |
 | 3 | System | `/etc/sdboot-manage.conf` |
 | 4 | System | `/etc/mkinitcpio.conf` |
-| 5 | System | `/etc/udev/rules.d/99-cachyos-udev.rules` |
-| 6 | System | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` |
-| 7 | System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
-| 8 | System | `/etc/iwd/main.conf` |
-| 9 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
-| 10 | System | `/etc/drirc` |
-| 11 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
-| 12 | User | `~/.config/environment.d/10-environment.conf` |
-| 13 | User | `~/.config/systemd/user/ssh-agent.service` |
-| 14 | Service | `/etc/systemd/system/amdgpu-performance.service` |
-| 15 | Service | `/etc/systemd/system/cpupower-epp.service` |
+| 5 | System | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` |
+| 6 | System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
+| 7 | System | `/etc/iwd/main.conf` |
+| 8 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
+| 9 | System | `/etc/drirc` |
+| 10 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
+| 11 | User | `~/.config/environment.d/10-environment.conf` |
+| 12 | User | `~/.config/systemd/user/ssh-agent.service` |
+| 13 | Service | `/etc/systemd/system/amdgpu-performance.service` |
+| 14 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
 ## Safety
 

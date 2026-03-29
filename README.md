@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.11.0-blue)
+![Version](https://img.shields.io/badge/version-3.12.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -15,7 +15,7 @@ Self-contained CachyOS configuration manager with profile support. Default profi
 | GPU | Radeon 8060S — RDNA 3.5, gfx1151, 40 CUs |
 | RAM | 128 GB LPDDR5x-8000 |
 | WiFi | MediaTek MT7925 (WiFi 7) |
-| NIC | Dual Intel E610 10 GbE |
+| NIC | Dual Realtek RTL8127 10 GbE (board v2.2) |
 | Thermals | 85 °C sustained · 95 °C throttle · 100 °C max |
 
 Check [Beelink](https://dr.bee-link.cn/) for BIOS, kernel bugzilla / Mesa GitLab for gfx1151 issues.
@@ -36,6 +36,7 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS, kernel bugzilla / Mesa GitLab
 | 10 | **Review masked services** | See [Masked Services](#masked-services-10) | Confirm desktop, not laptop |
 | 11 | **WiFi ready** | SSID 1-32 bytes, passphrase 8-63 bytes, no `%` | Interactive even with `--all` |
 | 12 | **CachyOS news** | [wiki.cachyos.org](https://wiki.cachyos.org/) / [archlinux.org/news](https://archlinux.org/news/) | Known issues before `-Syu` |
+| 13 | **paru** (optional) | `command -q paru` | AUR package installation |
 
 ```fish
 ./ry-install.fish --dry-run --all   # Preview
@@ -76,11 +77,11 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 ## Configuration
 
-### Kernel Parameters (15)
+### Kernel Parameters (16)
 
 | Parameter | Purpose |
 |-----------|---------|
-| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 hang workaround (remove on 6.18+) |
+| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (remove when 7.0+ stable) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14,15,17 off (overdrive/GFXOFF/stutter) |
 | `amdgpu.wbrf=0` | Disable WiFi RFI memory clock throttling (UMA bandwidth) |
 | `clocksource=tsc` | Force TSC clocksource on Zen 5 |
@@ -92,6 +93,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
 | `nvme_core.multipath=N` | Disable NVMe multipath on single-drive desktop |
 | `quiet` | Suppress boot messages |
+| `split_lock_detect=off` | Disable split-lock #AC exception (gaming) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
 | `workqueue.power_efficient=0` | Disable power-efficient workqueue remapping |
 | `zswap.enabled=0` | Disable zswap (ZRAM masked separately) |
@@ -104,7 +106,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | | timeout | `0` |
 | | console-mode | `keep` |
 | | editor | `no` |
-| `sdboot-manage.conf` | LINUX_OPTIONS | See [Kernel Parameters](#kernel-parameters-15) |
+| `sdboot-manage.conf` | LINUX_OPTIONS | See [Kernel Parameters](#kernel-parameters-16) |
 | | LINUX_FALLBACK_OPTIONS | `"quiet"` |
 | | DEFAULT_ENTRY | `"manual"` |
 | | REMOVE_EXISTING | `"yes"` |
@@ -125,7 +127,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 |------|---------|
 | `resolved.conf.d` | MulticastDNS=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
-| `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks=`DefaultInterface=*`,`PowerSaveDisable=*` · NameResolvingService=systemd |
+| `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks=`PowerSaveDisable=*` · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
 | `drirc` | RADV unified VRAM heap on APU |
 
@@ -155,6 +157,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 |--------|----------|
 | **Add (13)** | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, ntsync-common, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove (8)** | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
+| **AUR (1)** | mt76-mt7925-dkms (via paru) |
 
 ### Masked Services (10)
 
@@ -324,7 +327,7 @@ External profiles should define `function _ry_profile_<n>` with all required glo
 
 #### Strix Halo (gfx1151) GPU
 
-- **CWSR hang** (fixed 6.18+): Incorrect VGPR count (`cf326449637a5`). Compute-only. Pre-6.18: `amdgpu.cwsr_enable=0`.
+- **CWSR hang** (fixed 7.0+): Incorrect VGPR count (`cf326449637a5`). Compute-only. Pre-7.0: `amdgpu.cwsr_enable=0`.
 - **MES page faults**: FW 0x83 may fault. Avoid `linux-firmware-20251125` (breaks ROCm). Pin if affected.
 - **ROCm VRAM**: Kernel 6.16+ handles GTT automatically — no `ttm.pages_limit` or `amdgpu.gttsize` needed.
 - **PSR freeze** (eDP only): Add `amdgpu.dcdebugmask=0x10`. Not needed for HDMI/DP.
@@ -338,16 +341,9 @@ External profiles should define `function _ry_profile_<n>` with all required glo
 - **Random deauth**: Unpredictable drops.
 - **Fallback**: Intel AX210/AX211.
 
-#### Intel E610 10GbE NIC (Board v1 only)
-
-- **GPU load crash**: Null deref under load. Power cycle to recover. NVM v1.30 partial fix.
-- **Board v2.2+**: Stable Realtek NICs. Check revision.
-- **Workaround**: BIOS disable or `sudo ip link set <iface> down`.
-
 #### NetworkManager + iwd
 
 - **Boot connectivity**: Fix: `nmcli radio wifi off && nmcli radio wifi on`.
-- **DefaultInterface=\***: Intermittent drops.
 - **WPA2/3 Enterprise**: GUI broken with iwd.
 - **Monitor mode**: Requires full reboot.
 

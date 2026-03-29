@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.11.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.12.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.11.0"
+set -g VERSION "3.12.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -530,8 +530,8 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # ── Kernel (15 params) ──
-    # ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 workaround (remove 6.18+)
+    # ── Kernel (16 params) ──
+    # ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 VGPR workaround (remove when 7.0+ stable on gfx1151)
     # wbrf=0: disable WiFi RFI memory clock throttling (P1 — devastating for UMA bandwidth). clocksource=tsc: force TSC on Zen 5 (P2)
     # module_blacklist: pcspkr (beep) + wdat_wdt (ACPI watchdog, complements nowatchdog). CachyOS covers iTCO/sp5100 only
     set -g KERNEL_PARAMS \
@@ -547,6 +547,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         nvme_core.default_ps_max_latency_us=0 \
         nvme_core.multipath=N \
         quiet \
+        split_lock_detect=off \
         usbcore.autosuspend=-1 \
         workqueue.power_efficient=0 \
         zswap.enabled=0
@@ -583,13 +584,14 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         HandleRebootKey \
         HandleRebootKeyLongPress
     set -g IWD_ENABLE_NETWORK_CONFIG false
-    set -g IWD_DRIVER_QUIRKS "DefaultInterface=*" "PowerSaveDisable=*"
+    set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"
     set -g IWD_DNS_SERVICE systemd
     set -g NM_WIFI_BACKEND iwd
     set -g NM_WIFI_POWERSAVE 2
     set -g NM_LOG_LEVEL WARN
 
     # ── Environment ──
+    # PROTON_DXVK_LOWLATENCY: proton-cachyos-slr only (not upstream Valve Proton)
     set -g ENV_VARS \
         "DXVK_LOG_LEVEL=none" \
         "ENABLE_LAYER_MESA_ANTI_LAG=1" \
@@ -601,6 +603,9 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # ── Packages ──
     set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications ntsync-common fd sd dust procs bottom git-delta lm_sensors
     set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme ufw octopi micro cachyos-micro-settings btop
+
+    # AUR packages — installed via paru (not pacman)
+    set -g AUR_PKGS mt76-mt7925-dkms
 
     # ── Services ──
     set -g MASK \
@@ -662,7 +667,7 @@ function _validate_profile --description "Verify loaded profile has all required
         ROOT_AVAIL_CRIT \
         ROOT_AVAIL_WARN
 
-    # Intentionally optional (consumers handle unset safely): PKGS_DEL, BOOT_TIME_TARGET, EXPECTED_CPU_MATCH
+    # Intentionally optional (consumers handle unset safely): PKGS_DEL, AUR_PKGS, BOOT_TIME_TARGET, EXPECTED_CPU_MATCH
 
     # Conditionally required — needed only when profile includes corresponding destinations
     for dst in $SYSTEM_DESTINATIONS
@@ -1806,6 +1811,12 @@ function _ry_check_deps --description "Verify required packages are installed"
     for cmd in journalctl dmesg modinfo pgrep free uptime
         if not command -q $cmd
             _warn "Expected tool not found: $cmd (from base packages)"
+        end
+    end
+
+    if set -q AUR_PKGS; and test (count $AUR_PKGS) -gt 0
+        if not command -q paru
+            _warn "paru not found — required for AUR packages ($AUR_PKGS)"
         end
     end
 
@@ -3213,6 +3224,15 @@ function _ry_verify_static --description "Verify installed configs match embedde
     else
         _warn "  pacman not found, skipping package verification"
     end
+    if set -q AUR_PKGS
+        for pkg in $AUR_PKGS
+            if contains -- "$pkg" $_installed_pkgs
+                _ok "  $pkg: installed (AUR)"
+            else
+                _warn "  $pkg: NOT INSTALLED (AUR — install via paru)"
+            end
+        end
+    end
     _echo
 
     _echo "── Removed packages ──"
@@ -4314,42 +4334,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
     end
 
-    # §10 #1: E610 NVM firmware version (P0 — hang-under-load if < 1.30)
-    _echo
-    _echo "── E610 NVM firmware ──"
-    if command -q ethtool
-        set -l _e610_found false
-        for iface_path in /sys/class/net/*/device/driver
-            set -l _driver (basename (readlink -f "$iface_path" 2>/dev/null) 2>/dev/null)
-            if test "$_driver" = ice
-                set -l _iface (basename (dirname (dirname -- "$iface_path")))
-                set -l _fw_ver (ethtool -i "$_iface" 2>/dev/null | grep '^firmware-version:' | string replace -r '^firmware-version:\s+' '')
-                if test -n "$_fw_ver"
-                    set _e610_found true
-                    # Extract NVM version (format varies: "X.YY 0xABCDEF..." or similar)
-                    set -l _nvm_major (string match -r '^(\d+)\.' -- "$_fw_ver")[2]
-                    set -l _nvm_minor (string match -r '^\d+\.(\d+)' -- "$_fw_ver")[2]
-                    if test -n "$_nvm_major"; and test -n "$_nvm_minor"
-                        set -l _nvm_combined (math "$_nvm_major * 100 + $_nvm_minor")
-                        if test "$_nvm_combined" -ge 130
-                            _ok "  $_iface E610 NVM: $_fw_ver (≥ 1.30)"
-                        else
-                            _fail "  $_iface E610 NVM: $_fw_ver (REQUIRED: ≥ 1.30 — update via Intel NVM Package or BIOS ≥ v1.08)"
-                        end
-                    else
-                        _info "  $_iface E610 firmware: $_fw_ver (cannot parse NVM version)"
-                    end
-                end
-            end
-        end
-        if test "$_e610_found" = false
-            _info "  E610 NIC: not detected (ice driver not found)"
-        end
-    else
-        _info "  ethtool not available for E610 NVM check"
-    end
-    _echo
-
     _echo "FILE PERMISSIONS"
     _echo
 
@@ -5081,6 +5065,31 @@ function _install_packages --description "Install and remove managed packages vi
     return 0
 end
 
+# Pipeline phase 2b: install AUR packages via paru (not pacman); warn-only if paru missing
+function _install_aur_packages --description "Install AUR packages via paru"
+    if not set -q AUR_PKGS; or test (count $AUR_PKGS) -eq 0
+        return 0
+    end
+    if not command -q paru
+        _warn "paru not found — skipping AUR packages: $AUR_PKGS"
+        _info "  Install paru: sudo pacman -S --needed paru"
+        return 0
+    end
+    if test "$DRY" = true
+        _dry "paru -S --needed --noconfirm $AUR_PKGS"
+        return 0
+    end
+    if _ask "Install AUR packages? ($AUR_PKGS)"
+        for pkg in $AUR_PKGS
+            if not _run paru -S --needed --noconfirm -- "$pkg"
+                _warn "AUR install failed: $pkg"
+                set -g INSTALL_HAD_ERRORS true
+            end
+        end
+    end
+    return 0
+end
+
 # Pipeline phase 3: deploy all SYSTEM/USER/SERVICE files via _ry_install_file with privilege elevation as needed
 function _install_system_files --description "Deploy all embedded config files to the system"
     _check_sudo_keepalive
@@ -5738,6 +5747,8 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     if not _install_packages
         set -g INSTALL_HAD_ERRORS true
     end
+
+    _install_aur_packages
 
     if not _install_system_files
         set -g INSTALL_HAD_ERRORS true

@@ -1,3 +1,24 @@
+3.12.0 (2026-03-XX)
+-------------------
+  profile: add split_lock_detect=off kernel param (16 params).
+  profile: fix cwsr_enable=0 comment — remove when 7.0+ stable
+    on gfx1151 (was 6.18+). 6.19.0 black screen regression.
+  profile: add proton-cachyos-slr note to PROTON_DXVK_LOWLATENCY
+    env var comment.
+  profile: add AUR_PKGS global (mt76-mt7925-dkms). New
+    _install_aur_packages function installs via paru.
+  profile: remove iwd DefaultInterface=* DriverQuirk
+    (NixOS #439914). PowerSaveDisable=* retained.
+  verify: remove E610 NVM firmware check — board v2.2 uses
+    Realtek RTL8127 (r8169 in-tree). Check was non-functional
+    (matched ice driver, E610 uses ixgbe).
+  verify: add AUR_PKGS to static verification (warn-level).
+  deps: add paru to optional-tools warning block.
+  docs: update hardware table — Dual Realtek RTL8127 10G LAN.
+    Remove E610 known issues section. Update kernel params
+    table (16), CWSR timeline, iwd quirks. Add paru prereq.
+    Sync version badge 3.12.0.
+
 3.11.0 (2026-03-29)
 -------------------
   profile: add PROTON_DXVK_LOWLATENCY=1 to ENV_VARS — DXVK low-latency

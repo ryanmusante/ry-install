@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.14.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.15.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.14.0"
+set -g VERSION "3.15.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -2985,6 +2985,13 @@ function _ry_verify_static --description "Verify installed configs match embedde
         set _skip_iwd true
     end
 
+    # Pre-compute LVM state — lvm2-monitor.service is intentionally unmasked when LVM detected
+    set -l _has_lvm false
+    set -l _pvs_output (timeout 5 sudo -n pvs --noheadings 2>/dev/null | string trim --)
+    if test -n "$_pvs_output"
+        set _has_lvm true
+    end
+
     _info "Static verification (config files)..."
     _echo
 
@@ -3286,6 +3293,11 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _log "SYSTEMCTL_SHOW_MASK_PARTIAL: got="(count $_mask_parsed)" expected="(count $MASK)
         # Fallback: per-unit query to avoid positional misattribution
         for _svc in $MASK
+            # LVM-aware: lvm2-monitor is intentionally unmasked when LVM volumes exist
+            if test "$_has_lvm" = true; and string match -q 'lvm2*' -- "$_svc"
+                _info "  $_svc: skipped (LVM detected)"
+                continue
+            end
             set -l _state (systemctl is-enabled "$_svc" 2>/dev/null)
             switch "$_state"
                 case masked
@@ -3299,6 +3311,11 @@ function _ry_verify_static --description "Verify installed configs match embedde
     else
         for _mask_idx in (seq 1 (count $MASK))
             set -l _svc $MASK[$_mask_idx]
+            # LVM-aware: lvm2-monitor is intentionally unmasked when LVM volumes exist
+            if test "$_has_lvm" = true; and string match -q 'lvm2*' -- "$_svc"
+                _info "  $_svc: skipped (LVM detected)"
+                continue
+            end
             set -l _rec (string split -- ':' -- "$_mask_parsed[$_mask_idx]")
             if test "$_rec[1]" = not-found
                 _info "  $_svc: unit not found (may not be installed)"
@@ -3771,7 +3788,6 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     return $EXIT_OK
 end
 
-
 # Read CPU governor and current frequency from cpufreq sysfs
 function _gather_cpu_state --description "Collect CPU governor and frequency state"
     set -g _CPU_PATH ""
@@ -3787,7 +3803,6 @@ function _gather_cpu_state --description "Collect CPU governor and frequency sta
     end
     return 0
 end
-
 
 # ═══ RUNTIME VERIFICATION — live sysfs/procfs state checks; exit 1 when state doesn't match config.
 function _ry_verify_runtime --description "Verify runtime kernel params, services, and modules"
@@ -4777,9 +4792,6 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
     end
 end
 
-
-
-
 # Install pipeline
 
 # ═══ INSTALL PIPELINE — preflight → packages → files → services → boot → wifi → finalize ═══
@@ -5259,7 +5271,6 @@ function _install_configure_services --description "Enable, start, and configure
             end
         end
     end
-
 
     # B-7: Batch system-scope enable --now in --all mode
     if test "$ALL" = true
@@ -5981,7 +5992,6 @@ function _ry_do_completions --description "Generate fish shell completions for r
 
     # --install-file with destination completions
     echo "    complete -c \$cmd -l install-file -d 'Re-deploy a single managed file' -rxa '$_install_file_targets'" >>"$tmpfile"
-
 
     echo end >>"$tmpfile"
 

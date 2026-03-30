@@ -1,3 +1,20 @@
+3.15.0 (2026-03-30)
+-------------------
+  fix(verify-static): add LVM-aware mask verification.
+    _ry_verify_static unconditionally reported lvm2-monitor.service
+    as FAIL when not masked, but _install_configure_services and
+    _ry_do_check both intentionally skip masking when LVM volumes
+    are detected via pvs. Added pre-computed _has_lvm check
+    (timeout 5 sudo -n pvs --noheadings) to both fallback and
+    batch mask verification paths, emitting _info skip instead
+    of _fail (F-3: medium — false-positive on LVM systems).
+  style: remove 5 consecutive blank line runs (2-3 extra blanks
+    each) between function boundaries and section comments.
+    Locations: _ry_do_check/_gather_cpu_state, _ry_do_lint/install
+    pipeline, _install_configure_services B-7 block,
+    _ry_do_check/_ry_verify_runtime, _ry_do_completions end block.
+  docs: sync README (version badge 3.15.0), CHANGELOG.
+
 3.14.0 (2026-03-30)
 -------------------
   fix(_json_str): pipe 4 pre-newline-escape string replace calls

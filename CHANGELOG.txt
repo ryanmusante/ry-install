@@ -1,3 +1,24 @@
+3.13.0 (2026-03-29)
+-------------------
+  profile: add tsc=reliable kernel param after clocksource=tsc.
+    Skips runtime TSC verification on Zen 5 invariant TSC.
+    KERNEL_PARAMS 16 → 17.
+  profile: add AMD_VULKAN_ICD=RADV to ENV_VARS. Ensures RADV
+    over AMDVLK if installed as ROCm dependency.
+  profile: add VKD3D_DEBUG=none to ENV_VARS. Disables VKD3D-Proton
+    debug logging for DX12 games. Complements DXVK_LOG_LEVEL=none.
+  profile: remove PROTON_USE_NTSYNC=1 from ENV_VARS.
+    proton-cachyos 10.0-20260312-slr enables ntsync by default.
+  profile: remove PROTON_NO_WM_DECORATION=1 from ENV_VARS.
+    No effect under X11/XWayland; apply per-game when using
+    Wayland. ENV_VARS 6 → 6 (+2 −2).
+  profile: change MESA_SHADER_CACHE_MAX_SIZE 8G → 4G. Most games
+    use 50–430 MB; 4G is generous.
+  verify-static: remove PROTON_USE_NTSYNC=1 cross-check in ntsync
+    unavailable branch (env var no longer in profile).
+  docs: sync README (version badge 3.13.0, kernel param count 17,
+    tsc=reliable row, env var table updated), CHANGELOG.
+
 3.12.0 (2026-03-29)
 -------------------
   profile: add split_lock_detect=off kernel param (16 params).

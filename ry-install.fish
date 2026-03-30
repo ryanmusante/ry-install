@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.12.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.13.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.12.0"
+set -g VERSION "3.13.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -529,13 +529,14 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # ── Kernel (16 params) ──
+    # ── Kernel (17 params) ──
     # ppfeaturemask: bits 14,15,17 off; cwsr_enable=0: gfx1151 VGPR (remove 7.0+); wbrf=0: WiFi RFI throttle; module_blacklist: pcspkr+wdat_wdt (CachyOS covers iTCO/sp5100 only)
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
         amdgpu.wbrf=0 \
         clocksource=tsc \
+        tsc=reliable \
         initcall_blacklist=simpledrm_platform_driver_init \
         iommu=pt \
         module_blacklist=pcspkr,wdat_wdt \
@@ -588,12 +589,12 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     # ── Environment — PROTON_DXVK_LOWLATENCY: proton-cachyos-slr only (not upstream Valve Proton) ──
     set -g ENV_VARS \
+        "AMD_VULKAN_ICD=RADV" \
         "DXVK_LOG_LEVEL=none" \
         "ENABLE_LAYER_MESA_ANTI_LAG=1" \
-        "MESA_SHADER_CACHE_MAX_SIZE=8G" \
+        "MESA_SHADER_CACHE_MAX_SIZE=4G" \
         "PROTON_DXVK_LOWLATENCY=1" \
-        "PROTON_USE_NTSYNC=1" \
-        "PROTON_NO_WM_DECORATION=1"
+        "VKD3D_DEBUG=none"
 
     # ── Packages ──
     set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications ntsync-common fd sd dust procs bottom git-delta lm_sensors
@@ -3102,9 +3103,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
     switch $_ns
         case unavailable
             _info "  Kernel < 6.14 — ntsync not supported"
-            if contains -- PROTON_USE_NTSYNC=1 $ENV_VARS
-                _warn "  PROTON_USE_NTSYNC=1 in ENV_VARS but kernel < 6.14 — ntsync unavailable"
-            end
         case builtin
             _info "  ntsync: built-in (CONFIG_NTSYNC=y)"
         case loaded

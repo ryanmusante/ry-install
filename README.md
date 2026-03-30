@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.12.0-blue)
+![Version](https://img.shields.io/badge/version-3.13.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -138,7 +138,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ### Kernel Parameters
 
-16 parameters written to `/etc/kernel/cmdline`:
+17 parameters written to `/etc/kernel/cmdline`:
 
 | Parameter | Purpose |
 |-----------|---------|
@@ -146,6 +146,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
 | `amdgpu.wbrf=0` | Disable WiFi RFI memory clock throttling (UMA bandwidth) |
 | `clocksource=tsc` | Force TSC clocksource on Zen 5 |
+| `tsc=reliable` | Skip runtime TSC verification (Zen 5 invariant TSC) |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
 | `iommu=pt` | IOMMU passthrough (DMA protection, near-zero overhead) |
 | `module_blacklist=pcspkr,wdat_wdt` | Silence PC speaker beep, block ACPI watchdog |
@@ -209,12 +210,12 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | Variable | Value |
 |----------|-------|
 | `SSH_AUTH_SOCK` | `${XDG_RUNTIME_DIR}/ssh-agent.socket` |
+| `AMD_VULKAN_ICD` | `RADV` |
 | `DXVK_LOG_LEVEL` | `none` |
 | `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
-| `MESA_SHADER_CACHE_MAX_SIZE` | `8G` |
+| `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
 | `PROTON_DXVK_LOWLATENCY` | `1` |
-| `PROTON_USE_NTSYNC` | `1` |
-| `PROTON_NO_WM_DECORATION` | `1` |
+| `VKD3D_DEBUG` | `none` |
 
 ### User Configuration
 

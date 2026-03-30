@@ -291,7 +291,7 @@
   docs: sync README — kernel params (15), sysctl (9), version badge.
 
 3.7.56-3.7.59 (2026-03-21 -- 2026-03-22)
------------------------------------------
+----------------------------------------
   refactor(naming): prefix 22 public functions with _ry_ to prevent
     autoloaded function collisions. External profiles accept both
     _ry_profile_<n> (preferred) and legacy profile_<n> (deprecated).
@@ -313,7 +313,7 @@
   docs: sync README (version badge, profiles section).
 
 3.7.0-3.7.55 (2026-03-08 -- 2026-03-21)
------------------------------------------
+---------------------------------------
   feat: batch & parallel processing (B-1..B-9). Parallel collector with
     deterministic output ordering. Fork cap at 16.
   feat(kernel): add cwsr_enable=0 (gfx1151), workqueue.power_efficient=0,
@@ -346,7 +346,7 @@
   remove: --profile flag. Profile selection now file-based only.
 
 3.5.0-3.6.4 (2026-03-07 -- 2026-03-08)
-----------------------------------------
+--------------------------------------
   feat: --profile multi-machine support. _validate_profile (25+
     required globals), external loading.
   feat: --check silent idempotency probe (exit 0=clean, 10=drift).
@@ -359,7 +359,7 @@
   remove: backup system remnants.
 
 3.0.0-3.4.1 (2026-02-27 -- 2026-03-06)
-----------------------------------------
+--------------------------------------
   feat: sysctl.d/99-ry-sysctl.conf. --test-all suite. --completions.
     KERNEL_PARAMS validation against /proc/config.gz. Boot sanity.
     --existence-only hook validation. _verify_unit_syntax --user.

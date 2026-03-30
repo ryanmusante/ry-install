@@ -1,3 +1,21 @@
+3.14.0 (2026-03-30)
+-------------------
+  fix(_json_str): pipe 4 pre-newline-escape string replace calls
+    through `string collect --no-trim-newlines` to prevent Fish
+    command-substitution splitting. Embedded newlines were consumed
+    by list splitting before the \n escape step, silently becoming
+    spaces in JSONL log output (F-1: medium — silent data corruption).
+    _gkeyfile_escape has the same pattern (L1140–1143) but is
+    mitigated by upstream input validation rejecting newlines in
+    SSID/passphrase.
+  fix(parallel): add >/dev/null stdout redirect to all 10
+    backgrounded fish -c children — 5 validation jobs (_ry_validate_configs),
+    4 check jobs (_ry_do_check), 1 verify-static hash worker
+    (_ry_verify_static). stderr was redirected but stdout was open;
+    any unexpected Fish runtime diagnostic would interleave with
+    parent output (F-2: low — cosmetic).
+  docs: sync README (version badge 3.14.0), CHANGELOG.
+
 3.13.0 (2026-03-29)
 -------------------
   profile: add tsc=reliable kernel param after clocksource=tsc.

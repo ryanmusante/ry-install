@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.13.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.14.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.13.0"
+set -g VERSION "3.14.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -1117,11 +1117,13 @@ function _json_str --description "Escape a string for safe JSON embedding"
         return 1
     end
     # Escape order: backslash first to avoid double-escaping later chars; each set -l val re-binds the local
+    # Lines before the \n escape must pipe through `string collect --no-trim-newlines` to prevent
+    # Fish command-substitution splitting embedded newlines into a list (F-1: silent data corruption)
     set -l val "$argv[1]"
-    set -l val (string replace -a '\\' '\\\\' -- "$val")
-    set -l val (string replace -a '"' '\\"' -- "$val")
-    set -l val (string replace -a \t '\\t' -- "$val")
-    set -l val (string replace -a \r '\\r' -- "$val")
+    set -l val (string replace -a '\\' '\\\\' -- "$val" | string collect --no-trim-newlines)
+    set -l val (string replace -a '"' '\\"' -- "$val" | string collect --no-trim-newlines)
+    set -l val (string replace -a \t '\\t' -- "$val" | string collect --no-trim-newlines)
+    set -l val (string replace -a \r '\\r' -- "$val" | string collect --no-trim-newlines)
     set -l val (string replace -a \n '\\n' -- "$val")
     set -l val (string replace -a \x08 '\\b' -- "$val")
     set -l val (string replace -a \x0c '\\f' -- "$val")
@@ -2050,7 +2052,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
             set errs (math $expected_count - $actual_count)
         end
         echo $errs > "$val_dir/xref.errors"
-    ' -- "$dst_count" "$content_dir" "$val_dir" 2>"$val_dir/xref.stderr" &
+    ' -- "$dst_count" "$content_dir" "$val_dir" >/dev/null 2>"$val_dir/xref.stderr" &
     set -l pid_xref $last_pid
 
     # Job 2: systemd unit syntax — derive keys from SERVICE_DESTINATIONS (system) + USER_DESTINATIONS (user scope)
@@ -2092,7 +2094,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
             end
         end
         echo $errs > "$val_dir/units.errors"
-    ' -- "$content_dir" "$val_dir" "$HOME" $_svc_dsts 2>"$val_dir/units.stderr" &
+    ' -- "$content_dir" "$val_dir" "$HOME" $_svc_dsts >/dev/null 2>"$val_dir/units.stderr" &
     set -l pid_units $last_pid
 
     # Job 3: fish script syntax + environment.d check
@@ -2124,7 +2126,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
             set errs (math $errs + 1)
         end
         echo $errs > "$val_dir/scripts.errors"
-    ' -- "$content_dir" "$val_dir" "$HOME" 2>"$val_dir/scripts.stderr" &
+    ' -- "$content_dir" "$val_dir" "$HOME" >/dev/null 2>"$val_dir/scripts.stderr" &
     set -l pid_scripts $last_pid
 
     # Job 4: INI section-header validation (4 configs)
@@ -2153,7 +2155,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
             end
         end
         echo $errs > "$val_dir/ini.errors"
-    ' -- "$content_dir" "$val_dir" 2>"$val_dir/ini.stderr" &
+    ' -- "$content_dir" "$val_dir" >/dev/null 2>"$val_dir/ini.stderr" &
     set -l pid_ini $last_pid
 
     # Job 5: simple key-value config validation (3 configs)
@@ -2195,7 +2197,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
             set errs (math $errs + 1)
         end
         echo $errs > "$val_dir/simple.errors"
-    ' -- "$content_dir" "$val_dir" 2>"$val_dir/simple.stderr" &
+    ' -- "$content_dir" "$val_dir" >/dev/null 2>"$val_dir/simple.stderr" &
     set -l pid_simple $last_pid
 
     wait $pid_xref $pid_units $pid_scripts $pid_ini $pid_simple
@@ -3434,7 +3436,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
                     echo fail > "$hash_dir/result_$safe"
                 end
             end
-        ' -- "$hash_dir" "$start_idx" "$end_idx" 2>"$hash_dir/worker_$worker.stderr" &
+        ' -- "$hash_dir" "$start_idx" "$end_idx" >/dev/null 2>"$hash_dir/worker_$worker.stderr" &
         set -a hash_pids $last_pid
     end
 
@@ -3585,7 +3587,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         end
         echo $drift > "$result_dir/hash_drift"
         echo $checked > "$result_dir/hash_checked"
-    ' -- "$result_dir" "$content_dir" "$skip_iwd" "$my_home" 2>"$result_dir/hash.stderr" &
+    ' -- "$result_dir" "$content_dir" "$skip_iwd" "$my_home" >/dev/null 2>"$result_dir/hash.stderr" &
     set -l pid_hash $last_pid
 
     # ── Job 2: file permissions (parallel) — reads pre-serialized perms from parent ──
@@ -3621,7 +3623,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
             end
         end
         echo $drift > "$result_dir/perm_drift"
-    ' -- "$result_dir" "$boot_fstype" "$my_user" "$my_group" 2>"$result_dir/perm.stderr" &
+    ' -- "$result_dir" "$boot_fstype" "$my_user" "$my_group" >/dev/null 2>"$result_dir/perm.stderr" &
     set -l pid_perm $last_pid
 
     printf '%s\n' $KERNEL_PARAMS >"$result_dir/kparams"
@@ -3640,7 +3642,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
             end
         end
         echo $drift > "$result_dir/kparam_drift"
-    ' -- "$result_dir" 2>"$result_dir/kparam.stderr" &
+    ' -- "$result_dir" >/dev/null 2>"$result_dir/kparam.stderr" &
     set -l pid_kparam $last_pid
 
     # ── Job 4: service state — batch systemctl show (parallel); pre-parsed in parent (child can't call _parse_systemctl_show) ──
@@ -3716,7 +3718,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
             end
         end
         echo $drift > "$result_dir/svc_drift"
-    ' -- "$result_dir" 2>"$result_dir/svc.stderr" &
+    ' -- "$result_dir" >/dev/null 2>"$result_dir/svc.stderr" &
     set -l pid_svc $last_pid
 
     wait $pid_hash $pid_perm $pid_kparam $pid_svc

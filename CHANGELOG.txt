@@ -1,4 +1,4 @@
-3.12.0 (2026-03-XX)
+3.12.0 (2026-03-29)
 -------------------
   profile: add split_lock_detect=off kernel param (16 params).
   profile: fix cwsr_enable=0 comment — remove when 7.0+ stable
@@ -14,16 +14,24 @@
     (matched ice driver, E610 uses ixgbe).
   verify: add AUR_PKGS to static verification (warn-level).
   deps: add paru to optional-tools warning block.
-  docs: update hardware table — Dual Realtek RTL8127 10G LAN.
-    Remove E610 known issues section. Update kernel params
-    table (16), CWSR timeline, iwd quirks. Add paru prereq.
-    Sync version badge 3.12.0.
   fix(logging): break _json_str → _log → _json_str circular call
     chain. _json_str arg-count guard called _log, which calls
     _json_str — latent recursion (terminates at depth 2 but violates
     self-containment). Replace _log call with direct printf to
     $LOG_FILE guarded by test -f, matching _msg bug-path precedent
     (L1217). No callers affected.
+  style(comments): trim 14 multiline comments to single line
+    across 12 locations. No inline comments moved (all are
+    lint:ignore directives or help text examples).
+  docs: restructure README — add ToC, promote Quick Start,
+    add Install Flow phase table, group config under single
+    heading, break out Network Stack and System Tuning, convert
+    Known Issues to status/workaround tables, collapse jq
+    examples in <details>, move Hardware Reference to bottom.
+  docs: fix 4 CHANGELOG underline length mismatches (3.7.56,
+    3.7.0, 3.5.0, 3.0.0).
+  docs: sync README (version badge 3.12.0, all counts verified),
+    CHANGELOG.
 
 3.11.0 (2026-03-29)
 -------------------

@@ -21,8 +21,7 @@ set -g ALL false
 set -g FORCE false
 # --quiet: suppress command-wrapper stdout to terminal (auto-disabled for non-install modes)
 set -g QUIET true
-# ── Environment detection: NO_COLOR (no-color.org) — check env BEFORE setting global default ──
-# set -qx tests exported (environment) variables only; avoids false positive from set -g
+# ── Environment detection: NO_COLOR (no-color.org) — set -qx tests exported vars only, avoids false positive from set -g ──
 if set -qx NO_COLOR; or test "$TERM" = dumb
     set -g NO_COLOR true
 else
@@ -531,9 +530,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
     # ── Kernel (16 params) ──
-    # ppfeaturemask=0xfffd3fff: bits 14,15,17 off (overdrive/GFXOFF/stutter). cwsr_enable=0: gfx1151 VGPR workaround (remove when 7.0+ stable on gfx1151)
-    # wbrf=0: disable WiFi RFI memory clock throttling (P1 — devastating for UMA bandwidth). clocksource=tsc: force TSC on Zen 5 (P2)
-    # module_blacklist: pcspkr (beep) + wdat_wdt (ACPI watchdog, complements nowatchdog). CachyOS covers iTCO/sp5100 only
+    # ppfeaturemask: bits 14,15,17 off; cwsr_enable=0: gfx1151 VGPR (remove 7.0+); wbrf=0: WiFi RFI throttle; module_blacklist: pcspkr+wdat_wdt (CachyOS covers iTCO/sp5100 only)
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
@@ -569,8 +566,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         fsck
     set -g MKINITCPIO_COMPRESSION zstd
 
-    # ── Udev ──
-    # ntsync rule handled by ntsync-common package (in PKGS_ADD)
+    # ── Udev — ntsync rule handled by ntsync-common package (in PKGS_ADD) ──
 
     # ── Network ──
     set -g RESOLVED_MDNS no
@@ -590,8 +586,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g NM_WIFI_POWERSAVE 2
     set -g NM_LOG_LEVEL WARN
 
-    # ── Environment ──
-    # PROTON_DXVK_LOWLATENCY: proton-cachyos-slr only (not upstream Valve Proton)
+    # ── Environment — PROTON_DXVK_LOWLATENCY: proton-cachyos-slr only (not upstream Valve Proton) ──
     set -g ENV_VARS \
         "DXVK_LOG_LEVEL=none" \
         "ENABLE_LAYER_MESA_ANTI_LAG=1" \
@@ -975,8 +970,7 @@ RestartSec=5
 WantedBy=default.target'
 
         case "/etc/systemd/system/amdgpu-performance.service"
-            # After=multi-user.target for DRM settle (Arch #72655); ExecStart: 5 retries, 2s delay, exit 1 if no writable sysfs
-            # "auto" not "high": shared-TDP APU wastes CPU headroom at fixed max; GameMode sets "high" dynamically when gaming
+            # After=multi-user.target for DRM settle (Arch #72655); 5 retries, 2s delay; "auto" not "high" — GameMode sets "high" dynamically
             printf '%s\n' '[Unit]' \
                 'Description=Set AMDGPU power_dpm_force_performance_level to auto' \
                 'After=multi-user.target' \
@@ -991,9 +985,7 @@ WantedBy=default.target'
                 'WantedBy=graphical.target'
 
         case "/etc/systemd/system/cpupower-epp.service"
-            # Tradeoff: permanent EPP=performance + masks power-profiles-daemon.
-            # This breaks CachyOS game-performance wrapper + PPD integration (auto EPP/sched-ext switching).
-            # Alternative: unmask PPD, remove this service, use powerprofilesctl for dynamic switching.
+            # Tradeoff: permanent EPP=performance masks PPD — breaks CachyOS game-performance wrapper; alternative: unmask PPD + powerprofilesctl
             printf '%s\n' '[Unit]
 Description=Set CPU EPP to performance (amd_pstate=active: powersave governor + performance EPP)
 After=cpupower.service
@@ -1160,10 +1152,7 @@ function _gkeyfile_escape --argument-names raw --description "Escape a string fo
     printf '%s\n' "$val"
 end
 
-# Extract "data" field value from a JSONL line, handling escaped quotes
-# PCRE2: [^"\\] matches non-quote non-backslash; \\. matches escaped char
-# Fish single-quotes process \\ → \ and \' → ' (NOT fully literal like bash)
-# So source \\\\ → fish \\ → PCRE2 escaped-backslash
+# Extract "data" field from JSONL with escaped quotes; PCRE2 [^"\\]+\\. pattern; fish single-quotes process \\ and \' (NOT literal like bash)
 
 # ── Structured NDJSON logging — self-contained JSON per line, event classification (section/prefix/message), _json_str escapes+caps at 4096 chars ──
 
@@ -1527,9 +1516,7 @@ function _run --description "Execute a command with logging, dry-run support, an
         _log "BUG: _run called with no arguments"
         return 1
     end
-    # SECURITY: reject any argv element with shell metacharacters (;|&`$\n\t\r) to prevent injection from untrusted input
-    # Fish does not eval $argv (each element is a separate token), so this is defense-in-depth for log integrity
-    # and future external profile sourcing where callers may pass unsanitized data.
+    # SECURITY: reject argv with shell metacharacters (;|&`$\n\t\r) — defense-in-depth for log integrity and external profile sourcing
     for _arg in $argv
         if string match -qr '[;|&`\$\n\t\r]' -- "$_arg"
             _log "BUG: _run argv contains shell metacharacters — refusing to execute: $_arg"
@@ -1713,8 +1700,7 @@ NOTES:
 "
 end
 
-# Verify a managed file exists at dst; uses elevated test for /boot paths, logs OK/FAIL with context
-# System files are 0644 (world-readable) — only /boot/* needs sudo (ESP may be root-only vfat)
+# Verify managed file exists at dst; sudo test for /boot (ESP may be root-only vfat), system files are 0644
 function _chk_file --argument-names filepath --description "Verify a file exists (sudo for /boot, direct for /etc)"
     if test (count $argv) -lt 1
         _err "_chk_file: missing argument"
@@ -2066,8 +2052,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     ' -- "$dst_count" "$content_dir" "$val_dir" 2>"$val_dir/xref.stderr" &
     set -l pid_xref $last_pid
 
-    # Job 2: systemd unit syntax — derive keys from destinations (not hardcoded)
-    # Collect all .service destinations: SERVICE_DESTINATIONS (system) + USER_DESTINATIONS (user scope)
+    # Job 2: systemd unit syntax — derive keys from SERVICE_DESTINATIONS (system) + USER_DESTINATIONS (user scope)
     set -l _svc_dsts
     for _sd in $SERVICE_DESTINATIONS
         set -a _svc_dsts "$_sd"
@@ -3660,8 +3645,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     ' -- "$result_dir" 2>"$result_dir/kparam.stderr" &
     set -l pid_kparam $last_pid
 
-    # ── Job 4: service state — batch systemctl show (parallel); LVM pre-serialized by parent ──
-    # Pre-parse systemctl show in parent (child can't call _parse_systemctl_show)
+    # ── Job 4: service state — batch systemctl show (parallel); pre-parsed in parent (child can't call _parse_systemctl_show) ──
     set -l _all_check_units (command cat -- "$result_dir/exp_svcs") (command cat -- "$result_dir/mask_units") (command cat -- "$result_dir/implicit_svcs" 2>/dev/null)
     set -l _check_show (systemctl show --property=LoadState,ActiveState,UnitFileState -- $_all_check_units 2>/dev/null | string collect --no-trim-newlines)
     set -l _check_parsed (_parse_systemctl_show "$_check_show")
@@ -3676,9 +3660,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         # Read pre-parsed results from parent (eliminates duplicated _parse_systemctl_show)
         set -l results (command cat -- "$result_dir/parsed_units" 2>/dev/null)
 
-        # Check expected services (first N results)
-        # Timer units: ActiveState=active (waiting for next trigger); never exited
-        # Oneshot services (RemainAfterExit): ActiveState=exited after successful run
+        # Check expected services: timers=ActiveState:active (waiting); oneshot RemainAfterExit=ActiveState:exited
         set -l exp_count (count $exp_svcs)
         for i in (seq 1 $exp_count)
             set -l rec (string split -- ":" $results[$i])
@@ -4047,8 +4029,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     set -l show_output (systemctl show --property=LoadState,ActiveState,UnitFileState -- $sys_units 2>/dev/null | string collect --no-trim-newlines)
     set -l parsed (_parse_systemctl_show "$show_output")
 
-    # Index into parsed (LoadState:ActiveState:UnitFileState): 1=amdgpu-performance, 2=cpupower-epp, 3=fstrim, 4=resolved, 5=nm-dispatcher, 6=NetworkManager
-    # MAINTENANCE: parsed[] indices below are positionally coupled to sys_units order above — update both together
+    # MAINTENANCE: parsed[] indices (LoadState:ActiveState:UnitFileState) are positionally coupled to sys_units — update both together
     set -l _expected_unit_count (count $sys_units)
     if test (count $parsed) -lt $_expected_unit_count
         _warn "  systemctl show returned incomplete data ("(count $parsed)" of $_expected_unit_count records)"
@@ -4937,8 +4918,7 @@ function _install_preflight --description "Run all preflight checks before insta
             _err "Sudo required for installation"
             return $EXIT_PREFLIGHT
         end
-        # Matches: (ALL : ALL) ALL, (ALL) ALL, (ALL) NOPASSWD: ALL
-        # Does NOT match: (root) ALL — which IS genuinely restricted
+        # Matches: (ALL : ALL) ALL, (ALL) ALL, (ALL) NOPASSWD: ALL — does NOT match: (root) ALL
         set -l sudo_all (sudo -n -l 2>/dev/null | grep -v '^\s*#' | grep -cE '\(ALL.*\) .*ALL$')
         or set sudo_all 0
         if test "$sudo_all" -eq 0
@@ -5632,9 +5612,7 @@ function _install_finalize --description "Run post-install verification, cleanup
                     # GKeyFile escapes via consolidated helper (single source of truth)
                     set -l safe_pass (_gkeyfile_escape "$WIFI_PASS")
                     set -l safe_ssid (_gkeyfile_escape "$WIFI_SSID")
-                    # Inside DRY=false gate; credential write only occurs on live runs
-                    # SECURITY: printf|sudo tee used INSTEAD of _run to prevent psk= from appearing in JSONL logs;
-                    # tee stdout→/dev/null so credential never reaches _run's output capture path
+                    # SECURITY: printf|sudo tee bypasses _run to prevent psk= from appearing in JSONL logs; tee stdout→/dev/null
                     printf '%s\n' "[connection]" "id=$safe_ssid" "uuid=$conn_uuid" "type=wifi" "interface-name=$WIFI_IFACE" "autoconnect=true" "[wifi]" "mode=infrastructure" "ssid=$safe_ssid" "[wifi-security]" "key-mgmt=wpa-psk" "psk=$safe_pass" "[ipv4]" "method=auto" "[ipv6]" "method=disabled" | sudo tee -- "$tmpfile" >/dev/null
                     set -l _wifi_ps $pipestatus
                     if test $_wifi_ps[1] -ne 0; or test $_wifi_ps[2] -ne 0
@@ -6381,9 +6359,7 @@ if test "$ALL" = true; and test "$MODE" != test-all
 end
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"
 set -l old_log "$LOG_FILE"
-# Rename log to mode-specific path; mv before set — signal between them loses footer (acceptable)
-# but preserves log content. Reversed order would lose content (signal handler creates empty new_log,
-# then mv never runs because signal handler exits).
+# Rename log to mode-specific path; mv before set — signal loses footer but preserves content (reversed order loses content)
 if test -f "$old_log"; and test "$old_log" != "$new_log"
     command mv -- "$old_log" "$new_log" 2>/dev/null
 end

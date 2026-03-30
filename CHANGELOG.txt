@@ -1,3 +1,13 @@
+3.16.0 (2026-03-30)
+-------------------
+  fix(bootstrap): replace 6 bare exit 1 with exit $EXIT_PREFLIGHT
+    in fish version gate (L44, 50, 54, 60), HOME resolution (L81),
+    and log directory creation (L88). EXIT_PREFLIGHT (3) is defined
+    at L11, before all uses. Previously returned generic EXIT_FAIL
+    (1), masking preflight failures as runtime failures in exit
+    code consumers (scripts, CI, --test-all).
+  docs: sync README (version badge 3.16.0), CHANGELOG.
+
 3.15.0 (2026-03-30)
 -------------------
   fix(verify-static): add LVM-aware mask verification.

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.15.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.16.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.15.0"
+set -g VERSION "3.16.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -41,23 +41,23 @@ end
 set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n 1)
 if test -z "$fish_ver"
     echo "Error: Could not determine fish version" >&2
-    exit 1
+    exit $EXIT_PREFLIGHT
 end
 set -l fish_major (string split '.' -- "$fish_ver")[1]
 set -l fish_minor (string split '.' -- "$fish_ver")[2]
 if test -z "$fish_major"; or not string match -qr '^\d+$' -- "$fish_major"
     echo "Error: Could not parse fish version: $fish_ver" >&2
-    exit 1
+    exit $EXIT_PREFLIGHT
 end
 if test -z "$fish_minor"; or not string match -qr '^\d+$' -- "$fish_minor"
     echo "Error: Could not parse fish version: $fish_ver" >&2
-    exit 1
+    exit $EXIT_PREFLIGHT
 end
 if test "$fish_major" -lt 3; or begin
         test "$fish_major" -eq 3; and test "$fish_minor" -lt 4
     end
     echo "Error: fish 3.4+ required (found: $fish_ver)" >&2
-    exit 1
+    exit $EXIT_PREFLIGHT
 end
 # Upper bound: warn on untested fish versions — non-blocking
 if test "$fish_major" -gt 4
@@ -78,14 +78,14 @@ if test -z "$HOME"
     end
     if test -z "$HOME"; or not test -d "$HOME"
         echo "Error: Cannot determine HOME directory" >&2
-        exit 1
+        exit $EXIT_PREFLIGHT
     end
 end
 
 set -g LOG_DIR "$HOME/ry-install/logs/$DATE_LABEL"
 command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
     echo "[ERR] Cannot create log directory: $LOG_DIR" >&2
-    exit 1
+    exit $EXIT_PREFLIGHT
 end
 command chmod -- 700 "$HOME/ry-install" 2>/dev/null; or true
 set -g LOG_FILE "$LOG_DIR/install-$TIMESTAMP.jsonl"

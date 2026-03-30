@@ -1117,13 +1117,13 @@ function _json_str --description "Escape a string for safe JSON embedding"
         return 1
     end
     # Escape order: backslash first to avoid double-escaping later chars; each set -l val re-binds the local
-    # Lines before the \n escape must pipe through `string collect --no-trim-newlines` to prevent
-    # Fish command-substitution splitting embedded newlines into a list (F-1: silent data corruption)
+    # Lines before the \n escape pipe through `string collect` to prevent Fish command-substitution
+    # from splitting embedded newlines into a list (F-1: silent data corruption in JSONL logs)
     set -l val "$argv[1]"
-    set -l val (string replace -a '\\' '\\\\' -- "$val" | string collect --no-trim-newlines)
-    set -l val (string replace -a '"' '\\"' -- "$val" | string collect --no-trim-newlines)
-    set -l val (string replace -a \t '\\t' -- "$val" | string collect --no-trim-newlines)
-    set -l val (string replace -a \r '\\r' -- "$val" | string collect --no-trim-newlines)
+    set -l val (string replace -a '\\' '\\\\' -- "$val" | string collect)
+    set -l val (string replace -a '"' '\\"' -- "$val" | string collect)
+    set -l val (string replace -a \t '\\t' -- "$val" | string collect)
+    set -l val (string replace -a \r '\\r' -- "$val" | string collect)
     set -l val (string replace -a \n '\\n' -- "$val")
     set -l val (string replace -a \x08 '\\b' -- "$val")
     set -l val (string replace -a \x0c '\\f' -- "$val")

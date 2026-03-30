@@ -1,13 +1,16 @@
 3.14.0 (2026-03-30)
 -------------------
   fix(_json_str): pipe 4 pre-newline-escape string replace calls
-    through `string collect --no-trim-newlines` to prevent Fish
-    command-substitution splitting. Embedded newlines were consumed
-    by list splitting before the \n escape step, silently becoming
-    spaces in JSONL log output (F-1: medium — silent data corruption).
-    _gkeyfile_escape has the same pattern (L1140–1143) but is
-    mitigated by upstream input validation rejecting newlines in
-    SSID/passphrase.
+    through `string collect` to prevent Fish command-substitution
+    splitting. Embedded newlines were consumed by list splitting
+    before the \n escape step, silently becoming spaces in JSONL
+    log output. `--no-trim-newlines` is wrong here — it preserves
+    the output-terminator \n from string replace, accumulating
+    spurious newlines across steps. Plain `string collect` trims
+    the terminator while preserving internal newlines
+    (F-1: medium — silent data corruption).
+    _gkeyfile_escape has the same pattern but is mitigated by
+    upstream input validation rejecting newlines in SSID/passphrase.
   fix(parallel): add >/dev/null stdout redirect to all 10
     backgrounded fish -c children — 5 validation jobs (_ry_validate_configs),
     4 check jobs (_ry_do_check), 1 verify-static hash worker

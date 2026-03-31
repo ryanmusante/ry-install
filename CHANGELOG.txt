@@ -1,3 +1,11 @@
+3.20.0 (2026-03-30)
+-------------------
+  style(profile): break PKGS_ADD (13) and PKGS_DEL (8) into
+    multi-line continuations; matches all other ≥3-item lists.
+  style(_json_str): trim 3-line comment to single line.
+  style(_get_boot_time): add capture group extraction comment.
+  docs: sync README (version badge 3.20.0), CHANGELOG.
+
 3.19.0 (2026-03-30)
 -------------------
   fix(_gather_cpu_state): remove dead _CPU_GOVERNOR and _CPU_EPP

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.19.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.20.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.19.0"
+set -g VERSION "3.20.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -248,6 +248,7 @@ function _get_boot_time --description "Print boot time in seconds, or return 1"
     _log "BOOT_TIME_CHECK: querying systemd-analyze"
     command -q systemd-analyze; or return 1
     set -l line (systemd-analyze 2>/dev/null | head -n 1)
+    # string match -r outputs full match then capture groups; tail -n 1 extracts the group
     set -l sec (printf '%s\n' "$line" | string match -r -- '= ([0-9.]+)s' | tail -n 1)
     if test -n "$sec"; and string match -qr '^[0-9.]+$' -- "$sec"
         printf '%s\n' "$sec"
@@ -597,8 +598,29 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "VKD3D_DEBUG=none"
 
     # ── Packages ──
-    set -g PKGS_ADD mkinitcpio-firmware nvme-cli iw cachyos-gaming-meta cachyos-gaming-applications ntsync-common fd sd dust procs bottom git-delta lm_sensors
-    set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme ufw octopi micro cachyos-micro-settings btop
+    set -g PKGS_ADD \
+        mkinitcpio-firmware \
+        nvme-cli \
+        iw \
+        cachyos-gaming-meta \
+        cachyos-gaming-applications \
+        ntsync-common \
+        fd \
+        sd \
+        dust \
+        procs \
+        bottom \
+        git-delta \
+        lm_sensors
+    set -g PKGS_DEL \
+        plymouth \
+        cachyos-plymouth-bootanimation \
+        cachyos-plymouth-theme \
+        ufw \
+        octopi \
+        micro \
+        cachyos-micro-settings \
+        btop
 
     # AUR packages — installed via paru (not pacman)
     set -g AUR_PKGS mt76-mt7925-dkms
@@ -1116,9 +1138,7 @@ function _json_str --description "Escape a string for safe JSON embedding"
         printf '\n'
         return 1
     end
-    # Escape order: backslash first to avoid double-escaping later chars; each set -l val re-binds the local
-    # Lines before the \n escape pipe through `string collect` to prevent Fish command-substitution
-    # from splitting embedded newlines into a list (F-1: silent data corruption in JSONL logs)
+    # Escape order: backslash first; `string collect` before \n escape prevents Fish splitting embedded newlines (F-1)
     set -l val "$argv[1]"
     set -l val (string replace -a '\\' '\\\\' -- "$val" | string collect)
     set -l val (string replace -a '"' '\\"' -- "$val" | string collect)

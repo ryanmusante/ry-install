@@ -53,8 +53,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | WiFi credentials | SSID 1–32 bytes, passphrase 8–63 bytes | Interactive even with `--all` |
 | paru (optional) | `command -q paru` | AUR package installation |
 
-<details>
-<summary><strong>Recommended pre-flight steps</strong></summary>
+**Recommended pre-flight steps:**
 
 ```fish
 # Snapshot rootfs (btrfs)
@@ -66,8 +65,6 @@ sudo btrfs subvolume snapshot -r / /.snapshots/pre-ry-install
 # Check for known issues
 # https://wiki.cachyos.org  ·  https://archlinux.org/news/
 ```
-
-</details>
 
 ---
 
@@ -266,8 +263,7 @@ Machine-specific configuration is defined in profile functions. External profile
 
 External profiles define `function _ry_profile_<name>` with all required globals (25+). Legacy `profile_<name>` naming is accepted with a deprecation warning. Profiles are syntax-checked before sourcing; validation enforces name consistency and numeric types.
 
-<details>
-<summary><strong>Example: minimal external profile</strong></summary>
+**Example: minimal external profile**
 
 Save as `~/.config/ry-install/profiles/my_desktop.fish`, then set default:
 
@@ -368,8 +364,6 @@ Validate before first use:
 ./ry-install.fish --diff             # compare against installed state
 ```
 
-</details>
-
 ---
 
 ## Safety & Reliability
@@ -429,8 +423,7 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 | `section` | data | Phase boundary |
 | `diff` | data | File drift detected |
 
-<details>
-<summary><strong>Log analysis examples (jq)</strong></summary>
+**Log analysis examples (jq):**
 
 ```fish
 # All errors from most recent log
@@ -460,8 +453,6 @@ jq 'select(.event == "footer" and .mode == "check") | {ts: .ts, exit: .exit_code
 # List all runs with mode and exit code
 jq -r 'select(.event == "footer") | [.ts, .mode, .exit_code] | @tsv' ~/ry-install/logs/**/*.jsonl
 ```
-
-</details>
 
 ---
 

@@ -1,9 +1,11 @@
 3.24.0 (2026-03-31)
 -------------------
   docs(readme): restructure for professional clarity. Flatten ToC
-    (remove 15 nested sub-entries), collapse pre-flight steps into
-    collapsible block, consolidate Quick Start into single code block,
-    normalize table separators, tighten phrasing. 560 → 539 lines.
+    (remove 15 nested sub-entries), expand 3 collapsible <details>
+    blocks (pre-flight steps, external profile example, jq log
+    analysis) into visible sections, consolidate Quick Start into
+    single code block, normalize table separators, tighten phrasing.
+    560 → 530 lines.
   docs(readme/profile): strip box-drawing from example profile
     comments and remove 2 verbose inline comments; aligns with 3.23.0
     style change in script.

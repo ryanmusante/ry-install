@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.16.0-blue)
+![Version](https://img.shields.io/badge/version-3.17.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -72,7 +72,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | 2 GB root + 200 MB /boot free | `df -h / /boot` | Packages + initramfs |
 | Network connectivity | `curl -sf --head https://archlinux.org` | Package sync |
 | Current BIOS | [Beelink downloads](https://dr.bee-link.cn/) | P110+ for Strix Halo stability |
-| WiFi credentials ready | SSID 1–32 bytes, passphrase 8–63 bytes, no `%` | Interactive even with `--all` |
+| WiFi credentials ready | SSID 1–32 bytes, passphrase 8–63 bytes; see help for restrictions | Interactive even with `--all` |
 | paru (optional) | `command -q paru` | AUR package installation |
 
 **Recommended before first run:**

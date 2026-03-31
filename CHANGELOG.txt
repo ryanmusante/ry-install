@@ -1,3 +1,13 @@
+3.17.0 (2026-03-30)
+-------------------
+  fix(_gkeyfile_escape): add `string collect` to 2 pre-newline-escape
+    string replace calls. Same bug class as _json_str (v3.14.0, F-1).
+    Mitigated by upstream \n/\r rejection in SSID/passphrase validation.
+  fix(wifi): reduce SSID banned characters 15 → 5. Removed 10 chars
+    with no downstream failure path (/ ( ) { } < > ' " %). Retained:
+    \ ; (GKeyFile), ` $ | (_run metachar), \n \r.
+  docs: sync README (version badge 3.17.0, WiFi prereq), CHANGELOG.
+
 3.16.0 (2026-03-30)
 -------------------
   fix(bootstrap): replace 6 bare exit 1 with exit $EXIT_PREFLIGHT

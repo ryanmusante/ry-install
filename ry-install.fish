@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.16.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.17.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.16.0"
+set -g VERSION "3.17.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -1139,8 +1139,8 @@ function _gkeyfile_escape --argument-names raw --description "Escape a string fo
         _err "_gkeyfile_escape: expected 1 arg (raw), got "(count $argv)
         return 1
     end
-    set -l val (string replace -a '\\' '\\\\' -- "$raw")
-    set -l val (string replace -a \t '\\t' -- "$val")
+    set -l val (string replace -a '\\' '\\\\' -- "$raw" | string collect)
+    set -l val (string replace -a \t '\\t' -- "$val" | string collect)
     set -l val (string replace -a \n '\\n' -- "$val")
     set -l val (string replace -a ';' '\\;' -- "$val")
     if string match -q '#*' -- "$val"
@@ -1699,7 +1699,8 @@ NOTES:
   [WARN] = non-critical issue, operation continues. [FAIL] = verification
   check did not pass (used by --verify-static, --verify-runtime, --diff).
 
-  WiFi SSIDs/passphrases containing '%' are rejected (GKeyFile safety).
+  WiFi passphrases containing '%' are rejected (GKeyFile safety).
+  WiFi SSIDs cannot contain backslash, semicolon, backtick, dollar, pipe, or newlines.
 "
 end
 
@@ -4863,8 +4864,8 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
                     read -P "[?] WiFi SSID: " wifi_ssid
                     if test -n "$wifi_ssid"
                         set -l _ssid_bad false
-                        # Path separator (/) + GKeyFile special (\ ;) + subshell/expansion/redirect chars + quotes + printf % format
-                        for _c in / '\\' ';' '`' '$' '(' ')' '{' '}' '|' '<' '>' "'" '"' '%'
+                        # GKeyFile special (\ ;) + _run metachar rejection (` $ |) + newlines checked below
+                        for _c in '\\' ';' '`' '$' '|'
                             if string match -q -- "*$_c*" "$wifi_ssid"
                                 set _ssid_bad true
                                 break
@@ -4872,7 +4873,7 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
                         end
                         if test "$_ssid_bad" = true; or string match -qr '\\n|\\r' -- "$wifi_ssid"
                             _err "Invalid SSID: contains forbidden characters"
-                            _info "SSIDs cannot contain path separators, quotes, subshell chars, or newlines"
+                            _info "SSIDs cannot contain backslash, semicolon, backtick, dollar, pipe, or newlines"
                             _info "Workaround: skip WiFi setup here, then connect manually:"
                             _info "  nmcli device wifi connect '<SSID>' password '<pass>'"
                         else if string match -qr '^ | $' -- "$wifi_ssid"

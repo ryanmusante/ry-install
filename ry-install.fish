@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.21.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.22.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.21.0"
+set -g VERSION "3.22.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -588,13 +588,12 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g NM_WIFI_POWERSAVE 2
     set -g NM_LOG_LEVEL WARN
 
-    # ── Environment — PROTON_DXVK_LOWLATENCY: proton-cachyos-slr only (not upstream Valve Proton) ──
+    # ── Environment ──
     set -g ENV_VARS \
         "AMD_VULKAN_ICD=RADV" \
         "DXVK_LOG_LEVEL=none" \
         "ENABLE_LAYER_MESA_ANTI_LAG=1" \
         "MESA_SHADER_CACHE_MAX_SIZE=4G" \
-        "PROTON_DXVK_LOWLATENCY=1" \
         "VKD3D_DEBUG=none"
 
     # ── Packages ──

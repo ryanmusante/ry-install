@@ -1,3 +1,10 @@
+3.22.0 (2026-03-30)
+-------------------
+  profile: remove PROTON_DXVK_LOWLATENCY=1 from ENV_VARS; proton-cachyos
+    removed gplasync and PROTON_DXVK_LOWLATENCY is the only option, but
+    upstream Valve Proton and GE-Proton ignore it. ENV_VARS 6 → 5.
+  docs: sync README (version badge 3.22.0, env var table), CHANGELOG.
+
 3.21.0 (2026-03-30)
 -------------------
   fix(parallel): increase child stderr capture from 5 to 15 lines

@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.21.0-blue)
+![Version](https://img.shields.io/badge/version-3.22.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -214,7 +214,6 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `DXVK_LOG_LEVEL` | `none` |
 | `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
-| `PROTON_DXVK_LOWLATENCY` | `1` |
 | `VKD3D_DEBUG` | `none` |
 
 ### User Configuration

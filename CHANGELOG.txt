@@ -1,3 +1,9 @@
+3.23.0 (2026-03-31)
+-------------------
+  style: remove decorative box-drawing characters (══, ──) from 46
+    comment headers; text and indentation preserved.
+  docs: sync README (version badge 3.23.0), CHANGELOG.
+
 3.22.0 (2026-03-30)
 -------------------
   profile: remove PROTON_DXVK_LOWLATENCY=1 from ENV_VARS; proton-cachyos

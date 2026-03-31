@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.25.0-blue)
+![Version](https://img.shields.io/badge/version-3.26.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -30,8 +30,6 @@ Self-contained CachyOS configuration manager with profile support. Single Fish s
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
-./ry-install.fish --dry-run    # Preview changes
-./ry-install.fish              # Interactive install
 ./ry-install.fish --all        # Unattended — deploy everything
 ```
 

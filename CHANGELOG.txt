@@ -1,3 +1,9 @@
+3.26.0 (2026-03-31)
+-------------------
+  docs(readme): simplify Quick Start — show only clone + --all;
+    remove --dry-run and interactive alternatives (covered in Usage).
+  docs: sync README (version badge 3.26.0), CHANGELOG.
+
 3.25.0 (2026-03-31)
 -------------------
   docs(readme): remove btrfs references. Prerequisites now ext4-only;

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.17.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.19.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.17.0"
+set -g VERSION "3.19.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -2513,7 +2513,7 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
             for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
                 _echo "  $dst"
             end
-            return 2
+            return $EXIT_USAGE
         end
         _info "Comparing: $target_file"
     else
@@ -3286,19 +3286,23 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo
 
     _echo "── Masked services ──"
+    # LVM-aware: exclude lvm2-monitor from mask checks when LVM volumes exist
+    set -l _check_mask
+    for _svc in $MASK
+        if test "$_has_lvm" = true; and string match -q 'lvm2*' -- "$_svc"
+            _info "  $_svc: skipped (LVM detected)"
+            continue
+        end
+        set -a _check_mask "$_svc"
+    end
     # Batch systemctl show replaces N individual is-enabled+cat calls; string collect preserves blank-line delimiters
-    set -l _mask_raw (systemctl show --property=LoadState,UnitFileState -- $MASK 2>/dev/null | string collect --no-trim-newlines)
+    set -l _mask_raw (systemctl show --property=LoadState,UnitFileState -- $_check_mask 2>/dev/null | string collect --no-trim-newlines)
     set -l _mask_parsed (_parse_systemctl_show "$_mask_raw")
-    if test (count $_mask_parsed) -lt (count $MASK)
-        _warn "  systemctl show returned incomplete mask data ("(count $_mask_parsed)" of "(count $MASK)" records)"
-        _log "SYSTEMCTL_SHOW_MASK_PARTIAL: got="(count $_mask_parsed)" expected="(count $MASK)
+    if test (count $_mask_parsed) -lt (count $_check_mask)
+        _warn "  systemctl show returned incomplete mask data ("(count $_mask_parsed)" of "(count $_check_mask)" records)"
+        _log "SYSTEMCTL_SHOW_MASK_PARTIAL: got="(count $_mask_parsed)" expected="(count $_check_mask)
         # Fallback: per-unit query to avoid positional misattribution
-        for _svc in $MASK
-            # LVM-aware: lvm2-monitor is intentionally unmasked when LVM volumes exist
-            if test "$_has_lvm" = true; and string match -q 'lvm2*' -- "$_svc"
-                _info "  $_svc: skipped (LVM detected)"
-                continue
-            end
+        for _svc in $_check_mask
             set -l _state (systemctl is-enabled "$_svc" 2>/dev/null)
             switch "$_state"
                 case masked
@@ -3310,13 +3314,8 @@ function _ry_verify_static --description "Verify installed configs match embedde
             end
         end
     else
-        for _mask_idx in (seq 1 (count $MASK))
-            set -l _svc $MASK[$_mask_idx]
-            # LVM-aware: lvm2-monitor is intentionally unmasked when LVM volumes exist
-            if test "$_has_lvm" = true; and string match -q 'lvm2*' -- "$_svc"
-                _info "  $_svc: skipped (LVM detected)"
-                continue
-            end
+        for _mask_idx in (seq 1 (count $_check_mask))
+            set -l _svc $_check_mask[$_mask_idx]
             set -l _rec (string split -- ':' -- "$_mask_parsed[$_mask_idx]")
             if test "$_rec[1]" = not-found
                 _info "  $_svc: unit not found (may not be installed)"
@@ -3790,15 +3789,11 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
 end
 
 # Read CPU governor and current frequency from cpufreq sysfs
-function _gather_cpu_state --description "Collect CPU governor and frequency state"
+function _gather_cpu_state --description "Collect CPU frequency path for representative core"
     set -g _CPU_PATH ""
-    set -g _CPU_GOVERNOR ""
-    set -g _CPU_EPP ""
     for cpu_dir in /sys/devices/system/cpu/cpu*/cpufreq
         if test -d "$cpu_dir"
             set -g _CPU_PATH "$cpu_dir"
-            set -g _CPU_GOVERNOR (command cat -- "$cpu_dir/scaling_governor" 2>/dev/null)
-            set -g _CPU_EPP (command cat -- "$cpu_dir/energy_performance_preference" 2>/dev/null)
             break
         end
     end
@@ -4840,17 +4835,14 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
 
             if test -z "$wlan_iface"
                 _warn "Could not detect WiFi interface"
-                if not isatty stdin
-                    _warn "Non-interactive — skipping WiFi interface prompt"
-                else
-                    read -P "[?] Enter WiFi interface name: " wlan_iface
-                    if not string match -qr '^[a-zA-Z0-9_]+$' -- "$wlan_iface"; or test (string length -- "$wlan_iface") -gt 15
-                        _err "Invalid interface name: must be alphanumeric, max 15 chars"
-                        set wlan_iface ""
-                    else if not test -d "/sys/class/net/$wlan_iface"
-                        _err "Interface '$wlan_iface' does not exist (check /sys/class/net/)"
-                        set wlan_iface ""
-                    end
+                # stdin is guaranteed tty here (non-tty returns at function entry)
+                read -P "[?] Enter WiFi interface name: " wlan_iface
+                if not string match -qr '^[a-zA-Z0-9_]+$' -- "$wlan_iface"; or test (string length -- "$wlan_iface") -gt 15
+                    _err "Invalid interface name: must be alphanumeric, max 15 chars"
+                    set wlan_iface ""
+                else if not test -d "/sys/class/net/$wlan_iface"
+                    _err "Interface '$wlan_iface' does not exist (check /sys/class/net/)"
+                    set wlan_iface ""
                 end
             end
 
@@ -4858,53 +4850,50 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
                 set -g WIFI_IFACE "$wlan_iface"
                 _info "WiFi interface: $wlan_iface"
 
-                if not isatty stdin
-                    _warn "Non-interactive — skipping WiFi credential prompts"
-                else
-                    read -P "[?] WiFi SSID: " wifi_ssid
-                    if test -n "$wifi_ssid"
-                        set -l _ssid_bad false
-                        # GKeyFile special (\ ;) + _run metachar rejection (` $ |) + newlines checked below
-                        for _c in '\\' ';' '`' '$' '|'
-                            if string match -q -- "*$_c*" "$wifi_ssid"
-                                set _ssid_bad true
-                                break
-                            end
+                # stdin is guaranteed tty here (non-tty returns at function entry)
+                read -P "[?] WiFi SSID: " wifi_ssid
+                if test -n "$wifi_ssid"
+                    set -l _ssid_bad false
+                    # GKeyFile special (\ ;) + _run metachar rejection (` $ |) + newlines checked below
+                    for _c in '\\' ';' '`' '$' '|'
+                        if string match -q -- "*$_c*" "$wifi_ssid"
+                            set _ssid_bad true
+                            break
                         end
-                        if test "$_ssid_bad" = true; or string match -qr '\\n|\\r' -- "$wifi_ssid"
-                            _err "Invalid SSID: contains forbidden characters"
-                            _info "SSIDs cannot contain backslash, semicolon, backtick, dollar, pipe, or newlines"
-                            _info "Workaround: skip WiFi setup here, then connect manually:"
-                            _info "  nmcli device wifi connect '<SSID>' password '<pass>'"
-                        else if string match -qr '^ | $' -- "$wifi_ssid"
-                            _err "Invalid SSID: leading/trailing whitespace (GKeyFile trims unquoted values)"
-                        else if test "$wifi_ssid" = "."; or test "$wifi_ssid" = ".."
-                            _err "Invalid SSID: cannot be '.' or '..'"
-                        else if test (printf '%s' "$wifi_ssid" | wc -c) -gt 32
-                            _err "Invalid SSID: must be 1-32 bytes (IEEE 802.11)"
+                    end
+                    if test "$_ssid_bad" = true; or string match -qr '\\n|\\r' -- "$wifi_ssid"
+                        _err "Invalid SSID: contains forbidden characters"
+                        _info "SSIDs cannot contain backslash, semicolon, backtick, dollar, pipe, or newlines"
+                        _info "Workaround: skip WiFi setup here, then connect manually:"
+                        _info "  nmcli device wifi connect '<SSID>' password '<pass>'"
+                    else if string match -qr '^ | $' -- "$wifi_ssid"
+                        _err "Invalid SSID: leading/trailing whitespace (GKeyFile trims unquoted values)"
+                    else if test "$wifi_ssid" = "."; or test "$wifi_ssid" = ".."
+                        _err "Invalid SSID: cannot be '.' or '..'"
+                    else if test (printf '%s' "$wifi_ssid" | wc -c) -gt 32
+                        _err "Invalid SSID: must be 1-32 bytes (IEEE 802.11)"
+                    else
+                        set -g WIFI_SSID "$wifi_ssid"
+                        set -l wifi_pass ""
+                        read -sP "[?] WiFi passphrase: " wifi_pass
+                        echo >&2
+                        if string match -qr '\n|\r' -- "$wifi_pass"
+                            _err "Invalid passphrase: contains newline"
+                            set -g WIFI_SSID ""
+                            set wifi_pass ""
+                        else if string match -q -- '*%*' "$wifi_pass"
+                            _err "Invalid passphrase: contains '%' (GKeyFile parse safety)"
+                            set -g WIFI_SSID ""
+                            set wifi_pass ""
+                        else if test (printf '%s' "$wifi_pass" | wc -c) -lt 8; or test (printf '%s' "$wifi_pass" | wc -c) -gt 63
+                            _err "Invalid passphrase: WPA2 requires 8-63 bytes"
+                            set -g WIFI_SSID ""
+                            set wifi_pass ""
                         else
-                            set -g WIFI_SSID "$wifi_ssid"
-                            set -l wifi_pass ""
-                            read -sP "[?] WiFi passphrase: " wifi_pass
-                            echo >&2
-                            if string match -qr '\n|\r' -- "$wifi_pass"
-                                _err "Invalid passphrase: contains newline"
-                                set -g WIFI_SSID ""
-                                set wifi_pass ""
-                            else if string match -q -- '*%*' "$wifi_pass"
-                                _err "Invalid passphrase: contains '%' (GKeyFile parse safety)"
-                                set -g WIFI_SSID ""
-                                set wifi_pass ""
-                            else if test (printf '%s' "$wifi_pass" | wc -c) -lt 8; or test (printf '%s' "$wifi_pass" | wc -c) -gt 63
-                                _err "Invalid passphrase: WPA2 requires 8-63 bytes"
-                                set -g WIFI_SSID ""
-                                set wifi_pass ""
-                            else
-                                # Credential lifecycle: set here → used in _install_finalize → erased in _do_cleanup
-                                set -g WIFI_PASS "$wifi_pass"
-                                set wifi_pass ""
-                                _ok "WiFi credentials saved (will connect at end)"
-                            end
+                            # Credential lifecycle: set here → used in _install_finalize → erased in _do_cleanup
+                            set -g WIFI_PASS "$wifi_pass"
+                            set wifi_pass ""
+                            _ok "WiFi credentials saved (will connect at end)"
                         end
                     end
                 end
@@ -5817,7 +5806,7 @@ end
 function _ry_do_install_file --argument-names target --description "Install a single named config file interactively"
     if test (count $argv) -gt 1
         _err "_ry_do_install_file: expected 0-1 args (target), got "(count $argv)
-        return 2
+        return $EXIT_USAGE
     end
     # target bound by --argument-names; empty string when 0 args (handled by test -z below)
     _log "=== INSTALL-FILE START ==="
@@ -5829,7 +5818,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
         for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
             _echo "  $dst"
         end
-        return 2
+        return $EXIT_USAGE
     end
 
     set -l valid false
@@ -5854,7 +5843,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     if test "$valid" = false
         _err "Not a managed file: $target"
         _info "Run without path to see managed files"
-        return 2
+        return $EXIT_USAGE
     end
 
     _banner "ry-install v$VERSION - Install Single File"

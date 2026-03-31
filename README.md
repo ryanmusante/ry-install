@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.17.0-blue)
+![Version](https://img.shields.io/badge/version-3.19.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -130,7 +130,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | **Configuration** | Deploy 14 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
 | **Boot** | Rebuild initramfs, update systemd-boot entries |
-| **Finalize** | Write manifest, release lock, print summary |
+| **Finalize** | Daemon-reload, package cache cleanup, NM restart, WiFi reconnect, write manifest |
 
 ---
 

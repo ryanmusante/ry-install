@@ -1,3 +1,20 @@
+3.19.0 (2026-03-30)
+-------------------
+  fix(_gather_cpu_state): remove dead _CPU_GOVERNOR and _CPU_EPP
+    globals. Sysfs reads moved to data-driven loop in v3.8.0.
+  docs: sync README (version badge 3.19.0), CHANGELOG.
+
+3.18.0 (2026-03-30)
+-------------------
+  fix(wifi): remove 2 dead isatty stdin checks in
+    _install_collect_wifi; unreachable after entry guard.
+  fix(exit-codes): replace 4 bare return 2 with $EXIT_USAGE in
+    _ry_do_diff and _ry_do_install_file.
+  refactor(verify-static): pre-filter MASK for LVM before
+    batch/fallback branch; eliminates 2 duplicate lvm2 checks.
+  docs: fix README Finalize phase description, sync version badge
+    3.18.0, CHANGELOG.
+
 3.17.0 (2026-03-30)
 -------------------
   fix(_gkeyfile_escape): add `string collect` to 2 string replace

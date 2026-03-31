@@ -4,7 +4,7 @@
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
 set -g VERSION "3.22.0"
-# ── Exit codes ──
+# Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -21,7 +21,7 @@ set -g ALL false
 set -g FORCE false
 # --quiet: suppress command-wrapper stdout to terminal (auto-disabled for non-install modes)
 set -g QUIET true
-# ── Environment detection: NO_COLOR (no-color.org) — set -qx tests exported vars only, avoids false positive from set -g ──
+# Environment detection: NO_COLOR (no-color.org) — set -qx tests exported vars only, avoids false positive from set -g
 if set -qx NO_COLOR; or test "$TERM" = dumb
     set -g NO_COLOR true
 else
@@ -37,7 +37,7 @@ if test (id -u) -eq 0
     set -g DRY true
 end
 
-# ── Fish version gate (3.4+ required for $() syntax, set --function, string collect --allow-empty; string collect --no-trim-newlines available since fish 3.1) ──
+# Fish version gate (3.4+ required for $() syntax, set --function, string collect --allow-empty; string collect --no-trim-newlines available since fish 3.1)
 set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n 1)
 if test -z "$fish_ver"
     echo "Error: Could not determine fish version" >&2
@@ -64,7 +64,7 @@ if test "$fish_major" -gt 4
     echo "Warning: ry-install is tested on fish 3.4-4.x; found $fish_ver — please report issues" >&2
 end
 
-# ── Timestamps (single date(1) call → DATE_LABEL for dirs + TIMESTAMP for filenames), HOME resolution, log dirs ──
+# Timestamps (single date(1) call → DATE_LABEL for dirs + TIMESTAMP for filenames), HOME resolution, log dirs
 set -l _now (date '+%Y-%m-%d_%Y%m%d-%H%M%S%z')
 set -g DATE_LABEL (string split '_' -- "$_now")[1]
 set -g TIMESTAMP (string split '_' -- "$_now")[2]
@@ -98,16 +98,16 @@ end
 set -g INSTALL_HAD_ERRORS false
 set -g _TRACKED_TMPFILES
 
-# ── Retention limits ──
+# Retention limits
 set -g MAX_LOGS 50
 
-# ── Timing constants ──
+# Timing constants
 set -g SUDO_KEEPALIVE_INTERVAL 45
 set -g WIFI_RETRY_DELAY 3
 set -g WIFI_CONNECT_WAIT 1
 set -g NM_RESTART_DELAY 3
 
-# ── Kernel version globals for _ntsync_state ≥6.14 gate ──
+# Kernel version globals for _ntsync_state ≥6.14 gate
 set -g KVER (uname -r)
 set -g KVER_PARTS (string split '.' -- $KVER)
 set -g KVER_MAJOR $KVER_PARTS[1]
@@ -304,7 +304,7 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
     end
 end
 
-# ── Cleanup state: _CLEANUP_DONE prevents double-run across signal + fish_exit handlers ──
+# Cleanup state: _CLEANUP_DONE prevents double-run across signal + fish_exit handlers
 set -g _CLEANUP_DONE false
 
 # Atomic mkdir mutex with PID file; reclaims stale locks via PID liveness check; flock(1) eliminates TOCTOU race
@@ -382,7 +382,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     return 0
 end
 
-# ── Signal handling and cleanup chain: tmpfiles → lock release → credential keepalive; three entry points (_cleanup/_cleanup_pipe/_cleanup_on_exit), _CLEANUP_DONE prevents double-run ──
+# Signal handling and cleanup chain: tmpfiles → lock release → credential keepalive; three entry points (_cleanup/_cleanup_pipe/_cleanup_on_exit), _CLEANUP_DONE prevents double-run
 
 # Master teardown: tmpfiles → lock release → credential keepalive termination; idempotent via _CLEANUP_DONE
 function _do_cleanup --description "Master cleanup: remove tmpfiles, release lock, kill keepalive"
@@ -492,14 +492,14 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
     _do_cleanup
 end
 
-# ═══ PROFILES — machine-specific configuration ═══
+# PROFILES — machine-specific configuration
 
 function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
-    # ── Identity ──
+    # Identity
     set -g PROFILE_NAME gtr9_pro
     set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
 
-    # ── Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600 ──
+    # Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
         "/etc/kernel/cmdline" \
@@ -520,7 +520,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/systemd/system/amdgpu-performance.service" \
         "/etc/systemd/system/cpupower-epp.service"
 
-    # ── Boot ──
+    # Boot
     set -g LOADER_DEFAULT "@saved"
     set -g LOADER_TIMEOUT 0
     set -g LOADER_CONSOLE_MODE keep
@@ -530,7 +530,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # ── Kernel (17 params) ──
+    # Kernel (17 params)
     # ppfeaturemask: bits 14,15,17 off; cwsr_enable=0: gfx1151 VGPR (remove 7.0+); wbrf=0: WiFi RFI throttle; module_blacklist: pcspkr+wdat_wdt (CachyOS covers iTCO/sp5100 only)
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
@@ -551,7 +551,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         workqueue.power_efficient=0 \
         zswap.enabled=0
 
-    # ── Initramfs ──
+    # Initramfs
     set -g MKINITCPIO_MODULES amdgpu nvme
     # systemd hooks — no resume hook (targets masked)
     set -g MKINITCPIO_HOOKS \
@@ -568,9 +568,9 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         fsck
     set -g MKINITCPIO_COMPRESSION zstd
 
-    # ── Udev — ntsync rule handled by ntsync-common package (in PKGS_ADD) ──
+    # Udev — ntsync rule handled by ntsync-common package (in PKGS_ADD)
 
-    # ── Network ──
+    # Network
     set -g RESOLVED_MDNS no
     set -g LOGIND_IGNORE_KEYS \
         HandlePowerKey \
@@ -588,7 +588,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g NM_WIFI_POWERSAVE 2
     set -g NM_LOG_LEVEL WARN
 
-    # ── Environment ──
+    # Environment
     set -g ENV_VARS \
         "AMD_VULKAN_ICD=RADV" \
         "DXVK_LOG_LEVEL=none" \
@@ -596,7 +596,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "MESA_SHADER_CACHE_MAX_SIZE=4G" \
         "VKD3D_DEBUG=none"
 
-    # ── Packages ──
+    # Packages
     set -g PKGS_ADD \
         mkinitcpio-firmware \
         nvme-cli \
@@ -624,7 +624,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # AUR packages — installed via paru (not pacman)
     set -g AUR_PKGS mt76-mt7925-dkms
 
-    # ── Services ──
+    # Services
     set -g MASK \
         ananicy-cpp.service \
         power-profiles-daemon.service \
@@ -638,19 +638,19 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         systemd-zram-setup@zram0.service
     set -g EXPECTED_SERVICES amdgpu-performance.service cpupower-epp.service fstrim.timer NetworkManager.service
 
-    # ── Thresholds ──
+    # Thresholds
     set -g BOOT_SPACE_CRIT 200
     set -g BOOT_SPACE_WARN 500
     set -g ROOT_AVAIL_CRIT 2
     set -g ROOT_AVAIL_WARN 5
     set -g BOOT_TIME_TARGET 15
 
-    # ── Hardware expectations (optional) ──
+    # Hardware expectations (optional)
     set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
     return 0
 end
 
-# ═══ PROFILE LOADER ═══
+# PROFILE LOADER
 
 function _validate_profile --description "Verify loaded profile has all required globals" --argument-names expected_name
     if test (count $argv) -gt 1
@@ -815,7 +815,7 @@ function _load_profile --description "Determine, load, and validate the active p
     end
 end
 
-# ═══ MANIFEST — orphan tracking across versions and profile switches ═══
+# MANIFEST — orphan tracking across versions and profile switches
 
 set -g MANIFEST_FILE "$HOME/ry-install/.manifest"
 
@@ -1040,7 +1040,7 @@ WantedBy=multi-user.target'
     return 0
 end
 
-# ═══ BATCH & PARALLEL PREREQUISITES ═══
+# BATCH & PARALLEL PREREQUISITES
 
 function _pregenerate_content_files --argument-names out_dir --description "Write all expected-content files to a tmpdir (prereq for parallel consumers)"
     if test (count $argv) -gt 1
@@ -1126,7 +1126,7 @@ function _parse_systemctl_show --argument-names raw_output --description "Parse 
     end
 end
 
-# ═══ LOGGING, MESSAGE OUTPUT, AND VERIFICATION COUNTERS ═══
+# LOGGING, MESSAGE OUTPUT, AND VERIFICATION COUNTERS
 
 # Escape string for JSON embedding; function-scope reassignments use explicit set -l
 function _json_str --description "Escape a string for safe JSON embedding"
@@ -1176,7 +1176,7 @@ end
 
 # Extract "data" field from JSONL with escaped quotes; PCRE2 [^"\\]+\\. pattern; fish single-quotes process \\ and \' (NOT literal like bash)
 
-# ── Structured NDJSON logging — self-contained JSON per line, event classification (section/prefix/message), _json_str escapes+caps at 4096 chars ──
+# Structured NDJSON logging — self-contained JSON per line, event classification (section/prefix/message), _json_str escapes+caps at 4096 chars
 
 # Append JSONL event to LOG_FILE with ISO timestamp
 function _log --description "Append a timestamped message to the log file"
@@ -1365,7 +1365,7 @@ function _verify_summary --description "Print verification pass/fail/warn summar
     end
 end
 
-# ── Progress bar: step tracking with timing for multi-phase operations ──
+# Progress bar: step tracking with timing for multi-phase operations
 set -g PROGRESS_CURRENT 0
 # 40-char bar fits 60-col minimum terminal (15 cols for [XX/YY] prefix + padding)
 set -g PROGRESS_WIDTH 40
@@ -1530,7 +1530,7 @@ function _progress_done --description "Finalize and close the progress display"
     end
 end
 
-# ── Command execution wrapper — secret redaction (9 patterns), dry-run gating, output capture to tmpfiles, structured error reporting ──
+# Command execution wrapper — secret redaction (9 patterns), dry-run gating, output capture to tmpfiles, structured error reporting
 
 # Execute command with logging, secret redaction, dry-run gating, and stdout/stderr capture to tmpfiles
 function _run --description "Execute a command with logging, dry-run support, and error capture; stdout captured and only displayed when QUIET=false"
@@ -1943,7 +1943,7 @@ function _ry_check_kernel_version --description "Verify running kernel version m
     return 0
 end
 
-# ── Config validation pipeline — pre-flight checks on embedded content: hooks ordering, modprobe resolve, systemd-analyze verify, fish --no-execute; aborts on any error ──
+# Config validation pipeline — pre-flight checks on embedded content: hooks ordering, modprobe resolve, systemd-analyze verify, fish --no-execute; aborts on any error
 
 # Validate HOOKS ordering (base first, keyboard before sd-vconsole, etc.) and hook existence
 function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS ordering and presence"
@@ -2258,7 +2258,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     return 0
 end
 
-# ── Atomic file write helper — shared by _ry_install_file (deduplicates sudo/non-sudo paths) ──
+# Atomic file write helper — shared by _ry_install_file (deduplicates sudo/non-sudo paths)
 
 # Atomic write: mktemp→symlink-check→write→symlink-recheck→chmod→hash→mv→verify→chown
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write with symlink and integrity checks"
@@ -2400,7 +2400,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     return 0
 end
 
-# ── Atomic file installation — _ry_get_file_content → mktemp → validate → chmod/chown → mv; hash comparison skips unchanged files; skips NM/IWD if iwd not installed ──
+# Atomic file installation — _ry_get_file_content → mktemp → validate → chmod/chown → mv; hash comparison skips unchanged files; skips NM/IWD if iwd not installed
 
 # Deploy a single embedded config: get content → mktemp → validate → chmod → atomic mv to dst
 function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination"
@@ -2465,7 +2465,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     return $status
 end
 
-# ═══ FILE OPERATIONS — diff, install, verify ═══
+# FILE OPERATIONS — diff, install, verify
 
 function _ry_install_files --description "Install multiple embedded configs with argparse options"
     set -l _argparse_tmp (mktemp -t ry-argparse.XXXXXX 2>/dev/null; or echo /dev/null)
@@ -3592,7 +3592,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     end
     echo $_has_lvm >"$result_dir/has_lvm"
 
-    # ── Job 1: file content hashes (parallel) — reads pre-serialized hashes from parent ──
+    # Job 1: file content hashes (parallel) — reads pre-serialized hashes from parent
     fish -c '
         set -l result_dir $argv[1]; set -l content_dir $argv[2]; set -l skip_iwd $argv[3]; set -l my_home $argv[4]
         set -l drift false
@@ -3626,7 +3626,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     ' -- "$result_dir" "$content_dir" "$skip_iwd" "$my_home" >/dev/null 2>"$result_dir/hash.stderr" &
     set -l pid_hash $last_pid
 
-    # ── Job 2: file permissions (parallel) — reads pre-serialized perms from parent ──
+    # Job 2: file permissions (parallel) — reads pre-serialized perms from parent
     fish -c '
         set -l result_dir $argv[1]; set -l boot_fstype $argv[2]; set -l my_user $argv[3]; set -l my_group $argv[4]
         set -l drift false
@@ -3664,7 +3664,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
 
     printf '%s\n' $KERNEL_PARAMS >"$result_dir/kparams"
 
-    # ── Job 3: kernel params (parallel) — no sudo needed ──
+    # Job 3: kernel params (parallel) — no sudo needed
     fish -c '
         set -l result_dir $argv[1]
         set -l drift false
@@ -3681,7 +3681,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     ' -- "$result_dir" >/dev/null 2>"$result_dir/kparam.stderr" &
     set -l pid_kparam $last_pid
 
-    # ── Job 4: service state — batch systemctl show (parallel); pre-parsed in parent (child can't call _parse_systemctl_show) ──
+    # Job 4: service state — batch systemctl show (parallel); pre-parsed in parent (child can't call _parse_systemctl_show)
     set -l _all_check_units (command cat -- "$result_dir/exp_svcs") (command cat -- "$result_dir/mask_units") (command cat -- "$result_dir/implicit_svcs" 2>/dev/null)
     set -l _check_show (systemctl show --property=LoadState,ActiveState,UnitFileState -- $_all_check_units 2>/dev/null | string collect --no-trim-newlines)
     set -l _check_parsed (_parse_systemctl_show "$_check_show")
@@ -3819,7 +3819,7 @@ function _gather_cpu_state --description "Collect CPU frequency path for represe
     return 0
 end
 
-# ═══ RUNTIME VERIFICATION — live sysfs/procfs state checks; exit 1 when state doesn't match config.
+# RUNTIME VERIFICATION — live sysfs/procfs state checks; exit 1 when state doesn't match config.
 function _ry_verify_runtime --description "Verify runtime kernel params, services, and modules"
     _log "=== RUNTIME VERIFICATION START ==="
 
@@ -4566,7 +4566,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     return $ret
 end
 
-# ═══ LINT, CLEAN — development and maintenance tools ═══
+# LINT, CLEAN — development and maintenance tools
 function _ry_do_lint --description "Lint the script source for fish anti-patterns and style issues"
     _log "=== LINT START ==="
     _info "Running fish syntax check..."
@@ -4809,7 +4809,7 @@ end
 
 # Install pipeline
 
-# ═══ INSTALL PIPELINE — preflight → packages → files → services → boot → wifi → finalize ═══
+# INSTALL PIPELINE — preflight → packages → files → services → boot → wifi → finalize
 function _install_collect_wifi --description "Interactively collect WiFi credentials for iwd setup"
     set -g WIFI_SSID ""
     set -g WIFI_PASS ""
@@ -6089,7 +6089,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     set -l passed 0
     set -l failed 0
 
-    # ── Parallel phase: fork all read-only modes ──
+    # Parallel phase: fork all read-only modes
     set -l test_dir (mktemp -d -t ry-test.XXXXXX)
     if not test -d "$test_dir"
         _err "Failed to create test temp directory"
@@ -6146,7 +6146,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     end
     _echo
 
-    # ── Sequential phase: modes that write or acquire locks ──
+    # Sequential phase: modes that write or acquire locks
     _info "Running "(count $sequential_modes)" sequential modes..."
     _echo
 
@@ -6217,7 +6217,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     test $failed -gt 0; and return 1; or return 0
 end
 
-# ═══ CLI ARGUMENT PARSING AND DISPATCH ═══
+# CLI ARGUMENT PARSING AND DISPATCH
 
 # Entry point
 set -g MODE install
@@ -6226,7 +6226,7 @@ set -l mode_count 0
 set -l INSTALL_FILE_TARGET ""
 set -l DIFF_TARGET ""
 
-# ── Argument parsing — manual loop for mode exclusivity, --flag VALUE pairs, and optional trailing args; exit 2 on usage errors ──
+# Argument parsing — manual loop for mode exclusivity, --flag VALUE pairs, and optional trailing args; exit 2 on usage errors
 
 # Manual argument loop (not argparse): supports --flag VALUE pairs and mode exclusivity
 set -l i 1
@@ -6322,7 +6322,7 @@ while test $i -le (count $argv)
     set i (math $i + 1)
 end
 
-# ── Mode exclusivity: exactly one mode flag allowed per invocation ──
+# Mode exclusivity: exactly one mode flag allowed per invocation
 if test $mode_count -gt 1
     _log "ERR: Cannot combine multiple mode flags — run each separately"
     if test "$NO_COLOR" = true; or not isatty 2
@@ -6441,7 +6441,7 @@ if test $_log_count -gt $MAX_LOGS
 end
 
 set -g exit_code 0
-# ── Main dispatch: route MODE to handler, capture exit code ──
+# Main dispatch: route MODE to handler, capture exit code
 switch $MODE
     case diff
         _ry_do_diff "$DIFF_TARGET"

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.20.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.21.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.20.0"
+set -g VERSION "3.21.0"
 # ── Exit codes ──
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -2228,14 +2228,14 @@ function _ry_validate_configs --description "Run all embedded config validators"
         if not test -f "$val_dir/$phase.errors"
             _err "Validation child '$phase' crashed without writing results"
             if test -s "$val_dir/$phase.stderr"
-                _log "VALIDATE_CHILD_STDERR($phase): "(head -n 5 "$val_dir/$phase.stderr")
+                _log "VALIDATE_CHILD_STDERR($phase): "(head -n 15 "$val_dir/$phase.stderr")
             end
             set errors (math $errors + 1)
             continue
         end
         # Log stderr from ALL children (warnings from systemd-analyze, fish --no-execute, etc.)
         if test -s "$val_dir/$phase.stderr"
-            _log "VALIDATE_STDERR($phase): "(head -n 5 "$val_dir/$phase.stderr")
+            _log "VALIDATE_STDERR($phase): "(head -n 15 "$val_dir/$phase.stderr")
         end
         set -l phase_errors (command cat -- "$val_dir/$phase.errors" 2>/dev/null)
         if test -n "$phase_errors"; and string match -qr '^\d+$' -- "$phase_errors"
@@ -3482,7 +3482,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     # Log any worker stderr (child crash diagnostics)
     for worker in (seq 1 $num_workers)
         if test -s "$hash_dir/worker_$worker.stderr"
-            _log "HASH_WORKER_STDERR(worker $worker): "(head -n 5 "$hash_dir/worker_$worker.stderr")
+            _log "HASH_WORKER_STDERR(worker $worker): "(head -n 15 "$hash_dir/worker_$worker.stderr")
         end
     end
 
@@ -3774,7 +3774,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         set -l _drift_file "$result_dir/"$phase"_drift"
         # Log stderr from ALL children for diagnostics (not just crashes)
         if test -s "$result_dir/"$phase".stderr"
-            _log "CHECK_STDERR($phase): "(head -n 5 "$result_dir/"$phase".stderr")
+            _log "CHECK_STDERR($phase): "(head -n 15 "$result_dir/"$phase".stderr")
         end
         if not test -f "$_drift_file"
             _log "CHECK_DRIFT: child '$phase' crashed without writing results"
@@ -6138,7 +6138,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
             set failed (math $failed + 1)
             _warn "  $display_label: exit code $code"
             if test -s "$test_dir/$label.stderr"
-                set -l _head (head -n 5 "$test_dir/$label.stderr" | string trim --)
+                set -l _head (head -n 15 "$test_dir/$label.stderr" | string trim --)
                 for _hl in $_head
                     _warn "    $_hl"
                 end
@@ -6168,7 +6168,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
             set failed (math $failed + 1)
             _warn "  $display_label: exit code $code"
             if test "$_test_stderr" != /dev/null; and test -s "$_test_stderr"
-                set -l _head (head -n 5 "$_test_stderr" | string trim --)
+                set -l _head (head -n 15 "$_test_stderr" | string trim --)
                 for _hl in $_head
                     _warn "    $_hl"
                 end

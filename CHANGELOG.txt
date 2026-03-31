@@ -1,3 +1,12 @@
+3.25.0 (2026-03-31)
+-------------------
+  docs(readme): remove btrfs references. Prerequisites now ext4-only;
+    drop btrfs snapshot pre-flight step.
+  docs(readme/profile): collapse full 90-line example profile to
+    destinations + commented globals checklist. 530 → 474 lines.
+  fix(finalize): fstab guidance ext4/btrfs → ext4.
+  docs: sync README (version badge 3.25.0), CHANGELOG.
+
 3.24.0 (2026-03-31)
 -------------------
   docs(readme): restructure for professional clarity. Flatten ToC

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.24.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.25.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.24.0"
+set -g VERSION "3.25.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -5798,7 +5798,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     end
 
     _info "Manual steps required:"
-    _info "  1. Review /etc/fstab mount options (rw,noatime,lazytime for ext4/btrfs)"
+    _info "  1. Review /etc/fstab mount options (rw,noatime,lazytime for ext4)"
     _info "  2. Run 'rehash' or start new shell (updates command paths)"
     _info "  3. REBOOT to apply kernel cmdline and module changes"
     _echo

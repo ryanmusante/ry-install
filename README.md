@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.24.0-blue)
+![Version](https://img.shields.io/badge/version-3.25.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -43,7 +43,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Requirement | Verification | Notes |
 |---|---|---|
-| CachyOS (systemd-boot, btrfs/ext4) | — | Base assumption |
+| CachyOS (systemd-boot, ext4) | — | Base assumption |
 | Fish 3.4+ | `fish --version` | CachyOS ships 4.5 |
 | Kernel 6.14+ | `uname -r` | ntsync, gfx1151 fixes, mt7925e.disable_aspm |
 | Unrestricted sudo | `sudo -l` → `(ALL) ALL` | `--all` aborts if restricted |
@@ -56,9 +56,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 **Recommended pre-flight steps:**
 
 ```fish
-# Snapshot rootfs (btrfs)
-sudo btrfs subvolume snapshot -r / /.snapshots/pre-ry-install
-
 # Review masked services — confirm desktop, not laptop
 # See Masked Services section below
 
@@ -263,97 +260,44 @@ Machine-specific configuration is defined in profile functions. External profile
 
 External profiles define `function _ry_profile_<name>` with all required globals (25+). Legacy `profile_<name>` naming is accepted with a deprecation warning. Profiles are syntax-checked before sourcing; validation enforces name consistency and numeric types.
 
-**Example: minimal external profile**
-
-Save as `~/.config/ry-install/profiles/my_desktop.fish`, then set default:
+**Creating a profile:**
 
 ```fish
 echo my_desktop > ~/.config/ry-install/default-profile
 ```
 
+Save as `~/.config/ry-install/profiles/my_desktop.fish`:
+
 ```fish
 function _ry_profile_my_desktop --description "Example desktop profile"
-    # Identity
     set -g PROFILE_NAME my_desktop
     set -g PROFILE_DESC "My Desktop — AMD Ryzen 7 7800X3D / RX 7900 XTX"
 
-    # Managed file destinations (1:1 map to _ry_get_file_content cases)
-    set -g SYSTEM_DESTINATIONS \
-        "/boot/loader/loader.conf" \
-        "/etc/kernel/cmdline" \
-        "/etc/sdboot-manage.conf" \
-        "/etc/mkinitcpio.conf" \
-        "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
-        "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
-        "/etc/iwd/main.conf" \
-        "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        "/etc/drirc"
-
+    # Destinations — must match _ry_get_file_content cases
+    set -g SYSTEM_DESTINATIONS /boot/loader/loader.conf /etc/kernel/cmdline \
+        /etc/sdboot-manage.conf /etc/mkinitcpio.conf \
+        /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf \
+        /etc/systemd/logind.conf.d/99-cachyos-logind.conf \
+        /etc/iwd/main.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf \
+        /etc/drirc
     set -g USER_DESTINATIONS \
         "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
         "$HOME/.config/environment.d/10-environment.conf" \
         "$HOME/.config/systemd/user/ssh-agent.service"
-
     set -g SERVICE_DESTINATIONS \
-        "/etc/systemd/system/amdgpu-performance.service" \
-        "/etc/systemd/system/cpupower-epp.service"
+        /etc/systemd/system/amdgpu-performance.service \
+        /etc/systemd/system/cpupower-epp.service
 
-    # Boot
-    set -g LOADER_DEFAULT "@saved"
-    set -g LOADER_TIMEOUT 3
-    set -g LOADER_CONSOLE_MODE keep
-    set -g LOADER_EDITOR no
-    set -g SDBOOT_OVERWRITE yes
-    set -g SDBOOT_REMOVE_EXISTING yes
-    set -g SDBOOT_REMOVE_OBSOLETE yes
-
-    # Kernel — adjust to your hardware
-    set -g KERNEL_PARAMS \
-        clocksource=tsc \
-        iommu=pt \
-        nowatchdog \
-        quiet
-
-    # Initramfs
-    set -g MKINITCPIO_MODULES amdgpu nvme
-    set -g MKINITCPIO_HOOKS \
-        base systemd autodetect microcode modconf \
-        kms keyboard sd-vconsole block filesystems fsck
-    set -g MKINITCPIO_COMPRESSION zstd
-
-    # Network
-    set -g RESOLVED_MDNS no
-    set -g LOGIND_IGNORE_KEYS HandlePowerKey HandleSuspendKey
-    set -g IWD_ENABLE_NETWORK_CONFIG false
-    set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"
-    set -g IWD_DNS_SERVICE systemd
-    set -g NM_WIFI_BACKEND iwd
-    set -g NM_WIFI_POWERSAVE 2
-    set -g NM_LOG_LEVEL WARN
-
-    # Environment
-    set -g ENV_VARS \
-        "AMD_VULKAN_ICD=RADV"
-
-    # Packages
-    set -g PKGS_ADD mkinitcpio-firmware nvme-cli
-    # set -g PKGS_DEL  # optional
-
-    # Services
-    set -g MASK \
-        ananicy-cpp.service \
-        NetworkManager-wait-online.service
-    set -g EXPECTED_SERVICES amdgpu-performance.service cpupower-epp.service fstrim.timer
-
-    # Thresholds
-    set -g BOOT_SPACE_CRIT 200
-    set -g BOOT_SPACE_WARN 500
-    set -g ROOT_AVAIL_CRIT 2
-    set -g ROOT_AVAIL_WARN 5
-    # set -g BOOT_TIME_TARGET 15          # optional
-    # set -g EXPECTED_CPU_MATCH "7800X3D" # optional
-
-    return 0
+    # All remaining required globals — see --dry-run for validation errors:
+    # KERNEL_PARAMS  MKINITCPIO_MODULES  MKINITCPIO_HOOKS  MKINITCPIO_COMPRESSION
+    # LOADER_DEFAULT LOADER_TIMEOUT LOADER_CONSOLE_MODE LOADER_EDITOR
+    # SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE
+    # RESOLVED_MDNS LOGIND_IGNORE_KEYS
+    # IWD_ENABLE_NETWORK_CONFIG IWD_DRIVER_QUIRKS IWD_DNS_SERVICE
+    # NM_WIFI_BACKEND NM_WIFI_POWERSAVE NM_LOG_LEVEL
+    # ENV_VARS PKGS_ADD MASK EXPECTED_SERVICES
+    # BOOT_SPACE_CRIT BOOT_SPACE_WARN ROOT_AVAIL_CRIT ROOT_AVAIL_WARN
+    # Optional: PKGS_DEL  BOOT_TIME_TARGET  EXPECTED_CPU_MATCH  UDEV_RULES
 end
 ```
 

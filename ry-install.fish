@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.27.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.31.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.27.0"
+set -g VERSION "3.31.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -4687,7 +4687,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
         end
     else
         _ok "No dead grep -q pipes found"
-        # Cross-check: header version, VERSION constant, changelog, and README badge
+        # Cross-check: header version, VERSION constant, README badge, and changelog
     end
 
     # Scope shadow check: set -l in blocks can shadow outer vars; mawk-compatible, tracks piped while, anchored ^set -l filters false positives
@@ -4739,9 +4739,6 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
     set -l readme_path "$script_dir/README.md"
     if test -f "$readme_path"
         set -l readme_ver (sed -n -- 's/.*version-\([0-9][0-9.]*\)-.*/\1/p' "$readme_path" | head -n 1)
-        if test -z "$readme_ver"
-            set readme_ver (sed -n -- 's/^[- ]*\*\*v\([0-9][0-9.]*\)\*\*.*/\1/p' "$readme_path" | head -n 1)
-        end
         if test -n "$readme_ver"
             if test "$readme_ver" = "$VERSION"
                 _ok "README version matches: v$VERSION"
@@ -6205,7 +6202,6 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     command rm -rf --preserve-root -- "$test_dir"
 
     _echo
-    _echo "════════════════════════════════════════════════════════════════════"
     if test $failed -eq 0
         _ok "Test suite complete: $passed/$total passed"
     else

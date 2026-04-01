@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.27.0-blue)
+![Version](https://img.shields.io/badge/version-3.31.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -8,7 +8,6 @@ Self-contained CachyOS configuration manager with profile support. Single Fish s
 
 **Default profile:** Beelink GTR9 Pro — AMD Ryzen AI Max+ 395 (Zen 5, Strix Halo) / Radeon 8060S (RDNA 3.5, gfx1151) / 128 GB LPDDR5x-8000
 
----
 
 ## Table of Contents
 
@@ -17,14 +16,28 @@ Self-contained CachyOS configuration manager with profile support. Single Fish s
 - [Usage](#usage)
 - [Install Flow](#install-flow)
 - [Configuration Reference](#configuration-reference)
+  - [Kernel Parameters](#kernel-parameters)
+  - [Boot Loader](#boot-loader)
+  - [Initramfs](#initramfs)
+  - [System Services](#system-services)
+  - [Network Stack](#network-stack)
+  - [System Tuning](#system-tuning)
+  - [Environment Variables](#environment-variables)
+  - [User Configuration](#user-configuration)
+  - [Packages](#packages)
+  - [Masked Services](#masked-services)
 - [Managed Files](#managed-files)
 - [Profiles](#profiles)
 - [Safety & Reliability](#safety--reliability)
+  - [Exit Codes](#exit-codes)
+  - [Data Directory](#data-directory)
+  - [Log Format](#log-format)
 - [Hardware Reference](#hardware-reference)
+  - [Specifications](#specifications)
+  - [Known Issues](#known-issues)
 - [Troubleshooting](#troubleshooting)
 - [References](#references)
 
----
 
 ## Quick Start
 
@@ -35,7 +48,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 **Post-install:** Reboot → `--verify-static` → `--verify-runtime` → `sudo pacdiff` → test WiFi + gaming.
 
----
 
 ## Prerequisites
 
@@ -61,7 +73,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 # https://wiki.cachyos.org  ·  https://archlinux.org/news/
 ```
 
----
 
 ## Usage
 
@@ -86,7 +97,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 Suppress individual lint warnings with `# lint:ignore`.
 
----
 
 ## Install Flow
 
@@ -105,7 +115,6 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | **Boot** | Rebuild initramfs, update systemd-boot entries |
 | **Finalize** | Daemon-reload, cache cleanup, NM restart, WiFi reconnect, write manifest |
 
----
 
 ## Configuration Reference
 
@@ -222,7 +231,6 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `hybrid-sleep.target` | Desktop — no hybrid sleep |
 | `suspend-then-hibernate.target` | Desktop — no suspend-then-hibernate |
 
----
 
 ## Managed Files
 
@@ -245,7 +253,6 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | 13 | Service | `/etc/systemd/system/amdgpu-performance.service` |
 | 14 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
----
 
 ## Profiles
 
@@ -306,7 +313,6 @@ Validate before first use:
 ./ry-install.fish --diff             # compare against installed state
 ```
 
----
 
 ## Safety & Reliability
 
@@ -396,7 +402,6 @@ jq 'select(.event == "footer" and .mode == "check") | {ts: .ts, exit: .exit_code
 jq -r 'select(.event == "footer") | [.ts, .mode, .exit_code] | @tsv' ~/ry-install/logs/**/*.jsonl
 ```
 
----
 
 ## Hardware Reference
 
@@ -443,7 +448,6 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | WPA2/3 Enterprise GUI broken with iwd | Use CLI or switch to wpa_supplicant |
 | Monitor mode requires full reboot | Reboot |
 
----
 
 ## Troubleshooting
 
@@ -454,7 +458,6 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` |
 
----
 
 ## References
 
@@ -467,6 +470,5 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes) | ROCm containers + benchmarks |
 | [Ollama gfx1151](https://github.com/ollama/ollama/issues/14855) | LLM setup for Strix Halo |
 
----
 
 [Changelog](CHANGELOG.txt) · License: MIT

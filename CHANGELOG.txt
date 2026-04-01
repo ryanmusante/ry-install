@@ -1,3 +1,31 @@
+3.31.0 (2026-03-31)
+-------------------
+  docs(readme): restore shields.io badges (version, license, fish).
+  fix(lint): restore README badge version cross-check.
+  docs: sync README (version badge 3.31.0), CHANGELOG.
+
+3.30.0 (2026-03-31)
+-------------------
+  docs(readme): remove 3 shields.io badges (version, license, fish).
+    Version tracked in script header + CHANGELOG; license + fish
+    requirement documented in Prerequisites and footer.
+  refactor(lint): remove README version cross-check; version already
+    validated via header comment and CHANGELOG.
+  docs: sync CHANGELOG.
+
+3.29.0 (2026-03-31)
+-------------------
+  style(readme): remove 13 decorative horizontal rules (---).
+  style(test-all): remove decorative box-drawing separator.
+  docs: sync README (version badge 3.29.0), CHANGELOG.
+
+3.28.0 (2026-03-31)
+-------------------
+  docs(readme/toc): restore 15 nested sub-entries under
+    Configuration Reference (10), Safety & Reliability (3),
+    Hardware Reference (2). ToC 11 → 26 entries.
+  docs: sync README (version badge 3.28.0), CHANGELOG.
+
 3.27.0 (2026-03-31)
 -------------------
   style: strip 17 unnecessary quotes flagged by fish_indent.

@@ -1,3 +1,15 @@
+3.33.0 (2026-04-01)
+-------------------
+  fix(naming): rename coredump drop-in 99-ry-install.conf →
+    99-cachyos-coredump.conf. Aligns with resolved/logind/NM
+    convention (99-cachyos-<service>.conf).
+  style(quoting): re-quote /etc/kernel/cmdline and /etc/drirc in
+    SYSTEM_DESTINATIONS and _ry_get_file_content case arms. Reverts
+    v3.27.0 fish_indent strip; project convention quotes all paths
+    for visual consistency across the 15-entry destination list.
+  docs: sync README (version badge 3.33.0, profile example quoting),
+    CHANGELOG.
+
 3.32.0 (2026-04-01)
 -------------------
   perf(kernel): remove 5 redundant kernel params: clocksource=tsc,
@@ -9,7 +21,7 @@
     runtime PM — desktop), pcie_aspm=off (system-wide PCIe ASPM
     disable), processor.max_cstate=1 (limit C-states to C1).
   feat(config): add managed file /etc/systemd/coredump.conf.d/
-    99-ry-install.conf — Storage=none, ProcessSizeMax=0. Prevents
+    99-cachyos-coredump.conf — Storage=none, ProcessSizeMax=0. Prevents
     multi-GB coredumps from Wine/Proton crashes.
   feat(env): add VKD3D_SHADER_DEBUG=none (suppresses vkd3d-proton
     shader compiler logging, separate from VKD3D_DEBUG).

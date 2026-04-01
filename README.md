@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.32.0-blue)
+![Version](https://img.shields.io/badge/version-3.33.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -243,7 +243,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | 4 | System | `/etc/mkinitcpio.conf` |
 | 5 | System | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` |
 | 6 | System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
-| 7 | System | `/etc/systemd/coredump.conf.d/99-ry-install.conf` |
+| 7 | System | `/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf` |
 | 8 | System | `/etc/iwd/main.conf` |
 | 9 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
 | 10 | System | `/etc/drirc` |
@@ -279,19 +279,19 @@ function _ry_profile_my_desktop --description "Example desktop profile"
     set -g PROFILE_DESC "My Desktop — AMD Ryzen 7 7800X3D / RX 7900 XTX"
 
     # Destinations — must match _ry_get_file_content cases
-    set -g SYSTEM_DESTINATIONS /boot/loader/loader.conf /etc/kernel/cmdline \
-        /etc/sdboot-manage.conf /etc/mkinitcpio.conf \
-        /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf \
-        /etc/systemd/logind.conf.d/99-cachyos-logind.conf \
-        /etc/iwd/main.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf \
-        /etc/drirc
+    set -g SYSTEM_DESTINATIONS "/boot/loader/loader.conf" "/etc/kernel/cmdline" \
+        "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf" \
+        "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
+        "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
+        "/etc/iwd/main.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
+        "/etc/drirc"
     set -g USER_DESTINATIONS \
         "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
         "$HOME/.config/environment.d/10-environment.conf" \
         "$HOME/.config/systemd/user/ssh-agent.service"
     set -g SERVICE_DESTINATIONS \
-        /etc/systemd/system/amdgpu-performance.service \
-        /etc/systemd/system/cpupower-epp.service
+        "/etc/systemd/system/amdgpu-performance.service" \
+        "/etc/systemd/system/cpupower-epp.service"
 
     # All remaining required globals — see --dry-run for validation errors:
     # KERNEL_PARAMS  MKINITCPIO_MODULES  MKINITCPIO_HOOKS  MKINITCPIO_COMPRESSION

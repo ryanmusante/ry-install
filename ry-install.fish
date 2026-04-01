@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.32.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.33.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.32.0"
+set -g VERSION "3.33.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -501,15 +501,15 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        /etc/kernel/cmdline \
+        "/etc/kernel/cmdline" \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
         "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
-        "/etc/systemd/coredump.conf.d/99-ry-install.conf" \
+        "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        /etc/drirc
+        "/etc/drirc"
 
     set -g USER_DESTINATIONS \
         "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
@@ -894,7 +894,7 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' "console-mode $LOADER_CONSOLE_MODE"
             printf '%s\n' "editor $LOADER_EDITOR"
 
-        case /etc/kernel/cmdline
+        case "/etc/kernel/cmdline"
             if test -z "$_ROOT_UUID"
                 _err "_ry_get_file_content: root UUID not cached (_load_profile may not have run)"
                 return 1
@@ -934,7 +934,7 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
                 printf '%s\n' "$key=ignore"
             end
 
-        case "/etc/systemd/coredump.conf.d/99-ry-install.conf"
+        case "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf"
             printf '%s\n' "# Disable coredump storage — Wine/Proton crashes can write multi-GB dumps"
             printf '%s\n' "[Coredump]"
             printf '%s\n' "Storage=none"
@@ -1028,7 +1028,7 @@ ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system
 [Install]
 WantedBy=multi-user.target'
 
-        case /etc/drirc
+        case "/etc/drirc"
             # RADV unified VRAM heap: prevents games from misallocating via artificial two-heap split on UMA APUs
             printf '%s\n' '<driconf>' \
                 '  <device>' \
@@ -4104,14 +4104,14 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     _echo "── Coredump config ──"
-    if test -f /etc/systemd/coredump.conf.d/99-ry-install.conf
-        if grep -q 'Storage=none' /etc/systemd/coredump.conf.d/99-ry-install.conf 2>/dev/null
+    if test -f /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf
+        if grep -q 'Storage=none' /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf 2>/dev/null
             _ok "  coredump: Storage=none"
         else
-            _fail "  coredump: Storage!=none in /etc/systemd/coredump.conf.d/99-ry-install.conf"
+            _fail "  coredump: Storage!=none in /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf"
         end
     else
-        _warn "  coredump: /etc/systemd/coredump.conf.d/99-ry-install.conf not found"
+        _warn "  coredump: /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf not found"
     end
     _echo
 

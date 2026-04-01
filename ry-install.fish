@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.31.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.32.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.31.0"
+set -g VERSION "3.32.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -166,7 +166,6 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         "zswap.=CONFIG_ZSWAP" \
         "iommu=CONFIG_IOMMU_SUPPORT" \
         "amdgpu.=CONFIG_DRM_AMDGPU" \
-        "workqueue.=CONFIG_WQ_POWER_EFFICIENT_DEFAULT" \
         "ttm.=CONFIG_DRM_TTM"
 
     set -l config_data (_kconfig_cache)
@@ -507,6 +506,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/mkinitcpio.conf" \
         "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
         "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
+        "/etc/systemd/coredump.conf.d/99-ry-install.conf" \
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
         /etc/drirc
@@ -530,25 +530,23 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (17 params)
-    # ppfeaturemask: bits 14,15,17 off; cwsr_enable=0: gfx1151 VGPR (remove 7.0+); wbrf=0: WiFi RFI throttle; module_blacklist: pcspkr+wdat_wdt (CachyOS covers iTCO/sp5100 only)
+    # Kernel (15 params)
+    # ppfeaturemask: bits 14,15,17 off; cwsr_enable=0: gfx1151 VGPR (remove 7.0+); wbrf=0: WiFi RFI throttle; runpm=0: disable GPU runtime PM (desktop); module_blacklist: pcspkr+wdat_wdt (CachyOS covers iTCO/sp5100 only)
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
+        amdgpu.runpm=0 \
         amdgpu.wbrf=0 \
-        clocksource=tsc \
-        tsc=reliable \
         initcall_blacklist=simpledrm_platform_driver_init \
         iommu=pt \
         module_blacklist=pcspkr,wdat_wdt \
         mt7925e.disable_aspm=1 \
         nowatchdog \
         nvme_core.default_ps_max_latency_us=0 \
-        nvme_core.multipath=N \
-        quiet \
+        pcie_aspm=off \
+        processor.max_cstate=1 \
         split_lock_detect=off \
         usbcore.autosuspend=-1 \
-        workqueue.power_efficient=0 \
         zswap.enabled=0
 
     # Initramfs
@@ -594,7 +592,8 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "DXVK_LOG_LEVEL=none" \
         "ENABLE_LAYER_MESA_ANTI_LAG=1" \
         "MESA_SHADER_CACHE_MAX_SIZE=4G" \
-        "VKD3D_DEBUG=none"
+        "VKD3D_DEBUG=none" \
+        "VKD3D_SHADER_DEBUG=none"
 
     # Packages
     set -g PKGS_ADD \
@@ -934,6 +933,12 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             for key in $LOGIND_IGNORE_KEYS
                 printf '%s\n' "$key=ignore"
             end
+
+        case "/etc/systemd/coredump.conf.d/99-ry-install.conf"
+            printf '%s\n' "# Disable coredump storage — Wine/Proton crashes can write multi-GB dumps"
+            printf '%s\n' "[Coredump]"
+            printf '%s\n' "Storage=none"
+            printf '%s\n' "ProcessSizeMax=0"
 
         case "/etc/iwd/main.conf"
             printf '%s\n' "# iwd configuration - minimal config for NetworkManager backend"
@@ -4003,18 +4008,9 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
     end
 
-    if test -f /sys/module/nvme_core/parameters/multipath
-        set -l sysfs_val (command cat -- /sys/module/nvme_core/parameters/multipath 2>/dev/null)
-        if test "$sysfs_val" = N
-            _ok "  nvme_core.multipath: $sysfs_val"
-        else
-            _fail "  nvme_core.multipath: $sysfs_val (expected: N)"
-        end
-    end
-
     if test -d /sys/module/amdgpu/parameters
         # Hex→decimal normalization: sysfs may return 0xfffd3fff or 4294787071
-        for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0"
+        for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0" "runpm:0" "wbrf:0"
             set -l pname (string split ':' -- "$pair")[1]
             set -l expected (string split ':' -- "$pair")[2]
             set -l ppath /sys/module/amdgpu/parameters/$pname
@@ -4046,6 +4042,76 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
     else if test -d /sys/module/mt7925e
         _info "  mt7925e: loaded but disable_aspm param not found"
+    end
+    _echo
+
+    _echo "── Additional module parameters ──"
+    if test -f /sys/module/workqueue/parameters/power_efficient
+        set -l sysfs_val (command cat -- /sys/module/workqueue/parameters/power_efficient 2>/dev/null | string trim --)
+        if test "$sysfs_val" = 0; or test "$sysfs_val" = N
+            _ok "  workqueue.power_efficient: $sysfs_val"
+        else
+            _warn "  workqueue.power_efficient: $sysfs_val (expected: 0)"
+        end
+    end
+    if test -f /sys/module/zswap/parameters/enabled
+        set -l sysfs_val (command cat -- /sys/module/zswap/parameters/enabled 2>/dev/null | string trim --)
+        if test "$sysfs_val" = N; or test "$sysfs_val" = 0
+            _ok "  zswap.enabled: $sysfs_val"
+        else
+            _fail "  zswap.enabled: $sysfs_val (expected: N/0)"
+        end
+    end
+    if test -f /sys/module/processor/parameters/max_cstate
+        set -l sysfs_val (command cat -- /sys/module/processor/parameters/max_cstate 2>/dev/null | string trim --)
+        if test "$sysfs_val" = 1
+            _ok "  processor.max_cstate: $sysfs_val"
+        else
+            _warn "  processor.max_cstate: $sysfs_val (expected: 1)"
+        end
+    end
+    if test -f /proc/sys/kernel/nmi_watchdog
+        set -l sysfs_val (command cat -- /proc/sys/kernel/nmi_watchdog 2>/dev/null | string trim --)
+        if test "$sysfs_val" = 0
+            _ok "  nmi_watchdog: $sysfs_val"
+        else
+            _fail "  nmi_watchdog: $sysfs_val (expected: 0 — nowatchdog)"
+        end
+    end
+    _echo
+
+    _echo "── Blacklisted modules ──"
+    for mod in pcspkr wdat_wdt
+        if lsmod 2>/dev/null | grep -q "^$mod "
+            _fail "  $mod: LOADED (should be blacklisted)"
+        else
+            _ok "  $mod: not loaded"
+        end
+    end
+    _echo
+
+    _echo "── Clocksource ──"
+    if test -f /sys/devices/system/clocksource/clocksource0/current_clocksource
+        set -l _cs (command cat -- /sys/devices/system/clocksource/clocksource0/current_clocksource 2>/dev/null | string trim --)
+        if test "$_cs" = tsc
+            _ok "  clocksource: $_cs"
+        else if test "$_cs" = hpet
+            _fail "  clocksource: $_cs (expected: tsc — HPET is ~20× slower, check dmesg for TSC demotion)"
+        else
+            _warn "  clocksource: $_cs (expected: tsc)"
+        end
+    end
+    _echo
+
+    _echo "── Coredump config ──"
+    if test -f /etc/systemd/coredump.conf.d/99-ry-install.conf
+        if grep -q 'Storage=none' /etc/systemd/coredump.conf.d/99-ry-install.conf 2>/dev/null
+            _ok "  coredump: Storage=none"
+        else
+            _fail "  coredump: Storage!=none in /etc/systemd/coredump.conf.d/99-ry-install.conf"
+        end
+    else
+        _warn "  coredump: /etc/systemd/coredump.conf.d/99-ry-install.conf not found"
     end
     _echo
 

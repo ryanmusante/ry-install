@@ -1,3 +1,31 @@
+3.32.0 (2026-04-01)
+-------------------
+  perf(kernel): remove 5 redundant kernel params: clocksource=tsc,
+    tsc=reliable (kernel auto-selects on Zen 5 since 5.16),
+    workqueue.power_efficient=0 (matches kernel default),
+    nvme_core.multipath=N (single-drive, param deprecated ≥6.15),
+    quiet (fallback entry retains independently).
+  perf(kernel): add 3 kernel params: amdgpu.runpm=0 (disable GPU
+    runtime PM — desktop), pcie_aspm=off (system-wide PCIe ASPM
+    disable), processor.max_cstate=1 (limit C-states to C1).
+  feat(config): add managed file /etc/systemd/coredump.conf.d/
+    99-ry-install.conf — Storage=none, ProcessSizeMax=0. Prevents
+    multi-GB coredumps from Wine/Proton crashes.
+  feat(env): add VKD3D_SHADER_DEBUG=none (suppresses vkd3d-proton
+    shader compiler logging, separate from VKD3D_DEBUG).
+  feat(verify): add defense-in-depth runtime checks — amdgpu.runpm
+    + amdgpu.wbrf sysfs, workqueue.power_efficient sysfs,
+    zswap.enabled sysfs, processor.max_cstate sysfs,
+    nmi_watchdog procfs, pcspkr/wdat_wdt lsmod blacklist,
+    clocksource=tsc active (HPET guard), coredump.conf.d deployed.
+  fix(verify): remove stale nvme_core.multipath sysfs check (would
+    false-fail after param removal — default Y on CachyOS).
+  refactor(validate): remove dead workqueue.= entry from
+    _validate_kernel_params prefix map.
+  docs: sync README (version badge 3.32.0, 15 embedded configs,
+    15 kernel params, 15 managed files, env vars table),
+    CHANGELOG.
+
 3.31.0 (2026-03-31)
 -------------------
   docs(readme): restore shields.io badges (version, license, fish).

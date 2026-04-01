@@ -1,10 +1,10 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.31.0-blue)
+![Version](https://img.shields.io/badge/version-3.32.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
-Self-contained CachyOS configuration manager with profile support. Single Fish script, 14 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
 
 **Default profile:** Beelink GTR9 Pro — AMD Ryzen AI Max+ 395 (Zen 5, Strix Halo) / Radeon 8060S (RDNA 3.5, gfx1151) / 128 GB LPDDR5x-8000
 
@@ -110,7 +110,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | **Preflight** | Validate prerequisites, acquire lock, load profile |
 | **Packages** | Sync repos, install/remove packages, AUR via paru |
-| **Configuration** | Deploy 14 embedded config files (atomic writes) |
+| **Configuration** | Deploy 15 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
 | **Boot** | Rebuild initramfs, update systemd-boot entries |
 | **Finalize** | Daemon-reload, cache cleanup, NM restart, WiFi reconnect, write manifest |
@@ -120,26 +120,24 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ### Kernel Parameters
 
-17 parameters written to `/etc/kernel/cmdline`:
+15 parameters written to `/etc/kernel/cmdline`:
 
 | Parameter | Purpose |
 |---|---|
 | `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (remove when 7.0+ stable) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
+| `amdgpu.runpm=0` | Disable GPU runtime PM (desktop — no battery) |
 | `amdgpu.wbrf=0` | Disable WiFi RFI memory clock throttling (UMA bandwidth) |
-| `clocksource=tsc` | Force TSC clocksource on Zen 5 |
-| `tsc=reliable` | Skip runtime TSC verification (Zen 5 invariant TSC) |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
 | `iommu=pt` | IOMMU passthrough (DMA protection, near-zero overhead) |
 | `module_blacklist=pcspkr,wdat_wdt` | Silence PC speaker beep, block ACPI watchdog |
 | `mt7925e.disable_aspm=1` | Disable WiFi ASPM |
 | `nowatchdog` | Disable software watchdog timers |
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
-| `nvme_core.multipath=N` | Disable NVMe multipath on single-drive desktop |
-| `quiet` | Suppress boot messages |
+| `pcie_aspm=off` | Disable PCIe ASPM system-wide |
+| `processor.max_cstate=1` | Limit CPU C-states to C1 (low wake latency) |
 | `split_lock_detect=off` | Disable split-lock #AC exception (gaming) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
-| `workqueue.power_efficient=0` | Disable power-efficient workqueue remapping |
 | `zswap.enabled=0` | Disable zswap (ZRAM masked separately) |
 
 ### Boot Loader
@@ -197,6 +195,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
 | `VKD3D_DEBUG` | `none` |
+| `VKD3D_SHADER_DEBUG` | `none` |
 
 ### User Configuration
 
@@ -234,7 +233,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ## Managed Files
 
-14 files deployed via atomic writes (tmp → chmod → mv):
+15 files deployed via atomic writes (tmp → chmod → mv):
 
 | # | Scope | Path |
 |---|---|---|
@@ -244,14 +243,15 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | 4 | System | `/etc/mkinitcpio.conf` |
 | 5 | System | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` |
 | 6 | System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
-| 7 | System | `/etc/iwd/main.conf` |
-| 8 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
-| 9 | System | `/etc/drirc` |
-| 10 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
-| 11 | User | `~/.config/environment.d/10-environment.conf` |
-| 12 | User | `~/.config/systemd/user/ssh-agent.service` |
-| 13 | Service | `/etc/systemd/system/amdgpu-performance.service` |
-| 14 | Service | `/etc/systemd/system/cpupower-epp.service` |
+| 7 | System | `/etc/systemd/coredump.conf.d/99-ry-install.conf` |
+| 8 | System | `/etc/iwd/main.conf` |
+| 9 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
+| 10 | System | `/etc/drirc` |
+| 11 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
+| 12 | User | `~/.config/environment.d/10-environment.conf` |
+| 13 | User | `~/.config/systemd/user/ssh-agent.service` |
+| 14 | Service | `/etc/systemd/system/amdgpu-performance.service` |
+| 15 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
 
 ## Profiles

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.33.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.34.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.33.0"
+set -g VERSION "3.34.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -165,8 +165,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
     set -l param_config_map \
         "zswap.=CONFIG_ZSWAP" \
         "iommu=CONFIG_IOMMU_SUPPORT" \
-        "amdgpu.=CONFIG_DRM_AMDGPU" \
-        "ttm.=CONFIG_DRM_TTM"
+        "amdgpu.=CONFIG_DRM_AMDGPU"
 
     set -l config_data (_kconfig_cache)
     if test -z "$config_data"
@@ -509,7 +508,8 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        "/etc/drirc"
+        "/etc/drirc" \
+        "/etc/sysctl.d/99-cachyos-sysctl.conf"
 
     set -g USER_DESTINATIONS \
         "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
@@ -530,21 +530,19 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (15 params)
-    # ppfeaturemask: bits 14,15,17 off; cwsr_enable=0: gfx1151 VGPR (remove 7.0+); wbrf=0: WiFi RFI throttle; runpm=0: disable GPU runtime PM (desktop); module_blacklist: pcspkr+wdat_wdt (CachyOS covers iTCO/sp5100 only)
+    # Kernel (13 params)
+    # ppfeaturemask: bits 14,15,17 off; cwsr_enable=0: gfx1151 VGPR (remove 7.0+); clocksource=tsc: force TSC; quiet: suppress boot messages; module_blacklist: pcspkr+wdat_wdt (CachyOS covers iTCO/sp5100 only)
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
-        amdgpu.runpm=0 \
-        amdgpu.wbrf=0 \
+        clocksource=tsc \
         initcall_blacklist=simpledrm_platform_driver_init \
         iommu=pt \
         module_blacklist=pcspkr,wdat_wdt \
-        mt7925e.disable_aspm=1 \
         nowatchdog \
         nvme_core.default_ps_max_latency_us=0 \
         pcie_aspm=off \
-        processor.max_cstate=1 \
+        quiet \
         split_lock_detect=off \
         usbcore.autosuspend=-1 \
         zswap.enabled=0
@@ -565,6 +563,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         filesystems \
         fsck
     set -g MKINITCPIO_COMPRESSION zstd
+    set -g MKINITCPIO_COMPRESSION_OPTIONS "-3"
 
     # Udev — ntsync rule handled by ntsync-common package (in PKGS_ADD)
 
@@ -592,8 +591,23 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "DXVK_LOG_LEVEL=none" \
         "ENABLE_LAYER_MESA_ANTI_LAG=1" \
         "MESA_SHADER_CACHE_MAX_SIZE=4G" \
+        "RADV_PERFTEST=transfer_queue" \
         "VKD3D_DEBUG=none" \
         "VKD3D_SHADER_DEBUG=none"
+
+    # Sysctl tunables — overrides CachyOS vendor 70-cachyos-settings.conf where values differ
+    set -g SYSCTL_VALUES \
+        "net.core.default_qdisc=fq" \
+        "net.ipv4.tcp_congestion_control=bbr" \
+        "net.ipv4.tcp_fastopen=3" \
+        "net.ipv4.tcp_mtu_probing=1" \
+        "net.ipv4.tcp_slow_start_after_idle=0" \
+        "vm.compaction_proactiveness=0" \
+        "vm.max_map_count=2147483642" \
+        "vm.page_lock_unfairness=1" \
+        "vm.swappiness=10" \
+        "vm.watermark_boost_factor=0" \
+        "vm.watermark_scale_factor=125"
 
     # Packages
     set -g PKGS_ADD \
@@ -681,9 +695,10 @@ function _validate_profile --description "Verify loaded profile has all required
         BOOT_SPACE_CRIT \
         BOOT_SPACE_WARN \
         ROOT_AVAIL_CRIT \
-        ROOT_AVAIL_WARN
+        ROOT_AVAIL_WARN \
+        SYSCTL_VALUES
 
-    # Intentionally optional (consumers handle unset safely): PKGS_DEL, AUR_PKGS, BOOT_TIME_TARGET, EXPECTED_CPU_MATCH
+    # Intentionally optional (consumers handle unset safely): PKGS_DEL, AUR_PKGS, BOOT_TIME_TARGET, EXPECTED_CPU_MATCH, MKINITCPIO_COMPRESSION_OPTIONS
 
     # Conditionally required — needed only when profile includes corresponding destinations
     for dst in $SYSTEM_DESTINATIONS
@@ -919,11 +934,15 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' "FILES=()"
             printf '%s\n' "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")"
             printf '%s\n' "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
+            if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"
+                printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"
+            end
 
         case "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf"
             printf '%s\n' "# systemd-resolved configuration"
             printf '%s\n' "[Resolve]"
             printf '%s\n' "MulticastDNS=$RESOLVED_MDNS"
+            printf '%s\n' "LLMNR=no"
             printf '%s\n' "DNSOverTLS=opportunistic"
             printf '%s\n' "DNSSEC=allow-downgrade"
 
@@ -1038,6 +1057,14 @@ WantedBy=multi-user.target'
                 '    </application>' \
                 '  </device>' \
                 '</driconf>'
+
+        case "/etc/sysctl.d/99-cachyos-sysctl.conf"
+            printf '%s\n' "# ry-install sysctl tunables"
+            for entry in $SYSCTL_VALUES
+                set -l key (string split '=' -- "$entry")[1]
+                set -l val (string split '=' -- "$entry")[2]
+                printf '%s = %s\n' "$key" "$val"
+            end
 
         case '*'
             return 1
@@ -1920,11 +1947,11 @@ function _ry_check_kernel_version --description "Verify running kernel version m
 
     _info "Kernel version: $kver"
 
-    # Minimum: 6.14 (ntsync, gfx1151 fixes, mt7925e.disable_aspm)
+    # Minimum: 6.14 (ntsync, gfx1151 fixes)
     if test "$major" -lt 6; or begin
             test "$major" -eq 6; and test "$minor" -lt 14
         end
-        _fail "Kernel $kver < 6.14: ntsync, gfx1151 fixes, and mt7925e.disable_aspm unavailable"
+        _fail "Kernel $kver < 6.14: ntsync and gfx1151 fixes unavailable"
         _info "  Upgrade kernel before or during install (pacman -Syu)"
         return 1
     end
@@ -3113,6 +3140,15 @@ function _ry_verify_static --description "Verify installed configs match embedde
         else
             _fail "  COMPRESSION=zstd: MISSING"
         end
+
+        if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"
+            set -l comp_opts_line (grep -E '^[[:space:]]*COMPRESSION_OPTIONS=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1)
+            if string match -q "*$MKINITCPIO_COMPRESSION_OPTIONS*" -- "$comp_opts_line"
+                _ok "  COMPRESSION_OPTIONS=$MKINITCPIO_COMPRESSION_OPTIONS: present"
+            else
+                _fail "  COMPRESSION_OPTIONS=$MKINITCPIO_COMPRESSION_OPTIONS: MISSING"
+            end
+        end
     end
     _echo
 
@@ -3161,6 +3197,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "MulticastDNS=$RESOLVED_MDNS" "MulticastDNS=$RESOLVED_MDNS"
         _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "DNSOverTLS=opportunistic" "DNSOverTLS=opportunistic"
         _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "DNSSEC=allow-downgrade" "DNSSEC=allow-downgrade"
+        _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "LLMNR=no" "LLMNR=no"
     end
     _echo
 
@@ -3199,6 +3236,15 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo "── RADV driconf ──"
     if _chk_file /etc/drirc
         _chk_grep /etc/drirc radv_enable_unified_heap_on_apu unified_heap_on_apu
+    end
+    _echo
+
+    _echo "── sysctl drop-in ──"
+    if _chk_file /etc/sysctl.d/99-cachyos-sysctl.conf
+        for entry in $SYSCTL_VALUES
+            set -l key (string split '=' -- "$entry")[1]
+            _chk_grep /etc/sysctl.d/99-cachyos-sysctl.conf "$key" "$key"
+        end
     end
     _echo
 
@@ -4010,7 +4056,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
 
     if test -d /sys/module/amdgpu/parameters
         # Hex→decimal normalization: sysfs may return 0xfffd3fff or 4294787071
-        for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0" "runpm:0" "wbrf:0"
+        for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0"
             set -l pname (string split ':' -- "$pair")[1]
             set -l expected (string split ':' -- "$pair")[2]
             set -l ppath /sys/module/amdgpu/parameters/$pname
@@ -4033,18 +4079,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
     end
 
-    if test -f /sys/module/mt7925e/parameters/disable_aspm
-        set -l sysfs_val (command cat -- /sys/module/mt7925e/parameters/disable_aspm 2>/dev/null)
-        if test "$sysfs_val" = Y; or test "$sysfs_val" = 1
-            _ok "  mt7925e.disable_aspm: $sysfs_val"
-        else
-            _fail "  mt7925e.disable_aspm: $sysfs_val (expected: 1/Y)"
-        end
-    else if test -d /sys/module/mt7925e
-        _info "  mt7925e: loaded but disable_aspm param not found"
-    end
-    _echo
-
     _echo "── Additional module parameters ──"
     if test -f /sys/module/workqueue/parameters/power_efficient
         set -l sysfs_val (command cat -- /sys/module/workqueue/parameters/power_efficient 2>/dev/null | string trim --)
@@ -4060,14 +4094,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             _ok "  zswap.enabled: $sysfs_val"
         else
             _fail "  zswap.enabled: $sysfs_val (expected: N/0)"
-        end
-    end
-    if test -f /sys/module/processor/parameters/max_cstate
-        set -l sysfs_val (command cat -- /sys/module/processor/parameters/max_cstate 2>/dev/null | string trim --)
-        if test "$sysfs_val" = 1
-            _ok "  processor.max_cstate: $sysfs_val"
-        else
-            _warn "  processor.max_cstate: $sysfs_val (expected: 1)"
         end
     end
     if test -f /proc/sys/kernel/nmi_watchdog
@@ -4288,21 +4314,18 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     _echo
 
-    _echo "── sysctl (vendor) ──"
-    # Vendor-managed sysctl values (CachyOS 70-cachyos-settings.conf) — _warn on mismatch, not _fail
-    set -l _sysctl_vendor \
-        "kernel.split_lock_mitigate=0"
-    for _sc in $_sysctl_vendor
-        set -l _key (string split '=' -- "$_sc")[1]
-        set -l _expected (string split '=' -- "$_sc")[2]
+    _echo "── sysctl (ry-install) ──"
+    for entry in $SYSCTL_VALUES
+        set -l _key (string split '=' -- "$entry")[1]
+        set -l _expected (string split '=' -- "$entry")[2]
         set -l _proc_path (string replace -a '.' '/' -- "$_key")
         set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim --)
         if test "$_actual" = "$_expected"
-            _ok "  $_key: $_actual (vendor)"
+            _ok "  $_key: $_actual"
         else if test -n "$_actual"
-            _warn "  $_key: $_actual (expected: $_expected, vendor-managed)"
+            _fail "  $_key: $_actual (expected: $_expected)"
         else
-            _info "  $_key: not available"
+            _warn "  $_key: not available"
         end
     end
     _echo
@@ -4311,11 +4334,11 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     # §10 #2: THP enabled
     if test -f /sys/kernel/mm/transparent_hugepage/enabled
         set -l _thp (command cat -- /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null)
-        if string match -q '*\[madvise\]*' -- "$_thp"
-            _ok "  THP enabled: madvise"
+        if string match -q '*\[always\]*' -- "$_thp"
+            _ok "  THP enabled: always"
         else
             set -l _active (string match -r '\[(\w+)\]' -- "$_thp")[2]
-            _warn "  THP enabled: $_active (recommended: madvise — see README)"
+            _warn "  THP enabled: $_active (recommended: always — CachyOS default)"
         end
     end
     # §10 #3: THP defrag

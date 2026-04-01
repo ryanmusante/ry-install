@@ -1,3 +1,40 @@
+3.34.0 (2026-04-01)
+-------------------
+  perf(kernel): remove 4 kernel params: processor.max_cstate=1
+    (Zen 5 sub-µs C-state exit, wastes 30-60W idle),
+    amdgpu.runpm=0 (dead on APU — no BOCO/BACO),
+    amdgpu.wbrf=0 (removed — let driver default handle),
+    mt7925e.disable_aspm=1 (redundant with pcie_aspm=off).
+  perf(kernel): restore 2 kernel params: clocksource=tsc (force
+    TSC, prevent HPET demotion), quiet (suppress boot messages).
+    KERNEL_PARAMS 15→13.
+  feat(sysctl): add managed /etc/sysctl.d/99-cachyos-sysctl.conf
+    with 11 tunables: BBR+fq, tcp_fastopen=3, tcp_mtu_probing=1,
+    tcp_slow_start_after_idle=0, vm.max_map_count=2147483642
+    (Proton crash fix), vm.swappiness=10 (overrides CachyOS
+    default 100 — ZRAM masked), vm.compaction_proactiveness=0,
+    vm.watermark_boost_factor=0, vm.watermark_scale_factor=125,
+    vm.page_lock_unfairness=1. Embedded files 15→16.
+  feat(resolved): add LLMNR=no (Windows-centric, MITM vectors).
+  perf(initramfs): add COMPRESSION_OPTIONS=(-3). zstd -3 vs
+    default -19: dramatically faster mkinitcpio -P rebuilds,
+    identical decompression speed, ~2.5% larger image.
+  feat(env): add RADV_PERFTEST=transfer_queue (SDMA offload,
+    Mesa ≥ 26.0). ENV_VARS 6→7.
+  fix(verify): expect THP=always (CachyOS default, not madvise).
+  fix(verify): remove 4 dead runtime checks: amdgpu.runpm,
+    amdgpu.wbrf, mt7925e.disable_aspm, processor.max_cstate.
+  fix(verify): remove dead kernel.split_lock_mitigate=0 vendor
+    sysctl check (no effect with split_lock_detect=off).
+  feat(verify): add sysctl runtime checks for all 11 tunables.
+  feat(verify): add sysctl drop-in static verification.
+  feat(verify): add LLMNR, COMPRESSION_OPTIONS static checks.
+  refactor(validate): remove dead ttm prefix from kernel param
+    config map. Add SYSCTL_VALUES to required profile globals.
+  docs: sync README (version badge 3.34.0, 13 kernel params,
+    16 managed files, 7 env vars, sysctl/initramfs/resolved
+    tables), CHANGELOG.
+
 3.33.0 (2026-04-01)
 -------------------
   fix(naming): rename coredump drop-in 99-ry-install.conf →

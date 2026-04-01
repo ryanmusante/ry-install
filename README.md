@@ -1,10 +1,10 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.33.0-blue)
+![Version](https://img.shields.io/badge/version-3.34.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
-Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no external dependencies.
 
 **Default profile:** Beelink GTR9 Pro — AMD Ryzen AI Max+ 395 (Zen 5, Strix Halo) / Radeon 8060S (RDNA 3.5, gfx1151) / 128 GB LPDDR5x-8000
 
@@ -55,7 +55,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 |---|---|---|
 | CachyOS (systemd-boot, ext4) | — | Base assumption |
 | Fish 3.4+ | `fish --version` | CachyOS ships 4.5 |
-| Kernel 6.14+ | `uname -r` | ntsync, gfx1151 fixes, mt7925e.disable_aspm |
+| Kernel 6.14+ | `uname -r` | ntsync, gfx1151 fixes |
 | Unrestricted sudo | `sudo -l` → `(ALL) ALL` | `--all` aborts if restricted |
 | 2 GB root + 200 MB /boot free | `df -h / /boot` | Packages + initramfs |
 | Network connectivity | `curl -sf --head https://archlinux.org` | Package sync |
@@ -110,7 +110,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | **Preflight** | Validate prerequisites, acquire lock, load profile |
 | **Packages** | Sync repos, install/remove packages, AUR via paru |
-| **Configuration** | Deploy 15 embedded config files (atomic writes) |
+| **Configuration** | Deploy 16 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
 | **Boot** | Rebuild initramfs, update systemd-boot entries |
 | **Finalize** | Daemon-reload, cache cleanup, NM restart, WiFi reconnect, write manifest |
@@ -120,22 +120,20 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ### Kernel Parameters
 
-15 parameters written to `/etc/kernel/cmdline`:
+13 parameters written to `/etc/kernel/cmdline`:
 
 | Parameter | Purpose |
 |---|---|
 | `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (remove when 7.0+ stable) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
-| `amdgpu.runpm=0` | Disable GPU runtime PM (desktop — no battery) |
-| `amdgpu.wbrf=0` | Disable WiFi RFI memory clock throttling (UMA bandwidth) |
+| `clocksource=tsc` | Force TSC clocksource (prevents HPET demotion, 20× faster) |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
 | `iommu=pt` | IOMMU passthrough (DMA protection, near-zero overhead) |
 | `module_blacklist=pcspkr,wdat_wdt` | Silence PC speaker beep, block ACPI watchdog |
-| `mt7925e.disable_aspm=1` | Disable WiFi ASPM |
 | `nowatchdog` | Disable software watchdog timers |
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
 | `pcie_aspm=off` | Disable PCIe ASPM system-wide |
-| `processor.max_cstate=1` | Limit CPU C-states to C1 (low wake latency) |
+| `quiet` | Suppress kernel boot messages |
 | `split_lock_detect=off` | Disable split-lock #AC exception (gaming) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
 | `zswap.enabled=0` | Disable zswap (ZRAM masked separately) |
@@ -162,6 +160,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | Modules | `amdgpu`, `nvme` |
 | Hooks | `base` → `systemd` → `autodetect` → `microcode` → `modconf` → `kms` → `keyboard` → `sd-vconsole` → `block` → `filesystems` → `fsck` |
 | Compression | `zstd` |
+| Compression Options | `-3` |
 
 ### System Services
 
@@ -174,7 +173,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | File | Setting |
 |---|---|
-| `resolved.conf.d` | MulticastDNS=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
+| `resolved.conf.d` | MulticastDNS=no · LLMNR=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks=`PowerSaveDisable=*` · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
 
@@ -184,6 +183,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
 | `drirc` | RADV unified VRAM heap on APU |
+| `sysctl.d` | BBR+fq · tcp_fastopen=3 · vm.max_map_count=max · vm.swappiness=10 · compaction/watermark tuning (11 tunables, overrides CachyOS vendor where needed) |
 
 ### Environment Variables
 
@@ -194,6 +194,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `DXVK_LOG_LEVEL` | `none` |
 | `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
+| `RADV_PERFTEST` | `transfer_queue` |
 | `VKD3D_DEBUG` | `none` |
 | `VKD3D_SHADER_DEBUG` | `none` |
 
@@ -233,7 +234,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ## Managed Files
 
-15 files deployed via atomic writes (tmp → chmod → mv):
+16 files deployed via atomic writes (tmp → chmod → mv):
 
 | # | Scope | Path |
 |---|---|---|
@@ -247,11 +248,12 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | 8 | System | `/etc/iwd/main.conf` |
 | 9 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
 | 10 | System | `/etc/drirc` |
-| 11 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
-| 12 | User | `~/.config/environment.d/10-environment.conf` |
-| 13 | User | `~/.config/systemd/user/ssh-agent.service` |
-| 14 | Service | `/etc/systemd/system/amdgpu-performance.service` |
-| 15 | Service | `/etc/systemd/system/cpupower-epp.service` |
+| 11 | System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
+| 12 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
+| 13 | User | `~/.config/environment.d/10-environment.conf` |
+| 14 | User | `~/.config/systemd/user/ssh-agent.service` |
+| 15 | Service | `/etc/systemd/system/amdgpu-performance.service` |
+| 16 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
 
 ## Profiles

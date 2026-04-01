@@ -1,3 +1,13 @@
+3.27.0 (2026-03-31)
+-------------------
+  style: strip 17 unnecessary quotes flagged by fish_indent.
+    2 paths in SYSTEM_DESTINATIONS, 2 case labels in
+    _ry_get_file_content, 6 PROGRESS_STEPS entries,
+    6 _progress calls, 1 _progress_skip call.
+  fix(lint): update progress-call counter grep to match unquoted
+    args (_progress " → _progress [A-Z]).
+  docs: sync README (version badge 3.27.0), CHANGELOG.
+
 3.26.0 (2026-03-31)
 -------------------
   docs(readme): simplify Quick Start — show only clone + --all;

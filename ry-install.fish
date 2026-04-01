@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.26.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.27.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.26.0"
+set -g VERSION "3.27.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -502,14 +502,14 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        "/etc/kernel/cmdline" \
+        /etc/kernel/cmdline \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
         "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        "/etc/drirc"
+        /etc/drirc
 
     set -g USER_DESTINATIONS \
         "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
@@ -895,7 +895,7 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' "console-mode $LOADER_CONSOLE_MODE"
             printf '%s\n' "editor $LOADER_EDITOR"
 
-        case "/etc/kernel/cmdline"
+        case /etc/kernel/cmdline
             if test -z "$_ROOT_UUID"
                 _err "_ry_get_file_content: root UUID not cached (_load_profile may not have run)"
                 return 1
@@ -1023,7 +1023,7 @@ ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system
 [Install]
 WantedBy=multi-user.target'
 
-        case "/etc/drirc"
+        case /etc/drirc
             # RADV unified VRAM heap: prevents games from misallocating via artificial two-heap split on UMA APUs
             printf '%s\n' '<driconf>' \
                 '  <device>' \
@@ -1372,12 +1372,12 @@ set -g PROGRESS_WIDTH 40
 set -g PROGRESS_START_TIME 0
 set -g PROGRESS_STEP_START 0
 set -g PROGRESS_STEPS \
-    "Preflight" \
-    "Packages" \
-    "Configuration" \
-    "Services" \
-    "Boot" \
-    "Finalize"
+    Preflight \
+    Packages \
+    Configuration \
+    Services \
+    Boot \
+    Finalize
 set -g PROGRESS_TOTAL (count $PROGRESS_STEPS)
 
 # Reset progress counters and compute PROGRESS_TOTAL from PROGRESS_STEPS list
@@ -4780,7 +4780,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
     end
 
     set -l steps_count (count $PROGRESS_STEPS)
-    set -l progress_calls (sed -n -- '/^function _install_/,/^end$/p; /^function _ry_do_install/,/^end$/p' "$script_path" | grep -c '_progress "')
+    set -l progress_calls (sed -n -- '/^function _install_/,/^end$/p; /^function _ry_do_install/,/^end$/p' "$script_path" | grep -c '_progress [A-Z]')
     if test $steps_count -eq $progress_calls
         _ok "Progress steps verified: $steps_count steps = $progress_calls calls"
     else
@@ -4924,7 +4924,7 @@ end
 
 # Pipeline phase 1: deps, disk, network, kernel version, config validation
 function _install_preflight --description "Run all preflight checks before installation"
-    _progress "Preflight"
+    _progress Preflight
 
     if test "$DRY" = false
         _info "Sudo password required for installation..."
@@ -5000,7 +5000,7 @@ end
 function _install_packages --description "Install and remove managed packages via pacman"
     _check_sudo_keepalive
     set -l _fn_err false
-    _progress "Packages"
+    _progress Packages
     _echo
     _info "Synchronizing package databases..."
 
@@ -5097,7 +5097,7 @@ end
 function _install_system_files --description "Deploy all embedded config files to the system"
     _check_sudo_keepalive
     set -l _fn_err false
-    _progress "Configuration"
+    _progress Configuration
     _echo
     _info "Installing system configuration files..."
     if not _ry_install_files --sudo --desc "SYSTEM FILES" $SYSTEM_DESTINATIONS
@@ -5140,7 +5140,7 @@ end
 function _install_configure_services --description "Enable, start, and configure systemd services"
     _check_sudo_keepalive
     set -l _fn_err false
-    _progress "Services"
+    _progress Services
     _echo
     _info "Post-installation tasks..."
 
@@ -5463,7 +5463,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     _check_sudo_keepalive
 
     # Order: syu → mkinitcpio → sdboot → boot_sanity; syu first so new kernel is present before mkinitcpio -P; explicit pass ensures our configs apply
-    _progress "Boot"
+    _progress Boot
     if test "$SYSTEM_UPGRADED" = true
         _ok "System already upgraded during package installation"
     else if _ask "Perform full system upgrade? (pacman -Syu)"
@@ -5554,7 +5554,7 @@ end
 
 # Pipeline phase 6: daemon-reload, verify-static, verify-runtime, log summary, report errors
 function _install_finalize --description "Run post-install verification, cleanup, and summary"
-    _progress "Finalize"
+    _progress Finalize
     if not _run sudo systemctl daemon-reload
         _warn "Systemctl daemon-reload failed"
     end
@@ -5768,7 +5768,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
         _err "Boot-critical failure — skipping WiFi and finalization"
         _err "Fix boot issue first: sudo mkinitcpio -P && sudo sdboot-manage gen"
-        _progress_skip "Finalize"
+        _progress_skip Finalize
     else
         # Collect WiFi creds just before use to minimize WIFI_PASS global lifetime
         _install_collect_wifi

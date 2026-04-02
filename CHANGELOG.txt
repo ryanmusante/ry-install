@@ -1,3 +1,42 @@
+3.38.0 (2026-04-02)
+-------------------
+  feat(env): rename RADV_PERFTEST → RADV_EXPERIMENTAL (Mesa deprecated
+    RADV_PERFTEST; old name will break in future release). Add
+    VKD3D_CONFIG=transfer_queue (SDMA transfer queue for DX12 games),
+    PROTON_LOCAL_SHADER_CACHE=1 (per-game shader cache isolation),
+    WINEDEBUG=-all (suppress Wine debug output). Remove AMD_VULKAN_ICD
+    (RADV is sole ICD on CachyOS). ENV_VARS 7→9.
+  feat(sysctl): add 10 GbE buffer tuning: net.core.rmem_max,
+    net.core.wmem_max (128 MB), net.ipv4.tcp_rmem, net.ipv4.tcp_wmem
+    (64 MB max), net.core.netdev_max_backlog=16384. Add dirty page
+    limits: vm.dirty_bytes=400 MB, vm.dirty_background_bytes=200 MB
+    (prevents multi-second I/O stalls on 128 GB RAM). Add
+    vm.page-cluster=0 (single-page swap reads). Add security hardening:
+    kernel.kptr_restrict=1, kernel.dmesg_restrict=1,
+    kernel.yama.ptrace_scope=1, kernel.unprivileged_bpf_disabled=1.
+    SYSCTL_VALUES 11→23.
+  feat(kernel): add usbhid.mousepoll=1 (1000 Hz USB mouse polling).
+    KERNEL_PARAMS 13→14.
+  perf(initramfs): COMPRESSION_OPTIONS -3 → -1 (faster decompression,
+    marginal size increase on NVMe).
+  remove(service): remove amdgpu-performance.service. Wrote "auto" to
+    power_dpm_force_performance_level — already the kernel default.
+    Remove from SERVICE_DESTINATIONS, EXPECTED_SERVICES,
+    _ry_get_file_content, _install_system_files, _ry_verify_static,
+    _ry_verify_runtime (shift parsed[] indices 6→5). Embedded files
+    16→15. EXPECTED_SERVICES 4→3.
+  fix(verify): normalize whitespace in sysctl runtime verify for
+    multi-value keys (tcp_rmem, tcp_wmem). /proc/sys uses tabs;
+    SYSCTL_VALUES uses spaces.
+  docs: sync README (version badge 3.38.0, 14 kernel params, 15
+    embedded configs, 23 sysctl tunables, 9 env vars, remove
+    amdgpu-performance from System Services / Managed Files / example
+    profile, add usbhid.mousepoll row). Condense Profiles section
+    (remove destination boilerplate, keep skeleton + globals checklist).
+    Condense Safety & Reliability (remove jq examples, keep event
+    table + one-liner). Condense changelog (collapse 3.0.0–3.9.0).
+    CHANGELOG.
+
 3.37.2 (2026-04-02)
 -------------------
   fix(style): quote /etc/kernel/cmdline and /etc/drirc in
@@ -147,46 +186,21 @@
   fix(logging): break _json_str → _log circular call.
   docs: restructure README — add ToC, Install Flow, Known Issues.
 
-3.8.0–3.9.0 (2026-03-22 — 2026-03-24)
---------------------------------------
-  feat(validate): 5-job parallel config validation pipeline.
-  feat(kernel): add amdgpu.wbrf=0, tsc=reliable. KERNEL_PARAMS → 15.
-  feat(env): add DXVK_LOG_LEVEL=none. ENV_VARS 4→5.
-  feat(mask): add systemd-zram-setup@zram0.service. MASK 9→10.
-  feat(verify): 12 new runtime checks — THP, KSM, ZRAM, amd_pstate,
-    CPU boost, split_lock_mitigate, NVMe scheduler, BIOS VRAM.
-  fix(verify): split vendor-managed sysctl from ry-install-managed.
-  fix(scope): block-local out_dir shadow in _pregenerate_content_files.
-  refactor: extract _pregenerate_content_files, _ensure_sudo_cached,
-    centralize lint exclusions, data-driven completions.
-
-3.7.0–3.7.59 (2026-03-08 — 2026-03-22)
+3.0.0–3.9.0 (2026-02-27 — 2026-03-24)
 ---------------------------------------
-  feat: batch & parallel processing (B-1..B-9). Fork cap at 16.
-  feat(kernel): cwsr_enable=0, workqueue.power_efficient=0,
-    ttm.pages_limit. Remove split_lock_detect=off.
-  feat: sysctl VM tunables, resolved DoT/DNSSEC, modprobe configs,
-    drirc unified heap, Mesa anti-lag env var.
-  fix: 202 Bash-style &&/|| → Fish. 12 fish -c scope fixes.
-    8 set scope leaks. 8 "if not" inversions.
-  fix(security): amd_iommu=off → iommu=pt. _run metachar rejection.
-  fix(signal): Fish signal name without SIG prefix. Exit 128+signum.
-  fix(lock): PID ownership before delete. _do_cleanup race.
-  fix(wifi): _gkeyfile_escape tab/newline. WPA2 wc -c (bytes).
-  remove: --profile flag (now file-based only).
-
-3.5.0–3.6.4 (2026-03-07 — 2026-03-08)
--------------------------------------
-  feat: --check silent idempotency probe (exit 0/10).
-  feat: structured exit codes (0–5, 10–11). Manifest orphan tracking.
-  feat: --profile multi-machine support. _validate_profile.
-  fix: fish version gate 3.4+. Root UUID cached once. Boot abort.
-
-3.0.0–3.4.1 (2026-02-27 — 2026-03-06)
--------------------------------------
-  feat: sysctl.d, --test-all, --completions, KERNEL_PARAMS validation,
-    boot sanity, GKeyFile WiFi escaping, NDJSON header/footer.
-  fix: 292+ scope fixes. 96+ bare cat/rm → command prefix. SIGPIPE
-    handler. 2 infinite loops. do_diff --fix never triggered.
-  remove: --no-color, --no-log, --clean (344 lines), --json, --once.
+  Initial release through early stabilization. Batch & parallel
+    processing (B-1..B-9, fork cap 16). 5-job parallel config
+    validation. Structured exit codes (0–5, 10–11). --check silent
+    idempotency probe. --profile multi-machine support. NDJSON
+    structured logging with header/footer. --test-all, --completions.
+  kernel: cwsr_enable=0, ppfeaturemask, iommu=pt (was amd_iommu=off),
+    workqueue.power_efficient=0, DXVK_LOG_LEVEL, ZRAM mask.
+  verify: 12 runtime checks (THP, KSM, ZRAM, amd_pstate, CPU boost,
+    NVMe scheduler, BIOS VRAM). Parallel hash workers. Vendor sysctl
+    split from ry-install-managed.
+  fix: 292+ scope fixes. 202 Bash &&/|| → Fish. 96+ bare cat/rm →
+    command prefix. Signal handling (Fish SIG prefix, 128+signum).
+    _gkeyfile_escape. _run metachar rejection. PID lock ownership.
+  remove: --no-color, --no-log, --clean (344 lines), --json, --once,
+    --profile flag (file-based only).
   docs: README rewrite. Adopt kernel.org changelog style.

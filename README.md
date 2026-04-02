@@ -1,10 +1,10 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.37.2-blue)
+![Version](https://img.shields.io/badge/version-3.38.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
-Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
 
 **Default profile:** Beelink GTR9 Pro — AMD Ryzen AI Max+ 395 (Zen 5, Strix Halo) / Radeon 8060S (RDNA 3.5, gfx1151) / 128 GB LPDDR5x-8000
 
@@ -110,7 +110,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | **Preflight** | Validate prerequisites, acquire lock, load profile |
 | **Packages** | Sync repos, install/remove packages, AUR via paru |
-| **Configuration** | Deploy 16 embedded config files (atomic writes) |
+| **Configuration** | Deploy 15 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
 | **Boot** | Rebuild initramfs, update systemd-boot entries |
 | **Finalize** | Daemon-reload, cache cleanup, NM restart, WiFi reconnect, write manifest |
@@ -120,7 +120,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ### Kernel Parameters
 
-13 parameters written to `/etc/kernel/cmdline`:
+14 parameters written to `/etc/kernel/cmdline`:
 
 | Parameter | Purpose |
 |---|---|
@@ -136,6 +136,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `quiet` | Suppress kernel boot messages |
 | `split_lock_detect=off` | Disable split-lock #AC exception (gaming) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
+| `usbhid.mousepoll=1` | USB HID mouse polling at 1000 Hz (default 125 Hz) |
 | `zswap.enabled=0` | Disable zswap (ZRAM masked separately) |
 
 ### Boot Loader
@@ -166,7 +167,6 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | Unit | Description |
 |---|---|
-| `amdgpu-performance.service` | Write `auto` to `power_dpm_force_performance_level` sysfs (retry loop, multi-GPU). GameMode sets `high` dynamically. |
 | `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` sysfs |
 
 ### Network Stack
@@ -183,20 +183,21 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
 | `drirc` | RADV unified VRAM heap on APU |
-| `sysctl.d` | BBR+fq · tcp_fastopen=3 · vm.max_map_count=max · vm.swappiness=10 · compaction/watermark tuning (11 tunables, overrides CachyOS vendor where needed) |
+| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · vm.swappiness=10 · dirty page limits · compaction/watermark tuning · security hardening (23 tunables, overrides CachyOS vendor where needed) |
 
 ### Environment Variables
 
 | Variable | Value |
 |---|---|
-| `SSH_AUTH_SOCK` | `${XDG_RUNTIME_DIR}/ssh-agent.socket` |
-| `AMD_VULKAN_ICD` | `RADV` |
 | `DXVK_LOG_LEVEL` | `none` |
 | `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
-| `RADV_PERFTEST` | `transfer_queue` |
+| `PROTON_LOCAL_SHADER_CACHE` | `1` |
+| `RADV_EXPERIMENTAL` | `transfer_queue` |
+| `VKD3D_CONFIG` | `transfer_queue` |
 | `VKD3D_DEBUG` | `none` |
 | `VKD3D_SHADER_DEBUG` | `none` |
+| `WINEDEBUG` | `-all` |
 
 ### User Configuration
 
@@ -234,7 +235,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ## Managed Files
 
-16 files deployed via atomic writes (tmp → chmod → mv):
+15 files deployed via atomic writes (tmp → chmod → mv):
 
 | # | Scope | Path |
 |---|---|---|
@@ -252,8 +253,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | 12 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
 | 13 | User | `~/.config/environment.d/10-environment.conf` |
 | 14 | User | `~/.config/systemd/user/ssh-agent.service` |
-| 15 | Service | `/etc/systemd/system/amdgpu-performance.service` |
-| 16 | Service | `/etc/systemd/system/cpupower-epp.service` |
+| 15 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
 
 ## Profiles
@@ -280,33 +280,19 @@ function _ry_profile_my_desktop --description "Example desktop profile"
     set -g PROFILE_NAME my_desktop
     set -g PROFILE_DESC "My Desktop — AMD Ryzen 7 7800X3D / RX 7900 XTX"
 
-    # Destinations — must match _ry_get_file_content cases
-    set -g SYSTEM_DESTINATIONS "/boot/loader/loader.conf" "/etc/kernel/cmdline" \
-        "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf" \
-        "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
-        "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
-        "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
-        "/etc/iwd/main.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        "/etc/drirc" \
-        "/etc/sysctl.d/99-cachyos-sysctl.conf"
-    set -g USER_DESTINATIONS \
-        "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
-        "$HOME/.config/environment.d/10-environment.conf" \
-        "$HOME/.config/systemd/user/ssh-agent.service"
-    set -g SERVICE_DESTINATIONS \
-        "/etc/systemd/system/amdgpu-performance.service" \
-        "/etc/systemd/system/cpupower-epp.service"
+    # Copy SYSTEM_DESTINATIONS, USER_DESTINATIONS, SERVICE_DESTINATIONS
+    # from the built-in gtr9_pro profile and adjust paths as needed.
 
-    # All remaining required globals — see --dry-run for validation errors:
-    # KERNEL_PARAMS  MKINITCPIO_MODULES  MKINITCPIO_HOOKS  MKINITCPIO_COMPRESSION
+    # Required globals (--dry-run reports missing ones):
+    # KERNEL_PARAMS MKINITCPIO_MODULES MKINITCPIO_HOOKS MKINITCPIO_COMPRESSION
     # LOADER_DEFAULT LOADER_TIMEOUT LOADER_CONSOLE_MODE LOADER_EDITOR
     # SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE
-    # RESOLVED_MDNS LOGIND_IGNORE_KEYS
-    # IWD_ENABLE_NETWORK_CONFIG IWD_DRIVER_QUIRKS IWD_DNS_SERVICE
-    # NM_WIFI_BACKEND NM_WIFI_POWERSAVE NM_LOG_LEVEL
-    # ENV_VARS PKGS_ADD MASK EXPECTED_SERVICES SYSCTL_VALUES
-    # BOOT_SPACE_CRIT BOOT_SPACE_WARN ROOT_AVAIL_CRIT ROOT_AVAIL_WARN
-    # Optional: PKGS_DEL  BOOT_TIME_TARGET  EXPECTED_CPU_MATCH
+    # RESOLVED_MDNS LOGIND_IGNORE_KEYS ENV_VARS PKGS_ADD MASK
+    # EXPECTED_SERVICES SYSCTL_VALUES IWD_ENABLE_NETWORK_CONFIG
+    # IWD_DRIVER_QUIRKS IWD_DNS_SERVICE NM_WIFI_BACKEND NM_WIFI_POWERSAVE
+    # NM_LOG_LEVEL BOOT_SPACE_CRIT BOOT_SPACE_WARN ROOT_AVAIL_CRIT
+    # ROOT_AVAIL_WARN
+    # Optional: PKGS_DEL BOOT_TIME_TARGET EXPECTED_CPU_MATCH
 end
 ```
 
@@ -375,36 +361,7 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 | `section` | data | Phase boundary |
 | `diff` | data | File drift detected |
 
-**Log analysis examples (jq):**
-
-```fish
-# All errors from most recent log
-jq 'select(.event == "err")' ~/ry-install/logs/**/*.jsonl | tail -20
-
-# Failures from a specific run
-jq 'select(.event == "fail")' ~/ry-install/logs/2026-03-25/install-20260325-140000+0000.jsonl
-
-# Run summary (exit code, pass/fail/warn counts)
-jq 'select(.event == "footer")' ~/ry-install/logs/**/*.jsonl
-
-# Step timing for install runs
-jq 'select(.event == "step_time") | {step: .data, seconds: .elapsed_s}' ~/ry-install/logs/**/*.jsonl
-
-# All unique warnings across all runs
-jq -r 'select(.event == "warn") | .data' ~/ry-install/logs/**/*.jsonl | sort -u
-
-# Commands that failed (non-zero exit)
-jq -r 'select(.event == "run") | .data' ~/ry-install/logs/**/*.jsonl | grep '^EXIT: [^0]'
-
-# Interrupted runs
-jq 'select(.event == "footer" and .interrupted == true)' ~/ry-install/logs/**/*.jsonl
-
-# Drift check history
-jq 'select(.event == "footer" and .mode == "check") | {ts: .ts, exit: .exit_code}' ~/ry-install/logs/**/*.jsonl
-
-# List all runs with mode and exit code
-jq -r 'select(.event == "footer") | [.ts, .mode, .exit_code] | @tsv' ~/ry-install/logs/**/*.jsonl
-```
+Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
 
 ## Hardware Reference

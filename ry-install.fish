@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.37.2 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.38.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.37.2"
+set -g VERSION "3.38.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -517,7 +517,6 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "$HOME/.config/systemd/user/ssh-agent.service"
 
     set -g SERVICE_DESTINATIONS \
-        "/etc/systemd/system/amdgpu-performance.service" \
         "/etc/systemd/system/cpupower-epp.service"
 
     # Boot
@@ -530,7 +529,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (13 params)
+    # Kernel (14 params)
     # ppfeaturemask: bits 14,15,17 off; cwsr_enable=0: gfx1151 VGPR (remove after ROCm 7.2+ fix); clocksource=tsc: force TSC; quiet: suppress boot messages; module_blacklist: pcspkr+wdat_wdt (CachyOS covers iTCO/sp5100 only)
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
@@ -545,6 +544,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         quiet \
         split_lock_detect=off \
         usbcore.autosuspend=-1 \
+        usbhid.mousepoll=1 \
         zswap.enabled=0
 
     # Initramfs
@@ -563,7 +563,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         filesystems \
         fsck
     set -g MKINITCPIO_COMPRESSION zstd
-    set -g MKINITCPIO_COMPRESSION_OPTIONS -3
+    set -g MKINITCPIO_COMPRESSION_OPTIONS -1
 
     # Udev — ntsync rule handled by ntsync-common package (in PKGS_ADD)
 
@@ -587,13 +587,15 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     # Environment
     set -g ENV_VARS \
-        "AMD_VULKAN_ICD=RADV" \
         "DXVK_LOG_LEVEL=none" \
         "ENABLE_LAYER_MESA_ANTI_LAG=1" \
         "MESA_SHADER_CACHE_MAX_SIZE=4G" \
-        "RADV_PERFTEST=transfer_queue" \
+        "PROTON_LOCAL_SHADER_CACHE=1" \
+        "RADV_EXPERIMENTAL=transfer_queue" \
+        "VKD3D_CONFIG=transfer_queue" \
         "VKD3D_DEBUG=none" \
-        "VKD3D_SHADER_DEBUG=none"
+        "VKD3D_SHADER_DEBUG=none" \
+        "WINEDEBUG=-all"
 
     # Sysctl tunables — overrides CachyOS vendor 70-cachyos-settings.conf where values differ
     set -g SYSCTL_VALUES \
@@ -602,12 +604,24 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "net.ipv4.tcp_fastopen=3" \
         "net.ipv4.tcp_mtu_probing=1" \
         "net.ipv4.tcp_slow_start_after_idle=0" \
+        "net.core.rmem_max=134217728" \
+        "net.core.wmem_max=134217728" \
+        "net.ipv4.tcp_rmem=4096 87380 67108864" \
+        "net.ipv4.tcp_wmem=4096 65536 67108864" \
+        "net.core.netdev_max_backlog=16384" \
         "vm.compaction_proactiveness=0" \
+        "vm.dirty_bytes=419430400" \
+        "vm.dirty_background_bytes=209715200" \
         "vm.max_map_count=2147483642" \
         "vm.page_lock_unfairness=1" \
+        "vm.page-cluster=0" \
         "vm.swappiness=10" \
         "vm.watermark_boost_factor=0" \
-        "vm.watermark_scale_factor=125"
+        "vm.watermark_scale_factor=125" \
+        "kernel.kptr_restrict=1" \
+        "kernel.dmesg_restrict=1" \
+        "kernel.yama.ptrace_scope=1" \
+        "kernel.unprivileged_bpf_disabled=1"
 
     # Packages
     set -g PKGS_ADD \
@@ -649,7 +663,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         hybrid-sleep.target \
         suspend-then-hibernate.target \
         systemd-zram-setup@zram0.service
-    set -g EXPECTED_SERVICES amdgpu-performance.service cpupower-epp.service fstrim.timer NetworkManager.service
+    set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service
 
     # Thresholds
     set -g BOOT_SPACE_CRIT 200
@@ -1014,21 +1028,6 @@ RestartSec=5
 
 [Install]
 WantedBy=default.target'
-
-        case "/etc/systemd/system/amdgpu-performance.service"
-            # After=multi-user.target for DRM settle (Arch #72655); 5 retries, 2s delay; "auto" not "high" — GameMode sets "high" dynamically
-            printf '%s\n' '[Unit]' \
-                'Description=Set AMDGPU power_dpm_force_performance_level to auto' \
-                'After=multi-user.target' \
-                'ConditionPathIsDirectory=/sys/class/drm' \
-                '' \
-                '[Service]' \
-                'Type=oneshot' \
-                'RemainAfterExit=yes' \
-                'ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; retries=5; delay=2; written=0; for attempt in $(seq 1 $retries); do for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do [ -f "$f" ] && [ -w "$f" ] && { echo auto > "$f" && written=$((written+1)); }; done; [ "$written" -gt 0 ] && break; [ "$attempt" -lt "$retries" ] && sleep $delay; done; [ "$written" -gt 0 ]'\''' \
-                '' \
-                '[Install]' \
-                'WantedBy=graphical.target'
 
         case "/etc/systemd/system/cpupower-epp.service"
             # Tradeoff: permanent EPP=performance masks PPD — breaks CachyOS game-performance wrapper; alternative: unmask PPD + powerprofilesctl
@@ -3356,11 +3355,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
     for svc_file in $SERVICE_DESTINATIONS
         _chk_file "$svc_file"
     end
-    if test -f /etc/systemd/system/amdgpu-performance.service
-        _chk_grep /etc/systemd/system/amdgpu-performance.service power_dpm_force_performance_level "amdgpu-performance ExecStart"
-        _chk_grep /etc/systemd/system/amdgpu-performance.service "WantedBy=graphical.target" "amdgpu-performance WantedBy"
-        _chk_grep /etc/systemd/system/amdgpu-performance.service "retries=" "amdgpu-performance retry loop"
-    end
     if test -f /etc/systemd/system/cpupower-epp.service
         # scaling_governor ExecStart absent: amd_pstate=active uses powersave+performance EPP
         _chk_grep /etc/systemd/system/cpupower-epp.service energy_performance_preference "cpupower-epp EPP ExecStart"
@@ -3942,7 +3936,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     if test "$found_gpu" = false
         _warn "  No GPU DPM sysfs entries found"
     else if test "$gpu_ok" = false
-        _warn "  GPU not at 'auto' - enable amdgpu-performance.service"
+        _warn "  GPU not at 'auto' — check dmesg for amdgpu errors"
     end
     _echo
 
@@ -4160,8 +4154,8 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo "SERVICE STATE"
     _echo
 
-    # B-8a: Batch systemctl show — 1 system call replaces 9 individual calls
-    set -l sys_units amdgpu-performance.service cpupower-epp.service \
+    # B-8a: Batch systemctl show — 1 system call replaces individual calls
+    set -l sys_units cpupower-epp.service \
         fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service \
         NetworkManager.service
     set -l show_output (systemctl show --property=LoadState,ActiveState,UnitFileState -- $sys_units 2>/dev/null | string collect --no-trim-newlines)
@@ -4195,24 +4189,8 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
     else
 
-        # amdgpu-performance.service
-        set -l rec (string split -- ':' -- "$parsed[1]")
-        if test "$rec[1]" = not-found
-            _warn "  amdgpu-performance.service: not installed"
-        else if test "$rec[2]" = active; or test "$rec[2]" = exited
-            if test "$rec[3]" = enabled
-                _ok "  amdgpu-performance.service: $rec[2] (enabled)"
-            else
-                _warn "  amdgpu-performance.service: $rec[2] but $rec[3] (won't persist)"
-            end
-        else if test -f /etc/systemd/system/amdgpu-performance.service
-            _fail "  amdgpu-performance.service: $rec[2] (expected: active)"
-        else
-            _warn "  amdgpu-performance.service: not installed"
-        end
-
         # cpupower-epp.service
-        set -l rec (string split -- ':' -- "$parsed[2]")
+        set -l rec (string split -- ':' -- "$parsed[1]")
         if test "$rec[1]" = not-found
             _warn "  cpupower-epp.service: not installed"
         else if test "$rec[2]" = active; or test "$rec[2]" = exited
@@ -4228,7 +4206,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
 
         # fstrim.timer
-        set -l rec (string split -- ':' -- "$parsed[3]")
+        set -l rec (string split -- ':' -- "$parsed[2]")
         if test "$rec[2]" = active
             if test "$rec[3]" = enabled
                 _ok "  fstrim.timer: active (enabled)"
@@ -4240,7 +4218,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
 
         # systemd-resolved
-        set -l rec (string split -- ':' -- "$parsed[4]")
+        set -l rec (string split -- ':' -- "$parsed[3]")
         if test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
             if test "$rec[2]" = active
                 _ok "  systemd-resolved: active"
@@ -4250,7 +4228,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
 
         # NetworkManager-dispatcher
-        set -l rec (string split -- ':' -- "$parsed[5]")
+        set -l rec (string split -- ':' -- "$parsed[4]")
         if test "$rec[3]" = enabled
             if test "$rec[2]" = active; or test "$rec[2]" = inactive
                 _ok "  NetworkManager-dispatcher: $rec[3] ($rec[2])"
@@ -4262,7 +4240,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
 
         # NetworkManager
-        set -l rec (string split -- ':' -- "$parsed[6]")
+        set -l rec (string split -- ':' -- "$parsed[5]")
         if test "$rec[2]" = active
             if test "$rec[3]" = enabled
                 _ok "  NetworkManager.service: active (enabled)"
@@ -4335,8 +4313,10 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         set -l _key (string split '=' -- "$entry")[1]
         set -l _expected (string split '=' -- "$entry")[2]
         set -l _proc_path (string replace -a '.' '/' -- "$_key")
-        set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim --)
-        if test "$_actual" = "$_expected"
+        # Normalize whitespace: /proc/sys uses tabs for multi-value keys (tcp_rmem, tcp_wmem); SYSCTL_VALUES uses spaces
+        set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim -- | string replace -ra '\s+' ' ')
+        set -l _expected_norm (string replace -ra '\s+' ' ' -- "$_expected")
+        if test "$_actual" = "$_expected_norm"
             _ok "  $_key: $_actual"
         else if test -n "$_actual"
             _fail "  $_key: $_actual (expected: $_expected)"
@@ -5216,24 +5196,6 @@ function _install_system_files --description "Deploy all embedded config files t
         set _fn_err true
     end
 
-    _echo
-    _info "AMDGPU performance service (STRONGLY RECOMMENDED)"
-    _info "  Udev rule may fail due to timing (Arch bug #72655)"
-
-    if _ask "Install amdgpu-performance.service?"
-        if not _ry_install_file "/etc/systemd/system/amdgpu-performance.service" true
-            _err "Failed to install amdgpu-performance.service"
-            set -g INSTALL_HAD_ERRORS true
-            set _fn_err true
-        else
-            if not _run sudo systemctl daemon-reload
-                _warn "Systemctl daemon-reload failed"
-            end
-            if not _run sudo systemctl enable --now amdgpu-performance.service
-                _warn "Failed to enable amdgpu-performance.service"
-            end
-        end
-    end
     test "$_fn_err" = true; and return 1
     return 0
 end

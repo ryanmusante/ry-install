@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.36.0-blue)
+![Version](https://img.shields.io/badge/version-3.37.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -87,7 +87,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |
 | `--lint` | Fish syntax, anti-pattern, and scope shadow checks |
-| `--check` | Silent idempotency probe (exit 0 = clean, 10 = drift) |
+| `--check` | Silent idempotency probe (exit 0 = clean, 3 = prereq fail, 10 = drift) |
 | `--test-all` | Run all safe modes, generate NDJSON logs |
 | `--install-file <path>` | Re-deploy a single managed file |
 | `--completions` | Install Fish tab-completions |
@@ -339,7 +339,7 @@ Validate before first use:
 | `0` | Success |
 | `1` | Non-critical failure |
 | `2` | Usage error |
-| `3` | Preflight failed |
+| `3` | Preflight failed (also `--check` prereq failure) |
 | `4` | Boot-critical failure |
 | `5` | Lock failed |
 | `10` | Drift (`--check`) |

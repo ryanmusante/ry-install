@@ -1,3 +1,21 @@
+3.37.0 (2026-04-02)
+-------------------
+  fix(check): return EXIT_PREFLIGHT(3) for infrastructure failures
+    (sudo unavailable, content pregeneration, mktemp). Previously
+    returned EXIT_DRIFT(10), making CI unable to distinguish prereq
+    failure from actual config drift.
+  fix(diff): set VERIFY_MODE=true with counter reset at entry, false
+    before return. JSONL footer now reports accurate pass/fail/warn
+    counts for diff runs (was always 0/0/0).
+  fix(diff-fix): call _manifest_write after successful --diff --fix
+    (guarded: FIX=true, DRY=false, fixed_count>0). Orphan tracking
+    now stays current without requiring a full reinstall.
+  fix(validate): display first 5 lines of parallel validation child
+    stderr to terminal via _warn. systemd-analyze and fish diagnostic
+    warnings were previously only written to JSONL log.
+  docs: sync README (version badge 3.37.0, --check exit codes,
+    exit code table), CHANGELOG.
+
 3.36.0 (2026-04-01)
 -------------------
   fix(docs/specs): cTDP "55–120 W" → "55 W default TDP (cTDP

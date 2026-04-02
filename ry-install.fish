@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.36.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.37.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.36.0"
+set -g VERSION "3.37.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -500,7 +500,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        "/etc/kernel/cmdline" \
+        /etc/kernel/cmdline \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
@@ -508,7 +508,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        "/etc/drirc" \
+        /etc/drirc \
         "/etc/sysctl.d/99-cachyos-sysctl.conf"
 
     set -g USER_DESTINATIONS \
@@ -563,7 +563,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         filesystems \
         fsck
     set -g MKINITCPIO_COMPRESSION zstd
-    set -g MKINITCPIO_COMPRESSION_OPTIONS "-3"
+    set -g MKINITCPIO_COMPRESSION_OPTIONS -3
 
     # Udev — ntsync rule handled by ntsync-common package (in PKGS_ADD)
 
@@ -909,7 +909,7 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' "console-mode $LOADER_CONSOLE_MODE"
             printf '%s\n' "editor $LOADER_EDITOR"
 
-        case "/etc/kernel/cmdline"
+        case /etc/kernel/cmdline
             if test -z "$_ROOT_UUID"
                 _err "_ry_get_file_content: root UUID not cached (_load_profile may not have run)"
                 return 1
@@ -1047,7 +1047,7 @@ ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system
 [Install]
 WantedBy=multi-user.target'
 
-        case "/etc/drirc"
+        case /etc/drirc
             # RADV unified VRAM heap: prevents games from misallocating via artificial two-heap split on UMA APUs
             printf '%s\n' '<driconf>' \
                 '  <device>' \
@@ -1701,7 +1701,7 @@ VERIFICATION:
   --verify-static   Check config files exist with correct content
   --verify-runtime  Check live system state (run after reboot)
   --lint            Run fish syntax and anti-pattern checks
-  --check           Silent idempotency probe (exit 0 = clean, exit 10 = drift)
+  --check           Silent idempotency probe (exit 0 = clean, exit 3 = prereq fail, exit 10 = drift)
   --test-all        Run all safe modes and generate NDJSON logs (test suite)
 
 UTILITIES:
@@ -2267,6 +2267,11 @@ function _ry_validate_configs --description "Run all embedded config validators"
         # Log stderr from ALL children (warnings from systemd-analyze, fish --no-execute, etc.)
         if test -s "$val_dir/$phase.stderr"
             _log "VALIDATE_STDERR($phase): "(head -n 15 "$val_dir/$phase.stderr")
+            # Surface warnings to terminal so user sees systemd-analyze/fish diagnostics
+            set -l _child_lines (command head -n 5 "$val_dir/$phase.stderr")
+            for _cl in $_child_lines
+                _warn "  validate($phase): $_cl"
+            end
         end
         set -l phase_errors (command cat -- "$val_dir/$phase.errors" 2>/dev/null)
         if test -n "$phase_errors"; and string match -qr '^\d+$' -- "$phase_errors"
@@ -2543,6 +2548,11 @@ end
 # Compare embedded content against installed files; --fix repairs in-place; exit 1 when drift found.
 function _ry_do_diff --argument-names target_file --description "Show diffs between embedded and installed configs"
     _log "=== DIFF START ==="
+
+    set -g VERIFY_MODE true
+    set -g VERIFY_OK 0
+    set -g VERIFY_FAIL 0
+    set -g VERIFY_WARN 0
 
     # Check for orphaned files from previous install or profile switch
     _manifest_check_orphans
@@ -3006,6 +3016,8 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
 
     _log "=== DIFF END ==="
 
+    set -g VERIFY_MODE false
+
     if test "$fix_errors" = true
         return 1
     end
@@ -3014,6 +3026,10 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
     end
     if test "$has_diff" = true; and test "$DRY" = true
         return 1
+    end
+    # Update manifest after successful --fix so orphan tracking stays current
+    if test "$FIX" = true; and test "$DRY" = false; and test $fixed_count -gt 0
+        _manifest_write; or _warn "Failed to update manifest after --fix"
     end
     return 0
 end
@@ -3563,8 +3579,8 @@ function _ry_verify_static --description "Verify installed configs match embedde
     return $ret
 end
 
-# Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted
-function _ry_do_check --description "Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted"
+# Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted, EXIT_PREFLIGHT if prereqs fail
+function _ry_do_check --description "Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted, EXIT_PREFLIGHT if prereqs fail"
     set -l drift false
     set -l checked 0
 
@@ -3574,15 +3590,15 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         set _sudo_ok true
     end
     if test "$_sudo_ok" = false
-        _log "CHECK_DRIFT: sudo not cached"
-        return $EXIT_DRIFT
+        _log "CHECK_PREFLIGHT: sudo not cached"
+        return $EXIT_PREFLIGHT
     end
 
     # Pre-generate content files (prereq 1)
     set -l content_dir (_pregenerate_content_files)
     if not test -d "$content_dir"
-        _log "CHECK_DRIFT: content pregeneration failed"
-        return $EXIT_DRIFT
+        _log "CHECK_PREFLIGHT: content pregeneration failed"
+        return $EXIT_PREFLIGHT
     end
 
     # Determine iwd skip list
@@ -3593,8 +3609,8 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
 
     set -l result_dir (mktemp -d -t ry-check-parallel.XXXXXX)
     if not test -d "$result_dir"
-        _log "CHECK_DRIFT: mktemp failed"
-        return $EXIT_DRIFT
+        _log "CHECK_PREFLIGHT: mktemp failed"
+        return $EXIT_PREFLIGHT
     end
     set -ga _TRACKED_TMPFILES "$result_dir"
     set -l my_home "$HOME"
@@ -6073,7 +6089,7 @@ function _ry_do_completions --description "Generate fish shell completions for r
         '-l verify-static|Check config files exist with correct content' \
         '-l verify-runtime|Check live system state (run after reboot)' \
         '-l lint|Run fish syntax and anti-pattern checks' \
-        '-l check|Silent idempotency probe (exit 0 = clean, exit 10 = drift)' \
+        '-l check|Silent idempotency probe (exit 0 = clean, exit 3 = prereq fail, exit 10 = drift)' \
         '-l test-all|Run all safe modes and generate NDJSON logs (test suite)' \
         '-l completions|Install fish tab-completions for ry-install itself' \
         '-l fix|Re-install drifted files (use with --diff)' \

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.37.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.37.1 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.37.0"
+set -g VERSION "3.37.1"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -2609,7 +2609,7 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
         _info "No automatic backup — snapshot your rootfs before proceeding if needed"
     end
 
-    # B-6: Batch I/O — pre-generate expected content + parallel installed-file reads
+    # B-6: Batch I/O — pre-generate expected content + sequential installed-file reads
     _ensure_sudo_cached
     or return 1
     set -l diff_batch_dir (mktemp -d -t ry-diffbatch.XXXXXX)
@@ -2620,7 +2620,7 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
     set -ga _TRACKED_TMPFILES "$diff_batch_dir"
     set -l my_home "$HOME"
 
-    # Detect iwd skip state for both Phase 1 and Phase 2 (avoids wasted content generation + parallel forks)
+    # Detect iwd skip state for both Phase 1 and Phase 2 (avoids wasted content generation + sequential reads)
     set -l _diff_skip_iwd false
     if not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1
         set _diff_skip_iwd true
@@ -6170,6 +6170,8 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         "--install-file /etc/kernel/cmdline --dry-run"
 
     # Nested parallelism guard: <8 cores→sequential, 8-15→batch nproc, 16+→full parallel
+    # Fork budget: 7 outer modes + inner forks from --check (4 jobs) and --verify-static (4 workers)
+    # Worst case: 7 + 4 + 4 = 15 fish procs; acceptable on 8+ cores (I/O-bound children, <1s each)
     set -l nproc_val (nproc 2>/dev/null)
     set -l par_batch_size 0
     if test -n "$nproc_val"; and string match -qr '^\d+$' -- "$nproc_val"

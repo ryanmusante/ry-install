@@ -1,3 +1,16 @@
+3.37.1 (2026-04-02)
+-------------------
+  fix(docs): B-6 comment "parallel installed-file reads" →
+    "sequential installed-file reads" (reads are sequential in
+    parent; sudo ppid constraint documented in Phase 2 comment).
+  fix(docs): B-6 iwd skip comment "parallel forks" → "sequential
+    reads" (no parallel forks exist in _ry_do_diff).
+  fix(docs): expand B-5 nested parallelism guard comment to
+    document actual fork budget: 7 outer modes + inner forks
+    from --check (4 jobs) and --verify-static (4 workers),
+    worst case 15 fish procs on 8+ cores.
+  docs: sync README (version badge 3.37.1), CHANGELOG.
+
 3.37.0 (2026-04-02)
 -------------------
   fix(check): return EXIT_PREFLIGHT(3) for infrastructure failures

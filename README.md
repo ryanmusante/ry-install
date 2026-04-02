@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.34.0-blue)
+![Version](https://img.shields.io/badge/version-3.35.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -285,8 +285,10 @@ function _ry_profile_my_desktop --description "Example desktop profile"
         "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf" \
         "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
         "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
+        "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
         "/etc/iwd/main.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        "/etc/drirc"
+        "/etc/drirc" \
+        "/etc/sysctl.d/99-cachyos-sysctl.conf"
     set -g USER_DESTINATIONS \
         "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
         "$HOME/.config/environment.d/10-environment.conf" \
@@ -302,9 +304,9 @@ function _ry_profile_my_desktop --description "Example desktop profile"
     # RESOLVED_MDNS LOGIND_IGNORE_KEYS
     # IWD_ENABLE_NETWORK_CONFIG IWD_DRIVER_QUIRKS IWD_DNS_SERVICE
     # NM_WIFI_BACKEND NM_WIFI_POWERSAVE NM_LOG_LEVEL
-    # ENV_VARS PKGS_ADD MASK EXPECTED_SERVICES
+    # ENV_VARS PKGS_ADD MASK EXPECTED_SERVICES SYSCTL_VALUES
     # BOOT_SPACE_CRIT BOOT_SPACE_WARN ROOT_AVAIL_CRIT ROOT_AVAIL_WARN
-    # Optional: PKGS_DEL  BOOT_TIME_TARGET  EXPECTED_CPU_MATCH  UDEV_RULES
+    # Optional: PKGS_DEL  BOOT_TIME_TARGET  EXPECTED_CPU_MATCH
 end
 ```
 
@@ -412,7 +414,7 @@ jq -r 'select(.event == "footer") | [.ts, .mode, .exit_code] | @tsv' ~/ry-instal
 | Component | Detail |
 |---|---|
 | BIOS | P110 (Dec 2025 — ACPI fix) |
-| CPU | Ryzen AI Max+ 395 — Zen 5, 16C/32T, 5.1 GHz, 55–120 W TDP |
+| CPU | Ryzen AI Max+ 395 — Zen 5, 16C/32T, 5.1 GHz, 55–120 W cTDP (Beelink: 140 W) |
 | GPU | Radeon 8060S — RDNA 3.5, gfx1151, 40 CUs |
 | RAM | 128 GB LPDDR5x-8000 |
 | WiFi | MediaTek MT7925 (WiFi 7) |
@@ -431,7 +433,7 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | MES page faults | FW 0x83 affected | Avoid `linux-firmware-20251125`; pin if needed |
 | ROCm VRAM allocation | Fixed in kernel 6.16+ | GTT handled automatically — no `ttm.pages_limit` or `amdgpu.gttsize` needed |
 | PSR freeze (eDP only) | Open | `amdgpu.dcdebugmask=0x10` (not needed for HDMI/DP) |
-| Black screen | Kernel 6.19.0 regression | Use 6.18.9 |
+| Black screen | Kernel 6.19.0 regression | Downgrade to 6.18.x or upgrade to 6.19.1+ |
 | ROCm compute | Requires env vars | `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.1` |
 
 #### MediaTek MT7925 WiFi

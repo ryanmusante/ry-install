@@ -1,3 +1,18 @@
+3.35.0 (2026-04-01)
+-------------------
+  fix(docs/profile): remove dead UDEV_RULES from optional globals
+    list (removed from script in v3.11.0).
+  fix(docs/profile): add SYSCTL_VALUES to required globals comment
+    (required since v3.34.0 but missing from example).
+  fix(docs/profile): add coredump.conf.d and sysctl.d destinations
+    to example profile. SYSTEM_DESTINATIONS 9→11, total 14→16.
+  fix(docs/known-issues): black screen workaround "Use 6.18.9" →
+    "Downgrade to 6.18.x or upgrade to 6.19.1+" (aligns with
+    script CHK-03 guidance).
+  fix(docs/specs): TDP "55–120 W" → "55–120 W cTDP (Beelink:
+    140 W)". AMD cTDP spec vs Beelink configured value.
+  docs: sync README (version badge 3.35.0), CHANGELOG.
+
 3.34.0 (2026-04-01)
 -------------------
   perf(kernel): remove 4 kernel params: processor.max_cstate=1

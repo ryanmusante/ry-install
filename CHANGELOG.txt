@@ -1,3 +1,25 @@
+3.36.0 (2026-04-01)
+-------------------
+  fix(docs/specs): cTDP "55–120 W" → "55 W default TDP (cTDP
+    45–120 W)". AMD spec lists cTDP floor at 45W, not 55W.
+  fix(docs/known-issues): CWSR "Fixed in kernel 7.0+" → "ROCm 7.2+
+    userspace + kernel patches (6.14/6.17 OEM)". No Linux kernel 7.0
+    exists; fix requires both kernel and userspace components.
+  fix(docs/known-issues): MT7925 TX power "Unfixable driver bug" →
+    "Cosmetic — actual TX follows regulatory limits; kernel patches
+    pending". Reporting bug, not hardware limitation.
+  fix(docs/kernel): CWSR param "remove when 7.0+ stable" → "remove
+    after ROCm 7.2+ fix". Aligns with known-issues correction.
+  fix(docs/known-issues): mt7925_mac_reset_work → mt792x_mac_reset_work
+    (shared mt792x family function).
+  fix(docs/kernel): clocksource=tsc "20× faster" → "~10–100× lower
+    read latency". Sources range widely by workload.
+  fix(verify): HPET message "~20× slower" → "10–100× higher read
+    latency".
+  fix(profile-comment): CWSR "remove 7.0+" → "remove after ROCm 7.2+
+    fix".
+  docs: sync README (version badge 3.36.0), CHANGELOG, script.
+
 3.35.0 (2026-04-01)
 -------------------
   fix(docs/profile): remove dead UDEV_RULES from optional globals

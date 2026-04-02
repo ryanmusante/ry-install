@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.35.0-blue)
+![Version](https://img.shields.io/badge/version-3.36.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -124,9 +124,9 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | Parameter | Purpose |
 |---|---|
-| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (remove when 7.0+ stable) |
+| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (remove after ROCm 7.2+ fix) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
-| `clocksource=tsc` | Force TSC clocksource (prevents HPET demotion, 20× faster) |
+| `clocksource=tsc` | Force TSC clocksource (prevents HPET demotion, ~10–100× lower read latency) |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
 | `iommu=pt` | IOMMU passthrough (DMA protection, near-zero overhead) |
 | `module_blacklist=pcspkr,wdat_wdt` | Silence PC speaker beep, block ACPI watchdog |
@@ -414,7 +414,7 @@ jq -r 'select(.event == "footer") | [.ts, .mode, .exit_code] | @tsv' ~/ry-instal
 | Component | Detail |
 |---|---|
 | BIOS | P110 (Dec 2025 — ACPI fix) |
-| CPU | Ryzen AI Max+ 395 — Zen 5, 16C/32T, 5.1 GHz, 55–120 W cTDP (Beelink: 140 W) |
+| CPU | Ryzen AI Max+ 395 — Zen 5, 16C/32T, 5.1 GHz, 55 W default TDP (cTDP 45–120 W, Beelink: 140 W) |
 | GPU | Radeon 8060S — RDNA 3.5, gfx1151, 40 CUs |
 | RAM | 128 GB LPDDR5x-8000 |
 | WiFi | MediaTek MT7925 (WiFi 7) |
@@ -429,7 +429,7 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 
 | Issue | Status | Workaround |
 |---|---|---|
-| CWSR hang — incorrect VGPR count (`cf326449637a5`), compute-only | Fixed in kernel 7.0+ | `amdgpu.cwsr_enable=0` (pre-7.0) |
+| CWSR hang — incorrect VGPR count (`cf326449637a5`), compute-only | ROCm 7.2+ userspace + kernel patches (6.14/6.17 OEM) | `amdgpu.cwsr_enable=0` (pre-fix) |
 | MES page faults | FW 0x83 affected | Avoid `linux-firmware-20251125`; pin if needed |
 | ROCm VRAM allocation | Fixed in kernel 6.16+ | GTT handled automatically — no `ttm.pages_limit` or `amdgpu.gttsize` needed |
 | PSR freeze (eDP only) | Open | `amdgpu.dcdebugmask=0x10` (not needed for HDMI/DP) |
@@ -440,8 +440,8 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 
 | Issue | Status | Workaround |
 |---|---|---|
-| Kernel panics (NULL deref in `mt7925_mac_reset_work`) | Driver bug | `paru -S mt76-mt7925-dkms` |
-| TX power locked at 3 dBm | Unfixable driver bug | None — consider Intel AX210/AX211 |
+| Kernel panics (NULL deref in `mt792x_mac_reset_work`) | Driver bug | `paru -S mt76-mt7925-dkms` |
+| TX power reported as 3 dBm | Cosmetic — actual TX follows regulatory limits; kernel patches pending | Consider Intel AX210/AX211 if signal issues persist |
 | Random deauthentication | Intermittent | None — consider Intel AX210/AX211 |
 
 #### NetworkManager + iwd

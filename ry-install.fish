@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.35.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.36.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.35.0"
+set -g VERSION "3.36.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -531,7 +531,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
     # Kernel (13 params)
-    # ppfeaturemask: bits 14,15,17 off; cwsr_enable=0: gfx1151 VGPR (remove 7.0+); clocksource=tsc: force TSC; quiet: suppress boot messages; module_blacklist: pcspkr+wdat_wdt (CachyOS covers iTCO/sp5100 only)
+    # ppfeaturemask: bits 14,15,17 off; cwsr_enable=0: gfx1151 VGPR (remove after ROCm 7.2+ fix); clocksource=tsc: force TSC; quiet: suppress boot messages; module_blacklist: pcspkr+wdat_wdt (CachyOS covers iTCO/sp5100 only)
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
@@ -4122,7 +4122,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         if test "$_cs" = tsc
             _ok "  clocksource: $_cs"
         else if test "$_cs" = hpet
-            _fail "  clocksource: $_cs (expected: tsc — HPET is ~20× slower, check dmesg for TSC demotion)"
+            _fail "  clocksource: $_cs (expected: tsc — HPET has 10–100× higher read latency, check dmesg for TSC demotion)"
         else
             _warn "  clocksource: $_cs (expected: tsc)"
         end

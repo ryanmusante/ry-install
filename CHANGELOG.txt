@@ -1,3 +1,14 @@
+3.37.2 (2026-04-02)
+-------------------
+  fix(style): quote /etc/kernel/cmdline and /etc/drirc in
+    SYSTEM_DESTINATIONS and _ry_get_file_content case branches.
+    All 16 destinations and case patterns now consistently quoted.
+  fix(sudo): 4 bare sudo cat → sudo -n cat in _atomic_write_file
+    (2 sites), _ry_install_file (1 site), _ry_verify_static (1
+    site). Prevents interactive prompt if credential expires
+    mid-run; aligns with sudo -n convention used elsewhere.
+  docs: sync README (version badge 3.37.2), CHANGELOG.
+
 3.37.1 (2026-04-02)
 -------------------
   fix(docs): B-6 comment "parallel installed-file reads" →

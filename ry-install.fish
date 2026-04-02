@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.37.1 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.37.2 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.37.1"
+set -g VERSION "3.37.2"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -500,7 +500,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        /etc/kernel/cmdline \
+        "/etc/kernel/cmdline" \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
@@ -508,7 +508,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        /etc/drirc \
+        "/etc/drirc" \
         "/etc/sysctl.d/99-cachyos-sysctl.conf"
 
     set -g USER_DESTINATIONS \
@@ -909,7 +909,7 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' "console-mode $LOADER_CONSOLE_MODE"
             printf '%s\n' "editor $LOADER_EDITOR"
 
-        case /etc/kernel/cmdline
+        case "/etc/kernel/cmdline"
             if test -z "$_ROOT_UUID"
                 _err "_ry_get_file_content: root UUID not cached (_load_profile may not have run)"
                 return 1
@@ -1047,7 +1047,7 @@ ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system
 [Install]
 WantedBy=multi-user.target'
 
-        case /etc/drirc
+        case "/etc/drirc"
             # RADV unified VRAM heap: prevents games from misallocating via artificial two-heap split on UMA APUs
             printf '%s\n' '<driconf>' \
                 '  <device>' \
@@ -2390,7 +2390,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     # Capture expected hash from tmpfile before mv (single _ry_get_file_content call; no redundant re-generation)
     set -l _expected_hash
     if test "$use_sudo" = true
-        set _expected_hash (sudo cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
+        set _expected_hash (sudo -n cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
     else
         set _expected_hash (command cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
     end
@@ -2413,7 +2413,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs)
     set -l _actual_hash
     if test "$use_sudo" = true
-        set _actual_hash (sudo cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+        set _actual_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
     else
         set _actual_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
     end
@@ -2488,7 +2488,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     if test -n "$_new_hash"
         set -l _cur_hash
         if test "$use_sudo" = true
-            set _cur_hash (sudo cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+            set _cur_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
         else
             set _cur_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
         end
@@ -3097,7 +3097,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
 
     _echo "── kernel cmdline ──"
     if _chk_file /etc/kernel/cmdline
-        set -l cmdline_content (sudo cat -- /etc/kernel/cmdline 2>/dev/null)
+        set -l cmdline_content (sudo -n cat -- /etc/kernel/cmdline 2>/dev/null)
         if test -n "$cmdline_content"
             for param in $KERNEL_PARAMS
                 if string match -q -- "* $param *" " $cmdline_content "

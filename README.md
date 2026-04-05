@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.38.0-blue)
+![Version](https://img.shields.io/badge/version-3.40.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -132,11 +132,11 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `module_blacklist=pcspkr,wdat_wdt` | Silence PC speaker beep, block ACPI watchdog |
 | `nowatchdog` | Disable software watchdog timers |
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
-| `pcie_aspm=off` | Disable PCIe ASPM system-wide |
+| `pcie_aspm.policy=performance` | PCIe ASPM L0 always (framework intact, per-device sysfs control preserved) |
 | `quiet` | Suppress kernel boot messages |
 | `split_lock_detect=off` | Disable split-lock #AC exception (gaming) |
+| `threadirqs` | Force threaded IRQ handlers (lower worst-case latency, near-RT with preempt=full) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
-| `usbhid.mousepoll=1` | USB HID mouse polling at 1000 Hz (default 125 Hz) |
 | `zswap.enabled=0` | Disable zswap (ZRAM masked separately) |
 
 ### Boot Loader
@@ -161,7 +161,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | Modules | `amdgpu`, `nvme` |
 | Hooks | `base` → `systemd` → `autodetect` → `microcode` → `modconf` → `kms` → `keyboard` → `sd-vconsole` → `block` → `filesystems` → `fsck` |
 | Compression | `zstd` |
-| Compression Options | `-3` |
+| Compression Options | `-1 -T0` |
 
 ### System Services
 
@@ -183,7 +183,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
 | `drirc` | RADV unified VRAM heap on APU |
-| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · vm.swappiness=10 · dirty page limits · compaction/watermark tuning · security hardening (23 tunables, overrides CachyOS vendor where needed) |
+| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · vm.swappiness=10 · dirty page limits · compaction/watermark tuning · security hardening (22 tunables, overrides CachyOS vendor where needed) |
 
 ### Environment Variables
 

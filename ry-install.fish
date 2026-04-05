@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.38.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.40.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.38.0"
+set -g VERSION "3.40.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -134,7 +134,7 @@ function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy
     printf '%s\n' $_KCONFIG_DATA
 end
 
-# Return: unavailable (<6.14) | builtin (CONFIG_NTSYNC=y) | loaded | loaded_nodev | missing
+# unavailable=<6.14 | builtin=CONFIG_NTSYNC=y | loaded=/dev/ntsync exists | loaded_nodev=module loaded, no dev | missing
 function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_nodev|missing"
     _log "NTSYNC_CHECK: major=$KVER_MAJOR minor=$KVER_MINOR"
     if test "$KVER_MAJOR" -lt 6; or begin
@@ -234,7 +234,6 @@ function _verify_unit_syntax --argument-names unit_path label --description "Ver
     end
 end
 
-# Emit paths of *.pacnew and *.pacsave files in /etc and /boot via elevated find
 function _find_pacnew_files --description "Find pacnew/pacsave files in /etc /boot"
     if command -q sudo
         sudo -n find /etc /boot \( -name '*.pacnew' -o -name '*.pacsave' \) 2>/dev/null
@@ -395,7 +394,7 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     end
     set --erase _TRACKED_TMPFILES
     # Fallback sweep: find -user $_MY_UID catches ry-* tmpfiles missed by the tracked list (e.g., crash before tracking)
-    set -l _tmpdir (set -q TMPDIR; and echo "$TMPDIR"; or echo /tmp)
+    set -l _tmpdir (set -q TMPDIR; and test -n "$TMPDIR"; and echo "$TMPDIR"; or echo /tmp)
     command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -type f -user $_MY_UID -delete 2>/dev/null
     command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -type d -empty -user $_MY_UID -delete 2>/dev/null
     # Credential erase on every exit path — defense-in-depth against WIFI_PASS lingering in memory
@@ -413,7 +412,6 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     _kill_sudo_keepalive
 end
 
-# Send SIGTERM to the background credential-refresh loop started during install preflight
 function _kill_sudo_keepalive --description "Terminate the background sudo credential refresh loop"
     if set -q SUDO_KEEPALIVE_PID; and test -n "$SUDO_KEEPALIVE_PID"
         command kill -- $SUDO_KEEPALIVE_PID 2>/dev/null
@@ -529,8 +527,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (14 params)
-    # ppfeaturemask: bits 14,15,17 off; cwsr_enable=0: gfx1151 VGPR (remove after ROCm 7.2+ fix); clocksource=tsc: force TSC; quiet: suppress boot messages; module_blacklist: pcspkr+wdat_wdt (CachyOS covers iTCO/sp5100 only)
+    # Kernel (14 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (remove after ROCm 7.2+ fix); clocksource=tsc force TSC; module_blacklist pcspkr+wdat_wdt; threadirqs threaded IRQ handlers
     set -g KERNEL_PARAMS \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
@@ -540,11 +537,11 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         module_blacklist=pcspkr,wdat_wdt \
         nowatchdog \
         nvme_core.default_ps_max_latency_us=0 \
-        pcie_aspm=off \
+        pcie_aspm.policy=performance \
         quiet \
         split_lock_detect=off \
+        threadirqs \
         usbcore.autosuspend=-1 \
-        usbhid.mousepoll=1 \
         zswap.enabled=0
 
     # Initramfs
@@ -563,7 +560,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         filesystems \
         fsck
     set -g MKINITCPIO_COMPRESSION zstd
-    set -g MKINITCPIO_COMPRESSION_OPTIONS -1
+    set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
     # Udev — ntsync rule handled by ntsync-common package (in PKGS_ADD)
 
@@ -619,7 +616,6 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "vm.watermark_boost_factor=0" \
         "vm.watermark_scale_factor=125" \
         "kernel.kptr_restrict=1" \
-        "kernel.dmesg_restrict=1" \
         "kernel.yama.ptrace_scope=1" \
         "kernel.unprivileged_bpf_disabled=1"
 
@@ -1205,11 +1201,7 @@ function _gkeyfile_escape --argument-names raw --description "Escape a string fo
     printf '%s\n' "$val"
 end
 
-# Extract "data" field from JSONL with escaped quotes; PCRE2 [^"\\]+\\. pattern; fish single-quotes process \\ and \' (NOT literal like bash)
-
-# Structured NDJSON logging — self-contained JSON per line, event classification (section/prefix/message), _json_str escapes+caps at 4096 chars
-
-# Append JSONL event to LOG_FILE with ISO timestamp
+# NDJSON logging: self-contained JSON per line, event classification, _json_str escapes+caps at 4096 chars; fish single-quotes pass \\ and \' to PCRE2 (NOT literal like bash)
 function _log --description "Append a timestamped message to the log file"
     # Guard: do not recreate LOG_FILE if it was intentionally deleted (e.g. _acquire_lock contention)
     test -f "$LOG_FILE"; or return 0
@@ -1411,6 +1403,17 @@ set -g PROGRESS_STEPS \
     Finalize
 set -g PROGRESS_TOTAL (count $PROGRESS_STEPS)
 
+# Emit JSONL step_time event for the previous progress step if one was started
+function _emit_step_time --description "Log elapsed time for the previous progress step"
+    if test -n "$_STEP_PREV_NAME"; and test "$_STEP_PREV_START" -gt 0
+        set -l _step_now (date +%s)
+        set -l _step_elapsed (math "$_step_now - $_STEP_PREV_START")
+        set -l _step_name_esc (_json_str "$_STEP_PREV_NAME")
+        printf '{"ts":"%s","event":"step_time","data":"%s","elapsed_s":%d}\n' \
+            (date '+%Y-%m-%dT%H:%M:%S%z') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
+    end
+end
+
 # Reset progress counters and compute PROGRESS_TOTAL from PROGRESS_STEPS list
 function _progress_init --description "Initialize the step progress counter"
     set -g _STEP_PREV_NAME ""
@@ -1428,14 +1431,7 @@ function _progress --argument-names step_name --description "Advance and display
     if test (count $argv) -lt 1
         return 0
     end
-    # Emit timing for the previous step
-    if test -n "$_STEP_PREV_NAME"; and test "$_STEP_PREV_START" -gt 0
-        set -l _step_now (date +%s)
-        set -l _step_elapsed (math "$_step_now - $_STEP_PREV_START")
-        set -l _step_name_esc (_json_str "$_STEP_PREV_NAME")
-        printf '{"ts":"%s","event":"step_time","data":"%s","elapsed_s":%d}\n' \
-            (date '+%Y-%m-%dT%H:%M:%S%z') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
-    end
+    _emit_step_time
     set -g _STEP_PREV_NAME "$step_name"
     set -g _STEP_PREV_START (date +%s)
 
@@ -1488,14 +1484,7 @@ function _progress_skip --argument-names step_name --description "Advance progre
     if test (count $argv) -lt 1
         return 0
     end
-    # Emit timing for the previous step (consistent with _progress)
-    if test -n "$_STEP_PREV_NAME"; and test "$_STEP_PREV_START" -gt 0
-        set -l _step_now (date +%s)
-        set -l _step_elapsed (math "$_step_now - $_STEP_PREV_START")
-        set -l _step_name_esc (_json_str "$_STEP_PREV_NAME")
-        printf '{"ts":"%s","event":"step_time","data":"%s","elapsed_s":%d}\n' \
-            (date '+%Y-%m-%dT%H:%M:%S%z') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
-    end
+    _emit_step_time
     set -g _STEP_PREV_NAME "$step_name"
     set -g _STEP_PREV_START (date +%s)
     set -g PROGRESS_CURRENT (math "min($PROGRESS_CURRENT + 1, $PROGRESS_TOTAL)")
@@ -1524,14 +1513,7 @@ end
 
 # Close progress display: emit final step timing, fill bar to 100%, reset state
 function _progress_done --description "Finalize and close the progress display"
-    # Emit timing for the final step
-    if test -n "$_STEP_PREV_NAME"; and test "$_STEP_PREV_START" -gt 0
-        set -l _step_now (date +%s)
-        set -l _step_elapsed (math "$_step_now - $_STEP_PREV_START")
-        set -l _step_name_esc (_json_str "$_STEP_PREV_NAME")
-        printf '{"ts":"%s","event":"step_time","data":"%s","elapsed_s":%d}\n' \
-            (date '+%Y-%m-%dT%H:%M:%S%z') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
-    end
+    _emit_step_time
     set -g _STEP_PREV_NAME ""
     set -g _STEP_PREV_START 0
 
@@ -1561,9 +1543,7 @@ function _progress_done --description "Finalize and close the progress display"
     end
 end
 
-# Command execution wrapper — secret redaction (9 patterns), dry-run gating, output capture to tmpfiles, structured error reporting
-
-# Execute command with logging, secret redaction, dry-run gating, and stdout/stderr capture to tmpfiles
+# Execute command with logging, secret redaction (9 patterns), dry-run gating, and stdout/stderr capture to tmpfiles
 function _run --description "Execute a command with logging, dry-run support, and error capture; stdout captured and only displayed when QUIET=false"
     if test (count $argv) -eq 0
         _log "BUG: _run called with no arguments"
@@ -2294,8 +2274,6 @@ function _ry_validate_configs --description "Run all embedded config validators"
     return 0
 end
 
-# Atomic file write helper — shared by _ry_install_file (deduplicates sudo/non-sudo paths)
-
 # Atomic write: mktemp→symlink-check→write→symlink-recheck→chmod→hash→mv→verify→chown
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write with symlink and integrity checks"
     if test (count $argv) -ne 3
@@ -2436,9 +2414,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     return 0
 end
 
-# Atomic file installation — _ry_get_file_content → mktemp → validate → chmod/chown → mv; hash comparison skips unchanged files; skips NM/IWD if iwd not installed
-
-# Deploy a single embedded config: get content → mktemp → validate → chmod → atomic mv to dst
+# Deploy a single embedded config: get content → mktemp → validate → chmod → atomic mv; skips unchanged (hash match) and NM/IWD if iwd not installed
 function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination"
     if test (count $argv) -ne 2
         _err "_ry_install_file: expected 2 args (dst use_sudo), got "(count $argv)
@@ -3573,7 +3549,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
     return $ret
 end
 
-# Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted, EXIT_PREFLIGHT if prereqs fail
 function _ry_do_check --description "Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted, EXIT_PREFLIGHT if prereqs fail"
     set -l drift false
     set -l checked 0
@@ -3912,6 +3887,19 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     _validate_kernel_params
+
+    _echo "── Preemption model ──"
+    set -l _preempt (dmesg 2>/dev/null | grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
+    if test -n "$_preempt"
+        if string match -q '*full*' -- "$_preempt"
+            _ok "  $_preempt"
+        else
+            _warn "  $_preempt (recommended: full — add preempt=full to cmdline)"
+        end
+    else
+        _info "  Preemption model: cannot determine from dmesg"
+    end
+    _echo
 
     _echo "HARDWARE STATE"
     _echo
@@ -4290,6 +4278,19 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     _echo
 
+    _echo "── irqbalance (conflicts with threadirqs) ──"
+    set -l _irqbal_state (systemctl is-enabled irqbalance.service 2>/dev/null | string trim --)
+    if test "$_irqbal_state" = enabled
+        _fail "  irqbalance.service: enabled (conflicts with threadirqs — disable or mask)"
+    else if test "$_irqbal_state" = masked; or test "$_irqbal_state" = disabled
+        _ok "  irqbalance.service: $_irqbal_state"
+    else if test -z "$_irqbal_state"; or test "$_irqbal_state" = "not-found"
+        _ok "  irqbalance.service: not installed"
+    else
+        _info "  irqbalance.service: $_irqbal_state"
+    end
+    _echo
+
     _echo "ENVIRONMENT STATE"
     _echo
 
@@ -4323,6 +4324,23 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         else
             _warn "  $_key: not available"
         end
+    end
+    _echo
+
+    _echo "── TCP congestion control ──"
+    if command -q modinfo
+        set -l _bbr_ver (modinfo tcp_bbr 2>/dev/null | grep -i '^version:' | string replace -r '^version:\s*' '')
+        if test -n "$_bbr_ver"
+            _ok "  tcp_bbr module version: $_bbr_ver"
+        else
+            _info "  tcp_bbr: version field not available"
+        end
+    end
+    set -l _cc_active (command cat -- /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null | string trim --)
+    if test "$_cc_active" = bbr
+        _ok "  tcp_congestion_control: $_cc_active"
+    else if test -n "$_cc_active"
+        _warn "  tcp_congestion_control: $_cc_active (expected: bbr)"
     end
     _echo
 
@@ -4614,6 +4632,21 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     _echo
 
+    _echo "── Vulkan driver packages ──"
+    set -l _vk_missing 0
+    for _vk_pkg in vulkan-radeon lib32-vulkan-radeon lib32-mesa
+        if pacman -Q "$_vk_pkg" >/dev/null 2>&1
+            _ok "  $_vk_pkg: installed"
+        else
+            _fail "  $_vk_pkg: NOT installed (DXVK/VKD3D-Proton requires this)"
+            set _vk_missing (math $_vk_missing + 1)
+        end
+    end
+    if test $_vk_missing -gt 0
+        _info "  Install missing packages: sudo pacman -S vulkan-radeon lib32-vulkan-radeon lib32-mesa"
+    end
+    _echo
+
     _echo "BOOT PERFORMANCE"
     _echo
 
@@ -4698,7 +4731,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
     set -l clean_content (sed '/^[[:space:]]*#/d; /# lint:ignore/d' "$script_path")
 
     # Exclude embedded bash in systemd ExecStart= (bash syntax is correct there)
-    set -l bash_subst (printf '%s\n' $clean_content | grep -n '\$(' 2>/dev/null | grep -vE "ExecStart|/bin/bash|fish --version|'\\\$\\('|$_output_funcs" | head -n 20|| true)
+    set -l bash_subst (printf '%s\n' $clean_content | grep -n '\$(' 2>/dev/null | grep -vE "ExecStart|/bin/bash|fish --version|'\\\$\\('|$_output_funcs" | head -n 20; or true)
     if test -n "$bash_subst"
         _warn "Possible bash-style \$() found:"
         set -l lint_out (printf '%s\n' $bash_subst | sed 's/^/  /')
@@ -4711,7 +4744,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
         _info "  Note: ExecStart and embedded bash lines excluded"
     end
 
-    set -l bash_cond (printf '%s\n' $clean_content | grep -nE '(^|[[:space:];])\[\[[[:space:]]' 2>/dev/null | grep -vE "$_output_funcs"|| true)
+    set -l bash_cond (printf '%s\n' $clean_content | grep -nE '(^|[[:space:];])\[\[[[:space:]]' 2>/dev/null | grep -vE "$_output_funcs"; or true)
     if test -n "$bash_cond"
         _fail "Bash-style [[ ]] found:"
         set -l lint_out (printf '%s\n' $bash_cond | sed 's/^/  /')
@@ -4737,7 +4770,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
         _ok "No bash-style 'export' found"
     end
 
-    set -l bash_logic (printf '%s\n' $clean_content | grep -nE '[^|]\|\|[^|]|[^&]&&[^&]' 2>/dev/null | grep -vE "printf|awk|sed|$_output_funcs|'.*&&|'.*\|\||NR >|~ /|/\\^"|| true)
+    set -l bash_logic (printf '%s\n' $clean_content | grep -nE '[^|]\|\|[^|]|[^&]&&[^&]' 2>/dev/null | grep -vE "printf|awk|sed|$_output_funcs|'.*&&|'.*\|\||NR >|~ /|/\\^"; or true)
     if test -n "$bash_logic"
         _warn "Possible bash-style &&/|| found:"
         set -l lint_out (printf '%s\n' $bash_logic | sed 's/^/  /')
@@ -4749,7 +4782,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
         _ok "No bash-style &&/|| operators found"
     end
 
-    set -l bash_varexp (printf '%s\n' $clean_content | grep -nE '\$\{[a-zA-Z_]' 2>/dev/null | grep -vE "$_output_funcs|printf"|| true)
+    set -l bash_varexp (printf '%s\n' $clean_content | grep -nE '\$\{[a-zA-Z_]' 2>/dev/null | grep -vE "$_output_funcs|printf"; or true)
     if test -n "$bash_varexp"
         _fail "Bash-style \${var} found:"
         set -l lint_out (printf '%s\n' $bash_varexp | sed 's/^/  /')
@@ -6131,9 +6164,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         "--diff --fix --dry-run --all" \
         "--install-file /etc/kernel/cmdline --dry-run"
 
-    # Nested parallelism guard: <8 cores→sequential, 8-15→batch nproc, 16+→full parallel
-    # Fork budget: 7 outer modes + inner forks from --check (4 jobs) and --verify-static (4 workers)
-    # Worst case: 7 + 4 + 4 = 15 fish procs; acceptable on 8+ cores (I/O-bound children, <1s each)
+    # Nested parallelism guard: <8→sequential, 8-15→batch, 16+→full; worst case 15 fish procs (7 outer + 4 check + 4 hash workers)
     set -l nproc_val (nproc 2>/dev/null)
     set -l par_batch_size 0
     if test -n "$nproc_val"; and string match -qr '^\d+$' -- "$nproc_val"

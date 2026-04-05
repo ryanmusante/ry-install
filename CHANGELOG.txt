@@ -1,3 +1,35 @@
+3.40.0 (2026-04-05)
+-------------------
+  fix(cleanup): guard empty TMPDIR in fallback sweep. set -q TMPDIR
+    succeeds when TMPDIR is set-but-empty; find "" silently skipped
+    the ry-* tmpfile sweep. Add test -n guard.
+  style(lint): normalize 4 || true → ; or true in _ry_do_lint
+    (bash_subst, bash_cond, bash_logic, bash_varexp). Aligns with
+    ; or true used by dead_pipe and shadow_hits in the same function.
+  refactor(progress): extract _emit_step_time helper. Replaces 3
+    identical 7-line step timing blocks in _progress, _progress_skip,
+    _progress_done with single-line calls. -10 lines.
+  style(comments): remove 4 comments that duplicate --description
+    (_ntsync_state, _find_pacnew_files, _kill_sudo_keepalive,
+    _ry_do_check). Remove 3 standalone section headers where function
+    comment covers same ground (_run, _atomic_write_file,
+    _ry_install_file). Merge 3 orphan comments before _log into 1.
+    Merge kernel params comment (2→1) and parallelism guard (3→1).
+    Restore 4 debug-critical annotations: ntsync return-value mapping,
+    PCRE2/fish escaping footgun, _run pattern count, _ry_install_file
+    skip conditions. Net -26 lines.
+  docs: sync README (version badge 3.40.0), CHANGELOG.
+
+3.39.0 (2026-04-05)
+-------------------
+  feat(kernel): add threadirqs. Replace pcie_aspm=off →
+    pcie_aspm.policy=performance. Remove usbhid.mousepoll=1.
+  remove(sysctl): drop kernel.dmesg_restrict=1. SYSCTL_VALUES 23→22.
+  perf(initramfs): COMPRESSION_OPTIONS -1 → -1 -T0.
+  feat(verify): add preemption model, irqbalance conflict, tcp_bbr,
+    and vulkan-radeon/lib32 package checks.
+  docs: sync README, CHANGELOG.
+
 3.38.0 (2026-04-02)
 -------------------
   feat(env): rename RADV_PERFTEST → RADV_EXPERIMENTAL (Mesa deprecated

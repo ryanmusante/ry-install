@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.43.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.46.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.43.0"
+set -g VERSION "3.46.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -526,7 +526,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (14 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (remove after ROCm 7.2+ fix); amd_iommu=off (APU unified memory — no VFIO/passthrough); clocksource=tsc force TSC; module_blacklist pcspkr; threadirqs threaded IRQ handlers
+    # Kernel (15 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (remove after ROCm 7.2+ fix); amd_iommu=off (APU unified memory — no VFIO/passthrough); clocksource=tsc force TSC; module_blacklist pcspkr; preempt=full pin Dynamic Preempt; threadirqs threaded IRQ handlers
     set -g KERNEL_PARAMS \
         amd_iommu=off \
         amdgpu.cwsr_enable=0 \
@@ -537,6 +537,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         nowatchdog \
         nvme_core.default_ps_max_latency_us=0 \
         pcie_aspm.policy=performance \
+        preempt=full \
         quiet \
         split_lock_detect=off \
         threadirqs \
@@ -597,8 +598,9 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # Sysctl tunables — supplements CachyOS vendor 70-cachyos-settings.conf (networking, security, memory)
     set -g SYSCTL_VALUES \
         "net.core.default_qdisc=fq" \
-        "net.core.netdev_max_backlog=300000" \
+        "net.core.netdev_max_backlog=16384" \
         "net.core.rmem_max=134217728" \
+        "net.core.somaxconn=8192" \
         "net.core.wmem_max=134217728" \
         "net.ipv4.tcp_congestion_control=bbr" \
         "net.ipv4.tcp_fastopen=3" \
@@ -609,7 +611,6 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "vm.dirty_background_bytes=67108864" \
         "vm.dirty_bytes=268435456" \
         "vm.max_map_count=2147483642" \
-        "vm.page_lock_unfairness=1" \
         "vm.watermark_boost_factor=0" \
         "kernel.unprivileged_bpf_disabled=1" \
         "fs.inotify.max_user_watches=524288" \
@@ -1051,10 +1052,13 @@ WantedBy=multi-user.target'
                 '</driconf>'
 
         case "/etc/sysctl.d/99-cachyos-sysctl.conf"
-            printf '%s\n' "# ry-install sysctl tunables"
+            printf '%s\n' "# ry-install sysctl tunables (priority 99 — overrides"
+            printf '%s\n' "# CachyOS vendor 70-cachyos-settings.conf for:"
+            printf '%s\n' "# vm.dirty_bytes, vm.dirty_background_bytes, net.core.netdev_max_backlog)"
             for entry in $SYSCTL_VALUES
-                set -l key (string split '=' -- "$entry")[1]
-                set -l val (string split '=' -- "$entry")[2]
+                set -l parts (string split -m1 '=' -- "$entry")
+                set -l key $parts[1]
+                set -l val $parts[2]
                 printf '%s = %s\n' "$key" "$val"
             end
 
@@ -1727,7 +1731,7 @@ NOTES:
   check did not pass (used by --verify-static, --verify-runtime, --diff).
 
   WiFi passphrases containing '%' are rejected (GKeyFile safety).
-  WiFi SSIDs cannot contain backslash, semicolon, backtick, dollar, pipe, or newlines.
+  WiFi SSIDs cannot contain backslash, semicolon, backtick, dollar, pipe, ampersand, or newlines.
 "
 end
 
@@ -3197,6 +3201,13 @@ function _ry_verify_static --description "Verify installed configs match embedde
     end
     _echo
 
+    _echo "── coredump.conf ──"
+    if _chk_file /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf
+        _chk_grep /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf "Storage=none" "Storage=none"
+        _chk_grep /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf "ProcessSizeMax=0" "ProcessSizeMax=0"
+    end
+    _echo
+
     _echo "── iwd ──"
     if test "$_skip_iwd" = true
         _info "  Skipping (iwd not installed)"
@@ -3891,7 +3902,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         if string match -q '*full*' -- "$_preempt"
             _ok "  $_preempt"
         else
-            _warn "  $_preempt (recommended: full — add preempt=full to cmdline)"
+            _warn "  $_preempt (expected: full — verify kernel supports PREEMPT_DYNAMIC)"
         end
     else
         _info "  Preemption model: cannot determine from dmesg"
@@ -4095,7 +4106,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
 
     _echo "── Blacklisted modules ──"
     for mod in pcspkr
-        if lsmod 2>/dev/null | grep -q "^$mod "
+        if lsmod 2>/dev/null | grep -q -- "^$mod "
             _fail "  $mod: LOADED (should be blacklisted)"
         else
             _ok "  $mod: not loaded"
@@ -4118,7 +4129,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
 
     _echo "── Coredump config ──"
     if test -f /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf
-        if grep -q 'Storage=none' /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf 2>/dev/null
+        if grep -q -- 'Storage=none' /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf 2>/dev/null
             _ok "  coredump: Storage=none"
         else
             _fail "  coredump: Storage!=none in /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf"
@@ -4284,8 +4295,9 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     for exp in $ENV_VARS
-        set -l var_name (string split '=' -- "$exp")[1]
-        set -l expected (string split '=' -- "$exp")[2]
+        set -l _ev_parts (string split -m1 '=' -- "$exp")
+        set -l var_name $_ev_parts[1]
+        set -l expected $_ev_parts[2]
         set -l actual (printenv "$var_name")
 
         if test "$actual" = "$expected"
@@ -4300,8 +4312,9 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
 
     _echo "── sysctl (ry-install) ──"
     for entry in $SYSCTL_VALUES
-        set -l _key (string split '=' -- "$entry")[1]
-        set -l _expected (string split '=' -- "$entry")[2]
+        set -l _parts (string split -m1 '=' -- "$entry")
+        set -l _key $_parts[1]
+        set -l _expected $_parts[2]
         set -l _proc_path (string replace -a '.' '/' -- "$_key")
         # Normalize whitespace: /proc/sys uses tabs for multi-value keys; SYSCTL_VALUES uses spaces
         set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim -- | string replace -ra '\s+' ' ')
@@ -5014,8 +5027,8 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
                 read -P "[?] WiFi SSID: " wifi_ssid
                 if test -n "$wifi_ssid"
                     set -l _ssid_bad false
-                    # GKeyFile special (\ ;) + _run metachar rejection (` $ |) + newlines checked below
-                    for _c in '\\' ';' '`' '$' '|'
+                    # GKeyFile special (\ ;) + _run metachar rejection (& ` $ |) + newlines checked below
+                    for _c in '\\' ';' '`' '$' '|' '&'
                         if string match -q -- "*$_c*" "$wifi_ssid"
                             set _ssid_bad true
                             break
@@ -5023,7 +5036,7 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
                     end
                     if test "$_ssid_bad" = true; or string match -qr '\\n|\\r' -- "$wifi_ssid"
                         _err "Invalid SSID: contains forbidden characters"
-                        _info "SSIDs cannot contain backslash, semicolon, backtick, dollar, pipe, or newlines"
+                        _info "SSIDs cannot contain backslash, semicolon, backtick, dollar, pipe, ampersand, or newlines"
                         _info "Workaround: skip WiFi setup here, then connect manually:"
                         _info "  nmcli device wifi connect '<SSID>' password '<pass>'"
                     else if string match -qr '^ | $' -- "$wifi_ssid"
@@ -5309,6 +5322,8 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
     # For ext4 lines: replace relatime→noatime,lazytime; add noatime,lazytime if absent
     # Step 1: relatime → noatime,lazytime (covers the common case)
     sudo sed -i '/^[^#].*ext4/{ s/relatime/noatime,lazytime/; }' "$tmpfstab"
+    # Step 1b: dedup — collapse doubled noatime from step 1 (edge case: line already had noatime + relatime)
+    sudo sed -i '/^[^#].*ext4/{ s/noatime,noatime/noatime/g; }' "$tmpfstab"
     # Step 2: if noatime still missing, append to options field (4th field, comma-separated)
     sudo sed -i '/^[^#].*ext4/{ /noatime/!s/\(ext4[[:space:]]*\)\([^[:space:]]*\)/\1\2,noatime,lazytime/; }' "$tmpfstab"
     # Step 3: if lazytime missing but noatime present, append lazytime
@@ -5833,7 +5848,7 @@ function _install_finalize --description "Run post-install verification, cleanup
                     set -l safe_pass (_gkeyfile_escape "$WIFI_PASS")
                     set -l safe_ssid (_gkeyfile_escape "$WIFI_SSID")
                     # SECURITY: printf|sudo tee bypasses _run to prevent psk= from appearing in JSONL logs; tee stdout→/dev/null
-                    printf '%s\n' "[connection]" "id=$safe_ssid" "uuid=$conn_uuid" "type=wifi" "interface-name=$WIFI_IFACE" "autoconnect=true" "[wifi]" "mode=infrastructure" "ssid=$safe_ssid" "[wifi-security]" "key-mgmt=wpa-psk" "psk=$safe_pass" "[ipv4]" "method=auto" "[ipv6]" "method=disabled" | sudo tee -- "$tmpfile" >/dev/null
+                    printf '%s\n' "[connection]" "id=$safe_ssid" "uuid=$conn_uuid" "type=wifi" "interface-name=$WIFI_IFACE" "autoconnect=true" "[wifi]" "mode=infrastructure" "ssid=$safe_ssid" "[wifi-security]" "key-mgmt=wpa-psk" "psk=$safe_pass" "[ipv4]" "method=auto" "[ipv6]" "method=auto" | sudo tee -- "$tmpfile" >/dev/null
                     set -l _wifi_ps $pipestatus
                     if test $_wifi_ps[1] -ne 0; or test $_wifi_ps[2] -ne 0
                         set --erase WIFI_PASS

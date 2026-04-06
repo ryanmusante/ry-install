@@ -1,299 +1,119 @@
+3.46.0 (2026-04-05)
+-------------------
+  fix(header): sync header comment version to 3.46.0.
+  fix(sysctl): use string split -m1 '=' in content generation and
+    verify-runtime sysctl checks (prevents incorrect split if future
+    values contain '=').
+  fix(fstab): add dedup step to prevent doubled noatime when ext4
+    entry already has noatime alongside relatime.
+  remove(kernel): drop usbhid.mousepoll=1 (global USB autosuspend
+    disable via usbcore.autosuspend=-1 supersedes per-HID polling
+    interval override). KERNEL_PARAMS stays 15.
+  fix(verify): add coredump.conf.d semantic section to
+    --verify-static. Checks Storage=none and ProcessSizeMax=0
+    individually. Previously only hash-verified.
+  docs: sync README (version badge 3.46.0, add coredump.conf.d to
+    System Tuning reference table). CHANGELOG trimmed.
+
+3.45.0 (2026-04-05)
+-------------------
+  feat(kernel): add preempt=full. Pin Dynamic Preempt to full via
+    cmdline — lowest scheduling latency for input and audio.
+    KERNEL_PARAMS 14→15.
+  perf(sysctl): remove vm.page_lock_unfairness=1. Kernel default 5
+    provides optimal throughput per upstream benchmarking (commit
+    5ef64cc8987a).
+  perf(sysctl): reduce net.core.netdev_max_backlog 300000→16384
+    (matches 10 GbE, not 40/100GbE server). Add
+    net.core.somaxconn=8192. SYSCTL_VALUES stays 19.
+  fix(sysctl): expand 99-cachyos-sysctl.conf header to document
+    priority-99 override of CachyOS vendor config.
+  fix(verify): update preempt runtime message.
+  docs: sync README, CHANGELOG.
+
+3.44.0 (2026-04-05)
+-------------------
+  fix(wifi): add '&' to SSID forbidden characters (nmcli silent
+    failure). Change .nmconnection IPv6 method=disabled →
+    method=auto.
+  fix(verify): add '--' separator to grep in blacklisted modules
+    and coredump config checks.
+  docs: sync README, CHANGELOG.
+
 3.43.0 (2026-04-05)
 -------------------
-  feat(env): add PROTON_ENABLE_WAYLAND=1 (native Wayland in Proton —
-    lower input latency, better frame pacing, HDR without Gamescope).
-  feat(sysctl): add 10 GbE buffer tuning: net.core.rmem_max,
-    net.core.wmem_max (128 MB), net.ipv4.tcp_rmem, net.ipv4.tcp_wmem
-    (128 MB max), net.core.netdev_max_backlog=300000. Add dirty page
-    limits: vm.dirty_bytes=256 MB, vm.dirty_background_bytes=64 MB
-    (prevents I/O stalls on 128 GB RAM). SYSCTL_VALUES 12→19.
-  feat(mask): add irqbalance.service. Conflicts with threadirqs on
-    32-thread system (cache thrashing from periodic IRQ migration).
-    MASK 9→10.
-  feat(kernel): replace iommu=pt → amd_iommu=off. APU unified memory
-    benefits from fully disabled IOMMU (~2–6% iGPU bandwidth gain).
-    No VFIO/passthrough on this system.
-  remove(env): drop VKD3D_CONFIG=transfer_queue. transfer_queue is now
-    the vkd3d-proton default; flag is a no-op.
-  remove(verify): drop workqueue.power_efficient runtime check. Removed
-    from KERNEL_PARAMS in v3.32; stale check on unmanaged value.
-  fix(verify): remove wdat_wdt from blacklisted modules runtime check.
-    Removed from module_blacklist in v3.41.0 (redundant with
-    nowatchdog); _fail message "should be blacklisted" was incorrect.
-  fix(validate): remove iommu from param_config_map. amd_iommu=off is
-    a disable flag; CONFIG_IOMMU_SUPPORT check is irrelevant.
-  docs: add FSR4 per-game launch option to Troubleshooting
-    (PROTON_FSR4_RDNA3_UPGRADE=1, proton-cachyos / GE-Proton 10-9+).
-  docs: sync README (version badge 3.43.0, env var table: add
-    PROTON_ENABLE_WAYLAND, remove VKD3D_CONFIG, kernel params table
-    amd_iommu=off, 19 sysctl tunables, 10 masked services, FSR4 tip).
-    CHANGELOG.
+  feat(env): add PROTON_ENABLE_WAYLAND=1.
+  feat(sysctl): add 10 GbE buffer tuning, dirty page limits.
+    SYSCTL_VALUES 12→19.
+  feat(mask): add irqbalance.service. MASK 9→10.
+  feat(kernel): replace iommu=pt → amd_iommu=off.
+  remove(env): drop VKD3D_CONFIG=transfer_queue (now default).
+  remove(verify): drop workqueue.power_efficient and wdat_wdt
+    runtime checks.
+  docs: sync README, CHANGELOG.
 
 3.41.0 (2026-04-05)
 -------------------
-  feat(fstab): add _install_fstab_opts. Ensures ext4 entries in
-    /etc/fstab have noatime,lazytime. Atomic tmpfile+sed+findmnt
-    verify+mv. Replaces manual post-install step.
-  feat(verify): add ZRAM device, swap, and fstab mount option
-    checks to --verify-runtime.
+  feat(fstab): add _install_fstab_opts (noatime,lazytime for ext4).
+  feat(verify): add ZRAM, swap, fstab mount option runtime checks.
   feat(env): add PROTON_USE_NTSYNC=1. ENV_VARS 9→10.
-  feat(sysctl): add fs.inotify.max_user_watches=524288,
-    fs.protected_fifos=2, fs.protected_regular=2.
-  remove(sysctl): drop 13 values now covered by CachyOS vendor
-    70-cachyos-settings.conf or redundant: kernel.kptr_restrict,
-    net.core.netdev_max_backlog, vm.dirty_bytes,
-    vm.dirty_background_bytes, vm.page-cluster, vm.swappiness,
-    vm.compaction_proactiveness, kernel.yama.ptrace_scope,
-    net.core.rmem_max, net.core.wmem_max, net.ipv4.tcp_rmem,
-    net.ipv4.tcp_wmem, vm.watermark_scale_factor.
+  feat(sysctl): add fs.inotify, fs.protected_fifos/regular.
+  remove(sysctl): drop 13 values now in CachyOS vendor config.
     SYSCTL_VALUES 22→12.
-  remove(mask): unmask systemd-zram-setup@zram0.service. Enable
-    ZRAM for compressed swap. MASK 10→9.
-  remove(kernel): drop wdat_wdt from module_blacklist. Redundant
-    with nowatchdog.
-  fix(verify): ZRAM check expects enabled (was: masked).
-  fix(comment): module_blacklist pcspkr+wdat_wdt → pcspkr.
-    Sysctl comment "overrides" → "supplements".
-  docs: sync README (version badge 3.41.0, 12 sysctl tunables,
-    10 env vars, 9 masked services, remove ZRAM from mask table,
-    add PROTON_USE_NTSYNC, update zswap/module_blacklist/sysctl
-    descriptions). CHANGELOG.
-
-3.40.0 (2026-04-05)
--------------------
-  fix(cleanup): guard empty TMPDIR in fallback sweep. set -q TMPDIR
-    succeeds when TMPDIR is set-but-empty; find "" silently skipped
-    the ry-* tmpfile sweep. Add test -n guard.
-  style(lint): normalize 4 || true → ; or true in _ry_do_lint
-    (bash_subst, bash_cond, bash_logic, bash_varexp). Aligns with
-    ; or true used by dead_pipe and shadow_hits in the same function.
-  refactor(progress): extract _emit_step_time helper. Replaces 3
-    identical 7-line step timing blocks in _progress, _progress_skip,
-    _progress_done with single-line calls. -10 lines.
-  style(comments): remove 4 comments that duplicate --description
-    (_ntsync_state, _find_pacnew_files, _kill_sudo_keepalive,
-    _ry_do_check). Remove 3 standalone section headers where function
-    comment covers same ground (_run, _atomic_write_file,
-    _ry_install_file). Merge 3 orphan comments before _log into 1.
-    Merge kernel params comment (2→1) and parallelism guard (3→1).
-    Restore 4 debug-critical annotations: ntsync return-value mapping,
-    PCRE2/fish escaping footgun, _run pattern count, _ry_install_file
-    skip conditions. Net -26 lines.
-  docs: sync README (version badge 3.40.0), CHANGELOG.
-
-3.39.0 (2026-04-05)
--------------------
-  feat(kernel): add threadirqs. Replace pcie_aspm=off →
-    pcie_aspm.policy=performance. Remove usbhid.mousepoll=1.
-  remove(sysctl): drop kernel.dmesg_restrict=1. SYSCTL_VALUES 23→22.
-  perf(initramfs): COMPRESSION_OPTIONS -1 → -1 -T0.
-  feat(verify): add preemption model, irqbalance conflict, tcp_bbr,
-    and vulkan-radeon/lib32 package checks.
+  remove(mask): unmask zram (enable compressed swap). MASK 10→9.
+  remove(kernel): drop wdat_wdt from module_blacklist.
   docs: sync README, CHANGELOG.
 
-3.38.0 (2026-04-02)
--------------------
-  feat(env): rename RADV_PERFTEST → RADV_EXPERIMENTAL (Mesa deprecated
-    RADV_PERFTEST; old name will break in future release). Add
-    VKD3D_CONFIG=transfer_queue (SDMA transfer queue for DX12 games),
-    PROTON_LOCAL_SHADER_CACHE=1 (per-game shader cache isolation),
-    WINEDEBUG=-all (suppress Wine debug output). Remove AMD_VULKAN_ICD
-    (RADV is sole ICD on CachyOS). ENV_VARS 7→9.
-  feat(sysctl): add 10 GbE buffer tuning: net.core.rmem_max,
-    net.core.wmem_max (128 MB), net.ipv4.tcp_rmem, net.ipv4.tcp_wmem
-    (64 MB max), net.core.netdev_max_backlog=16384. Add dirty page
-    limits: vm.dirty_bytes=400 MB, vm.dirty_background_bytes=200 MB
-    (prevents multi-second I/O stalls on 128 GB RAM). Add
-    vm.page-cluster=0 (single-page swap reads). Add security hardening:
-    kernel.kptr_restrict=1, kernel.dmesg_restrict=1,
-    kernel.yama.ptrace_scope=1, kernel.unprivileged_bpf_disabled=1.
-    SYSCTL_VALUES 11→23.
-  feat(kernel): add usbhid.mousepoll=1 (1000 Hz USB mouse polling).
-    KERNEL_PARAMS 13→14.
-  perf(initramfs): COMPRESSION_OPTIONS -3 → -1 (faster decompression,
-    marginal size increase on NVMe).
-  remove(service): remove amdgpu-performance.service. Wrote "auto" to
-    power_dpm_force_performance_level — already the kernel default.
-    Remove from SERVICE_DESTINATIONS, EXPECTED_SERVICES,
-    _ry_get_file_content, _install_system_files, _ry_verify_static,
-    _ry_verify_runtime (shift parsed[] indices 6→5). Embedded files
-    16→15. EXPECTED_SERVICES 4→3.
-  fix(verify): normalize whitespace in sysctl runtime verify for
-    multi-value keys (tcp_rmem, tcp_wmem). /proc/sys uses tabs;
-    SYSCTL_VALUES uses spaces.
-  docs: sync README (version badge 3.38.0, 14 kernel params, 15
-    embedded configs, 23 sysctl tunables, 9 env vars, remove
-    amdgpu-performance from System Services / Managed Files / example
-    profile, add usbhid.mousepoll row). Condense Profiles section
-    (remove destination boilerplate, keep skeleton + globals checklist).
-    Condense Safety & Reliability (remove jq examples, keep event
-    table + one-liner). Condense changelog (collapse 3.0.0–3.9.0).
-    CHANGELOG.
-
-3.37.2 (2026-04-02)
--------------------
-  fix(style): quote /etc/kernel/cmdline and /etc/drirc in
-    SYSTEM_DESTINATIONS and _ry_get_file_content case branches.
-    All 16 destinations and case patterns now consistently quoted.
-  fix(sudo): 4 bare sudo cat → sudo -n cat in _atomic_write_file
-    (2 sites), _ry_install_file (1 site), _ry_verify_static (1
-    site). Prevents interactive prompt if credential expires
-    mid-run; aligns with sudo -n convention used elsewhere.
-  docs: sync README (version badge 3.37.2), CHANGELOG.
-
-3.37.1 (2026-04-02)
--------------------
-  fix(docs): B-6 comment "parallel installed-file reads" →
-    "sequential installed-file reads" (reads are sequential in
-    parent; sudo ppid constraint documented in Phase 2 comment).
-  fix(docs): B-6 iwd skip comment "parallel forks" → "sequential
-    reads" (no parallel forks exist in _ry_do_diff).
-  fix(docs): expand B-5 nested parallelism guard comment to
-    document actual fork budget: 7 outer modes + inner forks
-    from --check (4 jobs) and --verify-static (4 workers),
-    worst case 15 fish procs on 8+ cores.
-  docs: sync README (version badge 3.37.1), CHANGELOG.
-
-3.37.0 (2026-04-02)
--------------------
-  fix(check): return EXIT_PREFLIGHT(3) for infrastructure failures
-    (sudo unavailable, content pregeneration, mktemp). Previously
-    returned EXIT_DRIFT(10), making CI unable to distinguish prereq
-    failure from actual config drift.
-  fix(diff): set VERIFY_MODE=true with counter reset at entry, false
-    before return. JSONL footer now reports accurate pass/fail/warn
-    counts for diff runs (was always 0/0/0).
-  fix(diff-fix): call _manifest_write after successful --diff --fix
-    (guarded: FIX=true, DRY=false, fixed_count>0). Orphan tracking
-    now stays current without requiring a full reinstall.
-  fix(validate): display first 5 lines of parallel validation child
-    stderr to terminal via _warn. systemd-analyze and fish diagnostic
-    warnings were previously only written to JSONL log.
-  docs: sync README (version badge 3.37.0, --check exit codes,
-    exit code table), CHANGELOG.
-
-3.36.0 (2026-04-01)
--------------------
-  fix(docs/specs): cTDP "55–120 W" → "55 W default TDP (cTDP
-    45–120 W)". AMD spec lists cTDP floor at 45W, not 55W.
-  fix(docs/known-issues): CWSR "Fixed in kernel 7.0+" → "ROCm 7.2+
-    userspace + kernel patches (6.14/6.17 OEM)". No Linux kernel 7.0
-    exists; fix requires both kernel and userspace components.
-  fix(docs/known-issues): MT7925 TX power "Unfixable driver bug" →
-    "Cosmetic — actual TX follows regulatory limits; kernel patches
-    pending". Reporting bug, not hardware limitation.
-  fix(docs/kernel): CWSR param "remove when 7.0+ stable" → "remove
-    after ROCm 7.2+ fix". Aligns with known-issues correction.
-  fix(docs/known-issues): mt7925_mac_reset_work → mt792x_mac_reset_work
-    (shared mt792x family function).
-  fix(docs/kernel): clocksource=tsc "20× faster" → "~10–100× lower
-    read latency". Sources range widely by workload.
-  fix(verify): HPET message "~20× slower" → "10–100× higher read
-    latency".
-  fix(profile-comment): CWSR "remove 7.0+" → "remove after ROCm 7.2+
-    fix".
-  docs: sync README (version badge 3.36.0), CHANGELOG, script.
-
-3.35.0 (2026-04-01)
--------------------
-  fix(docs/profile): remove dead UDEV_RULES from optional globals
-    list (removed from script in v3.11.0).
-  fix(docs/profile): add SYSCTL_VALUES to required globals comment
-    (required since v3.34.0 but missing from example).
-  fix(docs/profile): add coredump.conf.d and sysctl.d destinations
-    to example profile. SYSTEM_DESTINATIONS 9→11, total 14→16.
-  fix(docs/known-issues): black screen workaround "Use 6.18.9" →
-    "Downgrade to 6.18.x or upgrade to 6.19.1+" (aligns with
-    script CHK-03 guidance).
-  fix(docs/specs): TDP "55–120 W" → "55–120 W cTDP (Beelink:
-    140 W)". AMD cTDP spec vs Beelink configured value.
-  docs: sync README (version badge 3.35.0), CHANGELOG.
-
-3.32.0–3.34.0 (2026-04-01)
----------------------------
-  perf(kernel): net -6 kernel params. Remove processor.max_cstate=1,
-    amdgpu.runpm=0, amdgpu.wbrf=0, mt7925e.disable_aspm=1. Restore
-    clocksource=tsc, quiet. KERNEL_PARAMS 15→13.
-  feat(sysctl): add managed /etc/sysctl.d/99-cachyos-sysctl.conf
-    (11 tunables: BBR+fq, tcp_fastopen, vm.max_map_count, swappiness,
-    compaction/watermark tuning). Embedded files 15→16.
-  feat(resolved): add LLMNR=no.
-  feat(env): add RADV_PERFTEST=transfer_queue. ENV_VARS 6→7.
-  perf(initramfs): add COMPRESSION_OPTIONS=(-3) for faster rebuilds.
-  feat(config): add /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf
-    (Storage=none, ProcessSizeMax=0). VKD3D_SHADER_DEBUG=none env var.
-  feat(verify): sysctl runtime + static checks, LLMNR, compression.
-    Remove 5 dead runtime checks (runpm, wbrf, mt7925e, max_cstate,
-    nvme multipath, kernel.split_lock_mitigate vendor sysctl).
-  fix(naming): coredump drop-in 99-ry-install.conf →
-    99-cachyos-coredump.conf (aligns with resolved/logind/NM).
-  style: re-quote all paths in SYSTEM_DESTINATIONS and case arms.
-
-3.23.0–3.31.0 (2026-03-31)
----------------------------
-  docs(readme): restructure for professional clarity. Flatten ToC,
-    expand 3 collapsible <details> blocks, simplify Quick Start,
-    remove btrfs references (ext4-only), collapse example profile
-    to destinations + commented globals checklist. Restore ToC
-    sub-entries (26 total) and shields.io badges. 560→474 lines.
-  style: remove decorative box-drawing (46 comment headers), 13
-    horizontal rules, and strip 17 unnecessary quotes flagged by
-    fish_indent.
-  fix(lint): update progress-call counter for unquoted args.
-  refactor(lint): version cross-check via header + CHANGELOG.
-
-3.14.0–3.22.0 (2026-03-29 — 2026-03-30)
+3.38.0–3.40.0 (2026-04-02 — 2026-04-05)
 -----------------------------------------
-  profile: remove PROTON_DXVK_LOWLATENCY=1. ENV_VARS 6→5.
-  fix(parallel): increase child stderr capture 5→15 lines (6 sites).
-  fix(_gkeyfile_escape): add string collect before \n escape.
-  fix(_json_str): add string collect to 4 pre-\n-escape calls.
-    Prevents silent newline corruption in JSONL logs.
-  fix(parallel): add stdout redirect to all 10 backgrounded children.
-  fix(bootstrap): 6 bare exit 1 → exit $EXIT_PREFLIGHT.
-  fix(exit-codes): 4 bare return 2 → $EXIT_USAGE.
-  fix(verify-static): LVM-aware mask verification.
-  fix(wifi): SSID banned chars 15→5; remove 2 dead isatty checks.
-  fix(_gather_cpu_state): remove dead _CPU_GOVERNOR/_CPU_EPP globals.
-  refactor(verify-static): pre-filter MASK for LVM before batch.
-  style: multi-line PKGS_ADD/PKGS_DEL, remove 5 blank line runs,
-    trim comments.
+  feat(env): RADV_PERFTEST→RADV_EXPERIMENTAL, add VKD3D_CONFIG,
+    PROTON_LOCAL_SHADER_CACHE, WINEDEBUG. Remove AMD_VULKAN_ICD.
+    ENV_VARS 7→9.
+  feat(sysctl): 10 GbE buffers, dirty page limits, page-cluster,
+    security hardening. SYSCTL_VALUES 11→23.
+  feat(kernel): add usbhid.mousepoll=1. KERNEL_PARAMS 13→14.
+  remove(service): drop amdgpu-performance.service (kernel default).
+    Embedded files 16→15. EXPECTED_SERVICES 4→3.
+  fix(cleanup): guard empty TMPDIR in fallback sweep.
+  refactor(progress): extract _emit_step_time helper (-10 lines).
+  style: remove decorative box-drawing, duplicate comments (-26 lines).
+  docs: sync README, CHANGELOG.
 
-3.10.0–3.13.0 (2026-03-25 — 2026-03-29)
+3.35.0–3.37.2 (2026-04-01 — 2026-04-02)
+-----------------------------------------
+  fix(check): return EXIT_PREFLIGHT(3) for infrastructure failures.
+  fix(diff): set VERIFY_MODE for accurate JSONL counters.
+  fix(diff-fix): call _manifest_write after successful fix.
+  fix(validate): surface parallel validation child stderr.
+  fix(sudo): 4 bare sudo cat → sudo -n cat.
+  fix(docs): correct cTDP spec, CWSR kernel version, MT7925 TX
+    power, clocksource latency range, black screen workaround.
+  docs: sync README, CHANGELOG.
+
+3.23.0–3.34.0 (2026-03-31 — 2026-04-01)
+-----------------------------------------
+  feat(sysctl): managed /etc/sysctl.d/99-cachyos-sysctl.conf (11→22
+    tunables across releases). feat(resolved): LLMNR=no.
+  feat(config): coredump.conf.d (Storage=none, ProcessSizeMax=0).
+  perf(kernel): net -6 kernel params. Restore clocksource=tsc, quiet.
+  docs: README restructure (flatten ToC, expand details, 560→474 lines).
+  style: remove decorative box-drawing, strip unnecessary quotes.
+
+3.10.0–3.22.0 (2026-03-25 — 2026-03-30)
 -----------------------------------------
   feat(verify-static): parallel hash workers (min(4, nproc)).
   feat(check): 4-job parallel check with pre-serialized state.
-  profile: add split_lock_detect=off, tsc=reliable, AUR_PKGS
-    (mt76-mt7925-dkms). AMD_VULKAN_ICD=RADV, VKD3D_DEBUG=none.
-    Remove PROTON_USE_NTSYNC=1, PROTON_NO_WM_DECORATION=1, iwd
-    DefaultInterface quirk. MESA_SHADER_CACHE_MAX_SIZE 8G→4G.
-  profile: remove udev rules file (ntsync-common). Files 15→14.
-  verify: remove E610 NVM check (board v2.2 uses RTL8127). Add
-    ntsync-common and AUR_PKGS static verification.
-  fix(install): propagate _atomic_write_file return code.
-  fix(completions): fish --no-execute validation before mv.
-  fix(docs): renumber pipeline phase comments 1–6.
-  fix(parallel): pre-serialize sudo-dependent I/O for parallel
-    children. Pre-serialize LVM state. Batch I/O for diff.
-  fix(scope): 4 block-scoped variable shadows.
-  fix(logging): break _json_str → _log circular call.
-  docs: restructure README — add ToC, Install Flow, Known Issues.
+  profile: add split_lock_detect=off, tsc=reliable, AUR_PKGS.
+    MESA_SHADER_CACHE_MAX_SIZE 8G→4G. Remove udev rules file.
+  fix: 292+ scope fixes, 202 &&/||→Fish, 96+ bare cat/rm→command
+    prefix, signal handling, _gkeyfile_escape, _json_str newlines,
+    PID lock ownership. Remove --no-color/--no-log/--clean/--json.
+  docs: README rewrite, ToC, Install Flow, Known Issues.
 
 3.0.0–3.9.0 (2026-02-27 — 2026-03-24)
 ---------------------------------------
-  Initial release through early stabilization. Batch & parallel
-    processing (B-1..B-9, fork cap 16). 5-job parallel config
-    validation. Structured exit codes (0–5, 10–11). --check silent
-    idempotency probe. --profile multi-machine support. NDJSON
-    structured logging with header/footer. --test-all, --completions.
-  kernel: cwsr_enable=0, ppfeaturemask, iommu=pt (was amd_iommu=off),
-    workqueue.power_efficient=0, DXVK_LOG_LEVEL, ZRAM mask.
-  verify: 12 runtime checks (THP, KSM, ZRAM, amd_pstate, CPU boost,
-    NVMe scheduler, BIOS VRAM). Parallel hash workers. Vendor sysctl
-    split from ry-install-managed.
-  fix: 292+ scope fixes. 202 Bash &&/|| → Fish. 96+ bare cat/rm →
-    command prefix. Signal handling (Fish SIG prefix, 128+signum).
-    _gkeyfile_escape. _run metachar rejection. PID lock ownership.
-  remove: --no-color, --no-log, --clean (344 lines), --json, --once,
-    --profile flag (file-based only).
-  docs: README rewrite. Adopt kernel.org changelog style.
+  Initial release through early stabilization. Profile-driven
+  config management, 15 embedded files, structured NDJSON logging,
+  5-job parallel validation, batch processing (B-1..B-9), exit
+  codes 0–5/10–11, --check/--test-all/--completions. Adopt
+  kernel.org changelog style.

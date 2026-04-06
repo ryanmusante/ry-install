@@ -3,12 +3,12 @@
 ![Version](https://img.shields.io/badge/version-3.46.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
-[changelog](CHANGELOG.md)
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
 
 **Default profile:** Beelink GTR9 Pro — AMD Ryzen AI Max+ 395 (Zen 5, Strix Halo) / Radeon 8060S (RDNA 3.5, gfx1151) / 128 GB LPDDR5x-8000
 
+[changelog](CHANGELOG.md)
 
 ## Table of Contents
 
@@ -39,7 +39,6 @@ Self-contained CachyOS configuration manager with profile support. Single Fish s
 - [Troubleshooting](#troubleshooting)
 - [References](#references)
 
-
 ## Quick Start
 
 ```fish
@@ -48,7 +47,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 ```
 
 **Post-install:** Reboot → `--verify-static` → `--verify-runtime` → `sudo pacdiff` → test WiFi + gaming.
-
 
 ## Prerequisites
 
@@ -74,7 +72,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 # https://wiki.cachyos.org  ·  https://archlinux.org/news/
 ```
 
-
 ## Usage
 
 | Flag | Description |
@@ -98,7 +95,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 Suppress individual lint warnings with `# lint:ignore`.
 
-
 ## Install Flow
 
 Six sequential phases — boot-critical failures abort immediately:
@@ -115,7 +111,6 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | **Services** | Enable, mask, or create systemd units |
 | **Boot** | Rebuild initramfs, update systemd-boot entries |
 | **Finalize** | Daemon-reload, cache cleanup, NM restart, WiFi reconnect, write manifest |
-
 
 ## Configuration Reference
 
@@ -237,7 +232,6 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `hybrid-sleep.target` | Desktop — no hybrid sleep |
 | `suspend-then-hibernate.target` | Desktop — no suspend-then-hibernate |
 
-
 ## Managed Files
 
 15 files deployed via atomic writes (tmp → chmod → mv):
@@ -259,7 +253,6 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | 13 | User | `~/.config/environment.d/10-environment.conf` |
 | 14 | User | `~/.config/systemd/user/ssh-agent.service` |
 | 15 | Service | `/etc/systemd/system/cpupower-epp.service` |
-
 
 ## Profiles
 
@@ -307,7 +300,6 @@ Validate before first use:
 ./ry-install.fish --dry-run --all    # preview with new profile
 ./ry-install.fish --diff             # compare against installed state
 ```
-
 
 ## Safety & Reliability
 
@@ -368,7 +360,6 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 
 Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
-
 ## Hardware Reference
 
 ### Specifications
@@ -414,7 +405,6 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | WPA2/3 Enterprise GUI broken with iwd | Use CLI or switch to wpa_supplicant |
 | Monitor mode requires full reboot | Reboot |
 
-
 ## Troubleshooting
 
 | Problem | Diagnostic |
@@ -424,7 +414,6 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` |
 | FSR4 on RDNA 3.5 | Per-game: `PROTON_FSR4_RDNA3_UPGRADE=1 %command%` (proton-cachyos / GE-Proton 10-9+) |
-
 
 ## References
 
@@ -437,8 +426,6 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes) | ROCm containers + benchmarks |
 | [Ollama gfx1151](https://github.com/ollama/ollama/issues/14855) | LLM setup for Strix Halo |
 
-
-[Changelog](CHANGELOG.md)
 
 ## License
 

@@ -1,6 +1,6 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.40.0-blue)
+![Version](https://img.shields.io/badge/version-3.43.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -128,8 +128,8 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
 | `clocksource=tsc` | Force TSC clocksource (prevents HPET demotion, ~10–100× lower read latency) |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
-| `iommu=pt` | IOMMU passthrough (DMA protection, near-zero overhead) |
-| `module_blacklist=pcspkr,wdat_wdt` | Silence PC speaker beep, block ACPI watchdog |
+| `amd_iommu=off` | Disable IOMMU (APU unified memory — ~2–6% iGPU bandwidth gain, no VFIO/passthrough) |
+| `module_blacklist=pcspkr` | Silence PC speaker beep |
 | `nowatchdog` | Disable software watchdog timers |
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
 | `pcie_aspm.policy=performance` | PCIe ASPM L0 always (framework intact, per-device sysfs control preserved) |
@@ -137,7 +137,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `split_lock_detect=off` | Disable split-lock #AC exception (gaming) |
 | `threadirqs` | Force threaded IRQ handlers (lower worst-case latency, near-RT with preempt=full) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
-| `zswap.enabled=0` | Disable zswap (ZRAM masked separately) |
+| `zswap.enabled=0` | Disable zswap (ZRAM handles compressed swap) |
 
 ### Boot Loader
 
@@ -183,7 +183,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
 | `drirc` | RADV unified VRAM heap on APU |
-| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · vm.swappiness=10 · dirty page limits · compaction/watermark tuning · security hardening (22 tunables, overrides CachyOS vendor where needed) |
+| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · dirty page limits · watermark tuning · security hardening (19 tunables, supplements CachyOS vendor config) |
 
 ### Environment Variables
 
@@ -192,9 +192,10 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `DXVK_LOG_LEVEL` | `none` |
 | `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
+| `PROTON_ENABLE_WAYLAND` | `1` |
 | `PROTON_LOCAL_SHADER_CACHE` | `1` |
+| `PROTON_USE_NTSYNC` | `1` |
 | `RADV_EXPERIMENTAL` | `transfer_queue` |
-| `VKD3D_CONFIG` | `transfer_queue` |
 | `VKD3D_DEBUG` | `none` |
 | `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |
@@ -222,10 +223,10 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | Service | Reason |
 |---|---|
 | `ananicy-cpp.service` | Manual tuning preferred |
+| `irqbalance.service` | Conflicts with threadirqs (cache thrashing on 32T) |
 | `power-profiles-daemon.service` | Conflicts with cpupower-epp |
 | `lvm2-monitor.service` | Skipped if LVM detected |
 | `NetworkManager-wait-online.service` | Unnecessary boot delay |
-| `systemd-zram-setup@zram0.service` | 128 GB RAM — ZRAM overhead unnecessary |
 | `sleep.target` | Desktop — no sleep |
 | `suspend.target` | Desktop — no suspend |
 | `hibernate.target` | Desktop — no hibernate |
@@ -418,6 +419,7 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | WiFi backend mismatch | `nmcli -t -f TYPE,FILENAME connection show --active` |
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` |
+| FSR4 on RDNA 3.5 | Per-game: `PROTON_FSR4_RDNA3_UPGRADE=1 %command%` (proton-cachyos / GE-Proton 10-9+) |
 
 
 ## References

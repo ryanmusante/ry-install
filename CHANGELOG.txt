@@ -1,3 +1,64 @@
+3.43.0 (2026-04-05)
+-------------------
+  feat(env): add PROTON_ENABLE_WAYLAND=1 (native Wayland in Proton —
+    lower input latency, better frame pacing, HDR without Gamescope).
+  feat(sysctl): add 10 GbE buffer tuning: net.core.rmem_max,
+    net.core.wmem_max (128 MB), net.ipv4.tcp_rmem, net.ipv4.tcp_wmem
+    (128 MB max), net.core.netdev_max_backlog=300000. Add dirty page
+    limits: vm.dirty_bytes=256 MB, vm.dirty_background_bytes=64 MB
+    (prevents I/O stalls on 128 GB RAM). SYSCTL_VALUES 12→19.
+  feat(mask): add irqbalance.service. Conflicts with threadirqs on
+    32-thread system (cache thrashing from periodic IRQ migration).
+    MASK 9→10.
+  feat(kernel): replace iommu=pt → amd_iommu=off. APU unified memory
+    benefits from fully disabled IOMMU (~2–6% iGPU bandwidth gain).
+    No VFIO/passthrough on this system.
+  remove(env): drop VKD3D_CONFIG=transfer_queue. transfer_queue is now
+    the vkd3d-proton default; flag is a no-op.
+  remove(verify): drop workqueue.power_efficient runtime check. Removed
+    from KERNEL_PARAMS in v3.32; stale check on unmanaged value.
+  fix(verify): remove wdat_wdt from blacklisted modules runtime check.
+    Removed from module_blacklist in v3.41.0 (redundant with
+    nowatchdog); _fail message "should be blacklisted" was incorrect.
+  fix(validate): remove iommu from param_config_map. amd_iommu=off is
+    a disable flag; CONFIG_IOMMU_SUPPORT check is irrelevant.
+  docs: add FSR4 per-game launch option to Troubleshooting
+    (PROTON_FSR4_RDNA3_UPGRADE=1, proton-cachyos / GE-Proton 10-9+).
+  docs: sync README (version badge 3.43.0, env var table: add
+    PROTON_ENABLE_WAYLAND, remove VKD3D_CONFIG, kernel params table
+    amd_iommu=off, 19 sysctl tunables, 10 masked services, FSR4 tip).
+    CHANGELOG.
+
+3.41.0 (2026-04-05)
+-------------------
+  feat(fstab): add _install_fstab_opts. Ensures ext4 entries in
+    /etc/fstab have noatime,lazytime. Atomic tmpfile+sed+findmnt
+    verify+mv. Replaces manual post-install step.
+  feat(verify): add ZRAM device, swap, and fstab mount option
+    checks to --verify-runtime.
+  feat(env): add PROTON_USE_NTSYNC=1. ENV_VARS 9→10.
+  feat(sysctl): add fs.inotify.max_user_watches=524288,
+    fs.protected_fifos=2, fs.protected_regular=2.
+  remove(sysctl): drop 13 values now covered by CachyOS vendor
+    70-cachyos-settings.conf or redundant: kernel.kptr_restrict,
+    net.core.netdev_max_backlog, vm.dirty_bytes,
+    vm.dirty_background_bytes, vm.page-cluster, vm.swappiness,
+    vm.compaction_proactiveness, kernel.yama.ptrace_scope,
+    net.core.rmem_max, net.core.wmem_max, net.ipv4.tcp_rmem,
+    net.ipv4.tcp_wmem, vm.watermark_scale_factor.
+    SYSCTL_VALUES 22→12.
+  remove(mask): unmask systemd-zram-setup@zram0.service. Enable
+    ZRAM for compressed swap. MASK 10→9.
+  remove(kernel): drop wdat_wdt from module_blacklist. Redundant
+    with nowatchdog.
+  fix(verify): ZRAM check expects enabled (was: masked).
+  fix(comment): module_blacklist pcspkr+wdat_wdt → pcspkr.
+    Sysctl comment "overrides" → "supplements".
+  docs: sync README (version badge 3.41.0, 12 sysctl tunables,
+    10 env vars, 9 masked services, remove ZRAM from mask table,
+    add PROTON_USE_NTSYNC, update zswap/module_blacklist/sysctl
+    descriptions). CHANGELOG.
+
 3.40.0 (2026-04-05)
 -------------------
   fix(cleanup): guard empty TMPDIR in fallback sweep. set -q TMPDIR

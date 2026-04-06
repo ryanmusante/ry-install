@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v3.40.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.43.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.40.0"
+set -g VERSION "3.43.0"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -161,10 +161,9 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         return 0
     end
 
-    # Map: cmdline param prefix → CONFIG_ symbol; nowatchdog excluded (no-op without CONFIG_WATCHDOG)
+    # Map: cmdline param prefix → CONFIG_ symbol; nowatchdog excluded (no-op without CONFIG_WATCHDOG); amd_iommu=off excluded (disable flag, works regardless of CONFIG_IOMMU_SUPPORT)
     set -l param_config_map \
         "zswap.=CONFIG_ZSWAP" \
-        "iommu=CONFIG_IOMMU_SUPPORT" \
         "amdgpu.=CONFIG_DRM_AMDGPU"
 
     set -l config_data (_kconfig_cache)
@@ -527,14 +526,14 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (14 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (remove after ROCm 7.2+ fix); clocksource=tsc force TSC; module_blacklist pcspkr+wdat_wdt; threadirqs threaded IRQ handlers
+    # Kernel (14 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (remove after ROCm 7.2+ fix); amd_iommu=off (APU unified memory — no VFIO/passthrough); clocksource=tsc force TSC; module_blacklist pcspkr; threadirqs threaded IRQ handlers
     set -g KERNEL_PARAMS \
+        amd_iommu=off \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
         clocksource=tsc \
         initcall_blacklist=simpledrm_platform_driver_init \
-        iommu=pt \
-        module_blacklist=pcspkr,wdat_wdt \
+        module_blacklist=pcspkr \
         nowatchdog \
         nvme_core.default_ps_max_latency_us=0 \
         pcie_aspm.policy=performance \
@@ -587,37 +586,35 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "DXVK_LOG_LEVEL=none" \
         "ENABLE_LAYER_MESA_ANTI_LAG=1" \
         "MESA_SHADER_CACHE_MAX_SIZE=4G" \
+        "PROTON_ENABLE_WAYLAND=1" \
         "PROTON_LOCAL_SHADER_CACHE=1" \
         "RADV_EXPERIMENTAL=transfer_queue" \
-        "VKD3D_CONFIG=transfer_queue" \
         "VKD3D_DEBUG=none" \
         "VKD3D_SHADER_DEBUG=none" \
-        "WINEDEBUG=-all"
+        "WINEDEBUG=-all" \
+        "PROTON_USE_NTSYNC=1"
 
-    # Sysctl tunables — overrides CachyOS vendor 70-cachyos-settings.conf where values differ
+    # Sysctl tunables — supplements CachyOS vendor 70-cachyos-settings.conf (networking, security, memory)
     set -g SYSCTL_VALUES \
         "net.core.default_qdisc=fq" \
+        "net.core.netdev_max_backlog=300000" \
+        "net.core.rmem_max=134217728" \
+        "net.core.wmem_max=134217728" \
         "net.ipv4.tcp_congestion_control=bbr" \
         "net.ipv4.tcp_fastopen=3" \
         "net.ipv4.tcp_mtu_probing=1" \
+        "net.ipv4.tcp_rmem=4096 87380 134217728" \
         "net.ipv4.tcp_slow_start_after_idle=0" \
-        "net.core.rmem_max=134217728" \
-        "net.core.wmem_max=134217728" \
-        "net.ipv4.tcp_rmem=4096 87380 67108864" \
-        "net.ipv4.tcp_wmem=4096 65536 67108864" \
-        "net.core.netdev_max_backlog=16384" \
-        "vm.compaction_proactiveness=0" \
-        "vm.dirty_bytes=419430400" \
-        "vm.dirty_background_bytes=209715200" \
+        "net.ipv4.tcp_wmem=4096 65536 134217728" \
+        "vm.dirty_background_bytes=67108864" \
+        "vm.dirty_bytes=268435456" \
         "vm.max_map_count=2147483642" \
         "vm.page_lock_unfairness=1" \
-        "vm.page-cluster=0" \
-        "vm.swappiness=10" \
         "vm.watermark_boost_factor=0" \
-        "vm.watermark_scale_factor=125" \
-        "kernel.kptr_restrict=1" \
-        "kernel.yama.ptrace_scope=1" \
-        "kernel.unprivileged_bpf_disabled=1"
+        "kernel.unprivileged_bpf_disabled=1" \
+        "fs.inotify.max_user_watches=524288" \
+        "fs.protected_fifos=2" \
+        "fs.protected_regular=2"
 
     # Packages
     set -g PKGS_ADD \
@@ -650,6 +647,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # Services
     set -g MASK \
         ananicy-cpp.service \
+        irqbalance.service \
         power-profiles-daemon.service \
         lvm2-monitor.service \
         NetworkManager-wait-online.service \
@@ -657,8 +655,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         suspend.target \
         hibernate.target \
         hybrid-sleep.target \
-        suspend-then-hibernate.target \
-        systemd-zram-setup@zram0.service
+        suspend-then-hibernate.target
     set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service
 
     # Thresholds
@@ -4078,14 +4075,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
 
     _echo "── Additional module parameters ──"
-    if test -f /sys/module/workqueue/parameters/power_efficient
-        set -l sysfs_val (command cat -- /sys/module/workqueue/parameters/power_efficient 2>/dev/null | string trim --)
-        if test "$sysfs_val" = 0; or test "$sysfs_val" = N
-            _ok "  workqueue.power_efficient: $sysfs_val"
-        else
-            _warn "  workqueue.power_efficient: $sysfs_val (expected: 0)"
-        end
-    end
     if test -f /sys/module/zswap/parameters/enabled
         set -l sysfs_val (command cat -- /sys/module/zswap/parameters/enabled 2>/dev/null | string trim --)
         if test "$sysfs_val" = N; or test "$sysfs_val" = 0
@@ -4105,7 +4094,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     _echo "── Blacklisted modules ──"
-    for mod in pcspkr wdat_wdt
+    for mod in pcspkr
         if lsmod 2>/dev/null | grep -q "^$mod "
             _fail "  $mod: LOADED (should be blacklisted)"
         else
@@ -4314,7 +4303,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         set -l _key (string split '=' -- "$entry")[1]
         set -l _expected (string split '=' -- "$entry")[2]
         set -l _proc_path (string replace -a '.' '/' -- "$_key")
-        # Normalize whitespace: /proc/sys uses tabs for multi-value keys (tcp_rmem, tcp_wmem); SYSCTL_VALUES uses spaces
+        # Normalize whitespace: /proc/sys uses tabs for multi-value keys; SYSCTL_VALUES uses spaces
         set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim -- | string replace -ra '\s+' ' ')
         set -l _expected_norm (string replace -ra '\s+' ' ' -- "$_expected")
         if test "$_actual" = "$_expected_norm"
@@ -4385,12 +4374,49 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     # §10 #6: ZRAM service state
     set -l _zram_state (systemctl is-enabled systemd-zram-setup@zram0.service 2>/dev/null | string trim --)
-    if test "$_zram_state" = masked
-        _ok "  ZRAM service: masked"
+    if test "$_zram_state" = enabled
+        _ok "  ZRAM service: enabled"
+    else if test "$_zram_state" = masked
+        _fail "  ZRAM service: masked (expected: enabled)"
     else if test -n "$_zram_state"
-        _warn "  ZRAM service: $_zram_state (expected: masked — 128 GB makes ZRAM pointless)"
+        _warn "  ZRAM service: $_zram_state (expected: enabled)"
     else
-        _ok "  ZRAM service: not found (OK)"
+        _warn "  ZRAM service: not found"
+    end
+
+    _echo "── ZRAM device ──"
+    set -l _zram_swap (swapon --show=NAME,TYPE 2>/dev/null | grep zram)
+    if test -n "$_zram_swap"
+        set -l _zram_info (zramctl --output NAME,ALGORITHM,DISKSIZE,TOTAL,COMP-RATIO --noheadings 2>/dev/null | head -n 1 | string trim --)
+        _ok "  ZRAM swap active: $_zram_info"
+    else
+        set -l _any_swap (swapon --show=NAME,SIZE 2>/dev/null | tail -n +2)
+        if test -z "$_any_swap"
+            _fail "  No swap available (ZRAM not active, no swap file/partition)"
+        else
+            _warn "  ZRAM not active but other swap found: $_any_swap"
+        end
+    end
+
+    _echo "── fstab mount options ──"
+    set -l _fstab_ext4 (grep '^[^#]' /etc/fstab 2>/dev/null | grep 'ext4')
+    if test -n "$_fstab_ext4"
+        set -l _fstab_ok true
+        for _fl in $_fstab_ext4
+            set -l _mnt (string split -f 2 -- ' ' (string replace -ra '\t' ' ' -- "$_fl") | string trim --)
+            if not string match -q '*noatime*' -- "$_fl"
+                _fail "  ext4 entry missing noatime: $_fl"
+                set _fstab_ok false
+            else if not string match -q '*lazytime*' -- "$_fl"
+                _fail "  ext4 entry missing lazytime: $_fl"
+                set _fstab_ok false
+            end
+        end
+        if test "$_fstab_ok" = true
+            _ok "  ext4 entries: noatime,lazytime present"
+        end
+    else
+        _info "  No ext4 entries in /etc/fstab"
     end
     _echo
 
@@ -5233,6 +5259,83 @@ function _install_system_files --description "Deploy all embedded config files t
     return 0
 end
 
+# Ensure ext4 entries in /etc/fstab have noatime,lazytime mount options
+function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab entries"
+    if not test -f /etc/fstab
+        _warn "  /etc/fstab not found — skipping"
+        return 0
+    end
+
+    # Check if any ext4 entry is missing noatime or lazytime
+    set -l needs_change false
+    set -l ext4_lines (grep -n '^[^#]' /etc/fstab 2>/dev/null | grep 'ext4')
+    if test -z "$ext4_lines"
+        _info "  No ext4 entries in /etc/fstab"
+        return 0
+    end
+    for line in $ext4_lines
+        if not string match -q '*noatime*' -- "$line"; or not string match -q '*lazytime*' -- "$line"
+            set needs_change true
+            break
+        end
+    end
+
+    if test "$needs_change" = false
+        _ok "  /etc/fstab: ext4 entries already have noatime,lazytime"
+        return 0
+    end
+
+    if test "$DRY" = true
+        _dry "  Add noatime,lazytime to ext4 entries in /etc/fstab"
+        return 0
+    end
+
+    if not _ask "Add noatime,lazytime to ext4 mount options in /etc/fstab?"
+        return 0
+    end
+
+    # Atomic modify: copy → sed → verify → mv
+    set -l tmpfstab (sudo mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null)
+    if test -z "$tmpfstab"
+        _warn "  /etc/fstab: mktemp failed"
+        return 1
+    end
+    if not sudo cp --preserve=mode,ownership -- /etc/fstab "$tmpfstab"
+        sudo rm -f -- "$tmpfstab" 2>/dev/null
+        _warn "  /etc/fstab: backup copy failed"
+        return 1
+    end
+
+    # For ext4 lines: replace relatime→noatime,lazytime; add noatime,lazytime if absent
+    # Step 1: relatime → noatime,lazytime (covers the common case)
+    sudo sed -i '/^[^#].*ext4/{ s/relatime/noatime,lazytime/; }' "$tmpfstab"
+    # Step 2: if noatime still missing, append to options field (4th field, comma-separated)
+    sudo sed -i '/^[^#].*ext4/{ /noatime/!s/\(ext4[[:space:]]*\)\([^[:space:]]*\)/\1\2,noatime,lazytime/; }' "$tmpfstab"
+    # Step 3: if lazytime missing but noatime present, append lazytime
+    sudo sed -i '/^[^#].*ext4/{ /lazytime/!s/noatime/noatime,lazytime/; }' "$tmpfstab"
+
+    # Verify the modified fstab parses correctly (findmnt --verify)
+    if command -q findmnt
+        set -l _verify_err (sudo findmnt --verify --tab-file "$tmpfstab" 2>&1 | grep -i 'error\|unknown' | head -n 3)
+        if test -n "$_verify_err"
+            _warn "  /etc/fstab: modified file has parse warnings: $_verify_err"
+            _warn "  Keeping original /etc/fstab unchanged"
+            sudo rm -f -- "$tmpfstab" 2>/dev/null
+            return 1
+        end
+    end
+
+    if not sudo mv -- "$tmpfstab" /etc/fstab
+        sudo rm -f -- "$tmpfstab" 2>/dev/null
+        _warn "  /etc/fstab: atomic move failed"
+        return 1
+    end
+
+    _ok "  /etc/fstab: noatime,lazytime applied to ext4 entries"
+    _log "FSTAB_OPTS: noatime,lazytime applied"
+    return 0
+end
+
 # Pipeline phase 4: daemon-reload, enable/start services, configure systemd-resolved, mask units
 function _install_configure_services --description "Enable, start, and configure systemd services"
     _check_sudo_keepalive
@@ -5851,6 +5954,8 @@ function _ry_do_install --description "Full installation: preflight, packages, c
         set -g INSTALL_HAD_ERRORS true
     end
 
+    _install_fstab_opts; or set -g INSTALL_HAD_ERRORS true
+
     if not _install_configure_services
         set -g INSTALL_HAD_ERRORS true
     end
@@ -5895,9 +6000,8 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     end
 
     _info "Manual steps required:"
-    _info "  1. Review /etc/fstab mount options (rw,noatime,lazytime for ext4)"
-    _info "  2. Run 'rehash' or start new shell (updates command paths)"
-    _info "  3. REBOOT to apply kernel cmdline and module changes"
+    _info "  1. Run 'rehash' or start new shell (updates command paths)"
+    _info "  2. REBOOT to apply kernel cmdline and module changes"
     _echo
     _info "Post-reboot verification: ./ry-install.fish --verify-static; and ./ry-install.fish --verify-runtime"
     _echo

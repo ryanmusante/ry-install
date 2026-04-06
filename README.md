@@ -437,4 +437,8 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | [Ollama gfx1151](https://github.com/ollama/ollama/issues/14855) | LLM setup for Strix Halo |
 
 
-[Changelog](CHANGELOG.txt) · License: MIT
+[Changelog](CHANGELOG.md)
+
+## License
+
+MIT

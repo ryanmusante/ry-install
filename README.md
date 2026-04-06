@@ -3,6 +3,7 @@
 ![Version](https://img.shields.io/badge/version-3.46.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
+[changelog](CHANGELOG.md)
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
 

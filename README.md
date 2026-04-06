@@ -184,6 +184,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
 | `drirc` | RADV unified VRAM heap on APU |
 | `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · dirty page limits · watermark tuning · security hardening (19 tunables, supplements CachyOS vendor config) |
+| `/etc/fstab` | Adds `noatime,lazytime` to ext4 entries (modified in-place, not a managed file) |
 
 ### Environment Variables
 

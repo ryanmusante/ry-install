@@ -497,7 +497,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        "/etc/kernel/cmdline" \
+        /etc/kernel/cmdline \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
@@ -505,7 +505,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        "/etc/drirc" \
+        /etc/drirc \
         "/etc/sysctl.d/99-cachyos-sysctl.conf"
 
     set -g USER_DESTINATIONS \
@@ -916,7 +916,7 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' "console-mode $LOADER_CONSOLE_MODE"
             printf '%s\n' "editor $LOADER_EDITOR"
 
-        case "/etc/kernel/cmdline"
+        case /etc/kernel/cmdline
             if test -z "$_ROOT_UUID"
                 _err "_ry_get_file_content: root UUID not cached (_load_profile may not have run)"
                 return 1
@@ -1039,7 +1039,7 @@ ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system
 [Install]
 WantedBy=multi-user.target'
 
-        case "/etc/drirc"
+        case /etc/drirc
             # RADV unified VRAM heap: prevents games from misallocating via artificial two-heap split on UMA APUs
             printf '%s\n' '<driconf>' \
                 '  <device>' \
@@ -4273,7 +4273,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         _fail "  irqbalance.service: enabled (conflicts with threadirqs — disable or mask)"
     else if test "$_irqbal_state" = masked; or test "$_irqbal_state" = disabled
         _ok "  irqbalance.service: $_irqbal_state"
-    else if test -z "$_irqbal_state"; or test "$_irqbal_state" = "not-found"
+    else if test -z "$_irqbal_state"; or test "$_irqbal_state" = not-found
         _ok "  irqbalance.service: not installed"
     else
         _info "  irqbalance.service: $_irqbal_state"

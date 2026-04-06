@@ -1,8 +1,8 @@
 # ry-install
 
-![Version](https://img.shields.io/badge/version-3.46.0-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![Fish](https://img.shields.io/badge/fish-3.4%2B-orange)
+![version](https://img.shields.io/badge/version-3.46.0-blue)
+![license](https://img.shields.io/badge/license-MIT-green)
+![fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
 
@@ -426,7 +426,6 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes) | ROCm containers + benchmarks |
 | [Ollama gfx1151](https://github.com/ollama/ollama/issues/14855) | LLM setup for Strix Halo |
 
-
 ## License
 
-MIT
+[MIT](LICENSE)

@@ -2,6 +2,20 @@ ry-install changelog
 
 2026-04-07  Ryan Musante
 
+- Tagged as v3.47.6
+- fix: PKGS_ADD — removed `ntsync-common`. Redundant on CachyOS: linux-cachyos ships `CONFIG_NTSYNC=m` and declares `provides=(NTSYNC-MODULE)`; wine-cachyos (transitive dep of cachyos-gaming-meta via wine-cachyos-opt) installs `/usr/lib/modules-load.d/10-ntsync.conf` to auto-load the in-kernel module on boot. Refs: github.com/CachyOS/linux-cachyos config + PKGBUILD, github.com/CachyOS/CachyOS-PKGBUILDS/wine-cachyos.
+- fix: SYSCTL_VALUES — dropped `vm.dirty_bytes=268435456` and `vm.dirty_background_bytes=67108864`. Both are byte-identical to vendor `/usr/lib/sysctl.d/70-cachyos-settings.conf` and were no-op duplicates.
+- doc: README sysctl row updated to "17 net-new tunables" and explicitly notes `net.core.netdev_max_backlog` overrides vendor 4096→16384 (99-* loads after 70-* lexically).
+- doc: Hardware Reference NIC corrected from "Dual Realtek RTL8127 10 GbE (board v2.2)" to "Dual Intel E610-XT2 10 GbE" per ServeTheHome review and Beelink/Intel support correspondence (craigwilson.blog).
+- fix: KERNEL_PARAMS — removed `preempt=full`. No-op on stock linux-cachyos (CONFIG_PREEMPT=y + CONFIG_PREEMPT_DYNAMIC=y → "full" is already the dynamic default). README kernel-params count 15 → 14.
+- doc: README Masked Services — removed unsourced "cache thrashing on 32T" framing from irqbalance row; left only the verifiable "Conflicts with threadirqs".
+- doc: README Environment Variables — `PROTON_USE_NTSYNC=1` annotated as "default in current proton-cachyos; explicit pin" since recent proton-cachyos releases enable it by default.
+- doc: README + profile comment — softened CWSR row, dropped unverifiable "Ubuntu OEM kernel 1018+ (not mainline as of 2026-Q2)" claim; kept the verified ROCm 7.2 userspace fix note and the kernel workaround.
+- doc: README Known Issues — softened MES page faults row (dropped specific FW 0x83 / linux-firmware-20251125 date string pending upstream verification); softened black-screen row (dropped specific 6.19.0/6.19.1+ version pins pending verification).
+- doc: Hardware Reference BIOS row softened from "P110 (Dec 2025 — ACPI fix)" to "Latest available from Beelink (P110+ recommended)" — vendor changelog not publicly verifiable.
+
+2026-04-07  Ryan Musante
+
 - Tagged as v3.47.5
 - fix: ENV_VARS — `DXVK_LOG_LEVEL=none` valid but creates empty `app_d3d11.log` / `app_dxgi.log` files (doitsujin/dxvk#1703); added `DXVK_LOG_PATH=none` per DXVK README to disable log file creation entirely.
 - doc: corrected `amdgpu.cwsr_enable=0` rationale in profile comment, README env table, and audit table — kernel-mode fix is only in Ubuntu OEM kernel 1018+ (not mainline as of 2026-Q2); ROCm 7.2 ships userspace fix only, kernel workaround still required. Refs: ROCm/ROCm#5724, ROCm/TheRock#2991.

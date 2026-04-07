@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v3.47.5 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.47.6 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     status is-interactive; and return 1; or exit 1
 end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.47.5"
+set -g VERSION "3.47.6"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -535,7 +535,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (15 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (kernel workaround still required — ROCm 7.2 ships userspace fix only; kmod fix is in Ubuntu OEM kernel 1018+, not mainline as of 2026-Q2); amd_iommu=off (APU unified memory — no VFIO/passthrough); clocksource=tsc force TSC; module_blacklist pcspkr; preempt=full pin Dynamic Preempt; threadirqs threaded IRQ handlers
+    # Kernel (14 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (ROCm 7.2 ships userspace fix only; kernel workaround still required); amd_iommu=off (APU unified memory — no VFIO/passthrough); clocksource=tsc force TSC; module_blacklist pcspkr; threadirqs threaded IRQ handlers
     set -g KERNEL_PARAMS \
         amd_iommu=off \
         amdgpu.cwsr_enable=0 \
@@ -546,7 +546,6 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         nowatchdog \
         nvme_core.default_ps_max_latency_us=0 \
         pcie_aspm.policy=performance \
-        preempt=full \
         quiet \
         split_lock_detect=off \
         threadirqs \
@@ -571,7 +570,8 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g MKINITCPIO_COMPRESSION zstd
     set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
-    # Udev — ntsync rule handled by ntsync-common package (in PKGS_ADD)
+    # Udev — ntsync module autoloaded via wine-cachyos's /usr/lib/modules-load.d/10-ntsync.conf
+    #        (wine-cachyos is a transitive dep of cachyos-gaming-meta via wine-cachyos-opt)
 
     # Network
     set -g RESOLVED_MDNS no
@@ -607,6 +607,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "PROTON_USE_NTSYNC=1"
 
     # Sysctl tunables — supplements CachyOS vendor 70-cachyos-settings.conf (networking, security, memory)
+    # Note: net.core.netdev_max_backlog overrides vendor 4096→16384 (99-* loads after 70-*)
     set -g SYSCTL_VALUES \
         "net.core.default_qdisc=fq" \
         "net.core.netdev_max_backlog=16384" \
@@ -619,8 +620,6 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "net.ipv4.tcp_rmem=4096 87380 134217728" \
         "net.ipv4.tcp_slow_start_after_idle=0" \
         "net.ipv4.tcp_wmem=4096 65536 134217728" \
-        "vm.dirty_background_bytes=67108864" \
-        "vm.dirty_bytes=268435456" \
         "vm.max_map_count=2147483642" \
         "vm.watermark_boost_factor=0" \
         "kernel.unprivileged_bpf_disabled=1" \
@@ -635,7 +634,6 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         iw \
         cachyos-gaming-meta \
         cachyos-gaming-applications \
-        ntsync-common \
         fd \
         sd \
         dust \
@@ -1076,9 +1074,9 @@ WantedBy=multi-user.target'
                 '</driconf>'
 
         case "/etc/sysctl.d/99-cachyos-sysctl.conf"
-            printf '%s\n' "# ry-install sysctl tunables (priority 99 — overrides"
-            printf '%s\n' "# CachyOS vendor 70-cachyos-settings.conf for:"
-            printf '%s\n' "# vm.dirty_bytes, vm.dirty_background_bytes, net.core.netdev_max_backlog)"
+            printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after"
+            printf '%s\n' "# CachyOS vendor 70-cachyos-settings.conf; overrides"
+            printf '%s\n' "# net.core.netdev_max_backlog 4096 → 16384)"
             for entry in $SYSCTL_VALUES
                 set -l parts (string split -m1 '=' -- "$entry")
                 set -l key $parts[1]
@@ -3266,10 +3264,10 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo
 
     _echo "── Udev rules ──"
-    if pacman -Qi ntsync-common &>/dev/null
-        _ok "  ntsync-common: installed (handles udev + module loading)"
+    if test -f /usr/lib/modules-load.d/10-ntsync.conf
+        _ok "  ntsync autoload: /usr/lib/modules-load.d/10-ntsync.conf present (shipped by wine-cachyos)"
     else
-        _warn "  ntsync-common: not installed — ntsync udev rule may be missing"
+        _warn "  ntsync autoload: /usr/lib/modules-load.d/10-ntsync.conf missing — module may not load on boot"
     end
     _echo
 
@@ -3991,7 +3989,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         if string match -q '*full*' -- "$_preempt"
             _ok "  $_preempt"
         else
-            _warn "  $_preempt (expected: full — verify kernel supports PREEMPT_DYNAMIC)"
+            _warn "  $_preempt (linux-cachyos defaults to full; add preempt=full to cmdline if running a different kernel)"
         end
     else
         _info "  Preemption model: cannot determine from dmesg"

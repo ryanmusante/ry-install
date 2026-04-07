@@ -1,6 +1,6 @@
 # ry-install
 
-![version](https://img.shields.io/badge/version-3.47.5-blue)
+![version](https://img.shields.io/badge/version-3.47.6-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -116,11 +116,11 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ### Kernel Parameters
 
-15 parameters written to `/etc/kernel/cmdline`:
+14 parameters written to `/etc/kernel/cmdline`:
 
 | Parameter | Purpose |
 |---|---|
-| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (kernel fix only in Ubuntu OEM 1018+; ROCm 7.2 userspace fix alone insufficient) |
+| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (ROCm 7.2 userspace fix alone insufficient; kernel-mode fix not yet in mainline) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
 | `clocksource=tsc` | Force TSC clocksource (prevents HPET demotion, ~10–100× lower read latency) |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
@@ -129,10 +129,9 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `nowatchdog` | Disable software watchdog timers |
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
 | `pcie_aspm.policy=performance` | PCIe ASPM L0 always (framework intact, per-device sysfs control preserved) |
-| `preempt=full` | Pin Dynamic Preempt to full (lowest scheduling latency for input/audio) |
 | `quiet` | Suppress kernel boot messages |
 | `split_lock_detect=off` | Disable split-lock #AC exception (gaming) |
-| `threadirqs` | Force threaded IRQ handlers (lower worst-case latency, near-RT with preempt=full) |
+| `threadirqs` | Force threaded IRQ handlers (lower worst-case latency) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
 | `zswap.enabled=0` | Disable zswap (ZRAM handles compressed swap) |
 
@@ -181,7 +180,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
 | `coredump.conf.d` | Storage=none · ProcessSizeMax=0 (disables coredump storage — Wine/Proton multi-GB dumps) |
 | `drirc` | RADV unified VRAM heap on APU |
-| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · dirty page limits · watermark tuning · security hardening (19 tunables, supplements CachyOS vendor config) |
+| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · watermark tuning · security hardening (17 net-new tunables, supplements CachyOS vendor 70-cachyos-settings.conf; net.core.netdev_max_backlog overrides vendor 4096→16384) |
 | `/etc/fstab` | Adds `noatime,lazytime` to ext4 entries (modified in-place, not a managed file) |
 
 ### Environment Variables
@@ -194,7 +193,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
 | `PROTON_ENABLE_WAYLAND` | `1` |
 | `PROTON_LOCAL_SHADER_CACHE` | `1` |
-| `PROTON_USE_NTSYNC` | `1` |
+| `PROTON_USE_NTSYNC` | `1` (default in current proton-cachyos; explicit pin) |
 | `RADV_PERFTEST` | `transfer_queue` |
 | `VKD3D_CONFIG` | `transfer_queue` |
 | `VKD3D_DEBUG` | `none` |
@@ -213,7 +212,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | Action | Count | Packages |
 |---|---|---|
-| **Install** | 13 | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, ntsync-common, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
+| **Install** | 12 | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove** | 8 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
 | **AUR** | 1 | mt76-mt7925-dkms (via paru) |
 
@@ -224,7 +223,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | Service | Reason |
 |---|---|
 | `ananicy-cpp.service` | Manual tuning preferred |
-| `irqbalance.service` | Conflicts with threadirqs (cache thrashing on 32T) |
+| `irqbalance.service` | Conflicts with threadirqs |
 | `power-profiles-daemon.service` | Conflicts with cpupower-epp |
 | `lvm2-monitor.service` | Skipped if LVM detected |
 | `NetworkManager-wait-online.service` | Unnecessary boot delay |
@@ -368,12 +367,12 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
 | Component | Detail |
 |---|---|
-| BIOS | P110 (Dec 2025 — ACPI fix) |
+| BIOS | Latest available from Beelink (P110+ recommended for Strix Halo stability) |
 | CPU | Ryzen AI Max+ 395 — Zen 5, 16C/32T, 5.1 GHz, 55 W default TDP (cTDP 45–120 W, Beelink: 140 W) |
 | GPU | Radeon 8060S — RDNA 3.5, gfx1151, 40 CUs |
 | RAM | 128 GB LPDDR5x-8000 |
 | WiFi | MediaTek MT7925 (WiFi 7) |
-| NIC | Dual Realtek RTL8127 10 GbE (board v2.2) |
+| NIC | Dual Intel E610-XT2 10 GbE |
 | Thermals | 85 °C sustained · 95 °C throttle · 100 °C max |
 
 Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](https://bugzilla.kernel.org) / [Mesa GitLab](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) for gfx1151 issues.
@@ -384,11 +383,11 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 
 | Issue | Status | Workaround |
 |---|---|---|
-| CWSR hang — incorrect VGPR count (`cf326449637a5`), compute-only | Userspace fix in ROCm 7.2; kmod fix only in Ubuntu OEM kernel 1018+ (not mainline as of 2026-Q2) | `amdgpu.cwsr_enable=0` (still required) |
-| MES page faults | FW 0x83 affected | Avoid `linux-firmware-20251125`; pin if needed |
+| CWSR hang — incorrect VGPR count (`cf326449637a5`), compute-only | Userspace fix in ROCm 7.2; kernel-mode fix not yet in mainline | `amdgpu.cwsr_enable=0` (still required) |
+| MES page faults | Specific firmware revisions affected | Pin a known-good `linux-firmware` version if encountered |
 | ROCm VRAM allocation | Fixed in kernel 6.16+ | GTT handled automatically — no `ttm.pages_limit` or `amdgpu.gttsize` needed |
 | PSR freeze (eDP only) | Open | `amdgpu.dcdebugmask=0x10` (not needed for HDMI/DP) |
-| Black screen | Kernel 6.19.0 regression | Downgrade to 6.18.x or upgrade to 6.19.1+ |
+| Black screen | Reported kernel-version-specific regressions | Track linux-cachyos changelog; downgrade or upgrade as advised |
 | ROCm compute | Requires env vars | `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.1` |
 
 #### MediaTek MT7925 WiFi

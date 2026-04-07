@@ -5000,7 +5000,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
     end
     set -l changelog_path "$script_dir/CHANGELOG.md"
     if test -f "$changelog_path"
-        set -l changelog_ver (sed -n -- 's/^[[:space:]]*\* Tagged as v\([0-9][0-9.]*\).*/\1/p' "$changelog_path" | head -n 1)
+        set -l changelog_ver (sed -n -- 's/^- Tagged as v\([0-9][0-9.]*\).*/\1/p' "$changelog_path" | head -n 1)
         if test -n "$changelog_ver"
             if test "$changelog_ver" = "$VERSION"
                 _ok "CHANGELOG version matches: v$VERSION"

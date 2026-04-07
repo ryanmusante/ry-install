@@ -1,6 +1,6 @@
 # ry-install
 
-![version](https://img.shields.io/badge/version-3.47.3-blue)
+![version](https://img.shields.io/badge/version-3.47.5-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -120,7 +120,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | Parameter | Purpose |
 |---|---|
-| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (remove after ROCm 7.2+ fix) |
+| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (kernel fix only in Ubuntu OEM 1018+; ROCm 7.2 userspace fix alone insufficient) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
 | `clocksource=tsc` | Force TSC clocksource (prevents HPET demotion, ~10–100× lower read latency) |
 | `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
@@ -189,12 +189,14 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | Variable | Value |
 |---|---|
 | `DXVK_LOG_LEVEL` | `none` |
+| `DXVK_LOG_PATH` | `none` |
 | `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
 | `PROTON_ENABLE_WAYLAND` | `1` |
 | `PROTON_LOCAL_SHADER_CACHE` | `1` |
 | `PROTON_USE_NTSYNC` | `1` |
-| `RADV_EXPERIMENTAL` | `transfer_queue` |
+| `RADV_PERFTEST` | `transfer_queue` |
+| `VKD3D_CONFIG` | `transfer_queue` |
 | `VKD3D_DEBUG` | `none` |
 | `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |
@@ -382,7 +384,7 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 
 | Issue | Status | Workaround |
 |---|---|---|
-| CWSR hang — incorrect VGPR count (`cf326449637a5`), compute-only | ROCm 7.2+ userspace + kernel patches (6.14/6.17 OEM) | `amdgpu.cwsr_enable=0` (pre-fix) |
+| CWSR hang — incorrect VGPR count (`cf326449637a5`), compute-only | Userspace fix in ROCm 7.2; kmod fix only in Ubuntu OEM kernel 1018+ (not mainline as of 2026-Q2) | `amdgpu.cwsr_enable=0` (still required) |
 | MES page faults | FW 0x83 affected | Avoid `linux-firmware-20251125`; pin if needed |
 | ROCm VRAM allocation | Fixed in kernel 6.16+ | GTT handled automatically — no `ttm.pages_limit` or `amdgpu.gttsize` needed |
 | PSR freeze (eDP only) | Open | `amdgpu.dcdebugmask=0x10` (not needed for HDMI/DP) |

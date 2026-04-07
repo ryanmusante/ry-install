@@ -2,6 +2,17 @@ ry-install changelog
 
 2026-04-07  Ryan Musante
 
+- Tagged as v3.47.5
+- fix: ENV_VARS — `DXVK_LOG_LEVEL=none` valid but creates empty `app_d3d11.log` / `app_dxgi.log` files (doitsujin/dxvk#1703); added `DXVK_LOG_PATH=none` per DXVK README to disable log file creation entirely.
+- doc: corrected `amdgpu.cwsr_enable=0` rationale in profile comment, README env table, and audit table — kernel-mode fix is only in Ubuntu OEM kernel 1018+ (not mainline as of 2026-Q2); ROCm 7.2 ships userspace fix only, kernel workaround still required. Refs: ROCm/ROCm#5724, ROCm/TheRock#2991.
+
+2026-04-07  Ryan Musante
+
+- Tagged as v3.47.4
+- fix: ENV_VARS — `RADV_EXPERIMENTAL=transfer_queue` does not exist; correct variable per Mesa 26.0 is `RADV_PERFTEST=transfer_queue`. Also added `VKD3D_CONFIG=transfer_queue` so vkd3d-proton (DX12) titles actually use the dedicated SDMA transfer queue. Ref: https://www.phoronix.com/news/Mesa-26.0-RADV-Transfer-SDMA
+
+2026-04-07  Ryan Musante
+
 - Tagged as v3.47.3
 - _install_fstab_opts: replace substring sed pipeline with field-based awk filter ($3 == "ext4"); old pipeline corrupted unrelated mounts whose path contained the literal "ext4" (e.g. /srv/ext4backups on xfs). Same fix applied to _ry_verify_runtime and needs_change check.
 - _install_rebuild_boot: initrd size loop uses sudo find instead of user-context glob; on ESP-mounted /boot (vfat 0700) the glob silently yielded zero iterations.

@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v3.47.3 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.47.5 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     status is-interactive; and return 1; or exit 1
 end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.47.3"
+set -g VERSION "3.47.5"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -535,7 +535,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (15 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (remove after ROCm 7.2+ fix); amd_iommu=off (APU unified memory — no VFIO/passthrough); clocksource=tsc force TSC; module_blacklist pcspkr; preempt=full pin Dynamic Preempt; threadirqs threaded IRQ handlers
+    # Kernel (15 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (kernel workaround still required — ROCm 7.2 ships userspace fix only; kmod fix is in Ubuntu OEM kernel 1018+, not mainline as of 2026-Q2); amd_iommu=off (APU unified memory — no VFIO/passthrough); clocksource=tsc force TSC; module_blacklist pcspkr; preempt=full pin Dynamic Preempt; threadirqs threaded IRQ handlers
     set -g KERNEL_PARAMS \
         amd_iommu=off \
         amdgpu.cwsr_enable=0 \
@@ -594,11 +594,13 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # Environment
     set -g ENV_VARS \
         "DXVK_LOG_LEVEL=none" \
+        "DXVK_LOG_PATH=none" \
         "ENABLE_LAYER_MESA_ANTI_LAG=1" \
         "MESA_SHADER_CACHE_MAX_SIZE=4G" \
         "PROTON_ENABLE_WAYLAND=1" \
         "PROTON_LOCAL_SHADER_CACHE=1" \
-        "RADV_EXPERIMENTAL=transfer_queue" \
+        "RADV_PERFTEST=transfer_queue" \
+        "VKD3D_CONFIG=transfer_queue" \
         "VKD3D_DEBUG=none" \
         "VKD3D_SHADER_DEBUG=none" \
         "WINEDEBUG=-all" \

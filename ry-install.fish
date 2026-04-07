@@ -1,9 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v3.46.0 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.47.1 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
-set -q _RY_INSTALL_LOADED; and echo "ry-install already loaded in this session" >&2; and exit 1
+if set -q _RY_INSTALL_LOADED
+    echo "ry-install already loaded in this session" >&2
+    status is-interactive; and return 1; or exit 1
+end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.46.0"
+set -g VERSION "3.47.1"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -35,6 +38,7 @@ if test (id -u) -eq 0
     # Running as root forces --dry-run (run as normal user; uses sudo internally)
     set -g _IS_ROOT true
     set -g DRY true
+    echo "[NOTICE] Running as root: --dry-run forced. Run as your normal user (sudo is invoked internally)." >&2
 end
 
 # Fish version gate (3.4+ required for $() syntax, set --function, string collect --allow-empty; string collect --no-trim-newlines available since fish 3.1)
@@ -254,6 +258,21 @@ function _get_boot_time --description "Print boot time in seconds, or return 1"
 end
 
 # Sweep /tmp for ry-{run-stderr,run-stdout,validate,diff,argparse,test-stderr}.* owned by current UID
+function _write_footer --argument-names exit_code extra_key --description "Append JSONL footer to LOG_FILE; idempotent via _FOOTER_WRITTEN"
+    set -q _FOOTER_WRITTEN; and return 0
+    set -q LOG_FILE; or return 0
+    test -n "$LOG_FILE"; and test -f "$LOG_FILE"; or return 0
+    set -g _FOOTER_WRITTEN true
+    set -l _mode_esc (_json_str "$MODE")
+    set -l _ts (date '+%Y-%m-%dT%H:%M:%S%z')
+    set -l _extra ""
+    if test -n "$extra_key"
+        set _extra ",\"$extra_key\":true"
+    end
+    printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s%s}\n' \
+        "$_ts" "$_ts" "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" "$_extra" >>"$LOG_FILE" 2>/dev/null
+end
+
 function _cleanup_tmpfiles --description "Remove temporary files created during this run"
     if not set -q _FOOTER_WRITTEN
         _log "CLEANUP_TMPFILES: sweep starting"
@@ -329,10 +348,9 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         flock -n -E 5 "$_reclaim_parent" /bin/sh -c '
             rm -f -- "$1/pid" 2>/dev/null
             find "$1" -maxdepth 1 -type f -delete 2>/dev/null
-            rmdir -- "$1" 2>/dev/null || true  # lint:ignore
-            mkdir -- "$1" 2>/dev/null || exit 1  # lint:ignore
-            echo "$2" > "$1/pid"
-        ' _ "$LOCK_DIR" %self 2>/dev/null
+            rmdir -- "$1" 2>/dev/null || true  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
+            mkdir -- "$1" 2>/dev/null || exit 1  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
+        ' _ "$LOCK_DIR" 2>/dev/null
         set -l _flock_rc $status
         if test $_flock_rc -eq 5
             echo "[ERR] Failed to reclaim stale lock — another instance is reclaiming" >&2
@@ -343,7 +361,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
             command rm -f -- "$LOG_FILE" 2>/dev/null
             return 1
         end
-        # flock subshell wrote its own PID; overwrite with ours
+        # flock subshell recreated empty LOCK_DIR; write our PID
         echo %self >"$LOCK_FILE"
     else
         # Fallback: rmdir+mkdir not atomic; yield + double PID verify narrows the race window
@@ -450,10 +468,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
         case TERM
             set _sig_exit 143
     end
-    if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
-        set -l _mode_esc (_json_str "$MODE")
-        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$_sig_exit" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
-    end
+    _write_footer "$_sig_exit" interrupted
     _do_cleanup
     exit $_sig_exit
 end
@@ -462,10 +477,7 @@ end
 function _cleanup_pipe --on-signal PIPE --description "Signal handler: clean up on SIGPIPE (broken pipe)"
     # SIGPIPE: stderr may also be broken — skip all terminal output
     set -g _CLEANUP_DONE true
-    if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
-        set -l _mode_esc (_json_str "$MODE")
-        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":141,"pass":%s,"fail":%s,"warn":%s,"interrupted":true}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE" 2>/dev/null
-    end
+    _write_footer 141 interrupted
     _do_cleanup
     exit 141
 end
@@ -480,10 +492,7 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
     if test "$_CLEANUP_DONE" = true
         return 0
     end
-    if not set -q _FOOTER_WRITTEN; and set -q LOG_FILE; and test -n "$LOG_FILE"; and test -f "$LOG_FILE"
-        set -l _mode_esc (_json_str "$MODE")
-        printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s,"cleanup_exit":true}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$_exit_status" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
-    end
+    _write_footer "$_exit_status" cleanup_exit
     _do_cleanup
 end
 
@@ -1035,6 +1044,7 @@ ConditionPathIsDirectory=/sys/devices/system/cpu
 Type=oneshot
 RemainAfterExit=yes
 TimeoutStartSec=10
+# Inline bash retained intentionally: oneshot unit, no external script dependency, nullglob needed for empty cpufreq dirs
 ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do [ -w "$cpu" ] && echo performance > "$cpu"; done; exit 0'\''
 
 [Install]
@@ -1077,7 +1087,7 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
     end
     # Must run after _load_profile — needs profile globals for _ry_get_file_content
     if test -z "$out_dir"
-        set out_dir (mktemp -d -t ry-content.XXXXXX)
+        set out_dir (mktemp -d --tmpdir=/tmp ry-content.XXXXXX)
     end
     if not test -d "$out_dir"
         return 1
@@ -1652,9 +1662,7 @@ function _ry_show_help --description "Display usage information and available su
     # Fallback: count _ry_get_file_content case branches if profile hasn't loaded (--help exits before _load_profile)
     set -l _file_count "$MANAGED_FILE_COUNT"
     if test -z "$_file_count"
-        # Count all case branches minus the wildcard case '*'; avoids $HOME expansion bugs in regex
-        set -l _all_cases (sed -n -- '/^function _ry_get_file_content/,/^end$/p' (status filename) | grep -c '^        case ')
-        set _file_count (math "$_all_cases - 1")
+        set _file_count (_ry_count_managed_cases (status filename))
     end
     set -l _profile_desc "Beelink GTR9 Pro (Strix Halo)"
     if set -q PROFILE_DESC; and test -n "$PROFILE_DESC"
@@ -2275,6 +2283,25 @@ function _ry_validate_configs --description "Run all embedded config validators"
     return 0
 end
 
+
+# Count managed-file cases in _ry_get_file_content (total case branches minus wildcard '*').
+# Used by file-count xref checks. Accepts optional script_path; defaults to (status filename).
+function _ry_count_managed_cases --argument-names script_path --description "Count case branches in _ry_get_file_content minus wildcard"
+    if test -z "$script_path"
+        set script_path (status filename)
+    end
+    set -l _all_cases (sed -n -- '/^function _ry_get_file_content/,/^end$/p' "$script_path" | grep -c '^        case ')
+    math "$_all_cases - 1"
+end
+
+
+# Read first non-comment "KEY=..." line from mkinitcpio.conf (or any conf file).
+# Usage: _ry_mkinitcpio_array MODULES   →   first matching line, or empty.
+function _ry_mkinitcpio_array --argument-names key file --description "First non-comment KEY=... line from a conf file"
+    test -z "$file"; and set file /etc/mkinitcpio.conf
+    grep -E "^[[:space:]]*$key=" "$file" 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1
+end
+
 # Atomic write: mktemp→symlink-check→write→symlink-recheck→chmod→hash→mv→verify→chown
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write with symlink and integrity checks"
     if test (count $argv) -ne 3
@@ -2283,6 +2310,27 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     end
 
     set -l dst_dir (dirname -- "$dst")
+    # Parent-dir trust check: dst_dir must exist, be a real directory (not symlink),
+    # owned by root (uid 0), and not group/world-writable. Closes the only realistic
+    # TOCTOU window for the post-mktemp symlink check (attacker-writable parent dir).
+    if test "$use_sudo" = true
+        if not sudo test -d "$dst_dir"; or sudo test -L "$dst_dir"
+            _fail "→ $dst (parent dir missing or symlink: $dst_dir)"
+            return 1
+        end
+        set -l _dir_stat (sudo stat -c '%u %a' -- "$dst_dir" 2>/dev/null)
+        set -l _dir_uid (string split ' ' -- "$_dir_stat")[1]
+        set -l _dir_mode (string split ' ' -- "$_dir_stat")[2]
+        if test "$_dir_uid" != 0
+            _fail "→ $dst (parent dir not root-owned: uid=$_dir_uid)"
+            return 1
+        end
+        # Reject if group or world writable (last two octal digits & 022)
+        if string match -qr '[2367]$' -- "$_dir_mode"; or string match -qr '[2367].$' -- "$_dir_mode"
+            _fail "→ $dst (parent dir group/world writable: mode=$_dir_mode)"
+            return 1
+        end
+    end
     set -l tmpfile
     if test "$use_sudo" = true
         set tmpfile (sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
@@ -2372,6 +2420,17 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     else
         set _expected_hash (command cat -- "$tmpfile" 2>/dev/null | sha256sum | string split -- ' ')[1]
     end
+    # Fail-closed: empty hash means cred timeout or read failure — never silently accept
+    if test -z "$_expected_hash"
+        if test "$use_sudo" = true
+            sudo rm -f -- "$tmpfile" 2>/dev/null
+        else
+            command rm -f -- "$tmpfile" 2>/dev/null
+        end
+        _fail "→ $dst (pre-mv hash unavailable — sudo cred timeout or read failure)"
+        _log "HASH_UNAVAILABLE: dst=$dst use_sudo=$use_sudo"
+        return 1
+    end
 
     # Atomic mv
     if test "$use_sudo" = true
@@ -2395,7 +2454,12 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     else
         set _actual_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
     end
-    if test -n "$_expected_hash"; and test "$_expected_hash" != "$_actual_hash"
+    if test -z "$_actual_hash"
+        _fail "→ $dst (post-write hash unavailable)"
+        _log "HASH_UNAVAILABLE_POST: dst=$dst"
+        return 1
+    end
+    if test "$_expected_hash" != "$_actual_hash"
         _fail "→ $dst (post-write checksum mismatch)"
         _log "HASH_MISMATCH: expected=$_expected_hash actual=$_actual_hash dst=$dst"
         return 1
@@ -2404,11 +2468,10 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     # chown + success message
     if test "$use_sudo" = true
         if not _run sudo chown -- root:root "$dst"
-            _warn "→ $dst (chown failed, check ownership)"
-            set -g INSTALL_HAD_ERRORS true
-        else
-            _ok "→ $dst"
+            _fail "→ $dst (chown failed)"
+            return 1
         end
+        _ok "→ $dst"
     else
         _ok "→ $dst"
     end
@@ -2483,6 +2546,10 @@ end
 function _ry_install_files --description "Install multiple embedded configs with argparse options"
     set -l _argparse_tmp (mktemp -t ry-argparse.XXXXXX 2>/dev/null; or echo /dev/null)
     test "$_argparse_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$_argparse_tmp"
+    if test "$_argparse_tmp" = /dev/null; and not set -q _MKTEMP_DEGRADED_WARNED
+        set -g _MKTEMP_DEGRADED_WARNED true
+        _log "WARN: mktemp fallback to /dev/null — argparse error capture degraded"
+    end
     argparse s/sudo 'd/desc=' -- $argv 2>$_argparse_tmp
     or begin
         set -l _argparse_err (string trim -- (command cat -- "$_argparse_tmp" 2>/dev/null))
@@ -2576,11 +2643,19 @@ function _ry_do_diff --argument-names target_file --description "Show diffs betw
             _err "Sudo required for --diff --fix"
             return 1
         end
-        sudo true 2>/dev/null
-        if test $status -ne 0
+        # Style-unified with _ensure_sudo_cached: avoid `if not sudo true` (fish `not` can invert silently)
+        set -l _sudo_err2 (mktemp -t ry-sudo-err.XXXXXX 2>/dev/null; or echo /dev/null)
+        test "$_sudo_err2" != /dev/null; and set -ga _TRACKED_TMPFILES "$_sudo_err2"
+        sudo true 2>"$_sudo_err2"
+        set -l _rc2 $status
+        if test $_rc2 -ne 0
+            set -l _reason2 (command head -n 1 "$_sudo_err2" 2>/dev/null)
+            command rm -f -- "$_sudo_err2" 2>/dev/null
+            _log "SUDO_CACHE_FAIL: $_reason2"
             _err "Sudo required for --diff --fix"
             return 1
         end
+        command rm -f -- "$_sudo_err2" 2>/dev/null
         # Automatic pre-install snapshots removed in v3.5.0; user is responsible for rootfs snapshots
         _info "No automatic backup — snapshot your rootfs before proceeding if needed"
     end
@@ -3095,7 +3170,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
 
     _echo "── mkinitcpio.conf ──"
     if _chk_file /etc/mkinitcpio.conf
-        set -l modules_line (grep -E '^[[:space:]]*MODULES=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1)
+        set -l modules_line (_ry_mkinitcpio_array MODULES)
         _echo "  Config: $modules_line"
 
         if string match -q '*amdgpu*' -- "$modules_line"
@@ -3115,7 +3190,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
             end
         end
 
-        set -l hooks_line (grep -E '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1)
+        set -l hooks_line (_ry_mkinitcpio_array HOOKS)
         _echo "  Config: $hooks_line"
 
         for hook in $MKINITCPIO_HOOKS
@@ -3126,7 +3201,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
             end
         end
 
-        set -l comp_line (grep -E '^[[:space:]]*COMPRESSION=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1)
+        set -l comp_line (_ry_mkinitcpio_array COMPRESSION)
         if string match -q '*zstd*' -- "$comp_line"
             _ok "  COMPRESSION=zstd: present"
         else
@@ -3134,7 +3209,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
         end
 
         if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"
-            set -l comp_opts_line (grep -E '^[[:space:]]*COMPRESSION_OPTIONS=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1)
+            set -l comp_opts_line (_ry_mkinitcpio_array COMPRESSION_OPTIONS)
             if string match -q "*$MKINITCPIO_COMPRESSION_OPTIONS*" -- "$comp_opts_line"
                 _ok "  COMPRESSION_OPTIONS=$MKINITCPIO_COMPRESSION_OPTIONS: present"
             else
@@ -4767,7 +4842,9 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
 
     _echo "── Anti-pattern Check ──"
 
-    set -l clean_content (sed '/^[[:space:]]*#/d; /# lint:ignore/d' "$script_path")
+    # Strip comments, lint:ignore lines, AND heredoc bodies (anything between `<<'TAG'` / `<<-'TAG'` and `^TAG$`)
+    # to prevent embedded shell-syntax false-positives (e.g. systemd unit bodies, sh -c blocks).
+    set -l clean_content (sed -E "/<<-?'?[A-Z_]+'?\$/,/^[[:space:]]*[A-Z_]+\$/d; /^[[:space:]]*#/d; /# lint:ignore/d" "$script_path")
 
     # Exclude embedded bash in systemd ExecStart= (bash syntax is correct there)
     set -l bash_subst (printf '%s\n' $clean_content | grep -n '\$(' 2>/dev/null | grep -vE "ExecStart|/bin/bash|fish --version|'\\\$\\('|$_output_funcs" | head -n 20; or true)
@@ -4923,9 +5000,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
     end
 
     set -l total (math (count $SYSTEM_DESTINATIONS) + (count $USER_DESTINATIONS) + (count $SERVICE_DESTINATIONS))
-    # Count all case branches minus the wildcard case '*'; avoids $HOME expansion bugs in regex
-    set -l _all_cases (sed -n -- '/^function _ry_get_file_content/,/^end$/p' "$script_path" | grep -c '^        case ')
-    set -l case_count (math "$_all_cases - 1")
+    set -l case_count (_ry_count_managed_cases "$script_path")
     if test $case_count -ge $total
         _ok "File count verified: $total destinations, $case_count content cases"
     else
@@ -5712,6 +5787,16 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     end
 
     if _ask "Update bootloader?"
+        # SDBOOT_REMOVE_EXISTING=yes deletes ALL existing loader entries before regen.
+        # In interactive mode, require explicit confirm so manual entries (rescue, Windows) aren't lost silently.
+        if test "$SDBOOT_REMOVE_EXISTING" = yes; and test "$ALL" != true
+            _warn "SDBOOT_REMOVE_EXISTING=yes — all existing /boot/loader/entries/*.conf will be deleted and regenerated."
+            _warn "Manual entries (rescue, Windows, custom kernels) will be LOST."
+            if not _ask "Proceed with destructive bootloader regeneration?"
+                _info "Bootloader update skipped by user."
+                return 0
+            end
+        end
         set -l _boot_ok true
         if not _run sudo sdboot-manage gen
             _warn "Sdboot-manage gen failed"
@@ -6697,10 +6782,7 @@ end
 # fish_exit handler receives $status of last command in setup, not script exit — capture intended code here
 set -g _INTENDED_EXIT_CODE $exit_code
 
-# Set flag BEFORE write to prevent signal-handler race (SIGINT between printf and flag would double-write)
-set -g _FOOTER_WRITTEN true
-set -l _mode_esc (_json_str "$MODE")
-printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (date '+%Y-%m-%dT%H:%M:%S%z') "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" >>"$LOG_FILE"
+_write_footer "$exit_code" ""
 
 if test "$MODE" != check
     echo "[i] Log file: $LOG_FILE" >&2

@@ -1,6 +1,6 @@
 # ry-install
 
-![version](https://img.shields.io/badge/version-3.47.6-blue)
+![version](https://img.shields.io/badge/version-3.47.8-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -286,6 +286,7 @@ function _ry_profile_my_desktop --description "Example desktop profile"
     # KERNEL_PARAMS MKINITCPIO_MODULES MKINITCPIO_HOOKS MKINITCPIO_COMPRESSION
     # LOADER_DEFAULT LOADER_TIMEOUT LOADER_CONSOLE_MODE LOADER_EDITOR
     # SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE
+    # SDBOOT_DEFAULT_ENTRY
     # RESOLVED_MDNS LOGIND_IGNORE_KEYS ENV_VARS PKGS_ADD MASK
     # EXPECTED_SERVICES SYSCTL_VALUES IWD_ENABLE_NETWORK_CONFIG
     # IWD_DRIVER_QUIRKS IWD_DNS_SERVICE NM_WIFI_BACKEND NM_WIFI_POWERSAVE
@@ -301,6 +302,14 @@ Validate before first use:
 ./ry-install.fish --dry-run --all    # preview with new profile
 ./ry-install.fish --diff             # compare against installed state
 ```
+
+### Profile Trust Model
+
+External profiles in `~/.config/ry-install/profiles/<n>.fish` are loaded via `source` and execute with the user's privileges. Treat profile files like any other shell script you would run:
+
+- Only use profiles from sources you trust.
+- Verify ownership: `stat -c '%U' ~/.config/ry-install/profiles/*.fish` should show your username, not root or any other user.
+- The script does not sandbox profile execution; a malicious profile can do anything your user account can do.
 
 ## Safety & Reliability
 

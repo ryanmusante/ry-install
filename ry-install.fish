@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v3.47.1 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.47.3 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     status is-interactive; and return 1; or exit 1
 end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.47.1"
+set -g VERSION "3.47.3"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -712,15 +712,14 @@ function _validate_profile --description "Verify loaded profile has all required
         BOOT_SPACE_CRIT \
         BOOT_SPACE_WARN \
         ROOT_AVAIL_CRIT \
-        ROOT_AVAIL_WARN \
-        SYSCTL_VALUES
+        ROOT_AVAIL_WARN
 
     # Intentionally optional (consumers handle unset safely): PKGS_DEL, AUR_PKGS, BOOT_TIME_TARGET, EXPECTED_CPU_MATCH, MKINITCPIO_COMPRESSION_OPTIONS
 
     # Conditionally required — needed only when profile includes corresponding destinations
     for dst in $SYSTEM_DESTINATIONS
         switch "$dst"
-            case '*/iwd/*' '*/nm.conf'
+            case '*/iwd/*' '*nm.conf'
                 for nw_var in IWD_ENABLE_NETWORK_CONFIG IWD_DNS_SERVICE IWD_DRIVER_QUIRKS NM_WIFI_BACKEND NM_WIFI_POWERSAVE NM_LOG_LEVEL
                     if not contains -- $nw_var $required
                         set -a required $nw_var
@@ -729,6 +728,10 @@ function _validate_profile --description "Verify loaded profile has all required
             case '*/resolved.conf.d/*'
                 if not contains -- RESOLVED_MDNS $required
                     set -a required RESOLVED_MDNS
+                end
+            case '*/sysctl.d/*'
+                if not contains -- SYSCTL_VALUES $required
+                    set -a required SYSCTL_VALUES
                 end
         end
     end
@@ -863,14 +866,23 @@ function _manifest_write --description "Record current profile destinations for 
         _warn "Failed to write manifest (mktemp failed)"
         return 1
     end
+    # Track tmp for cleanup; on successful mv it disappears (rm -f is harmless),
+    # on failure cleanup removes the leftover.
     set -ga _TRACKED_TMPFILES "$tmp"
     printf '%s\n' "v$VERSION" "$PROFILE_NAME" $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS >"$tmp"
     command chmod -- 600 "$tmp"
-    command mv -f -- "$tmp" "$MANIFEST_FILE" 2>/dev/null
-    or begin
+    if not command mv -f -- "$tmp" "$MANIFEST_FILE" 2>/dev/null
         command rm -f -- "$tmp" 2>/dev/null
         _warn "Failed to write manifest"
         return 1
+    end
+    # Success: remove tmp from tracked list (mv consumed it)
+    if set -q _TRACKED_TMPFILES
+        set -l _new_tracked
+        for _t in $_TRACKED_TMPFILES
+            test "$_t" = "$tmp"; or set -a _new_tracked "$_t"
+        end
+        set -g _TRACKED_TMPFILES $_new_tracked
     end
     _log "MANIFEST_WRITTEN: $MANIFEST_FILE ($MANAGED_FILE_COUNT destinations)"
     return 0
@@ -1738,7 +1750,7 @@ NOTES:
   [WARN] = non-critical issue, operation continues. [FAIL] = verification
   check did not pass (used by --verify-static, --verify-runtime, --diff).
 
-  WiFi passphrases containing '%' are rejected (GKeyFile safety).
+  WiFi passphrases containing '%' are rejected (NM keyfile reserved character).
   WiFi SSIDs cannot contain backslash, semicolon, backtick, dollar, pipe, ampersand, or newlines.
 "
 end
@@ -3222,7 +3234,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo "── Boot entries ──"
     set -l entry_count 0
     if sudo test -d /boot/loader/entries 2>/dev/null
-        set entry_count (sudo find /boot/loader/entries -name "*.conf" 2>/dev/null | wc -l | string trim --)
+        set entry_count (sudo find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" 2>/dev/null | wc -l | string trim --)
     end
     if test -n "$entry_count"; and string match -qr '^\d+$' -- "$entry_count"; and test "$entry_count" -gt 0
         _ok "  Boot entries: $entry_count found"
@@ -3455,7 +3467,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     else
         for _mask_idx in (seq 1 (count $_check_mask))
             set -l _svc $_check_mask[$_mask_idx]
-            set -l _rec (string split -- ':' -- "$_mask_parsed[$_mask_idx]")
+            set -l _rec (string split ':' -- "$_mask_parsed[$_mask_idx]")
             if test "$_rec[1]" = not-found
                 _info "  $_svc: unit not found (may not be installed)"
             else if test "$_rec[3]" = masked
@@ -4237,7 +4249,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
                 _warn "  $_svc: cannot query"
                 continue
             end
-            set -l _rec (string split -- ':' -- "$_unit_parsed[1]")
+            set -l _rec (string split ':' -- "$_unit_parsed[1]")
             if test "$_rec[1]" = not-found
                 _info "  $_svc: unit not found (may not be installed)"
             else if test "$_rec[2]" = active; or test "$_rec[2]" = exited
@@ -4253,7 +4265,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     else
 
         # cpupower-epp.service
-        set -l rec (string split -- ':' -- "$parsed[1]")
+        set -l rec (string split ':' -- "$parsed[1]")
         if test "$rec[1]" = not-found
             _warn "  cpupower-epp.service: not installed"
         else if test "$rec[2]" = active; or test "$rec[2]" = exited
@@ -4269,7 +4281,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
 
         # fstrim.timer
-        set -l rec (string split -- ':' -- "$parsed[2]")
+        set -l rec (string split ':' -- "$parsed[2]")
         if test "$rec[2]" = active
             if test "$rec[3]" = enabled
                 _ok "  fstrim.timer: active (enabled)"
@@ -4281,7 +4293,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
 
         # systemd-resolved
-        set -l rec (string split -- ':' -- "$parsed[3]")
+        set -l rec (string split ':' -- "$parsed[3]")
         if test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
             if test "$rec[2]" = active
                 _ok "  systemd-resolved: active"
@@ -4291,7 +4303,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
 
         # NetworkManager-dispatcher
-        set -l rec (string split -- ':' -- "$parsed[4]")
+        set -l rec (string split ':' -- "$parsed[4]")
         if test "$rec[3]" = enabled
             if test "$rec[2]" = active; or test "$rec[2]" = inactive
                 _ok "  NetworkManager-dispatcher: $rec[3] ($rec[2])"
@@ -4303,7 +4315,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
 
         # NetworkManager
-        set -l rec (string split -- ':' -- "$parsed[5]")
+        set -l rec (string split ':' -- "$parsed[5]")
         if test "$rec[2]" = active
             if test "$rec[3]" = enabled
                 _ok "  NetworkManager.service: active (enabled)"
@@ -4323,7 +4335,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     if test (count $user_parsed) -lt 1
         _warn "  ssh-agent.service: systemctl --user show returned no data"
     else
-        set -l rec (string split -- ':' -- "$user_parsed[1]")
+        set -l rec (string split ':' -- "$user_parsed[1]")
         if test "$rec[2]" = active
             if test "$rec[3]" = enabled
                 _ok "  ssh-agent.service: active (enabled)"
@@ -4385,24 +4397,26 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     _echo
 
-    _echo "── sysctl (ry-install) ──"
-    for entry in $SYSCTL_VALUES
-        set -l _parts (string split -m1 '=' -- "$entry")
-        set -l _key $_parts[1]
-        set -l _expected $_parts[2]
-        set -l _proc_path (string replace -a '.' '/' -- "$_key")
-        # Normalize whitespace: /proc/sys uses tabs for multi-value keys; SYSCTL_VALUES uses spaces
-        set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim -- | string replace -ra '\s+' ' ')
-        set -l _expected_norm (string replace -ra '\s+' ' ' -- "$_expected")
-        if test "$_actual" = "$_expected_norm"
-            _ok "  $_key: $_actual"
-        else if test -n "$_actual"
-            _fail "  $_key: $_actual (expected: $_expected)"
-        else
-            _warn "  $_key: not available"
+    if set -q SYSCTL_VALUES; and test (count $SYSCTL_VALUES) -gt 0
+        _echo "── sysctl (ry-install) ──"
+        for entry in $SYSCTL_VALUES
+            set -l _parts (string split -m1 '=' -- "$entry")
+            set -l _key $_parts[1]
+            set -l _expected $_parts[2]
+            set -l _proc_path (string replace -a '.' '/' -- "$_key")
+            # Normalize whitespace: /proc/sys uses tabs for multi-value keys; SYSCTL_VALUES uses spaces
+            set -l _actual (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim -- | string replace -ra '\s+' ' ')
+            set -l _expected_norm (string replace -ra '\s+' ' ' -- "$_expected")
+            if test "$_actual" = "$_expected_norm"
+                _ok "  $_key: $_actual"
+            else if test -n "$_actual"
+                _fail "  $_key: $_actual (expected: $_expected)"
+            else
+                _warn "  $_key: not available"
+            end
         end
+        _echo
     end
-    _echo
 
     _echo "── TCP congestion control ──"
     if command -q modinfo
@@ -4487,15 +4501,15 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
 
     _echo "── fstab mount options ──"
-    set -l _fstab_ext4 (grep '^[^#]' /etc/fstab 2>/dev/null | grep 'ext4')
+    set -l _fstab_ext4 (awk '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }' /etc/fstab 2>/dev/null)
     if test -n "$_fstab_ext4"
         set -l _fstab_ok true
         for _fl in $_fstab_ext4
-            set -l _mnt (string split -f 2 -- ' ' (string replace -ra '\t' ' ' -- "$_fl") | string trim --)
-            if not string match -q '*noatime*' -- "$_fl"
+            set -l _opts (printf '%s\n' "$_fl" | awk '{ print $4 }')
+            if not string match -q '*noatime*' -- "$_opts"
                 _fail "  ext4 entry missing noatime: $_fl"
                 set _fstab_ok false
-            else if not string match -q '*lazytime*' -- "$_fl"
+            else if not string match -q '*lazytime*' -- "$_opts"
                 _fail "  ext4 entry missing lazytime: $_fl"
                 set _fstab_ok false
             end
@@ -4984,9 +4998,9 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
             _warn "Could not parse README version"
         end
     end
-    set -l changelog_path "$script_dir/CHANGELOG.txt"
+    set -l changelog_path "$script_dir/CHANGELOG.md"
     if test -f "$changelog_path"
-        set -l changelog_ver (sed -n -- 's/^\([0-9][0-9.]*\) (.*/\1/p' "$changelog_path" | head -n 1)
+        set -l changelog_ver (sed -n -- 's/^[[:space:]]*\* Tagged as v\([0-9][0-9.]*\).*/\1/p' "$changelog_path" | head -n 1)
         if test -n "$changelog_ver"
             if test "$changelog_ver" = "$VERSION"
                 _ok "CHANGELOG version matches: v$VERSION"
@@ -5130,7 +5144,7 @@ function _install_collect_wifi --description "Interactively collect WiFi credent
                             set -g WIFI_SSID ""
                             set wifi_pass ""
                         else if string match -q -- '*%*' "$wifi_pass"
-                            _err "Invalid passphrase: contains '%' (GKeyFile parse safety)"
+                            _err "Invalid passphrase: contains '%' (NM keyfile reserved character)"
                             set -g WIFI_SSID ""
                             set wifi_pass ""
                         else if test (printf '%s' "$wifi_pass" | wc -c) -lt 8; or test (printf '%s' "$wifi_pass" | wc -c) -gt 63
@@ -5170,7 +5184,6 @@ function _install_preflight --description "Run all preflight checks before insta
         end
         # Matches: (ALL : ALL) ALL, (ALL) ALL, (ALL) NOPASSWD: ALL — does NOT match: (root) ALL
         set -l sudo_all (sudo -n -l 2>/dev/null | grep -v '^\s*#' | grep -cE '\(ALL.*\) .*ALL$')
-        or set sudo_all 0
         if test "$sudo_all" -eq 0
             if test "$ALL" = true
                 _err "Restricted sudo incompatible with --all mode (unattended install requires full sudo)"
@@ -5354,15 +5367,16 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
         return 0
     end
 
-    # Check if any ext4 entry is missing noatime or lazytime
+    # Check if any ext4 entry is missing noatime or lazytime — field-based: $3 == "ext4"
     set -l needs_change false
-    set -l ext4_lines (grep -n '^[^#]' /etc/fstab 2>/dev/null | grep 'ext4')
+    set -l ext4_lines (awk '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }' /etc/fstab 2>/dev/null)
     if test -z "$ext4_lines"
         _info "  No ext4 entries in /etc/fstab"
         return 0
     end
     for line in $ext4_lines
-        if not string match -q '*noatime*' -- "$line"; or not string match -q '*lazytime*' -- "$line"
+        set -l opts_field (printf '%s\n' "$line" | awk '{ print $4 }')
+        if not string match -q '*noatime*' -- "$opts_field"; or not string match -q '*lazytime*' -- "$opts_field"
             set needs_change true
             break
         end
@@ -5394,15 +5408,43 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
         return 1
     end
 
-    # For ext4 lines: replace relatime→noatime,lazytime; add noatime,lazytime if absent
-    # Step 1: relatime → noatime,lazytime (covers the common case)
-    sudo sed -i '/^[^#].*ext4/{ s/relatime/noatime,lazytime/; }' "$tmpfstab"
-    # Step 1b: dedup — collapse doubled noatime from step 1 (edge case: line already had noatime + relatime)
-    sudo sed -i '/^[^#].*ext4/{ s/noatime,noatime/noatime/g; }' "$tmpfstab"
-    # Step 2: if noatime still missing, append to options field (4th field, comma-separated)
-    sudo sed -i '/^[^#].*ext4/{ /noatime/!s/\(ext4[[:space:]]*\)\([^[:space:]]*\)/\1\2,noatime,lazytime/; }' "$tmpfstab"
-    # Step 3: if lazytime missing but noatime present, append lazytime
-    sudo sed -i '/^[^#].*ext4/{ /lazytime/!s/noatime/noatime,lazytime/; }' "$tmpfstab"
+    # Field-based edit: $3 (fstype) must equal "ext4" — substring match on the full line
+    # would corrupt unrelated mounts whose device/mountpoint contains the literal "ext4"
+    # (e.g. /srv/ext4backups on xfs). awk rewrites $4 (options) only when $3 == "ext4".
+    set -l tmpfstab2 (sudo mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null)
+    if test -z "$tmpfstab2"
+        sudo rm -f -- "$tmpfstab" 2>/dev/null
+        _warn "  /etc/fstab: mktemp (awk target) failed"
+        return 1
+    end
+    sudo awk '
+        BEGIN { OFS = "\t" }
+        /^[[:space:]]*#/ || NF < 4 { print; next }
+        $3 != "ext4" { print; next }
+        {
+            n = split($4, opts, ",")
+            has_noat = 0; has_lazy = 0; out = ""
+            for (i = 1; i <= n; i++) {
+                o = opts[i]
+                if (o == "relatime" || o == "atime") continue  # lint:ignore (awk, not fish — embedded awk script)
+                if (o == "noatime") has_noat = 1
+                if (o == "lazytime") has_lazy = 1
+                out = (out == "" ? o : out "," o)
+            }
+            if (!has_noat)  out = (out == "" ? "noatime"  : out ",noatime")
+            if (!has_lazy)  out = (out == "" ? "lazytime" : out ",lazytime")
+            $4 = out
+            print
+        }
+    ' "$tmpfstab" | sudo tee -- "$tmpfstab2" >/dev/null
+    set -l _awk_ps $pipestatus
+    if test $_awk_ps[1] -ne 0; or test $_awk_ps[2] -ne 0
+        sudo rm -f -- "$tmpfstab" "$tmpfstab2" 2>/dev/null
+        _warn "  /etc/fstab: awk/tee rewrite failed"
+        return 1
+    end
+    sudo rm -f -- "$tmpfstab" 2>/dev/null
+    set tmpfstab "$tmpfstab2"
 
     # Verify the modified fstab parses correctly (findmnt --verify)
     if command -q findmnt
@@ -5814,7 +5856,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
             end
         end
 
-        set -l entry_count (sudo find /boot/loader/entries -name "*.conf" 2>/dev/null | wc -l)
+        set -l entry_count (sudo find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" 2>/dev/null | wc -l)
         set -l entry_count (string trim -- "$entry_count")
         if test -n "$entry_count"; and string match -qr '^\d+$' -- "$entry_count"; and test "$entry_count" -gt 0
             _ok "Boot entries: $entry_count found in /boot/loader/entries/"
@@ -5825,16 +5867,17 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
             set -g INSTALL_HAD_ERRORS true
         end
 
-        for initrd in /boot/initramfs-*.img
-            if test -f "$initrd"
-                set -l size_mb (du -m -- "$initrd" 2>/dev/null | cut -f1)
-                if test -n "$size_mb"; and string match -qr '^\d+$' -- "$size_mb"
-                    # >100MB initramfs suggests unnecessary MODULES or hooks (typical: 30-60MB)
-                    if test "$size_mb" -gt 100
-                        _warn "Large initramfs: $initrd ($size_mb MB) - consider reviewing MODULES/HOOKS"
-                    else
-                        _ok "Initramfs size: $initrd ($size_mb MB)"
-                    end
+        # sudo find required: /boot may be ESP (vfat) mounted root:root 0700 — user-context
+        # glob silently yields zero iterations, hiding large-initramfs warnings.
+        set -l _initrd_list (sudo find /boot -maxdepth 1 -type f -name 'initramfs-*.img' 2>/dev/null)
+        for initrd in $_initrd_list
+            set -l size_mb (sudo du -m -- "$initrd" 2>/dev/null | cut -f1)
+            if test -n "$size_mb"; and string match -qr '^\d+$' -- "$size_mb"
+                # >100MB initramfs suggests unnecessary MODULES or hooks (typical: 30-60MB)
+                if test "$size_mb" -gt 100
+                    _warn "Large initramfs: $initrd ($size_mb MB) - consider reviewing MODULES/HOOKS"
+                else
+                    _ok "Initramfs size: $initrd ($size_mb MB)"
                 end
             end
         end
@@ -6488,7 +6531,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         _info "  completions file not available (dry-run or write failed) — skipping content check"
         set passed (math $passed + 1)
     else
-        for _expected_cmd in install diff verify-static verify-runtime lint
+        for _expected_cmd in --install-file --diff --verify-static --verify-runtime --lint
             if not string match -q "*$_expected_cmd*" -- "$_comp_out"
                 _warn "  completions missing: $_expected_cmd"
                 set _comp_ok false
@@ -6679,10 +6722,16 @@ end
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"
 set -l old_log "$LOG_FILE"
 # Rename log to mode-specific path; mv before set — signal loses footer but preserves content (reversed order loses content)
+set -l _log_rename_ok true
 if test -f "$old_log"; and test "$old_log" != "$new_log"
-    command mv -- "$old_log" "$new_log" 2>/dev/null
+    if not command mv -- "$old_log" "$new_log" 2>/dev/null
+        set _log_rename_ok false
+        echo "[WARN] Log rename failed: $old_log -> $new_log (keeping old path)" >&2
+    end
 end
-set -g LOG_FILE "$new_log"
+if test "$_log_rename_ok" = true
+    set -g LOG_FILE "$new_log"
+end
 # Only create fresh file if it doesn't already exist (mv above may have placed it); preserve pre-existing content from _load_profile
 if not test -f "$LOG_FILE"
     command install -m 0600 /dev/null "$LOG_FILE" 2>/dev/null
@@ -6731,11 +6780,10 @@ set -l _existing_logs (command find "$_log_base_rot" \( -name '*.jsonl' -o -name
 set -l _log_count (count $_existing_logs)
 if test $_log_count -gt $MAX_LOGS
     set -l _to_remove (math $_log_count - $MAX_LOGS)
-    set -l _rm_targets (string join0 -- $_existing_logs[1..$_to_remove])
     if command -q flock
-        printf '%s' "$_rm_targets" | flock -n "$_log_base_rot" xargs -0 rm -f -- 2>/dev/null
+        string join0 -- $_existing_logs[1..$_to_remove] | flock -n "$_log_base_rot" xargs -0 rm -f -- 2>/dev/null
     else
-        printf '%s' "$_rm_targets" | xargs -0 rm -f --
+        string join0 -- $_existing_logs[1..$_to_remove] | xargs -0 rm -f --
     end
     command find "$_log_base_rot" -mindepth 1 -maxdepth 1 -type d -empty -delete 2>/dev/null
 end
@@ -6777,7 +6825,7 @@ switch $MODE
         end
     case '*'
         _err "Unknown mode: $MODE"
-        set exit_code 2
+        set exit_code $EXIT_USAGE
 end
 # fish_exit handler receives $status of last command in setup, not script exit — capture intended code here
 set -g _INTENDED_EXIT_CODE $exit_code

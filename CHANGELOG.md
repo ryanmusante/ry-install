@@ -1,5 +1,75 @@
 ry-install changelog
 
+2026-04-08  Ryan Musante
+
+- Tagged as v3.48.1
+- audit: applied 12-item audit (2 HIGH, 6 MED, 4 LOW). fish --no-execute, fish_indent --check, internal consistency: all green.
+- F-25 (HIGH): _install_aur_packages now erases _RY_SKIP_IWD / _RY_SKIP_IWD_CACHED globals at the package-phase boundary. Closes a latent cache-poisoning hazard where _ry_install_file primes the iwd-skip cache during pre-deploy of mkinitcpio.conf BEFORE pacman -Syu runs; if a future profile added iwd to PKGS_ADD on a host that lacked it, the stale cache would silently skip iwd/main.conf and 99-cachyos-nm.conf in _install_system_files even though pacman just installed iwd.
+- F-26 (HIGH): _atomic_write_file H-01 hash gen now captures generator content + exit code into a variable before hashing, and fail-closes on $status -ne 0. Previously the wildcard '*' arm of _ry_get_file_content (which returns 1 with no output) would silently produce the empty-string SHA (e3b0c44...) when piped through sha256sum, defeating the fail-closed guard. Unreachable through current call sites but one refactor away from breaking.
+- fix(MED): _do_cleanup now `set --erase`s _RY_SKIP_IWD and _RY_SKIP_IWD_CACHED alongside _KCONFIG_DATA / _KCONFIG_LOADED for consistent cleanup discipline.
+- F-27 (MED): _acquire_lock now wraps `echo %self >$LOCK_FILE` in a check; on write failure (disk full, inode exhaustion) the just-created LOCK_DIR is rmdir'd and the function returns 1. Closes window where mkdir succeeds, pid write fails, and a subsequent stale-lock reclaim evicts our own (empty) lock.
+- F-28 (MED): _ry_validate_configs Job 4 INI section check now uses `grep -qFx` (whole-line match) instead of `grep -qF`. Defense against false positives where a section name appears inside a comment or value.
+- F-29 (MED): _ry_verify_runtime adds a static `(count $sys_units) -ne 5` assertion before the parsed[1..5] consumers. Hard-fails on positional-coupling drift if anyone adds/removes a unit without updating the parsed[N] indices.
+- F-30 (MED): _atomic_write_file post-write integrity check uses `sudo cat` (not `sudo -n cat`). Matches the M-02 fix in _ry_install_file's skip-unchanged path. Removes false-abort window if sudo keepalive lapses during long runs.
+- F-31 (MED): _install_preflight sudo -l ALL detection rewritten. Previous regex `\(ALL.*\) .*ALL$` matched dangerous tags like `(ALL) NOEXEC: ALL` and `(ALL) !PASSWD: ALL`, letting users pass the gate then fail mid-install. New logic: explicit reject of NOEXEC / !PASSWD / !SETENV / LOG_OUTPUT tags, then positive whitelist `\(ALL(\s*:\s*ALL)?\)\s+(NOPASSWD:\s+)?ALL$`.
+- F-32 (LOW): _progress_init seeds PROGRESS_STEP_START with current epoch (was 0). Step 1 elapsed display is now non-empty.
+- F-33 (LOW): _install_fstab_opts findmnt --verify grep changed from `-i 'error|unknown'` to `-iE 'error|unknown|invalid'`. Catches "Invalid" capitalisation variants.
+- F-34 (LOW): _ry_verify_static and _ry_verify_runtime sudo-cache failure now returns $EXIT_PREFLIGHT (was bare 1). Consistent exit code semantics for the same root cause.
+- F-35 (LOW): _install_preflight `sudo true` redirected to /dev/null. Suppresses sudo lecture text in the script's banner stream.
+- F-36 (LOW): _ry_do_check has a documentation comment explaining that the read-only mode has no keepalive and depends on sudo timestamp_timeout; mid-loop expiry produces fail-closed drift, not a bug.
+
+### Audit findings withdrawn after re-verification
+
+- Parent-dir mode regex (`[2367]$` / `[2367].$`): tested 770/757/1773/1755/644 — current regex correctly rejects all group/world-writable modes. `stat -c %a` never emits 5+ digit modes. Not a bug.
+- _json_str 0x80-0x9f corruption claim: tested with `printf "\u0090"` and box-drawing U+2500. Fish `string replace -ra` operates on Unicode codepoints, not raw bytes; multibyte UTF-8 is not corrupted. The regex correctly targets only the C1 control plane.
+- Banner UTF-8 corruption in JSONL: same root cause as above, withdrawn.
+
+### Deferred to future release
+
+- F-16 _parse_systemctl_show name-keyed refactor: too invasive for a point release; would touch every caller. Existing TODO marker preserved at line 3267.
+
+---
+
+
+- Tagged as v3.48.0
+
+### BREAKING
+- Removed --dry-run / -n.
+- Removed --all / -a. Unattended is the only mode.
+- Removed --diff and --fix. The entire _ry_do_diff drift-and-repair subsystem is gone.
+  Use --verify-static / --verify-runtime for read-only checks.
+- Removed all pacdiff integration **and** all pacnew/pacsave detection.
+  ry-install no longer scans for, reports, or mentions .pacnew/.pacsave files
+  anywhere — not in --verify-static, not after pacman -Syu, nowhere.
+  _find_pacnew_files is deleted. Pacnew handling is entirely the user's
+  responsibility (use `paccheck`, `pacdiff`, or your own tooling outside ry-install).
+- Removed all _ask confirmation prompts. Profile flags are the sole authority for
+  destructive operations (notably SDBOOT_REMOVE_EXISTING).
+- Removed _dry, _ask, DRY global, DRY log level, FIX global, FORCE global.
+- header log event no longer emits dry_run or all fields.
+- Removed --allow-root and --force. Running as root is now a hard EXIT_USAGE error.
+- Removed _install_collect_wifi entirely. ry-install no longer collects WiFi
+  credentials. iwd/NetworkManager config files are still managed; credential
+  setup is the user's responsibility post-install.
+- NetworkManager restarts (backend switch in finalize, NM/iwd config-change in
+  --install-file) are now deferred with a warning when WiFi is the active
+  default route. The backend switch / config change takes effect at next
+  reboot or after manual `sudo systemctl restart NetworkManager` once on
+  ethernet. WiFi-attached installs no longer drop network mid-run.
+- fstab ext4 optimization (noatime,lazytime) now runs unconditionally with
+  idempotency guard. No prompt, no profile flag.
+
+### Migration
+- Replace `--all` with no flag.
+- Replace `--dry-run` with `--verify-static` (read-only) or remove.
+- Replace `--diff` / `--diff --fix` workflows: there is no in-tool drift repair.
+  Re-run ry-install to reassert managed state.
+- Do not run as root. ry-install refuses. Run as your normal user.
+- Configure WiFi credentials manually via iwctl or nmcli post-install.
+- If pacman-contrib was in your profile only for pacdiff, you may remove it.
+
+---
+
 2026-04-07  Ryan Musante
 
 - Tagged as v3.47.8

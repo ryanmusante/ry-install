@@ -1,6 +1,6 @@
 # ry-install
 
-![version](https://img.shields.io/badge/version-3.47.8-blue)
+![version](https://img.shields.io/badge/version-3.48.1-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -43,10 +43,14 @@ Self-contained CachyOS configuration manager with profile support. Single Fish s
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
-./ry-install.fish --all        # Unattended — deploy everything
+./ry-install.fish              # Deploy everything (unattended)
 ```
 
-**Post-install:** Reboot → `--verify-static` → `--verify-runtime` → `sudo pacdiff` → test WiFi + gaming.
+**Post-install:** Reboot → `--verify-static` → `--verify-runtime` → test WiFi + gaming.
+
+> **BREAKING (v3.48.0):** Removed `--interactive`, `--dry-run`, `--all`, `--diff`, `--fix`, `--allow-root`, `--force`, all pacdiff/pacnew/pacsave handling, and WiFi credential collection. Unattended install is the only mode. Root execution is refused. See [CHANGELOG](CHANGELOG.md).
+
+> **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until your next reboot to keep WiFi connectivity active during install. Reboot after install completes, or run `sudo systemctl restart NetworkManager` once on ethernet to apply immediately.
 
 ## Prerequisites
 
@@ -55,11 +59,10 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 | CachyOS (systemd-boot, ext4) | — | Base assumption |
 | Fish 3.4+ | `fish --version` | CachyOS ships 4.5 |
 | Kernel 6.14+ | `uname -r` | ntsync, gfx1151 fixes |
-| Unrestricted sudo | `sudo -l` → `(ALL) ALL` | `--all` aborts if restricted |
+| Unrestricted sudo | `sudo -l` → `(ALL) ALL` | Required (unattended install) |
 | 2 GB root + 200 MB /boot free | `df -h / /boot` | Packages + initramfs |
 | Network connectivity | `curl -sf --head https://archlinux.org` | Package sync |
 | Current BIOS | [Beelink downloads](https://dr.bee-link.cn/) | P110+ for Strix Halo stability |
-| WiFi credentials | SSID 1–32 bytes, passphrase 8–63 bytes | Interactive even with `--all` |
 | paru (optional) | `command -q paru` | AUR package installation |
 
 **Recommended pre-flight steps:**
@@ -76,12 +79,8 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 | Flag | Description |
 |---|---|
-| `-a, --all` | Unattended mode |
-| `-f, --force` | Auto-yes prompts, no progress bar |
+| (no args) | Unattended install (the only mode) |
 | `-V, --verbose` | Show output on terminal |
-| `-n, --dry-run` | Preview without modifying system |
-| `--diff [path]` | Per-file unified diff (colorized) |
-| `--diff --fix` | Show diffs and re-install drifted files |
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |
 | `--lint` | Fish syntax, anti-pattern, and scope shadow checks |
@@ -110,7 +109,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | **Configuration** | Deploy 15 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
 | **Boot** | Rebuild initramfs, update systemd-boot entries |
-| **Finalize** | Daemon-reload, cache cleanup, NM restart, WiFi reconnect, write manifest |
+| **Finalize** | Daemon-reload, cache cleanup, NM restart (deferred on active WiFi), write manifest |
 
 ## Configuration Reference
 
@@ -282,7 +281,7 @@ function _ry_profile_my_desktop --description "Example desktop profile"
     # Copy SYSTEM_DESTINATIONS, USER_DESTINATIONS, SERVICE_DESTINATIONS
     # from the built-in gtr9_pro profile and adjust paths as needed.
 
-    # Required globals (--dry-run reports missing ones):
+    # Required globals (preflight reports missing ones):
     # KERNEL_PARAMS MKINITCPIO_MODULES MKINITCPIO_HOOKS MKINITCPIO_COMPRESSION
     # LOADER_DEFAULT LOADER_TIMEOUT LOADER_CONSOLE_MODE LOADER_EDITOR
     # SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE
@@ -299,8 +298,8 @@ end
 Validate before first use:
 
 ```fish
-./ry-install.fish --dry-run --all    # preview with new profile
-./ry-install.fish --diff             # compare against installed state
+./ry-install.fish --verify-static    # check profile/manifest sanity
+./ry-install.fish --verify-runtime   # check live system state
 ```
 
 ### Profile Trust Model
@@ -316,9 +315,9 @@ External profiles in `~/.config/ry-install/profiles/<n>.fish` are loaded via `so
 | Feature | Detail |
 |---|---|
 | Atomic writes | tmp → chmod → mv (same filesystem) |
-| Root detection | Forces `--dry-run` when invoked as root |
+| Root detection | **Refuses to run as root.** Run as your normal user; sudo is invoked internally. |
 | Instance lock | Atomic mkdir, PID verification, stale reclaim |
-| Credentials | WiFi: `read -s`, 0600 permissions, erased on exit, redacted in logs |
+| Credentials | Sensitive args redacted in logs (9 patterns: `--passphrase`, `--password`, `--token`, `--key`, etc.) |
 | Signal handling | INT/TERM/HUP/QUIT → 128+signum; SIGPIPE → 141 |
 | Logging | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl` |
 | Boot safety | Abort on initramfs or bootloader rebuild failure |
@@ -340,7 +339,7 @@ External profiles in `~/.config/ry-install/profiles/<n>.fish` are loaded via `so
 | `129/130/131/143` | Signal (HUP / INT / QUIT / TERM) |
 | `141` | SIGPIPE |
 
-> `--diff` and `--verify-*` return exit 1 on differences — expected for scripting.
+> `--verify-*` returns exit 1 on differences — expected for scripting.
 
 ### Data Directory
 
@@ -356,7 +355,7 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 
 | Event | Key Fields | Emitted |
 |---|---|---|
-| `header` | version, profile, mode, dry_run, all, verbose, command | Run start |
+| `header` | version, profile, mode, verbose, command | Run start |
 | `footer` | exit_code, pass, fail, warn, interrupted | Run end |
 | `ok` | data | Verification pass |
 | `fail` | data | Verification failure |
@@ -366,7 +365,6 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 | `run` | data | Command executed |
 | `stderr` | data | Captured stderr |
 | `section` | data | Phase boundary |
-| `diff` | data | File drift detected |
 
 Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 

@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v3.48.6 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.48.8 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     status is-interactive; and return 1; or exit 1
 end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.48.6"
+set -g VERSION "3.48.8"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -166,7 +166,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
     end
 
     # Map cmdline param prefix → CONFIG_ symbol
-    # unchecked: amd_iommu, clocksource, initcall_blacklist, module_blacklist, nowatchdog, quiet, threadirqs (no clean CONFIG_ symbol or always-on)
+    # unchecked: amd_iommu (validation moot — we disable it), clocksource, initcall_blacklist, module_blacklist, nowatchdog, quiet, threadirqs (always-on or no clean CONFIG_ symbol)
     set -l param_config_map \
         "zswap.=CONFIG_ZSWAP" \
         "amdgpu.=CONFIG_DRM_AMDGPU" \
@@ -196,7 +196,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         end
         test "$found" = true; or continue
 
-        # Check if config_sym (e.g., CONFIG_AMD_PSTATE) is =y or =m in /proc/config.gz
+        # Check if config_sym (e.g., CONFIG_ZSWAP) is =y or =m in /proc/config.gz
         if not printf '%s\n' $config_data | grep -q -- "^$config_sym=[ym]"
             _warn "  $prefix* requires $config_sym but not enabled in running kernel"
             set mismatches (math $mismatches + 1)
@@ -1281,7 +1281,10 @@ function _msg --argument-names level --description "Format and print a leveled s
     set -l valid_levels INFO WARN ERR FAIL OK
     if not contains -- "$level" $valid_levels
         echo "[BUG] _msg called with invalid level: '$level'" >&2
-        printf '{"ts":"%s","event":"bug","data":"_msg called with invalid level: %s"}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (_json_str "$level") >>"$LOG_FILE"
+        # Guard direct-to-LOG_FILE write (matches _log discipline at line ~1238): LOG_FILE may be absent during early init or post-lock-contention cleanup
+        if test -n "$LOG_FILE"; and test -f "$LOG_FILE"
+            printf '{"ts":"%s","event":"bug","data":"_msg called with invalid level: %s"}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (_json_str "$level") >>"$LOG_FILE"
+        end
         set level ERR
     end
     # Route level to JSONL event + increment verify counters for summary
@@ -2301,8 +2304,10 @@ function _content_hash --argument-names dst --description "SHA256 of embedded co
         _err "_content_hash: expected 1 arg (dst), got "(count $argv)
         return 1
     end
+    # Capture generator status via $pipestatus[1] — bare $status after `set -l var (gen | string collect)` reflects the tail stage, not the generator. `string collect --no-trim-newlines` is required to preserve trailing newlines for hash parity with the on-disk file written by tee.
     set -l _content (_ry_get_file_content "$dst" 2>/dev/null | string collect --no-trim-newlines)
-    test $status -ne 0; and return 1
+    set -l _gen_rc $pipestatus[1]
+    test $_gen_rc -ne 0; and return 1
     test -z "$_content"; and return 1
     printf '%s' "$_content" | sha256sum | string split -- ' ' | head -n 1
     return 0
@@ -3747,7 +3752,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         NetworkManager.service
     # Static assertion: sys_units order is positionally coupled to parsed[1..5] consumers below. Fail loud on add/remove drift
     if test (count $sys_units) -ne 5
-        _err "  sys_units count drift: \"(count $sys_units)\" (expected 5) — update parsed[N] indices below"
+        _err "  sys_units count drift: actual="(count $sys_units)" expected=5 — update parsed[N] indices below"
         set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
         set -g VERIFY_MODE false
         return 1

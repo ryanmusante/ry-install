@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v3.48.9 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.48.12 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     status is-interactive; and return 1; or exit 1
 end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.48.9"
+set -g VERSION "3.48.12"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -227,14 +227,14 @@ function _verify_unit_syntax --argument-names unit_path label --description "Ver
     test "$_verify_err" != /dev/null; and set -ga _TRACKED_TMPFILES "$_verify_err"
     if systemd-analyze $user_flag verify "$unit_path" 2>"$_verify_err"
         if test "$_verify_err" != /dev/null; and test -s "$_verify_err"
-            _log "VERIFY_UNIT_WARN($label): "(head -n 5 "$_verify_err")
+            _log "VERIFY_UNIT_WARN: ($label) "(head -n 5 "$_verify_err")
         end
         command rm -f -- "$_verify_err" 2>/dev/null
         _ok "  $label: syntax OK"
         return 0
     else
         if test "$_verify_err" != /dev/null; and test -s "$_verify_err"
-            _log "VERIFY_UNIT_ERR($label): "(head -n 5 "$_verify_err")
+            _log "VERIFY_UNIT_ERR: ($label) "(head -n 5 "$_verify_err")
         end
         command rm -f -- "$_verify_err" 2>/dev/null
         _fail "  $label: INVALID SYNTAX"
@@ -885,7 +885,9 @@ function _manifest_write --description "Record current profile destinations for 
     end
     # Track tmp for cleanup; on successful mv it disappears (rm -f is harmless), on failure cleanup removes the leftover.
     set -ga _TRACKED_TMPFILES "$tmp"
-    printf '%s\n' "v$VERSION" "$PROFILE_NAME" $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS >"$tmp"
+    # Include generated completions path so _manifest_check_orphans can detect it across profile/version changes
+    set -l _completions_path "$HOME/.config/fish/completions/ry-install.fish"
+    printf '%s\n' "v$VERSION" "$PROFILE_NAME" $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS "$_completions_path" >"$tmp"
     command chmod -- 600 "$tmp"
     if not command mv -f -- "$tmp" "$MANIFEST_FILE" 2>/dev/null
         command rm -f -- "$tmp" 2>/dev/null
@@ -916,7 +918,10 @@ function _manifest_check_orphans --description "Warn about files from previous i
     set -l prev_ver "$manifest_lines[1]"
     set -l prev_profile "$manifest_lines[2]"
     set -l prev_dests $manifest_lines[3..]
-    set -l current_dests $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
+    # Completions path is generated (not in DESTINATIONS lists) but IS recorded in the manifest;
+    # include it in current_dests so re-runs do not flag it as an orphan.
+    set -l _completions_path "$HOME/.config/fish/completions/ry-install.fish"
+    set -l current_dests $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS "$_completions_path"
 
     set -l orphans
     for prev in $prev_dests
@@ -1607,7 +1612,7 @@ function _run --description "Execute a command with logging and error capture; s
         set -l total_err (command wc -l < "$stderr_tmp" | string trim --)
         set -l first_lines (command head -n 5 "$stderr_tmp")
         set -l dedup_lines (LC_ALL=C command sort "$stderr_tmp" | command uniq -c | command sort -rn | command sed 's/^ *//')
-        _log "STDERR($total_err lines): first: "(string join -- " | " $first_lines)" | dedup: "(string join -- " | " $dedup_lines)
+        _log "STDERR: ($total_err lines) first: "(string join -- " | " $first_lines)" | dedup: "(string join -- " | " $dedup_lines)
         if test "$QUIET" = false
             for el in $first_lines
                 echo "  stderr: $el" >&2
@@ -2242,14 +2247,14 @@ function _ry_validate_configs --description "Run all embedded config validators"
         if not test -f "$val_dir/$phase.errors"
             _err "Validation child '$phase' crashed without writing results"
             if test -s "$val_dir/$phase.stderr"
-                _log "VALIDATE_CHILD_STDERR($phase): "(head -n 15 "$val_dir/$phase.stderr")
+                _log "VALIDATE_CHILD_STDERR: ($phase) "(head -n 15 "$val_dir/$phase.stderr")
             end
             set errors (math $errors + 1)
             continue
         end
         # Log stderr from ALL children (warnings from systemd-analyze, fish --no-execute, etc.)
         if test -s "$val_dir/$phase.stderr"
-            _log "VALIDATE_STDERR($phase): "(head -n 15 "$val_dir/$phase.stderr")
+            _log "VALIDATE_STDERR: ($phase) "(head -n 15 "$val_dir/$phase.stderr")
             # Surface warnings to terminal so user sees systemd-analyze/fish diagnostics
             set -l _child_lines (command head -n 5 "$val_dir/$phase.stderr")
             for _cl in $_child_lines
@@ -2950,8 +2955,9 @@ function _ry_verify_static --description "Verify installed configs match embedde
         end
         set -a _check_mask "$_svc"
     end
-    # Batch systemctl show replaces N individual is-enabled+cat calls; string collect preserves blank-line delimiters
-    set -l _mask_raw (systemctl show --property=LoadState,UnitFileState -- $_check_mask 2>/dev/null | string collect --no-trim-newlines)
+    # Batch systemctl show replaces N individual is-enabled+cat calls; string collect preserves blank-line delimiters.
+    # Request all 3 properties (LoadState,ActiveState,UnitFileState) for parser consistency with do_check/verify_runtime; consumer uses _rec[3] only, ActiveState is ignored here but parsing stays symmetric.
+    set -l _mask_raw (systemctl show --property=LoadState,ActiveState,UnitFileState -- $_check_mask 2>/dev/null | string collect --no-trim-newlines)
     set -l _mask_parsed (_parse_systemctl_show "$_mask_raw")
     if test (count $_mask_parsed) -lt (count $_check_mask)
         _warn "  systemctl show returned incomplete mask data ("(count $_mask_parsed)" of "(count $_check_mask)" records)"
@@ -3056,8 +3062,17 @@ function _ry_verify_static --description "Verify installed configs match embedde
                 sha256sum <"$dst" 2>/dev/null | string split -- ' ' | head -n 1 >"$hash_dir/installed_$safe"
             end
         else
-            if sudo -n test -r "$dst" 2>/dev/null
+            # Re-check sudo -n right before the read: if the timestamp lapsed, we skip the hash write entirely.
+            # Child worker treats missing installed_$safe as "cannot read" rather than emitting a spurious
+            # "checksum MISMATCH" from the empty-file sha256 (e3b0c4…) that an empty pipeline would produce.
+            # Trailing newlines are preserved by direct-to-pipeline cat (command substitution would strip them).
+            if sudo -n test -r "$dst" 2>/dev/null; and sudo -n true 2>/dev/null
                 sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ' | head -n 1 >"$hash_dir/installed_$safe"
+                # If cat failed despite the sudo probe above (race), the file contains the empty-file hash;
+                # detect by checking pipestatus[1] and clear on failure.
+                if test $pipestatus[1] -ne 0
+                    command rm -f -- "$hash_dir/installed_$safe" 2>/dev/null
+                end
             end
         end
     end
@@ -3099,10 +3114,15 @@ function _ry_verify_static --description "Verify installed configs match embedde
                     continue
                 end
                 set -l expected_hash (sha256sum < "$hash_dir/expected_$safe" | string split -- " ")[1]
-                # empty installed_hash from sudo readback failure → fail (not skip), fail-closed
+                # Distinguish "cat failed / file unreadable" from "hash differs" so the collect phase
+                # can surface an accurate error. Missing installed_$safe → noread; present-but-diff → fail.
+                if not test -e "$hash_dir/installed_$safe"
+                    echo noread > "$hash_dir/result_$safe"
+                    continue
+                end
                 set -l installed_hash (string trim -- (command cat -- "$hash_dir/installed_$safe" 2>/dev/null))
                 if test -z "$installed_hash"
-                    echo fail > "$hash_dir/result_$safe"
+                    echo noread > "$hash_dir/result_$safe"
                 else if test "$expected_hash" = "$installed_hash"
                     echo pass > "$hash_dir/result_$safe"
                 else
@@ -3118,7 +3138,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     # Log any worker stderr (child crash diagnostics)
     for worker in (seq 1 $num_workers)
         if test -s "$hash_dir/worker_$worker.stderr"
-            _log "HASH_WORKER_STDERR(worker $worker): "(head -n 15 "$hash_dir/worker_$worker.stderr")
+            _log "HASH_WORKER_STDERR: (worker $worker) "(head -n 15 "$hash_dir/worker_$worker.stderr")
         end
     end
 
@@ -3131,6 +3151,9 @@ function _ry_verify_static --description "Verify installed configs match embedde
                 _ok "  $dst: checksum match"
             case fail
                 _fail "  $dst: checksum MISMATCH"
+            case noread
+                # File unreadable in parent (sudo lapse, permission change, or missing) — fail-closed
+                _fail "  $dst: cannot read (sudo timestamp lapsed or file missing)"
             case skip
                 # Intentional skip (no expected content, file unreadable, or NM/IWD not installed)
             case ''
@@ -3420,7 +3443,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         set -l _drift_file "$result_dir/"$phase"_drift"
         # Log stderr from ALL children for diagnostics (not just crashes)
         if test -s "$result_dir/"$phase".stderr"
-            _log "CHECK_STDERR($phase): "(head -n 15 "$result_dir/"$phase".stderr")
+            _log "CHECK_STDERR: ($phase) "(head -n 15 "$result_dir/"$phase".stderr")
         end
         if not test -f "$_drift_file"
             _log "CHECK_DRIFT: child '$phase' crashed without writing results"
@@ -3500,8 +3523,11 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
 
     _validate_kernel_params
 
+    # Cache dmesg once — used by Preempt, ReBAR, and any future boot-log checks. sudo-gated to see kernel ring buffer (dmesg_restrict=1 is Arch default).
+    set -l _dmesg (sudo dmesg 2>/dev/null)
+
     _echo "── Preemption model ──"
-    set -l _preempt (sudo dmesg 2>/dev/null | grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
+    set -l _preempt (printf '%s\n' $_dmesg | grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
     if test -n "$_preempt"
         if string match -q '*full*' -- "$_preempt"
             _ok "  $_preempt"
@@ -3541,7 +3567,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     _echo "── ReBAR/SAM status ──"
-    set -l rebar_status (sudo dmesg 2>/dev/null | grep -i 'BAR' | grep -i -E 'resize|rebar|large|above.4g' | head -n 1)
+    set -l rebar_status (printf '%s\n' $_dmesg | grep -i 'BAR' | grep -i -E 'resize|rebar|large|above.4g' | head -n 1)
     if test -n "$rebar_status"
         if string match -qi '*enabled*' -- "$rebar_status"; or string match -qi '*resiz*' -- "$rebar_status"
             _ok "  ReBAR/SAM: enabled"
@@ -3923,7 +3949,10 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         else if test -n "$actual"
             _fail "  $var_name=$actual (expected: $expected)"
         else
-            _fail "  $var_name: NOT SET (re-login may be required)"
+            # Env file is verified by _ry_verify_static; here we only observe shell-visible state.
+            # A correctly-installed variable that hasn't been re-loaded into the current session is a WARN,
+            # not a FAIL — re-login or `systemctl --user import-environment` is the expected fix.
+            _warn "  $var_name: NOT SET in current session (re-login or systemctl --user import-environment)"
         end
     end
     _echo
@@ -4670,8 +4699,22 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
     set -l my_pid %self
-    # Keepalive: refresh assumes credential timeout ≥5min (timestamp_timeout=5)
-    fish -c 'while kill -0 -- $argv[1] 2>/dev/null; and test -d -- $argv[2]; sudo -n true 2>/dev/null; or break; sleep $argv[3]; end' -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null &
+    # Keepalive: sudo -n -v refreshes timestamp without running a command; 2 retries with 1s backoff
+    # absorb transient PAM/NSS failures so a single hiccup does not kill the loop
+    fish -c '
+        while kill -0 -- $argv[1] 2>/dev/null; and test -d -- $argv[2]
+            set -l _ok false
+            for _try in 1 2 3
+                if sudo -n -v 2>/dev/null
+                    set _ok true
+                    break
+                end
+                sleep 1
+            end
+            test "$_ok" = true; or break
+            sleep $argv[3]
+        end
+    ' -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null &
     set -g SUDO_KEEPALIVE_PID $last_pid
     if not kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
         _warn "Sudo keepalive process failed to start — long installs may require re-auth"
@@ -4750,13 +4793,10 @@ function _install_packages --description "Install managed packages via pacman -S
         end
 
         _info "Verifying package installation..."
-        set -l missing_pkgs
-        set -l _inst_check (pacman -Qq 2>/dev/null)
-        for pkg in $pkgs_to_install
-            if not contains -- "$pkg" $_inst_check
-                set -a missing_pkgs "$pkg"
-            end
-        end
+        # pacman -T <targets> prints any targets not satisfied by an installed package
+        # or its providers; correctly handles groups, virtual packages, and provides.
+        # Exit code: 0 = all satisfied, 127 = one or more unresolved.
+        set -l missing_pkgs (pacman -T -- $pkgs_to_install 2>/dev/null)
         if test (count $missing_pkgs) -gt 0
             _err "Missing packages: $missing_pkgs"
             _warn "  Install manually: sudo pacman -S --needed $missing_pkgs"
@@ -4799,10 +4839,15 @@ function _install_aur_packages --description "Install AUR packages via paru"
         _info "  Install paru: sudo pacman -S --needed paru"
         return 0
     end
-    for pkg in $AUR_PKGS
-        if not _run paru -S --needed --noconfirm -- "$pkg"
-            _warn "AUR install failed: $pkg"
-            set -g INSTALL_HAD_ERRORS true
+    # Batch install: paru resolves shared makedeps once across the whole set.
+    # Fall back to per-package loop only on batch failure to identify culprits.
+    if not _run paru -S --needed --noconfirm -- $AUR_PKGS
+        _warn "AUR batch install failed — retrying per-package to identify failures"
+        for pkg in $AUR_PKGS
+            if not _run paru -S --needed --noconfirm -- "$pkg"
+                _warn "AUR install failed: $pkg"
+                set -g INSTALL_HAD_ERRORS true
+            end
         end
     end
     return 0
@@ -5105,9 +5150,12 @@ function _install_configure_services --description "Enable, start, and configure
         if not _run systemctl --user enable --now ssh-agent.service
             _warn "Failed to enable ssh-agent.service"
         else
-            if set -q XDG_RUNTIME_DIR
+            # Require an active user bus before set-environment; skip silently on TTY/no-session installs
+            if set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"
                 _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
                 or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
+            else
+                _info "  SSH_AUTH_SOCK propagation skipped (no active user D-Bus session)"
             end
         end
     else
@@ -5194,7 +5242,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     if test "$SYSTEM_UPGRADED" = true
         _ok "System already upgraded during package installation"
     else
-        _info "Check https://archlinux.org/news/ and https://wiki.cachyos.org/ for known issues before upgrading"
+        _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
         if not _run sudo pacman -Syu --noconfirm
             _warn "System upgrade failed or was interrupted"
             set -g INSTALL_HAD_ERRORS true
@@ -5378,9 +5426,8 @@ function _ry_do_install --description "Full installation: preflight, packages, c
         if not _install_finalize
             set -g INSTALL_HAD_ERRORS true
         end
+        _ry_do_completions 2>/dev/null; or _warn "Completions install failed (run --completions manually)"
     end
-
-    _ry_do_completions 2>/dev/null; or _warn "Completions install failed (run --completions manually)"
 
     _progress_done
 
@@ -5493,7 +5540,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
             if string match -q "$HOME/*" -- "$target"
                 _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
                 if _run systemctl --user enable --now (basename -- "$target")
-                    if string match -q '*ssh-agent*' -- "$target"; and set -q XDG_RUNTIME_DIR
+                    if string match -q '*ssh-agent*' -- "$target"; and set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"
                         _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
                         or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
                     end
@@ -5686,7 +5733,9 @@ function _ry_do_test_all --description "Run the full test suite across all subco
 
     for i in (seq (count $parallel_modes))
         set -l mode_args (string split ' ' -- $parallel_modes[$i])
-        set -l label (string replace -a ' ' '_' -- $parallel_modes[$i] | string replace -a '/' '_' | string replace -a '-' '')
+        # Strip only the leading `--` and replace spaces/slashes; preserves interior hyphens so
+        # --verify-static and --verifystatic (hypothetical) would not collide on the label filename.
+        set -l label (string replace -- '--' '' $parallel_modes[$i] | string replace -a ' ' '_' | string replace -a '/' '_')
         fish -c '
             set -l script_path $argv[1]; set -l stderr_file $argv[2]; set -l exit_file $argv[3] # lint:ignore
             set -l mode_args $argv[4..]
@@ -5784,6 +5833,14 @@ end
 
 # CLI ARGUMENT PARSING AND DISPATCH
 
+# Shared usage-exit helper for the top-level arg parser: prints message, removes the pre-dispatch log file, exits EXIT_USAGE.
+# Defined here (top-level, not function) so it is visible to the loop below without polluting the function namespace of sourced shells.
+function _early_usage_exit --description "Print usage error to stderr, remove pre-dispatch log, exit EXIT_USAGE"
+    echo "[ERR] $argv" >&2
+    command rm -f -- "$LOG_FILE" 2>/dev/null
+    exit $EXIT_USAGE
+end
+
 # Entry point
 set -g MODE install
 set -l mode_count 0
@@ -5798,17 +5855,11 @@ while test $i -le (count $argv)
     set -l arg $argv[$i]
     switch $arg
         case -a --all
-            echo "[ERR] --all is no longer required; unattended is the only mode" >&2
-            command rm -f -- "$LOG_FILE" 2>/dev/null
-            exit $EXIT_USAGE
+            _early_usage_exit "--all is no longer required; unattended is the only mode"
         case -n --dry-run
-            echo "[ERR] --dry-run has been removed; unattended is the only mode" >&2
-            command rm -f -- "$LOG_FILE" 2>/dev/null
-            exit $EXIT_USAGE
+            _early_usage_exit "--dry-run has been removed; unattended is the only mode"
         case --diff
-            echo "[ERR] --diff has been removed; use --verify-static for read-only drift checks" >&2
-            command rm -f -- "$LOG_FILE" 2>/dev/null
-            exit $EXIT_USAGE
+            _early_usage_exit "--diff has been removed; use --verify-static for read-only drift checks"
         case -V --verbose
             set -g QUIET false
         case --verify-static
@@ -5827,9 +5878,7 @@ while test $i -le (count $argv)
             set MODE test-all
             set mode_count (math $mode_count + 1)
         case --fix
-            echo "[ERR] --fix has been removed; ry-install no longer performs in-tool drift repair" >&2
-            command rm -f -- "$LOG_FILE" 2>/dev/null
-            exit $EXIT_USAGE
+            _early_usage_exit "--fix has been removed; ry-install no longer performs in-tool drift repair"
         case --completions
             set MODE completions
             set mode_count (math $mode_count + 1)
@@ -5838,9 +5887,7 @@ while test $i -le (count $argv)
             set mode_count (math $mode_count + 1)
             set -l next_i (math $i + 1)
             if test $next_i -gt (count $argv)
-                echo "[ERR] --install-file requires an absolute path argument" >&2
-                command rm -f -- "$LOG_FILE" 2>/dev/null
-                exit $EXIT_USAGE
+                _early_usage_exit "--install-file requires an absolute path argument"
             end
             set -l next_arg $argv[$next_i]
             if string match -q -- '/*' "$next_arg"
@@ -5853,13 +5900,9 @@ while test $i -le (count $argv)
                 end
                 set i $next_i
             else if string match -q -- '-*' "$next_arg"
-                echo "[ERR] --install-file requires an absolute path argument (got flag: $next_arg)" >&2
-                command rm -f -- "$LOG_FILE" 2>/dev/null
-                exit $EXIT_USAGE
+                _early_usage_exit "--install-file requires an absolute path argument (got flag: $next_arg)"
             else
-                echo "[ERR] --install-file requires absolute path (got: $next_arg)" >&2
-                command rm -f -- "$LOG_FILE" 2>/dev/null
-                exit $EXIT_USAGE
+                _early_usage_exit "--install-file requires absolute path (got: $next_arg)"
             end
         case -h --help
             _ry_show_help

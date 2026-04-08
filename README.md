@@ -1,6 +1,6 @@
 # ry-install
 
-![version](https://img.shields.io/badge/version-3.48.9-blue)
+![version](https://img.shields.io/badge/version-3.48.12-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 
@@ -48,7 +48,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 **Post-install:** Reboot → `--verify-static` → `--verify-runtime` → test WiFi + gaming.
 
-> **BREAKING (v3.48.0):** Removed `--interactive`, `--dry-run`, `--all`, `--diff`, `--fix`, `--allow-root`, `--force`, all pacdiff/pacnew/pacsave handling, and WiFi credential collection. Unattended install is the only mode. Root execution is refused. See [CHANGELOG](CHANGELOG.md).
+> **BREAKING (v3.48.0):** Removed `--interactive`, `--dry-run`, `--all`, `--diff`, `--fix`, `--allow-root`, `--force`, and WiFi credential collection. Unattended install is the only mode. Root execution is refused. See [CHANGELOG](CHANGELOG.md).
 
 > **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until your next reboot to keep WiFi connectivity active during install. Reboot after install completes, or run `sudo systemctl restart NetworkManager` once on ethernet to apply immediately.
 
@@ -291,7 +291,7 @@ function _ry_profile_my_desktop --description "Example desktop profile"
     # IWD_DRIVER_QUIRKS IWD_DNS_SERVICE NM_WIFI_BACKEND NM_WIFI_POWERSAVE
     # NM_LOG_LEVEL BOOT_SPACE_CRIT BOOT_SPACE_WARN ROOT_AVAIL_CRIT
     # ROOT_AVAIL_WARN
-    # Optional: PKGS_DEL BOOT_TIME_TARGET EXPECTED_CPU_MATCH
+    # Optional: PKGS_DEL AUR_PKGS BOOT_TIME_TARGET EXPECTED_CPU_MATCH MKINITCPIO_COMPRESSION_OPTIONS
 end
 ```
 

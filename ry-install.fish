@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v3.48.8 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.48.9 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     status is-interactive; and return 1; or exit 1
 end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.48.8"
+set -g VERSION "3.48.9"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -3338,7 +3338,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         # Maintenance assertion: parsed[] indices are positionally coupled to exp_svcs/mask_units/implicit_svcs concatenation order. Fail loud if a future edit adds a unit to one list without updating the other
         set -l _expected_total (math (count $exp_svcs) + (count $mask_units) + (count $implicit_svcs))
         if test (count $results) -ne $_expected_total
-            echo "ASSERT_FAIL: parsed_units count=(count $results) expected=$_expected_total" >&2
+            echo "ASSERT_FAIL: parsed_units count="(count $results)" expected=$_expected_total" >&2
             echo true > "$result_dir/svc_drift"
             exit 1
         end

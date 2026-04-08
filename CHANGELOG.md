@@ -2,6 +2,11 @@ ry-install changelog
 
 2026-04-08  Ryan Musante
 
+- Tagged as v3.48.9
+- LOW FIX (`_ry_do_check`, job 4 child): positional-coupling assertion diagnostic at `parsed_units` count drift embedded `(count $results)` inside a double-quoted string. Fish does not perform command substitution through `"..."` quoted spans, so the error would have printed the literal text `count=(count $results)` instead of the actual count. Same bug class as the v3.48.8 `_ry_verify_runtime` fix — missed in the child `fish -c` block. Cold path (maintainer-introduced drift between `exp_svcs`/`mask_units`/`implicit_svcs` list composition and `parsed_units` consumers), but misleading when it fires. Rewrote as `count="(count $results)" expected=$_expected_total` with the command substitution outside the quoted span.
+
+2026-04-08  Ryan Musante
+
 - Tagged as v3.48.8
 - LOW FIX (`_ry_verify_runtime`): positional-coupling assertion diagnostic at `sys_units` count drift embedded `\"(count $sys_units)\"` inside a double-quoted string. Fish does not perform command substitution through escape-quoted boundaries, so the error message would have printed the literal text `"(count $sys_units)"` instead of the actual count. Cold path (only fires on maintainer-introduced drift), but misleading when it does. Rewrote as `actual="(count $sys_units)" expected=5` with the command substitution outside the quoted span.
 

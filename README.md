@@ -1,6 +1,6 @@
 # ry-install
 
-![version](https://img.shields.io/badge/version-3.48.4-blue)
+![version](https://img.shields.io/badge/version-3.48.6-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![fish](https://img.shields.io/badge/fish-3.4%2B-orange)
 

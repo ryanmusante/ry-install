@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v3.48.4 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.48.6 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     status is-interactive; and return 1; or exit 1
 end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.48.4"
+set -g VERSION "3.48.6"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -362,8 +362,13 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
             command rm -f -- "$LOG_FILE" 2>/dev/null
             return 1
         end
-        # flock subshell recreated empty LOCK_DIR; write our PID
-        echo %self >"$LOCK_FILE"
+        # flock subshell recreated empty LOCK_DIR; write our PID with error check (matches line 329 branch)
+        if not echo %self >"$LOCK_FILE" 2>/dev/null
+            command rmdir -- "$LOCK_DIR" 2>/dev/null
+            echo "[ERR] Failed to write lock pid file after flock reclaim: $LOCK_FILE" >&2
+            command rm -f -- "$LOG_FILE" 2>/dev/null
+            return 1
+        end
     else
         # Fallback: rmdir+mkdir not atomic; yield + double PID verify narrows the race window
         echo "[WARN] flock(1) not available — using non-atomic stale lock reclaim" >&2
@@ -1109,6 +1114,7 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
         return 1
     end
     # Must run after _load_profile — needs profile globals for _ry_get_file_content
+    set -l _we_created_dir false
     if test -z "$out_dir"
         set out_dir (mktemp -d --tmpdir=/tmp ry-content.XXXXXX)
         # bail on mktemp failure BEFORE set -ga to avoid tracking empty path
@@ -1116,11 +1122,13 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
             _err "_pregenerate_content_files: mktemp -d failed"
             return 1
         end
+        set _we_created_dir true
     end
     if not test -d "$out_dir"
         return 1
     end
-    set -ga _TRACKED_TMPFILES "$out_dir"
+    # Only track for cleanup when we own the dir; caller-supplied dirs are caller's responsibility
+    test "$_we_created_dir" = true; and set -ga _TRACKED_TMPFILES "$out_dir"
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         set -l safe (string replace -a '/' '_' -- "$dst")
         _ry_get_file_content "$dst" >"$out_dir/$safe" 2>/dev/null
@@ -1869,7 +1877,12 @@ end
 function _ry_check_disk_space --description "Verify sufficient free disk space for installation"
     _log "Checking disk space..."
 
-    set -l root_avail (LC_ALL=C df -BG / 2>/dev/null | tail -n 1 | awk '{print $4}' | tr -d 'G')
+    # df -B1 for byte-precision; -BG/-BM round UP and create false-pass at boundary
+    set -l root_avail_b (LC_ALL=C df -B1 / 2>/dev/null | tail -n 1 | awk '{print $4}')
+    set -l root_avail ""
+    if test -n "$root_avail_b"; and string match -qr '^\d+$' -- "$root_avail_b"
+        set root_avail (math "floor($root_avail_b / 1073741824)")
+    end
     if test -n "$root_avail"; and string match -qr '^\d+$' -- "$root_avail"
         if test "$root_avail" -lt $ROOT_AVAIL_CRIT
             _err "Insufficient disk space on /: $root_avail""GB available, need "$ROOT_AVAIL_CRIT"GB minimum"
@@ -1883,7 +1896,11 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
         _warn "Could not determine disk space for /"
     end
 
-    set -l boot_avail (LC_ALL=C df -BM /boot 2>/dev/null | tail -n 1 | awk '{print $4}' | tr -d 'M')
+    set -l boot_avail_b (LC_ALL=C df -B1 /boot 2>/dev/null | tail -n 1 | awk '{print $4}')
+    set -l boot_avail ""
+    if test -n "$boot_avail_b"; and string match -qr '^\d+$' -- "$boot_avail_b"
+        set boot_avail (math "floor($boot_avail_b / 1048576)")
+    end
     if test -n "$boot_avail"; and string match -qr '^\d+$' -- "$boot_avail"
         if test "$boot_avail" -lt $BOOT_SPACE_CRIT
             _err "Insufficient disk space on /boot: $boot_avail""MB available, need "$BOOT_SPACE_CRIT"MB minimum"
@@ -2275,6 +2292,22 @@ function _ry_mkinitcpio_array --argument-names key file --description "First non
     grep -E "^[[:space:]]*$key=" "$file" 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1
 end
 
+# Single canonical hash method for embedded content. Used by both _ry_install_file (skip-unchanged check)
+# and _atomic_write_file (post-write integrity verify) — keeping these in one place prevents the
+# fragility where two call sites used different hash pipelines that only happened to produce
+# identical output by coincidence.
+function _content_hash --argument-names dst --description "SHA256 of embedded content for a destination, or empty on generator failure"
+    if test (count $argv) -ne 1
+        _err "_content_hash: expected 1 arg (dst), got "(count $argv)
+        return 1
+    end
+    set -l _content (_ry_get_file_content "$dst" 2>/dev/null | string collect --no-trim-newlines)
+    test $status -ne 0; and return 1
+    test -z "$_content"; and return 1
+    printf '%s' "$_content" | sha256sum | string split -- ' ' | head -n 1
+    return 0
+end
+
 # Atomic write: mktemp→symlink-check→write→symlink-recheck→chmod→hash→mv→verify→chown
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write with symlink and integrity checks"
     if test (count $argv) -ne 3
@@ -2384,13 +2417,9 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         end
     end
 
-    # Expected hash sourced from generator (not tee'd tmpfile); generator content captured first with exit-code check so the wildcard '*' arm of _ry_get_file_content (returns 1, no output) cannot silently produce the empty-string SHA via piped sha256sum
-    set -l _gen_content (_ry_get_file_content "$dst" 2>/dev/null | string collect --no-trim-newlines)
+    # Expected hash via canonical helper — fail-closed on generator failure
+    set -l _expected_hash (_content_hash "$dst")
     set -l _gen_rc $status
-    set -l _expected_hash ""
-    if test $_gen_rc -eq 0
-        set _expected_hash (printf '%s' "$_gen_content" | sha256sum | string split -- ' ')[1]
-    end
     # Fail-closed: empty hash OR generator failure means generator failure — never silently accept
     if test $_gen_rc -ne 0; or test -z "$_expected_hash"
         if test "$use_sudo" = true
@@ -2418,10 +2447,12 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         end
     end
 
-    # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs); use plain `sudo` (not `sudo -n`) so a lapsed keepalive does not false-abort long runs
+    # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs).
+    # Uses sudo -n: a lapsed keepalive will produce empty _actual_hash → explicit fail-closed below,
+    # rather than the silent prompt-suppression that would happen with plain `sudo` + 2>/dev/null.
     set -l _actual_hash
     if test "$use_sudo" = true
-        set _actual_hash (sudo cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+        set _actual_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
     else
         set _actual_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
     end
@@ -2495,8 +2526,8 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
         set perms 0600
     end
 
-    # Skip unchanged: SHA256 hash comparison (Fish variable comparison flattens newlines to spaces)
-    set -l _new_hash (_ry_get_file_content "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+    # Skip unchanged: SHA256 hash via canonical helper (matches _atomic_write_file)
+    set -l _new_hash (_content_hash "$dst")
     if test -n "$_new_hash"
         set -l _cur_hash
         if test "$use_sudo" = true
@@ -3934,7 +3965,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     # §10 #2: THP enabled
     if test -f /sys/kernel/mm/transparent_hugepage/enabled
         set -l _thp (command cat -- /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null)
-        if string match -q '*\[always\]*' -- "$_thp"
+        if string match -qr '\[always\]' -- "$_thp"
             _ok "  THP enabled: always"
         else
             set -l _active (string match -r '\[(\w+)\]' -- "$_thp")[2]
@@ -3944,7 +3975,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     # §10 #3: THP defrag
     if test -f /sys/kernel/mm/transparent_hugepage/defrag
         set -l _defrag (command cat -- /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null)
-        if string match -q '*\[defer+madvise\]*' -- "$_defrag"
+        if string match -qr '\[defer\+madvise\]' -- "$_defrag"
             _ok "  THP defrag: defer+madvise"
         else
             set -l _active (string match -r '\[(\S+)\]' -- "$_defrag")[2]
@@ -4623,7 +4654,8 @@ function _install_preflight --description "Run all preflight checks before insta
         if string match -qr -- '\b(NOEXEC|!PASSWD|!SETENV|LOG_OUTPUT)\b' "$_sl"
             continue
         end
-        if string match -qr -- '\(ALL(\s*:\s*ALL)?\)\s+(NOPASSWD:\s+)?ALL$' "$_sl"
+        # Accept ALL at end of Cmnd_List OR followed by additional whitelisted commands (ALL,...)
+        if string match -qr -- '\(ALL(\s*:\s*ALL)?\)\s+(NOPASSWD:\s+)?ALL(\s*,|\s*$)' "$_sl"
             set sudo_all (math $sudo_all + 1)
         end
     end
@@ -4729,6 +4761,25 @@ function _install_packages --description "Install managed packages via pacman -S
             _ok "All packages verified installed"
         end
     end
+
+    # LOW-1 fix: scan for .pacnew/.pacsave files at managed destinations.
+    # pacman creates these silently when upgrading a package whose config was modified.
+    set -l _pacnew_found
+    for _dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
+        for _suffix in .pacnew .pacsave
+            if sudo -n test -f "$_dst$_suffix" 2>/dev/null
+                set -a _pacnew_found "$_dst$_suffix"
+            end
+        end
+    end
+    if test (count $_pacnew_found) -gt 0
+        _warn "Pacman config remnants found at managed destinations:"
+        for _f in $_pacnew_found
+            _warn "  $_f"
+        end
+        _warn "  Review with: sudo pacdiff   (then re-run install to redeploy managed configs)"
+        _log "PACNEW_FOUND: $_pacnew_found"
+    end
     test "$_fn_err" = true; and return 1
     return 0
 end
@@ -4749,12 +4800,18 @@ function _install_aur_packages --description "Install AUR packages via paru"
             set -g INSTALL_HAD_ERRORS true
         end
     end
+    return 0
+end
 
-    # Invalidate _RY_SKIP_IWD cache across the package phase boundary: _ry_install_file primes it during mkinitcpio.conf pre-deploy BEFORE pacman -Syu runs, so a future profile adding iwd to PKGS_ADD on a host that lacks it would otherwise silently skip iwd/main.conf and 99-cachyos-nm.conf
+# Post-package phase boundary: invalidate iwd cache (state may have changed via -Syu) and refresh package DBs.
+# Must run UNCONDITIONALLY after _install_packages + _install_aur_packages — both can early-return without
+# reaching the work below, leaving _RY_SKIP_IWD stale from preflight (mkinitcpio.conf pre-deploy primes it).
+function _install_post_package_refresh --description "Invalidate caches and refresh package DBs after pacman/paru phase"
+    # Invalidate _RY_SKIP_IWD cache: _ry_install_file primes it during mkinitcpio.conf pre-deploy BEFORE pacman -Syu runs.
+    # Without this reset, a profile adding iwd to PKGS_ADD on a host that lacks it would silently skip iwd/main.conf and 99-cachyos-nm.conf.
     set --erase _RY_SKIP_IWD 2>/dev/null
     set --erase _RY_SKIP_IWD_CACHED 2>/dev/null
 
-    # package DB refreshes moved here from _install_configure_services (post-package phase boundary)
     if command -q updatedb
         if not _run sudo updatedb
             _warn "Updatedb failed"
@@ -5223,7 +5280,18 @@ function _install_finalize --description "Run post-install verification, cleanup
         end
     end
 
-    if command -q pacman; and pacman -Qi iwd >/dev/null 2>&1
+    # Profile-aware: only attempt NM/iwd restart when profile actually manages those configs
+    set -l _profile_uses_iwd false
+    for _dst in $SYSTEM_DESTINATIONS
+        if string match -q '*nm.conf' -- "$_dst"; or string match -q '*/iwd/*' -- "$_dst"
+            set _profile_uses_iwd true
+            break
+        end
+    end
+
+    if test "$_profile_uses_iwd" = false
+        _info "Profile does not manage iwd/NetworkManager — skipping NM restart"
+    else if command -q pacman; and pacman -Qi iwd >/dev/null 2>&1
         if _is_wifi_active_route
             _warn "NetworkManager restart deferred — WiFi is the active route."
             _warn "  Backend switch to iwd will not take effect until next reboot or manual restart."
@@ -5232,14 +5300,14 @@ function _install_finalize --description "Run post-install verification, cleanup
         else
             _info "iwd will restart with NetworkManager (D-Bus disconnect expected)"
             if not _run sudo systemctl restart NetworkManager
-                _warn "NetworkManager restart failed"
-                set -g INSTALL_HAD_ERRORS true
+                _warn "NetworkManager restart failed (will recover on reboot)"
+                _log "NM_RESTART_FAILED: context=finalize_backend_switch"
             end
             # iwd needs time to re-register on D-Bus after NM restart
             sleep $NM_RESTART_DELAY
         end
     else
-        _err "Iwd package not installed"
+        _warn "Profile manages iwd configs but iwd package is not installed"
         set -g INSTALL_HAD_ERRORS true
     end
 
@@ -5276,6 +5344,9 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     end
 
     _install_aur_packages
+
+    # Unconditional post-package boundary work — must run regardless of AUR_PKGS state
+    _install_post_package_refresh
 
     if not _install_system_files
         set -g INSTALL_HAD_ERRORS true
@@ -5654,10 +5725,22 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     _echo
 
     # Validate --completions installs file with expected subcommands
+    # Sandbox HOME to a scratch dir so --test-all does not overwrite the user's real completions file
     _echo "─ Validating completions output..."
-    fish "$script_path" --completions 2>/dev/null
-    set -l _comp_file "$HOME/.config/fish/completions/ry-install.fish"
-    set -l _comp_out (command cat -- "$_comp_file" 2>/dev/null)
+    set -l _comp_sandbox (mktemp -d -t ry-test-comp.XXXXXX)
+    if test -z "$_comp_sandbox"; or not test -d "$_comp_sandbox"
+        _fail "  completions sandbox: mktemp -d failed"
+        set failed (math $failed + 1)
+        set _comp_sandbox ""
+    else
+        set -ga _TRACKED_TMPFILES "$_comp_sandbox"
+        env HOME="$_comp_sandbox" fish "$script_path" --completions >/dev/null 2>&1
+    end
+    set -l _comp_file "$_comp_sandbox/.config/fish/completions/ry-install.fish"
+    set -l _comp_out ""
+    if test -n "$_comp_sandbox"; and test -f "$_comp_file"
+        set _comp_out (command cat -- "$_comp_file" 2>/dev/null)
+    end
     set -l _comp_ok true
     if test -z "$_comp_out"
         # write failure — skip content validation
@@ -5678,6 +5761,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
             _fail "  completions content: missing subcommands"
         end
     end
+    test -n "$_comp_sandbox"; and command rm -rf --preserve-root -- "$_comp_sandbox" 2>/dev/null
 
     command rm -rf --preserve-root -- "$test_dir"
 
@@ -5748,22 +5832,29 @@ while test $i -le (count $argv)
             set MODE install-file
             set mode_count (math $mode_count + 1)
             set -l next_i (math $i + 1)
-            if test $next_i -le (count $argv)
-                set -l next_arg $argv[$next_i]
-                if string match -q -- '/*' "$next_arg"
-                    # Canonicalize: collapse //, .., symlinks to prevent bypassing managed-file validation
-                    set -l _canon (realpath -m -- "$next_arg" 2>/dev/null)
-                    if test -n "$_canon"
-                        set INSTALL_FILE_TARGET "$_canon"
-                    else
-                        set INSTALL_FILE_TARGET "$next_arg"
-                    end
-                    set i $next_i
-                else if not string match -q -- '-*' "$next_arg"
-                    echo "[ERR] --install-file requires absolute path (got: $next_arg)" >&2
-                    command rm -f -- "$LOG_FILE" 2>/dev/null
-                    exit $EXIT_USAGE
+            if test $next_i -gt (count $argv)
+                echo "[ERR] --install-file requires an absolute path argument" >&2
+                command rm -f -- "$LOG_FILE" 2>/dev/null
+                exit $EXIT_USAGE
+            end
+            set -l next_arg $argv[$next_i]
+            if string match -q -- '/*' "$next_arg"
+                # Canonicalize: collapse //, .., symlinks to prevent bypassing managed-file validation
+                set -l _canon (realpath -m -- "$next_arg" 2>/dev/null)
+                if test -n "$_canon"
+                    set INSTALL_FILE_TARGET "$_canon"
+                else
+                    set INSTALL_FILE_TARGET "$next_arg"
                 end
+                set i $next_i
+            else if string match -q -- '-*' "$next_arg"
+                echo "[ERR] --install-file requires an absolute path argument (got flag: $next_arg)" >&2
+                command rm -f -- "$LOG_FILE" 2>/dev/null
+                exit $EXIT_USAGE
+            else
+                echo "[ERR] --install-file requires absolute path (got: $next_arg)" >&2
+                command rm -f -- "$LOG_FILE" 2>/dev/null
+                exit $EXIT_USAGE
             end
         case -h --help
             _ry_show_help
@@ -5868,7 +5959,14 @@ end
 
 # Log rotation: flock serializes concurrent instances; without flock, rm -f is idempotent (last-write-wins)
 set -l _log_base_rot "$HOME/ry-install/logs"
-set -l _existing_logs (command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f ! -path "$LOG_FILE" -printf '%T@\t%p\n' 2>/dev/null | LC_ALL=C sort -n | string replace -r -- '^[^\t]+\t' '')
+# Null-delimited pipeline handles paths containing newlines (theoretical but cheap to fix).
+# Format: %T@<NUL>%p<NUL>  →  sort -z by mtime  →  strip mtime prefix  →  Fish list via split0
+set -l _rot_raw (command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f ! -path "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -z -t \t -k1,1n | string split0)
+set -l _existing_logs
+for _rot_entry in $_rot_raw
+    # Each entry is "MTIME\tPATH" — strip up to first tab
+    set -a _existing_logs (string replace -r -- '^[^\t]+\t' '' "$_rot_entry")
+end
 set -l _log_count (count $_existing_logs)
 if test $_log_count -gt $MAX_LOGS
     set -l _to_remove (math $_log_count - $MAX_LOGS)

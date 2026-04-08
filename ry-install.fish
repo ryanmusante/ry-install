@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v3.48.1 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.48.4 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     status is-interactive; and return 1; or exit 1
 end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.48.1"
+set -g VERSION "3.48.4"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -79,7 +79,7 @@ command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
     echo "[ERR] Cannot create log directory: $LOG_DIR" >&2
     exit $EXIT_PREFLIGHT
 end
-# M-03: verify mode after chmod; preflight-fail on mismatch
+# verify mode after chmod; preflight-fail on mismatch
 command chmod -- 700 "$HOME/ry-install" 2>/dev/null
 set -l _ld_mode (stat -c '%a' -- "$HOME/ry-install" 2>/dev/null)
 if test "$_ld_mode" != 700
@@ -87,7 +87,7 @@ if test "$_ld_mode" != 700
     exit $EXIT_PREFLIGHT
 end
 set -g LOG_FILE "$LOG_DIR/install-$TIMESTAMP.jsonl"
-# M-04: umask 0177 makes touch+chmod fallback race-free (file created 0600 atomically by kernel)
+# umask 0177 makes touch+chmod fallback race-free (file created 0600 atomically by kernel)
 set -l _prev_umask (umask)
 umask 0177
 command install -m 0600 /dev/null "$LOG_FILE" 2>/dev/null
@@ -110,7 +110,7 @@ set -g NM_RESTART_DELAY 3
 set -g KVER (uname -r)
 set -g KVER_PARTS (string split '.' -- $KVER)
 set -g KVER_MAJOR $KVER_PARTS[1]
-# L-02: preflight-fail on unparseable uname -r (was: silent fallback to 0)
+# preflight-fail on unparseable uname -r (was: silent fallback to 0)
 if not string match -qr '^\d+$' -- "$KVER_MAJOR"
     echo "[ERR] Cannot parse kernel major version from uname -r: $KVER" >&2
     exit $EXIT_PREFLIGHT
@@ -124,7 +124,7 @@ end
 
 # Lazy cache for /proc/config.gz — avoids redundant zcat across _ntsync_state and _validate_kernel_params
 function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy-loaded)"
-    # F-14: sentinel-based gate — `count == 0` re-tested /proc/config.gz on every call when missing
+    # sentinel-based gate — `count == 0` re-tested /proc/config.gz on every call when missing
     if not set -q _KCONFIG_LOADED
         if test -f /proc/config.gz
             set -g _KCONFIG_DATA (zcat /proc/config.gz 2>/dev/null)
@@ -165,7 +165,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         return 0
     end
 
-    # F-17: Map cmdline param prefix → CONFIG_ symbol
+    # Map cmdline param prefix → CONFIG_ symbol
     # unchecked: amd_iommu, clocksource, initcall_blacklist, module_blacklist, nowatchdog, quiet, threadirqs (no clean CONFIG_ symbol or always-on)
     set -l param_config_map \
         "zswap.=CONFIG_ZSWAP" \
@@ -325,9 +325,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     command mkdir -p -- (dirname -- "$LOCK_DIR") 2>/dev/null; or true
 
     if command mkdir -- "$LOCK_DIR" 2>/dev/null
-        # F-27 (MED): check pid write — if disk full / inode exhaustion races between
-        # mkdir and echo, lock dir exists with empty pid file. Subsequent stale-lock
-        # reclaim would then evict our own lock and let a second instance proceed.
+        # Check pid write succeeded; on disk-full/inode-exhaustion race between mkdir and echo, rmdir and bail so a stale-lock reclaim cannot evict our own empty lock
         if not echo %self >"$LOCK_FILE" 2>/dev/null
             command rmdir -- "$LOCK_DIR" 2>/dev/null
             echo "[ERR] Failed to write lock pid file: $LOCK_FILE" >&2
@@ -349,8 +347,8 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     if command -q flock
         # flock -n/-E 5: non-blocking, exit 5 on contention; /bin/sh inner script avoids Fish quoting; paths as positional args
         flock -n -E 5 "$_reclaim_parent" /bin/sh -c '
-            rm -f -- "$1/pid" 2>/dev/null
-            find "$1" -maxdepth 1 -type f -delete 2>/dev/null
+            rm -f -- "$1/pid" 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)
+            find "$1" -maxdepth 1 -type f -delete 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)
             rmdir -- "$1" 2>/dev/null || true  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
             mkdir -- "$1" 2>/dev/null || exit 1  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
         ' _ "$LOCK_DIR" 2>/dev/null
@@ -510,7 +508,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g PROFILE_NAME gtr9_pro
     set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
 
-    # Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600 INVARIANT[I-01]: SYSTEM=11 USER=3 SERVICE=1 = 15 destinations = README count = _ry_get_file_content cases
+    # Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600. SYSTEM=11 USER=3 SERVICE=1 = 15 destinations = README count = _ry_get_file_content cases
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
         /etc/kernel/cmdline \
@@ -537,7 +535,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g LOADER_TIMEOUT 0
     set -g LOADER_CONSOLE_MODE keep
     set -g LOADER_EDITOR no
-    set -g SDBOOT_DEFAULT_ENTRY manual # F-20
+    set -g SDBOOT_DEFAULT_ENTRY manual
     set -g SDBOOT_OVERWRITE yes
     # REMOVE_EXISTING=yes deletes ALL boot entries before regen — manual entries (rescue, Windows) will be lost
     set -g SDBOOT_REMOVE_EXISTING yes
@@ -633,7 +631,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "fs.protected_fifos=2" \
         "fs.protected_regular=2"
 
-    # Packages INVARIANT[I-03]: PKGS_ADD=12 PKGS_DEL=8 AUR=1 EXPECTED_SERVICES=3 must equal README
+    # Packages: PKGS_ADD=12 PKGS_DEL=8 AUR=1 EXPECTED_SERVICES=3 must equal README
     set -g PKGS_ADD \
         mkinitcpio-firmware \
         nvme-cli \
@@ -662,7 +660,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     # Services
     set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
-    # INVARIANT[I-02]: MASK=10 must equal README "Masked Services" count
+    # MASK=10 must equal README "Masked Services" count
     set -g MASK \
         ananicy-cpp.service \
         irqbalance.service \
@@ -729,7 +727,7 @@ function _validate_profile --description "Verify loaded profile has all required
     for dst in $SYSTEM_DESTINATIONS
         switch "$dst"
             case '*/iwd/*'
-                # F-19: decoupled from NM
+                # decoupled from NM
                 for nw_var in IWD_ENABLE_NETWORK_CONFIG IWD_DNS_SERVICE IWD_DRIVER_QUIRKS
                     if not contains -- $nw_var $required
                         set -a required $nw_var
@@ -873,7 +871,7 @@ set -g MANIFEST_FILE "$HOME/ry-install/.manifest"
 function _manifest_write --description "Record current profile destinations for orphan detection"
     # Create tmpfile in same directory as manifest for same-filesystem atomic mv
     set -l manifest_dir (dirname -- "$MANIFEST_FILE")
-    # F-11: defensive mkdir -p — init block creates $HOME/ry-install but external rm could remove it mid-run
+    # defensive mkdir -p — init block creates $HOME/ry-install but external rm could remove it mid-run
     command mkdir -p -- "$manifest_dir" 2>/dev/null
     set -l tmp (mktemp -p "$manifest_dir" .ry-install.manifest.XXXXXX 2>/dev/null)
     if test -z "$tmp"
@@ -936,7 +934,7 @@ function _manifest_check_orphans --description "Warn about files from previous i
     return 0
 end
 
-# Generate config file content by destination path — INVARIANT: content emitted via printf/echo only, NEVER eval'd
+# Generate config file content by destination path. Content is emitted via printf/echo only, NEVER eval'd.
 function _ry_get_file_content --argument-names dst --description "Return embedded config content for a given destination path"
     if test (count $argv) -ne 1
         _err "_ry_get_file_content: expected 1 argument, got "(count $argv)
@@ -1092,8 +1090,8 @@ WantedBy=multi-user.target'
             printf '%s\n' "# net.core.netdev_max_backlog 4096 → 16384)"
             for entry in $SYSCTL_VALUES
                 set -l parts (string split -m1 '=' -- "$entry")
-                set -l key $parts[1]
-                set -l val $parts[2]
+                set -l key (string trim -- "$parts[1]")
+                set -l val (string trim -- "$parts[2]")
                 printf '%s = %s\n' "$key" "$val"
             end
 
@@ -1113,7 +1111,7 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
     # Must run after _load_profile — needs profile globals for _ry_get_file_content
     if test -z "$out_dir"
         set out_dir (mktemp -d --tmpdir=/tmp ry-content.XXXXXX)
-        # F-12: bail on mktemp failure BEFORE set -ga to avoid tracking empty path
+        # bail on mktemp failure BEFORE set -ga to avoid tracking empty path
         if test -z "$out_dir"
             _err "_pregenerate_content_files: mktemp -d failed"
             return 1
@@ -1140,9 +1138,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     end
     set -l _sudo_err (mktemp -t ry-sudo-err.XXXXXX 2>/dev/null; or echo /dev/null)
     test "$_sudo_err" != /dev/null; and set -ga _TRACKED_TMPFILES "$_sudo_err"
-    # `sudo -v` updates the credential cache without running a command. With redirected stderr
-    # the prompt is lost, so probe with `-n -v` first; on cache miss, retry `-v`
-    # so the user sees the password prompt on the controlling tty.
+    # Probe with `sudo -n -v` first (silent, redirected stderr loses any prompt); on cache miss retry plain `sudo -v` so the user sees the password prompt on the controlling tty
     sudo -n -v 2>"$_sudo_err"
     set -l _rc $status
     if test $_rc -ne 0
@@ -1212,7 +1208,7 @@ function _json_str --description "Escape a string for safe JSON embedding"
         printf '\n'
         return 1
     end
-    # Escape order: backslash first; `string collect` before \n escape prevents Fish splitting embedded newlines (F-1)
+    # Escape order: backslash first; `string collect` before \n escape prevents Fish splitting embedded newlines
     set -l val "$argv[1]"
     set -l val (string replace -a '\\' '\\\\' -- "$val" | string collect)
     set -l val (string replace -a '"' '\\"' -- "$val" | string collect)
@@ -1441,7 +1437,7 @@ function _progress_init --description "Initialize the step progress counter"
     set -g _STEP_PREV_START 0
     set -g PROGRESS_CURRENT 0
     set -g PROGRESS_START_TIME (date +%s)
-    # F-32 (LOW): seed with current time so step 1 elapsed display is non-empty
+    # seed with current time so step 1 elapsed display is non-empty
     set -g PROGRESS_STEP_START (date +%s)
     printf '\n' >&2
 end
@@ -1540,26 +1536,24 @@ function _progress_done --description "Finalize and close the progress display"
         _warn "Progress step mismatch: emitted $PROGRESS_CURRENT of $PROGRESS_TOTAL expected"
     end
 
-    if true
-        set -g PROGRESS_CURRENT $PROGRESS_TOTAL
-        set -l bar (string repeat -n $PROGRESS_WIDTH -- '█')
-        set -l elapsed_str ""
-        if test "$PROGRESS_START_TIME" -gt 0
-            set -l now (date +%s)
-            set -l elapsed (math "$now - $PROGRESS_START_TIME")
-            if test "$elapsed" -ge 60
-                set -l el_m (math "floor($elapsed / 60)")
-                set -l el_s (math "$elapsed % 60")
-                set elapsed_str (printf ' (%dm%02ds)' $el_m $el_s)
-            else
-                set elapsed_str (printf ' (%ds)' $elapsed)
-            end
+    set -g PROGRESS_CURRENT $PROGRESS_TOTAL
+    set -l bar (string repeat -n $PROGRESS_WIDTH -- '█')
+    set -l elapsed_str ""
+    if test "$PROGRESS_START_TIME" -gt 0
+        set -l now (date +%s)
+        set -l elapsed (math "$now - $PROGRESS_START_TIME")
+        if test "$elapsed" -ge 60
+            set -l el_m (math "floor($elapsed / 60)")
+            set -l el_s (math "$elapsed % 60")
+            set elapsed_str (printf ' (%dm%02ds)' $el_m $el_s)
+        else
+            set elapsed_str (printf ' (%ds)' $elapsed)
         end
-        printf '\r[%s] 100%% Done%-25s%s\n' "$bar" "" "$elapsed_str" >&2
     end
+    printf '\r[%s] 100%% Done%-25s%s\n' "$bar" "" "$elapsed_str" >&2
 end
 
-# Execute command with logging, secret redaction (9 patterns), and stdout/stderr capture to tmpfiles INVARIANT[I-06]: argv metachar reject + secret-flag redaction (--passphrase --password --token --key --secret --api-key --psk --wpa-psk --private-key)
+# Execute command with logging, secret redaction (9 patterns: --passphrase --password --token --key --secret --api-key --psk --wpa-psk --private-key), and stdout/stderr capture to tmpfiles. Argv shell-metacharacter reject closes log-injection surface.
 function _run --description "Execute a command with logging and error capture; stdout captured and only displayed when QUIET=false"
     if test (count $argv) -eq 0
         _log "BUG: _run called with no arguments"
@@ -1595,7 +1589,7 @@ function _run --description "Execute a command with logging and error capture; s
             _log "WARN: mktemp fallback to /dev/null — output capture degraded"
         end
     end
-    # SECURITY INVARIANT: $argv is hardcoded from internal callers
+    # SECURITY: $argv is hardcoded from internal callers
     $argv >"$stdout_tmp" 2>"$stderr_tmp"
     set -l ret $status
     if test "$stderr_tmp" != /dev/null; and test -s "$stderr_tmp"
@@ -2043,7 +2037,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     end
     _ry_validate_mkinitcpio_modules
 
-    # B-1: Pre-generate all content files for parallel validation
+    # Pre-generate all content files for parallel validation
     set -l content_dir (_pregenerate_content_files)
     if not test -d "$content_dir"
         _err "Failed to pre-generate content files"
@@ -2059,7 +2053,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
 
     # Phase 2 (parallel): fork independent validation jobs
 
-    # Job 1: cross-reference check — F-15: per-destination existence check (was count comparison; a generator emitting N wrong files would pass)
+    # Job 1: cross-reference check — per-destination existence check (was count comparison; a generator emitting N wrong files would pass)
     fish -c '
         set -l errs 0
         set -l content_dir $argv[1]
@@ -2169,8 +2163,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
                 continue
             end
             for section in $sections
-                # F-28 (MED): -qFx requires whole-line match — closes false-positive where
-                # section name appears inside a comment or value
+                # -qFx (whole-line match) closes false-positive where section name appears inside a comment or value
                 if not grep -qFx -- "$section" "$f"
                     set errs (math $errs + 1)
                 end
@@ -2276,7 +2269,7 @@ function _ry_count_managed_cases --argument-names script_path --description "Cou
 end
 
 
-# Read first non-comment "KEY=..." line from mkinitcpio.conf (or any conf file). Usage: _ry_mkinitcpio_array MODULES   →   first matching line, or empty.
+# Read first non-comment "KEY=..." line from mkinitcpio.conf (or any conf file). Usage: _ry_mkinitcpio_array MODULES → first matching line, or empty.
 function _ry_mkinitcpio_array --argument-names key file --description "First non-comment KEY=... line from a conf file"
     test -z "$file"; and set file /etc/mkinitcpio.conf
     grep -E "^[[:space:]]*$key=" "$file" 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1
@@ -2361,7 +2354,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         return 1
     end
 
-    # INVARIANT[I-11]: pre+post-write symlink recheck closes mktemp/tee TOCTOU Post-write symlink re-check: closes TOCTOU between pre-write test -L and tee
+    # pre+post-write symlink recheck closes mktemp/tee TOCTOU Post-write symlink re-check: closes TOCTOU between pre-write test -L and tee
     if test "$use_sudo" = true
         if sudo test -L "$tmpfile"
             sudo rm -f -- "$tmpfile" 2>/dev/null
@@ -2391,10 +2384,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         end
     end
 
-    # H-01: expected hash sourced from generator (not tee'd tmpfile) — detects tee truncation, generator drift, in-flight tampering
-    # F-26 (HIGH): capture content first and check generator exit code; piping into sha256sum
-    # would otherwise produce the empty-string SHA (e3b0c44…) on generator failure, defeating
-    # the fail-closed guard for the wildcard '*' arm of _ry_get_file_content.
+    # Expected hash sourced from generator (not tee'd tmpfile); generator content captured first with exit-code check so the wildcard '*' arm of _ry_get_file_content (returns 1, no output) cannot silently produce the empty-string SHA via piped sha256sum
     set -l _gen_content (_ry_get_file_content "$dst" 2>/dev/null | string collect --no-trim-newlines)
     set -l _gen_rc $status
     set -l _expected_hash ""
@@ -2428,9 +2418,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         end
     end
 
-    # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs)
-    # F-30 (MED): use `sudo` (not `sudo -n`) — matches M-02 fix in _ry_install_file's
-    # skip-unchanged path. Removes false-abort window if sudo keepalive lapses.
+    # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs); use plain `sudo` (not `sudo -n`) so a lapsed keepalive does not false-abort long runs
     set -l _actual_hash
     if test "$use_sudo" = true
         set _actual_hash (sudo cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
@@ -2470,7 +2458,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     set -l dst $argv[1]
     set -l use_sudo $argv[2]
 
-    # F-10: lazy-cache iwd skip state — first call probes, subsequent calls hit cache
+    # lazy-cache iwd skip state — first call probes, subsequent calls hit cache
     if not set -q _RY_SKIP_IWD_CACHED
         if not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1
             set -g _RY_SKIP_IWD true
@@ -2578,7 +2566,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _log "=== STATIC VERIFICATION START ==="
     _ensure_sudo_cached; or begin
         _err "Sudo required for verification"
-        # F-34 (LOW): use EXIT_PREFLIGHT constant for consistency with other modes
+        # use EXIT_PREFLIGHT constant for consistency with other modes
         return $EXIT_PREFLIGHT
     end
 
@@ -2617,7 +2605,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo "── sdboot-manage.conf ──"
     if _chk_file /etc/sdboot-manage.conf
         set -l opts (grep -- '^LINUX_OPTIONS=' /etc/sdboot-manage.conf 2>/dev/null \
-            | string replace -r -- '^LINUX_OPTIONS="([^"]*)"' '$1')
+            | string replace -r -- '^LINUX_OPTIONS="([^"]*)"' '$1') # lint:ignore (PCRE backref)
 
         for param in $KERNEL_PARAMS
             if string match -q -- "* $param *" " $opts "
@@ -2804,7 +2792,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
 
     _echo "── sysctl drop-in ──"
     if _chk_file /etc/sysctl.d/99-cachyos-sysctl.conf
-        # F-18: compare key + value, not just key presence
+        # compare key + value, not just key presence
         for entry in $SYSCTL_VALUES
             set -l parts (string split -m1 '=' -- "$entry")
             set -l key $parts[1]
@@ -2965,7 +2953,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo "── mkinitcpio hooks ──"
     set -l hooks_syntax_line (grep -E '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^#' | head -n 1)
     if test -n "$hooks_syntax_line"
-        set -l hooks_str (string replace -r '.*HOOKS=\(([^)]*)\).*' '$1' -- "$hooks_syntax_line")
+        set -l hooks_str (string replace -r '.*HOOKS=\(([^)]*)\).*' '$1' -- "$hooks_syntax_line") # lint:ignore (PCRE backref)
         _ry_validate_mkinitcpio_hooks --existence-only (string split ' ' -- "$hooks_str")
     else
         _warn "  Could not parse HOOKS from mkinitcpio.conf"
@@ -2995,7 +2983,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo
     _echo "── embedded vs installed ──"
 
-    # INVARIANT[I-10]: 4-worker batch; per-worker stderr captured; result="" → FAIL B-2: Pre-generate expected content + batched parallel hash verification (4 workers)
+    # Pre-generate expected content + batched parallel hash verification (4 workers); per-worker stderr captured; result="" → FAIL
     set -l hash_dir (mktemp -d -t ry-hash-par.XXXXXX)
     if not test -d "$hash_dir"
         _err "Failed to create hash verification temp directory"
@@ -3075,7 +3063,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
                     continue
                 end
                 set -l expected_hash (sha256sum < "$hash_dir/expected_$safe" | string split -- " ")[1]
-                # L-03: empty installed_hash from sudo readback failure → fail (not skip), fail-closed
+                # empty installed_hash from sudo readback failure → fail (not skip), fail-closed
                 set -l installed_hash (string trim -- (command cat -- "$hash_dir/installed_$safe" 2>/dev/null))
                 if test -z "$installed_hash"
                     echo fail > "$hash_dir/result_$safe"
@@ -3129,11 +3117,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     set -l drift false
     set -l checked 0
 
-    # Pre-cache sudo for parallel children; avoid "if not sudo -n true" — Fish's "not" on unknown commands silently inverts
-    # F-36 (LOW): _ry_do_check has no keepalive (read-only mode). Mid-loop sudo -n calls
-    # depend on sudo timestamp_timeout (default 5min). Long checks on slow disks can race
-    # the cache expiry; if that happens, hash/perm reads return empty → counted as drift.
-    # This is acceptable fail-closed behavior, not a bug.
+    # Pre-cache sudo for parallel children. Read-only check mode has no keepalive; mid-loop sudo -n calls depend on sudo timestamp_timeout (default 5min) and may race the cache expiry on long checks — empty hash/perm reads count as drift, which is the desired fail-closed behavior
     set -l _sudo_ok false
     if command -q sudo; and sudo -n true 2>/dev/null
         set _sudo_ok true
@@ -3286,7 +3270,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         set -l drift false
         set -l cmdline (command cat -- /proc/cmdline 2>/dev/null)
         set -l kparams (command cat -- "$result_dir/kparams")
-        # L-04: empty/unreadable /proc/cmdline → drift (was: silent skip)
+        # empty/unreadable /proc/cmdline → drift (was: silent skip)
         if test -z "$cmdline"
             set drift true
         else
@@ -3315,11 +3299,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         # Read pre-parsed results from parent (eliminates duplicated _parse_systemctl_show)
         set -l results (command cat -- "$result_dir/parsed_units" 2>/dev/null)
 
-        # F-16: maintenance assertion — parsed[] indices are positionally coupled to
-        # exp_svcs/mask_units/implicit_svcs concatenation order. If a future edit adds
-        # a unit to one list without updating the other, the silent index shift would
-        # mis-attribute states. Fail loud here. TODO: refactor _parse_systemctl_show
-        # to emit unit-keyed records so lookups can be name-based instead of positional.
+        # Maintenance assertion: parsed[] indices are positionally coupled to exp_svcs/mask_units/implicit_svcs concatenation order. Fail loud if a future edit adds a unit to one list without updating the other
         set -l _expected_total (math (count $exp_svcs) + (count $mask_units) + (count $implicit_svcs))
         if test (count $results) -ne $_expected_total
             echo "ASSERT_FAIL: parsed_units count=(count $results) expected=$_expected_total" >&2
@@ -3399,7 +3379,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         end
     end
 
-    # INVARIANT[I-09]: missing/malformed result file → drift; checked==0 → EXIT_DRIFT Merge results — treat missing result files as child crash (prevents false-negative)
+    # missing/malformed result file → drift; checked==0 → EXIT_DRIFT Merge results — treat missing result files as child crash (prevents false-negative)
     for phase in hash perm kparam svc
         set -l _drift_file "$result_dir/"$phase"_drift"
         # Log stderr from ALL children for diagnostics (not just crashes)
@@ -3456,7 +3436,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
 
     _ensure_sudo_cached; or begin
         _err "Sudo required for verification"
-        # F-34 (LOW): use EXIT_PREFLIGHT constant for consistency
+        # use EXIT_PREFLIGHT constant for consistency
         return $EXIT_PREFLIGHT
     end
 
@@ -3485,7 +3465,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _validate_kernel_params
 
     _echo "── Preemption model ──"
-    set -l _preempt (dmesg 2>/dev/null | grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
+    set -l _preempt (sudo dmesg 2>/dev/null | grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
     if test -n "$_preempt"
         if string match -q '*full*' -- "$_preempt"
             _ok "  $_preempt"
@@ -3575,7 +3555,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     if test -z "$_CPU_PATH"
         _warn "  No CPU frequency scaling found"
     else
-        set -l cpu_name (string replace -r '.*/cpu(\d+)/.*' 'cpu$1' -- "$_CPU_PATH")
+        set -l cpu_name (string replace -r '.*/cpu(\d+)/.*' 'cpu$1' -- "$_CPU_PATH") # lint:ignore (PCRE backref)
         _info "  Checking $cpu_name (representative)"
         for check in "scaling_driver:amd-pstate-epp:Scaling driver" \
             "scaling_governor:powersave:Governor" \
@@ -3730,13 +3710,11 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo "SERVICE STATE"
     _echo
 
-    # B-8a: Batch systemctl show — 1 system call replaces individual calls
+    # Batch systemctl show — 1 system call replaces individual calls
     set -l sys_units cpupower-epp.service \
         fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service \
         NetworkManager.service
-    # F-29 (MED): static assertion guards positional coupling between sys_units order
-    # and parsed[1..5] indices below. If anyone adds/removes a unit without updating
-    # the parsed[N] consumers, fail loud here instead of silently mis-attributing states.
+    # Static assertion: sys_units order is positionally coupled to parsed[1..5] consumers below. Fail loud on add/remove drift
     if test (count $sys_units) -ne 5
         _err "  sys_units count drift: \"(count $sys_units)\" (expected 5) — update parsed[N] indices below"
         set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
@@ -4152,7 +4130,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     set -l _boot_fstype (findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         if sudo test -f "$dst" 2>/dev/null
-            # M-06: increment AFTER vfat-skip so /boot vfat files don't inflate "All N checked"
+            # increment AFTER vfat-skip so /boot vfat files don't inflate "All N checked"
             if string match -q '/boot/*' -- "$dst"; and test "$_boot_fstype" = vfat
                 continue
             end
@@ -4199,7 +4177,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             set dir_checked (math $dir_checked + 1)
             set -l perms (sudo stat -c '%a' -- "$dir" 2>/dev/null)
             set -l owner (sudo stat -c '%U:%G' -- "$dir" 2>/dev/null)
-            # INVARIANT[I-12]: parent-dir mode parse — strip leading on len>3, floor(n/2)%2 verified for 755/775/757/1755/4755
+            # parent-dir mode parse — strip leading on len>3, floor(n/2)%2 verified for 755/775/757/1755/4755
             if test "$owner" != "root:root"
                 _fail "  $dir: $perms $owner (expected: root:root)"
                 set dir_bad (math $dir_bad + 1)
@@ -4250,7 +4228,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     _echo "── Vulkan driver packages ──"
-    # L-07: iterate EXPECTED_VULKAN_PKGS profile global instead of hardcoding
+    # iterate EXPECTED_VULKAN_PKGS profile global instead of hardcoding
     set -l _vk_missing 0
     for _vk_pkg in $EXPECTED_VULKAN_PKGS
         if pacman -Q "$_vk_pkg" >/dev/null 2>&1
@@ -4319,7 +4297,7 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
     # Output function exclusions for anti-pattern checks (update when adding output functions)
     set -l _output_funcs '_fail|_ok|_warn|_info|_echo|_err|_msg'
 
-    # INVARIANT[I-04]: fish --no-execute must exit 0
+    # fish --no-execute must exit 0
     _echo "── Fish Syntax Check ──"
     if fish -n "$script_path"
         _ok "ry-install.fish: syntax valid"
@@ -4345,14 +4323,14 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
     end
     _echo
 
-    # INVARIANT[I-05]: $() [[ ]] export && || ${var} forbidden in execution paths
+    # $() [[ ]] export && || ${var} forbidden in execution paths
     _echo "── Anti-pattern Check ──"
 
-    # F-2: preserve real source line numbers — awk emits "NR:content" for kept lines and "NR:" for stripped lines (heredoc bodies, comments, lint:ignore). Greps below run without -n; line number is already embedded in each record so reported locations match the source file, not array indices.
+    # Preserve real source line numbers — awk emits "NR:content" for kept lines and "NR:" for stripped lines (heredoc bodies, comments, lint:ignore). Greps below run without -n; line number is already embedded in each record so reported locations match the source file, not array indices.
     set -l clean_content (awk 'BEGIN{h=0} /<<-?.?[A-Z_]+.?$/{h=1} h&&/^[[:space:]]*[A-Z_]+$/{h=0;print NR":";next} h{print NR":";next} /^[[:space:]]*#/{print NR":";next} /# lint:ignore/{print NR":";next} {print NR":"$0}' "$script_path")
 
-    # Exclude embedded bash in systemd ExecStart= (bash syntax is correct there)
-    set -l bash_subst (printf '%s\n' $clean_content | grep '\$(' 2>/dev/null | grep -vE "ExecStart|/bin/bash|fish --version|'\\\$\\('|$_output_funcs" | head -n 20; or true)
+    # Exclude embedded bash in systemd ExecStart= (bash syntax is correct there) and awk field arithmetic (awk '$(i+1)' etc.)
+    set -l bash_subst (printf '%s\n' $clean_content | grep '\$(' 2>/dev/null | grep -vE "ExecStart|/bin/bash|fish --version|awk |'\\\$\\('|$_output_funcs" | head -n 20; or true)
     if test -n "$bash_subst"
         _warn "Possible bash-style \$() found:"
         set -l lint_out (printf '%s\n' $bash_subst | sed 's/^/  /')
@@ -4426,8 +4404,79 @@ function _ry_do_lint --description "Lint the script source for fish anti-pattern
         end
     else
         _ok "No dead grep -q pipes found"
-        # Cross-check: header version, VERSION constant, README badge, and changelog
     end
+
+    # Bash exit-status `$?` — fish uses `$status`. Excludes regex-class (`$?` inside a character class is unusual; not seen in practice).
+    set -l bash_qmark (printf '%s\n' $clean_content | grep -E '\$\?' 2>/dev/null | grep -vE "$_output_funcs"; or true) # lint:ignore (detector self-reference)
+    if test -n "$bash_qmark"
+        _fail "Bash-style \$? (use \$status) found:"
+        set -l lint_out (printf '%s\n' $bash_qmark | sed 's/^/  /')
+        _log "LINT: $lint_out"
+        if test "$QUIET" = false
+            printf '%s\n' $bash_qmark | sed 's/^/  /' >&2
+        end
+        set has_errors true
+    else
+        _ok "No bash-style \$? exit-status reads found"
+    end
+
+    # Bash positional `$@` — fish uses `$argv`.
+    set -l bash_at (printf '%s\n' $clean_content | grep -E '\$@' 2>/dev/null | grep -vE "$_output_funcs"; or true) # lint:ignore (detector self-reference)
+    if test -n "$bash_at"
+        _fail "Bash-style \$@ (use \$argv) found:"
+        set -l lint_out (printf '%s\n' $bash_at | sed 's/^/  /')
+        _log "LINT: $lint_out"
+        if test "$QUIET" = false
+            printf '%s\n' $bash_at | sed 's/^/  /' >&2
+        end
+        set has_errors true
+    else
+        _ok "No bash-style \$@ positional found"
+    end
+
+    # Backtick command substitution — fish uses `(cmd)`. Pattern: backtick + identifier-start + identifier chars + backtick.
+    set -l bash_btick (printf '%s\n' $clean_content | grep -E '`[a-zA-Z_][a-zA-Z0-9_ -]*`' 2>/dev/null | grep -vE "$_output_funcs"; or true) # lint:ignore (detector self-reference)
+    if test -n "$bash_btick"
+        _fail "Bash-style backtick command substitution found:"
+        set -l lint_out (printf '%s\n' $bash_btick | sed 's/^/  /')
+        _log "LINT: $lint_out"
+        if test "$QUIET" = false
+            printf '%s\n' $bash_btick | sed 's/^/  /' >&2
+        end
+        set has_errors true
+    else
+        _ok "No bash-style backtick command substitution found"
+    end
+
+    # Bash `unset VAR` — fish uses `set --erase VAR`. Match `unset` at start of line (after the NR: line-number prefix the awk pre-pass adds).
+    set -l bash_unset (printf '%s\n' $clean_content | grep -E '^[0-9]+:[[:space:]]*unset[[:space:]]' 2>/dev/null; or true) # lint:ignore (detector self-reference)
+    if test -n "$bash_unset"
+        _fail "Bash-style 'unset' (use 'set --erase') found:"
+        set -l lint_out (printf '%s\n' $bash_unset | sed 's/^/  /')
+        _log "LINT: $lint_out"
+        if test "$QUIET" = false
+            printf '%s\n' $bash_unset | sed 's/^/  /' >&2
+        end
+        set has_errors true
+    else
+        _ok "No bash-style 'unset' found"
+    end
+
+    # Bash positional parameters `$1`-`$9` — fish uses `$argv[1]`. Excludes `/bin/sh` heredocs (intentional embedded sh), awk scripts ($1-$9 are field references), `string replace`/`string match` regex backreferences ('$1' is a literal PCRE backref passed to fish's regex engine), and `$PIPESTATUS`-style fish extensions (none here, but defensive).  # lint:ignore (awk field reference)
+    set -l bash_pos (printf '%s\n' $clean_content | grep -E '\$[1-9]([^a-zA-Z0-9_]|$)' 2>/dev/null | grep -vE "/bin/sh|awk |string replace|string match|$_output_funcs"; or true) # lint:ignore (detector self-reference)
+    if test -n "$bash_pos"
+        _fail "Bash-style positional parameter (use \$argv[N]) found:"
+        set -l lint_out (printf '%s\n' $bash_pos | sed 's/^/  /')
+        _log "LINT: $lint_out"
+        if test "$QUIET" = false
+            printf '%s\n' $bash_pos | sed 's/^/  /' >&2
+        end
+        set has_errors true
+    else
+        _ok "No bash-style positional parameters found"
+    end
+
+    # Cross-check: header version, VERSION constant, README badge, and changelog
 
     # Scope shadow check: set -l in blocks can shadow outer vars; mawk-compatible, tracks piped while, anchored ^set -l filters false positives
     set -l shadow_hits (awk '
@@ -4561,15 +4610,12 @@ function _install_preflight --description "Run all preflight checks before insta
         _err "Sudo required for installation"
         return $EXIT_PREFLIGHT
     end
-    # F-35 (LOW): redirect to keep sudo lecture text out of the script's banner stream
+    # redirect to keep sudo lecture text out of the script's banner stream
     sudo true >/dev/null 2>&1; or begin
         _err "Sudo required for installation"
         return $EXIT_PREFLIGHT
     end
-    # F-31 (MED): explicit reject of restrictive/dangerous tags. Previous regex
-    # `\(ALL.*\) .*ALL$` matched `(ALL) NOEXEC: ALL`, `(ALL) !PASSWD: ALL`, etc.,
-    # letting users pass the gate then fail mid-install on the first sudo command.
-    # Whitelist: (ALL [: ALL]) [NOPASSWD: ] ALL
+    # Explicit reject of restrictive sudoers tags (NOEXEC, !PASSWD, !SETENV, LOG_OUTPUT) before whitelist match. Previous regex accepted dangerous tags and let users pass the gate only to fail mid-install
     set -l _sudo_lines (sudo -n -l 2>/dev/null | grep -v '^\s*#')
     set -l sudo_all 0
     for _sl in $_sudo_lines
@@ -4626,8 +4672,8 @@ function _install_preflight --description "Run all preflight checks before insta
     end
 end
 
-# Pipeline phase 2: pacman -Syu, install PKGS_ADD, remove PKGS_DEL with --needed idempotency
-function _install_packages --description "Install and remove managed packages via pacman"
+# Pipeline phase 2: pacman -Syu, install PKGS_ADD with --needed idempotency (PKGS_DEL removal lives in phase 4 _install_configure_services)
+function _install_packages --description "Install managed packages via pacman -Syu"
     _check_sudo_keepalive
     set -l _fn_err false
     _progress Packages
@@ -4704,15 +4750,11 @@ function _install_aur_packages --description "Install AUR packages via paru"
         end
     end
 
-    # F-25 (HIGH): invalidate _RY_SKIP_IWD cache across package phase boundary.
-    # _ry_install_file primes the cache on its first call (mkinitcpio.conf pre-deploy)
-    # BEFORE pacman -Syu runs. If a future profile adds iwd to PKGS_ADD on a host
-    # that lacks it, the stale cache would silently skip iwd/main.conf and 99-cachyos-nm.conf
-    # in _install_system_files even though pacman just installed iwd.
+    # Invalidate _RY_SKIP_IWD cache across the package phase boundary: _ry_install_file primes it during mkinitcpio.conf pre-deploy BEFORE pacman -Syu runs, so a future profile adding iwd to PKGS_ADD on a host that lacks it would otherwise silently skip iwd/main.conf and 99-cachyos-nm.conf
     set --erase _RY_SKIP_IWD 2>/dev/null
     set --erase _RY_SKIP_IWD_CACHED 2>/dev/null
 
-    # L-08: package DB refreshes moved here from _install_configure_services (post-package phase boundary)
+    # package DB refreshes moved here from _install_configure_services (post-package phase boundary)
     if command -q updatedb
         if not _run sudo updatedb
             _warn "Updatedb failed"
@@ -4726,7 +4768,7 @@ function _install_aur_packages --description "Install AUR packages via paru"
     return 0
 end
 
-# Pipeline phase 3: deploy all SYSTEM/USER/SERVICE files via _ry_install_file with privilege elevation as needed L-09: SERVICE_DESTINATIONS are NOT deployed here — they ship in _install_configure_services alongside enable/start (atomic install+enable). Asymmetry is intentional.
+# Pipeline phase 3: deploy all SYSTEM/USER/SERVICE files via _ry_install_file with privilege elevation as needed. SERVICE_DESTINATIONS are intentionally NOT deployed here — they ship in _install_configure_services alongside enable/start (atomic install+enable).
 function _install_system_files --description "Deploy all embedded config files to the system"
     _check_sudo_keepalive
     set -l _fn_err false
@@ -4751,14 +4793,14 @@ function _install_system_files --description "Deploy all embedded config files t
     return 0
 end
 
-# Ensure ext4 entries in /etc/fstab have noatime,lazytime mount options INVARIANT[I-13]: field-based ext4 ($3=="ext4"), atomic copy → awk → tee → findmnt --verify → mv
+# Ensure ext4 entries in /etc/fstab have noatime,lazytime mount options. Field-based ext4 ($3=="ext4"), atomic copy → awk → tee → findmnt --verify → mv.  # lint:ignore (awk field reference)
 function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab entries"
     if not test -f /etc/fstab
         _warn "  /etc/fstab not found — skipping"
         return 0
     end
 
-    # Check if any ext4 entry is missing noatime or lazytime — field-based: $3 == "ext4"
+    # Check if any ext4 entry is missing noatime or lazytime — field-based: $3 == "ext4"  # lint:ignore (awk field reference)
     set -l needs_change false
     set -l ext4_lines (awk '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }' /etc/fstab 2>/dev/null)
     if test -z "$ext4_lines"
@@ -4790,7 +4832,7 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
         return 1
     end
 
-    # Field-based edit: $3 (fstype) must equal "ext4" — substring match on the full line would corrupt unrelated mounts whose device/mountpoint contains the literal "ext4" (e.g. /srv/ext4backups on xfs). awk rewrites $4 (options) only when $3 == "ext4".
+    # Field-based edit: $3 (fstype) must equal "ext4" — substring match on the full line would corrupt unrelated mounts whose device/mountpoint contains the literal "ext4" (e.g. /srv/ext4backups on xfs). awk rewrites $4 (options) only when $3 == "ext4".  # lint:ignore (awk field reference)
     set -l tmpfstab2 (sudo mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null)
     if test -z "$tmpfstab2"
         sudo rm -f -- "$tmpfstab" 2>/dev/null
@@ -4800,9 +4842,9 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
     sudo awk '
         BEGIN { OFS = "\t" }
         /^[[:space:]]*#/ || NF < 4 { print; next }
-        $3 != "ext4" { print; next }
+        $3 != "ext4" { print; next }  # lint:ignore (awk field reference)
         {
-            n = split($4, opts, ",")
+            n = split($4, opts, ",")  # lint:ignore (awk field reference)
             has_noat = 0; has_lazy = 0; out = ""
             for (i = 1; i <= n; i++) {
                 o = opts[i]
@@ -4813,7 +4855,7 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
             }
             if (!has_noat)  out = (out == "" ? "noatime"  : out ",noatime")
             if (!has_lazy)  out = (out == "" ? "lazytime" : out ",lazytime")
-            $4 = out
+            $4 = out  # lint:ignore (awk field reference)
             print
         }
     ' "$tmpfstab" | sudo tee -- "$tmpfstab2" >/dev/null
@@ -4828,7 +4870,7 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
 
     # Verify the modified fstab parses correctly (findmnt --verify)
     if command -q findmnt
-        # F-33 (LOW): -iE catches "Error", "Warning", "Invalid" capitalisation variants
+        # -iE catches "Error", "Warning", "Invalid" capitalisation variants
         set -l _verify_err (sudo findmnt --verify --tab-file "$tmpfstab" 2>&1 | grep -iE 'error|unknown|invalid' | head -n 3)
         if test -n "$_verify_err"
             _warn "  /etc/fstab: modified file has parse warnings: $_verify_err"
@@ -4951,7 +4993,7 @@ function _install_configure_services --description "Enable, start, and configure
         end
     end
 
-    # B-7: Batch system-scope enable --now
+    # Batch system-scope enable --now
     set -l sys_enable
 
     # NM-dispatcher
@@ -5014,15 +5056,19 @@ function _install_configure_services --description "Enable, start, and configure
     return 0
 end
 
-# Post-rebuild safety gate: verify vmlinuz exists, initramfs non-zero, boot entry valid; block reboot on failure INVARIANT[I-14]: vmlinuz present + non-zero, all initramfs non-zero, ≥1 boot entry references existing kernel
+# Post-rebuild safety gate: vmlinuz present + non-zero, all initramfs non-zero, ≥1 boot entry references existing kernel. Block reboot on failure.
 function _preflight_boot_sanity --description "Verify boot artifacts are viable after rebuild"
     set -l errors 0
-    # /boot (ESP, vfat) typically 700 root:root — use sudo for all access, consistent with _chk_file/_ry_verify_static
+    # ESP path (vfat, typically 700 root:root) — resolve via bootctl rather than hardcoding /boot, so hosts using /efi or /boot/efi are still verified. Fall back to /boot when bootctl is unavailable or returns nothing.
+    set -l _esp (sudo bootctl -p 2>/dev/null | string trim --)
+    if test -z "$_esp"; or not sudo test -d "$_esp" 2>/dev/null
+        set _esp /boot
+    end
 
     # 1. At least one vmlinuz must exist
-    set -l vmlinuz_files (sudo find /boot -maxdepth 1 -name 'vmlinuz-*' -type f 2>/dev/null)
+    set -l vmlinuz_files (sudo find "$_esp" -maxdepth 1 -name 'vmlinuz-*' -type f 2>/dev/null)
     if test (count $vmlinuz_files) -eq 0
-        _err "No vmlinuz found in /boot/"
+        _err "No vmlinuz found in $_esp/"
         set errors (math $errors + 1)
     else
         for f in $vmlinuz_files
@@ -5035,7 +5081,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     end
 
     # 2. Every initramfs must be non-zero
-    set -l initrd_files (sudo find /boot -maxdepth 1 -name 'initramfs-*.img' -type f 2>/dev/null)
+    set -l initrd_files (sudo find "$_esp" -maxdepth 1 -name 'initramfs-*.img' -type f 2>/dev/null)
     for f in $initrd_files
         sudo test -s "$f" 2>/dev/null
         if test $status -ne 0
@@ -5045,15 +5091,17 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     end
 
     # 3. At least one boot entry .conf must reference an existing kernel
-    set -l confs (sudo find /boot/loader/entries -maxdepth 1 -name '*.conf' -type f 2>/dev/null)
+    set -l confs (sudo find "$_esp/loader/entries" -maxdepth 1 -name '*.conf' -type f 2>/dev/null)
     if test (count $confs) -eq 0
-        _err "No boot loader entries in /boot/loader/entries/"
+        _err "No boot loader entries in $_esp/loader/entries/"
         set errors (math $errors + 1)
     else
         set -l valid_entry false
         for conf in $confs
-            set -l linux_line (sudo grep -m1 '^linux ' -- "$conf" 2>/dev/null | string replace 'linux ' '' | string trim --)
-            if test -n "$linux_line"; and sudo test -f "/boot$linux_line" 2>/dev/null
+            # Anchored strip of the leading "linux" keyword (allow tabs/multispace), then strip any leading slash so the join below is unambiguous
+            set -l linux_line (sudo grep -m1 '^linux ' -- "$conf" 2>/dev/null | string replace -r '^linux\s+' '' | string trim --)
+            set -l linux_rel (string trim --left --chars=/ -- "$linux_line")
+            if test -n "$linux_rel"; and sudo test -f "$_esp/$linux_rel" 2>/dev/null
                 set valid_entry true
                 break
             end
@@ -5066,7 +5114,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
 
     if test $errors -gt 0
         _err "Boot sanity check failed ($errors error(s)) — DO NOT REBOOT"
-        _info "  Inspect: ls -la /boot/vmlinuz-* /boot/initramfs-*.img"
+        _info "  Inspect: ls -la $_esp/vmlinuz-* $_esp/initramfs-*.img"
         _info "  Rebuild: sudo mkinitcpio -P && sudo sdboot-manage gen"
         return 1
     end
@@ -5101,50 +5149,43 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         return $EXIT_BOOT_CRIT
     end
 
-    if true
-        # SDBOOT_REMOVE_EXISTING=yes deletes ALL existing loader entries before regen.
-        # Profile flag is the sole authority — no prompt.
-        if test "$SDBOOT_REMOVE_EXISTING" = yes
-            _warn "SDBOOT_REMOVE_EXISTING=yes — all existing /boot/loader/entries/*.conf will be deleted and regenerated."
-            _warn "Manual entries (rescue, Windows, custom kernels) will be LOST."
-        end
-        set -l _boot_ok true
-        if not _run sudo sdboot-manage gen
-            _warn "Sdboot-manage gen failed"
-            set -g INSTALL_HAD_ERRORS true
-            set _boot_ok false
-            _err "CRITICAL: Bootloader update failed — aborting remaining steps"
-            return $EXIT_BOOT_CRIT
-        end
-        if test "$_boot_ok" = true
-            if not _run sudo sdboot-manage update
-                _warn "Sdboot-manage update failed"
-                set -g INSTALL_HAD_ERRORS true
-            end
-        end
+    # SDBOOT_REMOVE_EXISTING=yes deletes ALL existing loader entries before regen — profile flag is sole authority, no prompt
+    if test "$SDBOOT_REMOVE_EXISTING" = yes
+        _warn "SDBOOT_REMOVE_EXISTING=yes — all existing /boot/loader/entries/*.conf will be deleted and regenerated."
+        _warn "Manual entries (rescue, Windows, custom kernels) will be LOST."
+    end
+    if not _run sudo sdboot-manage gen
+        _warn "Sdboot-manage gen failed"
+        set -g INSTALL_HAD_ERRORS true
+        _err "CRITICAL: Bootloader update failed — aborting remaining steps"
+        return $EXIT_BOOT_CRIT
+    end
+    if not _run sudo sdboot-manage update
+        _warn "Sdboot-manage update failed"
+        set -g INSTALL_HAD_ERRORS true
+    end
 
-        set -l entry_count (sudo find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" 2>/dev/null | wc -l)
-        set -l entry_count (string trim -- "$entry_count")
-        if test -n "$entry_count"; and string match -qr '^\d+$' -- "$entry_count"; and test "$entry_count" -gt 0
-            _ok "Boot entries: $entry_count found in /boot/loader/entries/"
-        else
-            _err "No boot entries found in /boot/loader/entries/"
-            _info "  System may not boot! Check /etc/sdboot-manage.conf LINUX_OPTIONS"
-            _info "  Try: sudo sdboot-manage gen --verbose"
-            set -g INSTALL_HAD_ERRORS true
-        end
+    set -l entry_count (sudo find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" 2>/dev/null | wc -l)
+    set -l entry_count (string trim -- "$entry_count")
+    if test -n "$entry_count"; and string match -qr '^\d+$' -- "$entry_count"; and test "$entry_count" -gt 0
+        _ok "Boot entries: $entry_count found in /boot/loader/entries/"
+    else
+        _err "No boot entries found in /boot/loader/entries/"
+        _info "  System may not boot! Check /etc/sdboot-manage.conf LINUX_OPTIONS"
+        _info "  Try: sudo sdboot-manage gen --verbose"
+        set -g INSTALL_HAD_ERRORS true
+    end
 
-        # sudo find required: /boot may be ESP (vfat) mounted root:root 0700 — user-context glob silently yields zero iterations, hiding large-initramfs warnings.
-        set -l _initrd_list (sudo find /boot -maxdepth 1 -type f -name 'initramfs-*.img' 2>/dev/null)
-        for initrd in $_initrd_list
-            set -l size_mb (sudo du -m -- "$initrd" 2>/dev/null | cut -f1)
-            if test -n "$size_mb"; and string match -qr '^\d+$' -- "$size_mb"
-                # >100MB initramfs suggests unnecessary MODULES or hooks (typical: 30-60MB)
-                if test "$size_mb" -gt 100
-                    _warn "Large initramfs: $initrd ($size_mb MB) - consider reviewing MODULES/HOOKS"
-                else
-                    _ok "Initramfs size: $initrd ($size_mb MB)"
-                end
+    # sudo find required: /boot may be ESP (vfat) mounted root:root 0700 — user-context glob silently yields zero iterations, hiding large-initramfs warnings.
+    set -l _initrd_list (sudo find /boot -maxdepth 1 -type f -name 'initramfs-*.img' 2>/dev/null)
+    for initrd in $_initrd_list
+        set -l size_mb (sudo du -m -- "$initrd" 2>/dev/null | cut -f1)
+        if test -n "$size_mb"; and string match -qr '^\d+$' -- "$size_mb"
+            # >100MB initramfs suggests unnecessary MODULES or hooks (typical: 30-60MB)
+            if test "$size_mb" -gt 100
+                _warn "Large initramfs: $initrd ($size_mb MB) - consider reviewing MODULES/HOOKS"
+            else
+                _ok "Initramfs size: $initrd ($size_mb MB)"
             end
         end
     end
@@ -5252,7 +5293,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
         set -g INSTALL_HAD_ERRORS true
     end
 
-    # INVARIANT[I-15]: EXIT_BOOT_CRIT short-circuits finalize/manifest_write — system may not boot; continuing would mask the failure
+    # EXIT_BOOT_CRIT short-circuits finalize/manifest_write — system may not boot; continuing would mask the failure
     if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
         _err "Boot-critical failure — skipping finalization"
         _err "Fix boot issue first: sudo mkinitcpio -P && sudo sdboot-manage gen"
@@ -5434,7 +5475,7 @@ function _ry_do_completions --description "Generate fish shell completions for r
 
     set -l tmpfile (mktemp -p "$comp_dir" .ry-install.XXXXXX)
     if test -z "$tmpfile"
-        # L-13: include path context for diagnostics
+        # include path context for diagnostics
         _fail "Failed to create temp file for completions in: $comp_dir"
         return 1
     end
@@ -5477,7 +5518,7 @@ function _ry_do_completions --description "Generate fish shell completions for r
     echo end >>"$tmpfile"
     set -l _end_status $status
 
-    # L-14: per-write end-marker status capture; combined with end-marker grep (was: chained $status only reflected last echo)
+    # per-write end-marker status capture; combined with end-marker grep (was: chained $status only reflected last echo)
     if test $_end_status -ne 0; or not test -s "$tmpfile"; or not grep -q '^end$' -- "$tmpfile"
         command rm -f -- "$tmpfile" 2>/dev/null
         _fail "Failed to write completions"
@@ -5525,7 +5566,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     _ensure_sudo_cached
     or return 1
 
-    # B-5: Read-only parallel modes (no sequential write modes — install path is exercised by actual installs)
+    # Read-only parallel modes (no sequential write modes — install path is exercised by actual installs)
     set -l parallel_modes \
         --check \
         --verify-static \
@@ -5534,7 +5575,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         --version \
         --help
 
-    # INVARIANT[I-18]: nproc-scaled — <8 sequential, 8-15 batched, 16+ capped at 16
+    # nproc-scaled — <8 sequential, 8-15 batched, 16+ capped at 16
     set -l nproc_val (nproc 2>/dev/null)
     set -l par_batch_size 0
     if test -n "$nproc_val"; and string match -qr '^\d+$' -- "$nproc_val"
@@ -5660,7 +5701,7 @@ set -l mode_count 0
 
 set -l INSTALL_FILE_TARGET ""
 
-# INVARIANT[I-17]: manual loop, realpath -m canonicalization. Argument parsing — manual loop for mode exclusivity, --flag VALUE pairs, and optional trailing args; exit 2 on usage errors
+# manual loop, realpath -m canonicalization. Argument parsing — manual loop for mode exclusivity, --flag VALUE pairs, and optional trailing args; exit 2 on usage errors
 
 # Manual argument loop (not argparse): supports --flag VALUE pairs and mode exclusivity
 set -l i 1
@@ -5761,7 +5802,7 @@ if test $mode_count -gt 1
     exit $EXIT_USAGE
 end
 
-# L-12: dispatch-time root warning removed (duplicated init-block NOTICE at line ~38)
+# dispatch-time root warning removed (duplicated init-block NOTICE at line ~38)
 
 if test "$MODE" != install; and test "$MODE" != check
     set -g QUIET false
@@ -5784,7 +5825,7 @@ end
 if test "$_log_rename_ok" = true
     set -g LOG_FILE "$new_log"
 end
-# M-05: umask-wrapped touch+chmod fallback (race-free); preserve pre-existing content from _load_profile
+# umask-wrapped touch+chmod fallback (race-free); preserve pre-existing content from _load_profile
 if not test -f "$LOG_FILE"
     set -l _prev_umask (umask)
     umask 0177
@@ -5804,7 +5845,7 @@ printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","v
     (date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" \
     (test "$QUIET" = false; and echo true; or echo false) "$_init_cmd" >>"$LOG_FILE"
 
-# INVARIANT[I-16]: install / install-file acquire lock; read modes skip
+# install / install-file acquire lock; read modes skip
 switch $MODE
     case install-file
         # Validate path before lock — exit 2 (usage) not masked by lock failure

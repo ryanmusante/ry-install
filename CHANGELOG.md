@@ -2,197 +2,41 @@ ry-install changelog
 
 2026-04-08  Ryan Musante
 
+- Tagged as v3.48.4
+- `_ry_do_lint` `$()` detector now excludes `awk` lines so awk field arithmetic (`{print $(i+1)}`) is no longer flagged as bash command substitution. The previous detector emitted a spurious WARN on `_is_wifi_active_route`.
+- `_ry_do_lint` adds five new bash anti-pattern detectors: `$?` (use `$status`), `$@` (use `$argv`), backtick command substitution (use `(cmd)`), `unset VAR` (use `set --erase VAR`), and bare positional parameters `$1`-`$9` (use `$argv[N]`). Each detector verified against synthetic bad input to confirm it fires correctly. The positional detector excludes embedded `/bin/sh -c` blocks, awk field references, and `string replace` / `string match` PCRE backreferences.
+- Tagged five existing lines with `# lint:ignore` annotated with the actual context: two `/bin/sh -c` heredoc lines in `_acquire_lock` (`embedded /bin/sh -c block`), seven awk continuation lines in `_install_fstab_opts` (`awk field reference`), and three `string replace` regex backreference lines (`PCRE backref`).
+
+2026-04-08  Ryan Musante
+
+- Tagged as v3.48.3
+- Stripped historical marker prefixes from in-source comments. Rationale preserved in present tense.
+- Collapsed multiline comment blocks to single lines.
+- Removed two `if true` wrapper blocks (vestigial from prior refactors) in `_progress_done` and `_install_rebuild_boot`. De-indented bodies.
+- Removed dead `_boot_ok` variable and its dead conditional in `_install_rebuild_boot`. The false-arm of the assignment already early-returned with `EXIT_BOOT_CRIT`, so the check was provably always-true.
+- Trimmed changelog to last three releases.
+
+2026-04-08  Ryan Musante
+
+- Tagged as v3.48.2
+- `_install_packages` description and section comment now correctly state install-only; `PKGS_DEL` removal documented to live in `_install_configure_services`.
+- `_ry_verify_runtime` preempt probe uses `sudo dmesg` so `kernel.dmesg_restrict=1` no longer silently degrades to "cannot determine".
+- `_preflight_boot_sanity` resolves ESP via `sudo bootctl -p` (fallback `/boot`) instead of hardcoded `/boot`. Hosts with ESP at `/efi` or `/boot/efi` are now correctly verified across vmlinuz scan, initramfs scan, loader/entries scan, and the failure-mode hint.
+- `_preflight_boot_sanity` loader-entry kernel-path extraction is now anchored (`string replace -r '^linux\s+' ''`) and strips a leading slash before joining with the ESP root, so the join is unambiguous regardless of `sdboot-manage` emit format.
+- Sysctl emitter trims key/value after `string split -m1 '='` so the canonical `key = value` format is preserved if a future profile entry includes surrounding whitespace.
+
+2026-04-07  Ryan Musante
+
 - Tagged as v3.48.1
-- audit: applied 12-item audit (2 HIGH, 6 MED, 4 LOW). fish --no-execute, fish_indent --check, internal consistency: all green.
-- F-25 (HIGH): _install_aur_packages now erases _RY_SKIP_IWD / _RY_SKIP_IWD_CACHED globals at the package-phase boundary. Closes a latent cache-poisoning hazard where _ry_install_file primes the iwd-skip cache during pre-deploy of mkinitcpio.conf BEFORE pacman -Syu runs; if a future profile added iwd to PKGS_ADD on a host that lacked it, the stale cache would silently skip iwd/main.conf and 99-cachyos-nm.conf in _install_system_files even though pacman just installed iwd.
-- F-26 (HIGH): _atomic_write_file H-01 hash gen now captures generator content + exit code into a variable before hashing, and fail-closes on $status -ne 0. Previously the wildcard '*' arm of _ry_get_file_content (which returns 1 with no output) would silently produce the empty-string SHA (e3b0c44...) when piped through sha256sum, defeating the fail-closed guard. Unreachable through current call sites but one refactor away from breaking.
-- fix(MED): _do_cleanup now `set --erase`s _RY_SKIP_IWD and _RY_SKIP_IWD_CACHED alongside _KCONFIG_DATA / _KCONFIG_LOADED for consistent cleanup discipline.
-- F-27 (MED): _acquire_lock now wraps `echo %self >$LOCK_FILE` in a check; on write failure (disk full, inode exhaustion) the just-created LOCK_DIR is rmdir'd and the function returns 1. Closes window where mkdir succeeds, pid write fails, and a subsequent stale-lock reclaim evicts our own (empty) lock.
-- F-28 (MED): _ry_validate_configs Job 4 INI section check now uses `grep -qFx` (whole-line match) instead of `grep -qF`. Defense against false positives where a section name appears inside a comment or value.
-- F-29 (MED): _ry_verify_runtime adds a static `(count $sys_units) -ne 5` assertion before the parsed[1..5] consumers. Hard-fails on positional-coupling drift if anyone adds/removes a unit without updating the parsed[N] indices.
-- F-30 (MED): _atomic_write_file post-write integrity check uses `sudo cat` (not `sudo -n cat`). Matches the M-02 fix in _ry_install_file's skip-unchanged path. Removes false-abort window if sudo keepalive lapses during long runs.
-- F-31 (MED): _install_preflight sudo -l ALL detection rewritten. Previous regex `\(ALL.*\) .*ALL$` matched dangerous tags like `(ALL) NOEXEC: ALL` and `(ALL) !PASSWD: ALL`, letting users pass the gate then fail mid-install. New logic: explicit reject of NOEXEC / !PASSWD / !SETENV / LOG_OUTPUT tags, then positive whitelist `\(ALL(\s*:\s*ALL)?\)\s+(NOPASSWD:\s+)?ALL$`.
-- F-32 (LOW): _progress_init seeds PROGRESS_STEP_START with current epoch (was 0). Step 1 elapsed display is now non-empty.
-- F-33 (LOW): _install_fstab_opts findmnt --verify grep changed from `-i 'error|unknown'` to `-iE 'error|unknown|invalid'`. Catches "Invalid" capitalisation variants.
-- F-34 (LOW): _ry_verify_static and _ry_verify_runtime sudo-cache failure now returns $EXIT_PREFLIGHT (was bare 1). Consistent exit code semantics for the same root cause.
-- F-35 (LOW): _install_preflight `sudo true` redirected to /dev/null. Suppresses sudo lecture text in the script's banner stream.
-- F-36 (LOW): _ry_do_check has a documentation comment explaining that the read-only mode has no keepalive and depends on sudo timestamp_timeout; mid-loop expiry produces fail-closed drift, not a bug.
-
-### Audit findings withdrawn after re-verification
-
-- Parent-dir mode regex (`[2367]$` / `[2367].$`): tested 770/757/1773/1755/644 — current regex correctly rejects all group/world-writable modes. `stat -c %a` never emits 5+ digit modes. Not a bug.
-- _json_str 0x80-0x9f corruption claim: tested with `printf "\u0090"` and box-drawing U+2500. Fish `string replace -ra` operates on Unicode codepoints, not raw bytes; multibyte UTF-8 is not corrupted. The regex correctly targets only the C1 control plane.
-- Banner UTF-8 corruption in JSONL: same root cause as above, withdrawn.
-
-### Deferred to future release
-
-- F-16 _parse_systemctl_show name-keyed refactor: too invasive for a point release; would touch every caller. Existing TODO marker preserved at line 3267.
-
----
-
-
-- Tagged as v3.48.0
-
-### BREAKING
-- Removed --dry-run / -n.
-- Removed --all / -a. Unattended is the only mode.
-- Removed --diff and --fix. The entire _ry_do_diff drift-and-repair subsystem is gone.
-  Use --verify-static / --verify-runtime for read-only checks.
-- Removed all pacdiff integration **and** all pacnew/pacsave detection.
-  ry-install no longer scans for, reports, or mentions .pacnew/.pacsave files
-  anywhere — not in --verify-static, not after pacman -Syu, nowhere.
-  _find_pacnew_files is deleted. Pacnew handling is entirely the user's
-  responsibility (use `paccheck`, `pacdiff`, or your own tooling outside ry-install).
-- Removed all _ask confirmation prompts. Profile flags are the sole authority for
-  destructive operations (notably SDBOOT_REMOVE_EXISTING).
-- Removed _dry, _ask, DRY global, DRY log level, FIX global, FORCE global.
-- header log event no longer emits dry_run or all fields.
-- Removed --allow-root and --force. Running as root is now a hard EXIT_USAGE error.
-- Removed _install_collect_wifi entirely. ry-install no longer collects WiFi
-  credentials. iwd/NetworkManager config files are still managed; credential
-  setup is the user's responsibility post-install.
-- NetworkManager restarts (backend switch in finalize, NM/iwd config-change in
-  --install-file) are now deferred with a warning when WiFi is the active
-  default route. The backend switch / config change takes effect at next
-  reboot or after manual `sudo systemctl restart NetworkManager` once on
-  ethernet. WiFi-attached installs no longer drop network mid-run.
-- fstab ext4 optimization (noatime,lazytime) now runs unconditionally with
-  idempotency guard. No prompt, no profile flag.
-
-### Migration
-- Replace `--all` with no flag.
-- Replace `--dry-run` with `--verify-static` (read-only) or remove.
-- Replace `--diff` / `--diff --fix` workflows: there is no in-tool drift repair.
-  Re-run ry-install to reassert managed state.
-- Do not run as root. ry-install refuses. Run as your normal user.
-- Configure WiFi credentials manually via iwctl or nmcli post-install.
-- If pacman-contrib was in your profile only for pacdiff, you may remove it.
-
----
-
-2026-04-07  Ryan Musante
-
-- Tagged as v3.47.8
-- audit: applied 24-item audit spec — 5 HIGH, 13 MED, 5 LOW, 1 INFO.
-- F-1 (HIGH): _ry_do_lint file count xref now uses strict equality (-eq).
-- F-2 (LOW): _ry_do_lint anti-pattern greps preserve real source line numbers via awk NR: prefix.
-- F-3 (HIGH): _run argv metachar reject regex extended with < > ( ) { }.
-- F-4 (LOW): _get_boot_time gained explicit return 0 / return 1.
-- F-5 (INFO): _kill_sudo_keepalive verifies PID with kill -0 before TERM.
-- F-6 (MED): _ensure_sudo_cached uses sudo -v with interactive fallback.
-- F-7 (HIGH): _find_pacnew_files captures sudo -n stderr and warns on failure.
-- F-8 (MED): _ry_do_diff removed redundant inline sudo cache block in --fix branch.
-- F-9 (MED): .pacnew/.pacsave detection uses one batched find instead of 2*N sudo test -f calls.
-- F-10 (MED): _ry_install_file lazy-caches iwd-skip state.
-- F-11 (MED): _manifest_write defensive mkdir -p $manifest_dir before mktemp.
-- F-12 (MED): _pregenerate_content_files bails on mktemp -d failure before tracking.
-- F-13 (MED): _cleanup_tmpfiles dropped DRY early-return; closes tmpfile leak on dry-run exit.
-- F-14 (LOW): _kconfig_cache uses sentinel _KCONFIG_LOADED instead of count==0 gate.
-- F-15 (HIGH): _ry_validate_configs Job 1 (xref) replaced count comparison with explicit per-destination existence check.
-- F-16 (HIGH): _ry_do_check Job 4 (svc check) added runtime assertion guarding positional coupling.
-- F-17 (MED): _validate_kernel_params CONFIG_ map extended; unchecked params documented.
-- F-18 (MED): _ry_verify_static sysctl check now compares value, not just key presence.
-- F-19 (MED): _validate_profile decoupled iwd vs NM required-var sets.
-- F-20 (MED): added SDBOOT_DEFAULT_ENTRY profile global; removes hardcoded "manual".
-- F-21 (MED): _ry_do_diff --fix iwd branch now restarts iwd.service before NetworkManager.
-- F-22 (LOW): _ry_verify_runtime ENV_VARS check sources from systemctl --user show-environment with printenv fallback.
-- F-23 (LOW): WiFi nmcli loop magic numbers promoted to WIFI_RELOAD_WAIT/WIFI_RESCAN_INTV.
-- F-24 (MED): added "Profile Trust Model" section to README.md.
-
-2026-04-07  Ryan Musante
-
-- Tagged as v3.47.7
-- audit: applied v3.47.6 audit spec — 1 HIGH, 8 MED, 15 LOW, 3 REFACTOR, 18 INFO injections. fish --no-execute, fish_indent --check, --lint internal consistency: all green.
-- fix(H-01): _atomic_write_file expected hash now sourced from `_ry_get_file_content "$dst"` (generator), not from sudo cat of the tee'd tmpfile. Closes integrity gap where tee truncation, generator drift, or in-flight tampering could not be detected by the post-mv check. Pattern matches existing _ry_install_file at the skip-unchanged path.
-- fix(M-01): subsumed by H-01 — the `sudo -n cat -- $tmpfile` call that raced sudo keepalive no longer exists.
-- fix(M-02): _ry_install_file skip-unchanged path: `sudo -n cat` → `sudo cat`. Removes false-abort on sudo credential lapse during long runs.
-- fix(M-03): init block — `chmod 700 "$HOME/ry-install"` now verifies mode via `stat -c %a` and preflight-fails on mismatch (was: `; or true` swallowed errors silently).
-- fix(M-04): init block — touch+chmod fallback for $LOG_FILE wrapped in `umask 0177` to make file creation race-free even when `install -m` is unavailable.
-- fix(M-05): log-rename block — same `umask 0177` wrap applied to the second touch+chmod fallback.
-- fix(M-06): _ry_verify_runtime — `perm_checked` counter increment moved AFTER the vfat-skip `continue` so /boot vfat files no longer inflate the "All N installed files: correct permissions" tally.
-- fix(M-07): _install_finalize — dropped trailing `2>/dev/null` on `_run sudo chown` and `_run sudo nmcli connection load` so failures surface in the log.
-- fix(M-08): _ry_do_install_file — system *.service post-install now prompts to enable, matching the user-scope path. Closes dispatch asymmetry where user services were enabled interactively but system services only got daemon-reload.
-- fix(L-01): root execution is now a hard EXIT_USAGE error. Previously forced --dry-run and continued; now requires explicit `--allow-root` opt-in with a louder NOTICE banner. Fail-closed privilege.
-- fix(L-02): KVER_MAJOR/KVER_MINOR parse failures now preflight-fail with EXIT_PREFLIGHT instead of silently falling back to 0 (which masked broken `uname -r` output).
-- fix(L-03): _ry_verify_static parallel hash workers now write `fail` (not `skip`) when `installed_$safe` is empty, so a sudo readback failure can no longer be misclassified as "missing file, skip".
-- fix(L-04): _ry_do_check Job 3 (kernel params) — empty/unreadable /proc/cmdline now sets drift=true. Previously the `if test -n "$cmdline"` guard caused silent skip.
-- fix(L-05): _install_configure_services dry-run LVM detection — when sudo is uncached, `has_lvm` defaults to true. Prevents incorrect masking of `lvm2-monitor.service` in dry-run reports on LVM systems.
-- fix(L-06): _ry_verify_runtime pacnew loop — removed dead `pac_managed` counter that was incremented but never read.
-- fix(L-07): _ry_verify_runtime vulkan check — `vulkan-radeon lib32-vulkan-radeon lib32-mesa` no longer hardcoded; new profile global `EXPECTED_VULKAN_PKGS` added and iterated. Removes profile bleed.
-- fix(L-08): updatedb / pkgfile prompts moved from `_install_configure_services` to the end of `_install_packages`. DB refreshes now sit on the correct side of the package phase boundary.
-- doc(L-09): added comment in _install_system_files explaining that SERVICE_DESTINATIONS are deployed in _install_configure_services for atomic install+enable, not here.
-- fix(L-10): _install_configure_services interactive cpupower-epp prompt — declined branch now writes `USER_DECLINED: cpupower-epp.service install` to the log for audit trail.
-- fix(L-11): _install_finalize — `sleep $NM_RESTART_DELAY` after NetworkManager restart is no longer gated on `WIFI_SSID`. Restart-without-WiFi now also gets the iwd D-Bus settle window.
-- fix(L-12): dispatch-time `_IS_ROOT` warning block removed; duplicated the init-block NOTICE that already runs at line ~38.
-- fix(L-13): _ry_do_completions — mktemp failure error now includes `$comp_dir` path for diagnostics.
-- fix(L-14): _ry_do_completions — captured `$status` immediately after the `echo end >>"$tmpfile"` write into a dedicated variable; the verification block no longer relies on a `$status` value that was overwritten by intervening checks.
-- doc(L-15): no code change required — log-rotation `rm -f` is idempotent; existing comment is accurate.
-- refactor(R-03): injected 18 `# INVARIANT[I-NN]:` single-line comments at the verified anchors (file-count consistency, MASK consistency, fish-syntax gate, anti-pattern gate, _run argv hardening, WiFi credential lifecycle, NM UUID derivation, drift accounting, parallel-hash worker contract, TOCTOU symlink recheck, parent-dir mode parser, fstab patching, boot sanity, EXIT_BOOT_CRIT short-circuit, lock policy, argparse model, nproc-scaled parallelism).
-- refactor(R-02): collapsed 25 adjacent multi-line comment runs into single comments. `lint:ignore` markers, shebang, and header line 2 preserved.
-- refactor(R-01): moved 5 trailing inline comments onto their own lines above the code they describe. `lint:ignore` markers preserved in original position.
-
-2026-04-07  Ryan Musante
-
-- Tagged as v3.47.6
-- fix: PKGS_ADD — removed `ntsync-common`. Redundant on CachyOS: linux-cachyos ships `CONFIG_NTSYNC=m` and declares `provides=(NTSYNC-MODULE)`; wine-cachyos (transitive dep of cachyos-gaming-meta via wine-cachyos-opt) installs `/usr/lib/modules-load.d/10-ntsync.conf` to auto-load the in-kernel module on boot. Refs: github.com/CachyOS/linux-cachyos config + PKGBUILD, github.com/CachyOS/CachyOS-PKGBUILDS/wine-cachyos.
-- fix: SYSCTL_VALUES — dropped `vm.dirty_bytes=268435456` and `vm.dirty_background_bytes=67108864`. Both are byte-identical to vendor `/usr/lib/sysctl.d/70-cachyos-settings.conf` and were no-op duplicates.
-- doc: README sysctl row updated to "17 net-new tunables" and explicitly notes `net.core.netdev_max_backlog` overrides vendor 4096→16384 (99-* loads after 70-* lexically).
-- doc: Hardware Reference NIC corrected from "Dual Realtek RTL8127 10 GbE (board v2.2)" to "Dual Intel E610-XT2 10 GbE" per ServeTheHome review and Beelink/Intel support correspondence (craigwilson.blog).
-- fix: KERNEL_PARAMS — removed `preempt=full`. No-op on stock linux-cachyos (CONFIG_PREEMPT=y + CONFIG_PREEMPT_DYNAMIC=y → "full" is already the dynamic default). README kernel-params count 15 → 14.
-- doc: README Masked Services — removed unsourced "cache thrashing on 32T" framing from irqbalance row; left only the verifiable "Conflicts with threadirqs".
-- doc: README Environment Variables — `PROTON_USE_NTSYNC=1` annotated as "default in current proton-cachyos; explicit pin" since recent proton-cachyos releases enable it by default.
-- doc: README + profile comment — softened CWSR row, dropped unverifiable "Ubuntu OEM kernel 1018+ (not mainline as of 2026-Q2)" claim; kept the verified ROCm 7.2 userspace fix note and the kernel workaround.
-- doc: README Known Issues — softened MES page faults row (dropped specific FW 0x83 / linux-firmware-20251125 date string pending upstream verification); softened black-screen row (dropped specific 6.19.0/6.19.1+ version pins pending verification).
-- doc: Hardware Reference BIOS row softened from "P110 (Dec 2025 — ACPI fix)" to "Latest available from Beelink (P110+ recommended)" — vendor changelog not publicly verifiable.
-
-2026-04-07  Ryan Musante
-
-- Tagged as v3.47.5
-- fix: ENV_VARS — `DXVK_LOG_LEVEL=none` valid but creates empty `app_d3d11.log` / `app_dxgi.log` files (doitsujin/dxvk#1703); added `DXVK_LOG_PATH=none` per DXVK README to disable log file creation entirely.
-- doc: corrected `amdgpu.cwsr_enable=0` rationale in profile comment, README env table, and audit table — kernel-mode fix is only in Ubuntu OEM kernel 1018+ (not mainline as of 2026-Q2); ROCm 7.2 ships userspace fix only, kernel workaround still required. Refs: ROCm/ROCm#5724, ROCm/TheRock#2991.
-
-2026-04-07  Ryan Musante
-
-- Tagged as v3.47.4
-- fix: ENV_VARS — `RADV_EXPERIMENTAL=transfer_queue` does not exist; correct variable per Mesa 26.0 is `RADV_PERFTEST=transfer_queue`. Also added `VKD3D_CONFIG=transfer_queue` so vkd3d-proton (DX12) titles actually use the dedicated SDMA transfer queue. Ref: https://www.phoronix.com/news/Mesa-26.0-RADV-Transfer-SDMA
-
-2026-04-07  Ryan Musante
-
-- Tagged as v3.47.3
-- _install_fstab_opts: replace substring sed pipeline with field-based awk filter ($3 == "ext4"); old pipeline corrupted unrelated mounts whose path contained the literal "ext4" (e.g. /srv/ext4backups on xfs). Same fix applied to _ry_verify_runtime and needs_change check.
-- _install_rebuild_boot: initrd size loop uses sudo find instead of user-context glob; on ESP-mounted /boot (vfat 0700) the glob silently yielded zero iterations.
-- _ry_verify_static, _install_rebuild_boot: add -maxdepth 1 -type f to find /boot/loader/entries -name '*.conf'.
-- CLI dispatch: unknown-mode arm uses $EXIT_USAGE constant.
-- _validate_profile: SYSCTL_VALUES moved to conditional required block (only when */sysctl.d/* destination present); _ry_verify_runtime sysctl loop guards on set -q.
-- _manifest_write: drop tmp from _TRACKED_TMPFILES on successful mv.
-- Top-level LOG_FILE rename: capture mv rc, warn on failure, keep old path so footer/header still write.
-- WiFi passphrase % rejection: rationale corrected to "NM keyfile reserved character".
-
-2026-04-06  Ryan Musante
-
-- Tagged as v3.47.2
-- Drop spurious second `--` in 8 `string split -- ':' --` calls; rec[1..3] indices were off by one, breaking every service-state assertion in --verify-static and --verify-runtime.
-- _validate_profile case glob `*/nm.conf` -> `*nm.conf` (fish glob `*` doesn't cross `/`; basename `99-cachyos-nm.conf` never matched).
-- lint: changelog cross-check pointed at CHANGELOG.txt (file is .md) and used a regex for `3.47.1 (...)`; updated to match `- Tagged as v<ver>` lines.
-- Log rotation piped `string join0` directly into xargs; capture into variable was stripping NULs and removing only one stale log per run.
-- Removed dead `or set sudo_all 0` after `set -l sudo_all (...)`.
-- test: --test-all completions check matches full flag tokens.
-- _install_fstab_opts: removed unused `_mnt` local.
-
-2026-04-05  Ryan Musante
-
-- Tagged as v3.47.1
-- Re-source guard no longer kills caller's interactive shell.
-- _atomic_write_file: chown failure now returns 1.
-- _acquire_lock: removed redundant PID write inside flock /bin/sh -c.
-- Extracted _write_footer helper; deduped four JSONL footer printf sites.
-
-2026-04-04  Ryan Musante
-
-- Tagged as v3.47.0
-- _atomic_write_file: parent-dir trust check before sudo mktemp; closes TOCTOU vs symlink probe.
-- _atomic_write_file: fail-closed on empty pre-mv / post-mv hash.
-- _ry_install_files: _argparse_tmp /dev/null fallback emits one-shot WARN.
-- _pregenerate_content_files: mktemp uses --tmpdir=/tmp explicitly.
-- Bootloader update: interactive confirm before destructive sdboot-manage gen.
-- Root invocation emits explicit [NOTICE] when forcing --dry-run.
+- `_install_aur_packages` erases `_RY_SKIP_IWD` / `_RY_SKIP_IWD_CACHED` at the package-phase boundary. Closes a latent cache-poisoning hazard where the iwd-skip cache would survive across the `pacman -Syu` boundary and silently skip `iwd/main.conf` and `99-cachyos-nm.conf` if a future profile added iwd to `PKGS_ADD`.
+- `_atomic_write_file` expected-hash gen captures generator content + exit code into a variable before hashing, fail-closes on `$status -ne 0`. Previously the wildcard arm of `_ry_get_file_content` (returns 1, no output) would silently produce the empty-string SHA when piped through sha256sum.
+- `_do_cleanup` `set --erase`s `_RY_SKIP_IWD` / `_RY_SKIP_IWD_CACHED` alongside `_KCONFIG_*` for consistent cleanup discipline.
+- `_acquire_lock` wraps `echo %self >$LOCK_FILE` in a check; on write failure (disk full, inode exhaustion) the just-created `LOCK_DIR` is `rmdir`'d and the function returns 1.
+- `_ry_validate_configs` Job 4 INI section check uses `grep -qFx` (whole-line match) instead of `grep -qF`. Defends against false positives where a section name appears inside a comment or value.
+- `_ry_verify_runtime` adds a static `(count $sys_units) -ne 5` assertion before the `parsed[1..5]` consumers. Hard-fails on positional-coupling drift.
+- `_atomic_write_file` post-write integrity check uses plain `sudo cat` (not `sudo -n cat`) so a lapsed keepalive does not false-abort during long runs.
+- `_install_preflight` sudo `-l ALL` detection rewritten with explicit reject of NOEXEC / !PASSWD / !SETENV / LOG_OUTPUT tags before a positive whitelist match. Previous regex matched dangerous tags and let users pass the gate only to fail mid-install.
+- `_progress_init` seeds `PROGRESS_STEP_START` with current epoch (was 0). Step 1 elapsed display is now non-empty.
+- `_install_fstab_opts` findmnt `--verify` grep changed to also catch capitalisation variants of "invalid".
+- `_ry_verify_static` and `_ry_verify_runtime` sudo-cache failure now returns `$EXIT_PREFLIGHT` (was bare 1).
+- `_install_preflight` `sudo true` redirected to `/dev/null` to suppress sudo lecture text in the script's banner stream.

@@ -1,41 +1,25 @@
 # ry-install
 
-![version](https://img.shields.io/badge/version-3.48.12-blue)
-![license](https://img.shields.io/badge/license-MIT-green)
-![fish](https://img.shields.io/badge/fish-3.4%2B-orange)
-
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
 
-**Default profile:** Beelink GTR9 Pro — AMD Ryzen AI Max+ 395 (Zen 5, Strix Halo) / Radeon 8060S (RDNA 3.5, gfx1151) / 128 GB LPDDR5x-8000
+**Default profile:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware Reference](#hardware-reference).
 
 [changelog](CHANGELOG.md)
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Scope](#scope)
 - [Prerequisites](#prerequisites)
+- [Hardware Reference](#hardware-reference)
 - [Usage](#usage)
 - [Install Flow](#install-flow)
 - [Configuration Reference](#configuration-reference)
-  - [Kernel Parameters](#kernel-parameters)
-  - [Boot Loader](#boot-loader)
-  - [Initramfs](#initramfs)
-  - [System Services](#system-services)
-  - [Network Stack](#network-stack)
-  - [System Tuning](#system-tuning)
-  - [Environment Variables](#environment-variables)
-  - [User Configuration](#user-configuration)
-  - [Packages](#packages)
-  - [Masked Services](#masked-services)
 - [Managed Files](#managed-files)
 - [Profiles](#profiles)
 - [Safety & Reliability](#safety--reliability)
-  - [Exit Codes](#exit-codes)
-  - [Data Directory](#data-directory)
-  - [Log Format](#log-format)
-- [Hardware Reference](#hardware-reference)
-  - [Specifications](#specifications)
-  - [Known Issues](#known-issues)
+- [Uninstall](#uninstall)
+- [Known Issues](#known-issues)
 - [Troubleshooting](#troubleshooting)
 - [References](#references)
 
@@ -46,11 +30,24 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 ./ry-install.fish              # Deploy everything (unattended)
 ```
 
-**Post-install:** Reboot → `--verify-static` → `--verify-runtime` → test WiFi + gaming.
+**Post-install verification:**
 
-> **BREAKING (v3.48.0):** Removed `--interactive`, `--dry-run`, `--all`, `--diff`, `--fix`, `--allow-root`, `--force`, and WiFi credential collection. Unattended install is the only mode. Root execution is refused. See [CHANGELOG](CHANGELOG.md).
+1. Reboot — required for kernel cmdline, initramfs, NetworkManager backend switch.
+2. `./ry-install.fish --verify-static` — confirms managed files match embedded content (catches manual edits, package overwrites).
+3. `./ry-install.fish --verify-runtime` — confirms live kernel params, services, and modules are loaded as expected.
+4. Smoke test: WiFi associates, a Vulkan game launches via Steam/Proton.
+
+Typical first-run duration: **3–8 minutes** (depends on package mirror speed and initramfs rebuild).
+
+> **BREAKING (v3.48.0):** Removed `--interactive`, `--dry-run`, `--all`, `--diff`, `--fix`, `--allow-root`, `--force`, and WiFi credential collection. `--all`, `--dry-run`, `--diff`, and `--fix` exit with a migration message; the others exit as unknown options. Unattended install is the only mode. Root execution is refused. See [CHANGELOG](CHANGELOG.md).
 
 > **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until your next reboot to keep WiFi connectivity active during install. Reboot after install completes, or run `sudo systemctl restart NetworkManager` once on ethernet to apply immediately.
+
+## Scope
+
+**In scope:** system-wide CachyOS configuration (kernel cmdline, initramfs, systemd units, network stack, sysctl, gaming env vars), package install/remove via pacman + paru, masking of laptop power-management units for desktop use, single-user systemd `--user` units (ssh-agent, environment.d).
+
+**Out of scope:** dotfiles, shell prompts, editor config, application settings, secrets/credentials management, backup orchestration, multi-user provisioning, non-CachyOS distributions, laptops without a custom profile (the default `gtr9_pro` profile masks all sleep/suspend targets).
 
 ## Prerequisites
 
@@ -68,12 +65,27 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 **Recommended pre-flight steps:**
 
 ```fish
-# Review masked services — confirm desktop, not laptop
-# See Masked Services section below
-
-# Check for known issues
-# https://wiki.cachyos.org  ·  https://archlinux.org/news/
+./ry-install.fish --check        # silent idempotency probe (exit 0=clean, 3=prereq fail, 10=drift)
+./ry-install.fish --lint         # syntax + anti-pattern check (no system changes)
+sudo -v                          # warm sudo cache; confirms unrestricted sudo
+df -h / /boot                    # verify space (≥2 GB / and ≥200 MB /boot)
 ```
+
+Then review the [Masked Services](#masked-services) table — the default profile is **desktop-oriented** and masks all sleep/suspend targets. Laptop users must override `MASK` in a custom profile. Check [CachyOS news](https://wiki.cachyos.org) and [Arch news](https://archlinux.org/news/) for breaking changes before any `pacman -Syu`.
+
+## Hardware Reference
+
+| Component | Detail |
+|---|---|
+| BIOS | Latest available from Beelink (P110+ recommended for Strix Halo stability) |
+| CPU | Ryzen AI Max+ 395 — Zen 5, 16C/32T, 5.1 GHz, 55 W default TDP (cTDP 45–120 W, Beelink: 140 W) |
+| GPU | Radeon 8060S — RDNA 3.5, gfx1151, 40 CUs |
+| RAM | 128 GB LPDDR5x-8000 |
+| WiFi | MediaTek MT7925 (WiFi 7) |
+| NIC | Dual Intel E610-XT2 10 GbE |
+| Thermals | 85 °C sustained · 95 °C throttle · 100 °C max |
+
+Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](https://bugzilla.kernel.org) / [Mesa GitLab](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) for gfx1151 issues.
 
 ## Usage
 
@@ -213,7 +225,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|---|
 | **Install** | 12 | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove** | 8 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
-| **AUR** | 1 | mt76-mt7925-dkms (via paru) |
+| **AUR** | 1 | mt76-mt7925-dkms (via paru — **skipped with WARN if paru is not installed**; install continues) |
 
 ### Masked Services
 
@@ -263,13 +275,40 @@ Machine-specific configuration is defined in profile functions. External profile
 | `~/.config/ry-install/default-profile` | Persistent default (single line: profile name) |
 | `gtr9_pro` | Hardcoded fallback |
 
-External profiles define `function _ry_profile_<name>` with all required globals (25+). Legacy `profile_<name>` naming is accepted with a deprecation warning. Profiles are syntax-checked before sourcing; validation enforces name consistency and numeric types.
+External profiles define `function _ry_profile_<name>` with all required globals (26 unconditional + up to 8 conditional). Legacy `profile_<name>` naming is accepted with a deprecation warning. Profiles are syntax-checked before sourcing; validation enforces name consistency and numeric types.
 
 **Creating a profile:**
 
 ```fish
 echo my_desktop > ~/.config/ry-install/default-profile
 ```
+
+### Required Globals
+
+A profile must define **26 unconditional globals**, plus **8 conditional globals** activated by the presence of corresponding entries in `SYSTEM_DESTINATIONS`. Preflight reports any missing ones with the variable name.
+
+| Category | Globals |
+|---|---|
+| Identity | `PROFILE_NAME`, `PROFILE_DESC` |
+| Destinations | `SYSTEM_DESTINATIONS`, `USER_DESTINATIONS`, `SERVICE_DESTINATIONS` |
+| Kernel + initramfs | `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, `MKINITCPIO_HOOKS`, `MKINITCPIO_COMPRESSION` |
+| Boot loader | `LOADER_DEFAULT`, `LOADER_TIMEOUT`, `LOADER_CONSOLE_MODE`, `LOADER_EDITOR`, `SDBOOT_DEFAULT_ENTRY`, `SDBOOT_OVERWRITE`, `SDBOOT_REMOVE_EXISTING`, `SDBOOT_REMOVE_OBSOLETE` |
+| Packages + services | `PKGS_ADD`, `MASK`, `EXPECTED_SERVICES` |
+| Environment | `ENV_VARS`, `LOGIND_IGNORE_KEYS` |
+| Thresholds | `BOOT_SPACE_CRIT`, `BOOT_SPACE_WARN`, `ROOT_AVAIL_CRIT`, `ROOT_AVAIL_WARN` |
+
+**Conditional globals** (required only when the matching destination is present):
+
+| Triggered by destination match | Required globals |
+|---|---|
+| `*/iwd/*` | `IWD_ENABLE_NETWORK_CONFIG`, `IWD_DRIVER_QUIRKS`, `IWD_DNS_SERVICE` |
+| `*nm.conf` | `NM_WIFI_BACKEND`, `NM_WIFI_POWERSAVE`, `NM_LOG_LEVEL` |
+| `*/resolved.conf.d/*` | `RESOLVED_MDNS` |
+| `*/sysctl.d/*` | `SYSCTL_VALUES` |
+
+**Optional globals** (consumers handle unset safely): `PKGS_DEL`, `AUR_PKGS`, `BOOT_TIME_TARGET`, `EXPECTED_CPU_MATCH`, `MKINITCPIO_COMPRESSION_OPTIONS`.
+
+### Example Profile
 
 Save as `~/.config/ry-install/profiles/my_desktop.fish`:
 
@@ -278,20 +317,10 @@ function _ry_profile_my_desktop --description "Example desktop profile"
     set -g PROFILE_NAME my_desktop
     set -g PROFILE_DESC "My Desktop — AMD Ryzen 7 7800X3D / RX 7900 XTX"
 
-    # Copy SYSTEM_DESTINATIONS, USER_DESTINATIONS, SERVICE_DESTINATIONS
+    # Copy SYSTEM_DESTINATIONS / USER_DESTINATIONS / SERVICE_DESTINATIONS
     # from the built-in gtr9_pro profile and adjust paths as needed.
-
-    # Required globals (preflight reports missing ones):
-    # KERNEL_PARAMS MKINITCPIO_MODULES MKINITCPIO_HOOKS MKINITCPIO_COMPRESSION
-    # LOADER_DEFAULT LOADER_TIMEOUT LOADER_CONSOLE_MODE LOADER_EDITOR
-    # SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE
-    # SDBOOT_DEFAULT_ENTRY
-    # RESOLVED_MDNS LOGIND_IGNORE_KEYS ENV_VARS PKGS_ADD MASK
-    # EXPECTED_SERVICES SYSCTL_VALUES IWD_ENABLE_NETWORK_CONFIG
-    # IWD_DRIVER_QUIRKS IWD_DNS_SERVICE NM_WIFI_BACKEND NM_WIFI_POWERSAVE
-    # NM_LOG_LEVEL BOOT_SPACE_CRIT BOOT_SPACE_WARN ROOT_AVAIL_CRIT
-    # ROOT_AVAIL_WARN
-    # Optional: PKGS_DEL AUR_PKGS BOOT_TIME_TARGET EXPECTED_CPU_MATCH MKINITCPIO_COMPRESSION_OPTIONS
+    # Then define the 26 unconditional + applicable conditional globals
+    # listed in the Required Globals tables above.
 end
 ```
 
@@ -304,7 +333,7 @@ Validate before first use:
 
 ### Profile Trust Model
 
-External profiles in `~/.config/ry-install/profiles/<n>.fish` are loaded via `source` and execute with the user's privileges. Treat profile files like any other shell script you would run:
+External profiles in `~/.config/ry-install/profiles/<name>.fish` are loaded via `source` and execute with the user's privileges. Treat profile files like any other shell script you would run:
 
 - Only use profiles from sources you trust.
 - Verify ownership: `stat -c '%U' ~/.config/ry-install/profiles/*.fish` should show your username, not root or any other user.
@@ -315,6 +344,7 @@ External profiles in `~/.config/ry-install/profiles/<n>.fish` are loaded via `so
 | Feature | Detail |
 |---|---|
 | Atomic writes | tmp → chmod → mv (same filesystem) |
+| fstab edits | Idempotent (skipped if `noatime,lazytime` already present); validated via `findmnt --verify` before atomic move; **no persistent backup written** — snapshot `/etc/fstab` yourself before first run if you want recovery |
 | Root detection | **Refuses to run as root.** Run as your normal user; sudo is invoked internally. |
 | Instance lock | Atomic mkdir, PID verification, stale reclaim |
 | Credentials | Sensitive args redacted in logs (9 patterns: `--passphrase`, `--password`, `--token`, `--key`, etc.) |
@@ -329,7 +359,7 @@ External profiles in `~/.config/ry-install/profiles/<n>.fish` are loaded via `so
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | Non-critical failure |
+| `1` | Non-critical failure / verification drift (`--verify-static`, `--verify-runtime`) |
 | `2` | Usage error |
 | `3` | Preflight failed (also `--check` prereq failure) |
 | `4` | Boot-critical failure |
@@ -338,8 +368,6 @@ External profiles in `~/.config/ry-install/profiles/<n>.fish` are loaded via `so
 | `11` | Lint errors |
 | `129/130/131/143` | Signal (HUP / INT / QUIT / TERM) |
 | `141` | SIGPIPE |
-
-> `--verify-*` returns exit 1 on differences — expected for scripting.
 
 ### Data Directory
 
@@ -368,25 +396,70 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 
 Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
-## Hardware Reference
+<details>
+<summary>Sample log output</summary>
 
-### Specifications
+```json
+{"ts":"2026-04-08T14:23:01-0700","event":"header","version":"3.48.12","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-08T14:23:04-0700","event":"section","data":"Preflight"}
+{"ts":"2026-04-08T14:23:12-0700","event":"step_time","data":"Packages","elapsed_s":127.4}
+{"ts":"2026-04-08T14:25:19-0700","event":"warn","data":"paru not found — skipping AUR packages: mt76-mt7925-dkms"}
+{"ts":"2026-04-08T14:26:42-0700","event":"footer","exit_code":0,"pass":47,"fail":0,"warn":1,"interrupted":false}
+```
 
-| Component | Detail |
-|---|---|
-| BIOS | Latest available from Beelink (P110+ recommended for Strix Halo stability) |
-| CPU | Ryzen AI Max+ 395 — Zen 5, 16C/32T, 5.1 GHz, 55 W default TDP (cTDP 45–120 W, Beelink: 140 W) |
-| GPU | Radeon 8060S — RDNA 3.5, gfx1151, 40 CUs |
-| RAM | 128 GB LPDDR5x-8000 |
-| WiFi | MediaTek MT7925 (WiFi 7) |
-| NIC | Dual Intel E610-XT2 10 GbE |
-| Thermals | 85 °C sustained · 95 °C throttle · 100 °C max |
+</details>
 
-Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](https://bugzilla.kernel.org) / [Mesa GitLab](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) for gfx1151 issues.
+## Uninstall
 
-### Known Issues
+ry-install does **not** ship an automated uninstaller. The script tracks deployed files in `~/ry-install/.manifest` — use it as the source of truth for manual rollback.
 
-#### Strix Halo GPU (gfx1151)
+**Manual rollback steps:**
+
+```fish
+# 1. Unmask the 10 systemd units
+sudo systemctl unmask \
+    ananicy-cpp.service irqbalance.service power-profiles-daemon.service \
+    lvm2-monitor.service NetworkManager-wait-online.service \
+    sleep.target suspend.target hibernate.target hybrid-sleep.target \
+    suspend-then-hibernate.target
+
+# 2. Disable + remove the cpupower-epp unit
+sudo systemctl disable --now cpupower-epp.service
+sudo rm /etc/systemd/system/cpupower-epp.service
+
+# 3. Remove managed config files (see Managed Files table for full list)
+sudo rm /etc/kernel/cmdline /etc/sdboot-manage.conf /etc/mkinitcpio.conf \
+    /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf \
+    /etc/systemd/logind.conf.d/99-cachyos-logind.conf \
+    /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf \
+    /etc/iwd/main.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf \
+    /etc/drirc /etc/sysctl.d/99-cachyos-sysctl.conf
+rm ~/.config/fish/conf.d/10-ssh-auth-sock.fish \
+   ~/.config/environment.d/10-environment.conf \
+   ~/.config/systemd/user/ssh-agent.service
+
+# 4. Restore /etc/fstab from your own snapshot (no persistent backup is written by ry-install)
+#    Or manually remove "noatime,lazytime" from ext4 entries.
+
+# 5. Restore removed packages if desired
+sudo pacman -S --needed plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme \
+    ufw octopi micro cachyos-micro-settings btop
+
+# 6. Rebuild initramfs and bootloader entries
+sudo mkinitcpio -P
+sudo sdboot-manage gen
+
+# 7. Remove ry-install state
+rm -rf ~/ry-install/
+
+# 8. Reboot
+```
+
+**Note:** Packages installed by ry-install (`PKGS_ADD`) are not auto-removed; use `pacman -Rns` selectively if desired. AUR `mt76-mt7925-dkms` removal: `paru -Rns mt76-mt7925-dkms`.
+
+## Known Issues
+
+### Strix Halo GPU (gfx1151)
 
 | Issue | Status | Workaround |
 |---|---|---|
@@ -397,7 +470,7 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | Black screen | Reported kernel-version-specific regressions | Track linux-cachyos changelog; downgrade or upgrade as advised |
 | ROCm compute | Requires env vars | `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.1` |
 
-#### MediaTek MT7925 WiFi
+### MediaTek MT7925 WiFi
 
 | Issue | Status | Workaround |
 |---|---|---|
@@ -405,7 +478,7 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | TX power reported as 3 dBm | Cosmetic — actual TX follows regulatory limits; kernel patches pending | Consider Intel AX210/AX211 if signal issues persist |
 | Random deauthentication | Intermittent | None — consider Intel AX210/AX211 |
 
-#### NetworkManager + iwd
+### NetworkManager + iwd
 
 | Issue | Workaround |
 |---|---|
@@ -415,13 +488,20 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 
 ## Troubleshooting
 
-| Problem | Diagnostic |
+| Problem | Diagnostic / Fix |
 |---|---|
 | GPU perf level stuck | `cat /sys/class/drm/card*/device/power_dpm_force_performance_level` |
-| WiFi backend mismatch | `nmcli -t -f TYPE,FILENAME connection show --active` |
+| WiFi backend mismatch | `nmcli -t -f TYPE,FILENAME connection show --active` (expect `iwd`) |
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
-| Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` |
+| Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
 | FSR4 on RDNA 3.5 | Per-game: `PROTON_FSR4_RDNA3_UPGRADE=1 %command%` (proton-cachyos / GE-Proton 10-9+) |
+| Profile load failure | `./ry-install.fish --check` reports missing globals; verify file ownership: `stat -c '%U' ~/.config/ry-install/profiles/*.fish` |
+| Stale lock | `rm -rf ~/ry-install/.lock/` (only if no other ry-install process is running: `pgrep -af ry-install`) |
+| Manifest version mismatch | Expected after upgrade — script warns but does not block; re-run install to refresh manifest |
+| AUR pkg not installed | `command -q paru; or sudo pacman -S --needed paru` then re-run install |
+| Sudo cache expiry mid-run | Re-run with fresh sudo: `sudo -v && ./ry-install.fish` |
+| `drirc` XML rejected by Mesa | `cat /etc/drirc` and validate with `xmllint --noout /etc/drirc` |
+| `--verify-static` reports drift | Re-deploy single file: `./ry-install.fish --install-file /etc/...` |
 
 ## References
 

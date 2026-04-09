@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v3.48.12 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.48.13 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     status is-interactive; and return 1; or exit 1
 end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.48.12"
+set -g VERSION "3.48.13"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1

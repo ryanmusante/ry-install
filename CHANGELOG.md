@@ -2,6 +2,29 @@ ry-install changelog
 
 2026-04-08  Ryan Musante
 
+- Tagged as v3.48.13
+- DOC RESTRUCTURE (README): Comprehensive completeness pass against script v3.48.12. No script logic changes; documentation gaps only.
+  - Added Uninstall section with 8-step manual rollback procedure (unmask 10 units, remove cpupower-epp, rm 14 managed files, fstab restore note, optional pkg restore, mkinitcpio + sdboot-manage rebuild, state cleanup, reboot). Script ships no automated uninstaller; previous README left users with no documented recovery path.
+  - Added Scope section (in-scope / out-of-scope) immediately after BREAKING blockquote. Sets expectations re: dotfiles, secrets, backups, multi-user, non-CachyOS, laptops without custom profile.
+  - Documented `paru` missing-tool behavior in Packages table: `_install_aur_packages` at line 4837 emits `_warn` and skips AUR install; install continues. Previous "via paru" wording did not state the fallback.
+  - Documented fstab no-persistent-backup in Safety table. Script is idempotent (early-return at line 4926 when `noatime,lazytime` present) and validates with `findmnt --verify` before atomic mv (line 4979), but the temp backup at `/etc/.ry-install.fstab.XXXXXX` is rm'd after the move — no persistent original is kept.
+  - Replaced empty `Recommended pre-flight steps` fish block (only `#` comments) with 4 real commands (`--check`, `--lint`, `sudo -v`, `df -h`) plus a paragraph on Masked Services + upstream news review.
+  - Profile required-globals: replaced 12-line `#`-comment list inside example function with two scannable tables. Unconditional globals (26) categorized by function (Identity, Destinations, Kernel+initramfs, Boot loader, Packages+services, Environment, Thresholds). Conditional globals (8) with their `SYSTEM_DESTINATIONS` glob triggers (`*/iwd/*`, `*nm.conf`, `*/resolved.conf.d/*`, `*/sysctl.d/*`). Optional globals listed separately. Counts verified against `_validate_profile` at line 701.
+  - Replaced vague "(25+)" with exact "(26 unconditional + up to 8 conditional)".
+  - Moved Hardware Reference up to immediately follow Prerequisites — discovery-phase content belongs before Usage, not in an appendix. Promoted Known Issues to its own top-level section before Troubleshooting; Specifications subsection header dropped (single subsection now).
+  - Expanded Quick Start post-install line into 4-step numbered verification workflow with rationale per step. Added typical first-run duration (3–8 min).
+  - Added collapsible sample NDJSON log output to Log Format section (5 representative events: header, section, step_time, warn, footer).
+  - Disambiguated exit code `1` row to "Non-critical failure / verification drift (`--verify-static`, `--verify-runtime`)". Removed redundant trailing footnote that conflicted with the table.
+  - Expanded Troubleshooting from 5 → 12 rows: profile load failure, stale lock, manifest version mismatch, AUR pkg missing, sudo cache expiry, drirc XML rejection, verify-static drift remediation.
+  - Clarified BREAKING blockquote: distinguished flags that exit with a migration message (`--all`, `--dry-run`, `--diff`, `--fix`) from flags that exit as unknown options (`--interactive`, `--allow-root`, `--force`).
+  - Trimmed TOC from 25 entries (3 levels) to 13 (top-level only). Subsection navigation handled by GitHub's auto-rendered outline.
+  - Removed 3 static badges (version, license, fish) — no CI signal, no real value.
+  - Trimmed default-profile line in intro from full hardware spec to "Beelink GTR9 Pro (Strix Halo APU)" with link to Hardware Reference; eliminates duplication.
+  - Cosmetic: line 307 `<n>` → `<name>` to match the rest of the document.
+
+
+2026-04-08  Ryan Musante
+
 - Tagged as v3.48.12
 - DOC FIX (README BREAKING note): v3.48.0 breaking-change callout claimed "all pacdiff/pacnew/pacsave handling" was removed, but `_install_packages` at lines 4810–4826 actively scans for `.pacnew`/`.pacsave` files at every managed destination, emits per-file `_warn` output, logs a `PACNEW_FOUND:` JSONL event, and directs the user to `sudo pacdiff` for remediation. The absolute "all" claim was inaccurate. Dropped the phrase from the BREAKING note; the remaining removed-flags list is unchanged and verified correct against the dispatcher.
 

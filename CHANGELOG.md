@@ -2,6 +2,25 @@ ry-install changelog
 
 2026-04-08  Ryan Musante
 
+- Tagged as v3.48.16
+- AUDIT (12 fixes from exhaustive line-by-line audit of v3.48.15):
+  - HIGH: SDBOOT_REMOVE_EXISTING=yes now requires explicit acknowledgement on first run via env var RY_INSTALL_CONFIRM_BOOT_WIPE=1; subsequent runs use marker file ~/ry-install/.boot-wipe-acknowledged. Prevents silent loss of dual-boot/rescue entries.
+  - MED: New utility mode --restore-power-targets unmasks the sleep/suspend/hibernate targets that the install masks. Iterates MASK list filtered to *sleep*/*suspend*/*hibernate* unit names. Acquires lock; daemon-reload after unmask.
+  - MED: _atomic_write_file post-write hash now distinguishes sudo credential lapse from filesystem read error in failure messages and JSONL logs.
+  - LOW (preflight): Cannot detect root UUID (findmnt failure) is now a hard preflight FAIL with EXIT_PREFLIGHT, not a WARN. Previously the failure surfaced only at /etc/kernel/cmdline write time.
+  - LOW (preflight): Required deps list trimmed — removed `diff`, `md5sum`, `tput` (none used in script).
+  - LOW (profile): Dropped `iw` from PKGS_ADD; profile uses iwd backend, iw was diagnostic-only. PKGS_ADD count: 12 → 11. README and inline count comment updated.
+  - LOW (cleanup): _cleanup_tmpfiles NM connections sweep now gated on profile actually managing NM/iwd configs.
+  - LOW (lock): _acquire_lock flock reclaim now writes the PID file inside the locked subshell, closing the race window between mkdir and pid-write where another reclaimer could win.
+  - LOW (profile loader): _load_profile now logs an INFO event when defaulting to gtr9_pro because no ~/.config/ry-install/default-profile exists.
+  - LOW (verify-runtime): WiFi state checks (interface, iwd process, nmcli) now gated on profile actually managing NM/iwd configs. Prevents spurious FAILs on profiles that don't use the iwd backend.
+  - LOW (verify-runtime): Clocksource HPET fail message now auto-greps cached dmesg for "Marking TSC unstable" and surfaces matching lines instead of asking the user to check manually.
+  - INFO (drirc): Added comment to /etc/drirc generator noting that radv_enable_unified_heap_on_apu requires Mesa ≥25.0 and should be re-verified against current Mesa source before each release; if renamed/removed, gfx1151 UMA tuning silently no-ops.
+- 10 audit findings were verified as false positives against source and discarded: root-uid order check (L26), HOME fallback chain (L64), KVER patch parsing (L109), cpupower-epp inline bash (intentional per inline comment), _run metachar reject (already documented in function header), CHK-03 patch-empty branch (already handles empty), _atomic_write_file parent-dir mode regex (correct for 3- and 4-digit modes), fstab perm check vfat skip (correct), parent-dir math perm check (correct floor(n/2)%2 logic).
+
+
+2026-04-08  Ryan Musante
+
 - Tagged as v3.48.15
 - DOC (README): Condensed Uninstall section. Removed 8-step manual rollback code block; replaced with one paragraph pointing at `~/ry-install/.manifest` and the existing Masked Services + Managed Files tables. Procedure is unchanged — users follow the linked tables instead of a duplicated step list.
 

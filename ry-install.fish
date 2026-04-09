@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v3.48.15 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
+# ry-install v3.48.16 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     status is-interactive; and return 1; or exit 1
 end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.48.15"
+set -g VERSION "3.48.16"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -284,7 +284,15 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
             set -a sys_dirs "$dir"
         end
     end
-    if not contains -- /etc/NetworkManager/system-connections $sys_dirs
+    # Only sweep NM connections dir if profile manages NM/iwd configs
+    set -l _profile_uses_nm false
+    for _d in $SYSTEM_DESTINATIONS
+        if string match -q '*nm.conf' -- "$_d"; or string match -q '*/iwd/*' -- "$_d"
+            set _profile_uses_nm true
+            break
+        end
+    end
+    if test "$_profile_uses_nm" = true; and not contains -- /etc/NetworkManager/system-connections $sys_dirs
         set -a sys_dirs /etc/NetworkManager/system-connections
     end
     for dir in $sys_dirs
@@ -346,26 +354,21 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     set -l _reclaim_parent (dirname -- "$LOCK_DIR")
     if command -q flock
         # flock -n/-E 5: non-blocking, exit 5 on contention; /bin/sh inner script avoids Fish quoting; paths as positional args
+        # PID write happens INSIDE the flocked subshell to close the race between mkdir and pid-write where another reclaimer could win
         flock -n -E 5 "$_reclaim_parent" /bin/sh -c '
             rm -f -- "$1/pid" 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)
             find "$1" -maxdepth 1 -type f -delete 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)
             rmdir -- "$1" 2>/dev/null || true  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
             mkdir -- "$1" 2>/dev/null || exit 1  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
-        ' _ "$LOCK_DIR" 2>/dev/null
+            printf "%s\n" "$2" > "$1/pid" 2>/dev/null || exit 2  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
+        ' _ "$LOCK_DIR" %self 2>/dev/null
         set -l _flock_rc $status
         if test $_flock_rc -eq 5
             echo "[ERR] Failed to reclaim stale lock — another instance is reclaiming" >&2
             command rm -f -- "$LOG_FILE" 2>/dev/null
             return 1
         else if test $_flock_rc -ne 0
-            echo "[ERR] Failed to reclaim stale lock via flock" >&2
-            command rm -f -- "$LOG_FILE" 2>/dev/null
-            return 1
-        end
-        # flock subshell recreated empty LOCK_DIR; write our PID with error check (matches line 329 branch)
-        if not echo %self >"$LOCK_FILE" 2>/dev/null
-            command rmdir -- "$LOCK_DIR" 2>/dev/null
-            echo "[ERR] Failed to write lock pid file after flock reclaim: $LOCK_FILE" >&2
+            echo "[ERR] Failed to reclaim stale lock via flock (rc=$_flock_rc)" >&2
             command rm -f -- "$LOG_FILE" 2>/dev/null
             return 1
         end
@@ -636,11 +639,10 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "fs.protected_fifos=2" \
         "fs.protected_regular=2"
 
-    # Packages: PKGS_ADD=12 PKGS_DEL=8 AUR=1 EXPECTED_SERVICES=3 must equal README
+    # Packages: PKGS_ADD=11 PKGS_DEL=8 AUR=1 EXPECTED_SERVICES=3 must equal README
     set -g PKGS_ADD \
         mkinitcpio-firmware \
         nvme-cli \
-        iw \
         cachyos-gaming-meta \
         cachyos-gaming-applications \
         fd \
@@ -799,11 +801,16 @@ function _load_profile --description "Determine, load, and validate the active p
     # 1. Determine name
     set -l name
     set -l default_file "$HOME/.config/ry-install/default-profile"
+    set -l _name_from_file false
     if test -f "$default_file"
         set name (string trim < "$default_file")
+        test -n "$name"; and set _name_from_file true
     end
     if test -z "$name"
         set name gtr9_pro
+        if test "$_name_from_file" = false
+            _log "PROFILE_DEFAULT: no $default_file — using built-in default '$name'"
+        end
     end
 
     # 2. Validate name format
@@ -855,7 +862,17 @@ function _load_profile --description "Determine, load, and validate the active p
     # 6. Cache root UUID — findmnt called once here; eliminates TOCTOU between _ry_install_file's comparison and write paths
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
     if test -z "$_ROOT_UUID"
-        _warn "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline generation will fail"
+        # Hard-fail only for modes that actually generate or verify /etc/kernel/cmdline.
+        # Read-only modes (lint, completions, --help, --version) and modes that don't touch cmdline
+        # can safely proceed with an empty UUID.
+        switch "$MODE"
+            case install install-file verify-static verify-runtime check
+                _err "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline cannot be generated"
+                command rm -f -- "$LOG_FILE" 2>/dev/null
+                exit $EXIT_PREFLIGHT
+            case '*'
+                _log "ROOT_UUID_UNAVAILABLE: mode=$MODE — non-fatal for this mode"
+        end
     end
 
     # 7. Lightweight hardware sanity — /proc/cpuinfo only, no lspci/sudo
@@ -1085,6 +1102,7 @@ WantedBy=multi-user.target'
 
         case /etc/drirc
             # RADV unified VRAM heap: prevents games from misallocating via artificial two-heap split on UMA APUs
+            # NOTE: radv_enable_unified_heap_on_apu requires Mesa ≥25.0; verify option still exists in current Mesa source before each release. If renamed/removed, gfx1151 UMA tuning silently no-ops.
             printf '%s\n' '<driconf>' \
                 '  <device>' \
                 '    <application name="Default">' \
@@ -1684,6 +1702,7 @@ VERIFICATION:
 UTILITIES:
   --install-file <path>  Re-deploy a single managed file
   --completions     Install fish tab-completions for ry-install itself
+  --restore-power-targets  Unmask sleep/suspend/hibernate targets that ry-install masks
 
 OPTIONS:
   --                End of options (remaining arguments ignored)
@@ -1803,7 +1822,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     _log "Checking dependencies..."
     set -l missing
 
-    for cmd in pacman systemctl mkinitcpio udevadm sdboot-manage diff findmnt md5sum sha256sum stat date tput
+    for cmd in pacman systemctl mkinitcpio udevadm sdboot-manage findmnt sha256sum stat date
         if not command -q $cmd
             set -a missing $cmd
         end
@@ -2460,15 +2479,24 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs).
     # Uses sudo -n: a lapsed keepalive will produce empty _actual_hash → explicit fail-closed below,
     # rather than the silent prompt-suppression that would happen with plain `sudo` + 2>/dev/null.
+    # Trailing newlines are preserved by direct-to-pipeline cat (command substitution would strip them).
     set -l _actual_hash
+    set -l _hash_fail_reason ""
     if test "$use_sudo" = true
-        set _actual_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+        # Pre-probe sudo cred to distinguish auth-lapse from fs-error
+        if not sudo -n true 2>/dev/null
+            set _hash_fail_reason "sudo credential lapsed"
+        else
+            set _actual_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+            test -z "$_actual_hash"; and set _hash_fail_reason "filesystem read error after write"
+        end
     else
         set _actual_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+        test -z "$_actual_hash"; and set _hash_fail_reason "filesystem read error after write"
     end
     if test -z "$_actual_hash"
-        _fail "→ $dst (post-write hash unavailable)"
-        _log "HASH_UNAVAILABLE_POST: dst=$dst"
+        _fail "→ $dst (post-write hash unavailable: $_hash_fail_reason)"
+        _log "HASH_UNAVAILABLE_POST: dst=$dst reason=$_hash_fail_reason"
         return 1
     end
     if test "$_expected_hash" != "$_actual_hash"
@@ -3750,7 +3778,16 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         if test "$_cs" = tsc
             _ok "  clocksource: $_cs"
         else if test "$_cs" = hpet
-            _fail "  clocksource: $_cs (expected: tsc — HPET has 10–100× higher read latency, check dmesg for TSC demotion)"
+            _fail "  clocksource: $_cs (expected: tsc — HPET has 10–100× higher read latency)"
+            # Auto-correlate: grep cached dmesg for TSC instability markers
+            set -l _tsc_demote (printf '%s\n' $_dmesg | grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | head -n 3)
+            if test -n "$_tsc_demote"
+                for _l in $_tsc_demote
+                    _info "  dmesg: $_l"
+                end
+            else
+                _info "  dmesg: no TSC demotion markers found — check BIOS/firmware"
+            end
         else
             _warn "  clocksource: $_cs (expected: tsc)"
         end
@@ -4105,36 +4142,49 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo "WIFI STATE"
     _echo
 
-    set -l wlan_iface ""
-    for iface in /sys/class/net/*/wireless
-        if test -d "$iface"
-            set wlan_iface (basename (dirname -- "$iface"))
+    # Gate WiFi state checks on profile actually managing iwd configs
+    set -l _profile_uses_iwd false
+    for _d in $SYSTEM_DESTINATIONS
+        if string match -q '*nm.conf' -- "$_d"; or string match -q '*/iwd/*' -- "$_d"
+            set _profile_uses_iwd true
             break
         end
     end
 
-    if test -n "$wlan_iface"
-        _ok "  WiFi interface: $wlan_iface"
+    if test "$_profile_uses_iwd" = false
+        _info "  Profile does not manage iwd/NM — skipping WiFi state checks"
     else
-        _warn "  WiFi interface: NOT DETECTED"
-    end
-
-    if pgrep -x iwd >/dev/null
-        _ok "  iwd process: running"
-    else
-        _fail "  iwd process: NOT running"
-    end
-
-    if command -q nmcli
-        set -l nm_wifi_backend (nmcli -t -f WIFI general 2>/dev/null | string trim --)
-        if test -n "$nm_wifi_backend"
-            _info "  NM wifi: $nm_wifi_backend"
+        set -l wlan_iface ""
+        for iface in /sys/class/net/*/wireless
+            if test -d "$iface"
+                set wlan_iface (basename (dirname -- "$iface"))
+                break
+            end
         end
-        set -l wifi_state (nmcli -t -f TYPE,STATE device 2>/dev/null | grep '^wifi:' | head -n 1 | cut -d: -f2)
-        if test "$wifi_state" = connected
-            _ok "  WiFi device: connected"
-        else if test -n "$wifi_state"
-            _warn "  WiFi device: $wifi_state (not connected)"
+
+        if test -n "$wlan_iface"
+            _ok "  WiFi interface: $wlan_iface"
+        else
+            _warn "  WiFi interface: NOT DETECTED"
+        end
+
+        if pgrep -x iwd >/dev/null
+            _ok "  iwd process: running"
+        else
+            _fail "  iwd process: NOT running"
+        end
+
+        if command -q nmcli
+            set -l nm_wifi_backend (nmcli -t -f WIFI general 2>/dev/null | string trim --)
+            if test -n "$nm_wifi_backend"
+                _info "  NM wifi: $nm_wifi_backend"
+            end
+            set -l wifi_state (nmcli -t -f TYPE,STATE device 2>/dev/null | grep '^wifi:' | head -n 1 | cut -d: -f2)
+            if test "$wifi_state" = connected
+                _ok "  WiFi device: connected"
+            else if test -n "$wifi_state"
+                _warn "  WiFi device: $wifi_state (not connected)"
+            end
         end
     end
 
@@ -5259,8 +5309,31 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         return $EXIT_BOOT_CRIT
     end
 
-    # SDBOOT_REMOVE_EXISTING=yes deletes ALL existing loader entries before regen — profile flag is sole authority, no prompt
+    # SDBOOT_REMOVE_EXISTING=yes deletes ALL existing loader entries before regen.
+    # First-run safety: require explicit acknowledgement via env var OR marker file (set after first successful gen).
+    # This prevents an unattended install on a dual-boot or rescue-entry host from silently wiping non-managed entries.
     if test "$SDBOOT_REMOVE_EXISTING" = yes
+        set -l _wipe_marker "$HOME/ry-install/.boot-wipe-acknowledged"
+        set -l _acknowledged false
+        if set -q RY_INSTALL_CONFIRM_BOOT_WIPE; and test "$RY_INSTALL_CONFIRM_BOOT_WIPE" = 1
+            set _acknowledged true
+            _log "BOOT_WIPE_ACK: env var RY_INSTALL_CONFIRM_BOOT_WIPE=1"
+        else if test -f "$_wipe_marker"
+            set _acknowledged true
+            _log "BOOT_WIPE_ACK: marker file $_wipe_marker"
+        end
+
+        if test "$_acknowledged" = false
+            # First run on this host — count existing entries to surface what would be deleted
+            set -l _existing_entries (sudo find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' 2>/dev/null | wc -l | string trim --)
+            _err "SDBOOT_REMOVE_EXISTING=yes will delete $_existing_entries existing /boot/loader/entries/*.conf file(s)"
+            _err "  Manual entries (rescue, Windows, custom kernels) will be LOST."
+            _err "  To proceed (one-time): RY_INSTALL_CONFIRM_BOOT_WIPE=1 ./ry-install.fish"
+            _err "  After the first successful run, marker file $_wipe_marker will suppress this gate."
+            set -g INSTALL_HAD_ERRORS true
+            return $EXIT_BOOT_CRIT
+        end
+
         _warn "SDBOOT_REMOVE_EXISTING=yes — all existing /boot/loader/entries/*.conf will be deleted and regenerated."
         _warn "Manual entries (rescue, Windows, custom kernels) will be LOST."
     end
@@ -5273,6 +5346,16 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     if not _run sudo sdboot-manage update
         _warn "Sdboot-manage update failed"
         set -g INSTALL_HAD_ERRORS true
+    end
+
+    # Persist first-run boot-wipe acknowledgement so future runs don't re-prompt
+    if test "$SDBOOT_REMOVE_EXISTING" = yes
+        set -l _wipe_marker "$HOME/ry-install/.boot-wipe-acknowledged"
+        if not test -f "$_wipe_marker"
+            command touch -- "$_wipe_marker" 2>/dev/null
+            command chmod -- 600 "$_wipe_marker" 2>/dev/null
+            _log "BOOT_WIPE_MARKER_CREATED: $_wipe_marker"
+        end
     end
 
     set -l entry_count (sudo find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" 2>/dev/null | wc -l)
@@ -5585,6 +5668,56 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return 0
 end
 
+# Restore power targets: unmask the sleep/suspend/hibernate units that ry-install masks
+function _ry_do_restore_power_targets --description "Unmask sleep/suspend/hibernate targets that ry-install masks"
+    _log "=== RESTORE-POWER-TARGETS START ==="
+    _banner "ry-install v$VERSION - Restore Power Targets"
+
+    if not command -q sudo
+        _err "Sudo required"
+        return $EXIT_PREFLIGHT
+    end
+    if not sudo true 2>/dev/null
+        _err "Sudo required"
+        return $EXIT_PREFLIGHT
+    end
+
+    # Filter MASK list to power-related targets only
+    set -l _power_targets
+    for _u in $MASK
+        if string match -q '*sleep*' -- "$_u"; or string match -q '*suspend*' -- "$_u"; or string match -q '*hibernate*' -- "$_u"
+            set -a _power_targets "$_u"
+        end
+    end
+
+    if test (count $_power_targets) -eq 0
+        _info "Profile masks no power targets — nothing to restore"
+        _log "=== RESTORE-POWER-TARGETS END ==="
+        return 0
+    end
+
+    _info "The following targets will be unmasked:"
+    for _t in $_power_targets
+        _echo "  $_t"
+    end
+    _echo
+
+    if not _run sudo systemctl unmask -- $_power_targets
+        _err "Failed to unmask one or more targets"
+        _log "=== RESTORE-POWER-TARGETS END ==="
+        return $EXIT_FAIL
+    end
+
+    if not _run sudo systemctl daemon-reload
+        _warn "daemon-reload failed (unmask succeeded)"
+    end
+
+    _ok "Unmasked "(count $_power_targets)" power target(s)"
+    _info "Note: re-running install will re-mask these. Edit profile MASK list to persist."
+    _log "=== RESTORE-POWER-TARGETS END ==="
+    return 0
+end
+
 # Tab completions: dynamically generated from SYSTEM/USER/SERVICE_DESTINATIONS
 function _ry_do_completions --description "Generate fish shell completions for ry-install"
     set -l comp_dir "$HOME/.config/fish/completions"
@@ -5627,6 +5760,7 @@ function _ry_do_completions --description "Generate fish shell completions for r
         '-l check|Silent idempotency probe (exit 0 = clean, exit 3 = prereq fail, exit 10 = drift)' \
         '-l test-all|Run all safe modes and generate NDJSON logs (test suite)' \
         '-l completions|Install fish tab-completions for ry-install itself' \
+        '-l restore-power-targets|Unmask sleep/suspend/hibernate targets that ry-install masks' \
         '-s h -l help|Show help' \
         '-s v -l version|Show version'
     for _ce in $_comp_entries
@@ -5882,6 +6016,9 @@ while test $i -le (count $argv)
         case --completions
             set MODE completions
             set mode_count (math $mode_count + 1)
+        case --restore-power-targets
+            set MODE restore-power-targets
+            set mode_count (math $mode_count + 1)
         case --install-file
             set MODE install-file
             set mode_count (math $mode_count + 1)
@@ -6001,6 +6138,8 @@ switch $MODE
         _acquire_lock; or exit $EXIT_LOCK
     case install
         _acquire_lock; or exit $EXIT_LOCK
+    case restore-power-targets
+        _acquire_lock; or exit $EXIT_LOCK
     case '*'
         # No lock needed for read-only modes (verify, lint, completions, test-all)
 end
@@ -6046,6 +6185,9 @@ switch $MODE
         set exit_code $status
     case completions
         _ry_do_completions
+        set exit_code $status
+    case restore-power-targets
+        _ry_do_restore_power_targets
         set exit_code $status
     case install-file
         _ry_do_install_file "$INSTALL_FILE_TARGET"

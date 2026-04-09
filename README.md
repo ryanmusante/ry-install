@@ -221,7 +221,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | Action | Count | Packages |
 |---|---|---|
-| **Install** | 12 | mkinitcpio-firmware, nvme-cli, iw, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
+| **Install** | 11 | mkinitcpio-firmware, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove** | 8 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
 | **AUR** | 1 | mt76-mt7925-dkms (via paru — **skipped with WARN if paru is not installed**; install continues) |
 

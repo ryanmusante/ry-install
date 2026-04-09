@@ -1,5 +1,63 @@
 ry-install changelog
 
+v3.48.24  2026-04-09
+- `_run`: added `</dev/null` on the command exec line. Closes a hang class
+  where any caller that would otherwise probe the terminal (stray sudo
+  password prompt after keepalive lapse, pacman confirm on a malformed
+  package set) would block forever with no interrupt path beyond the signal
+  handler. Previously masked only by upstream `sudo -n` + `--noconfirm`
+  discipline; now defense-in-depth at the exec site.
+- `_run`: added opt-in wall-clock timeout via `RY_RUN_TIMEOUT` env var.
+  Default unset = legacy behavior preserved. When set to a positive integer
+  and `timeout(1)` is available, wraps the exec in
+  `command timeout --preserve-status --kill-after=10 $RY_RUN_TIMEOUT`.
+  Recommended value for unattended installs: `RY_RUN_TIMEOUT=1800` (30 min,
+  covers worst-case `pacman -Syu` on a slow mirror). `timeout(1)` is part of
+  GNU coreutils and therefore a hard dep on Arch/CachyOS; the `command -q`
+  guard is purely defensive.
+- Parallel workers: wrapped 10 `fish -c` background jobs with
+  `command timeout --kill-after=5 60`. Sites:
+  `_ry_validate_configs` jobs 1–5 (xref, systemd unit syntax, fish syntax +
+  environment.d, INI headers, simple key-value) and `_ry_verify_static` +
+  `_ry_do_check` jobs (hash workers, permissions, kernel params, services).
+  Closes the hang class where a stuck `systemd-analyze verify` on a
+  malformed socket, or a syscall stall inside `sha256sum`, would block the
+  parent `wait` forever. Parent collection already treats missing
+  `*.errors` / `*_drift` result files as "child crashed without writing
+  results" → timeout-killed workers slot cleanly into the existing
+  fail-closed path, no parent-side changes required.
+- Deliberately NOT wrapped: `_install_preflight` sudo keepalive loop (must
+  run for entire install duration) and `_ry_do_test_all` per-mode runner
+  (invokes full ry-install subprocesses that carry their own guards).
+- `_atomic_write_file`: classify post-write hash mismatch. When the
+  expected/actual hash comparison fails, re-probe `sudo -n true` to
+  distinguish a real content mismatch from a sudo credential lapse between
+  the existing pre-probe (`sudo -n true`) and the actual `sudo -n cat`
+  microseconds later. A lapsed `cat` produces an empty pipe → `sha256sum`
+  of nothing → canonical `e3b0c442...` (non-empty), which slipped past the
+  `test -z "$_actual_hash"` check and surfaced as "post-write checksum
+  mismatch". Users would then debug content generation instead of the real
+  cause (sudo timestamp expiry). New branch emits "sudo credential lapsed
+  mid-verify" and logs `HASH_UNAVAILABLE_POST` with the accurate reason.
+  Preserves the existing trailing-newline invariant (no command
+  substitution on content — would strip trailing newlines and poison
+  subsequent hash compares).
+- Audit methodology: execution flow + options + stdout/stderr + logging +
+  verification + shells/subshells review across all 5999 lines. 5
+  candidate findings, 3 confirmed actionable, 1 downgraded to
+  informational (`_log` append atomicity is guaranteed by ext4/btrfs
+  `i_rwsem` inode lock on the target filesystem, not by the mistaken
+  `4096 == PIPE_BUF` rationale — only a concern if `LOG_FILE` ever lands
+  on NFS), 1 withdrawn (`--install-file --` edge case — the existing
+  `-*` branch in the install-file parser rejects it correctly).
+- Verified: `fish --no-execute` clean, `command timeout --kill-after=5 60`
+  + `--preserve-status` semantics confirmed in isolation (normal=0,
+  timeout-kill=124, preserve-status-kill=143). Runtime test deferred to
+  the CachyOS host; run `./ry-install.fish --check` and `--verify-static`
+  before the next full `--install`.
+- Net 5999 → 6023 lines (+24).
+
+
 v3.48.23  2026-04-09
 - `_ry_do_test_all`: added managed-case count drift assertion. Runs `awk`
   over `_ry_get_file_content` to count `case` branches and compares against

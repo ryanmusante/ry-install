@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.48.23 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.48.24 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
@@ -19,7 +19,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.48.23"
+set -g VERSION "3.48.24"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -1654,7 +1654,19 @@ function _run --description "Execute a command with logging and error capture; s
         return 1
     end
     # SECURITY: $argv is hardcoded from internal callers
-    $argv >"$stdout_tmp" 2>"$stderr_tmp"
+    # Fix: </dev/null prevents hangs on any caller that would otherwise probe the
+    # terminal (sudo password prompt, pacman confirm) when running detached.
+    # Fix: optional timeout wrapper via RY_RUN_TIMEOUT env/global (seconds). Default
+    # unset = legacy behavior (no wall-clock limit). Set RY_RUN_TIMEOUT=1800 in the
+    # environment to cap every _run command at 30 minutes (covers worst-case pacman
+    # -Syu on a slow mirror). --kill-after=10 ensures SIGKILL follows SIGTERM if a
+    # child ignores the first signal. --preserve-status keeps the child's exit
+    # code visible; timeout(1) itself exits 124 on kill, which _run will log.
+    if set -q RY_RUN_TIMEOUT; and test -n "$RY_RUN_TIMEOUT"; and string match -qr '^\d+$' -- "$RY_RUN_TIMEOUT"; and command -q timeout
+        command timeout --preserve-status --kill-after=10 "$RY_RUN_TIMEOUT" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
+    else
+        $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
+    end
     set -l ret $status
     if test -s "$stderr_tmp"
         set -l total_err (command wc -l < "$stderr_tmp" | string trim --)
@@ -2149,7 +2161,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     # Phase 2 (parallel): fork independent validation jobs
 
     # Job 1: cross-reference check — per-destination existence check (was count comparison; a generator emitting N wrong files would pass)
-    fish -c '
+    command timeout --kill-after=5 60 fish -c '
         set -l errs 0
         set -l content_dir $argv[1]
         set -l val_dir $argv[2]
@@ -2174,7 +2186,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
             set -a _svc_dsts "$_ud"
         end
     end
-    fish -c '
+    command timeout --kill-after=5 60 fish -c '
         set -l errs 0
         set -l content_dir $argv[1]
         set -l val_dir $argv[2]
@@ -2207,7 +2219,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     set -l pid_units $last_pid
 
     # Job 3: fish script syntax + environment.d check
-    fish -c '
+    command timeout --kill-after=5 60 fish -c '
         set -l errs 0
         set -l content_dir $argv[1]
         set -l val_dir $argv[2]
@@ -2239,7 +2251,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     set -l pid_scripts $last_pid
 
     # Job 4: INI section-header validation (4 configs)
-    fish -c '
+    command timeout --kill-after=5 60 fish -c '
         set -l errs 0
         set -l content_dir $argv[1]
         set -l val_dir $argv[2]
@@ -2269,7 +2281,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     set -l pid_ini $last_pid
 
     # Job 5: simple key-value config validation (3 configs)
-    fish -c '
+    command timeout --kill-after=5 60 fish -c '
         set -l errs 0
         set -l content_dir $argv[1]
         set -l val_dir $argv[2]
@@ -2551,8 +2563,20 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         return 1
     end
     if test "$_expected_hash" != "$_actual_hash"
-        _fail "→ $dst (post-write checksum mismatch)"
-        _log "HASH_MISMATCH: expected=$_expected_hash actual=$_actual_hash dst=$dst"
+        # Classify: re-probe sudo to distinguish a real content mismatch from a
+        # credential lapse between the pre-probe `sudo -n true` and `sudo -n cat`
+        # microseconds later. A lapsed cat produces an empty pipe → sha256sum of
+        # nothing → canonical empty-file hash `e3b0c442...`, which is non-empty
+        # and therefore slips past the `test -z` check above. Without this
+        # classifier the user sees "checksum mismatch" and debugs content
+        # generation instead of the real cause (sudo timeout).
+        if test "$use_sudo" = true; and not sudo -n true 2>/dev/null
+            _fail "→ $dst (post-write hash unavailable: sudo credential lapsed mid-verify)"
+            _log "HASH_UNAVAILABLE_POST: dst=$dst reason=sudo credential lapsed mid-verify"
+        else
+            _fail "→ $dst (post-write checksum mismatch)"
+            _log "HASH_MISMATCH: expected=$_expected_hash actual=$_actual_hash dst=$dst"
+        end
         return 1
     end
 
@@ -3180,7 +3204,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
         if test $start_idx -gt $total_dsts
             continue
         end
-        fish -c '
+        command timeout --kill-after=5 60 fish -c '
             set -l hash_dir $argv[1]
             set -l start_idx $argv[2]
             set -l end_idx $argv[3]
@@ -3331,7 +3355,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     echo $_has_lvm >"$result_dir/has_lvm"
 
     # Job 1: file content hashes (parallel) — reads pre-serialized hashes from parent
-    fish -c '
+    command timeout --kill-after=5 60 fish -c '
         set -l result_dir $argv[1]; set -l content_dir $argv[2]; set -l skip_iwd $argv[3]; set -l my_home $argv[4]
         set -l drift false
         set -l checked 0
@@ -3365,7 +3389,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     set -l pid_hash $last_pid
 
     # Job 2: file permissions (parallel) — reads pre-serialized perms from parent
-    fish -c '
+    command timeout --kill-after=5 60 fish -c '
         set -l result_dir $argv[1]; set -l boot_fstype $argv[2]; set -l my_user $argv[3]; set -l my_group $argv[4]
         set -l drift false
         set -l sys_dsts (command cat -- "$result_dir/sys_dsts")
@@ -3403,7 +3427,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     printf '%s\n' $KERNEL_PARAMS >"$result_dir/kparams"
 
     # Job 3: kernel params (parallel) — no sudo needed
-    fish -c '
+    command timeout --kill-after=5 60 fish -c '
         set -l result_dir $argv[1]
         set -l drift false
         set -l cmdline (command cat -- /proc/cmdline 2>/dev/null)
@@ -3427,7 +3451,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     set -l _check_show (systemctl show --property=LoadState,ActiveState,UnitFileState -- $_all_check_units 2>/dev/null | string collect --no-trim-newlines)
     set -l _check_parsed (_parse_systemctl_show "$_check_show")
     printf '%s\n' $_check_parsed >"$result_dir/parsed_units"
-    fish -c '
+    command timeout --kill-after=5 60 fish -c '
         set -l result_dir $argv[1]
         set -l drift false
         # Read serialized lists from files (safe for names with quotes/backslashes)

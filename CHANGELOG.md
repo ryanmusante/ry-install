@@ -2,6 +2,12 @@ ry-install changelog
 
 2026-04-08  Ryan Musante
 
+- Tagged as v3.48.14
+- DOC (README): Removed v3.48.0 BREAKING blockquote from Quick Start. Six releases past v3.48.0; the migration callout is no longer current-user-relevant. Removed-flag history is preserved in CHANGELOG.
+
+
+2026-04-08  Ryan Musante
+
 - Tagged as v3.48.13
 - DOC RESTRUCTURE (README): Comprehensive completeness pass against script v3.48.12. No script logic changes; documentation gaps only.
   - Added Uninstall section with 8-step manual rollback procedure (unmask 10 units, remove cpupower-epp, rm 14 managed files, fstab restore note, optional pkg restore, mkinitcpio + sdboot-manage rebuild, state cleanup, reboot). Script ships no automated uninstaller; previous README left users with no documented recovery path.

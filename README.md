@@ -39,8 +39,6 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 Typical first-run duration: **3–8 minutes** (depends on package mirror speed and initramfs rebuild).
 
-> **BREAKING (v3.48.0):** Removed `--interactive`, `--dry-run`, `--all`, `--diff`, `--fix`, `--allow-root`, `--force`, and WiFi credential collection. `--all`, `--dry-run`, `--diff`, and `--fix` exit with a migration message; the others exit as unknown options. Unattended install is the only mode. Root execution is refused. See [CHANGELOG](CHANGELOG.md).
-
 > **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until your next reboot to keep WiFi connectivity active during install. Reboot after install completes, or run `sudo systemctl restart NetworkManager` once on ethernet to apply immediately.
 
 ## Scope

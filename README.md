@@ -1,4 +1,4 @@
-# ry-install
+# ry-install v3.48.20
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
 
@@ -304,7 +304,7 @@ A profile must define **26 unconditional globals**, plus **8 conditional globals
 | `*/resolved.conf.d/*` | `RESOLVED_MDNS` |
 | `*/sysctl.d/*` | `SYSCTL_VALUES` |
 
-**Optional globals** (consumers handle unset safely): `PKGS_DEL`, `AUR_PKGS`, `BOOT_TIME_TARGET`, `EXPECTED_CPU_MATCH`, `MKINITCPIO_COMPRESSION_OPTIONS`.
+**Optional globals** (consumers handle unset safely): `PKGS_DEL`, `AUR_PKGS`, `BOOT_TIME_TARGET`, `EXPECTED_CPU_MATCH`, `MKINITCPIO_COMPRESSION_OPTIONS`, `EXPECTED_VULKAN_PKGS`.
 
 ### Example Profile
 
@@ -351,6 +351,7 @@ External profiles in `~/.config/ry-install/profiles/<name>.fish` are loaded via 
 | Boot safety | Abort on initramfs or bootloader rebuild failure |
 | LVM-aware | Skips lvm2-monitor mask when LVM detected |
 | Orphan tracking | Manifest warns on version or profile change |
+| Source-safe | When `source`d from an interactive Fish shell (rather than executed), the script will not call `exit` — it returns the exit code via `$_RY_INSTALL_LAST_EXIT` instead. This lets you `source ry-install.fish --check` from a wrapper without killing the host shell. |
 
 ### Exit Codes
 
@@ -374,6 +375,7 @@ External profiles in `~/.config/ry-install/profiles/<name>.fish` are loaded via 
 | `~/ry-install/logs/YYYY-MM-DD/` | NDJSON logs (`*.jsonl`) |
 | `~/ry-install/.lock/` | Instance guard |
 | `~/ry-install/.manifest` | Orphan tracking |
+| `~/ry-install/.boot-wipe-acknowledged` | Marker created on the first successful run after `SDBOOT_REMOVE_EXISTING=yes` is acknowledged via `RY_INSTALL_CONFIRM_BOOT_WIPE=1`. Suppresses the gate on subsequent runs. Survives `rm -rf ~/ry-install/logs/*` but not `rm -rf ~/ry-install`. Delete it to force the one-time confirmation prompt again. |
 
 ### Log Format
 
@@ -398,7 +400,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 <summary>Sample log output</summary>
 
 ```json
-{"ts":"2026-04-08T14:23:01-0700","event":"header","version":"3.48.12","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-08T14:23:01-0700","event":"header","version":"3.48.20","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
 {"ts":"2026-04-08T14:23:04-0700","event":"section","data":"Preflight"}
 {"ts":"2026-04-08T14:23:12-0700","event":"step_time","data":"Packages","elapsed_s":127.4}
 {"ts":"2026-04-08T14:25:19-0700","event":"warn","data":"paru not found — skipping AUR packages: mt76-mt7925-dkms"}

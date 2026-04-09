@@ -28,7 +28,6 @@ set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4
 set -g EXIT_LOCK 5
 set -g EXIT_DRIFT 10
-set -g EXIT_LINT_FAIL 11
 
 # _ry_exit: source-safe exit. Exits the process when run normally; sets a
 # bail sentinel and returns when sourced. Top-level loops/dispatch must test
@@ -1750,14 +1749,12 @@ INSTALLATION:
 VERIFICATION:
   --verify-static   Check config files exist with correct content
   --verify-runtime  Check live system state (run after reboot)
-  --lint            Run fish syntax and anti-pattern checks
   --check           Silent idempotency probe (exit 0 = clean, exit 3 = prereq fail, exit 10 = drift)
   --test-all        Run all safe modes and generate NDJSON logs (test suite)
 
 UTILITIES:
   --install-file <path>  Re-deploy a single managed file
   --completions     Install fish tab-completions for ry-install itself
-  --restore-power-targets  Unmask sleep/suspend/hibernate targets that ry-install masks
 
 OPTIONS:
   --                End of options (remaining arguments ignored)
@@ -1775,7 +1772,6 @@ EXIT CODES:
   4   Boot-critical failure (mkinitcpio, sdboot-manage, vmlinuz missing)
   5   Lock acquisition failed (another instance running)
   10  Drift detected (--check mode)
-  11  Lint errors found (--lint mode)
   130  Interrupted (SIGINT)
   129/131/143  Interrupted (SIGHUP/SIGQUIT/SIGTERM)
   141  Broken pipe (SIGPIPE)
@@ -4467,325 +4463,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     return $ret
 end
 
-# LINT, CLEAN — development and maintenance tools
-function _ry_do_lint --description "Lint the script source for fish anti-patterns and style issues"
-    _log "=== LINT START ==="
-    _info "Running fish syntax check..."
-    _echo
-
-    set -l script_path (status filename)
-
-    if test "$script_path" != (status current-filename 2>/dev/null; or echo "$script_path")
-        _warn "Script appears to be sourced; lint results may vary"
-    end
-
-    set -l has_errors false
-
-    # Output function exclusions for anti-pattern checks (update when adding output functions)
-    # CONTRACT: this set must list every output helper defined in this file. Adding a new
-    # `_xxx` helper without appending it here will silently false-positive the bash-syntax
-    # anti-pattern grep at line ~4429 because that grep uses `$_output_funcs` as the exclude
-    # alternation. To audit: `grep -nE '^function _(fail|ok|warn|info|echo|err|msg)' ry-install.fish`
-    # and confirm every match is represented below.
-    set -l _output_funcs '_fail|_ok|_warn|_info|_echo|_err|_msg|_log'
-
-    # fish --no-execute must exit 0
-    _echo "── Fish Syntax Check ──"
-    if fish -n "$script_path"
-        _ok "ry-install.fish: syntax valid"
-    else
-        set has_errors true
-        _fail "Ry-install.fish: syntax errors detected"
-    end
-    _echo
-
-    _echo "── Formatting Check ──"
-    if command -q fish_indent
-        set -l indent_diff (fish_indent --check "$script_path" 2>&1)
-        if test $status -eq 0
-            _ok "fish_indent --check: formatting consistent"
-        else
-            set -l drift_count (printf '%s\n' $indent_diff | wc -l)
-            _fail "Fish_indent reports $drift_count lines of formatting drift"
-            _info "  Run: fish_indent -w $script_path"
-            set has_errors true
-        end
-    else
-        _warn "Fish_indent not found — skipping formatting check"
-    end
-    _echo
-
-    # $() [[ ]] export && || ${var} forbidden in execution paths
-    _echo "── Anti-pattern Check ──"
-
-    # Preserve real source line numbers — awk emits "NR:content" for kept lines and "NR:" for stripped lines (heredoc bodies, comments, lint:ignore). Greps below run without -n; line number is already embedded in each record so reported locations match the source file, not array indices.
-    set -l clean_content (awk 'BEGIN{h=0} /<<-?.?[A-Z_]+.?$/{h=1} h&&/^[[:space:]]*[A-Z_]+$/{h=0;print NR":";next} h{print NR":";next} /^[[:space:]]*#/{print NR":";next} /# lint:ignore/{print NR":";next} {print NR":"$0}' "$script_path")
-
-    # Exclude embedded bash in systemd ExecStart= (bash syntax is correct there) and awk field arithmetic (awk '$(i+1)' etc.)
-    # NOTE: $clean_content already has comments stripped by the awk pre-pass above
-    # (the `^[[:space:]]*#` arm zeros out comment lines), so the substring match
-    # against "ExecStart" etc. cannot be tripped by a comment containing the keyword.
-    set -l bash_subst (printf '%s\n' $clean_content | grep '\$(' 2>/dev/null | grep -vE "ExecStart|/bin/bash|fish --version|awk |'\\\$\\('|$_output_funcs" | head -n 20; or true)
-    if test -n "$bash_subst"
-        _warn "Possible bash-style \$() found:"
-        set -l lint_out (printf '%s\n' $bash_subst | sed 's/^/  /')
-        _log "LINT: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $bash_subst | sed 's/^/  /' >&2
-        end
-    else
-        _ok "No bash-style \$() substitution found"
-        _info "  Note: ExecStart and embedded bash lines excluded"
-    end
-
-    set -l bash_cond (printf '%s\n' $clean_content | grep -E '(^[0-9]+:|[[:space:];])\[\[[[:space:]]' 2>/dev/null | grep -vE "$_output_funcs"; or true)
-    if test -n "$bash_cond"
-        _fail "Bash-style [[ ]] found:"
-        set -l lint_out (printf '%s\n' $bash_cond | sed 's/^/  /')
-        _log "LINT: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $bash_cond | sed 's/^/  /' >&2
-        end
-        set has_errors true
-    else
-        _ok "No bash-style [[ ]] conditionals found"
-    end
-
-    set -l bash_export (printf '%s\n' $clean_content | grep -E '^[0-9]+:[[:space:]]*export ' 2>/dev/null; or true)
-    if test -n "$bash_export"
-        _fail "Bash-style 'export' found:"
-        set -l lint_out (printf '%s\n' $bash_export | sed 's/^/  /')
-        _log "LINT: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $bash_export | sed 's/^/  /' >&2
-        end
-        set has_errors true
-    else
-        _ok "No bash-style 'export' found"
-    end
-
-    set -l bash_logic (printf '%s\n' $clean_content | grep -E '(^[0-9]+:|[^|])\|\|[^|]|(^[0-9]+:|[^&])&&[^&]' 2>/dev/null | grep -vE "printf|awk|sed|$_output_funcs|'.*&&|'.*\|\||NR >|~ /|/\\^"; or true)
-    if test -n "$bash_logic"
-        _warn "Possible bash-style &&/|| found:"
-        set -l lint_out (printf '%s\n' $bash_logic | sed 's/^/  /')
-        _log "LINT: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $bash_logic | sed 's/^/  /' >&2
-        end
-    else
-        _ok "No bash-style &&/|| operators found"
-    end
-
-    set -l bash_varexp (printf '%s\n' $clean_content | grep -E '\$\{[a-zA-Z_]' 2>/dev/null | grep -vE "$_output_funcs|printf"; or true)
-    if test -n "$bash_varexp"
-        _fail "Bash-style \${var} found:"
-        set -l lint_out (printf '%s\n' $bash_varexp | sed 's/^/  /')
-        _log "LINT: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $bash_varexp | sed 's/^/  /' >&2
-        end
-        set has_errors true
-    else
-        _ok "No bash-style \${var} expansion found"
-    end
-
-    set -l dead_pipe (printf '%s\n' $clean_content | grep -E 'grep\s+-[a-zA-Z]*q[a-zA-Z]*\s.*\|' 2>/dev/null | grep -vE "$_output_funcs"; or true)
-    if test -n "$dead_pipe"
-        _warn "Possible dead pipe (grep -q suppresses stdout):"
-        set -l lint_out (printf '%s\n' $dead_pipe | sed 's/^/  /')
-        _log "LINT: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $dead_pipe | sed 's/^/  /' >&2
-        end
-    else
-        _ok "No dead grep -q pipes found"
-    end
-
-    # Bash exit-status `$?` — fish uses `$status`. Excludes regex-class (`$?` inside a character class is unusual; not seen in practice).
-    set -l bash_qmark (printf '%s\n' $clean_content | grep -E '\$\?' 2>/dev/null | grep -vE "$_output_funcs"; or true) # lint:ignore (detector self-reference)
-    if test -n "$bash_qmark"
-        _fail "Bash-style \$? (use \$status) found:"
-        set -l lint_out (printf '%s\n' $bash_qmark | sed 's/^/  /')
-        _log "LINT: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $bash_qmark | sed 's/^/  /' >&2
-        end
-        set has_errors true
-    else
-        _ok "No bash-style \$? exit-status reads found"
-    end
-
-    # Bash positional `$@` — fish uses `$argv`.
-    set -l bash_at (printf '%s\n' $clean_content | grep -E '\$@' 2>/dev/null | grep -vE "$_output_funcs"; or true) # lint:ignore (detector self-reference)
-    if test -n "$bash_at"
-        _fail "Bash-style \$@ (use \$argv) found:"
-        set -l lint_out (printf '%s\n' $bash_at | sed 's/^/  /')
-        _log "LINT: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $bash_at | sed 's/^/  /' >&2
-        end
-        set has_errors true
-    else
-        _ok "No bash-style \$@ positional found"
-    end
-
-    # Backtick command substitution — fish uses `(cmd)`. Pattern: backtick + identifier-start + identifier chars + backtick.
-    set -l bash_btick (printf '%s\n' $clean_content | grep -E '`[a-zA-Z_][a-zA-Z0-9_ -]*`' 2>/dev/null | grep -vE "$_output_funcs"; or true) # lint:ignore (detector self-reference)
-    if test -n "$bash_btick"
-        _fail "Bash-style backtick command substitution found:"
-        set -l lint_out (printf '%s\n' $bash_btick | sed 's/^/  /')
-        _log "LINT: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $bash_btick | sed 's/^/  /' >&2
-        end
-        set has_errors true
-    else
-        _ok "No bash-style backtick command substitution found"
-    end
-
-    # Bash `unset VAR` — fish uses `set --erase VAR`. Match `unset` at start of line (after the NR: line-number prefix the awk pre-pass adds).
-    set -l bash_unset (printf '%s\n' $clean_content | grep -E '^[0-9]+:[[:space:]]*unset[[:space:]]' 2>/dev/null; or true) # lint:ignore (detector self-reference)
-    if test -n "$bash_unset"
-        _fail "Bash-style 'unset' (use 'set --erase') found:"
-        set -l lint_out (printf '%s\n' $bash_unset | sed 's/^/  /')
-        _log "LINT: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $bash_unset | sed 's/^/  /' >&2
-        end
-        set has_errors true
-    else
-        _ok "No bash-style 'unset' found"
-    end
-
-    # Bash positional parameters `$1`-`$9` — fish uses `$argv[1]`. Excludes `/bin/sh` heredocs (intentional embedded sh), awk scripts ($1-$9 are field references), `string replace`/`string match` regex backreferences ('$1' is a literal PCRE backref passed to fish's regex engine), and `$PIPESTATUS`-style fish extensions (none here, but defensive).  # lint:ignore (awk field reference)
-    set -l bash_pos (printf '%s\n' $clean_content | grep -E '\$[1-9]([^a-zA-Z0-9_]|$)' 2>/dev/null | grep -vE "/bin/sh|awk |string replace|string match|$_output_funcs"; or true) # lint:ignore (detector self-reference)
-    if test -n "$bash_pos"
-        _fail "Bash-style positional parameter (use \$argv[N]) found:"
-        set -l lint_out (printf '%s\n' $bash_pos | sed 's/^/  /')
-        _log "LINT: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $bash_pos | sed 's/^/  /' >&2
-        end
-        set has_errors true
-    else
-        _ok "No bash-style positional parameters found"
-    end
-
-    # Cross-check: header version, VERSION constant, README badge, and changelog
-
-    # Scope shadow check: set -l in blocks can shadow outer vars; mawk-compatible, tracks piped while, anchored ^set -l filters false positives
-    set -l shadow_hits (awk '
-        /# lint:ignore/ { next }
-        /^[[:space:]]*function / { in_func=1; depth=0; delete vars; next }
-        !in_func { next }
-        /^[[:space:]]*end($|[[:space:]])/ { if (depth > 0) depth--; else in_func=0; next }
-        /^[[:space:]]*(for|while|if|switch)[[:space:]]/ { depth++ }
-        /\|[[:space:]]*while[[:space:]]/ { depth++ }
-        /^[[:space:]]*set -l [a-zA-Z_]/ {
-            i = index($0, "set -l ")
-            if (i > 0) {
-                rest = substr($0, i + 7)
-                sub(/[^a-zA-Z0-9_].*/, "", rest)
-                if (rest != "") {
-                    if (depth > 0 && rest in vars) print NR": "$0  # lint:ignore
-                    if (depth == 0) vars[rest] = 1
-                }
-            }
-        }
-    ' "$script_path" 2>/dev/null; or true)
-    if test -n "$shadow_hits"
-        set -l shadow_count (printf '%s\n' $shadow_hits | wc -l)
-        _warn "Found $shadow_count potential scope shadow(s) (set -l inside block re-declares outer variable):"
-        set -l lint_out (printf '%s\n' $shadow_hits | sed 's/^/  /' | head -n 10)
-        _log "LINT_SCOPE: $lint_out"
-        if test "$QUIET" = false
-            printf '%s\n' $shadow_hits | sed 's/^/  /' | head -n 10 >&2
-        end
-    else
-        _ok "No scope shadow patterns found (set -l inside blocks)"
-    end
-    _echo
-
-    _echo "── Internal Consistency ──"
-    set -l header_ver (sed -n -- 's/^# ry-install v\([0-9][0-9.]*\).*/\1/p' "$script_path" | head -n 1)
-    if test -n "$header_ver"
-        if test "$header_ver" = "$VERSION"
-            _ok "Header version matches: v$VERSION"
-        else
-            _fail "Header version mismatch: header=$header_ver global=$VERSION"
-            set has_errors true
-        end
-    else
-        _warn "Could not parse header version"
-    end
-    set -l script_dir (dirname -- "$script_path")
-    set -l readme_path "$script_dir/README.md"
-    if test -f "$readme_path"
-        # README has no shields.io badge — grep for the literal `vX.Y.Z` token in the script title line(s)
-        set -l readme_ver (grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' "$readme_path" 2>/dev/null | head -n 1 | string sub -s 2)
-        if test -n "$readme_ver"
-            if test "$readme_ver" = "$VERSION"
-                _ok "README version matches: v$VERSION"
-            else
-                _fail "README version mismatch: readme=$readme_ver global=$VERSION"
-                set has_errors true
-            end
-        else
-            _warn "Could not parse README version"
-        end
-    end
-    set -l changelog_path "$script_dir/CHANGELOG.md"
-    if test -f "$changelog_path"
-        set -l changelog_ver (sed -n -- 's/^- Tagged as v\([0-9][0-9.]*\).*/\1/p' "$changelog_path" | head -n 1)
-        if test -n "$changelog_ver"
-            if test "$changelog_ver" = "$VERSION"
-                _ok "CHANGELOG version matches: v$VERSION"
-            else
-                _fail "CHANGELOG version mismatch: changelog=$changelog_ver global=$VERSION"
-                set has_errors true
-            end
-        else
-            _warn "Could not parse CHANGELOG version"
-        end
-    end
-
-    set -l total (math (count $SYSTEM_DESTINATIONS) + (count $USER_DESTINATIONS) + (count $SERVICE_DESTINATIONS))
-    set -l case_count (_ry_count_managed_cases "$script_path")
-    if test $case_count -eq $total
-        _ok "File count verified: $total destinations, $case_count content cases"
-    else
-        _fail "File count mismatch: $total destinations but $case_count content cases"
-        set has_errors true
-    end
-
-    set -l steps_count (count $PROGRESS_STEPS)
-    set -l progress_calls (sed -n -- '/^function _install_/,/^end$/p; /^function _ry_do_install/,/^end$/p' "$script_path" | grep -c '_progress [A-Z]')
-    if test $steps_count -eq $progress_calls
-        _ok "Progress steps verified: $steps_count steps = $progress_calls calls"
-    else
-        _fail "Progress mismatch: PROGRESS_STEPS has $steps_count, but _ry_do_install has $progress_calls _progress calls"
-        set has_errors true
-    end
-
-    set -l mask_count (count $MASK)
-    if test $mask_count -gt 0
-        _ok "MASK list: $mask_count services/targets defined"
-    else
-        _fail "MASK list is empty"
-        set has_errors true
-    end
-
-    _log "=== LINT END ==="
-
-    if test "$has_errors" = true
-        _fail "Lint check completed with errors"
-        return $EXIT_LINT_FAIL
-    else
-        _ok "Lint check passed"
-        return 0
-    end
-end
-
 # Install pipeline
 
 # INSTALL PIPELINE — preflight → packages → files → services → boot → finalize
@@ -5802,56 +5479,6 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return 0
 end
 
-# Restore power targets: unmask the sleep/suspend/hibernate units that ry-install masks
-function _ry_do_restore_power_targets --description "Unmask sleep/suspend/hibernate targets that ry-install masks"
-    _log "=== RESTORE-POWER-TARGETS START ==="
-    _banner "ry-install v$VERSION - Restore Power Targets"
-
-    if not command -q sudo
-        _err "Sudo required"
-        return $EXIT_PREFLIGHT
-    end
-    if not sudo true 2>/dev/null
-        _err "Sudo required"
-        return $EXIT_PREFLIGHT
-    end
-
-    # Filter MASK list to power-related targets only
-    set -l _power_targets
-    for _u in $MASK
-        if string match -q '*sleep*' -- "$_u"; or string match -q '*suspend*' -- "$_u"; or string match -q '*hibernate*' -- "$_u"
-            set -a _power_targets "$_u"
-        end
-    end
-
-    if test (count $_power_targets) -eq 0
-        _info "Profile masks no power targets — nothing to restore"
-        _log "=== RESTORE-POWER-TARGETS END ==="
-        return 0
-    end
-
-    _info "The following targets will be unmasked:"
-    for _t in $_power_targets
-        _echo "  $_t"
-    end
-    _echo
-
-    if not _run sudo systemctl unmask -- $_power_targets
-        _err "Failed to unmask one or more targets"
-        _log "=== RESTORE-POWER-TARGETS END ==="
-        return $EXIT_FAIL
-    end
-
-    if not _run sudo systemctl daemon-reload
-        _warn "daemon-reload failed (unmask succeeded)"
-    end
-
-    _ok "Unmasked "(count $_power_targets)" power target(s)"
-    _info "Note: re-running install will re-mask these. Edit profile MASK list to persist."
-    _log "=== RESTORE-POWER-TARGETS END ==="
-    return 0
-end
-
 # Tab completions: dynamically generated from SYSTEM/USER/SERVICE_DESTINATIONS
 function _ry_do_completions --description "Generate fish shell completions for ry-install"
     set -l comp_dir "$HOME/.config/fish/completions"
@@ -5892,11 +5519,9 @@ function _ry_do_completions --description "Generate fish shell completions for r
         '-s V -l verbose|Show output on terminal' \
         '-l verify-static|Check config files exist with correct content' \
         '-l verify-runtime|Check live system state (run after reboot)' \
-        '-l lint|Run fish syntax and anti-pattern checks' \
         '-l check|Silent idempotency probe (exit 0 = clean, exit 3 = prereq fail, exit 10 = drift)' \
         '-l test-all|Run all safe modes and generate NDJSON logs (test suite)' \
         '-l completions|Install fish tab-completions for ry-install itself' \
-        '-l restore-power-targets|Unmask sleep/suspend/hibernate targets that ry-install masks' \
         '-s h -l help|Show help' \
         '-s v -l version|Show version'
     for _ce in $_comp_entries
@@ -5960,13 +5585,13 @@ function _test_label --description "Canonical filename label for a test mode str
     string replace -- -- '' $argv[1] | string replace -a ' ' _ | string replace -a / _
 end
 
-# Smoke test: runs diff, verify-static, verify-runtime, lint in sequence
+# Smoke test: runs verify-static, verify-runtime, check in sequence
 function _ry_do_test_all --description "Run the full test suite across all subcommands"
     _banner "ry-install v$VERSION - Full Test Suite"
 
     set -l script_path (status filename)
 
-    # Fast-fail: abort suite on parse errors (direct fish --no-execute gives clearer error output than --lint's subprocess)
+    # Fast-fail: abort suite on parse errors
     _info "Syntax check..."
     if not fish --no-execute "$script_path" 2>/dev/null
         _err "Script has parse errors — fix before running tests"
@@ -5985,7 +5610,6 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         --check \
         --verify-static \
         --verify-runtime \
-        --lint \
         --version \
         --help
 
@@ -6090,7 +5714,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         _info "  completions file not available (write failed) — skipping content check"
         set passed (math $passed + 1)
     else
-        for _expected_cmd in install-file verify-static verify-runtime lint
+        for _expected_cmd in install-file verify-static verify-runtime
             if not string match -q "*-l $_expected_cmd *" -- "$_comp_out"
                 _warn "  completions missing: --$_expected_cmd"
                 set _comp_ok false
@@ -6156,9 +5780,6 @@ while test $i -le (count $argv)
         case --verify-runtime
             set MODE verify-runtime
             set mode_count (math $mode_count + 1)
-        case --lint
-            set MODE lint
-            set mode_count (math $mode_count + 1)
         case --check
             set MODE check
             set mode_count (math $mode_count + 1)
@@ -6169,9 +5790,6 @@ while test $i -le (count $argv)
             _early_usage_exit "--fix has been removed; ry-install no longer performs in-tool drift repair"
         case --completions
             set MODE completions
-            set mode_count (math $mode_count + 1)
-        case --restore-power-targets
-            set MODE restore-power-targets
             set mode_count (math $mode_count + 1)
         case --install-file
             set MODE install-file
@@ -6300,10 +5918,6 @@ switch $MODE
         _acquire_lock; or begin
             _ry_exit $EXIT_LOCK; and return $EXIT_LOCK; or return $EXIT_LOCK
         end
-    case restore-power-targets
-        _acquire_lock; or begin
-            _ry_exit $EXIT_LOCK; and return $EXIT_LOCK; or return $EXIT_LOCK
-        end
     case '*'
         # No lock needed for read-only modes (verify, lint, completions, test-all)
 end
@@ -6341,9 +5955,6 @@ switch $MODE
     case verify-runtime
         _ry_verify_runtime
         set exit_code $status
-    case lint
-        _ry_do_lint
-        set exit_code $status
     case check
         _ry_do_check
         set exit_code $status
@@ -6352,9 +5963,6 @@ switch $MODE
         set exit_code $status
     case completions
         _ry_do_completions
-        set exit_code $status
-    case restore-power-targets
-        _ry_do_restore_power_targets
         set exit_code $status
     case install-file
         _ry_do_install_file "$INSTALL_FILE_TARGET"

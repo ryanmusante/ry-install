@@ -64,7 +64,6 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 
 ```fish
 ./ry-install.fish --check        # silent idempotency probe (exit 0=clean, 3=prereq fail, 10=drift)
-./ry-install.fish --lint         # syntax + anti-pattern check (no system changes)
 sudo -v                          # warm sudo cache; confirms unrestricted sudo
 df -h / /boot                    # verify space (≥2 GB / and ≥200 MB /boot)
 ```
@@ -93,7 +92,6 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | `-V, --verbose` | Show output on terminal |
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |
-| `--lint` | Fish syntax, anti-pattern, and scope shadow checks |
 | `--check` | Silent idempotency probe (exit 0 = clean, 3 = prereq fail, 10 = drift) |
 | `--test-all` | Run all safe modes, generate NDJSON logs |
 | `--install-file <path>` | Re-deploy a single managed file |
@@ -101,8 +99,6 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 | `-h, --help` | Show help |
 | `-v, --version` | Show version |
 | `--` | End of options |
-
-Suppress individual lint warnings with `# lint:ignore`.
 
 ## Install Flow
 
@@ -364,7 +360,6 @@ External profiles in `~/.config/ry-install/profiles/<name>.fish` are loaded via 
 | `4` | Boot-critical failure |
 | `5` | Lock failed |
 | `10` | Drift (`--check`) |
-| `11` | Lint errors |
 | `129/130/131/143` | Signal (HUP / INT / QUIT / TERM) |
 | `141` | SIGPIPE |
 

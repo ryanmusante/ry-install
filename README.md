@@ -1,4 +1,4 @@
-# ry-install v3.48.24
+# ry-install v3.48.25
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
 
@@ -362,6 +362,14 @@ External profiles in `~/.config/ry-install/profiles/<name>.fish` are loaded via 
 | `10` | Drift (`--check`) |
 | `129/130/131/143` | Signal (HUP / INT / QUIT / TERM) |
 | `141` | SIGPIPE |
+
+### Environment Variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `RY_RUN_TIMEOUT` | unset | Opt-in wall-clock limit (seconds, positive integer) for every command executed via `_run` — pacman, sdboot-manage, mkinitcpio, udevadm, etc. Unset = no wall-clock limit (legacy behavior). Recommended for unattended installs: `RY_RUN_TIMEOUT=1800` (30 min, covers worst-case `pacman -Syu` on a slow mirror). Requires `timeout(1)` from coreutils (hard dep on Arch/CachyOS). Wraps with `--preserve-status --kill-after=10` so a stubborn child receives `SIGKILL` ten seconds after `SIGTERM`, and the child's real exit code is preserved in the log. Value of `0` is rejected by validation (would be a silent no-op per `timeout(1)` semantics). |
+| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | One-time acknowledgement for `SDBOOT_REMOVE_EXISTING=yes`. Required on the first run that wipes `/boot/loader/entries/*.conf`. Set to `1` to proceed: `RY_INSTALL_CONFIRM_BOOT_WIPE=1 ./ry-install.fish`. After the first successful run, the marker file at `~/ry-install/.boot-wipe-acknowledged` records the entry count and the gate is suppressed — unless entries grow (rescue/Windows/custom kernel added), at which point the gate re-prompts. |
+| `NO_COLOR` | unset | Respected per no-color.org. When set (any value), suppresses ANSI color codes in all leveled output. Also auto-detected from `TERM=dumb` and when stderr is not a TTY. |
 
 ### Data Directory
 

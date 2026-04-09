@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.48.24 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.48.25 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
@@ -19,7 +19,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.48.24"
+set -g VERSION "3.48.25"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -1662,7 +1662,10 @@ function _run --description "Execute a command with logging and error capture; s
     # -Syu on a slow mirror). --kill-after=10 ensures SIGKILL follows SIGTERM if a
     # child ignores the first signal. --preserve-status keeps the child's exit
     # code visible; timeout(1) itself exits 124 on kill, which _run will log.
-    if set -q RY_RUN_TIMEOUT; and test -n "$RY_RUN_TIMEOUT"; and string match -qr '^\d+$' -- "$RY_RUN_TIMEOUT"; and command -q timeout
+    # RY_RUN_TIMEOUT must be a positive integer (≥1). Regex `^[1-9]\d*$` rejects
+    # `0` (which timeout(1) treats as "no limit" — a silent no-op) and empty/negative
+    # values that would otherwise slip through `test -n` and numeric validation.
+    if set -q RY_RUN_TIMEOUT; and test -n "$RY_RUN_TIMEOUT"; and string match -qr '^[1-9]\d*$' -- "$RY_RUN_TIMEOUT"; and command -q timeout
         command timeout --preserve-status --kill-after=10 "$RY_RUN_TIMEOUT" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     else
         $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
@@ -1784,6 +1787,19 @@ EXAMPLES:
 
 LOG FILE:
   ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ.jsonl
+
+ENVIRONMENT:
+  RY_RUN_TIMEOUT=<seconds>
+      Opt-in wall-clock limit for every command run via _run (pacman, sdboot-manage,
+      mkinitcpio, etc.). Must be a positive integer. Recommended: 1800 (30 min,
+      covers worst-case pacman -Syu on a slow mirror). Unset = no wall-clock limit
+      (legacy behavior). Requires timeout(1) from coreutils.
+
+  RY_INSTALL_CONFIRM_BOOT_WIPE=1
+      One-time acknowledgement for SDBOOT_REMOVE_EXISTING=yes. Required on the
+      first run that wipes /boot/loader/entries/*.conf. After the first successful
+      run, a marker file records the entry count and the gate is suppressed until
+      entries grow (e.g., a rescue or Windows entry is added).
 
 REQUIREMENTS:
   CachyOS (Arch-based), systemd-boot, fish 3.4+

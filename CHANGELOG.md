@@ -1,5 +1,34 @@
 ry-install changelog
 
+v3.48.25  2026-04-09
+- `_run`: tightened `RY_RUN_TIMEOUT` validation regex from `^\d+$` to
+  `^[1-9]\d*$`. Rejects `RY_RUN_TIMEOUT=0`, which `timeout(1)` treats as
+  "no limit" and would otherwise produce a silent no-op wrap (user sets
+  timeout, expects bounded execution, gets none). Also rejects empty and
+  leading-zero forms. Positive integers ≥1 only.
+- `_ry_show_help`: added an `ENVIRONMENT:` section documenting
+  `RY_RUN_TIMEOUT` (new in v3.48.24) and `RY_INSTALL_CONFIRM_BOOT_WIPE`
+  (pre-existing but never surfaced in help). Both env vars were previously
+  source-only — readable by anyone who opened the script but invisible to
+  `./ry-install.fish --help`. Help text stays stderr-only and free of any
+  new stdout producers.
+- `README.md`: added `### Environment Variables` subsection under
+  `## Safety & Reliability`, documenting `RY_RUN_TIMEOUT`,
+  `RY_INSTALL_CONFIRM_BOOT_WIPE`, and `NO_COLOR` (also pre-existing but
+  previously undocumented in user-facing docs). Table format matches the
+  existing Exit Codes / Data Directory tables.
+- Documentation-only fixes aside from the one-line regex tighten.
+  No functional changes to execution flow, options parsing, stdout/stderr
+  discipline, logging, verification, or parallel worker machinery.
+- Post-v3.48.24 audit delta: all three v3.48.23 findings remain resolved.
+  Three v3.48.24 nits (undocumented env var × 2, too-loose regex)
+  closed by this release. No blocking issues.
+- Verified: `fish --no-execute` clean, `./ry-install.fish --help` shows
+  new ENVIRONMENT section, regex rejects `RY_RUN_TIMEOUT=0` / `""` /
+  `"-5"` / `"1.5"` / `"01"` and accepts `1`, `60`, `1800`.
+- Net 6023 → 6039 lines (+16, all doc/comment).
+
+
 v3.48.24  2026-04-09
 - `_run`: added `</dev/null` on the command exec line. Closes a hang class
   where any caller that would otherwise probe the terminal (stray sudo

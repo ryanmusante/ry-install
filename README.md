@@ -409,51 +409,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
 ## Uninstall
 
-ry-install does **not** ship an automated uninstaller. The script tracks deployed files in `~/ry-install/.manifest` — use it as the source of truth for manual rollback.
-
-**Manual rollback steps:**
-
-```fish
-# 1. Unmask the 10 systemd units
-sudo systemctl unmask \
-    ananicy-cpp.service irqbalance.service power-profiles-daemon.service \
-    lvm2-monitor.service NetworkManager-wait-online.service \
-    sleep.target suspend.target hibernate.target hybrid-sleep.target \
-    suspend-then-hibernate.target
-
-# 2. Disable + remove the cpupower-epp unit
-sudo systemctl disable --now cpupower-epp.service
-sudo rm /etc/systemd/system/cpupower-epp.service
-
-# 3. Remove managed config files (see Managed Files table for full list)
-sudo rm /etc/kernel/cmdline /etc/sdboot-manage.conf /etc/mkinitcpio.conf \
-    /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf \
-    /etc/systemd/logind.conf.d/99-cachyos-logind.conf \
-    /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf \
-    /etc/iwd/main.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf \
-    /etc/drirc /etc/sysctl.d/99-cachyos-sysctl.conf
-rm ~/.config/fish/conf.d/10-ssh-auth-sock.fish \
-   ~/.config/environment.d/10-environment.conf \
-   ~/.config/systemd/user/ssh-agent.service
-
-# 4. Restore /etc/fstab from your own snapshot (no persistent backup is written by ry-install)
-#    Or manually remove "noatime,lazytime" from ext4 entries.
-
-# 5. Restore removed packages if desired
-sudo pacman -S --needed plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme \
-    ufw octopi micro cachyos-micro-settings btop
-
-# 6. Rebuild initramfs and bootloader entries
-sudo mkinitcpio -P
-sudo sdboot-manage gen
-
-# 7. Remove ry-install state
-rm -rf ~/ry-install/
-
-# 8. Reboot
-```
-
-**Note:** Packages installed by ry-install (`PKGS_ADD`) are not auto-removed; use `pacman -Rns` selectively if desired. AUR `mt76-mt7925-dkms` removal: `paru -Rns mt76-mt7925-dkms`.
+ry-install ships no automated uninstaller. `~/ry-install/.manifest` lists every deployed file as the source of truth for manual rollback. To revert: unmask the units in [Masked Services](#masked-services), `rm` the paths in [Managed Files](#managed-files), restore `/etc/fstab` from your own snapshot (no persistent backup is written), optionally `pacman -S` the removed packages and `pacman -Rns` the installed ones, then `mkinitcpio -P && sdboot-manage gen` and reboot.
 
 ## Known Issues
 

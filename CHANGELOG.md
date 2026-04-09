@@ -2,6 +2,12 @@ ry-install changelog
 
 2026-04-08  Ryan Musante
 
+- Tagged as v3.48.15
+- DOC (README): Condensed Uninstall section. Removed 8-step manual rollback code block; replaced with one paragraph pointing at `~/ry-install/.manifest` and the existing Masked Services + Managed Files tables. Procedure is unchanged — users follow the linked tables instead of a duplicated step list.
+
+
+2026-04-08  Ryan Musante
+
 - Tagged as v3.48.14
 - DOC (README): Removed v3.48.0 BREAKING blockquote from Quick Start. Six releases past v3.48.0; the migration callout is no longer current-user-relevant. Removed-flag history is preserved in CHANGELOG.
 

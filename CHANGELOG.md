@@ -1,5 +1,34 @@
 ry-install changelog
 
+v3.48.26  2026-04-09
+- `TIMESTAMP` (init block): suffixed with `$fish_pid` so concurrent instances
+  running in the same second get distinct `$LOG_FILE` paths. Without the suffix,
+  two concurrent read-only children under `--test-all` (each computing
+  `TIMESTAMP` via second-precision `date(1)` as it re-runs the init block) could
+  race on the pre-rename `install-$TIMESTAMP.jsonl` path: the loser's
+  `install -m 0600 /dev/null` would truncate the winner's profile-load log
+  lines, and the loser's subsequent mode-specific rename (`mv install-T.jsonl
+  check-T.jsonl`) would fail because the winner had already moved the source
+  file away. The window is narrow (milliseconds, bounded by init → arg-parse →
+  `_load_profile` → rename) and only reachable via `--test-all`, but the race
+  is real and the fix is one line. Audit trigger: execution-flow review on
+  v3.48.25.
+- `_ry_verify_static`: hash_dir mktemp early-return path (line ~3153) now
+  calls `_verify_summary` before returning so the CI-parseable
+  `VERIFY:FAIL:N:M:W` line is always emitted on stdout, matching the contract
+  of the non-early-return path. Also switched the error reporter from `_err`
+  (which does not increment `VERIFY_FAIL`) to `_fail` (which does), so the
+  summary reflects the infrastructure failure.
+- `_ry_verify_runtime`: `sys_units` count-drift assertion path (line ~3908)
+  got the same treatment — calls `_verify_summary` before returning and uses
+  `_fail` instead of `_err` + manual `VERIFY_FAIL` increment. Removes the
+  one-off counter-mutation pattern that drifted from the rest of the
+  verification code. Audit trigger: same execution-flow review; both
+  early-return paths violated the VERIFY: stdout-line contract.
+- No user-visible behavior change beyond the two verify-mode contract fixes
+  (CI pipelines that grep stdout for `VERIFY:` will now see the line on
+  mktemp/assertion failures where they previously saw only the exit code).
+
 v3.48.25  2026-04-09
 - `_run`: tightened `RY_RUN_TIMEOUT` validation regex from `^\d+$` to
   `^[1-9]\d*$`. Rejects `RY_RUN_TIMEOUT=0`, which `timeout(1)` treats as

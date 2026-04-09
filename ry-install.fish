@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.48.25 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.48.26 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
@@ -19,7 +19,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.48.25"
+set -g VERSION "3.48.26"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -87,9 +87,15 @@ if test "$fish_major" -gt 4
 end
 
 # Timestamps (single date(1) call → DATE_LABEL for dirs + TIMESTAMP for filenames), HOME resolution, log dirs
+# TIMESTAMP is suffixed with $fish_pid to prevent collisions when --test-all forks
+# multiple children within the same second (date(1) is second-precision). Without the
+# PID suffix two concurrent read-only children could race on the pre-rename
+# `install-$TIMESTAMP.jsonl` path: the loser's `install -m 0600 /dev/null` would
+# truncate the winner's profile-load log lines, and the loser's subsequent mode-
+# specific rename would fail because the winner already moved the source file away.
 set -l _now (date '+%Y-%m-%d_%Y%m%d-%H%M%S%z')
 set -g DATE_LABEL (string split '_' -- "$_now")[1]
-set -g TIMESTAMP (string split '_' -- "$_now")[2]
+set -g TIMESTAMP (string split '_' -- "$_now")[2]"-"$fish_pid
 
 # HOME resolution: env → getent passwd → tilde expansion (handles privilege-escalated shells, cron, containers)
 set -g _MY_UID (id -u)
@@ -3152,9 +3158,12 @@ function _ry_verify_static --description "Verify installed configs match embedde
     # Pre-generate expected content + batched parallel hash verification (4 workers); per-worker stderr captured; result="" → FAIL
     set -l hash_dir (mktemp -d -t ry-hash-par.XXXXXX)
     if not test -d "$hash_dir"
-        _err "Failed to create hash verification temp directory"
+        _fail "Failed to create hash verification temp directory"
+        _log "=== STATIC VERIFICATION END ==="
+        _verify_summary
+        set -l ret $status
         set -g VERIFY_MODE false
-        return 1
+        return $ret
     end
     set -ga _TRACKED_TMPFILES "$hash_dir"
     set -l my_home "$HOME"
@@ -3906,10 +3915,12 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         NetworkManager.service
     # Static assertion: sys_units order is positionally coupled to parsed[1..5] consumers below. Fail loud on add/remove drift
     if test (count $sys_units) -ne 5
-        _err "  sys_units count drift: actual="(count $sys_units)" expected=5 — update parsed[N] indices below"
-        set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
+        _fail "  sys_units count drift: actual="(count $sys_units)" expected=5 — update parsed[N] indices below"
+        _log "=== RUNTIME VERIFICATION END ==="
+        _verify_summary
+        set -l ret $status
         set -g VERIFY_MODE false
-        return 1
+        return $ret
     end
     set -l show_output (systemctl show --property=LoadState,ActiveState,UnitFileState -- $sys_units 2>/dev/null | string collect --no-trim-newlines)
     set -l parsed (_parse_systemctl_show "$show_output")

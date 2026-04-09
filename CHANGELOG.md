@@ -1,5 +1,18 @@
 ry-install changelog
 
+v3.48.23  2026-04-09
+- `_ry_do_test_all`: added managed-case count drift assertion. Runs `awk`
+  over `_ry_get_file_content` to count `case` branches and compares against
+  the `_RY_MANAGED_CASE_COUNT` constant (used as the `_ry_show_help`
+  fallback since v3.48.22). On mismatch: `[ERR]` with exact counts + line
+  reference, `return 1` before forking parallel sub-tests. Moves the
+  drift-catch from "self-parsing awk on every --help invocation"
+  (v3.48.19) to "one awk pass in the test suite" (v3.48.23) — production
+  --help stays awk-free and zero-subprocess, while a forgotten constant
+  bump is caught at release time instead of by end users.
+- Verified both paths: PASS on 15=15, `[ERR]` + `exit 1` on forced 16→15
+  mismatch.
+
 v3.48.22  2026-04-09
 - Removed `_ry_count_managed_cases` (11 lines, awk-self-parse). Replaced
   with compile-time constant `_RY_MANAGED_CASE_COUNT=15` used as the

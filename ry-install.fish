@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.48.22 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.48.23 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
@@ -19,7 +19,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.48.22"
+set -g VERSION "3.48.23"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -5581,6 +5581,22 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         return 1
     end
     _ok "  fish --no-execute: passed"
+    _echo
+
+    # Managed-file count drift check: _RY_MANAGED_CASE_COUNT is a hand-maintained
+    # constant used by _ry_show_help as a fallback before _load_profile runs. It
+    # must match the number of `case` branches in _ry_get_file_content (minus the
+    # `case '*'` wildcard). This test fails loudly if a future edit adds or removes
+    # a case without bumping the constant — catching drift at test time so the
+    # production --help hot path stays awk-free.
+    _info "Managed-case count check..."
+    set -l _actual_cases (awk '/^function _ry_get_file_content/{f=1} f && $1=="case"{n++} f && /^end$/{print n-1; exit}' "$script_path")
+    if test "$_actual_cases" != "$_RY_MANAGED_CASE_COUNT"
+        _err "  _RY_MANAGED_CASE_COUNT=$_RY_MANAGED_CASE_COUNT but _ry_get_file_content has $_actual_cases cases"
+        _err "  Bump the constant near line 149 to match, then re-run --test-all"
+        return 1
+    end
+    _ok "  _RY_MANAGED_CASE_COUNT=$_RY_MANAGED_CASE_COUNT matches source"
     _echo
 
     # Best-effort sudo cache: version/help need none; check/verify-* degrade via noread path

@@ -1,107 +1,96 @@
 ry-install changelog
 
+2026-04-09  Ryan Musante
+
+- Tagged as v3.48.17
+- `_pregenerate_content_files`: switch `mktemp -d --tmpdir=/tmp` to `-t` for TMPDIR parity with the rest of the script.
+- `_cleanup_tmpfiles`: sweep 0700 root-only sys dirs (e.g. /etc/NetworkManager/system-connections) via `sudo -n find` instead of unprivileged find. Collapse three near-identical sweep blocks to single-line `find -delete`.
+- `_install_fstab_opts`: change awk `OFS` from `\t` to space; ext4 lines no longer mix tabs into a space-formatted fstab.
+- `_install_fstab_opts`: post-rewrite check now uses `findmnt --verify` exit code instead of grepping free-form output for `error|unknown|invalid`.
+- `_content_hash`: capture `$pipestatus` after the sha256sum pipeline so generator-side failures return rc=1 instead of an empty hash with rc=0.
+- `_ry_do_test_all`: sudo cache is now best-effort; lint/version/help no longer abort on sudo-less hosts.
+- `_ry_do_test_all`: completions content check matches `-l <flag>` form rather than the never-present `--<flag>` substring.
+- Cosmetic: collapsed runs of consecutive `#` comment lines to single-line comments (36 lines removed). Embedded `/bin/sh -c` and `awk` blocks untouched.
+
 2026-04-08  Ryan Musante
 
 - Tagged as v3.48.16
-- AUDIT (12 fixes from exhaustive line-by-line audit of v3.48.15):
-  - HIGH: SDBOOT_REMOVE_EXISTING=yes now requires explicit acknowledgement on first run via env var RY_INSTALL_CONFIRM_BOOT_WIPE=1; subsequent runs use marker file ~/ry-install/.boot-wipe-acknowledged. Prevents silent loss of dual-boot/rescue entries.
-  - MED: New utility mode --restore-power-targets unmasks the sleep/suspend/hibernate targets that the install masks. Iterates MASK list filtered to *sleep*/*suspend*/*hibernate* unit names. Acquires lock; daemon-reload after unmask.
-  - MED: _atomic_write_file post-write hash now distinguishes sudo credential lapse from filesystem read error in failure messages and JSONL logs.
-  - LOW (preflight): Cannot detect root UUID (findmnt failure) is now a hard preflight FAIL with EXIT_PREFLIGHT, not a WARN. Previously the failure surfaced only at /etc/kernel/cmdline write time.
-  - LOW (preflight): Required deps list trimmed — removed `diff`, `md5sum`, `tput` (none used in script).
-  - LOW (profile): Dropped `iw` from PKGS_ADD; profile uses iwd backend, iw was diagnostic-only. PKGS_ADD count: 12 → 11. README and inline count comment updated.
-  - LOW (cleanup): _cleanup_tmpfiles NM connections sweep now gated on profile actually managing NM/iwd configs.
-  - LOW (lock): _acquire_lock flock reclaim now writes the PID file inside the locked subshell, closing the race window between mkdir and pid-write where another reclaimer could win.
-  - LOW (profile loader): _load_profile now logs an INFO event when defaulting to gtr9_pro because no ~/.config/ry-install/default-profile exists.
-  - LOW (verify-runtime): WiFi state checks (interface, iwd process, nmcli) now gated on profile actually managing NM/iwd configs. Prevents spurious FAILs on profiles that don't use the iwd backend.
-  - LOW (verify-runtime): Clocksource HPET fail message now auto-greps cached dmesg for "Marking TSC unstable" and surfaces matching lines instead of asking the user to check manually.
-  - INFO (drirc): Added comment to /etc/drirc generator noting that radv_enable_unified_heap_on_apu requires Mesa ≥25.0 and should be re-verified against current Mesa source before each release; if renamed/removed, gfx1151 UMA tuning silently no-ops.
-- 10 audit findings were verified as false positives against source and discarded: root-uid order check (L26), HOME fallback chain (L64), KVER patch parsing (L109), cpupower-epp inline bash (intentional per inline comment), _run metachar reject (already documented in function header), CHK-03 patch-empty branch (already handles empty), _atomic_write_file parent-dir mode regex (correct for 3- and 4-digit modes), fstab perm check vfat skip (correct), parent-dir math perm check (correct floor(n/2)%2 logic).
-
+- `SDBOOT_REMOVE_EXISTING=yes` now requires explicit ack on first run via `RY_INSTALL_CONFIRM_BOOT_WIPE=1`; subsequent runs use `~/ry-install/.boot-wipe-acknowledged` marker. Prevents silent loss of dual-boot/rescue entries.
+- New `--restore-power-targets` mode unmasks the sleep/suspend/hibernate targets that install masks.
+- `_atomic_write_file`: post-write hash failure messages distinguish sudo credential lapse from filesystem read error.
+- Preflight: missing root UUID (findmnt failure) is now a hard `EXIT_PREFLIGHT`, not a warn.
+- Preflight: dropped unused `diff`, `md5sum`, `tput` from required deps list.
+- Profile: dropped diagnostic-only `iw` from PKGS_ADD (12 → 11).
+- `_cleanup_tmpfiles`: NM connections sweep gated on profile actually managing NM/iwd.
+- `_acquire_lock`: flock reclaim writes the PID file inside the locked subshell.
+- `_load_profile`: logs INFO when defaulting to gtr9_pro.
+- `_ry_verify_runtime`: WiFi state checks gated on profile managing NM/iwd.
+- `_ry_verify_runtime`: clocksource HPET fail message auto-greps cached dmesg for "Marking TSC unstable".
+- `/etc/drirc` generator: comment notes that `radv_enable_unified_heap_on_apu` requires Mesa ≥25.0.
 
 2026-04-08  Ryan Musante
 
 - Tagged as v3.48.15
-- DOC (README): Condensed Uninstall section. Removed 8-step manual rollback code block; replaced with one paragraph pointing at `~/ry-install/.manifest` and the existing Masked Services + Managed Files tables. Procedure is unchanged — users follow the linked tables instead of a duplicated step list.
-
+- README: condensed Uninstall section. Replaced 8-step rollback block with one paragraph pointing at `~/ry-install/.manifest` and the existing Masked Services + Managed Files tables.
 
 2026-04-08  Ryan Musante
 
 - Tagged as v3.48.14
-- DOC (README): Removed v3.48.0 BREAKING blockquote from Quick Start. Six releases past v3.48.0; the migration callout is no longer current-user-relevant. Removed-flag history is preserved in CHANGELOG.
-
+- README: removed v3.48.0 BREAKING blockquote from Quick Start. Removed-flag history is preserved here.
 
 2026-04-08  Ryan Musante
 
 - Tagged as v3.48.13
-- DOC RESTRUCTURE (README): Comprehensive completeness pass against script v3.48.12. No script logic changes; documentation gaps only.
-  - Added Uninstall section with 8-step manual rollback procedure (unmask 10 units, remove cpupower-epp, rm 14 managed files, fstab restore note, optional pkg restore, mkinitcpio + sdboot-manage rebuild, state cleanup, reboot). Script ships no automated uninstaller; previous README left users with no documented recovery path.
-  - Added Scope section (in-scope / out-of-scope) immediately after BREAKING blockquote. Sets expectations re: dotfiles, secrets, backups, multi-user, non-CachyOS, laptops without custom profile.
-  - Documented `paru` missing-tool behavior in Packages table: `_install_aur_packages` at line 4837 emits `_warn` and skips AUR install; install continues. Previous "via paru" wording did not state the fallback.
-  - Documented fstab no-persistent-backup in Safety table. Script is idempotent (early-return at line 4926 when `noatime,lazytime` present) and validates with `findmnt --verify` before atomic mv (line 4979), but the temp backup at `/etc/.ry-install.fstab.XXXXXX` is rm'd after the move — no persistent original is kept.
-  - Replaced empty `Recommended pre-flight steps` fish block (only `#` comments) with 4 real commands (`--check`, `--lint`, `sudo -v`, `df -h`) plus a paragraph on Masked Services + upstream news review.
-  - Profile required-globals: replaced 12-line `#`-comment list inside example function with two scannable tables. Unconditional globals (26) categorized by function (Identity, Destinations, Kernel+initramfs, Boot loader, Packages+services, Environment, Thresholds). Conditional globals (8) with their `SYSTEM_DESTINATIONS` glob triggers (`*/iwd/*`, `*nm.conf`, `*/resolved.conf.d/*`, `*/sysctl.d/*`). Optional globals listed separately. Counts verified against `_validate_profile` at line 701.
-  - Replaced vague "(25+)" with exact "(26 unconditional + up to 8 conditional)".
-  - Moved Hardware Reference up to immediately follow Prerequisites — discovery-phase content belongs before Usage, not in an appendix. Promoted Known Issues to its own top-level section before Troubleshooting; Specifications subsection header dropped (single subsection now).
-  - Expanded Quick Start post-install line into 4-step numbered verification workflow with rationale per step. Added typical first-run duration (3–8 min).
-  - Added collapsible sample NDJSON log output to Log Format section (5 representative events: header, section, step_time, warn, footer).
-  - Disambiguated exit code `1` row to "Non-critical failure / verification drift (`--verify-static`, `--verify-runtime`)". Removed redundant trailing footnote that conflicted with the table.
-  - Expanded Troubleshooting from 5 → 12 rows: profile load failure, stale lock, manifest version mismatch, AUR pkg missing, sudo cache expiry, drirc XML rejection, verify-static drift remediation.
-  - Clarified BREAKING blockquote: distinguished flags that exit with a migration message (`--all`, `--dry-run`, `--diff`, `--fix`) from flags that exit as unknown options (`--interactive`, `--allow-root`, `--force`).
-  - Trimmed TOC from 25 entries (3 levels) to 13 (top-level only). Subsection navigation handled by GitHub's auto-rendered outline.
-  - Removed 3 static badges (version, license, fish) — no CI signal, no real value.
-  - Trimmed default-profile line in intro from full hardware spec to "Beelink GTR9 Pro (Strix Halo APU)" with link to Hardware Reference; eliminates duplication.
-  - Cosmetic: line 307 `<n>` → `<name>` to match the rest of the document.
-
+- README: documentation completeness pass. Added Uninstall section, Scope section, `paru` fallback note, fstab no-persistent-backup note, real `--check`/`--lint`/`sudo -v`/`df -h` pre-flight commands, profile required-globals tables (26 unconditional + 8 conditional), Hardware Reference moved to follow Prerequisites, Known Issues promoted to top-level, 4-step post-install verification workflow, sample NDJSON log output, exit-code disambiguation, Troubleshooting expanded 5 → 12 rows, BREAKING blockquote clarified, TOC trimmed 25 → 13 entries, badges removed.
 
 2026-04-08  Ryan Musante
 
 - Tagged as v3.48.12
-- DOC FIX (README BREAKING note): v3.48.0 breaking-change callout claimed "all pacdiff/pacnew/pacsave handling" was removed, but `_install_packages` at lines 4810–4826 actively scans for `.pacnew`/`.pacsave` files at every managed destination, emits per-file `_warn` output, logs a `PACNEW_FOUND:` JSONL event, and directs the user to `sudo pacdiff` for remediation. The absolute "all" claim was inaccurate. Dropped the phrase from the BREAKING note; the remaining removed-flags list is unchanged and verified correct against the dispatcher.
+- README BREAKING note: dropped inaccurate "all pacdiff/pacnew/pacsave handling" claim. `_install_packages` actively scans for `.pacnew`/`.pacsave` and emits `_warn` + `PACNEW_FOUND:` JSONL events.
 
 2026-04-08  Ryan Musante
 
 - Tagged as v3.48.11
-- MED FIX (`_log` event classification, 7 sites): `_log` classifies an event by matching `^[A-Z][A-Z_]*: ` — an uppercase identifier followed immediately by `: `. Seven call sites used `PREFIX(parenthesized): ...` form, which inserts a `(` between the identifier and the `:` and therefore fails the match. Every one of these fell through to `event=message` instead of the intended category, breaking the JSONL event contract documented in README. Sites fixed: `VERIFY_UNIT_WARN(label):` (line 230), `VERIFY_UNIT_ERR(label):` (line 237), `STDERR(n lines):` (line 1615), `VALIDATE_CHILD_STDERR(phase):` (line 2250), `VALIDATE_STDERR(phase):` (line 2257), `HASH_WORKER_STDERR(worker N):` (line 3141), `CHECK_STDERR(phase):` (line 3446). All rewritten as `PREFIX: (parenthesized) ...`.
-- LOW FIX (`_ry_verify_runtime` dmesg): two independent `sudo dmesg` calls — one for Dynamic Preempt detection, one for ReBAR/SAM detection. On hosts with large kernel ring buffers this doubled the latency of the runtime verify. Cached output once at `set -l _dmesg (sudo dmesg 2>/dev/null)` and reused via `printf '%s\n' $_dmesg | grep ...` in both downstream checks.
-- LOW FIX (`_ry_verify_runtime` env-var check): reported `FAIL` when an `$ENV_VARS` entry was absent from the shell/user-bus environment, with the message `"NOT SET (re-login may be required)"`. The message acknowledged that the cause was a known post-install state (env loaded from `environment.d` only on next session), but the severity was still FAIL, inflating verify failure counts on correct installs run before re-login. Downgraded to `WARN` with a clearer message pointing to `systemctl --user import-environment` as the alternative fix.
-- INFO FIX (`_ry_verify_static`, `_parse_systemctl_show` consistency): masked-service check requested only 2 systemd properties (`LoadState,UnitFileState`), while `_ry_do_check` and `_ry_verify_runtime` request all 3 (`LoadState,ActiveState,UnitFileState`). The parser always emits 3-field records and the consumer at line 2968 uses `_rec[3]` only, so the current code works — but a future ActiveState check on masked services would silently read empty. Made all three call sites request the same 3 properties for parser symmetry.
-- INFO FIX (`_ry_verify_static` hash pre-serialization): `sudo -n test -r "$dst"; and sudo -n cat -- "$dst" \| sha256sum` had a narrow TOCTOU window between the sudo probe and the cat. A lapsed sudo timestamp would produce an empty cat stdout, which `sha256sum` hashes to the fixed empty-file digest `e3b0c4…`, then fails the later mismatch check with the misleading error `"checksum MISMATCH"`. Added an explicit `sudo -n true` probe immediately before the read, check `$pipestatus[1]` after the pipe, and remove the hash file on failure. Added a new `noread` result state so the collect phase emits `"cannot read (sudo timestamp lapsed or file missing)"` instead of the misattributed mismatch. Trailing newlines preserved by keeping `cat` in the pipeline (command substitution would strip them).
-- INFO FIX (`_ry_do_test_all` label derivation): `string replace -a '-' ''` stripped every hyphen from mode labels, so `--verify-static` became `verifystatic` as a filename fragment. A hypothetical future `--verifystatic` and `--verify-static` would collide on label. Rewrote to strip only the leading `--` with `string replace -- '--' ''`, preserving interior hyphens.
-- DOC FIX (README Profile example): Optional globals list was missing `AUR_PKGS` and `MKINITCPIO_COMPRESSION_OPTIONS`, both intentionally optional per the inline comment in `_validate_profile` at line 727. Added both to the README's Optional line so external profile authors know the full set.
+- `_log` event classification: 7 sites used `PREFIX(parens):` form, which broke the `^[A-Z][A-Z_]*: ` event-classifier and silently fell through to `event=message`. Rewritten as `PREFIX: (parens) ...`.
+- `_ry_verify_runtime`: cache `sudo dmesg` once and reuse for both Dynamic Preempt and ReBAR/SAM detection.
+- `_ry_verify_runtime`: env-var absence is now WARN with a `systemctl --user import-environment` hint, not FAIL.
+- `_ry_verify_static` / `_parse_systemctl_show`: all three call sites request the same 3 systemd properties (`LoadState,ActiveState,UnitFileState`) for parser symmetry.
+- `_ry_verify_static`: hash collection adds explicit `sudo -n true` probe + `$pipestatus[1]` check + new `noread` state to avoid the empty-file digest masquerading as "checksum MISMATCH".
+- `_ry_do_test_all`: label derivation strips only the leading `--` (preserving interior hyphens) instead of stripping all `-`.
+- README profile example: added missing `AUR_PKGS` and `MKINITCPIO_COMPRESSION_OPTIONS` to optional globals list.
 
 2026-04-08  Ryan Musante
 
 - Tagged as v3.48.10
-- MED FIX (`_install_packages`): post-install verification used `pacman -Qq` exact-match against `$pkgs_to_install`, which cannot match pkg groups (`base-devel`), virtual packages, or `provides` relationships. Current `PKGS_ADD` is all concrete names so no false-positive today, but any future profile adding a group would trip `INSTALL_HAD_ERRORS=true` on a clean install. Replaced with `pacman -T -- $pkgs_to_install` which prints unsatisfied targets to stdout and correctly honors providers. Semantics verified against pacman(8).
-- LOW FIX (`_install_preflight` sudo keepalive): single-line `while ... sudo -n true; or break; ...` killed the loop on any transient `sudo -n` failure (PAM/NSS hiccup). `_check_sudo_keepalive` warns on discovery but does not restart. Rewrote the child `fish -c` block with a 3-attempt retry + 1s backoff around `sudo -n -v` (idiomatic refresh), so transient failures no longer terminate the keepalive. Outer `kill -0 $parent` / `test -d $LOCK_DIR` guards unchanged.
-- LOW FIX (`_install_aur_packages`): looped `paru -S -- "$pkg"` one package at a time, losing cross-package makedep resolution and forcing redundant rebuilds of shared dependencies. Switched to a single `paru -S --needed --noconfirm -- $AUR_PKGS` batch call, with per-package fallback on batch failure to identify culprits.
-- LOW FIX (`_install_configure_services`, `_ry_do_install_file`): `systemctl --user set-environment SSH_AUTH_SOCK=...` was gated only on `set -q XDG_RUNTIME_DIR`, not on the presence of an active user D-Bus session. On a TTY install with no running `systemd --user`, this produces a misleading warning for a silent no-op. Both call sites now additionally require `test -S "$XDG_RUNTIME_DIR/bus"` before calling; the configure-services site emits an `_info` skip message instead of a warning.
-- LOW FIX (`_ry_do_install`): `_ry_do_completions` was invoked after the `EXIT_BOOT_CRIT` short-circuit branch, so completions were installed even when finalize was skipped due to a boot-critical failure. Moved the call inside the `else` branch so it runs only when boot rebuild succeeds, matching the "skip cosmetic work on boot-crit" intent.
-- LOW FIX (`_manifest_write` + `_manifest_check_orphans`): the generated `~/.config/fish/completions/ry-install.fish` path was never recorded in the manifest, so `_manifest_check_orphans` could never detect drift for it across profile or version changes. Both functions now include `$_completions_path` symmetrically — write records it, orphan-check includes it in `current_dests` — so the completions file is tracked without producing false-positive orphan warnings on re-run.
-- INFO FIX (`_install_rebuild_boot`): `_info "Check archlinux.org/news ... before upgrading"` was printed immediately before an unattended `sudo pacman -Syu --noconfirm`, implying a pause that never happens. Reworded to reflect the unattended reality: `"System upgrade proceeding unattended — review ... post-install"`.
-- INFO REFACTOR (top-level arg parser): 9 `switch` branches open-coded the same `echo "[ERR] ..." >&2; command rm -f -- "$LOG_FILE"; exit $EXIT_USAGE` triple. Extracted to `_early_usage_exit` helper defined just before the arg loop. Single implementation, message is the only per-site argument. `case '*'` remains open-coded because it also prints `_ry_show_help`.
+- `_install_packages`: post-install verification switched from `pacman -Qq` exact-match to `pacman -T` so groups, virtual packages, and providers are honored.
+- `_install_preflight` sudo keepalive: child loop uses 3-attempt retry + 1s backoff around `sudo -n -v`; transient PAM/NSS failures no longer kill the loop.
+- `_install_aur_packages`: single batched `paru -S --needed --noconfirm -- $AUR_PKGS` with per-package fallback on batch failure.
+- `_install_configure_services` / `_ry_do_install_file`: `systemctl --user set-environment` now also requires `test -S "$XDG_RUNTIME_DIR/bus"` so TTY installs don't emit a misleading warning.
+- `_ry_do_install`: `_ry_do_completions` moved inside the success branch so it skips on `EXIT_BOOT_CRIT`.
+- `_manifest_write` + `_manifest_check_orphans`: completions path now tracked symmetrically.
+- `_install_rebuild_boot`: reworded news-review message to reflect unattended reality.
+- Top-level arg parser: 9 open-coded usage-error branches extracted to `_early_usage_exit` helper.
 
 2026-04-08  Ryan Musante
 
 - Tagged as v3.48.9
-- LOW FIX (`_ry_do_check`, job 4 child): positional-coupling assertion diagnostic at `parsed_units` count drift embedded `(count $results)` inside a double-quoted string. Fish does not perform command substitution through `"..."` quoted spans, so the error would have printed the literal text `count=(count $results)` instead of the actual count. Same bug class as the v3.48.8 `_ry_verify_runtime` fix — missed in the child `fish -c` block. Cold path (maintainer-introduced drift between `exp_svcs`/`mask_units`/`implicit_svcs` list composition and `parsed_units` consumers), but misleading when it fires. Rewrote as `count="(count $results)" expected=$_expected_total` with the command substitution outside the quoted span.
+- `_ry_do_check` job 4 child: assertion diagnostic embedded `(count $results)` inside a double-quoted string. Rewrote with command substitution outside the quoted span.
 
 2026-04-08  Ryan Musante
 
 - Tagged as v3.48.8
-- LOW FIX (`_ry_verify_runtime`): positional-coupling assertion diagnostic at `sys_units` count drift embedded `\"(count $sys_units)\"` inside a double-quoted string. Fish does not perform command substitution through escape-quoted boundaries, so the error message would have printed the literal text `"(count $sys_units)"` instead of the actual count. Cold path (only fires on maintainer-introduced drift), but misleading when it does. Rewrote as `actual="(count $sys_units)" expected=5` with the command substitution outside the quoted span.
+- `_ry_verify_runtime`: assertion diagnostic embedded `(count $sys_units)` inside escape-quoted boundaries. Rewrote with command substitution outside the quoted span.
 
 2026-04-08  Ryan Musante
 
 - Tagged as v3.48.7
-- LOW FIX (`_content_hash`): `test $status -ne 0` after `set -l _content (_ry_get_file_content ... | string collect --no-trim-newlines)` checked the tail of the pipeline (`string collect`), not the generator — generator failures with partial output would slip past the status check and only be caught by the `-z` fallback. Switched to `$pipestatus[1]` to capture the generator's exit code explicitly. `string collect --no-trim-newlines` is retained for trailing-newline parity with on-disk files written by `tee`.
-- LOW FIX (`_msg`): invalid-level branch wrote JSONL directly to `$LOG_FILE` without the `test -n ... ; and test -f ...` guard that `_log` uses. If an invalid level was passed during early init (before log creation) or after lock-contention cleanup (which removes `$LOG_FILE`), the redirect would emit a "No such file" error on stderr. Now gated identically to `_log`.
-- LOW FIX (`_validate_kernel_params`): stale inline comments. Header comment claimed `amd_iommu` was unchecked because it lacked a "clean CONFIG_ symbol" — `CONFIG_AMD_IOMMU` exists; the real reason is validation is moot (we disable the feature). Example comment referenced `CONFIG_AMD_PSTATE`, which is not in `param_config_map`. Rewrote both to match the actual map contents.
+- `_content_hash`: captured `$pipestatus[1]` for generator status instead of bare `$status` (which reflected the tail `string collect`, not the generator).
+- `_msg`: invalid-level branch now gated on `test -n ... ; and test -f ...` like `_log`, so it doesn't emit "No such file" if called during early init.
+- `_validate_kernel_params`: stale inline comments rewritten to match the actual `param_config_map` contents.
 
 2026-04-08  Ryan Musante
 
 - Tagged as v3.48.6
-- HIGH FIX (`_ry_verify_runtime`): THP `enabled` and `defrag` runtime checks never entered their OK branch. Patterns `string match -q '*\[always\]*'` and `'*\[defer+madvise\]*'` ran in glob mode where backslash-bracket is not a valid escape, so both matches always failed and the checks fell through to WARN on correctly tuned hosts. Switched to regex mode (`string match -qr '\[always\]'` and `string match -qr '\[defer\+madvise\]'`). Verified against live-format sysfs strings.
-- LOW FIX (`_ry_do_test_all`): `--test-all` ran `fish $script_path --completions` against the real `$HOME`, overwriting the user's actual `~/.config/fish/completions/ry-install.fish` as a side effect of a read-only test mode. Now sandboxes the invocation under `HOME=$(mktemp -d)`, reads/validates from the sandbox, and cleans up on exit.
-- LOW FIX (CLI dispatch): `--install-file` without a path argument, or followed by another flag, silently fell through in the arg loop and produced a misleading "Cannot combine multiple mode flags" error on the next iteration. Now emits an explicit `--install-file requires an absolute path argument` diagnostic and exits `EXIT_USAGE` immediately.
+- `_ry_verify_runtime`: THP `enabled` and `defrag` runtime checks were running glob-mode `string match` against backslash-bracket patterns, which never matched. Switched to regex mode (`-qr '\[always\]'`, `-qr '\[defer\+madvise\]'`).
+- `_ry_do_test_all`: sandboxes `--completions` invocation under `HOME=(mktemp -d)` so the test mode doesn't overwrite the user's real completions file.
+- CLI dispatch: `--install-file` without a path now emits an explicit usage error and exits `EXIT_USAGE` immediately.

@@ -1,12 +1,11 @@
 #!/usr/bin/env fish
-# ry-install v3.48.16 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI)
-# Guard: prevent duplicate event handler registration if sourced twice in same session
+# ry-install v3.48.17 — CachyOS config manager | Ryan Musante | MIT | Global flags below (overridden by CLI) Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     status is-interactive; and return 1; or exit 1
 end
 set -g _RY_INSTALL_LOADED true
-set -g VERSION "3.48.16"
+set -g VERSION "3.48.17"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -165,8 +164,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         return 0
     end
 
-    # Map cmdline param prefix → CONFIG_ symbol
-    # unchecked: amd_iommu (validation moot — we disable it), clocksource, initcall_blacklist, module_blacklist, nowatchdog, quiet, threadirqs (always-on or no clean CONFIG_ symbol)
+    # Map cmdline param prefix → CONFIG_ symbol unchecked: amd_iommu (validation moot — we disable it), clocksource, initcall_blacklist, module_blacklist, nowatchdog, quiet, threadirqs (always-on or no clean CONFIG_ symbol)
     set -l param_config_map \
         "zswap.=CONFIG_ZSWAP" \
         "amdgpu.=CONFIG_DRM_AMDGPU" \
@@ -296,10 +294,11 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
         set -a sys_dirs /etc/NetworkManager/system-connections
     end
     for dir in $sys_dirs
-        for f in (command find "$dir" -maxdepth 1 -name '.ry-install.*' -type f 2>/dev/null)
-            if command -q sudo
-                sudo -n rm -f -- "$f" 2>/dev/null
-            end
+        # 0700 root-only dirs (e.g. /etc/NetworkManager/system-connections) need sudo to enumerate
+        if command -q sudo
+            sudo -n find "$dir" -maxdepth 1 -name '.ry-install.*' -type f -delete 2>/dev/null
+        else
+            command find "$dir" -maxdepth 1 -name '.ry-install.*' -type f -delete 2>/dev/null
         end
     end
     set -l usr_dirs
@@ -310,15 +309,11 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
         end
     end
     for dir in $usr_dirs
-        for f in (command find "$dir" -maxdepth 1 -name '.ry-install.*' -type f 2>/dev/null)
-            command rm -f -- "$f" 2>/dev/null
-        end
+        command find "$dir" -maxdepth 1 -name '.ry-install.*' -type f -delete 2>/dev/null
     end
     set -l comp_dir "$HOME/.config/fish/completions"
     if test -d "$comp_dir"
-        for f in (command find "$comp_dir" -maxdepth 1 -name '.ry-install.*' -type f 2>/dev/null)
-            command rm -f -- "$f" 2>/dev/null
-        end
+        command find "$comp_dir" -maxdepth 1 -name '.ry-install.*' -type f -delete 2>/dev/null
     end
 end
 
@@ -353,8 +348,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     # Stale lock reclaim: (a) flock(1) atomic advisory lock eliminates TOCTOU, (b) fallback rmdir+mkdir with PID re-verify
     set -l _reclaim_parent (dirname -- "$LOCK_DIR")
     if command -q flock
-        # flock -n/-E 5: non-blocking, exit 5 on contention; /bin/sh inner script avoids Fish quoting; paths as positional args
-        # PID write happens INSIDE the flocked subshell to close the race between mkdir and pid-write where another reclaimer could win
+        # flock -n/-E 5: non-blocking, exit 5 on contention; /bin/sh inner script avoids Fish quoting; paths as positional args PID write happens INSIDE the flocked subshell to close the race between mkdir and pid-write where another reclaimer could win
         flock -n -E 5 "$_reclaim_parent" /bin/sh -c '
             rm -f -- "$1/pid" 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)
             find "$1" -maxdepth 1 -type f -delete 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)
@@ -862,9 +856,7 @@ function _load_profile --description "Determine, load, and validate the active p
     # 6. Cache root UUID — findmnt called once here; eliminates TOCTOU between _ry_install_file's comparison and write paths
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
     if test -z "$_ROOT_UUID"
-        # Hard-fail only for modes that actually generate or verify /etc/kernel/cmdline.
-        # Read-only modes (lint, completions, --help, --version) and modes that don't touch cmdline
-        # can safely proceed with an empty UUID.
+        # Hard-fail only for modes that actually generate or verify /etc/kernel/cmdline. Read-only modes (lint, completions, --help, --version) and modes that don't touch cmdline can safely proceed with an empty UUID.
         switch "$MODE"
             case install install-file verify-static verify-runtime check
                 _err "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline cannot be generated"
@@ -935,8 +927,7 @@ function _manifest_check_orphans --description "Warn about files from previous i
     set -l prev_ver "$manifest_lines[1]"
     set -l prev_profile "$manifest_lines[2]"
     set -l prev_dests $manifest_lines[3..]
-    # Completions path is generated (not in DESTINATIONS lists) but IS recorded in the manifest;
-    # include it in current_dests so re-runs do not flag it as an orphan.
+    # Completions path is generated (not in DESTINATIONS lists) but IS recorded in the manifest; include it in current_dests so re-runs do not flag it as an orphan.
     set -l _completions_path "$HOME/.config/fish/completions/ry-install.fish"
     set -l current_dests $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS "$_completions_path"
 
@@ -1101,8 +1092,7 @@ ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system
 WantedBy=multi-user.target'
 
         case /etc/drirc
-            # RADV unified VRAM heap: prevents games from misallocating via artificial two-heap split on UMA APUs
-            # NOTE: radv_enable_unified_heap_on_apu requires Mesa ≥25.0; verify option still exists in current Mesa source before each release. If renamed/removed, gfx1151 UMA tuning silently no-ops.
+            # RADV unified VRAM heap: prevents games from misallocating via artificial two-heap split on UMA APUs NOTE: radv_enable_unified_heap_on_apu requires Mesa ≥25.0; verify option still exists in current Mesa source before each release. If renamed/removed, gfx1151 UMA tuning silently no-ops.
             printf '%s\n' '<driconf>' \
                 '  <device>' \
                 '    <application name="Default">' \
@@ -1139,7 +1129,7 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
     # Must run after _load_profile — needs profile globals for _ry_get_file_content
     set -l _we_created_dir false
     if test -z "$out_dir"
-        set out_dir (mktemp -d --tmpdir=/tmp ry-content.XXXXXX)
+        set out_dir (mktemp -d -t ry-content.XXXXXX)
         # bail on mktemp failure BEFORE set -ga to avoid tracking empty path
         if test -z "$out_dir"
             _err "_pregenerate_content_files: mktemp -d failed"
@@ -1254,8 +1244,7 @@ function _json_str --description "Escape a string for safe JSON embedding"
     printf '%s\n' "$val"
 end
 
-# GKeyFile escape for NM .nmconnection: backslash, tab, newline, semicolon, leading #, leading/trailing space
-# NDJSON logging: self-contained JSON per line, event classification, _json_str escapes+caps at 4096 chars; fish single-quotes pass \\ and \' to PCRE2 (NOT literal like bash)
+# GKeyFile escape for NM .nmconnection: backslash, tab, newline, semicolon, leading #, leading/trailing space NDJSON logging: self-contained JSON per line, event classification, _json_str escapes+caps at 4096 chars; fish single-quotes pass \\ and \' to PCRE2 (NOT literal like bash)
 function _log --description "Append a timestamped message to the log file"
     # Guard: do not recreate LOG_FILE if it was intentionally deleted (e.g. _acquire_lock contention)
     test -f "$LOG_FILE"; or return 0
@@ -2319,10 +2308,7 @@ function _ry_mkinitcpio_array --argument-names key file --description "First non
     grep -E "^[[:space:]]*$key=" "$file" 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1
 end
 
-# Single canonical hash method for embedded content. Used by both _ry_install_file (skip-unchanged check)
-# and _atomic_write_file (post-write integrity verify) — keeping these in one place prevents the
-# fragility where two call sites used different hash pipelines that only happened to produce
-# identical output by coincidence.
+# Single canonical hash method for embedded content. Used by both _ry_install_file (skip-unchanged check) and _atomic_write_file (post-write integrity verify) — keeping these in one place prevents the fragility where two call sites used different hash pipelines that only happened to produce identical output by coincidence.
 function _content_hash --argument-names dst --description "SHA256 of embedded content for a destination, or empty on generator failure"
     if test (count $argv) -ne 1
         _err "_content_hash: expected 1 arg (dst), got "(count $argv)
@@ -2333,7 +2319,13 @@ function _content_hash --argument-names dst --description "SHA256 of embedded co
     set -l _gen_rc $pipestatus[1]
     test $_gen_rc -ne 0; and return 1
     test -z "$_content"; and return 1
-    printf '%s' "$_content" | sha256sum | string split -- ' ' | head -n 1
+    set -l _hash (printf '%s' "$_content" | sha256sum | string split -- ' ' | head -n 1)
+    set -l _hash_ps $pipestatus
+    if test $_hash_ps[1] -ne 0; or test $_hash_ps[2] -ne 0
+        return 1
+    end
+    test -z "$_hash"; and return 1
+    printf '%s\n' "$_hash"
     return 0
 end
 
@@ -2476,10 +2468,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         end
     end
 
-    # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs).
-    # Uses sudo -n: a lapsed keepalive will produce empty _actual_hash → explicit fail-closed below,
-    # rather than the silent prompt-suppression that would happen with plain `sudo` + 2>/dev/null.
-    # Trailing newlines are preserved by direct-to-pipeline cat (command substitution would strip them).
+    # Post-write integrity check: verify mv preserved content (catches fs corruption, not generation bugs). Uses sudo -n: a lapsed keepalive will produce empty _actual_hash → explicit fail-closed below, rather than the silent prompt-suppression that would happen with plain `sudo` + 2>/dev/null. Trailing newlines are preserved by direct-to-pipeline cat (command substitution would strip them).
     set -l _actual_hash
     set -l _hash_fail_reason ""
     if test "$use_sudo" = true
@@ -2983,8 +2972,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
         end
         set -a _check_mask "$_svc"
     end
-    # Batch systemctl show replaces N individual is-enabled+cat calls; string collect preserves blank-line delimiters.
-    # Request all 3 properties (LoadState,ActiveState,UnitFileState) for parser consistency with do_check/verify_runtime; consumer uses _rec[3] only, ActiveState is ignored here but parsing stays symmetric.
+    # Batch systemctl show replaces N individual is-enabled+cat calls; string collect preserves blank-line delimiters. Request all 3 properties (LoadState,ActiveState,UnitFileState) for parser consistency with do_check/verify_runtime; consumer uses _rec[3] only, ActiveState is ignored here but parsing stays symmetric.
     set -l _mask_raw (systemctl show --property=LoadState,ActiveState,UnitFileState -- $_check_mask 2>/dev/null | string collect --no-trim-newlines)
     set -l _mask_parsed (_parse_systemctl_show "$_mask_raw")
     if test (count $_mask_parsed) -lt (count $_check_mask)
@@ -3090,14 +3078,10 @@ function _ry_verify_static --description "Verify installed configs match embedde
                 sha256sum <"$dst" 2>/dev/null | string split -- ' ' | head -n 1 >"$hash_dir/installed_$safe"
             end
         else
-            # Re-check sudo -n right before the read: if the timestamp lapsed, we skip the hash write entirely.
-            # Child worker treats missing installed_$safe as "cannot read" rather than emitting a spurious
-            # "checksum MISMATCH" from the empty-file sha256 (e3b0c4…) that an empty pipeline would produce.
-            # Trailing newlines are preserved by direct-to-pipeline cat (command substitution would strip them).
+            # Re-check sudo -n right before the read: if the timestamp lapsed, we skip the hash write entirely. Child worker treats missing installed_$safe as "cannot read" rather than emitting a spurious "checksum MISMATCH" from the empty-file sha256 (e3b0c4…) that an empty pipeline would produce. Trailing newlines are preserved by direct-to-pipeline cat (command substitution would strip them).
             if sudo -n test -r "$dst" 2>/dev/null; and sudo -n true 2>/dev/null
                 sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ' | head -n 1 >"$hash_dir/installed_$safe"
-                # If cat failed despite the sudo probe above (race), the file contains the empty-file hash;
-                # detect by checking pipestatus[1] and clear on failure.
+                # If cat failed despite the sudo probe above (race), the file contains the empty-file hash; detect by checking pipestatus[1] and clear on failure.
                 if test $pipestatus[1] -ne 0
                     command rm -f -- "$hash_dir/installed_$safe" 2>/dev/null
                 end
@@ -3142,8 +3126,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
                     continue
                 end
                 set -l expected_hash (sha256sum < "$hash_dir/expected_$safe" | string split -- " ")[1]
-                # Distinguish "cat failed / file unreadable" from "hash differs" so the collect phase
-                # can surface an accurate error. Missing installed_$safe → noread; present-but-diff → fail.
+                # Distinguish "cat failed / file unreadable" from "hash differs" so the collect phase can surface an accurate error. Missing installed_$safe → noread; present-but-diff → fail.
                 if not test -e "$hash_dir/installed_$safe"
                     echo noread > "$hash_dir/result_$safe"
                     continue
@@ -3986,9 +3969,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         else if test -n "$actual"
             _fail "  $var_name=$actual (expected: $expected)"
         else
-            # Env file is verified by _ry_verify_static; here we only observe shell-visible state.
-            # A correctly-installed variable that hasn't been re-loaded into the current session is a WARN,
-            # not a FAIL — re-login or `systemctl --user import-environment` is the expected fix.
+            # Env file is verified by _ry_verify_static; here we only observe shell-visible state. A correctly-installed variable that hasn't been re-loaded into the current session is a WARN, not a FAIL — re-login or `systemctl --user import-environment` is the expected fix.
             _warn "  $var_name: NOT SET in current session (re-login or systemctl --user import-environment)"
         end
     end
@@ -4749,8 +4730,7 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
     set -l my_pid %self
-    # Keepalive: sudo -n -v refreshes timestamp without running a command; 2 retries with 1s backoff
-    # absorb transient PAM/NSS failures so a single hiccup does not kill the loop
+    # Keepalive: sudo -n -v refreshes timestamp without running a command; 2 retries with 1s backoff absorb transient PAM/NSS failures so a single hiccup does not kill the loop
     fish -c '
         while kill -0 -- $argv[1] 2>/dev/null; and test -d -- $argv[2]
             set -l _ok false
@@ -4843,9 +4823,7 @@ function _install_packages --description "Install managed packages via pacman -S
         end
 
         _info "Verifying package installation..."
-        # pacman -T <targets> prints any targets not satisfied by an installed package
-        # or its providers; correctly handles groups, virtual packages, and provides.
-        # Exit code: 0 = all satisfied, 127 = one or more unresolved.
+        # pacman -T <targets> prints any targets not satisfied by an installed package or its providers; correctly handles groups, virtual packages, and provides. Exit code: 0 = all satisfied, 127 = one or more unresolved.
         set -l missing_pkgs (pacman -T -- $pkgs_to_install 2>/dev/null)
         if test (count $missing_pkgs) -gt 0
             _err "Missing packages: $missing_pkgs"
@@ -4857,8 +4835,7 @@ function _install_packages --description "Install managed packages via pacman -S
         end
     end
 
-    # LOW-1 fix: scan for .pacnew/.pacsave files at managed destinations.
-    # pacman creates these silently when upgrading a package whose config was modified.
+    # LOW-1 fix: scan for .pacnew/.pacsave files at managed destinations. pacman creates these silently when upgrading a package whose config was modified.
     set -l _pacnew_found
     for _dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         for _suffix in .pacnew .pacsave
@@ -4889,8 +4866,7 @@ function _install_aur_packages --description "Install AUR packages via paru"
         _info "  Install paru: sudo pacman -S --needed paru"
         return 0
     end
-    # Batch install: paru resolves shared makedeps once across the whole set.
-    # Fall back to per-package loop only on batch failure to identify culprits.
+    # Batch install: paru resolves shared makedeps once across the whole set. Fall back to per-package loop only on batch failure to identify culprits.
     if not _run paru -S --needed --noconfirm -- $AUR_PKGS
         _warn "AUR batch install failed — retrying per-package to identify failures"
         for pkg in $AUR_PKGS
@@ -4903,12 +4879,9 @@ function _install_aur_packages --description "Install AUR packages via paru"
     return 0
 end
 
-# Post-package phase boundary: invalidate iwd cache (state may have changed via -Syu) and refresh package DBs.
-# Must run UNCONDITIONALLY after _install_packages + _install_aur_packages — both can early-return without
-# reaching the work below, leaving _RY_SKIP_IWD stale from preflight (mkinitcpio.conf pre-deploy primes it).
+# Post-package phase boundary: invalidate iwd cache (state may have changed via -Syu) and refresh package DBs. Must run UNCONDITIONALLY after _install_packages + _install_aur_packages — both can early-return without reaching the work below, leaving _RY_SKIP_IWD stale from preflight (mkinitcpio.conf pre-deploy primes it).
 function _install_post_package_refresh --description "Invalidate caches and refresh package DBs after pacman/paru phase"
-    # Invalidate _RY_SKIP_IWD cache: _ry_install_file primes it during mkinitcpio.conf pre-deploy BEFORE pacman -Syu runs.
-    # Without this reset, a profile adding iwd to PKGS_ADD on a host that lacks it would silently skip iwd/main.conf and 99-cachyos-nm.conf.
+    # Invalidate _RY_SKIP_IWD cache: _ry_install_file primes it during mkinitcpio.conf pre-deploy BEFORE pacman -Syu runs. Without this reset, a profile adding iwd to PKGS_ADD on a host that lacks it would silently skip iwd/main.conf and 99-cachyos-nm.conf.
     set --erase _RY_SKIP_IWD 2>/dev/null
     set --erase _RY_SKIP_IWD_CACHED 2>/dev/null
 
@@ -4997,7 +4970,7 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
         return 1
     end
     sudo awk '
-        BEGIN { OFS = "\t" }
+        BEGIN { OFS = " " }
         /^[[:space:]]*#/ || NF < 4 { print; next }
         $3 != "ext4" { print; next }  # lint:ignore (awk field reference)
         {
@@ -5027,10 +5000,12 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
 
     # Verify the modified fstab parses correctly (findmnt --verify)
     if command -q findmnt
-        # -iE catches "Error", "Warning", "Invalid" capitalisation variants
-        set -l _verify_err (sudo findmnt --verify --tab-file "$tmpfstab" 2>&1 | grep -iE 'error|unknown|invalid' | head -n 3)
-        if test -n "$_verify_err"
-            _warn "  /etc/fstab: modified file has parse warnings: $_verify_err"
+        # findmnt --verify exits non-zero on real errors; rely on rc, not free-form output grep
+        set -l _verify_out (sudo findmnt --verify --tab-file "$tmpfstab" 2>&1)
+        set -l _verify_rc $status
+        if test $_verify_rc -ne 0
+            set -l _verify_snip (printf '%s\n' $_verify_out | head -n 3 | string join '; ')
+            _warn "  /etc/fstab: findmnt --verify failed (rc=$_verify_rc): $_verify_snip"
             _warn "  Keeping original /etc/fstab unchanged"
             sudo rm -f -- "$tmpfstab" 2>/dev/null
             return 1
@@ -5309,9 +5284,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         return $EXIT_BOOT_CRIT
     end
 
-    # SDBOOT_REMOVE_EXISTING=yes deletes ALL existing loader entries before regen.
-    # First-run safety: require explicit acknowledgement via env var OR marker file (set after first successful gen).
-    # This prevents an unattended install on a dual-boot or rescue-entry host from silently wiping non-managed entries.
+    # SDBOOT_REMOVE_EXISTING=yes deletes ALL existing loader entries before regen. First-run safety: require explicit acknowledgement via env var OR marker file (set after first successful gen). This prevents an unattended install on a dual-boot or rescue-entry host from silently wiping non-managed entries.
     if test "$SDBOOT_REMOVE_EXISTING" = yes
         set -l _wipe_marker "$HOME/ry-install/.boot-wipe-acknowledged"
         set -l _acknowledged false
@@ -5819,9 +5792,9 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     _ok "  fish --no-execute: passed"
     _echo
 
-    # Pre-cache sudo for modes that need it
+    # Best-effort sudo cache: lint/version/help need none; check/verify-* degrade via noread path
     _ensure_sudo_cached
-    or return 1
+    or _warn "Sudo unavailable — sudo-dependent sub-tests will degrade or skip"
 
     # Read-only parallel modes (no sequential write modes — install path is exercised by actual installs)
     set -l parallel_modes \
@@ -5867,8 +5840,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
 
     for i in (seq (count $parallel_modes))
         set -l mode_args (string split ' ' -- $parallel_modes[$i])
-        # Strip only the leading `--` and replace spaces/slashes; preserves interior hyphens so
-        # --verify-static and --verifystatic (hypothetical) would not collide on the label filename.
+        # Strip only the leading `--` and replace spaces/slashes; preserves interior hyphens so --verify-static and --verifystatic (hypothetical) would not collide on the label filename.
         set -l label (string replace -- '--' '' $parallel_modes[$i] | string replace -a ' ' '_' | string replace -a '/' '_')
         fish -c '
             set -l script_path $argv[1]; set -l stderr_file $argv[2]; set -l exit_file $argv[3] # lint:ignore
@@ -5912,8 +5884,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     end
     _echo
 
-    # Validate --completions installs file with expected subcommands
-    # Sandbox HOME to a scratch dir so --test-all does not overwrite the user's real completions file
+    # Validate --completions installs file with expected subcommands Sandbox HOME to a scratch dir so --test-all does not overwrite the user's real completions file
     _echo "─ Validating completions output..."
     set -l _comp_sandbox (mktemp -d -t ry-test-comp.XXXXXX)
     if test -z "$_comp_sandbox"; or not test -d "$_comp_sandbox"
@@ -5935,9 +5906,9 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         _info "  completions file not available (write failed) — skipping content check"
         set passed (math $passed + 1)
     else
-        for _expected_cmd in --install-file --verify-static --verify-runtime --lint
-            if not string match -q "*$_expected_cmd*" -- "$_comp_out"
-                _warn "  completions missing: $_expected_cmd"
+        for _expected_cmd in install-file verify-static verify-runtime lint
+            if not string match -q "*-l $_expected_cmd *" -- "$_comp_out"
+                _warn "  completions missing: --$_expected_cmd"
                 set _comp_ok false
             end
         end
@@ -5967,8 +5938,7 @@ end
 
 # CLI ARGUMENT PARSING AND DISPATCH
 
-# Shared usage-exit helper for the top-level arg parser: prints message, removes the pre-dispatch log file, exits EXIT_USAGE.
-# Defined here (top-level, not function) so it is visible to the loop below without polluting the function namespace of sourced shells.
+# Shared usage-exit helper for the top-level arg parser: prints message, removes the pre-dispatch log file, exits EXIT_USAGE. Defined here (top-level, not function) so it is visible to the loop below without polluting the function namespace of sourced shells.
 function _early_usage_exit --description "Print usage error to stderr, remove pre-dispatch log, exit EXIT_USAGE"
     echo "[ERR] $argv" >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
@@ -6146,8 +6116,7 @@ end
 
 # Log rotation: flock serializes concurrent instances; without flock, rm -f is idempotent (last-write-wins)
 set -l _log_base_rot "$HOME/ry-install/logs"
-# Null-delimited pipeline handles paths containing newlines (theoretical but cheap to fix).
-# Format: %T@<NUL>%p<NUL>  →  sort -z by mtime  →  strip mtime prefix  →  Fish list via split0
+# Null-delimited pipeline handles paths containing newlines (theoretical but cheap to fix). Format: %T@<NUL>%p<NUL>  →  sort -z by mtime  →  strip mtime prefix  →  Fish list via split0
 set -l _rot_raw (command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f ! -path "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -z -t \t -k1,1n | string split0)
 set -l _existing_logs
 for _rot_entry in $_rot_raw

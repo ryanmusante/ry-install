@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.48.20 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.48.21 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
@@ -19,7 +19,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.48.20"
+set -g VERSION "3.48.21"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -907,7 +907,7 @@ function _load_profile --description "Determine, load, and validate the active p
     # 6. Cache root UUID — findmnt called once here; eliminates TOCTOU between _ry_install_file's comparison and write paths
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
     if test -z "$_ROOT_UUID"
-        # Hard-fail only for modes that actually generate or verify /etc/kernel/cmdline. Read-only modes (lint, completions, --help, --version) and modes that don't touch cmdline can safely proceed with an empty UUID.
+        # Hard-fail only for modes that actually generate or verify /etc/kernel/cmdline. Read-only modes (completions, --help, --version) and modes that don't touch cmdline can safely proceed with an empty UUID.
         switch "$MODE"
             case install install-file verify-static verify-runtime check
                 _err "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline cannot be generated"
@@ -1604,7 +1604,7 @@ function _progress_done --description "Finalize and close the progress display"
     set -g _STEP_PREV_NAME ""
     set -g _STEP_PREV_START 0
 
-    # Runtime assertion: catch step count drift (lint also checks at build time)
+    # Runtime assertion: catch step count drift
     if test "$PROGRESS_CURRENT" -ne "$PROGRESS_TOTAL" 2>/dev/null
         _warn "Progress step mismatch: emitted $PROGRESS_CURRENT of $PROGRESS_TOTAL expected"
     end
@@ -1654,8 +1654,8 @@ function _run --description "Execute a command with logging and error capture; s
 
     # Single mktemp -d for the pair: halves inode pressure under heavy parallel use
     set -l _run_dir (mktemp -d -t ry-run.XXXXXX 2>/dev/null)
-    set -l stderr_tmp /dev/null
-    set -l stdout_tmp /dev/null
+    set -l stderr_tmp
+    set -l stdout_tmp
     if test -n "$_run_dir"; and test -d "$_run_dir"
         set stderr_tmp "$_run_dir/stderr"
         set stdout_tmp "$_run_dir/stdout"
@@ -1670,7 +1670,7 @@ function _run --description "Execute a command with logging and error capture; s
     # SECURITY: $argv is hardcoded from internal callers
     $argv >"$stdout_tmp" 2>"$stderr_tmp"
     set -l ret $status
-    if test "$stderr_tmp" != /dev/null; and test -s "$stderr_tmp"
+    if test -s "$stderr_tmp"
         set -l total_err (command wc -l < "$stderr_tmp" | string trim --)
         set -l first_lines (command head -n 5 "$stderr_tmp")
         set -l dedup_lines (LC_ALL=C command sort "$stderr_tmp" | command uniq -c | command sort -rn | command sed 's/^ *//')
@@ -1684,7 +1684,7 @@ function _run --description "Execute a command with logging and error capture; s
             end
         end
     end
-    if test "$stdout_tmp" != /dev/null; and test -s "$stdout_tmp"
+    if test -s "$stdout_tmp"
         set -l line_count (command wc -l < "$stdout_tmp" | string trim --)
         if test $line_count -le 50
             _log "OUTPUT: "(string join -- " | " (command cat -- "$stdout_tmp"))
@@ -5601,7 +5601,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     _ok "  fish --no-execute: passed"
     _echo
 
-    # Best-effort sudo cache: lint/version/help need none; check/verify-* degrade via noread path
+    # Best-effort sudo cache: version/help need none; check/verify-* degrade via noread path
     _ensure_sudo_cached
     or _warn "Sudo unavailable — sudo-dependent sub-tests will degrade or skip"
 
@@ -5919,7 +5919,7 @@ switch $MODE
             _ry_exit $EXIT_LOCK; and return $EXIT_LOCK; or return $EXIT_LOCK
         end
     case '*'
-        # No lock needed for read-only modes (verify, lint, completions, test-all)
+        # No lock needed for read-only modes (verify, completions, test-all)
 end
 
 # Log rotation: flock serializes concurrent instances; without flock, rm -f is idempotent (last-write-wins)

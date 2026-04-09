@@ -1,4 +1,4 @@
-# ry-install v3.48.21
+# ry-install v3.48.22
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
 

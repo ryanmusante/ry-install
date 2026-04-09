@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.48.21 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.48.22 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 # Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
@@ -19,7 +19,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.48.21"
+set -g VERSION "3.48.22"
 # Exit codes
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
@@ -142,6 +142,11 @@ set -g _TRACKED_TMPFILES
 
 # Retention limits
 set -g MAX_LOGS 50
+
+# Compile-time invariant: count of `case` branches in _ry_get_file_content.
+# Used as fallback by _ry_show_help when --help runs before _load_profile.
+# If you add/remove a case in _ry_get_file_content, bump this by hand.
+set -g _RY_MANAGED_CASE_COUNT 15
 
 # Timing constants
 set -g SUDO_KEEPALIVE_INTERVAL 45
@@ -286,21 +291,6 @@ function _verify_unit_syntax --argument-names unit_path label --description "Ver
     end
 end
 
-# Parse systemd-analyze output for total boot time in seconds; return 1 if unavailable
-function _get_boot_time --description "Print boot time in seconds, or return 1"
-    _log "BOOT_TIME_CHECK: querying systemd-analyze"
-    command -q systemd-analyze; or return 1
-    set -l line (systemd-analyze 2>/dev/null | head -n 1)
-    # string match -r outputs full match then capture groups; tail -n 1 extracts the group
-    set -l sec (printf '%s\n' "$line" | string match -r -- '= ([0-9.]+)s' | tail -n 1)
-    if test -n "$sec"; and string match -qr '^[0-9.]+$' -- "$sec"
-        printf '%s\n' "$sec"
-        return 0
-    end
-    return 1
-end
-
-# Sweep /tmp for ry-{run-stderr,run-stdout,validate,diff,argparse,test-stderr}.* owned by current UID
 function _write_footer --argument-names exit_code extra_key --description "Append JSONL footer to LOG_FILE; idempotent via _FOOTER_WRITTEN"
     set -q _FOOTER_WRITTEN; and return 0
     set -q LOG_FILE; or return 0
@@ -316,6 +306,7 @@ function _write_footer --argument-names exit_code extra_key --description "Appen
         "$_ts" "$_ts" "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" "$_extra" >>"$LOG_FILE" 2>/dev/null
 end
 
+# Sweep /tmp for ry-{run-stderr,run-stdout,validate,diff,argparse,test-stderr}.* owned by current UID
 function _cleanup_tmpfiles --description "Remove temporary files created during this run"
     if not set -q _FOOTER_WRITTEN
         _log "CLEANUP_TMPFILES: sweep starting"
@@ -1521,10 +1512,13 @@ function _progress_init --description "Initialize the step progress counter"
 end
 
 # Advance to next step: emit timing for previous step, display [N/M] progress bar to stderr
-function _progress --argument-names step_name --description "Advance and display the current progress step"
+function _progress --argument-names step_name skip_flag --description "Advance and display the current progress step; pass 'skip' as second arg for a skipped step"
     if test (count $argv) -lt 1
         return 0
     end
+    set -l is_skip false
+    test "$skip_flag" = skip; and set is_skip true
+
     _emit_step_time
     set -g _STEP_PREV_NAME "$step_name"
     set -g _STEP_PREV_START (date +%s)
@@ -1538,26 +1532,39 @@ function _progress --argument-names step_name --description "Advance and display
     set -l filled (math "floor($PROGRESS_CURRENT * $PROGRESS_WIDTH / $PROGRESS_TOTAL)")
     set -l empty (math "$PROGRESS_WIDTH - $filled")
 
-    set -l bar (string repeat -n $filled -- '█')(string repeat -n $empty -- '░')
+    # Fix: `string repeat -n 0` exits 1 in fish, which erases the entire
+    # adjacent command substitution. At 100% (empty=0) or 0% (filled=0)
+    # this rendered the bar as `[]`. Build each segment conditionally.
+    set -l bar_filled ""
+    set -l bar_empty ""
+    test $filled -gt 0; and set bar_filled (string repeat -n $filled -- '█')
+    test $empty -gt 0; and set bar_empty (string repeat -n $empty -- '░')
+    set -l bar "$bar_filled$bar_empty"
 
     set -l step_elapsed ""
-    set -l now (date +%s)
-    if test "$PROGRESS_STEP_START" -gt 0
-        set -l step_secs (math "$now - $PROGRESS_STEP_START")
-        if test "$step_secs" -ge 60
-            set -l sm (math "floor($step_secs / 60)")
-            set -l ss (math "$step_secs % 60")
-            set step_elapsed (printf ' %dm%02ds' $sm $ss)
-        else if test "$step_secs" -gt 0
-            set step_elapsed (printf ' %ds' $step_secs)
+    if test "$is_skip" = false
+        set -l now (date +%s)
+        if test "$PROGRESS_STEP_START" -gt 0
+            set -l step_secs (math "$now - $PROGRESS_STEP_START")
+            if test "$step_secs" -ge 60
+                set -l sm (math "floor($step_secs / 60)")
+                set -l ss (math "$step_secs % 60")
+                set step_elapsed (printf ' %dm%02ds' $sm $ss)
+            else if test "$step_secs" -gt 0
+                set step_elapsed (printf ' %ds' $step_secs)
+            end
         end
+        set -g PROGRESS_STEP_START $now
     end
-    set -g PROGRESS_STEP_START $now
 
     # Fix 19: skip the bar on narrow terminals (<60 cols) to avoid wrap+\r tail garbage
     set -l _term_cols (tput cols 2>/dev/null; or echo 80)
     if not string match -qr '^\d+$' -- "$_term_cols"; or test "$_term_cols" -lt 60
-        _log "PROGRESS: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $step_name"
+        if test "$is_skip" = true
+            _log "PROGRESS_SKIP: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $step_name"
+        else
+            _log "PROGRESS: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $step_name"
+        end
         return 0
     end
 
@@ -1568,34 +1575,13 @@ function _progress --argument-names step_name --description "Advance and display
         set desc (string sub -l 25 -- "$step_name                              ")
     end
 
-    printf '\r[%s] %3d%% %s%s' "$bar" "$pct" "$desc" "$step_elapsed" >&2
-    _log "PROGRESS: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $step_name"
-end
-
-# Record a skipped progress step to keep counter synchronized with PROGRESS_TOTAL
-function _progress_skip --argument-names step_name --description "Advance progress counter for a skipped step"
-    if test (count $argv) -lt 1
-        return 0
-    end
-    _emit_step_time
-    set -g _STEP_PREV_NAME "$step_name"
-    set -g _STEP_PREV_START (date +%s)
-    set -g PROGRESS_CURRENT (math "min($PROGRESS_CURRENT + 1, $PROGRESS_TOTAL)")
-    # Render progress bar to avoid visual stall on skipped steps
-    if test "$PROGRESS_TOTAL" -gt 0 2>/dev/null
-        set -l pct (math "floor($PROGRESS_CURRENT * 100 / $PROGRESS_TOTAL)")
-        set -l filled (math "floor($PROGRESS_CURRENT * $PROGRESS_WIDTH / $PROGRESS_TOTAL)")
-        set -l empty (math "$PROGRESS_WIDTH - $filled")
-        set -l bar (string repeat -n $filled -- '█')(string repeat -n $empty -- '░')
-        set -l desc
-        if test (string length -- "$step_name") -gt 25
-            set desc (string sub -l 22 -- "$step_name")"..."
-        else
-            set desc (string sub -l 25 -- "$step_name                              ")
-        end
+    if test "$is_skip" = true
         printf '\r[%s] %3d%% %s (skip)' "$bar" "$pct" "$desc" >&2
+        _log "PROGRESS_SKIP: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $step_name"
+    else
+        printf '\r[%s] %3d%% %s%s' "$bar" "$pct" "$desc" "$step_elapsed" >&2
+        _log "PROGRESS: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $step_name"
     end
-    _log "PROGRESS_SKIP: [$PROGRESS_CURRENT/$PROGRESS_TOTAL] $step_name"
 end
 
 # Close progress display: emit final step timing, fill bar to 100%, reset state
@@ -1726,10 +1712,10 @@ end
 
 # Display full usage, options, exit codes, and examples to stdout
 function _ry_show_help --description "Display usage information and available subcommands"
-    # Fallback: count _ry_get_file_content case branches if profile hasn't loaded (--help exits before _load_profile)
+    # Fallback: use compile-time constant if profile hasn't loaded (--help exits before _load_profile)
     set -l _file_count "$MANAGED_FILE_COUNT"
     if test -z "$_file_count"
-        set _file_count (_ry_count_managed_cases (status filename))
+        set _file_count $_RY_MANAGED_CASE_COUNT
     end
     set -l _profile_desc "Beelink GTR9 Pro (Strix Halo)"
     if set -q PROFILE_DESC; and test -n "$PROFILE_DESC"
@@ -2369,13 +2355,6 @@ end
 
 
 # Count managed-file cases in _ry_get_file_content (total case branches minus wildcard '*'). Used by file-count xref checks. Accepts optional script_path; defaults to (status filename).
-function _ry_count_managed_cases --argument-names script_path --description "Count case branches in _ry_get_file_content minus wildcard"
-    if test -z "$script_path"
-        set script_path (status filename)
-    end
-    set -l _all_cases (awk '/^function _ry_get_file_content/{f=1} f && $1=="case"{n++} f && /^end$/{print n+0; exit}' "$script_path")
-    math "$_all_cases - 1"
-end
 
 
 # Read first non-comment "KEY=..." line from mkinitcpio.conf (or any conf file). Usage: _ry_mkinitcpio_array MODULES → first matching line, or empty.
@@ -4433,10 +4412,13 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         set -l boot_time (systemd-analyze 2>/dev/null | head -n 1)
         _info "  $boot_time"
 
-        set -l total_sec (_get_boot_time)
+        # Extract total seconds from already-captured line (was: redundant _get_boot_time call
+        # that re-ran systemd-analyze). Format: "Startup finished in ... = 12.345s"
+        _log "BOOT_TIME_CHECK: parsing systemd-analyze output"
+        set -l total_sec (printf '%s\n' "$boot_time" | string match -r -- '= ([0-9.]+)s' | tail -n 1)
         if test -n "$total_sec"; and string match -qr '^[0-9.]+$' -- "$total_sec"
             set -l target $BOOT_TIME_TARGET
-            set -l time_int (printf "%.0f" (math "$total_sec") 2>/dev/null)
+            set -l time_int (printf "%.0f" "$total_sec" 2>/dev/null)
             if test -n "$time_int"; and test "$time_int" -lt $target
                 _ok "  Boot time under $target""s target"
             else if test -n "$time_int"
@@ -5310,7 +5292,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
         _err "Boot-critical failure — skipping finalization"
         _err "Fix boot issue first: sudo mkinitcpio -P && sudo sdboot-manage gen"
-        _progress_skip Finalize
+        _progress Finalize skip
     else
         if not _install_finalize
             set -g INSTALL_HAD_ERRORS true

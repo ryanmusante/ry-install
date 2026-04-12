@@ -1,7 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v3.48.26 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.49.0 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
-# Guard: prevent duplicate event handler registration if sourced twice in same session
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status is-interactive
@@ -19,8 +18,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.48.26"
-# Exit codes
+set -g VERSION "3.49.0"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -118,7 +116,6 @@ command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
     echo "[ERR] Cannot create log directory: $LOG_DIR" >&2
     _ry_exit $EXIT_PREFLIGHT; and return $EXIT_PREFLIGHT; or return $EXIT_PREFLIGHT
 end
-# verify mode after chmod; preflight-fail on mismatch
 set -l _ld_cur_mode (stat -c '%a' -- "$HOME/ry-install" 2>/dev/null)
 if test "$_ld_cur_mode" != 700
     command chmod -- 700 "$HOME/ry-install" 2>/dev/null
@@ -151,7 +148,6 @@ set -g MAX_LOGS 50
 
 # Compile-time invariant: count of `case` branches in _ry_get_file_content.
 # Used as fallback by _ry_show_help when --help runs before _load_profile.
-# If you add/remove a case in _ry_get_file_content, bump this by hand.
 set -g _RY_MANAGED_CASE_COUNT 15
 
 # Timing constants
@@ -178,7 +174,6 @@ end
 # CONTRACT: When /proc/config.gz is missing or unreadable, this function returns 0 with NO output.
 # Callers using `_kconfig_cache | grep -q PATTERN` therefore see "no match" which they correctly
 # interpret as "feature not enabled" — the right answer for this codebase. Do not change to non-zero
-# return without auditing all 2 callers (_ntsync_state, _validate_kernel_params).
 function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy-loaded; empty on missing config)"
     # sentinel-based gate — `count == 0` re-tested /proc/config.gz on every call when missing
     if not set -q _KCONFIG_LOADED
@@ -189,7 +184,6 @@ function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy
         end
         set -g _KCONFIG_LOADED true
     end
-    # Guard: empty list → no output (prevents spurious empty line to grep callers)
     test (count $_KCONFIG_DATA) -eq 0; and return 0
     printf '%s\n' $_KCONFIG_DATA
 end
@@ -241,7 +235,6 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         set -l prefix (string split '=' -- "$entry")[1]
         set -l config_sym (string split '=' -- "$entry")[2]
 
-        # Check if any KERNEL_PARAM starts with _cfg_prefix (e.g., "zswap." matches "zswap.enabled=0")
         set -l found false
         for param in $KERNEL_PARAMS
             if string match -q -- "$prefix*" "$param"
@@ -251,7 +244,6 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         end
         test "$found" = true; or continue
 
-        # Check if config_sym (e.g., CONFIG_ZSWAP) is =y or =m in /proc/config.gz
         if not printf '%s\n' $config_data | grep -q -- "^$config_sym=[ym]"
             _warn "  $prefix* requires $config_sym but not enabled in running kernel"
             set mismatches (math $mismatches + 1)
@@ -360,7 +352,6 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
     end
 end
 
-# Cleanup state: _CLEANUP_DONE prevents double-run across signal + fish_exit handlers
 set -g _CLEANUP_DONE false
 
 # Atomic mkdir mutex with PID file; reclaims stale locks via PID liveness check; flock(1) eliminates TOCTOU race
@@ -431,7 +422,6 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         command rm -f -- "$LOG_FILE" 2>/dev/null
         return 1
     end
-    # Second verify after yield: catches late writers that overwrote between first check and now
     set -l verify_pid2 (command cat -- "$LOCK_FILE" 2>/dev/null)
     if test "$verify_pid2" != "$my_pid"
         echo "[ERR] Lock reclaim lost to late writer (PID $verify_pid2)" >&2
@@ -811,7 +801,6 @@ function _validate_profile --description "Verify loaded profile has all required
         return 1
     end
 
-    # Verify PROFILE_NAME matches the function that was called
     if test -n "$expected_name"; and test "$PROFILE_NAME" != "$expected_name"
         _err "Profile function _ry_profile_$expected_name set PROFILE_NAME='$PROFILE_NAME' (expected '$expected_name')"
         return 1
@@ -930,7 +919,6 @@ end
 
 set -g MANIFEST_FILE "$HOME/ry-install/.manifest"
 
-# Write manifest: version, profile, and all managed destinations (one per line)
 function _manifest_write --description "Record current profile destinations for orphan detection"
     # Create tmpfile in same directory as manifest for same-filesystem atomic mv
     set -l manifest_dir (dirname -- "$MANIFEST_FILE")
@@ -1213,7 +1201,6 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     sudo -n -v 2>"$_sudo_err"
     set -l _rc $status
     if test $_rc -ne 0
-        # Cache miss — retry so the prompt reaches the tty
         sudo -v 2>"$_sudo_err"
         set _rc $status
     end
@@ -1232,7 +1219,6 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     return 0
 end
 
-# Parse multi-record systemctl show output into LoadState:ActiveState:UnitFileState lines
 function _parse_systemctl_show --argument-names raw_output --description "Parse multi-record systemctl show output into unit:ActiveState:UnitFileState lines"
     if test (count $argv) -ne 1
         _err "_parse_systemctl_show: expected 1 arg (raw_output), got "(count $argv)
@@ -1262,7 +1248,6 @@ function _parse_systemctl_show --argument-names raw_output --description "Parse 
                 set current_load (string replace -- 'LoadState=' '' "$line")
         end
     end
-    # Emit final record if no trailing blank line
     if test -n "$current_active"; or test -n "$current_unitfile"; or test -n "$current_load"
         printf '%s\n' "$current_load:$current_active:$current_unitfile"
     end
@@ -1296,7 +1281,6 @@ end
 
 # GKeyFile escape for NM .nmconnection: backslash, tab, newline, semicolon, leading #, leading/trailing space NDJSON logging: self-contained JSON per line, event classification, _json_str escapes+caps at 4096 chars; fish single-quotes pass \\ and \' to PCRE2 (NOT literal like bash)
 function _log --description "Append a timestamped message to the log file"
-    # Guard: do not recreate LOG_FILE if it was intentionally deleted (e.g. _acquire_lock contention)
     test -f "$LOG_FILE"; or return 0
     set -l _ts (date '+%Y-%m-%dT%H:%M:%S%z')
     set -l raw (string join -- " " $argv)
@@ -1345,7 +1329,6 @@ function _msg --argument-names level --description "Format and print a leveled s
     set -l valid_levels INFO WARN ERR FAIL OK
     if not contains -- "$level" $valid_levels
         echo "[BUG] _msg called with invalid level: '$level'" >&2
-        # Guard direct-to-LOG_FILE write (matches _log discipline at line ~1238): LOG_FILE may be absent during early init or post-lock-contention cleanup
         if test -n "$LOG_FILE"; and test -f "$LOG_FILE"
             printf '{"ts":"%s","event":"bug","data":"_msg called with invalid level: %s"}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (_json_str "$level") >>"$LOG_FILE"
         end
@@ -1417,7 +1400,6 @@ function _echo --description "Print a plain message without level prefix"
     end
 end
 
-# Print the boxed ry-install header with mode title; suppressed by QUIET flag
 function _banner --argument-names text --description "Print the ry-install startup banner"
     if test (count $argv) -lt 1
         return 0
@@ -1444,7 +1426,6 @@ function _banner --argument-names text --description "Print the ry-install start
     _echo
 end
 
-# Emit pass/fail/warn totals and CI-parseable VERIFY:STATUS:ok:fail:warn line to stdout
 function _verify_summary --description "Print verification pass/fail/warn summary"
     _echo
     _echo "VERIFICATION SUMMARY"
@@ -1495,7 +1476,6 @@ set -g PROGRESS_STEPS \
     Finalize
 set -g PROGRESS_TOTAL (count $PROGRESS_STEPS)
 
-# Emit JSONL step_time event for the previous progress step if one was started
 function _emit_step_time --description "Log elapsed time for the previous progress step"
     if test -n "$_STEP_PREV_NAME"; and test "$_STEP_PREV_START" -gt 0
         set -l _step_now (date +%s)
@@ -1618,7 +1598,6 @@ function _progress_done --description "Finalize and close the progress display"
     printf '\r[%s] 100%% Done%-25s%s\n' "$bar" "" "$elapsed_str" >&2
 end
 
-# Execute command with logging, secret redaction (9 patterns: --passphrase --password --token --key --secret --api-key --psk --wpa-psk --private-key), and stdout/stderr capture to tmpfiles. Argv shell-metacharacter reject closes log-injection surface.
 function _run --description "Execute a command with logging and error capture; stdout captured and only displayed when QUIET=false"
     if test (count $argv) -eq 0
         _log "BUG: _run called with no arguments"
@@ -1704,7 +1683,6 @@ function _run --description "Execute a command with logging and error capture; s
         else
             _log "OUTPUT: "(string join -- " | " (command head -n 50 "$stdout_tmp"))" | ... ($line_count lines, truncated)"
         end
-        # Print captured stdout when QUIET=false; cap display to 50 lines (full output in JSONL log above)
         if test "$QUIET" = false
             if test $line_count -le 50
                 command cat -- "$stdout_tmp" >&2
@@ -1788,7 +1766,6 @@ EXAMPLES:
   ./ry-install.fish
   # Re-deploy single file
   ./ry-install.fish --install-file /etc/mkinitcpio.conf
-  # Run all safe modes, generate NDJSON logs
   ./ry-install.fish --test-all
 
 LOG FILE:
@@ -1822,7 +1799,6 @@ NOTES:
 "
 end
 
-# Verify managed file exists at dst; sudo test for /boot (ESP may be root-only vfat), system files are 0644
 function _chk_file --argument-names filepath --description "Verify a file exists (sudo for /boot, direct for /etc)"
     if test (count $argv) -lt 1
         _err "_chk_file: missing argument"
@@ -1888,7 +1864,6 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     end
 end
 
-# Verify all required external commands are available via command -q
 function _ry_check_deps --description "Verify required packages are installed"
     _log "Checking dependencies..."
     set -l missing
@@ -2029,7 +2004,6 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
     return 0
 end
 
-# Verify running kernel meets minimum version and report ntsync availability
 function _ry_check_kernel_version --description "Verify running kernel version meets minimum requirement"
     set -l kver $KVER
     set -l major $KVER_MAJOR
@@ -2071,7 +2045,6 @@ end
 function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS ordering and presence"
     set -l existence_only false
     set -l hooks
-    # Verify mkinitcpio hook ordering and presence
     if test (count $argv) -gt 0; and test "$argv[1]" = --existence-only
         set existence_only true
         set hooks $argv[2..]
@@ -2115,7 +2088,6 @@ function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS 
             _err "Mkinitcpio hook order: 'base' must be first (found: $MKINITCPIO_HOOKS[1])"
             set errors (math $errors + 1)
         end
-        # Verify hook ordering constraints (before:after pairs)
         set -l order_checks \
             "systemd:sd-vconsole" \
             "keyboard:sd-vconsole" \
@@ -2154,7 +2126,6 @@ function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODU
     return 0
 end
 
-# Run all embedded config validators: hooks, modules, units, modprobe, fish; abort on errors
 function _ry_validate_configs --description "Run all embedded config validators"
     _info "Validating configuration syntax..."
 
@@ -2356,7 +2327,6 @@ function _ry_validate_configs --description "Run all embedded config validators"
             set errors (math $errors + 1)
             continue
         end
-        # Log stderr from ALL children (warnings from systemd-analyze, fish --no-execute, etc.)
         if test -s "$val_dir/$phase.stderr"
             _log "VALIDATE_STDERR: ($phase) "(head -n 15 "$val_dir/$phase.stderr")
             # Surface warnings to terminal so user sees systemd-analyze/fish diagnostics
@@ -2391,7 +2361,6 @@ end
 # Count managed-file cases in _ry_get_file_content (total case branches minus wildcard '*'). Used by file-count xref checks. Accepts optional script_path; defaults to (status filename).
 
 
-# Read first non-comment "KEY=..." line from mkinitcpio.conf (or any conf file). Usage: _ry_mkinitcpio_array MODULES → first matching line, or empty.
 function _ry_mkinitcpio_array --argument-names key file --description "First non-comment KEY=... line from a conf file"
     test -z "$file"; and set file /etc/mkinitcpio.conf
     grep -E "^[[:space:]]*$key=" "$file" 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1
@@ -2478,7 +2447,6 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         end
     end
 
-    # Write content via pipe
     if test "$use_sudo" = true
         _ry_get_file_content "$dst" | sudo tee -- "$tmpfile" >/dev/null
     else
@@ -2634,7 +2602,6 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
         set -g _RY_SKIP_IWD_CACHED true
     end
 
-    # Skip NM/IWD configs if iwd not installed — prevents broken wifi stack
     if string match -q '*nm.conf' -- "$dst"; or string match -q '*/iwd/*' -- "$dst"
         if test "$_RY_SKIP_IWD" = true
             _warn "Skipping $dst: iwd package not installed"
@@ -2661,7 +2628,6 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
         set perms 0600
     end
 
-    # Skip unchanged: SHA256 hash via canonical helper (matches _atomic_write_file)
     set -l _new_hash (_content_hash "$dst")
     if test -n "$_new_hash"
         set -l _cur_hash
@@ -3198,7 +3164,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
             # Re-check sudo -n right before the read: if the timestamp lapsed, we skip the hash write entirely. Child worker treats missing installed_$safe as "cannot read" rather than emitting a spurious "checksum MISMATCH" from the empty-file sha256 (e3b0c4…) that an empty pipeline would produce. Trailing newlines are preserved by direct-to-pipeline cat (command substitution would strip them).
             if sudo -n test -r "$dst" 2>/dev/null; and sudo -n true 2>/dev/null
                 sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ' | head -n 1 >"$hash_dir/installed_$safe"
-                # If cat failed despite the sudo probe above (race), the file contains the empty-file hash; detect by checking pipestatus[1] and clear on failure.
                 if test $pipestatus[1] -ne 0
                     command rm -f -- "$hash_dir/installed_$safe" 2>/dev/null
                 end
@@ -3263,7 +3228,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
 
     test (count $hash_pids) -gt 0; and wait $hash_pids
 
-    # Log any worker stderr (child crash diagnostics)
     for worker in (seq 1 $num_workers)
         if test -s "$hash_dir/worker_$worker.stderr"
             _log "HASH_WORKER_STDERR: (worker $worker) "(head -n 15 "$hash_dir/worker_$worker.stderr")
@@ -3479,11 +3443,9 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     command timeout --kill-after=5 60 fish -c '
         set -l result_dir $argv[1]
         set -l drift false
-        # Read serialized lists from files (safe for names with quotes/backslashes)
         set -l exp_svcs (command cat -- "$result_dir/exp_svcs")
         set -l mask_units (command cat -- "$result_dir/mask_units")
         set -l implicit_svcs (command cat -- "$result_dir/implicit_svcs" 2>/dev/null)
-        # Read pre-parsed results from parent (eliminates duplicated _parse_systemctl_show)
         set -l results (command cat -- "$result_dir/parsed_units" 2>/dev/null)
 
         # Maintenance assertion: parsed[] indices are positionally coupled to exp_svcs/mask_units/implicit_svcs concatenation order. Fail loud if a future edit adds a unit to one list without updating the other
@@ -3569,7 +3531,6 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     # missing/malformed result file → drift; checked==0 → EXIT_DRIFT Merge results — treat missing result files as child crash (prevents false-negative)
     for phase in hash perm kparam svc
         set -l _drift_file "$result_dir/"$phase"_drift"
-        # Log stderr from ALL children for diagnostics (not just crashes)
         if test -s "$result_dir/"$phase".stderr"
             _log "CHECK_STDERR: ($phase) "(head -n 15 "$result_dir/"$phase".stderr")
         end
@@ -3596,7 +3557,6 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
 
     test "$drift" = true; and return $EXIT_DRIFT
 
-    # Guard against false negative: if no files could be checked (missing sudo, mktemp failures), report drift
     if test $checked -eq 0
         _log "CHECK_DRIFT: no files could be checked (all skipped)"
         return $EXIT_DRIFT
@@ -3605,7 +3565,6 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     return $EXIT_OK
 end
 
-# Read CPU governor and current frequency from cpufreq sysfs
 function _gather_cpu_state --description "Collect CPU frequency path for representative core"
     set -g _CPU_PATH ""
     for cpu_dir in /sys/devices/system/cpu/cpu*/cpufreq
@@ -3651,7 +3610,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
 
     _validate_kernel_params
 
-    # Cache dmesg once — used by Preempt, ReBAR, and any future boot-log checks. sudo-gated to see kernel ring buffer (dmesg_restrict=1 is Arch default).
     set -l _dmesg (sudo dmesg 2>/dev/null)
 
     _echo "── Preemption model ──"
@@ -3670,7 +3628,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo "HARDWARE STATE"
     _echo
 
-    # This loop validates ALL cards for compliance
     _echo "── GPU performance level ──"
     set -l gpu_ok false
     set -l found_gpu false
@@ -3763,7 +3720,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     _echo "── amd_pstate / CPU boost ──"
-    # §10 #7: amd_pstate status (complements scaling_driver check above)
     if test -f /sys/devices/system/cpu/amd_pstate/status
         set -l _pstate_status (command cat -- /sys/devices/system/cpu/amd_pstate/status 2>/dev/null | string trim --)
         if test "$_pstate_status" = active
@@ -3774,7 +3730,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     else
         _info "  amd_pstate status: sysfs not available"
     end
-    # §10 #8: prefcore
     if test -f /sys/devices/system/cpu/amd_pstate/prefcore
         set -l _prefcore (command cat -- /sys/devices/system/cpu/amd_pstate/prefcore 2>/dev/null | string trim --)
         if test "$_prefcore" = enabled
@@ -3783,7 +3738,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             _fail "  amd_pstate prefcore: $_prefcore (expected: enabled)"
         end
     end
-    # §10 #9: CPU boost
     if test -f /sys/devices/system/cpu/cpufreq/boost
         set -l _boost (command cat -- /sys/devices/system/cpu/cpufreq/boost 2>/dev/null | string trim --)
         if test "$_boost" = 1
@@ -4134,7 +4088,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     _echo "── THP / KSM / ZRAM ──"
-    # §10 #2: THP enabled
     if test -f /sys/kernel/mm/transparent_hugepage/enabled
         set -l _thp (command cat -- /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null)
         if string match -qr '\[always\]' -- "$_thp"
@@ -4144,7 +4097,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             _warn "  THP enabled: $_active (recommended: always — CachyOS default)"
         end
     end
-    # §10 #3: THP defrag
     if test -f /sys/kernel/mm/transparent_hugepage/defrag
         set -l _defrag (command cat -- /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null)
         if string match -qr '\[defer\+madvise\]' -- "$_defrag"
@@ -4154,7 +4106,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             _warn "  THP defrag: $_active (recommended: defer+madvise)"
         end
     end
-    # §10 #4: THP shrink_underused
     if test -f /sys/kernel/mm/transparent_hugepage/shrink_underused
         set -l _shrink (command cat -- /sys/kernel/mm/transparent_hugepage/shrink_underused 2>/dev/null | string trim --)
         if test "$_shrink" = 0
@@ -4163,7 +4114,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             _warn "  THP shrink_underused: $_shrink (recommended: 0)"
         end
     end
-    # §10 #5: KSM run state
     if test -f /sys/kernel/mm/ksm/run
         set -l _ksm (command cat -- /sys/kernel/mm/ksm/run 2>/dev/null | string trim --)
         if test "$_ksm" = 0
@@ -4172,7 +4122,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             _warn "  KSM run: $_ksm (recommended: 0 — breaks THP, wastes CPU with 128 GB)"
         end
     end
-    # §10 #6: ZRAM service state
     set -l _zram_state (systemctl is-enabled systemd-zram-setup@zram0.service 2>/dev/null | string trim --)
     if test "$_zram_state" = enabled
         _ok "  ZRAM service: enabled"
@@ -4346,7 +4295,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     set -l _boot_fstype (findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         if sudo test -f "$dst" 2>/dev/null
-            # increment AFTER vfat-skip so /boot vfat files don't inflate "All N checked"
             if string match -q '/boot/*' -- "$dst"; and test "$_boot_fstype" = vfat
                 continue
             end
@@ -4437,7 +4385,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo
 
     _echo "── Vulkan driver packages ──"
-    # iterate EXPECTED_VULKAN_PKGS profile global instead of hardcoding; optional global
     if not set -q EXPECTED_VULKAN_PKGS; or test (count $EXPECTED_VULKAN_PKGS) -eq 0
         _info "  EXPECTED_VULKAN_PKGS not defined in profile — skipping"
     else
@@ -4511,7 +4458,6 @@ function _dir_group_or_world_writable --argument-names mode --description "True 
     end
     set -l group_w (string sub -s 2 -l 1 -- "$mode")
     set -l other_w (string sub -s 3 -l 1 -- "$mode")
-    # write bit = floor(digit/2) % 2 == 1 (digits 2,3,6,7)
     set -l group_has_w (math "floor($group_w / 2) % 2" 2>/dev/null)
     set -l other_has_w (math "floor($other_w / 2) % 2" 2>/dev/null)
     test "$group_has_w" -eq 1 2>/dev/null; and return 0
@@ -4827,7 +4773,6 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
     sudo rm -f -- "$tmpfstab" 2>/dev/null
     set tmpfstab "$tmpfstab2"
 
-    # Verify the modified fstab parses correctly (findmnt --verify)
     if command -q findmnt
         # findmnt --verify exits non-zero on real errors; rely on rc, not free-form output grep
         set -l _verify_out (sudo findmnt --verify --tab-file "$tmpfstab" 2>&1)
@@ -5192,7 +5137,6 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         end
     end
 
-    # Final boot viability gate: verify vmlinuz, initramfs, and boot entry exist
     if not _preflight_boot_sanity
         set -g INSTALL_HAD_ERRORS true
         _err "CRITICAL: Boot sanity failed — aborting remaining steps"
@@ -5286,7 +5230,6 @@ function _install_finalize --description "Run post-install verification, cleanup
         set -g INSTALL_HAD_ERRORS true
     end
 
-    # Return 1 on partial failure so _ry_do_install can detect and report errors
     test "$INSTALL_HAD_ERRORS" = true; and return 1
     return 0
 end
@@ -5654,7 +5597,6 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     _ensure_sudo_cached
     or _warn "Sudo unavailable — sudo-dependent sub-tests will degrade or skip"
 
-    # Read-only parallel modes (no sequential write modes — install path is exercised by actual installs)
     set -l parallel_modes \
         --check \
         --verify-static \
@@ -5759,7 +5701,6 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     end
     set -l _comp_ok true
     if test -z "$_comp_out"
-        # write failure — skip content validation
         _info "  completions file not available (write failed) — skipping content check"
         set passed (math $passed + 1)
     else
@@ -5971,7 +5912,6 @@ switch $MODE
         # No lock needed for read-only modes (verify, completions, test-all)
 end
 
-# Log rotation: flock serializes concurrent instances; without flock, rm -f is idempotent (last-write-wins)
 set -l _log_base_rot "$HOME/ry-install/logs"
 # Null-delimited pipeline handles paths containing newlines (theoretical but cheap to fix). Format: %T@<NUL>%p<NUL>  →  sort -z by mtime  →  strip mtime prefix  →  Fish list via split0
 set -l _rot_raw (command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f ! -path "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -z -t \t -k1,1n | string split0)
@@ -5996,7 +5936,6 @@ if test $_log_count -gt $MAX_LOGS
 end
 
 set -g exit_code 0
-# Main dispatch: route MODE to handler, capture exit code
 switch $MODE
     case verify-static
         _ry_verify_static

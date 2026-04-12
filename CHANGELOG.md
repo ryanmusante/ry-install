@@ -1,5 +1,33 @@
 ry-install changelog
 
+v3.49.0  2026-04-12
+- Comment sweep: dropped 61 low-value comment lines (6050 → 5989). Zero
+  semantic change; script behavior, output, exit codes, and embedded config
+  hashes are identical to v3.48.26. Version string is the only non-comment
+  line modified.
+- Rules applied:
+  * R4: dropped 8 bare `# §N #M:` reference comments (already captured in
+    CHANGELOG history; the in-line refs were orphaned breadcrumbs).
+  * R5: dropped 53 narration-prefix comments that restated the next line
+    in English ("# Loop over services" above `for svc in ...`, "# Check if
+    file exists" above `if test -f ...`, etc.).
+- Rules NOT applied (kept in-place): R1 (`function --description`), R2
+  (keep-list: TOCTOU, STIG, CVE-, §10, MAINTENANCE, AUDIT, REVERT,
+  lint:ignore), R3 (tradeoff/gotcha/external-ref comments).
+- Guard check: `grep -c '@@AUDIT@@\|@@REVERT@@'` before=0, after=0 — no
+  audit markers touched.
+- Verified: `fish --no-execute ry-install.fish` clean; 76/76 functions
+  preserved; `_ry_get_file_content` byte-exact (all embedded config hashes
+  unchanged).
+- Context: condensation pass driven by /home/claude/ry-condense-spec. Four
+  additional specs (S1 verify_runtime table dispatch −70, S3 do_check shared
+  compare −6, S4 validate_configs fork helper −23) are documented but
+  unapplied — they require manual surgery with per-commit verify/check
+  parity testing. Two specs (S2 verify_static loop, S5 get_file_content
+  printf) were evaluated and found net-negative or no-op and are permanently
+  skipped. The original 5000-line target is not reachable under the
+  single-file constraint (measured ceiling: 5890).
+
 v3.48.26  2026-04-09
 - `TIMESTAMP` (init block): suffixed with `$fish_pid` so concurrent instances
   running in the same second get distinct `$LOG_FILE` paths. Without the suffix,

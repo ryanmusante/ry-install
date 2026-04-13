@@ -407,15 +407,20 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 | Event | Key Fields | Emitted |
 |---|---|---|
 | `header` | version, profile, mode, verbose, command | Run start |
-| `footer` | exit_code, pass, fail, warn, interrupted | Run end |
+| `footer` | finished, mode, exit_code, pass, fail, warn (always); `interrupted:true` appended on signal exit; `cleanup_exit:true` appended on fish_exit fallback | Run end |
 | `ok` | data | Verification pass |
 | `fail` | data | Verification failure |
 | `warn` | data | Non-fatal issue |
 | `err` | data | Blocking error |
+| `info` | data | Progress / non-actionable status |
+| `echo` | data | Plain message (no level prefix) |
+| `bug` | data | Internal assertion failure (invalid level or arg count) |
 | `step_time` | data, elapsed_s | Install step completed |
 | `run` | data | Command executed |
 | `stderr` | data | Captured stderr |
 | `section` | data | Phase boundary |
+
+> **Operational events:** the script emits ~50 additional prefix-routed event types (`lock_acquired`, `manifest_written`, `pkg_remove_ok`, `ntsync_check`, etc.) that are not listed above. All follow the same `{"ts":…,"event":…,"data":…}` schema and are queryable with jq.
 
 Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
@@ -423,11 +428,11 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 <summary>Sample log output</summary>
 
 ```json
-{"ts":"2026-04-08T14:23:01-0700","event":"header","version":"3.48.20","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-08T14:23:01-0700","event":"header","version":"3.50.1","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
 {"ts":"2026-04-08T14:23:04-0700","event":"section","data":"Preflight"}
 {"ts":"2026-04-08T14:23:12-0700","event":"step_time","data":"Packages","elapsed_s":127.4}
 {"ts":"2026-04-08T14:25:19-0700","event":"warn","data":"paru not found — skipping AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-08T14:26:42-0700","event":"footer","exit_code":0,"pass":47,"fail":0,"warn":1,"interrupted":false}
+{"ts":"2026-04-08T14:26:42-0700","event":"footer","finished":"2026-04-08T14:26:42-0700","mode":"install","exit_code":0,"pass":47,"fail":0,"warn":1}
 ```
 
 </details>

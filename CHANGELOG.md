@@ -22,6 +22,23 @@ v3.50.1  2026-04-13
   --test-all still passes); diff vs v3.50.0 confined to the targeted
   lines (script +5 lines from the new if/else/end block + comment;
   README byte-changes only on lines 1, 3, 136).
+- README doc-only corrections (exhaustive audit; zero script changes):
+  * Log Format — footer key fields: added `finished` (ISO 8601
+    timestamp, always present) and `mode` (always present); corrected
+    `interrupted` — only appended as `"interrupted":true` on signal
+    exit (INT/TERM/HUP/QUIT/PIPE), absent on clean exit (script never
+    emits `"interrupted":false`); documented `"cleanup_exit":true`
+    appended by the fish_exit fallback handler (_cleanup_on_exit).
+  * Log Format — event table: added `info` (progress/non-actionable
+    status via _info/_msg INFO), `echo` (plain message via _echo ->
+    ECHO: prefix), `bug` (internal assertion guard in _json_str and
+    _msg invalid-level branch); added callout noting ~50 additional
+    operational prefix-routed event types (lock_acquired,
+    manifest_written, pkg_remove_ok, ntsync_check, ...) not enumerated
+    in the table.
+  * Sample log: header version corrected 3.48.20 -> 3.50.1; footer
+    corrected to match actual _write_footer output — added `finished`
+    and `mode` fields, removed `"interrupted":false` (never emitted).
 
 v3.50.0  2026-04-13
 - Kernel cmdline (14 → 12 params):

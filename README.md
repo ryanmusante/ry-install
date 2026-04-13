@@ -8,23 +8,41 @@ Self-contained CachyOS configuration manager with profile support. Single Fish s
 
 ## Table of Contents
 
-| # | Section |
-|---|---|
-| 1 | [Quick Start](#quick-start) |
-| 2 | [Scope](#scope) |
-| 3 | [Prerequisites](#prerequisites) |
-| 4 | [Hardware Reference](#hardware-reference) |
-| 5 | [Usage](#usage) |
-| 6 | [Install Flow](#install-flow) |
-| 7 | [Configuration Reference](#configuration-reference) |
-| 8 | [Managed Files](#managed-files) |
-| 9 | [Profiles](#profiles) |
-| 10 | [Safety & Reliability](#safety--reliability) |
-| 11 | [Uninstall](#uninstall) |
-| 12 | [Known Issues](#known-issues) |
-| 13 | [Troubleshooting](#troubleshooting) |
-| 14 | [References](#references) |
-| 15 | [License](#license) |
+1. [Quick Start](#quick-start)
+2. [Scope](#scope)
+3. [Prerequisites](#prerequisites)
+4. [Hardware Reference](#hardware-reference)
+5. [Usage](#usage)
+6. [Install Flow](#install-flow)
+7. [Configuration Reference](#configuration-reference)
+   - [Kernel Parameters](#kernel-parameters)
+   - [Boot Loader](#boot-loader)
+   - [Initramfs](#initramfs)
+   - [System Services](#system-services)
+   - [Network Stack](#network-stack)
+   - [System Tuning](#system-tuning)
+   - [Environment Variables](#environment-variables)
+   - [User Configuration](#user-configuration)
+   - [Packages](#packages)
+   - [Masked Services](#masked-services)
+8. [Managed Files](#managed-files)
+9. [Profiles](#profiles)
+   - [Required Globals](#required-globals)
+   - [Example Profile](#example-profile)
+   - [Profile Trust Model](#profile-trust-model)
+10. [Safety & Reliability](#safety--reliability)
+    - [Exit Codes](#exit-codes)
+    - [Environment Variables](#environment-variables-1)
+    - [Data Directory](#data-directory)
+    - [Log Format](#log-format)
+11. [Uninstall](#uninstall)
+12. [Known Issues](#known-issues)
+    - [Strix Halo GPU (gfx1151)](#strix-halo-gpu-gfx1151)
+    - [MediaTek MT7925 WiFi](#mediatek-mt7925-wifi)
+    - [NetworkManager + iwd](#networkmanager--iwd)
+13. [Troubleshooting](#troubleshooting)
+14. [References](#references)
+15. [License](#license)
 
 ## Quick Start
 

@@ -30,8 +30,11 @@ v3.50.0  2026-04-13
   trailing comment above its line. Net −20 lines (6010 → 5990).
   Zero semantic change; 76/76 functions preserved; TOCTOU, CONTRACT,
   lint:ignore markers all preserved at baseline counts.
-- README: TOC replaced with numbered markdown table (15 rows);
-  License row added (was missing from bullet TOC).
+- README: TOC replaced with numbered list including nested
+  subsection bullets (35 anchors total, 15 top-level + 20 ###
+  subsections under Configuration Reference, Profiles, Safety &
+  Reliability, and Known Issues); License row added (was missing
+  from prior bullet TOC).
 - Revert: @@REVERT@@ markers S1–S4, S6–S8 in-script.
 
 v3.49.0  2026-04-12

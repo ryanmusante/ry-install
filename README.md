@@ -204,7 +204,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (9 keys) |
 | `coredump.conf.d` | Storage=none · ProcessSizeMax=0 (disables coredump storage — Wine/Proton multi-GB dumps) |
 | `drirc` | RADV unified VRAM heap on APU |
-| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · watermark tuning · security hardening (21 net-new tunables, supplements CachyOS vendor 70-cachyos-settings.conf; net.core.netdev_max_backlog overrides vendor 4096→16384) |
+| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · watermark tuning · security hardening (21 net-new tunables) |
 | `/etc/fstab` | Adds `noatime,lazytime` to ext4 entries (modified in-place, not a managed file) |
 
 ### Environment Variables
@@ -238,7 +238,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|---|
 | **Install** | 15 | mkinitcpio-firmware, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, vulkan-radeon, lib32-vulkan-radeon, libva-mesa-driver, lib32-libva-mesa-driver, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove** | 8 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
-| **AUR** | 1 | mt76-mt7925-dkms (via paru — **skipped with WARN if paru is not installed**; install continues) |
+| **AUR** | 1 | mt76-mt7925-dkms (via paru — WARN and skip if paru absent; install continues) |
 
 ### Masked Services
 
@@ -282,16 +282,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ## Profiles
 
-Machine-specific configuration is defined in profile functions. External profiles are loaded from `~/.config/ry-install/profiles/<name>.fish`.
-
-| Source | Resolution |
-|---|---|
-| `~/.config/ry-install/default-profile` | Persistent default (single line: profile name) |
-| `gtr9_pro` | Hardcoded fallback |
-
-External profiles define `function _ry_profile_<name>` with all required globals (26 unconditional + up to 8 conditional). Legacy `profile_<name>` naming is accepted with a deprecation warning. Profiles are syntax-checked before sourcing; validation enforces name consistency and numeric types.
-
-**Creating a profile:**
+External profiles live at `~/.config/ry-install/profiles/<n>.fish` and define `function _ry_profile_<n>` with all required globals. Resolution: `~/.config/ry-install/default-profile` (single line: profile name) → `gtr9_pro` (hardcoded fallback). Legacy `profile_<n>` naming accepted with a deprecation warning; syntax and name-consistency validated before sourcing.
 
 ```fish
 echo my_desktop > ~/.config/ry-install/default-profile
@@ -299,7 +290,7 @@ echo my_desktop > ~/.config/ry-install/default-profile
 
 ### Required Globals
 
-A profile must define **26 unconditional globals**, plus **8 conditional globals** activated by the presence of corresponding entries in `SYSTEM_DESTINATIONS`. Preflight reports any missing ones with the variable name.
+**26 unconditional** — preflight fails and reports the variable name if any are missing:
 
 | Category | Globals |
 |---|---|
@@ -311,16 +302,9 @@ A profile must define **26 unconditional globals**, plus **8 conditional globals
 | Environment | `ENV_VARS`, `LOGIND_IGNORE_KEYS` |
 | Thresholds | `BOOT_SPACE_CRIT`, `BOOT_SPACE_WARN`, `ROOT_AVAIL_CRIT`, `ROOT_AVAIL_WARN` |
 
-**Conditional globals** (required only when the matching destination is present):
+**8 conditional** (required when the matching glob appears in `SYSTEM_DESTINATIONS`): `*/iwd/*` → `IWD_ENABLE_NETWORK_CONFIG`, `IWD_DRIVER_QUIRKS`, `IWD_DNS_SERVICE` · `*nm.conf` → `NM_WIFI_BACKEND`, `NM_WIFI_POWERSAVE`, `NM_LOG_LEVEL` · `*/resolved.conf.d/*` → `RESOLVED_MDNS` · `*/sysctl.d/*` → `SYSCTL_VALUES`.
 
-| Triggered by destination match | Required globals |
-|---|---|
-| `*/iwd/*` | `IWD_ENABLE_NETWORK_CONFIG`, `IWD_DRIVER_QUIRKS`, `IWD_DNS_SERVICE` |
-| `*nm.conf` | `NM_WIFI_BACKEND`, `NM_WIFI_POWERSAVE`, `NM_LOG_LEVEL` |
-| `*/resolved.conf.d/*` | `RESOLVED_MDNS` |
-| `*/sysctl.d/*` | `SYSCTL_VALUES` |
-
-**Optional globals** (consumers handle unset safely): `PKGS_DEL`, `AUR_PKGS`, `BOOT_TIME_TARGET`, `EXPECTED_CPU_MATCH`, `MKINITCPIO_COMPRESSION_OPTIONS`, `EXPECTED_VULKAN_PKGS`.
+**Optional** (unset-safe): `PKGS_DEL`, `AUR_PKGS`, `BOOT_TIME_TARGET`, `EXPECTED_CPU_MATCH`, `MKINITCPIO_COMPRESSION_OPTIONS`, `EXPECTED_VULKAN_PKGS`.
 
 ### Example Profile
 
@@ -334,40 +318,30 @@ function _ry_profile_my_desktop --description "Example desktop profile"
     # Copy SYSTEM_DESTINATIONS / USER_DESTINATIONS / SERVICE_DESTINATIONS
     # from the built-in gtr9_pro profile and adjust paths as needed.
     # Then define the 26 unconditional + applicable conditional globals
-    # listed in the Required Globals tables above.
+    # listed in the Required Globals table above.
 end
 ```
 
-Validate before first use:
-
-```fish
-./ry-install.fish --verify-static    # check profile/manifest sanity
-./ry-install.fish --verify-runtime   # check live system state
-```
+Run `--verify-static` and `--verify-runtime` before first use.
 
 ### Profile Trust Model
 
-External profiles in `~/.config/ry-install/profiles/<name>.fish` are loaded via `source` and execute with the user's privileges. Treat profile files like any other shell script you would run:
-
-- Only use profiles from sources you trust.
-- Verify ownership: `stat -c '%U' ~/.config/ry-install/profiles/*.fish` should show your username, not root or any other user.
-- The script does not sandbox profile execution; a malicious profile can do anything your user account can do.
-
+Profiles execute via `source` with the user's privileges — treat them like any shell script. Only use profiles from trusted sources; verify ownership with `stat -c '%U' ~/.config/ry-install/profiles/*.fish`. No sandboxing — a malicious profile can do anything your account can.
 ## Safety & Reliability
 
 | Feature | Detail |
 |---|---|
 | Atomic writes | tmp → chmod → mv (same filesystem) |
-| fstab edits | Idempotent (skipped if `noatime,lazytime` already present); validated via `findmnt --verify` before atomic move; **no persistent backup written** — snapshot `/etc/fstab` yourself before first run if you want recovery |
-| Root detection | **Refuses to run as root.** Run as your normal user; sudo is invoked internally. |
+| fstab edits | Idempotent; validated via `findmnt --verify` before write; **no backup written** — snapshot `/etc/fstab` before first run |
+| Root detection | **Refuses to run as root** — invoke as your normal user; sudo called internally |
 | Instance lock | Atomic mkdir, PID verification, stale reclaim |
-| Credentials | Sensitive args redacted in logs (9 patterns: `--passphrase`, `--password`, `--token`, `--key`, etc.) |
+| Credentials | 9 sensitive flag patterns redacted in logs (`--passphrase`, `--password`, `--token`, `--key`, etc.) |
 | Signal handling | INT/TERM/HUP/QUIT → 128+signum; SIGPIPE → 141 |
 | Logging | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl` |
 | Boot safety | Abort on initramfs or bootloader rebuild failure |
 | LVM-aware | Skips lvm2-monitor mask when LVM detected |
 | Orphan tracking | Manifest warns on version or profile change |
-| Source-safe | When `source`d from an interactive Fish shell (rather than executed), the script will not call `exit` — it returns the exit code via `$_RY_INSTALL_LAST_EXIT` instead. This lets you `source ry-install.fish --check` from a wrapper without killing the host shell. |
+| Source-safe | When `source`d, returns exit code via `$_RY_INSTALL_LAST_EXIT` instead of calling `exit` — safe for Fish wrapper scripts |
 
 ### Exit Codes
 
@@ -387,9 +361,9 @@ External profiles in `~/.config/ry-install/profiles/<name>.fish` are loaded via 
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `RY_RUN_TIMEOUT` | unset | Opt-in wall-clock limit (seconds, positive integer) for every command executed via `_run` — pacman, sdboot-manage, mkinitcpio, udevadm, etc. Unset = no wall-clock limit (legacy behavior). Recommended for unattended installs: `RY_RUN_TIMEOUT=1800` (30 min, covers worst-case `pacman -Syu` on a slow mirror). Requires `timeout(1)` from coreutils (hard dep on Arch/CachyOS). Wraps with `--preserve-status --kill-after=10` so a stubborn child receives `SIGKILL` ten seconds after `SIGTERM`, and the child's real exit code is preserved in the log. Value of `0` is rejected by validation (would be a silent no-op per `timeout(1)` semantics). |
-| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | One-time acknowledgement for `SDBOOT_REMOVE_EXISTING=yes`. Required on the first run that wipes `/boot/loader/entries/*.conf`. Set to `1` to proceed: `RY_INSTALL_CONFIRM_BOOT_WIPE=1 ./ry-install.fish`. After the first successful run, the marker file at `~/ry-install/.boot-wipe-acknowledged` records the entry count and the gate is suppressed — unless entries grow (rescue/Windows/custom kernel added), at which point the gate re-prompts. |
-| `NO_COLOR` | unset | Respected per no-color.org. When set (any value), suppresses ANSI color codes in all leveled output. Also auto-detected from `TERM=dumb` and when stderr is not a TTY. |
+| `RY_RUN_TIMEOUT` | unset | Positive integer seconds; wraps every `_run` call with `timeout --preserve-status --kill-after=10`. Unset = no limit. Recommended: `1800` for unattended installs. Rejects `0`. |
+| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Set to `1` to acknowledge the first boot-entry wipe (`SDBOOT_REMOVE_EXISTING=yes`). Gate re-prompts if entry count grows after the initial ack. Marker: `~/ry-install/.boot-wipe-acknowledged`. |
+| `NO_COLOR` | unset | Suppresses ANSI color per no-color.org. Also auto-detected from `TERM=dumb` and non-TTY stderr. |
 
 ### Data Directory
 
@@ -398,7 +372,7 @@ External profiles in `~/.config/ry-install/profiles/<name>.fish` are loaded via 
 | `~/ry-install/logs/YYYY-MM-DD/` | NDJSON logs (`*.jsonl`) |
 | `~/ry-install/.lock/` | Instance guard |
 | `~/ry-install/.manifest` | Orphan tracking |
-| `~/ry-install/.boot-wipe-acknowledged` | Marker created on the first successful run after `SDBOOT_REMOVE_EXISTING=yes` is acknowledged via `RY_INSTALL_CONFIRM_BOOT_WIPE=1`. Suppresses the gate on subsequent runs. Survives `rm -rf ~/ry-install/logs/*` but not `rm -rf ~/ry-install`. Delete it to force the one-time confirmation prompt again. |
+| `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker; suppresses gate on subsequent runs. Delete to re-prompt. |
 
 ### Log Format
 

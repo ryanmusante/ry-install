@@ -39,6 +39,24 @@ v3.50.1  2026-04-13
   * Sample log: header version corrected 3.48.20 -> 3.50.1; footer
     corrected to match actual _write_footer output — added `finished`
     and `mode` fields, removed `"interrupted":false` (never emitted).
+- README condensed (no information dropped; zero script changes):
+  * Profiles: collapsed source-resolution table into opening sentence;
+    removed standalone "Creating a profile" heading; merged conditional
+    globals table into inline sentence (dot-separated groups); trimmed
+    Example Profile trailing block to one line; collapsed Trust Model
+    bullets into single paragraph.
+  * Safety & Reliability: trimmed fstab edits, Root detection,
+    Credentials, Source-safe rows.
+  * Safety > Environment Variables: RY_RUN_TIMEOUT 5 sentences -> 4
+    clauses; RY_INSTALL_CONFIRM_BOOT_WIPE 3 sentences -> 3 clauses;
+    NO_COLOR trimmed to 2 clauses.
+  * Data Directory: .boot-wipe-acknowledged row 4 sentences -> 1.
+  * Net: 503 -> 477 lines (-26); all key facts verified against script.
+- README consistency pass (two remaining verbose cells):
+  * sysctl.d (System Tuning): removed parenthetical implementation detail
+    (vendor file name, netdev_max_backlog override note) — kept count (21).
+  * AUR (Packages): removed bold inline markdown; shortened skip-behavior
+    note to match plain style of surrounding rows.
 
 v3.50.0  2026-04-13
 - Kernel cmdline (14 → 12 params):

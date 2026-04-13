@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.50.0 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.50.1 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -16,7 +16,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.50.0"
+set -g VERSION "3.50.1"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -4418,13 +4418,18 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         _log "BOOT_TIME_CHECK: parsing systemd-analyze output"
         set -l total_sec (printf '%s\n' "$boot_time" | string match -r -- '= ([0-9.]+)s' | tail -n 1)
         if test -n "$total_sec"; and string match -qr '^[0-9.]+$' -- "$total_sec"
-            set -l target $BOOT_TIME_TARGET
-            set -l time_int (printf "%.0f" "$total_sec" 2>/dev/null)
-            if test -n "$time_int"; and test "$time_int" -lt $target
-                _ok "  Boot time under $target""s target"
-            else if test -n "$time_int"
-                _info "  Boot time exceeds $target""s target (ignored)"
-                _info "  Run 'systemd-analyze blame' to identify slow services"
+            # BOOT_TIME_TARGET is declared optional (line ~748); guard so profiles that omit it don't trip `test: argument expected`
+            if set -q BOOT_TIME_TARGET; and test -n "$BOOT_TIME_TARGET"
+                set -l target $BOOT_TIME_TARGET
+                set -l time_int (printf "%.0f" "$total_sec" 2>/dev/null)
+                if test -n "$time_int"; and test "$time_int" -lt $target
+                    _ok "  Boot time under $target""s target"
+                else if test -n "$time_int"
+                    _info "  Boot time exceeds $target""s target (ignored)"
+                    _info "  Run 'systemd-analyze blame' to identify slow services"
+                end
+            else
+                _info "  BOOT_TIME_TARGET not set in profile — skipping target comparison"
             end
         end
 

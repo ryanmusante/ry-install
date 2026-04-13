@@ -1,6 +1,6 @@
-# ry-install v3.50.0
+# ry-install v3.50.1
 
-Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no external dependencies.
 
 **Default profile:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware Reference](#hardware-reference).
 
@@ -133,7 +133,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | **Preflight** | Validate prerequisites, acquire lock, load profile |
 | **Packages** | Sync repos, install/remove packages, AUR via paru |
-| **Configuration** | Deploy 15 embedded config files (atomic writes) |
+| **Configuration** | Deploy 16 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
 | **Boot** | Rebuild initramfs, update systemd-boot entries |
 | **Finalize** | Daemon-reload, cache cleanup, NM restart (deferred on active WiFi), write manifest |

@@ -1,5 +1,28 @@
 ry-install changelog
 
+v3.50.1  2026-04-13
+- Audit fixes (LOW severity, both surfaced by exhaustive line-by-line audit
+  of v3.50.0; zero behavior change on the default gtr9_pro profile):
+  * _ry_verify_runtime: guard $BOOT_TIME_TARGET dereference behind
+    `set -q BOOT_TIME_TARGET; and test -n` (line ~4421). The tunable is
+    declared optional in _validate_profile (line ~748) but the BOOT
+    PERFORMANCE block consumed it unconditionally — any future profile
+    that omitted BOOT_TIME_TARGET would have tripped `test: argument
+    expected` mid-verify. Mirrors the guard pattern already used by
+    EXPECTED_CPU_MATCH, MKINITCPIO_COMPRESSION_OPTIONS, EXPECTED_VULKAN_PKGS.
+    Adds an `else` branch emitting `_info` so skipped checks are visible.
+  * README: lede paragraph and Install Flow table updated from
+    "15 embedded configs" → "16 embedded configs". Drift introduced in
+    v3.50.0 when the new /etc/udev/rules.d/99-nvme-rqaffinity.rules
+    managed file landed (15 → 16). The Managed Files table at line 263
+    was already correctly updated; only the two summary mentions lagged.
+- Verified: `fish --no-execute ry-install.fish` clean; `--version` and
+  `--help` exit 0 as non-root; awk-counted `case` branches in
+  _ry_get_file_content = 16 = _RY_MANAGED_CASE_COUNT (drift assertion in
+  --test-all still passes); diff vs v3.50.0 confined to the targeted
+  lines (script +5 lines from the new if/else/end block + comment;
+  README byte-changes only on lines 1, 3, 136).
+
 v3.50.0  2026-04-13
 - Kernel cmdline (14 → 12 params):
   * Dropped threadirqs — CachyOS kernel enables threaded IRQs by

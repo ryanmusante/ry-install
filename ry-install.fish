@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.49.0 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.50.0 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -18,7 +18,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.49.0"
+set -g VERSION "3.50.0"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -148,7 +148,7 @@ set -g MAX_LOGS 50
 
 # Compile-time invariant: count of `case` branches in _ry_get_file_content.
 # Used as fallback by _ry_show_help when --help runs before _load_profile.
-set -g _RY_MANAGED_CASE_COUNT 15
+set -g _RY_MANAGED_CASE_COUNT 16
 
 # Timing constants
 set -g SUDO_KEEPALIVE_INTERVAL 45
@@ -215,7 +215,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         return 0
     end
 
-    # Map cmdline param prefix → CONFIG_ symbol unchecked: amd_iommu (validation moot — we disable it), clocksource, initcall_blacklist, module_blacklist, nowatchdog, quiet, threadirqs (always-on or no clean CONFIG_ symbol)
+    # Map cmdline param prefix → CONFIG_ symbol unchecked: amd_iommu (validation moot — we disable it), clocksource, module_blacklist, nowatchdog, quiet (always-on or no clean CONFIG_ symbol)
     set -l param_config_map \
         "zswap.=CONFIG_ZSWAP" \
         "amdgpu.=CONFIG_DRM_AMDGPU" \
@@ -543,7 +543,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g PROFILE_NAME gtr9_pro
     set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
 
-    # Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600. SYSTEM=11 USER=3 SERVICE=1 = 15 destinations = README count = _ry_get_file_content cases
+    # Managed file destinations — 1:1 map to _ry_get_file_content(); system=0644, user=0600. SYSTEM=12 USER=3 SERVICE=1 = 16 destinations = README count = _ry_get_file_content cases
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
         /etc/kernel/cmdline \
@@ -555,7 +555,8 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
         /etc/drirc \
-        "/etc/sysctl.d/99-cachyos-sysctl.conf"
+        "/etc/sysctl.d/99-cachyos-sysctl.conf" \
+        "/etc/udev/rules.d/99-nvme-rqaffinity.rules"
 
     set -g USER_DESTINATIONS \
         "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
@@ -576,20 +577,18 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (14 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (ROCm 7.2 ships userspace fix only; kernel workaround still required); amd_iommu=off (APU unified memory — no VFIO/passthrough); clocksource=tsc force TSC; module_blacklist pcspkr; threadirqs threaded IRQ handlers
+    # Kernel (12 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (ROCm 7.2 ships userspace fix only; kernel workaround still required); amd_iommu=off (APU unified memory — no VFIO/passthrough); clocksource=tsc force TSC; module_blacklist pcspkr
     set -g KERNEL_PARAMS \
         amd_iommu=off \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
         clocksource=tsc \
-        initcall_blacklist=simpledrm_platform_driver_init \
         module_blacklist=pcspkr \
         nowatchdog \
         nvme_core.default_ps_max_latency_us=0 \
         pcie_aspm.policy=performance \
         quiet \
         split_lock_detect=off \
-        threadirqs \
         usbcore.autosuspend=-1 \
         zswap.enabled=0
 
@@ -623,7 +622,8 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         HandleHibernateKey \
         HandleHibernateKeyLongPress \
         HandleRebootKey \
-        HandleRebootKeyLongPress
+        HandleRebootKeyLongPress \
+        HandleSecureAttentionKey
     set -g IWD_ENABLE_NETWORK_CONFIG false
     set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"
     set -g IWD_DNS_SERVICE systemd
@@ -664,14 +664,22 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "kernel.unprivileged_bpf_disabled=1" \
         "fs.inotify.max_user_watches=524288" \
         "fs.protected_fifos=2" \
-        "fs.protected_regular=2"
+        "fs.protected_regular=2" \
+        "vm.compaction_proactiveness=0" \
+        "net.core.busy_read=50" \
+        "net.core.busy_poll=50" \
+        "net.core.netdev_budget=600"
 
-    # Packages: PKGS_ADD=11 PKGS_DEL=8 AUR=1 EXPECTED_SERVICES=3 must equal README
+    # Packages: PKGS_ADD=15 PKGS_DEL=8 AUR=1 EXPECTED_SERVICES=3 must equal README
     set -g PKGS_ADD \
         mkinitcpio-firmware \
         nvme-cli \
         cachyos-gaming-meta \
         cachyos-gaming-applications \
+        vulkan-radeon \
+        lib32-vulkan-radeon \
+        libva-mesa-driver \
+        lib32-libva-mesa-driver \
         fd \
         sd \
         dust \
@@ -1045,6 +1053,13 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' "# systemd-logind configuration - desktop power handling"
             printf '%s\n' "[Login]"
             for key in $LOGIND_IGNORE_KEYS
+                if test "$key" = HandleSecureAttentionKey
+                    set -l _sd_ver (systemctl --version 2>/dev/null \
+                        | head -n 1 | string match -r -- '\d+' | head -n 1)
+                    if test -z "$_sd_ver"; or test "$_sd_ver" -lt 256
+                        continue
+                    end
+                end
                 printf '%s\n' "$key=ignore"
             end
 
@@ -1053,6 +1068,10 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' "[Coredump]"
             printf '%s\n' "Storage=none"
             printf '%s\n' "ProcessSizeMax=0"
+
+        case "/etc/udev/rules.d/99-nvme-rqaffinity.rules"
+            printf '%s\n' '# NVMe completion locality — pin completions to submitting core'
+            printf '%s\n' 'ACTION=="add|change", KERNEL=="nvme[0-9]n[0-9]", ATTR{queue/rq_affinity}="2"'
 
         case "/etc/iwd/main.conf"
             printf '%s\n' "# iwd configuration - minimal config for NetworkManager backend"
@@ -1074,6 +1093,7 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             printf '%s\n' ""
             printf '%s\n' "[connection]"
             printf '%s\n' "wifi.powersave=$NM_WIFI_POWERSAVE"
+            printf '%s\n' "wifi.iwd.autoconnect=false"
             printf '%s\n' ""
             printf '%s\n' "[logging]"
             printf '%s\n' "level=$NM_LOG_LEVEL"
@@ -2917,6 +2937,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     else if _chk_file /etc/NetworkManager/conf.d/99-cachyos-nm.conf
         _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.backend=$NM_WIFI_BACKEND" "wifi backend $NM_WIFI_BACKEND"
         _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.powersave=$NM_WIFI_POWERSAVE" "WiFi powersave $NM_WIFI_POWERSAVE"
+        _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.iwd.autoconnect=false" "iwd autoconnect disabled"
         _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "level=$NM_LOG_LEVEL" "logging level $NM_LOG_LEVEL"
     end
     # NM-dispatcher enable state: checked in _ry_verify_runtime (batch systemctl show) — not a static config file check
@@ -4008,10 +4029,10 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     _echo
 
-    _echo "── irqbalance (conflicts with threadirqs) ──"
+    _echo "── irqbalance (manual IRQ tuning preferred) ──"
     set -l _irqbal_state (systemctl is-enabled irqbalance.service 2>/dev/null | string trim --)
     if test "$_irqbal_state" = enabled
-        _fail "  irqbalance.service: enabled (conflicts with threadirqs — disable or mask)"
+        _fail "  irqbalance.service: enabled (manual IRQ tuning preferred — disable or mask)"
     else if test "$_irqbal_state" = masked; or test "$_irqbal_state" = disabled
         _ok "  irqbalance.service: $_irqbal_state"
     else if test -z "$_irqbal_state"; or test "$_irqbal_state" = not-found

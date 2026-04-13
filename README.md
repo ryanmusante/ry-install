@@ -1,4 +1,4 @@
-# ry-install v3.49.0
+# ry-install v3.50.0
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no external dependencies.
 
@@ -121,14 +121,13 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ### Kernel Parameters
 
-14 parameters written to `/etc/kernel/cmdline`:
+12 parameters written to `/etc/kernel/cmdline`:
 
 | Parameter | Purpose |
 |---|---|
 | `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (ROCm 7.2 userspace fix alone insufficient; kernel-mode fix not yet in mainline) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
 | `clocksource=tsc` | Force TSC clocksource (prevents HPET demotion, ~10–100× lower read latency) |
-| `initcall_blacklist=simpledrm_platform_driver_init` | Prevent simpledrm conflict |
 | `amd_iommu=off` | Disable IOMMU (APU unified memory — ~2–6% iGPU bandwidth gain, no VFIO/passthrough) |
 | `module_blacklist=pcspkr` | Silence PC speaker beep |
 | `nowatchdog` | Disable software watchdog timers |
@@ -136,7 +135,6 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `pcie_aspm.policy=performance` | PCIe ASPM L0 always (framework intact, per-device sysfs control preserved) |
 | `quiet` | Suppress kernel boot messages |
 | `split_lock_detect=off` | Disable split-lock #AC exception (gaming) |
-| `threadirqs` | Force threaded IRQ handlers (lower worst-case latency) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
 | `zswap.enabled=0` | Disable zswap (ZRAM handles compressed swap) |
 
@@ -176,16 +174,16 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | `resolved.conf.d` | MulticastDNS=no · LLMNR=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks=`PowerSaveDisable=*` · NameResolvingService=systemd |
-| `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · logging.level=WARN |
+| `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · wifi.iwd.autoconnect=false · logging.level=WARN |
 
 ### System Tuning
 
 | File | Setting |
 |---|---|
-| `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (8 keys) |
+| `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (9 keys) |
 | `coredump.conf.d` | Storage=none · ProcessSizeMax=0 (disables coredump storage — Wine/Proton multi-GB dumps) |
 | `drirc` | RADV unified VRAM heap on APU |
-| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · watermark tuning · security hardening (17 net-new tunables, supplements CachyOS vendor 70-cachyos-settings.conf; net.core.netdev_max_backlog overrides vendor 4096→16384) |
+| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · watermark tuning · security hardening (21 net-new tunables, supplements CachyOS vendor 70-cachyos-settings.conf; net.core.netdev_max_backlog overrides vendor 4096→16384) |
 | `/etc/fstab` | Adds `noatime,lazytime` to ext4 entries (modified in-place, not a managed file) |
 
 ### Environment Variables
@@ -217,7 +215,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | Action | Count | Packages |
 |---|---|---|
-| **Install** | 11 | mkinitcpio-firmware, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
+| **Install** | 15 | mkinitcpio-firmware, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, vulkan-radeon, lib32-vulkan-radeon, libva-mesa-driver, lib32-libva-mesa-driver, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove** | 8 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
 | **AUR** | 1 | mt76-mt7925-dkms (via paru — **skipped with WARN if paru is not installed**; install continues) |
 
@@ -228,7 +226,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | Service | Reason |
 |---|---|
 | `ananicy-cpp.service` | Manual tuning preferred |
-| `irqbalance.service` | Conflicts with threadirqs |
+| `irqbalance.service` | Manual IRQ tuning preferred |
 | `power-profiles-daemon.service` | Conflicts with cpupower-epp |
 | `lvm2-monitor.service` | Skipped if LVM detected |
 | `NetworkManager-wait-online.service` | Unnecessary boot delay |
@@ -240,7 +238,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ## Managed Files
 
-15 files deployed via atomic writes (tmp → chmod → mv):
+16 files deployed via atomic writes (tmp → chmod → mv):
 
 | # | Scope | Path |
 |---|---|---|
@@ -255,10 +253,11 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | 9 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
 | 10 | System | `/etc/drirc` |
 | 11 | System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
-| 12 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
-| 13 | User | `~/.config/environment.d/10-environment.conf` |
-| 14 | User | `~/.config/systemd/user/ssh-agent.service` |
-| 15 | Service | `/etc/systemd/system/cpupower-epp.service` |
+| 12 | System | `/etc/udev/rules.d/99-nvme-rqaffinity.rules` |
+| 13 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
+| 14 | User | `~/.config/environment.d/10-environment.conf` |
+| 15 | User | `~/.config/systemd/user/ssh-agent.service` |
+| 16 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
 ## Profiles
 

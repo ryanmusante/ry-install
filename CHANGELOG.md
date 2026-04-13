@@ -1,5 +1,29 @@
 ry-install changelog
 
+v3.50.0  2026-04-13
+- Kernel cmdline (14 → 12 params):
+  * Dropped threadirqs — CachyOS kernel enables threaded IRQs by
+    default; param redundant (S1).
+  * Dropped initcall_blacklist=simpledrm_platform_driver_init —
+    workaround no longer required on current amdgpu (S2).
+- Sysctl (17 → 21 net-new tunables) (S3):
+  * vm.compaction_proactiveness=0 (reduce background compaction)
+  * net.core.busy_read=50, net.core.busy_poll=50 (low-latency NAPI)
+  * net.core.netdev_budget=600 (raise packet budget for 10 GbE)
+- Packages (PKGS_ADD 11 → 15) (S4): vulkan-radeon,
+  lib32-vulkan-radeon, libva-mesa-driver, lib32-libva-mesa-driver —
+  explicit RADV + VA-API for gfx1151.
+- New managed file (15 → 16) (S6):
+  * /etc/udev/rules.d/99-nvme-rqaffinity.rules —
+    rq_affinity=2 (pin completions to submitting core).
+- logind (8 → 9 ignore keys) (S7): HandleSecureAttentionKey gated
+  to systemd ≥256.
+- NetworkManager (S8): wifi.iwd.autoconnect=false — prevent NM/iwd
+  autoconnect race.
+- Verification (S9): documented Intel ice DDP firmware path
+  (linux-firmware vs linux-firmware-other split).
+- Revert: @@REVERT@@ markers S1–S4, S6–S8 in-script.
+
 v3.49.0  2026-04-12
 - Comment sweep: dropped 61 low-value comment lines (6050 → 5989). Zero
   semantic change; script behavior, output, exit codes, and embedded config

@@ -54,13 +54,13 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 **Post-install verification:**
 
 1. Reboot — required for kernel cmdline, initramfs, NetworkManager backend switch.
-2. `./ry-install.fish --verify-static` — confirms managed files match embedded content (catches manual edits, package overwrites).
-3. `./ry-install.fish --verify-runtime` — confirms live kernel params, services, and modules are loaded as expected.
+2. `./ry-install.fish --verify-static` — confirms managed files match embedded content.
+3. `./ry-install.fish --verify-runtime` — confirms live kernel params, services, and modules are loaded.
 4. Smoke test: WiFi associates, a Vulkan game launches via Steam/Proton.
 
 Typical first-run duration: **3–8 minutes** (depends on package mirror speed and initramfs rebuild).
 
-> **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until your next reboot to keep WiFi connectivity active during install. Reboot after install completes, or run `sudo systemctl restart NetworkManager` once on ethernet to apply immediately.
+> **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until your next reboot. On ethernet, run `sudo systemctl restart NetworkManager` once on ethernet to apply immediately.
 
 ## Scope
 
@@ -89,7 +89,7 @@ sudo -v                          # warm sudo cache; confirms unrestricted sudo
 df -h / /boot                    # verify space (≥2 GB / and ≥200 MB /boot)
 ```
 
-Then review the [Masked Services](#masked-services) table — the default profile is **desktop-oriented** and masks all sleep/suspend targets. Laptop users must override `MASK` in a custom profile. Check [CachyOS news](https://wiki.cachyos.org) and [Arch news](https://archlinux.org/news/) for breaking changes before any `pacman -Syu`.
+Then review the [Masked Services](#masked-services) table — the default profile masks all sleep/suspend targets — laptop users must override `MASK`. Check [CachyOS news](https://wiki.cachyos.org) and [Arch news](https://archlinux.org/news/) for breaking changes before any `pacman -Syu`.
 
 ## Hardware Reference
 
@@ -146,7 +146,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | Parameter | Purpose |
 |---|---|
-| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (ROCm 7.2 userspace fix alone insufficient; kernel-mode fix not yet in mainline) |
+| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround; kernel-mode fix not yet in mainline |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
 | `clocksource=tsc` | Force TSC clocksource (prevents HPET demotion, ~10–100× lower read latency) |
 | `amd_iommu=off` | Disable IOMMU (APU unified memory — ~2–6% iGPU bandwidth gain, no VFIO/passthrough) |
@@ -327,6 +327,7 @@ Run `--verify-static` and `--verify-runtime` before first use.
 ### Profile Trust Model
 
 Profiles execute via `source` with the user's privileges — treat them like any shell script. Only use profiles from trusted sources; verify ownership with `stat -c '%U' ~/.config/ry-install/profiles/*.fish`. No sandboxing — a malicious profile can do anything your account can.
+
 ## Safety & Reliability
 
 | Feature | Detail |
@@ -381,7 +382,7 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 | Event | Key Fields | Emitted |
 |---|---|---|
 | `header` | version, profile, mode, verbose, command | Run start |
-| `footer` | finished, mode, exit_code, pass, fail, warn (always); `interrupted:true` appended on signal exit; `cleanup_exit:true` appended on fish_exit fallback | Run end |
+| `footer` | finished, mode, exit_code, pass, fail, warn; `interrupted:true` on signal exit; `cleanup_exit:true` on fish_exit fallback | Run end |
 | `ok` | data | Verification pass |
 | `fail` | data | Verification failure |
 | `warn` | data | Non-fatal issue |
@@ -394,7 +395,7 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 | `stderr` | data | Captured stderr |
 | `section` | data | Phase boundary |
 
-> **Operational events:** the script emits ~50 additional prefix-routed event types (`lock_acquired`, `manifest_written`, `pkg_remove_ok`, `ntsync_check`, etc.) that are not listed above. All follow the same `{"ts":…,"event":…,"data":…}` schema and are queryable with jq.
+> ~50 additional prefix-routed event types (`lock_acquired`, `manifest_written`, `pkg_remove_ok`, `ntsync_check`, etc.) follow the same `{"ts":…,"event":…,"data":…}` schema and are queryable with jq.
 
 Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
@@ -413,7 +414,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
 ## Uninstall
 
-ry-install ships no automated uninstaller. `~/ry-install/.manifest` lists every deployed file as the source of truth for manual rollback. To revert: unmask the units in [Masked Services](#masked-services), `rm` the paths in [Managed Files](#managed-files), restore `/etc/fstab` from your own snapshot (no persistent backup is written), optionally `pacman -S` the removed packages and `pacman -Rns` the installed ones, then `mkinitcpio -P && sdboot-manage gen` and reboot.
+ry-install ships no automated uninstaller. `~/ry-install/.manifest` lists every deployed file as the source of truth for manual rollback. To revert: unmask the units in [Masked Services](#masked-services), `rm` the paths in [Managed Files](#managed-files), restore `/etc/fstab` from your own snapshot, optionally `pacman -S` the removed packages and `pacman -Rns` the installed ones, then `mkinitcpio -P && sdboot-manage gen` and reboot.
 
 ## Known Issues
 
@@ -421,7 +422,7 @@ ry-install ships no automated uninstaller. `~/ry-install/.manifest` lists every 
 
 | Issue | Status | Workaround |
 |---|---|---|
-| CWSR hang — incorrect VGPR count (`cf326449637a5`), compute-only | Userspace fix in ROCm 7.2; kernel-mode fix not yet in mainline | `amdgpu.cwsr_enable=0` (still required) |
+| CWSR hang — incorrect VGPR count, compute-only | Userspace fix in ROCm 7.2; kernel-mode fix not yet in mainline | `amdgpu.cwsr_enable=0` (still required) |
 | MES page faults | Specific firmware revisions affected | Pin a known-good `linux-firmware` version if encountered |
 | ROCm VRAM allocation | Fixed in kernel 6.16+ | GTT handled automatically — no `ttm.pages_limit` or `amdgpu.gttsize` needed |
 | PSR freeze (eDP only) | Open | `amdgpu.dcdebugmask=0x10` (not needed for HDMI/DP) |

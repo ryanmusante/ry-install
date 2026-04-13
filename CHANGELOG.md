@@ -52,6 +52,29 @@ v3.50.1  2026-04-13
     NO_COLOR trimmed to 2 clauses.
   * Data Directory: .boot-wipe-acknowledged row 4 sentences -> 1.
   * Net: 503 -> 477 lines (-26); all key facts verified against script.
+- README prose + table pass (10 trims, no information dropped):
+  * Formatting: added missing blank line between Profile Trust Model
+    and ## Safety & Reliability.
+  * Quick Start: --verify-static step dropped "(catches manual edits,
+    package overwrites)"; --verify-runtime dropped "as expected";
+    WiFi callout removed redundant "to keep WiFi connectivity active
+    during install" and "Reboot after install completes" (already step 1).
+  * Prerequisites: merged "desktop-oriented" redundant clause into
+    sleep/suspend mask sentence.
+  * Kernel Parameters: amdgpu.cwsr_enable=0 dropped ROCm 7.2 detail
+    (redundant with Known Issues workaround column).
+  * Log Format: footer row dropped "(always)" and "appended on" x2;
+    operational events note collapsed from two sentences to one.
+  * Uninstall: dropped "(no persistent backup is written)" — already
+    stated in the Safety table.
+  * Known Issues: CWSR hang dropped git hash cf326449637a5.
+  * Net: 477 -> 469 lines (-9 counting blank line added).
+- README audit: anchors, tables, numbers vs script (all correct):
+  * All 40 internal links resolve; 37 tables structurally valid.
+  * All numeric claims verified against script: 12 kernel params,
+    16 managed files, 15/8/1 packages, 10 masked services, 26/8/6
+    profile globals, 9 logind keys, 21 sysctl entries, 9 credential
+    patterns, 13 log event rows, 9 exit code rows — all match.
 - README consistency pass (two remaining verbose cells):
   * sysctl.d (System Tuning): removed parenthetical implementation detail
     (vendor file name, netdev_max_backlog override note) — kept count (21).

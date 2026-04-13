@@ -8,20 +8,23 @@ Self-contained CachyOS configuration manager with profile support. Single Fish s
 
 ## Table of Contents
 
-- [Quick Start](#quick-start)
-- [Scope](#scope)
-- [Prerequisites](#prerequisites)
-- [Hardware Reference](#hardware-reference)
-- [Usage](#usage)
-- [Install Flow](#install-flow)
-- [Configuration Reference](#configuration-reference)
-- [Managed Files](#managed-files)
-- [Profiles](#profiles)
-- [Safety & Reliability](#safety--reliability)
-- [Uninstall](#uninstall)
-- [Known Issues](#known-issues)
-- [Troubleshooting](#troubleshooting)
-- [References](#references)
+| # | Section |
+|---|---|
+| 1 | [Quick Start](#quick-start) |
+| 2 | [Scope](#scope) |
+| 3 | [Prerequisites](#prerequisites) |
+| 4 | [Hardware Reference](#hardware-reference) |
+| 5 | [Usage](#usage) |
+| 6 | [Install Flow](#install-flow) |
+| 7 | [Configuration Reference](#configuration-reference) |
+| 8 | [Managed Files](#managed-files) |
+| 9 | [Profiles](#profiles) |
+| 10 | [Safety & Reliability](#safety--reliability) |
+| 11 | [Uninstall](#uninstall) |
+| 12 | [Known Issues](#known-issues) |
+| 13 | [Troubleshooting](#troubleshooting) |
+| 14 | [References](#references) |
+| 15 | [License](#license) |
 
 ## Quick Start
 

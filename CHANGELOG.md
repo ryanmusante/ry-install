@@ -22,6 +22,16 @@ v3.50.0  2026-04-13
   autoconnect race.
 - Verification (S9): documented Intel ice DDP firmware path
   (linux-firmware vs linux-firmware-other split).
+- Comment cleanup: collapsed 8 multi-line tradeoff/contract comment
+  blocks to single lines (sourcing detection, _ry_exit contract,
+  _ry_call_or_bail guidance, TIMESTAMP TOCTOU race, BOOT_WIPE_MARKER
+  contract, _RY_MANAGED_CASE_COUNT invariant, _kconfig_cache CONTRACT,
+  _test_label invariant, footer bail checkpoint). Moved 1 inline
+  trailing comment above its line. Net −20 lines (6010 → 5990).
+  Zero semantic change; 76/76 functions preserved; TOCTOU, CONTRACT,
+  lint:ignore markers all preserved at baseline counts.
+- README: TOC replaced with numbered markdown table (15 rows);
+  License row added (was missing from bullet TOC).
 - Revert: @@REVERT@@ markers S1–S4, S6–S8 in-script.
 
 v3.49.0  2026-04-12

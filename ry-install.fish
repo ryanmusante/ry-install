@@ -10,9 +10,7 @@ if set -q _RY_INSTALL_LOADED
     end
 end
 set -g _RY_INSTALL_LOADED true
-# Sourcing detection: when sourced from an interactive shell we must NOT call
-# `exit` at end-of-file (would kill the host fish). Set a flag for the bottom
-# of the file to honor.
+# Sourcing detection: when sourced from an interactive shell we must NOT call `exit` at end-of-file (would kill the host fish). Set a flag for the bottom of the file to honor.
 if status is-interactive
     set -g _RY_INSTALL_SOURCED true
 else
@@ -27,10 +25,7 @@ set -g EXIT_BOOT_CRIT 4
 set -g EXIT_LOCK 5
 set -g EXIT_DRIFT 10
 
-# _ry_exit: source-safe exit. Exits the process when run normally; sets a
-# bail sentinel and returns when sourced. Top-level loops/dispatch must test
-# `$_RY_INSTALL_BAILING` after every call site that could transitively invoke
-# this helper, and `return` from the source frame when the sentinel is set.
+# _ry_exit: source-safe exit. Exits the process when run normally; sets a bail sentinel and returns when sourced. Top-level loops/dispatch must test `$_RY_INSTALL_BAILING` after every call site that could transitively invoke this helper, and `return` from the source frame when the sentinel is set.
 function _ry_exit --argument-names code --description "Source-safe exit: set bail sentinel and return when sourced, exit otherwise"
     test -z "$code"; and set code 0
     set -g _RY_INSTALL_LAST_EXIT $code
@@ -41,9 +36,7 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
     exit $code
 end
 
-# Shorthand for top-level checkpoints. Usage: `_ry_call_or_bail _load_profile`
-# At every top-level call site that could transitively call _ry_exit, follow
-# the call with `test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT`.
+# Shorthand for top-level checkpoints. Usage: `_ry_call_or_bail _load_profile` — at every top-level call site that could transitively call _ry_exit, follow the call with `test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT`.
 # --quiet: suppress command-wrapper stdout to terminal (auto-disabled for non-install modes)
 set -g QUIET true
 # Environment detection: NO_COLOR (no-color.org) — set -qx tests exported vars only, avoids false positive from set -g
@@ -84,13 +77,7 @@ if test "$fish_major" -gt 4
     echo "Warning: ry-install is tested on fish 3.4-4.x; found $fish_ver — please report issues" >&2
 end
 
-# Timestamps (single date(1) call → DATE_LABEL for dirs + TIMESTAMP for filenames), HOME resolution, log dirs
-# TIMESTAMP is suffixed with $fish_pid to prevent collisions when --test-all forks
-# multiple children within the same second (date(1) is second-precision). Without the
-# PID suffix two concurrent read-only children could race on the pre-rename
-# `install-$TIMESTAMP.jsonl` path: the loser's `install -m 0600 /dev/null` would
-# truncate the winner's profile-load log lines, and the loser's subsequent mode-
-# specific rename would fail because the winner already moved the source file away.
+# Timestamps (single date(1) call → DATE_LABEL for dirs + TIMESTAMP for filenames), HOME resolution, log dirs. TIMESTAMP is suffixed with $fish_pid to prevent collisions when --test-all forks multiple children within the same second (date(1) is second-precision). Without the PID suffix two concurrent read-only children could race on the pre-rename `install-$TIMESTAMP.jsonl` path: the loser's `install -m 0600 /dev/null` would truncate the winner's profile-load log lines, and the loser's subsequent mode-specific rename would fail because the winner already moved the source file away.
 set -l _now (date '+%Y-%m-%d_%Y%m%d-%H%M%S%z')
 set -g DATE_LABEL (string split '_' -- "$_now")[1]
 set -g TIMESTAMP (string split '_' -- "$_now")[2]"-"$fish_pid
@@ -109,8 +96,7 @@ if test -z "$HOME"
 end
 
 set -g LOG_DIR "$HOME/ry-install/logs/$DATE_LABEL"
-# Boot-wipe acknowledgement marker — sourced by both the gate (preflight) and the
-# writer (post-success). Single source of truth; do not duplicate the literal.
+# Boot-wipe acknowledgement marker — sourced by both the gate (preflight) and the writer (post-success). Single source of truth; do not duplicate the literal.
 set -g BOOT_WIPE_MARKER "$HOME/ry-install/.boot-wipe-acknowledged"
 command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
     echo "[ERR] Cannot create log directory: $LOG_DIR" >&2
@@ -146,8 +132,7 @@ set -g _TRACKED_TMPFILES
 # Retention limits
 set -g MAX_LOGS 50
 
-# Compile-time invariant: count of `case` branches in _ry_get_file_content.
-# Used as fallback by _ry_show_help when --help runs before _load_profile.
+# Compile-time invariant: count of `case` branches in _ry_get_file_content. Used as fallback by _ry_show_help when --help runs before _load_profile.
 set -g _RY_MANAGED_CASE_COUNT 16
 
 # Timing constants
@@ -170,10 +155,7 @@ if test -z "$KVER_MINOR"; or not string match -qr '^\d+$' -- "$KVER_MINOR"
     _ry_exit $EXIT_PREFLIGHT; and return $EXIT_PREFLIGHT; or return $EXIT_PREFLIGHT
 end
 
-# Lazy cache for /proc/config.gz — avoids redundant zcat across _ntsync_state and _validate_kernel_params
-# CONTRACT: When /proc/config.gz is missing or unreadable, this function returns 0 with NO output.
-# Callers using `_kconfig_cache | grep -q PATTERN` therefore see "no match" which they correctly
-# interpret as "feature not enabled" — the right answer for this codebase. Do not change to non-zero
+# Lazy cache for /proc/config.gz — avoids redundant zcat across _ntsync_state and _validate_kernel_params. CONTRACT: When /proc/config.gz is missing or unreadable, this function returns 0 with NO output. Callers using `_kconfig_cache | grep -q PATTERN` therefore see "no match" which they correctly interpret as "feature not enabled" — the right answer for this codebase. Do not change to non-zero
 function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy-loaded; empty on missing config)"
     # sentinel-based gate — `count == 0` re-tested /proc/config.gz on every call when missing
     if not set -q _KCONFIG_LOADED
@@ -5082,7 +5064,8 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
 
     # SDBOOT_REMOVE_EXISTING=yes deletes ALL existing loader entries before regen. First-run safety: require explicit acknowledgement via env var OR marker file. Marker file stores the entry count from the last acknowledged wipe — if entries grew since then (rescue/Windows added), re-prompt instead of silently wiping. This prevents an unattended install on a dual-boot host from quietly deleting later-added entries.
     if test "$SDBOOT_REMOVE_EXISTING" = yes
-        set -l _wipe_marker $BOOT_WIPE_MARKER # see global; do not re-hardcode the path
+        # see global; do not re-hardcode the path
+        set -l _wipe_marker $BOOT_WIPE_MARKER
         set -l _acknowledged false
         set -l _existing_entries (sudo find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' 2>/dev/null | wc -l | string trim --)
         if set -q RY_INSTALL_CONFIRM_BOOT_WIPE; and test "$RY_INSTALL_CONFIRM_BOOT_WIPE" = 1
@@ -5573,9 +5556,7 @@ function _ry_do_completions --description "Generate fish shell completions for r
     _ok "Completions installed to: $comp_dst"
 end
 
-# Test-suite label transform: strip leading `--`, fold spaces/slashes to `_`,
-# preserve interior hyphens. MUST be called from both fork and collect sites
-# so the filename written by one matches the filename read by the other.
+# Test-suite label transform: strip leading `--`, fold spaces/slashes to `_`, preserve interior hyphens. MUST be called from both fork and collect sites so the filename written by one matches the filename read by the other.
 function _test_label --description "Canonical filename label for a test mode string"
     # `--` ends options; positional args are then PATTERN REPLACEMENT STRING.
     # A second `--` would be parsed as a literal STRING arg and produce a spurious empty line.
@@ -5985,8 +5966,7 @@ switch $MODE
         _err "Unknown mode: $MODE"
         set exit_code $EXIT_USAGE
 end
-# Bail checkpoint: if any handler transitively tripped the source-safe bail
-# sentinel, return from the source frame now (before the footer/log noise).
+# Bail checkpoint: if any handler transitively tripped the source-safe bail sentinel, return from the source frame now (before the footer/log noise).
 if test "$_RY_INSTALL_BAILING" = true
     set -g _RY_INSTALL_LAST_EXIT $exit_code
     return $exit_code

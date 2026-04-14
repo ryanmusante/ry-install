@@ -1,5 +1,40 @@
 ry-install changelog
 
+v3.50.2  2026-04-13
+- Audit fixes (1 medium, 3 low; surfaced by exhaustive line-by-line audit of
+  v3.50.1; zero behavior change on the default gtr9_pro profile):
+  * [MEDIUM] _load_profile: add bail sentinel check after `source "$profile_path"`
+    (line ~856). The fish --no-execute gate validates syntax but not runtime
+    behavior; a sourced profile that transitively calls _ry_exit would set
+    _RY_INSTALL_BAILING=true and return, but execution continued into
+    _ry_profile_$name with the sentinel already armed. Fix: insert
+    `test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT`
+    immediately after the source call. Mirrors the bail pattern already used
+    at every other _ry_exit call site in the codebase.
+  * [LOW] _run: surface metacharacter rejection to terminal (line ~1614).
+    The defense-in-depth guard that rejects argv containing shell
+    metacharacters (;|&`$\n\t\r<>(){}) previously logged only to JSONL via
+    `_log "BUG:"` and returned 1 silently — zero terminal output. User would
+    see a command fail with no explanation. Fix: add `_err` before the `_log`
+    so the rejection appears on stderr. _log "BUG:" retained for JSONL
+    traceability. All 38 current call sites are safe after fish expansion;
+    the guard is defense-in-depth for future callers.
+  * [LOW] Line 53: correct fish version gate comment. Comment stated "3.4+
+    required for $() syntax" — fish has never supported $() (that is bash).
+    The actual 3.4 requirements are `set --function` and
+    `string collect --allow-empty`. The $() on line ~4477 is awk syntax
+    inside a string literal, not fish.
+  * [LOW] _ry_install_files: surface mktemp degradation to terminal
+    (line ~2668). When mktemp fails and argparse error capture falls back to
+    /dev/null, the condition was logged only via `_log "WARN:"` (JSONL only).
+    Argparse errors are then silently discarded. Fix: add `_warn` before
+    `_log` so the degradation appears on stderr. _MKTEMP_DEGRADED_WARNED
+    dedup flag unchanged.
+- Verified: `fish --no-execute ry-install.fish` clean (fish 3.7.0); diff vs
+  v3.50.1 confined to 5 added lines across 4 sites + 2 version strings;
+  no changes to managed file content, install logic, or verify paths.
+- README: version string updated (title + sample log header).
+
 v3.50.1  2026-04-13
 - Audit fixes (LOW severity, both surfaced by exhaustive line-by-line audit
   of v3.50.0; zero behavior change on the default gtr9_pro profile):

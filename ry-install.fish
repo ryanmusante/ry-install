@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.50.1 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.50.2 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -16,7 +16,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.50.1"
+set -g VERSION "3.50.2"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -50,7 +50,7 @@ if test (id -u) -eq 0
     _ry_exit $EXIT_USAGE; and return $EXIT_USAGE; or return $EXIT_USAGE
 end
 
-# Fish version gate (3.4+ required for $() syntax, set --function, string collect --allow-empty; string collect --no-trim-newlines available since fish 3.1)
+# Fish version gate (3.4+ required for set --function and string collect --allow-empty; string collect --no-trim-newlines available since fish 3.1)
 set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n 1)
 if test -z "$fish_ver"
     echo "Error: Could not determine fish version" >&2
@@ -851,6 +851,9 @@ function _load_profile --description "Determine, load, and validate the active p
             return $EXIT_USAGE
         end
         source "$profile_path"
+        # Bail check: a sourced profile that calls _ry_exit (e.g. via a helper) sets the
+        # sentinel; catch it here before proceeding to invoke the profile function.
+        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
         if functions -q "_ry_profile_$name"
             _ry_profile_$name
         else if functions -q "profile_$name"
@@ -1608,6 +1611,7 @@ function _run --description "Execute a command with logging and error capture; s
     # SECURITY: reject argv with shell metacharacters (;|&`$\n\t\r<>(){}) — defense-in-depth for log integrity and external profile sourcing
     for _arg in $argv
         if string match -qr '[;|&`\$\n\t\r<>(){}]' -- "$_arg"
+            _err "_run: argv contains shell metacharacter — refusing command (see log for detail)"
             _log "BUG: _run argv contains shell metacharacters — refusing to execute: $_arg"
             return 1
         end
@@ -2661,6 +2665,7 @@ function _ry_install_files --description "Install multiple embedded configs with
     test "$_argparse_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$_argparse_tmp"
     if test "$_argparse_tmp" = /dev/null; and not set -q _MKTEMP_DEGRADED_WARNED
         set -g _MKTEMP_DEGRADED_WARNED true
+        _warn "mktemp failed — argparse error capture degraded; stderr from argparse will be lost"
         _log "WARN: mktemp fallback to /dev/null — argparse error capture degraded"
     end
     argparse s/sudo 'd/desc=' -- $argv 2>$_argparse_tmp

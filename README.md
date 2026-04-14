@@ -1,4 +1,4 @@
-# ry-install v3.50.1
+# ry-install v3.50.2
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no external dependencies.
 
@@ -403,7 +403,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 <summary>Sample log output</summary>
 
 ```json
-{"ts":"2026-04-08T14:23:01-0700","event":"header","version":"3.50.1","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-08T14:23:01-0700","event":"header","version":"3.50.2","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
 {"ts":"2026-04-08T14:23:04-0700","event":"section","data":"Preflight"}
 {"ts":"2026-04-08T14:23:12-0700","event":"step_time","data":"Packages","elapsed_s":127.4}
 {"ts":"2026-04-08T14:25:19-0700","event":"warn","data":"paru not found — skipping AUR packages: mt76-mt7925-dkms"}

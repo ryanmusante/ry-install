@@ -1,10 +1,10 @@
-# ry-install v3.50.2
+# ry-install v3.50.3
 
-Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no external dependencies.
+Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
 **Default profile:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware Reference](#hardware-reference).
 
-[changelog](CHANGELOG.md)
+[Changelog](CHANGELOG.md)
 
 ## Table of Contents
 
@@ -60,7 +60,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 Typical first-run duration: **3–8 minutes** (depends on package mirror speed and initramfs rebuild).
 
-> **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until your next reboot. On ethernet, run `sudo systemctl restart NetworkManager` once on ethernet to apply immediately.
+> **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until your next reboot. On ethernet, run `sudo systemctl restart NetworkManager` once to apply immediately.
 
 ## Scope
 
@@ -78,13 +78,13 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 | Unrestricted sudo | `sudo -l` → `(ALL) ALL` | Required (unattended install) |
 | 2 GB root + 200 MB /boot free | `df -h / /boot` | Packages + initramfs |
 | Network connectivity | `curl -sf --head https://archlinux.org` | Package sync |
-| Current BIOS | [Beelink downloads](https://dr.bee-link.cn/) | P110+ for Strix Halo stability |
+| Current BIOS | [Beelink downloads](https://dr.bee-link.cn/) | See [Hardware Reference](#hardware-reference) |
 | paru (optional) | `command -q paru` | AUR package installation |
 
 **Recommended pre-flight steps:**
 
 ```fish
-./ry-install.fish --check        # silent idempotency probe (exit 0=clean, 3=prereq fail, 10=drift)
+./ry-install.fish --check        # idempotency probe — see Exit Codes
 sudo -v                          # warm sudo cache; confirms unrestricted sudo
 df -h / /boot                    # verify space (≥2 GB / and ≥200 MB /boot)
 ```
@@ -92,6 +92,8 @@ df -h / /boot                    # verify space (≥2 GB / and ≥200 MB /boot)
 Then review the [Masked Services](#masked-services) table — the default profile masks all sleep/suspend targets — laptop users must override `MASK`. Check [CachyOS news](https://wiki.cachyos.org) and [Arch news](https://archlinux.org/news/) for breaking changes before any `pacman -Syu`.
 
 ## Hardware Reference
+
+The default `gtr9_pro` profile targets this specific machine. All kernel parameters, driver workarounds, and tuning values in this repo are calibrated against the components below. Other hardware requires a custom profile.
 
 | Component | Detail |
 |---|---|
@@ -107,14 +109,16 @@ Check [Beelink](https://dr.bee-link.cn/) for BIOS updates, [kernel bugzilla](htt
 
 ## Usage
 
+All modes are non-interactive. The bare invocation is the primary path; verification flags (`--verify-static`, `--verify-runtime`, `--check`) are read-only and safe to run against an already-configured system. `--install-file` re-deploys a single managed file and does write.
+
 | Flag | Description |
 |---|---|
-| (no args) | Unattended install (the only mode) |
+| (no args) | Full unattended install (the only install path) |
 | `-V, --verbose` | Show output on terminal |
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |
 | `--check` | Silent idempotency probe (exit 0 = clean, 3 = prereq fail, 10 = drift) |
-| `--test-all` | Run all safe modes, generate NDJSON logs |
+| `--test-all` | Run all non-destructive modes, generate NDJSON logs |
 | `--install-file <path>` | Re-deploy a single managed file |
 | `--completions` | Install Fish tab-completions |
 | `-h, --help` | Show help |
@@ -140,13 +144,15 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ## Configuration Reference
 
+Each subsection corresponds to a discrete layer of the system. All values are embedded in the script and deployed via the paths listed in [Managed Files](#managed-files). Override any setting by creating a custom profile rather than editing the managed files directly — doing so will cause `--verify-static` to report drift.
+
 ### Kernel Parameters
 
 12 parameters written to `/etc/kernel/cmdline`:
 
 | Parameter | Purpose |
 |---|---|
-| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround; kernel-mode fix not yet in mainline |
+| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (see [Known Issues](#known-issues)) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
 | `clocksource=tsc` | Force TSC clocksource (prevents HPET demotion, ~10–100× lower read latency) |
 | `amd_iommu=off` | Disable IOMMU (APU unified memory — ~2–6% iGPU bandwidth gain, no VFIO/passthrough) |
@@ -160,6 +166,8 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `zswap.enabled=0` | Disable zswap (ZRAM handles compressed swap) |
 
 ### Boot Loader
+
+Configures systemd-boot and sdboot-manage generation. `editor no` prevents live kernel cmdline tampering at the boot prompt; `timeout 0` boots the saved entry immediately with no menu delay.
 
 | File | Key | Value |
 |---|---|---|
@@ -176,6 +184,8 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ### Initramfs
 
+`amdgpu` and `nvme` are forced unconditionally — they bypass `autodetect` rather than relying on it to detect them. `zstd -1 -T0` uses all available threads at the fastest compression level — decompression is fast enough that the trade-off favors boot time over archive size.
+
 | Setting | Value |
 |---|---|
 | Modules | `amdgpu`, `nvme` |
@@ -185,11 +195,15 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ### System Services
 
+One custom unit is created and enabled. `power-profiles-daemon` is masked separately (see [Masked Services](#masked-services)) to prevent it from fighting `cpupower-epp` over the EPP sysfs knob.
+
 | Unit | Description |
 |---|---|
 | `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` sysfs |
 
 ### Network Stack
+
+Three config files lock the WiFi stack to iwd as the NetworkManager backend with power-save disabled — required for MT7925 stability. DNS resolution is handled entirely by systemd-resolved; iwd delegates to it rather than writing `resolv.conf` directly.
 
 | File | Setting |
 |---|---|
@@ -198,6 +212,8 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · wifi.iwd.autoconnect=false · logging.level=WARN |
 
 ### System Tuning
+
+Miscellaneous kernel and userspace tuning not covered by other subsections. `coredump.conf.d` is particularly important on this hardware — Wine and Proton processes can produce multi-GB core dumps that silently fill `/var`. Note that `/etc/fstab` is the only path in this project written in-place rather than atomically — see [Safety & Reliability](#safety--reliability).
 
 | File | Setting |
 |---|---|
@@ -208,6 +224,8 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | `/etc/fstab` | Adds `noatime,lazytime` to ext4 entries (modified in-place, not a managed file) |
 
 ### Environment Variables
+
+Written to `~/.config/environment.d/10-environment.conf` for systemd user session pickup. All debug logging is silenced by default; re-enable selectively (`DXVK_LOG_LEVEL`, `VKD3D_DEBUG`, `WINEDEBUG`) only when diagnosing driver or shader issues — they generate significant volume under normal play.
 
 | Variable | Value |
 |---|---|
@@ -226,6 +244,8 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ### User Configuration
 
+Three files deploy to the calling user's home. The SSH agent runs with `-D` (no daemonize) so systemd can supervise it directly and restart on crash without leaving stale socket files.
+
 | File | Purpose |
 |---|---|
 | `fish/conf.d/10-ssh-auth-sock.fish` | SSH socket priority: forwarded > gcr > systemd agent |
@@ -234,11 +254,13 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ### Packages
 
+Package operations run during the Packages phase with `--needed` for idempotency — already-installed packages are skipped on subsequent runs. The single AUR package (`mt76-mt7925-dkms`) requires paru; if paru is absent the script warns and continues rather than aborting.
+
 | Action | Count | Packages |
 |---|---|---|
 | **Install** | 15 | mkinitcpio-firmware, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, vulkan-radeon, lib32-vulkan-radeon, libva-mesa-driver, lib32-libva-mesa-driver, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove** | 8 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
-| **AUR** | 1 | mt76-mt7925-dkms (via paru — WARN and skip if paru absent; install continues) |
+| **AUR** | 1 | mt76-mt7925-dkms (via paru; skipped with warning if paru absent) |
 
 ### Masked Services
 
@@ -337,7 +359,7 @@ Profiles execute via `source` with the user's privileges — treat them like any
 | Root detection | **Refuses to run as root** — invoke as your normal user; sudo called internally |
 | Instance lock | Atomic mkdir, PID verification, stale reclaim |
 | Credentials | 9 sensitive flag patterns redacted in logs (`--passphrase`, `--password`, `--token`, `--key`, etc.) |
-| Signal handling | INT/TERM/HUP/QUIT → 128+signum; SIGPIPE → 141 |
+| Signal handling | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
 | Logging | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl` |
 | Boot safety | Abort on initramfs or bootloader rebuild failure |
 | LVM-aware | Skips lvm2-monitor mask when LVM detected |
@@ -345,6 +367,8 @@ Profiles execute via `source` with the user's privileges — treat them like any
 | Source-safe | When `source`d, returns exit code via `$_RY_INSTALL_LAST_EXIT` instead of calling `exit` — safe for Fish wrapper scripts |
 
 ### Exit Codes
+
+Codes are designed for scripting — non-zero always means something actionable. Code `10` is exclusive to `--check` (drift detected) and will never appear during a full install run; code `1` during install indicates a non-critical failure that did not abort the run.
 
 | Code | Meaning |
 |---|---|
@@ -360,6 +384,8 @@ Profiles execute via `source` with the user's privileges — treat them like any
 
 ### Environment Variables
 
+Shell variables that modify script behavior at runtime — distinct from the gaming/Proton variables written to the system. Set them in the invoking shell before running; they are not persisted anywhere by the installer.
+
 | Variable | Default | Purpose |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | unset | Positive integer seconds; wraps every `_run` call with `timeout --preserve-status --kill-after=10`. Unset = no limit. Recommended: `1800` for unattended installs. Rejects `0`. |
@@ -367,6 +393,8 @@ Profiles execute via `source` with the user's privileges — treat them like any
 | `NO_COLOR` | unset | Suppresses ANSI color per no-color.org. Also auto-detected from `TERM=dumb` and non-TTY stderr. |
 
 ### Data Directory
+
+All runtime state lives under `~/ry-install/`. The directory is created on first run and persists across installs. Logs accumulate per-day and are not pruned automatically — use `jq` against the NDJSON files for post-run analysis.
 
 | Path | Contents |
 |---|---|
@@ -420,24 +448,30 @@ ry-install ships no automated uninstaller. `~/ry-install/.manifest` lists every 
 
 ### Strix Halo GPU (gfx1151)
 
+gfx1151 is a newly-released target with active upstream churn in both the kernel and Mesa. Expect regressions to land and get fixed within weeks — track the linux-cachyos changelog and the Mesa gfx1151 issue tracker before any driver or kernel upgrade.
+
 | Issue | Status | Workaround |
 |---|---|---|
 | CWSR hang — incorrect VGPR count, compute-only | Userspace fix in ROCm 7.2; kernel-mode fix not yet in mainline | `amdgpu.cwsr_enable=0` (still required) |
 | MES page faults | Specific firmware revisions affected | Pin a known-good `linux-firmware` version if encountered |
 | ROCm VRAM allocation | Fixed in kernel 6.16+ | GTT handled automatically — no `ttm.pages_limit` or `amdgpu.gttsize` needed |
 | PSR freeze (eDP only) | Open | `amdgpu.dcdebugmask=0x10` (not needed for HDMI/DP) |
-| Black screen | Reported kernel-version-specific regressions | Track linux-cachyos changelog; downgrade or upgrade as advised |
+| Black screen | Reported kernel-version-specific regressions | Downgrade or upgrade as advised |
 | ROCm compute | Requires env vars | `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.1` |
 
 ### MediaTek MT7925 WiFi
 
+The in-tree `mt76` driver has known stability bugs specific to the MT7925 revision. The `mt76-mt7925-dkms` AUR package carries out-of-tree patches ahead of mainline merge and should be the first remediation step. If instability persists, an Intel AX210 or AX211 is a well-tested drop-in alternative.
+
 | Issue | Status | Workaround |
 |---|---|---|
 | Kernel panics (NULL deref in `mt792x_mac_reset_work`) | Driver bug | `paru -S mt76-mt7925-dkms` |
-| TX power reported as 3 dBm | Cosmetic — actual TX follows regulatory limits; kernel patches pending | Consider Intel AX210/AX211 if signal issues persist |
-| Random deauthentication | Intermittent | None — consider Intel AX210/AX211 |
+| TX power reported as 3 dBm | Cosmetic — actual TX follows regulatory limits; kernel patches pending | None (cosmetic) |
+| Random deauthentication | Intermittent | None |
 
 ### NetworkManager + iwd
+
+These issues are specific to the NM + iwd combination and do not affect wpa_supplicant setups. The boot connectivity failure in particular is intermittent and usually self-resolves after a radio cycle; it does not indicate a misconfigured backend.
 
 | Issue | Workaround |
 |---|---|
@@ -446,6 +480,8 @@ ry-install ships no automated uninstaller. `~/ry-install/.manifest` lists every 
 | Monitor mode requires full reboot | Reboot |
 
 ## Troubleshooting
+
+Start with `--verify-static` and `--verify-runtime` to confirm whether the issue is configuration drift or a runtime state problem. For deeper failures, `journalctl -b -k` and `dmesg -T` are the first sources. The table below covers the most common failure modes and their first-pass fixes.
 
 | Problem | Diagnostic / Fix |
 |---|---|
@@ -463,6 +499,8 @@ ry-install ships no automated uninstaller. `~/ry-install/.manifest` lists every 
 | `--verify-static` reports drift | Re-deploy single file: `./ry-install.fish --install-file /etc/...` |
 
 ## References
+
+Upstream sources for hardware quirks, driver status, and the Arch/CachyOS configuration guidance this project builds on.
 
 | Resource | Topic |
 |---|---|

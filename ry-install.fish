@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.50.2 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.50.3 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -16,7 +16,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.50.2"
+set -g VERSION "3.50.3"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2

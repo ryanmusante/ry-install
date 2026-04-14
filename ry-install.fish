@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.50.3 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.50.4 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -16,7 +16,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.50.3"
+set -g VERSION "3.50.4"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -5653,7 +5653,13 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         set -l mode_args (string split ' ' -- $parallel_modes[$i])
         # Canonical label via shared helper; both fork and collect sites must agree.
         set -l label (_test_label $parallel_modes[$i])
-        fish -c '
+        # Timeout: 180s upper bound — other fish -c sites use 60s because they run
+        # in-memory validators; this site runs full verify modes (sudo reads, dmesg
+        # parse, pacman queries) that legitimately take longer. If the outer wrapper
+        # times out, timeout(1) SIGTERMs it and the collect loop sees a missing
+        # exit-code file → treats the run as failure (code=999). --kill-after=5
+        # ensures SIGKILL follows if the wrapper ignores SIGTERM.
+        command timeout --kill-after=5 180 fish -c '
             set -l script_path $argv[1]; set -l stderr_file $argv[2]; set -l exit_file $argv[3] # lint:ignore
             set -l mode_args $argv[4..]
             env NO_COLOR=1 fish "$script_path" $mode_args --verbose </dev/null >/dev/null 2>"$stderr_file"

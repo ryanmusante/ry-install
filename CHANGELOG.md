@@ -1,5 +1,8 @@
 ry-install changelog
 
+v3.50.4  2026-04-13
+- _ry_do_test_all: wrapped parallel worker fork (`fish -c` at the test harness call site) with `command timeout --kill-after=5 180` — was the only parallel `fish -c` site missing the timeout wrapper that the other 10 sites already carry. A hung child (e.g. `--verify-static` blocking mid-sudo) would have blocked the parent `wait $parallel_pids` indefinitely. 180s chosen over the 60s used elsewhere because this site runs full verify modes (sudo reads, dmesg parse, pacman queries), not in-memory validators.
+
 v3.50.3  2026-04-13
 - README: Environment Variables table — added missing `|---|---|` separator row (table was rendering as raw text).
 - README: Environment Variables table — added missing `DXVK_LOG_LEVEL=none` (script defines 12 ENV_VARS, README was listing 11).

@@ -1,4 +1,4 @@
-# ry-install v3.50.3
+# ry-install v3.50.4
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 

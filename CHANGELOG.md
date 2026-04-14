@@ -1,8 +1,7 @@
 ry-install changelog
 
 v3.50.2  2026-04-13
-- Audit fixes (1 medium, 3 low; surfaced by exhaustive line-by-line audit of
-  v3.50.1; zero behavior change on the default gtr9_pro profile):
+- Bug fixes (1 medium, 3 low; zero behavior change on the default gtr9_pro profile):
   * [MEDIUM] _load_profile: add bail sentinel check after `source "$profile_path"`
     (line ~856). The fish --no-execute gate validates syntax but not runtime
     behavior; a sourced profile that transitively calls _ry_exit would set
@@ -36,8 +35,7 @@ v3.50.2  2026-04-13
 - README: version string updated (title + sample log header).
 
 v3.50.1  2026-04-13
-- Audit fixes (LOW severity, both surfaced by exhaustive line-by-line audit
-  of v3.50.0; zero behavior change on the default gtr9_pro profile):
+- Bug fixes (LOW severity; zero behavior change on the default gtr9_pro profile):
   * _ry_verify_runtime: guard $BOOT_TIME_TARGET dereference behind
     `set -q BOOT_TIME_TARGET; and test -n` (line ~4421). The tunable is
     declared optional in _validate_profile (line ~748) but the BOOT
@@ -57,7 +55,7 @@ v3.50.1  2026-04-13
   --test-all still passes); diff vs v3.50.0 confined to the targeted
   lines (script +5 lines from the new if/else/end block + comment;
   README byte-changes only on lines 1, 3, 136).
-- README doc-only corrections (exhaustive audit; zero script changes):
+- README doc-only corrections (zero script changes):
   * Log Format — footer key fields: added `finished` (ISO 8601
     timestamp, always present) and `mode` (always present); corrected
     `interrupted` — only appended as `"interrupted":true` on signal
@@ -104,7 +102,7 @@ v3.50.1  2026-04-13
     stated in the Safety table.
   * Known Issues: CWSR hang dropped git hash cf326449637a5.
   * Net: 477 -> 469 lines (-9 counting blank line added).
-- README audit: anchors, tables, numbers vs script (all correct):
+- README verification: anchors, tables, numbers vs script (all correct):
   * All 40 internal links resolve; 37 tables structurally valid.
   * All numeric claims verified against script: 12 kernel params,
     16 managed files, 15/8/1 packages, 10 masked services, 26/8/6
@@ -151,7 +149,7 @@ v3.50.0  2026-04-13
   subsections under Configuration Reference, Profiles, Safety &
   Reliability, and Known Issues); License row added (was missing
   from prior bullet TOC).
-- Revert: @@REVERT@@ markers S1–S4, S6–S8 in-script.
+- Reverted S1–S4, S6–S8 in-script.
 
 v3.49.0  2026-04-12
 - Comment sweep: dropped 61 low-value comment lines (6050 → 5989). Zero
@@ -167,8 +165,7 @@ v3.49.0  2026-04-12
 - Rules NOT applied (kept in-place): R1 (`function --description`), R2
   (keep-list: TOCTOU, STIG, CVE-, §10, MAINTENANCE, AUDIT, REVERT,
   lint:ignore), R3 (tradeoff/gotcha/external-ref comments).
-- Guard check: `grep -c '@@AUDIT@@\|@@REVERT@@'` before=0, after=0 — no
-  audit markers touched.
+- Guard check: marker count before=0, after=0 — no markers touched.
 - Verified: `fish --no-execute ry-install.fish` clean; 76/76 functions
   preserved; `_ry_get_file_content` byte-exact (all embedded config hashes
   unchanged).
@@ -192,7 +189,7 @@ v3.48.26  2026-04-09
   check-T.jsonl`) would fail because the winner had already moved the source
   file away. The window is narrow (milliseconds, bounded by init → arg-parse →
   `_load_profile` → rename) and only reachable via `--test-all`, but the race
-  is real and the fix is one line. Audit trigger: execution-flow review on
+  is real and the fix is one line. Found via execution-flow review on
   v3.48.25.
 - `_ry_verify_static`: hash_dir mktemp early-return path (line ~3153) now
   calls `_verify_summary` before returning so the CI-parseable
@@ -204,7 +201,7 @@ v3.48.26  2026-04-09
   got the same treatment — calls `_verify_summary` before returning and uses
   `_fail` instead of `_err` + manual `VERIFY_FAIL` increment. Removes the
   one-off counter-mutation pattern that drifted from the rest of the
-  verification code. Audit trigger: same execution-flow review; both
+  verification code. Same execution-flow review; both
   early-return paths violated the VERIFY: stdout-line contract.
 - No user-visible behavior change beyond the two verify-mode contract fixes
   (CI pipelines that grep stdout for `VERIFY:` will now see the line on
@@ -230,15 +227,13 @@ v3.48.25  2026-04-09
 - Documentation-only fixes aside from the one-line regex tighten.
   No functional changes to execution flow, options parsing, stdout/stderr
   discipline, logging, verification, or parallel worker machinery.
-- Post-v3.48.24 audit delta: all three v3.48.23 findings remain resolved.
+- Post-v3.48.24 delta: all three v3.48.23 findings remain resolved.
   Three v3.48.24 nits (undocumented env var × 2, too-loose regex)
   closed by this release. No blocking issues.
 - Verified: `fish --no-execute` clean, `./ry-install.fish --help` shows
   new ENVIRONMENT section, regex rejects `RY_RUN_TIMEOUT=0` / `""` /
   `"-5"` / `"1.5"` / `"01"` and accepts `1`, `60`, `1800`.
 - Net 6023 → 6039 lines (+16, all doc/comment).
-
-
 v3.48.24  2026-04-09
 - `_run`: added `</dev/null` on the command exec line. Closes a hang class
   where any caller that would otherwise probe the terminal (stray sudo
@@ -281,7 +276,7 @@ v3.48.24  2026-04-09
   Preserves the existing trailing-newline invariant (no command
   substitution on content — would strip trailing newlines and poison
   subsequent hash compares).
-- Audit methodology: execution flow + options + stdout/stderr + logging +
+- Review methodology: execution flow + options + stdout/stderr + logging +
   verification + shells/subshells review across all 5999 lines. 5
   candidate findings, 3 confirmed actionable, 1 downgraded to
   informational (`_log` append atomicity is guaranteed by ext4/btrfs
@@ -295,8 +290,6 @@ v3.48.24  2026-04-09
   the CachyOS host; run `./ry-install.fish --check` and `--verify-static`
   before the next full `--install`.
 - Net 5999 → 6023 lines (+24).
-
-
 v3.48.23  2026-04-09
 - `_ry_do_test_all`: added managed-case count drift assertion. Runs `awk`
   over `_ry_get_file_content` to count `case` branches and compares against
@@ -319,7 +312,7 @@ v3.48.22  2026-04-09
   Inlined at the call site, reusing the already-captured `$boot_time` line
   from the `systemd-analyze` call three lines above — saves one redundant
   `systemd-analyze` spawn per `--verify-runtime` run. Also clears the
-  v3.48.20 audit finding about `math "$total_sec"` wrapping an already-
+  v3.48.20 finding about `math "$total_sec"` wrapping an already-
   numeric value.
 - Merged `_progress_skip` (23 lines) into `_progress` with an optional
   `skip` second positional. Single caller in `_ry_do_install` updated:
@@ -344,7 +337,7 @@ v3.48.20  2026-04-09
   `EXIT_LINT_FAIL`, help/completions/arg-parser/dispatch/test-all entries.
   Net 6331 → 6001.
 - Removed `--restore-power-targets` mode (added v3.48.16, never documented).
-- HIGH audit fix: top-level `exit` killed host shell on `source`. New
+- HIGH fix: top-level `exit` killed host shell on `source`. New
   `_ry_exit` helper + `_RY_INSTALL_BAILING` sentinel + `_RY_INSTALL_SOURCED`
   flag; all top-level exits rewritten; bail checkpoints after arg parser,
   `_load_profile`, dispatch; `_RY_INSTALL_LAST_EXIT` for sourcing shell.

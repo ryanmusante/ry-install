@@ -1,4 +1,4 @@
-# ry-install v3.50.4
+# ry-install v3.51.0
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
@@ -155,7 +155,7 @@ Each subsection corresponds to a discrete layer of the system. All values are em
 | `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (see [Known Issues](#known-issues)) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
 | `clocksource=tsc` | Force TSC clocksource (prevents HPET demotion, ~10–100× lower read latency) |
-| `amd_iommu=off` | Disable IOMMU (APU unified memory — ~2–6% iGPU bandwidth gain, no VFIO/passthrough) |
+| `iommu=pt` | IOMMU passthrough (preserves IRQ remapping/DMA security on APU, avoids translation overhead; no VFIO/passthrough use) |
 | `module_blacklist=pcspkr` | Silence PC speaker beep |
 | `nowatchdog` | Disable software watchdog timers |
 | `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
@@ -221,7 +221,7 @@ Miscellaneous kernel and userspace tuning not covered by other subsections. `cor
 | `coredump.conf.d` | Storage=none · ProcessSizeMax=0 (disables coredump storage — Wine/Proton multi-GB dumps) |
 | `drirc` | RADV unified VRAM heap on APU |
 | `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · watermark tuning · security hardening (21 net-new tunables) |
-| `/etc/fstab` | Adds `noatime,lazytime` to ext4 entries (modified in-place, not a managed file) |
+| `/etc/fstab` | Adds `noatime,lazytime,commit=10` to ext4 entries (modified in-place, not a managed file) |
 
 ### Environment Variables
 
@@ -236,8 +236,7 @@ Written to `~/.config/environment.d/10-environment.conf` for systemd user sessio
 | `PROTON_ENABLE_WAYLAND` | `1` |
 | `PROTON_LOCAL_SHADER_CACHE` | `1` |
 | `PROTON_USE_NTSYNC` | `1` (default in current proton-cachyos; explicit pin) |
-| `RADV_PERFTEST` | `transfer_queue` |
-| `VKD3D_CONFIG` | `transfer_queue` |
+| `RADV_EXPERIMENTAL` | `transfer_queue` |
 | `VKD3D_DEBUG` | `none` |
 | `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |

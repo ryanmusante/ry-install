@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.50.4 — CachyOS config manager | Ryan Musante | MIT
+# ry-install v3.51.0 — CachyOS config manager | Ryan Musante | MIT
 # Global flags below (overridden by CLI).
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -16,7 +16,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.50.4"
+set -g VERSION "3.51.0"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -197,7 +197,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         return 0
     end
 
-    # Map cmdline param prefix → CONFIG_ symbol unchecked: amd_iommu (validation moot — we disable it), clocksource, module_blacklist, nowatchdog, quiet (always-on or no clean CONFIG_ symbol)
+    # Map cmdline param prefix → CONFIG_ symbol unchecked: iommu (validation moot — passthrough mode, not feature toggle), clocksource, module_blacklist, nowatchdog, quiet (always-on or no clean CONFIG_ symbol)
     set -l param_config_map \
         "zswap.=CONFIG_ZSWAP" \
         "amdgpu.=CONFIG_DRM_AMDGPU" \
@@ -559,9 +559,9 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (12 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (ROCm 7.2 ships userspace fix only; kernel workaround still required); amd_iommu=off (APU unified memory — no VFIO/passthrough); clocksource=tsc force TSC; module_blacklist pcspkr
+    # Kernel (12 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR (ROCm 7.2 ships userspace fix only; kernel workaround still required); iommu=pt (passthrough — preserves IRQ remapping/DMA security on APU, avoids translation overhead); clocksource=tsc force TSC; module_blacklist pcspkr
     set -g KERNEL_PARAMS \
-        amd_iommu=off \
+        iommu=pt \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
         clocksource=tsc \
@@ -621,8 +621,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "MESA_SHADER_CACHE_MAX_SIZE=4G" \
         "PROTON_ENABLE_WAYLAND=1" \
         "PROTON_LOCAL_SHADER_CACHE=1" \
-        "RADV_PERFTEST=transfer_queue" \
-        "VKD3D_CONFIG=transfer_queue" \
+        "RADV_EXPERIMENTAL=transfer_queue" \
         "VKD3D_DEBUG=none" \
         "VKD3D_SHADER_DEBUG=none" \
         "WINEDEBUG=-all" \
@@ -851,8 +850,7 @@ function _load_profile --description "Determine, load, and validate the active p
             return $EXIT_USAGE
         end
         source "$profile_path"
-        # Bail check: a sourced profile that calls _ry_exit (e.g. via a helper) sets the
-        # sentinel; catch it here before proceeding to invoke the profile function.
+        # Bail check: a sourced profile that calls _ry_exit (e.g. via a helper) sets the sentinel; catch it here before invoking the profile function.
         test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
         if functions -q "_ry_profile_$name"
             _ry_profile_$name
@@ -1305,9 +1303,7 @@ function _log --description "Append a timestamped message to the log file"
     # Cap $data at 4096 chars; step back from cut point if inside a JSON escape sequence to avoid malformed output
     if test (string length -- "$data") -gt 4096
         set -l cut 4093
-        # Step back from cut point if inside a JSON backslash escape sequence.
-        # Handles: \uXXXX (≥6 chars), \t/\n/\r/\b/\f (2 chars), and a trailing
-        # single \ that would orphan a literal-backslash pair on the next byte.
+        # Step back from cut point if inside a JSON backslash escape sequence: \uXXXX (≥6 chars), \t/\n/\r/\b/\f (2 chars), and a trailing single \ that would orphan a literal-backslash pair on the next byte.
         set -l tail3 (string sub -s (math $cut - 7) -l 8 -- "$data")
         set -l _esc_match (string match -r '\\\\([tnrbf]|u[0-9a-fA-F]{0,4}|\\\\?)$' -- "$tail3" | head -n 1)
         if test -n "$_esc_match"
@@ -1523,9 +1519,7 @@ function _progress --argument-names step_name skip_flag --description "Advance a
     set -l filled (math "floor($PROGRESS_CURRENT * $PROGRESS_WIDTH / $PROGRESS_TOTAL)")
     set -l empty (math "$PROGRESS_WIDTH - $filled")
 
-    # Fix: `string repeat -n 0` exits 1 in fish, which erases the entire
-    # adjacent command substitution. At 100% (empty=0) or 0% (filled=0)
-    # this rendered the bar as `[]`. Build each segment conditionally.
+    # Fix: `string repeat -n 0` exits 1 in fish, erasing the entire adjacent command substitution; at 100% (empty=0) or 0% (filled=0) this rendered the bar as `[]`. Build each segment conditionally.
     set -l bar_filled ""
     set -l bar_empty ""
     test $filled -gt 0; and set bar_filled (string repeat -n $filled -- '█')
@@ -1638,24 +1632,12 @@ function _run --description "Execute a command with logging and error capture; s
         set stdout_tmp "$_run_dir/stdout"
         set -ga _TRACKED_TMPFILES "$_run_dir"
     else
-        # Fix 20: fail-loud — silently swallowing stderr would mask transient errors
-        # in pacman/sdboot-manage, the highest-impact callers. Refuse to run.
+        # Fix 20: fail-loud — silently swallowing stderr would mask transient errors in pacman/sdboot-manage, the highest-impact callers. Refuse to run.
         _log "RUN_ABORT: mktemp -d failed — refusing to execute without stderr capture"
         _err "_run: cannot allocate tmpdir for stdout/stderr capture — aborting command"
         return 1
     end
-    # SECURITY: $argv is hardcoded from internal callers
-    # Fix: </dev/null prevents hangs on any caller that would otherwise probe the
-    # terminal (sudo password prompt, pacman confirm) when running detached.
-    # Fix: optional timeout wrapper via RY_RUN_TIMEOUT env/global (seconds). Default
-    # unset = legacy behavior (no wall-clock limit). Set RY_RUN_TIMEOUT=1800 in the
-    # environment to cap every _run command at 30 minutes (covers worst-case pacman
-    # -Syu on a slow mirror). --kill-after=10 ensures SIGKILL follows SIGTERM if a
-    # child ignores the first signal. --preserve-status keeps the child's exit
-    # code visible; timeout(1) itself exits 124 on kill, which _run will log.
-    # RY_RUN_TIMEOUT must be a positive integer (≥1). Regex `^[1-9]\d*$` rejects
-    # `0` (which timeout(1) treats as "no limit" — a silent no-op) and empty/negative
-    # values that would otherwise slip through `test -n` and numeric validation.
+    # SECURITY: $argv hardcoded from internal callers. </dev/null prevents hangs on callers that probe the terminal (sudo prompt, pacman confirm) when detached. Optional timeout wrapper via RY_RUN_TIMEOUT env (positive integer seconds; unset = no limit; recommended 1800 for unattended); --kill-after=10 ensures SIGKILL after SIGTERM; --preserve-status keeps child exit code visible (timeout(1) itself exits 124 on kill). Regex `^[1-9]\d*$` rejects `0` (timeout treats as no-limit no-op) and empty/negative values.
     if set -q RY_RUN_TIMEOUT; and test -n "$RY_RUN_TIMEOUT"; and string match -qr '^[1-9]\d*$' -- "$RY_RUN_TIMEOUT"; and command -q timeout
         command timeout --preserve-status --kill-after=10 "$RY_RUN_TIMEOUT" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     else
@@ -1874,12 +1856,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     _log "Checking dependencies..."
     set -l missing
 
-    # GNU coreutils + GNU findutils + util-linux are HARD DEPS:
-    #   - mktemp --suffix= (GNU extension, not POSIX)
-    #   - find -printf '%T@' (GNU findutils, not BusyBox/uutils)
-    #   - flock(1) (util-linux)
-    # CachyOS ships all three; Alpine/BusyBox containers will silently
-    # degrade log rotation and fail _ry_validate_configs unit-syntax checks.
+    # GNU coreutils + findutils + util-linux are HARD DEPS: mktemp --suffix= (GNU), find -printf '%T@' (GNU, not BusyBox/uutils), flock(1) (util-linux). CachyOS ships all three; Alpine/BusyBox containers will silently degrade log rotation and fail _ry_validate_configs unit-syntax checks.
     for cmd in pacman systemctl mkinitcpio udevadm sdboot-manage findmnt sha256sum stat date
         if not command -q $cmd
             set -a missing $cmd
@@ -2559,13 +2536,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         return 1
     end
     if test "$_expected_hash" != "$_actual_hash"
-        # Classify: re-probe sudo to distinguish a real content mismatch from a
-        # credential lapse between the pre-probe `sudo -n true` and `sudo -n cat`
-        # microseconds later. A lapsed cat produces an empty pipe → sha256sum of
-        # nothing → canonical empty-file hash `e3b0c442...`, which is non-empty
-        # and therefore slips past the `test -z` check above. Without this
-        # classifier the user sees "checksum mismatch" and debugs content
-        # generation instead of the real cause (sudo timeout).
+        # Classify: re-probe sudo to distinguish a real content mismatch from a credential lapse between the pre-probe `sudo -n true` and `sudo -n cat` microseconds later. A lapsed cat produces an empty pipe → sha256sum of nothing → canonical empty-file hash `e3b0c442...`, which is non-empty and slips past the `test -z` check above. Without this classifier the user debugs content generation instead of the real cause (sudo timeout).
         if test "$use_sudo" = true; and not sudo -n true 2>/dev/null
             _fail "→ $dst (post-write hash unavailable: sudo credential lapsed mid-verify)"
             _log "HASH_UNAVAILABLE_POST: dst=$dst reason=sudo credential lapsed mid-verify"
@@ -2638,8 +2609,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     if test -n "$_new_hash"
         set -l _cur_hash
         if test "$use_sudo" = true
-            # Sudo precheck: if keepalive lapsed, skip the skip-check (force re-deploy via fall-through)
-            # rather than silently producing empty hash that fails comparison and re-deploys anyway.
+            # Sudo precheck: if keepalive lapsed, skip the skip-check (force re-deploy via fall-through) rather than silently producing empty hash that fails comparison and re-deploys anyway.
             if sudo -n true 2>/dev/null
                 set _cur_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
             else
@@ -4167,10 +4137,13 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             else if not string match -q '*lazytime*' -- "$_opts"
                 _fail "  ext4 entry missing lazytime: $_fl"
                 set _fstab_ok false
+            else if not string match -qr '(^|,)commit=10(,|$)' -- "$_opts"
+                _fail "  ext4 entry missing commit=10: $_fl"
+                set _fstab_ok false
             end
         end
         if test "$_fstab_ok" = true
-            _ok "  ext4 entries: noatime,lazytime present"
+            _ok "  ext4 entries: noatime,lazytime,commit=10 present"
         end
     else
         _info "  No ext4 entries in /etc/fstab"
@@ -4418,8 +4391,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         set -l boot_time (systemd-analyze 2>/dev/null | head -n 1)
         _info "  $boot_time"
 
-        # Extract total seconds from already-captured line (was: redundant _get_boot_time call
-        # that re-ran systemd-analyze). Format: "Startup finished in ... = 12.345s"
+        # Extract total seconds from already-captured line (was: redundant _get_boot_time call that re-ran systemd-analyze). Format: "Startup finished in ... = 12.345s"
         _log "BOOT_TIME_CHECK: parsing systemd-analyze output"
         set -l total_sec (printf '%s\n' "$boot_time" | string match -r -- '= ([0-9.]+)s' | tail -n 1)
         if test -n "$total_sec"; and string match -qr '^[0-9.]+$' -- "$total_sec"
@@ -4711,8 +4683,8 @@ function _install_system_files --description "Deploy all embedded config files t
     return 0
 end
 
-# Ensure ext4 entries in /etc/fstab have noatime,lazytime mount options. Field-based ext4 ($3=="ext4"), atomic copy → awk → tee → findmnt --verify → mv.  # lint:ignore (awk field reference)
-function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab entries"
+# Ensure ext4 entries in /etc/fstab have noatime,lazytime,commit=10 mount options. Field-based ext4 ($3=="ext4"), atomic copy → awk → tee → findmnt --verify → mv.  # lint:ignore (awk field reference)
+function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ext4 fstab entries"
     if not test -f /etc/fstab
         _warn "  /etc/fstab not found — skipping"
         return 0
@@ -4727,14 +4699,14 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
     end
     for line in $ext4_lines
         set -l opts_field (printf '%s\n' "$line" | awk '{ print $4 }')
-        if not string match -q '*noatime*' -- "$opts_field"; or not string match -q '*lazytime*' -- "$opts_field"
+        if not string match -q '*noatime*' -- "$opts_field"; or not string match -q '*lazytime*' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"
             set needs_change true
             break
         end
     end
 
     if test "$needs_change" = false
-        _ok "  /etc/fstab: ext4 entries already have noatime,lazytime"
+        _ok "  /etc/fstab: ext4 entries already have noatime,lazytime,commit=10"
         return 0
     end
 
@@ -4767,12 +4739,14 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
             for (i = 1; i <= n; i++) {
                 o = opts[i]
                 if (o == "relatime" || o == "atime") continue  # lint:ignore (awk, not fish — embedded awk script)
+                if (o ~ /^commit=/) continue
                 if (o == "noatime") has_noat = 1
                 if (o == "lazytime") has_lazy = 1
                 out = (out == "" ? o : out "," o)
             }
             if (!has_noat)  out = (out == "" ? "noatime"  : out ",noatime")
             if (!has_lazy)  out = (out == "" ? "lazytime" : out ",lazytime")
+            out = (out == "" ? "commit=10" : out ",commit=10")
             $4 = out  # lint:ignore (awk field reference)
             print
         }
@@ -4805,8 +4779,8 @@ function _install_fstab_opts --description "Add noatime,lazytime to ext4 fstab e
         return 1
     end
 
-    _ok "  /etc/fstab: noatime,lazytime applied to ext4 entries"
-    _log "FSTAB_OPTS: noatime,lazytime applied"
+    _ok "  /etc/fstab: noatime,lazytime,commit=10 applied to ext4 entries"
+    _log "FSTAB_OPTS: noatime,lazytime,commit=10 applied"
     return 0
 end
 
@@ -5123,8 +5097,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         set -g INSTALL_HAD_ERRORS true
     end
 
-    # Boot-wipe marker is written in _install_finalize success branch (Fix 9)
-    # so a partial-failure run does not silently update the count.
+    # Boot-wipe marker is written in _install_finalize success branch (Fix 9) so a partial-failure run does not silently update the count.
 
     set -l entry_count (sudo find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" 2>/dev/null | wc -l)
     set -l entry_count (string trim -- "$entry_count")
@@ -5164,9 +5137,7 @@ end
 function _install_finalize --description "Run post-install verification, cleanup, and summary"
     _progress Finalize
 
-    # Persist boot-wipe acknowledgement (Fix 9): only on the success path. Atomic
-    # write via tmp+mv (Fix 11) prevents zero-byte marker from a mid-write crash
-    # being silently accepted by the legacy-marker fallback.
+    # Persist boot-wipe acknowledgement (Fix 9): only on the success path. Atomic write via tmp+mv (Fix 11) prevents zero-byte marker from a mid-write crash being silently accepted by the legacy-marker fallback.
     if test "$SDBOOT_REMOVE_EXISTING" = yes
         set -l _wipe_marker $BOOT_WIPE_MARKER
         set -l _post_count (sudo find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' 2>/dev/null | wc -l | string trim --)
@@ -5369,9 +5340,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
 
     set -l valid false
     set -l use_sudo true
-    # Canonicalize managed destinations for comparison — handles hosts where
-    # /home is a symlink (rpm-ostree, systemd-homed) and realpath -m on the
-    # caller's --install-file arg would have already resolved to /var/home/...
+    # Canonicalize managed destinations for comparison — handles hosts where /home is a symlink (rpm-ostree, systemd-homed) and realpath -m on the caller's --install-file arg would have already resolved to /var/home/...
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         set -l _canon_dst (realpath -m -- "$dst" 2>/dev/null; or echo "$dst")
         if test "$target" = "$dst"; or test "$target" = "$_canon_dst"
@@ -5495,9 +5464,7 @@ function _ry_do_completions --description "Generate fish shell completions for r
 
     # (per-destination `complete` lines emitted below; no pre-joined target list)
 
-    # Fix 26: accumulate to a list and write once. ENOSPC mid-build now manifests
-    # as a single printf failure instead of being detected only by the post-write
-    # `grep -q '^end$'` heuristic.
+    # Fix 26: accumulate to a list and write once. ENOSPC mid-build now manifests as a single printf failure instead of being detected only by the post-write `grep -q '^end$'` heuristic.
     set -l _comp_lines
     set -a _comp_lines '# Fish completions for ry-install v'"$VERSION"
     set -a _comp_lines '# Generated by: ./ry-install.fish --completions'
@@ -5522,8 +5489,7 @@ function _ry_do_completions --description "Generate fish shell completions for r
         set -a _comp_lines "    complete -c \$cmd $_flags -d '$_desc'"
     end
 
-    # --install-file destinations: one `complete` per path so space-bearing paths
-    # round-trip safely (latent — current dests are space-free).
+    # --install-file destinations: one `complete` per path so space-bearing paths round-trip safely (latent — current dests are space-free).
     set -a _comp_lines "    complete -c \$cmd -l install-file -d 'Re-deploy a single managed file' -rxa ''"
     for _dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         set -l _dst_q (string replace -a "'" "'\\''" -- $_dst)
@@ -5568,8 +5534,7 @@ end
 
 # Test-suite label transform: strip leading `--`, fold spaces/slashes to `_`, preserve interior hyphens. MUST be called from both fork and collect sites so the filename written by one matches the filename read by the other.
 function _test_label --description "Canonical filename label for a test mode string"
-    # `--` ends options; positional args are then PATTERN REPLACEMENT STRING.
-    # A second `--` would be parsed as a literal STRING arg and produce a spurious empty line.
+    # `--` ends options; positional args are then PATTERN REPLACEMENT STRING. A second `--` would be parsed as a literal STRING arg and produce a spurious empty line.
     string replace -- -- '' $argv[1] | string replace -a ' ' _ | string replace -a / _
 end
 
@@ -5589,12 +5554,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
     _ok "  fish --no-execute: passed"
     _echo
 
-    # Managed-file count drift check: _RY_MANAGED_CASE_COUNT is a hand-maintained
-    # constant used by _ry_show_help as a fallback before _load_profile runs. It
-    # must match the number of `case` branches in _ry_get_file_content (minus the
-    # `case '*'` wildcard). This test fails loudly if a future edit adds or removes
-    # a case without bumping the constant — catching drift at test time so the
-    # production --help hot path stays awk-free.
+    # Managed-file count drift check: _RY_MANAGED_CASE_COUNT is a hand-maintained constant used by _ry_show_help as a fallback before _load_profile runs. It must match the number of `case` branches in _ry_get_file_content (minus the `case '*'` wildcard). Fails loudly if a future edit adds/removes a case without bumping the constant — catching drift at test time so the production --help hot path stays awk-free.
     _info "Managed-case count check..."
     set -l _actual_cases (awk '/^function _ry_get_file_content/{f=1} f && $1=="case"{n++} f && /^end$/{print n-1; exit}' "$script_path")
     if test "$_actual_cases" != "$_RY_MANAGED_CASE_COUNT"
@@ -5653,12 +5613,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         set -l mode_args (string split ' ' -- $parallel_modes[$i])
         # Canonical label via shared helper; both fork and collect sites must agree.
         set -l label (_test_label $parallel_modes[$i])
-        # Timeout: 180s upper bound — other fish -c sites use 60s because they run
-        # in-memory validators; this site runs full verify modes (sudo reads, dmesg
-        # parse, pacman queries) that legitimately take longer. If the outer wrapper
-        # times out, timeout(1) SIGTERMs it and the collect loop sees a missing
-        # exit-code file → treats the run as failure (code=999). --kill-after=5
-        # ensures SIGKILL follows if the wrapper ignores SIGTERM.
+        # Timeout: 180s upper bound — other fish -c sites use 60s because they run in-memory validators; this site runs full verify modes (sudo reads, dmesg parse, pacman queries) that legitimately take longer. If the outer wrapper times out, timeout(1) SIGTERMs it and the collect loop sees a missing exit-code file → treats the run as failure (code=999). --kill-after=5 ensures SIGKILL follows if the wrapper ignores SIGTERM.
         command timeout --kill-after=5 180 fish -c '
             set -l script_path $argv[1]; set -l stderr_file $argv[2]; set -l exit_file $argv[3] # lint:ignore
             set -l mode_args $argv[4..]
@@ -5838,8 +5793,7 @@ while test $i -le (count $argv)
             command rm -f -- "$LOG_FILE" 2>/dev/null
             _ry_exit $EXIT_USAGE; and return $EXIT_USAGE; or return $EXIT_USAGE
     end
-    # Bail checkpoint: if any case branch (e.g. _early_usage_exit) tripped the
-    # source-safe bail sentinel, return from the source frame now.
+    # Bail checkpoint: if any case branch (e.g. _early_usage_exit) tripped the source-safe bail sentinel, return from the source frame now.
     test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
     set i (math $i + 1)
 end
@@ -5944,10 +5898,7 @@ if test $_log_count -gt $MAX_LOGS
     if command -q flock
         string join0 -- $_existing_logs[1..$_to_remove] | flock -n "$_log_base_rot" xargs -0 rm -f -- 2>/dev/null
     else
-        # Best-effort fallback: util-linux flock(1) is a hard dep on Arch/CachyOS so this
-        # path should never trigger in supported environments. Two concurrent ry-install
-        # instances racing here may both target the same N oldest files; `rm -f` is
-        # idempotent so the worst case is duplicated stderr noise, never data loss.
+        # Best-effort fallback: util-linux flock(1) is a hard dep on Arch/CachyOS so this path should never trigger in supported environments. Two concurrent ry-install instances racing here may both target the same N oldest files; `rm -f` is idempotent so the worst case is duplicated stderr noise, never data loss.
         string join0 -- $_existing_logs[1..$_to_remove] | xargs -0 rm -f -- 2>/dev/null
     end
     command find "$_log_base_rot" -mindepth 1 -maxdepth 1 -type d -empty -delete 2>/dev/null
@@ -5975,8 +5926,7 @@ switch $MODE
         set exit_code $status
     case install
         _ry_do_install
-        # _ry_do_install already returns EXIT_FAIL when INSTALL_HAD_ERRORS=true (line ~5594);
-        # no need to re-check at dispatch level.
+        # _ry_do_install already returns EXIT_FAIL when INSTALL_HAD_ERRORS=true (line ~5594); no need to re-check at dispatch level.
         set exit_code $status
     case '*'
         _err "Unknown mode: $MODE"
@@ -5997,8 +5947,7 @@ if test "$MODE" != check
 end
 
 if test "$_RY_INSTALL_SOURCED" = true
-    # Sourced from an interactive shell: do NOT exit (would kill host fish).
-    # Caller can read $_RY_INSTALL_LAST_EXIT to check the result.
+    # Sourced from an interactive shell: do NOT exit (would kill host fish). Caller can read $_RY_INSTALL_LAST_EXIT to check the result.
     set -g _RY_INSTALL_LAST_EXIT $exit_code
     return $exit_code
 end

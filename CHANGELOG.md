@@ -1,5 +1,11 @@
 ry-install changelog
 
+v3.51.0  2026-04-14
+- Kernel cmdline: amd_iommu=off → iommu=pt. Passthrough preserves IRQ remapping and DMA security on the APU while avoiding translation overhead; functionally equivalent for gaming. Param count unchanged (12).
+- ENV_VARS: RADV_PERFTEST=transfer_queue → RADV_EXPERIMENTAL=transfer_queue. Mesa deprecated the PERFTEST form; EXPERIMENTAL is canonical in 26.1-dev+.
+- ENV_VARS: dropped VKD3D_CONFIG=transfer_queue (not a documented VKD3D-Proton option, silently ignored). 12 → 11 vars.
+- _install_fstab_opts: append commit=10 to ext4 entries alongside noatime,lazytime. awk rewriter strips any pre-existing commit=N. --verify-runtime fstab check extended.
+
 v3.50.4  2026-04-13
 - _ry_do_test_all: wrapped parallel worker fork (`fish -c` at the test harness call site) with `command timeout --kill-after=5 180` — was the only parallel `fish -c` site missing the timeout wrapper that the other 10 sites already carry. A hung child (e.g. `--verify-static` blocking mid-sudo) would have blocked the parent `wait $parallel_pids` indefinitely. 180s chosen over the 60s used elsewhere because this site runs full verify modes (sudo reads, dmesg parse, pacman queries), not in-memory validators.
 

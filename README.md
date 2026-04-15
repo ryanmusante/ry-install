@@ -1,4 +1,4 @@
-# ry-install v3.51.0
+# ry-install v3.51.7
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
@@ -213,7 +213,7 @@ Three config files lock the WiFi stack to iwd as the NetworkManager backend with
 
 ### System Tuning
 
-Miscellaneous kernel and userspace tuning not covered by other subsections. `coredump.conf.d` is particularly important on this hardware — Wine and Proton processes can produce multi-GB core dumps that silently fill `/var`. Note that `/etc/fstab` is the only path in this project written in-place rather than atomically — see [Safety & Reliability](#safety--reliability).
+Miscellaneous kernel and userspace tuning not covered by other subsections. `coredump.conf.d` is particularly important on this hardware — Wine and Proton processes can produce multi-GB core dumps that silently fill `/var`. Note that `/etc/fstab` is the only path modified outside the managed-file checksum pipeline; the rewrite itself is still atomic (tmp → `findmnt --verify` → `sudo mv`) — see [Safety & Reliability](#safety--reliability).
 
 | File | Setting |
 |---|---|
@@ -253,13 +253,13 @@ Three files deploy to the calling user's home. The SSH agent runs with `-D` (no 
 
 ### Packages
 
-Package operations run during the Packages phase with `--needed` for idempotency — already-installed packages are skipped on subsequent runs. The single AUR package (`mt76-mt7925-dkms`) requires paru; if paru is absent the script warns and continues rather than aborting.
+Package operations run during the Packages phase with `--needed` for idempotency — already-installed packages are skipped on subsequent runs. The single AUR package (`mt76-mt7925-dkms`) requires paru; if paru is absent the script emits `[ERR]`, sets `INSTALL_HAD_ERRORS`, and the AUR phase is marked failed. The rest of the install pipeline continues to run (boot rebuild, verify, finalize) but the overall exit code reflects the failure.
 
 | Action | Count | Packages |
 |---|---|---|
 | **Install** | 15 | mkinitcpio-firmware, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, vulkan-radeon, lib32-vulkan-radeon, libva-mesa-driver, lib32-libva-mesa-driver, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove** | 8 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
-| **AUR** | 1 | mt76-mt7925-dkms (via paru; skipped with warning if paru absent) |
+| **AUR** | 1 | mt76-mt7925-dkms (via paru; AUR phase fails with `INSTALL_HAD_ERRORS` if paru absent) |
 
 ### Masked Services
 
@@ -387,7 +387,7 @@ Shell variables that modify script behavior at runtime — distinct from the gam
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `RY_RUN_TIMEOUT` | unset | Positive integer seconds; wraps every `_run` call with `timeout --preserve-status --kill-after=10`. Unset = no limit. Recommended: `1800` for unattended installs. Rejects `0`. |
+| `RY_RUN_TIMEOUT` | `3600` | Positive integer seconds; wraps every `_run` call with `timeout --preserve-status --kill-after=10`. Default: 3600 (60 min). Set to `0` to explicitly disable (not recommended). |
 | `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Set to `1` to acknowledge the first boot-entry wipe (`SDBOOT_REMOVE_EXISTING=yes`). Gate re-prompts if entry count grows after the initial ack. Marker: `~/ry-install/.boot-wipe-acknowledged`. |
 | `NO_COLOR` | unset | Suppresses ANSI color per no-color.org. Also auto-detected from `TERM=dumb` and non-TTY stderr. |
 
@@ -430,11 +430,12 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 <summary>Sample log output</summary>
 
 ```json
-{"ts":"2026-04-08T14:23:01-0700","event":"header","version":"3.50.2","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
-{"ts":"2026-04-08T14:23:04-0700","event":"section","data":"Preflight"}
-{"ts":"2026-04-08T14:23:12-0700","event":"step_time","data":"Packages","elapsed_s":127.4}
-{"ts":"2026-04-08T14:25:19-0700","event":"warn","data":"paru not found — skipping AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-08T14:26:42-0700","event":"footer","finished":"2026-04-08T14:26:42-0700","mode":"install","exit_code":0,"pass":47,"fail":0,"warn":1}
+{"ts":"2026-04-14T14:23:01-0700","event":"header","version":"3.51.7","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-14T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
+{"ts":"2026-04-14T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
+{"ts":"2026-04-14T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
+{"ts":"2026-04-14T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
+{"ts":"2026-04-14T14:26:42-0700","event":"footer","finished":"2026-04-14T14:26:42-0700","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
 ```
 
 </details>
@@ -485,15 +486,15 @@ Start with `--verify-static` and `--verify-runtime` to confirm whether the issue
 | Problem | Diagnostic / Fix |
 |---|---|
 | GPU perf level stuck | `cat /sys/class/drm/card*/device/power_dpm_force_performance_level` |
-| WiFi backend mismatch | `nmcli -t -f TYPE,FILENAME connection show --active` (expect `iwd`) |
+| WiFi backend mismatch | `grep wifi.backend /etc/NetworkManager/conf.d/99-cachyos-nm.conf; and pgrep -x iwd` (expect both) |
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
 | FSR4 on RDNA 3.5 | Per-game: `PROTON_FSR4_RDNA3_UPGRADE=1 %command%` (proton-cachyos / GE-Proton 10-9+) |
-| Profile load failure | `./ry-install.fish --check` reports missing globals; verify file ownership: `stat -c '%U' ~/.config/ry-install/profiles/*.fish` |
+| Profile load failure | `./ry-install.fish --verify-static` reports missing globals (`--check` is silent — QUIET=true); verify file ownership: `stat -c '%U' ~/.config/ry-install/profiles/*.fish` |
 | Stale lock | `rm -rf ~/ry-install/.lock/` (only if no other ry-install process is running: `pgrep -af ry-install`) |
 | Manifest version mismatch | Expected after upgrade — script warns but does not block; re-run install to refresh manifest |
 | AUR pkg not installed | `command -q paru; or sudo pacman -S --needed paru` then re-run install |
-| Sudo cache expiry mid-run | Re-run with fresh sudo: `sudo -v && ./ry-install.fish` |
+| Sudo cache expiry mid-run | Re-run with fresh sudo: `sudo -v; and ./ry-install.fish` |
 | `drirc` XML rejected by Mesa | `cat /etc/drirc` and validate with `xmllint --noout /etc/drirc` |
 | `--verify-static` reports drift | Re-deploy single file: `./ry-install.fish --install-file /etc/...` |
 

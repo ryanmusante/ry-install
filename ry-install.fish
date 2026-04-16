@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.51.7 — CachyOS config manager | Ryan Musante | MIT Global flags below (overridden by CLI).
+# ry-install v3.51.9 — CachyOS config manager | Ryan Musante | MIT Global flags below (overridden by CLI).
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status is-interactive
@@ -8,6 +8,8 @@ if set -q _RY_INSTALL_LOADED
         exit 1
     end
 end
+# v3.51.8: snapshot pre-script global namespace so source-bail and source-completion can erase only globals this script created, never globals belonging to the host shell. Must precede every `set -g` below. PRESERVE list in _ry_namespace_cleanup keeps caller-readable result vars alive.
+set -g _RY_PRE_GLOBALS (set --names -g)
 set -g _RY_INSTALL_LOADED true
 # Sourcing detection: when sourced from an interactive shell we must NOT call `exit` at end-of-file (would kill the host fish). Set a flag for the bottom of the file to honor.
 if status is-interactive
@@ -15,7 +17,7 @@ if status is-interactive
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.51.7"
+set -g VERSION "3.51.9"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -32,9 +34,23 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
         set -g _RY_INSTALL_BAILING true
         # Erase registered signal/exit handlers so a later Ctrl+C / SIGPIPE / host-fish exit does not fire into our dead script context. Safe even when handlers were never defined (functions -e is a no-op on missing).
         functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
+        _ry_namespace_cleanup bail
         return $code
     end
     exit $code
+end
+
+# v3.51.8: erase every global set since _RY_PRE_GLOBALS snapshot, except the caller-API vars in _preserve. mode=bail keeps _RY_INSTALL_BAILING alive so the in-flight bail sentinel can propagate up the call stack to the top-level dispatch. Normal-completion call sites pass no mode and the bail sentinel (if somehow set) is also erased. _RY_PRE_GLOBALS itself is erased last so a re-source rebuilds a fresh snapshot.
+function _ry_namespace_cleanup --argument-names mode --description "Erase script-set globals; preserve caller-API"
+    set -l _preserve _RY_INSTALL_LAST_EXIT
+    test "$mode" = bail; and set -a _preserve _RY_INSTALL_BAILING
+    # Copy snapshot to local: _RY_PRE_GLOBALS is itself a post-snapshot global, so the loop below would erase it mid-iteration, causing subsequent `contains` checks to fail and erasing host-shell globals.
+    set -l _snap $_RY_PRE_GLOBALS
+    for _v in (set --names -g)
+        contains -- $_v $_snap; and continue
+        contains -- $_v $_preserve; and continue
+        set -e $_v 2>/dev/null
+    end
 end
 
 # Shorthand for top-level checkpoints. Usage: `_ry_call_or_bail _load_profile` — at every top-level call site that could transitively call _ry_exit, follow the call with `test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT`. --quiet: suppress command-wrapper stdout to terminal (auto-disabled for non-install modes)
@@ -115,7 +131,7 @@ set -g LOG_FILE "$LOG_DIR/install-$TIMESTAMP.jsonl"
 # NOTE: path format mirrored at dispatch rename site (~line 5830: $LOG_DIR/$mode_label-$TIMESTAMP.jsonl). Keep both in sync. umask 0177 makes touch+chmod fallback race-free (file created 0600 atomically by kernel)
 set -l _prev_umask (umask)
 umask 0177
-command install -m 0600 /dev/null "$LOG_FILE" 2>/dev/null
+command install -m 0600 -- /dev/null "$LOG_FILE" 2>/dev/null
 or begin
     command touch -- "$LOG_FILE" 2>/dev/null
     command chmod -- 600 "$LOG_FILE" 2>/dev/null
@@ -352,13 +368,13 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
 
     if command mkdir -- "$LOCK_DIR" 2>/dev/null
         # Check pid write succeeded; on disk-full/inode-exhaustion race between mkdir and echo, rmdir and bail so a stale-lock reclaim cannot evict our own empty lock
-        if not printf '%s\n' %self >"$LOCK_FILE" 2>/dev/null
+        if not printf '%s\n' $fish_pid >"$LOCK_FILE" 2>/dev/null
             command rmdir -- "$LOCK_DIR" 2>/dev/null
             echo "[ERR] Failed to write lock pid file: $LOCK_FILE" >&2
             command rm -f -- "$LOG_FILE" 2>/dev/null
             return 1
         end
-        _log "LOCK_ACQUIRED: pid=%self dir=$LOCK_DIR"
+        _log "LOCK_ACQUIRED: pid=$fish_pid dir=$LOCK_DIR"
         return 0
     end
     # LOCK_DIR exists — check if the PID inside is still alive
@@ -378,7 +394,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
             rmdir -- "$1" 2>/dev/null || true  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
             mkdir -- "$1" 2>/dev/null || exit 1  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
             printf "%s\n" "$2" > "$1/pid" 2>/dev/null || exit 2  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
-        ' _ "$LOCK_DIR" %self 2>/dev/null
+        ' _ "$LOCK_DIR" $fish_pid 2>/dev/null
         set -l _flock_rc $status
         if test $_flock_rc -eq 5
             echo "[ERR] Failed to reclaim stale lock — another instance is reclaiming" >&2
@@ -400,12 +416,12 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
             command rm -f -- "$LOG_FILE" 2>/dev/null
             return 1
         end
-        printf '%s\n' %self >"$LOCK_FILE"
+        printf '%s\n' $fish_pid >"$LOCK_FILE"
         # Yield to let any concurrent reclaimer finish writing, then double-verify ownership
         command sleep 0.1 2>/dev/null; or true
     end
     set -l verify_pid (command cat -- "$LOCK_FILE" 2>/dev/null)
-    set -l my_pid %self
+    set -l my_pid $fish_pid
     if test "$verify_pid" != "$my_pid"
         echo "[ERR] Lock reclaim lost to concurrent instance (PID $verify_pid)" >&2
         command rm -f -- "$LOG_FILE" 2>/dev/null
@@ -417,7 +433,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         command rm -f -- "$LOG_FILE" 2>/dev/null
         return 1
     end
-    _log "LOCK_RECLAIMED: stale pid=$old_pid, new pid=%self"
+    _log "LOCK_RECLAIMED: stale pid=$old_pid, new pid=$fish_pid"
     return 0
 end
 
@@ -442,12 +458,12 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     # Free cached data (harmless but consistent with cleanup discipline)
     set --erase _KCONFIG_DATA
     set --erase _KCONFIG_LOADED
-    set --erase _RY_SKIP_IWD 2>/dev/null
-    set --erase _RY_SKIP_IWD_CACHED 2>/dev/null
+    set --erase _RY_SKIP_IWD
+    set --erase _RY_SKIP_IWD_CACHED
     # Release LOCK_DIR mutex — verify PID ownership first (LOCK_DIR global is set before mkdir; on failure we don't own it)
     if set -q LOCK_DIR; and test -d "$LOCK_DIR"
         set -l _lock_pid (command cat -- "$LOCK_DIR/pid" 2>/dev/null)
-        set -l _my_pid %self
+        set -l _my_pid $fish_pid
         if test "$_lock_pid" = "$_my_pid"
             command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
         end
@@ -2452,9 +2468,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     return 0
 end
 
-
 # Count managed-file cases in _ry_get_file_content (total case branches minus wildcard '*'). Used by file-count xref checks. Accepts optional script_path; defaults to (status filename).
-
 
 function _ry_mkinitcpio_array --argument-names key file --description "First non-comment KEY=... line from a conf file"
     test -z "$file"; and set file /etc/mkinitcpio.conf
@@ -4691,7 +4705,7 @@ function _install_preflight --description "Run all preflight checks before insta
         _kill_sudo_keepalive
         return $EXIT_PREFLIGHT
     end
-    set -l my_pid %self
+    set -l my_pid $fish_pid
     # Keepalive: sudo -n -v refreshes timestamp without running a command; 2 retries with 1s backoff absorb transient PAM/NSS failures so a single hiccup does not kill the loop
     fish -c '
         while kill -0 -- $argv[1] 2>/dev/null; and test -d -- $argv[2]
@@ -4846,8 +4860,8 @@ end
 # Post-package phase boundary: invalidate iwd cache (state may have changed via -Syu) and refresh package DBs. Must run UNCONDITIONALLY after _install_packages + _install_aur_packages — both can early-return without reaching the work below, leaving _RY_SKIP_IWD stale from preflight (mkinitcpio.conf pre-deploy primes it).
 function _install_post_package_refresh --description "Invalidate caches and refresh package DBs after pacman/paru phase"
     # Invalidate _RY_SKIP_IWD cache: _ry_install_file primes it during mkinitcpio.conf pre-deploy BEFORE pacman -Syu runs. Without this reset, a profile adding iwd to PKGS_ADD on a host that lacks it would silently skip iwd/main.conf and 99-cachyos-nm.conf.
-    set --erase _RY_SKIP_IWD 2>/dev/null
-    set --erase _RY_SKIP_IWD_CACHED 2>/dev/null
+    set --erase _RY_SKIP_IWD
+    set --erase _RY_SKIP_IWD_CACHED
 
     if command -q updatedb
         if not _run sudo updatedb
@@ -6095,7 +6109,7 @@ end
 if not test -f "$LOG_FILE"
     set -l _prev_umask (umask)
     umask 0177
-    command install -m 0600 /dev/null "$LOG_FILE" 2>/dev/null
+    command install -m 0600 -- /dev/null "$LOG_FILE" 2>/dev/null
     or begin
         command touch -- "$LOG_FILE" 2>/dev/null
         command chmod -- 600 "$LOG_FILE" 2>/dev/null; or _warn "Chmod 600 failed on $LOG_FILE"
@@ -6198,9 +6212,10 @@ if test "$MODE" != check
 end
 
 if test "$_RY_INSTALL_SOURCED" = true
-    # Sourced from an interactive shell: do NOT exit (would kill host fish). Erase our signal/exit handlers so a later Ctrl+C / SIGPIPE / shell exit on the host does not fire into our dead script context. Caller can read $_RY_INSTALL_LAST_EXIT to check the result.
+    # Sourced from an interactive shell: do NOT exit (would kill host fish). Erase our signal/exit handlers so a later Ctrl+C / SIGPIPE / shell exit on the host does not fire into our dead script context. Caller can read $_RY_INSTALL_LAST_EXIT to check the result. v3.51.8: also erase script-set globals to keep host shell namespace clean.
     set -g _RY_INSTALL_LAST_EXIT $exit_code
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
+    _ry_namespace_cleanup
     return $exit_code
 end
 

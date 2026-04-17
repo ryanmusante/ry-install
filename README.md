@@ -1,4 +1,4 @@
-# ry-install v3.51.11
+# ry-install v3.51.12
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
@@ -418,6 +418,7 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 | `echo` | data | Plain message (no level prefix) |
 | `bug` | data | Internal assertion failure (invalid level or arg count) |
 | `step_time` | data, elapsed_s | Install step completed |
+| `progress` | data | Install phase advance ([N/M] label) |
 | `run` | data | Command executed |
 | `stderr` | data | Captured stderr |
 | `section` | data | Phase boundary |
@@ -430,7 +431,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 <summary>Sample log output</summary>
 
 ```json
-{"ts":"2026-04-14T14:23:01-0700","event":"header","version":"3.51.11","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-14T14:23:01-0700","event":"header","version":"3.51.12","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
 {"ts":"2026-04-14T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
 {"ts":"2026-04-14T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
 {"ts":"2026-04-14T14:23:12-0700","event":"progress","data":"[2/6] Packages"}

@@ -1,5 +1,30 @@
 ry-install changelog
 
+v3.51.15  2026-04-17
+- `_install_configure_services` dead local variable (LOW): `display_list` + the associated `first_five` subshell construction removed. The variable was set but never read; `_log "PKG_REMOVE_REQUESTED: …"` uses `$to_del` directly. 5 lines of dead code eliminated.
+- Historical-marker comment trimming (INFO): 31 comment sites carrying `v3.51.N:` / `Fix N:` / `LOW-N fix:` / `(was: …)` / `previously …` prefixes had their version-history tags removed. Behavioral rationale preserved verbatim; only the temporal/journal framing was stripped (user rule: "comments describe current behavior, not change history"). Sites: L11, L14, L33, L44, L141, L163, L208, L338, L485, L871, L1190, L1587, L1678, L2356, L2442, L2447, L2507, L2537, L3244, L3260, L3366, L3556, L4557, L4617, L4765, L4889, L4904, L4992, L5306, L5583, L5681, L5773.
+- Verification sweep: zero dead functions (all 77 have >=2 references), zero unread `set -g` globals (40 declared, all read), zero unused `set -l` locals across all 77 functions. `fish --no-execute` clean.
+- Line count: 6175 → 6170 (5 lines from `display_list` removal; comment trims are content-only).
+- No profile changes, no new dependencies, no managed-file count change (still 16), no kernel parameter changes, no embedded-config hash drift.
+- README.md: version banner + sample log bumped to v3.51.15.
+
+v3.51.14  2026-04-17
+- Comment trimming (INFO): two multi-line `#` comment blocks collapsed to single-line form for consistency with user rule "comments are single-sentence" — `_kill_sudo_keepalive` SIGTERM→SIGKILL rationale at L485-487 (3 lines → 1) and `_install_configure_services` pactree intra-batch filter rationale at L4994-4995 (2 lines → 1). No behavior change; content preserved verbatim in merged form.
+- Content generation condensation (INFO): 8 multi-line `printf '%s\n' "X"` blocks in `_ry_get_file_content` collapsed to single-call multi-arg form (loader.conf, sdboot-manage.conf, mkinitcpio.conf, resolved.conf.d, coredump.conf.d, nvme-rqaffinity.rules, iwd/main.conf, NM/nm.conf). `printf '%s\n' a b c` reuses the format per arg — byte-identical output, ~39 lines saved, no embedded-config hash drift.
+- `_ry_show_help` trimming (INFO): ENVIRONMENT and NOTES sections consolidated to single-line entries; information preserved, ~15 lines saved. Help text still self-contained.
+- Line count: 6233 → 6175 (58 lines, ~0.9%).
+- No profile changes, no new dependencies, no managed-file count change (still 16), no kernel parameter changes, no embedded-config hash drift.
+- README.md: version banner + sample log bumped to v3.51.14.
+
+v3.51.13  2026-04-17
+- `_install_configure_services` pactree intra-batch filter (MED): `pactree -ru $pkg` reverse-dep check now filters sibling members of `$PKGS_DEL` before the `count -gt 0` guard. Previously, removing a base pkg (plymouth, micro) whose only live rdeps were themselves queued for removal (cachyos-plymouth-bootanimation/theme depends=plymouth; cachyos-micro-settings depends=micro) caused the base pkg to be skipped silently, leaving it installed after the pipeline reported success. Verified against upstream PKGBUILDs at github.com/CachyOS/CachyOS-PKGBUILDS.
+- `_detect_lvm` helper (LOW): new function extracts the three identical `timeout 5 sudo -n pvs --noheadings` probes at (prev) L2840/L3518/L5087. Probe body lives in one place; callers retain per-site action. Incidental fixes: missing `command` prefix on `timeout`, and variable-name drift `_pvs_output` vs `pvs_output`, both unified.
+- `_kill_sudo_keepalive` SIGTERM→SIGKILL escalation (LOW): explicit `sleep 0.1` + `kill -KILL` fallback after SIGTERM closes the defensive-hardening window where a keepalive ignoring SIGTERM keeps sudo credentials cached past script exit. Child is still disowned — init reaps.
+- `_validate_profile` error message (LOW): L854 wording "(space/quote/paren)" extended to "(space/quote/paren/newline)" to match its sibling at L866; POSIX `[[:space:]]` matches `\n` so the shorter wording was incomplete.
+- CHANGELOG.md (MED): v3.51.10 was skipped during release — internal bump, no shipped changes — and is intentionally absent from this log. This note documents the gap so future readers do not assume a missing entry.
+- README.md: version banner + sample log bumped to v3.51.13.
+- No profile changes, no new dependencies, no managed-file count change (still 16), no kernel parameter changes, no embedded-config hash drift.
+
 v3.51.12  2026-04-17
 - `_RY_MANAGED_CASE_COUNT` renamed to `_RY_MANAGED_FILE_COUNT` (MED): constant counts managed destinations (16), not raw `case` branches (17 incl. wildcard).
 - Drift-error line reference (MED): replaced `"Bump the constant near line 149"` with name-based reference; old form was off by 4 and drift-prone.

@@ -1,4 +1,4 @@
-# ry-install v4.1.1
+# ry-install v4.1.3
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
@@ -402,6 +402,7 @@ Shell variables that modify script behavior at runtime — distinct from the gam
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | Positive integer seconds; wraps every `_run` call with `timeout --preserve-status --kill-after=10`. Default: 3600 (60 min). Set to `0` to explicitly disable (not recommended). |
 | `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Set to `1` to acknowledge the first boot-entry wipe (`SDBOOT_REMOVE_EXISTING=yes`). Gate re-prompts if entry count grows after the initial ack. Marker: `~/ry-install/.boot-wipe-acknowledged`. |
+| `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` | unset | Set to `1` to acknowledge unattended `pacman -Syu` during the Boot phase. Without the ack, ry-install prints [archlinux.org/news](https://archlinux.org/news/) + [cachyos.org/news](https://cachyos.org/news/) RSS headlines (3 each, `curl --max-time 5`, non-blocking) and instructs the operator to run `sudo pacman -Syu` manually. Matches project rule: review news before `-Syu`. |
 | `NO_COLOR` | unset | Suppresses ANSI color per no-color.org. Also auto-detected from `TERM=dumb` and non-TTY stderr. |
 
 ### Data Directory
@@ -444,7 +445,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 <summary>Sample log output</summary>
 
 ```json
-{"ts":"2026-04-19T14:23:01-0700","event":"header","version":"4.1.1","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-19T14:23:01-0700","event":"header","version":"4.1.3","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
 {"ts":"2026-04-18T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
 {"ts":"2026-04-18T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
 {"ts":"2026-04-18T14:23:12-0700","event":"progress","data":"[2/6] Packages"}

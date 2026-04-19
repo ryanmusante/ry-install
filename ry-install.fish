@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.1.1 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.1.3 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.1.1"
+set -g VERSION "4.1.3"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -95,10 +95,9 @@ if test "$fish_major" -gt 4
     echo "Warning: ry-install is tested on fish 3.4-4.x; found $fish_ver — please report issues" >&2
 end
 
-# Timestamps: DATE_LABEL for dirs, TIMESTAMP (with PID suffix) for filenames
-set -l _now (date '+%Y-%m-%d_%Y%m%d-%H%M%S%z')
-set -g DATE_LABEL (string split '_' -- "$_now")[1]
-set -g TIMESTAMP (string split '_' -- "$_now")[2]"-"$fish_pid
+# Timestamps: DATE_LABEL (ISO date) for dirs, TIMESTAMP (compact+PID) for filenames; two date calls avoid %Y dup.
+set -g DATE_LABEL (date '+%Y-%m-%d')
+set -g TIMESTAMP (date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
 
 # HOME resolution: env → getent passwd → tilde expansion (handles privilege-escalated shells, cron, containers)
 set -g _MY_UID (id -u)
@@ -305,7 +304,7 @@ end
 function _write_footer --argument-names exit_code extra_key --description "Append JSONL footer to LOG_FILE; idempotent via _FOOTER_WRITTEN"
     set -q _FOOTER_WRITTEN; and return 0
     set -q LOG_FILE; or return 0
-    test -n "$LOG_FILE"; and test -f "$LOG_FILE"; or return 0
+    begin; test -n "$LOG_FILE"; and test -f "$LOG_FILE"; end; or return 0
     set -g _FOOTER_WRITTEN true
     set -l _mode_esc (_json_str "$MODE")
     set -l _ts (date '+%Y-%m-%dT%H:%M:%S%z')
@@ -313,8 +312,8 @@ function _write_footer --argument-names exit_code extra_key --description "Appen
     if test -n "$extra_key"
         set _extra ",\"$extra_key\":true"
     end
-    printf '{"ts":"%s","event":"footer","finished":"%s","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s%s}\n' \
-        "$_ts" "$_ts" "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" "$_extra" >>"$LOG_FILE" 2>/dev/null
+    printf '{"ts":"%s","event":"footer","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s%s}\n' \
+        "$_ts" "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" "$_extra" >>"$LOG_FILE" 2>/dev/null
 end
 
 # Sweep /tmp for ry-{run-stderr,run-stdout,validate,diff,argparse,test-stderr}.* owned by current UID
@@ -409,7 +408,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
             rmdir -- "$1" 2>/dev/null || true  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
             mkdir -- "$1" 2>/dev/null || exit 1  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
             printf "%s\n" "$2" > "$1/pid" 2>/dev/null || exit 2  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
-        ' _ "$LOCK_DIR" $fish_pid 2>/dev/null
+        ' _ "$LOCK_DIR" "$fish_pid" 2>/dev/null
         set -l _flock_rc $status
         if test $_flock_rc -eq 5
             echo "[ERR] Failed to reclaim stale lock — another instance is reclaiming" >&2
@@ -467,7 +466,7 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     end
     set --erase _TRACKED_TMPFILES
     # Fallback sweep: find -user $_MY_UID catches ry-* tmpfiles missed by the tracked list (e.g., crash before tracking)
-    set -l _tmpdir (set -q TMPDIR; and test -n "$TMPDIR"; and echo "$TMPDIR"; or echo /tmp)
+    set -l _tmpdir (set -q TMPDIR; and test -n "$TMPDIR"; and printf '%s\n' "$TMPDIR"; or printf '%s\n' /tmp)
     command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -type f -user $_MY_UID -delete 2>/dev/null
     # Descend to purge abandoned ry-run.* dirs; -type d -empty reclaims parents (maxdepth=1 sweep can't reach in).
     command find "$_tmpdir" -mindepth 2 -maxdepth 2 -path "$_tmpdir/ry-*" -type f -user $_MY_UID -delete 2>/dev/null
@@ -932,8 +931,7 @@ function _load_profile --description "Determine, load, and validate the active p
     if not string match -qr '^[a-z0-9][a-z0-9_-]*$' -- "$name"
         _err "Invalid profile name: '$name' (must be lowercase alphanumeric, starting with [a-z0-9])"
         command rm -f -- "$LOG_FILE" 2>/dev/null
-        _ry_exit $EXIT_USAGE
-        return $EXIT_USAGE
+        _ry_exit $EXIT_USAGE; and return $EXIT_USAGE; or return $EXIT_USAGE
     end
 
     # 3. Load profile function
@@ -946,8 +944,7 @@ function _load_profile --description "Determine, load, and validate the active p
         if not fish --no-execute "$profile_path" 2>/dev/null
             _err "Profile file has syntax errors: $profile_path"
             command rm -f -- "$LOG_FILE" 2>/dev/null
-            _ry_exit $EXIT_USAGE
-            return $EXIT_USAGE
+            _ry_exit $EXIT_USAGE; and return $EXIT_USAGE; or return $EXIT_USAGE
         end
         source "$profile_path"
         # Bail check: sourced profile calling _ry_exit (via helper) sets sentinel; catch before profile fn invoke.
@@ -961,22 +958,19 @@ function _load_profile --description "Determine, load, and validate the active p
         else
             _err "Profile file does not define function _ry_profile_$name: $profile_path"
             command rm -f -- "$LOG_FILE" 2>/dev/null
-            _ry_exit $EXIT_USAGE
-            return $EXIT_USAGE
+            _ry_exit $EXIT_USAGE; and return $EXIT_USAGE; or return $EXIT_USAGE
         end
     else
         _err "Unknown profile: $name"
         command rm -f -- "$LOG_FILE" 2>/dev/null
-        _ry_exit $EXIT_USAGE
-        return $EXIT_USAGE
+        _ry_exit $EXIT_USAGE; and return $EXIT_USAGE; or return $EXIT_USAGE
     end
 
     # 4. Validate
     if not _validate_profile "$name"
         # EXIT_PREFLIGHT (not EXIT_USAGE): profile loaded but failed structural validation (missing globals, type errors).
         command rm -f -- "$LOG_FILE" 2>/dev/null
-        _ry_exit $EXIT_PREFLIGHT
-        return $EXIT_PREFLIGHT
+        _ry_exit $EXIT_PREFLIGHT; and return $EXIT_PREFLIGHT; or return $EXIT_PREFLIGHT
     end
 
     # 5. Derived globals
@@ -990,8 +984,7 @@ function _load_profile --description "Determine, load, and validate the active p
             case install install-file verify-static verify-runtime check
                 _err "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline cannot be generated"
                 command rm -f -- "$LOG_FILE" 2>/dev/null
-                _ry_exit $EXIT_PREFLIGHT
-                return $EXIT_PREFLIGHT
+                _ry_exit $EXIT_PREFLIGHT; and return $EXIT_PREFLIGHT; or return $EXIT_PREFLIGHT
             case '*'
                 _log "ROOT_UUID_UNAVAILABLE: mode=$MODE — non-fatal for this mode"
         end
@@ -1241,8 +1234,8 @@ function _pregenerate_content_files --argument-names out_dir --description "Writ
     # Only track for cleanup when we own the dir; caller-supplied dirs are caller's responsibility
     test "$_we_created_dir" = true; and set -ga _TRACKED_TMPFILES "$out_dir"
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
-        set -l safe (string replace -a '/' '_' -- "$dst")
-        # Capture stderr so generator failures surface via HASH_GENERATOR_STDERR instead of silent empty file.
+        set -l safe (_tmpfile_key "$dst")
+        # `2>&1 >file` order → cmdsubst captures stderr only (reversing routes both to file, empty cmdsubst).
         set -l _gen_err (_ry_get_file_content "$dst" 2>&1 >"$out_dir/$safe")
         set -l _gen_rc $status
         if test $_gen_rc -ne 0
@@ -1320,6 +1313,13 @@ function _parse_systemctl_show --argument-names raw_output --description "Parse 
     if test -n "$current_active"; or test -n "$current_unitfile"; or test -n "$current_load"
         printf '%s\n' "$current_load:$current_active:$current_unitfile"
     end
+end
+
+# Collision-safe tmpfile key: 8-char sha256 prefix + underscored path. Prevents `/`→`_` collisions between paths.
+function _tmpfile_key --argument-names path --description "Generate collision-free filename key from destination path"
+    set -l _h (printf '%s' "$path" | command sha256sum | string split -m 1 ' ')[1]
+    set -l _p (string replace -a '/' '_' -- "$path")
+    printf '%s_%s\n' (string sub -l 8 -- $_h) "$_p"
 end
 
 # LOGGING, MESSAGE OUTPUT, AND VERIFICATION COUNTERS
@@ -1734,7 +1734,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     if test -s "$stderr_tmp"
         set -l total_err (command wc -l < "$stderr_tmp" | string trim --)
         set -l first_lines (command head -n 5 "$stderr_tmp")
-        set -l dedup_lines (LC_ALL=C command sort "$stderr_tmp" | command uniq -c | command sort -rn | command sed 's/^ *//')
+        set -l dedup_lines (command head -n 10000 "$stderr_tmp" | LC_ALL=C command sort | command uniq -c | command sort -rn | command sed 's/^ *//')
         _log "STDERR: ($total_err lines) first: "(string join -- " | " $first_lines)" | dedup: "(string join -- " | " $dedup_lines)
         if test "$QUIET" = false
             for el in $first_lines
@@ -1829,6 +1829,7 @@ EXIT CODES:
 ENVIRONMENT:
   RY_RUN_TIMEOUT=<seconds>    Wall-clock limit for each _run. Default 3600. 0=disable.
   RY_INSTALL_CONFIRM_BOOT_WIPE=1    One-time ack for SDBOOT_REMOVE_EXISTING=yes.
+  RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1    Ack for unattended pacman -Syu (review arch/cachy news first).
 
 Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ.jsonl
 See README.md for full reference.
@@ -1904,7 +1905,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     _log "Checking dependencies..."
     set -l missing
 
-    # GNU coreutils+findutils+util-linux are HARD DEPS: mktemp --suffix= (GNU), find -printf (GNU), flock(1) (util-linux).
+    # HARD: GNU mktemp --suffix=, find -printf. SOFT: flock(1) — non-atomic fallback in _acquire_lock.
     for cmd in pacman systemctl mkinitcpio udevadm sdboot-manage findmnt sha256sum stat date
         if not command -q $cmd
             set -a missing $cmd
@@ -2430,6 +2431,14 @@ function _ry_validate_configs --description "Run all embedded config validators"
     end
 
     command rm -rf --preserve-root -- "$val_dir" "$content_dir"
+    # Prune tracked entries after explicit cleanup (mirrors _run's cleanup pattern; prevents array growth).
+    if set -q _TRACKED_TMPFILES
+        set -l _new_tracked
+        for _t in $_TRACKED_TMPFILES
+            test "$_t" = "$val_dir"; or test "$_t" = "$content_dir"; or set -a _new_tracked "$_t"
+        end
+        set -g _TRACKED_TMPFILES $_new_tracked
+    end
 
     if test $errors -gt 0
         _err "Validation failed with $errors error(s)"
@@ -3244,7 +3253,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         if test "$_skip_iwd" = true
             if string match -q '*nm.conf' -- "$dst"; or string match -q '*/iwd/*' -- "$dst"
-                set -l safe (string replace -a '/' '_' -- "$dst")
+                set -l safe (_tmpfile_key "$dst")
                 echo skip >"$hash_dir/result_$safe"
                 continue
             end
@@ -3254,7 +3263,8 @@ function _ry_verify_static --description "Verify installed configs match embedde
 
     # Pre-generate expected content files. Fail-closed: capture generator rc AND stderr.
     for dst in $hash_dsts
-        set -l safe (string replace -a '/' '_' -- "$dst")
+        set -l safe (_tmpfile_key "$dst")
+        # `2>&1 >file` order → cmdsubst captures stderr only (see _ry_validate_configs hash_dir loop).
         set -l _gen_err (_ry_get_file_content "$dst" 2>&1 >"$hash_dir/expected_$safe")
         set -l _gen_rc $status
         if test $_gen_rc -ne 0
@@ -3272,7 +3282,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
         sudo -n -v 2>/dev/null
     end
     for dst in $hash_dsts
-        set -l safe (string replace -a '/' '_' -- "$dst")
+        set -l safe (_tmpfile_key "$dst")
         if string match -q "$my_home/*" -- "$dst"
             if test -r "$dst"
                 # Symmetric with sudo branch below — capture sha256sum, check both pipe stages, write only on full success.
@@ -3401,7 +3411,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
 
     # Collect results in deterministic order
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
-        set -l safe (string replace -a '/' '_' -- "$dst")
+        set -l safe (_tmpfile_key "$dst")
         set -l result (command cat -- "$hash_dir/result_$safe" 2>/dev/null)
         switch "$result"
             case pass
@@ -3410,7 +3420,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
                 _fail "  $dst: checksum MISMATCH"
             case noread
                 # Consult read_rc sidecar written by parent sudo probe
-                set -l _safe_rr (string replace -a '/' '_' -- "$dst")
+                set -l _safe_rr (_tmpfile_key "$dst")
                 set -l _rr (command cat -- "$hash_dir/read_rc_$_safe_rr" 2>/dev/null | string trim --)
                 switch "$_rr"
                     case sudo_lapsed
@@ -3494,8 +3504,17 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     # Serialize service/mask lists for Job 4 (avoids interpolation into fish -c strings)
     printf '%s\n' $EXPECTED_SERVICES >"$result_dir/exp_svcs"
     printf '%s\n' $MASK >"$result_dir/mask_units"
-    # Implicit service dependencies not in EXPECTED_SERVICES (checked by _ry_verify_runtime)
-    printf '%s\n' systemd-resolved.service NetworkManager-dispatcher.service >"$result_dir/implicit_svcs"
+    # Implicit services derived from SYSTEM_DESTINATIONS: drop-in present → managing service implicit (keep in sync).
+    set -l _implicit_svcs
+    for _dst in $SYSTEM_DESTINATIONS
+        switch $_dst
+            case '*/systemd/resolved.conf.d/*'
+                contains -- systemd-resolved.service $_implicit_svcs; or set -a _implicit_svcs systemd-resolved.service
+            case '*/NetworkManager/dispatcher.d/*' '*/NetworkManager/conf.d/*'
+                contains -- NetworkManager-dispatcher.service $_implicit_svcs; or set -a _implicit_svcs NetworkManager-dispatcher.service
+        end
+    end
+    printf '%s\n' $_implicit_svcs >"$result_dir/implicit_svcs"
 
     # Pre-serialize installed file hashes+permissions in parent (sudo timestamp_type=ppid doesn't propagate to children)
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
@@ -3504,7 +3523,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
                 continue
             end
         end
-        set -l safe (string replace -a '/' '_' -- "$dst")
+        set -l safe (_tmpfile_key "$dst")
         if string match -q "$my_home/*" -- "$dst"
             if test -r "$dst"
                 # sha256sum first; write hash_$safe on success; detector L3716 splits read-fail vs drift.
@@ -4679,8 +4698,8 @@ function _install_preflight --description "Run all preflight checks before insta
     set -l _sudo_lines (sudo -n -l 2>/dev/null | grep -v '^\s*#')
     set -l sudo_all 0
     for _sl in $_sudo_lines
-        # Reject any line carrying a restrictive tag
-        if string match -qr -- '\b(NOEXEC|!PASSWD|!SETENV|LOG_OUTPUT)\b' "$_sl"
+        # `!`-prefixed tags: right-boundary only — PCRE \b needs word↔non-word (space+! are both non-word).
+        if string match -qr -- '(\bNOEXEC\b|!PASSWD\b|!SETENV\b|\bLOG_OUTPUT\b)' "$_sl"
             continue
         end
         # Accept ALL at end of Cmnd_List OR followed by additional whitelisted commands (ALL,...)
@@ -5222,7 +5241,8 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
             # Strip leading 'linux' keyword and optional slash from initrd path to extract the basename.
             set -l linux_line (sudo grep -m1 '^linux ' -- "$conf" 2>/dev/null | string replace -r '^linux\s+' '' | string trim --)
             set -l linux_rel (string trim --left --chars=/ -- "$linux_line")
-            if string match -q '*..*' -- "$linux_rel"
+            # Reject exact `..` path segments (not substring — `foo..bar` is a legal filename in some BLS setups).
+            if contains -- ".." (string split '/' -- "$linux_rel")
                 _warn "  Loader entry has non-BLS path (contains ..): $conf"
                 continue
             end
@@ -5256,6 +5276,25 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     _progress Boot
     if test "$SYSTEM_UPGRADED" = true
         _ok "System already upgraded during package installation"
+    else if not set -q RY_INSTALL_CONFIRM_SYSTEM_UPGRADE; or test "$RY_INSTALL_CONFIRM_SYSTEM_UPGRADE" != 1
+        # Project rule: review arch/cachy news before -Syu. Skip unattended unless one-time ack given.
+        _warn "Skipping unattended system upgrade (RY_INSTALL_CONFIRM_SYSTEM_UPGRADE not set)"
+        _info "  Review news before -Syu:"
+        _info "    https://archlinux.org/news/"
+        _info "    https://cachyos.org/news/"
+        _info "  Run manually: sudo pacman -Syu"
+        _info "  Or re-run ry-install with RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1"
+        if command -q curl
+            for url in https://archlinux.org/feeds/news/ https://cachyos.org/feeds/news/
+                set -l _headlines (curl -sf --max-time 5 -- "$url" 2>/dev/null \
+                    | string match -ra '<title>([^<]+)</title>' \
+                    | head -n 4 | tail -n 3)
+                for _h in $_headlines
+                    _info "  [$url] $_h"
+                end
+            end
+        end
+        _log "SYSTEM_UPGRADE_SKIPPED: RY_INSTALL_CONFIRM_SYSTEM_UPGRADE not set"
     else
         _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
         if not _run sudo pacman -Syu --noconfirm
@@ -5340,8 +5379,10 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         return $EXIT_BOOT_CRIT
     end
     if not _run sudo sdboot-manage update
-        _warn "Sdboot-manage update failed"
+        _err "Sdboot-manage update failed (bootctl EFI binary refresh)"
         set -g INSTALL_HAD_ERRORS true
+        _err "CRITICAL: Bootloader binary update failed — aborting remaining steps"
+        return $EXIT_BOOT_CRIT
     end
 
     # Boot-wipe marker written in _install_finalize success only (Fix 9) — partial-failure can't update count.
@@ -5512,6 +5553,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
         set -g INSTALL_HAD_ERRORS true
     end
 
+    # fstab failure non-blocking: no downstream phase depends on noatime/lazytime/commit=10.
     _install_fstab_opts; or set -g INSTALL_HAD_ERRORS true
 
     if not _install_configure_services
@@ -5570,7 +5612,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
         _log "MANIFEST_SKIP: boot-critical failure — partial deploy not recorded"
         return $EXIT_BOOT_CRIT
     end
-    _manifest_write; or set -g INSTALL_HAD_ERRORS true
+    _manifest_write; or _log "MANIFEST_WRITE_FAILED: install succeeded, manifest deferred (cosmetic — orphan detection next run)"
     test "$INSTALL_HAD_ERRORS" = true; and return $EXIT_FAIL
     return $EXIT_OK
 end
@@ -5749,72 +5791,86 @@ set -l mode_count 0
 
 set -l INSTALL_FILE_TARGET ""
 
-# Manual arg loop: mode exclusivity, --flag VALUE pairs, realpath -m; exit 2 on usage error
-set -l i 1
-while test $i -le (count $argv)
-    set -l arg $argv[$i]
-    switch $arg
-        case -a --all
-            _early_usage_exit "--all is no longer required; unattended is the only mode"
-        case -n --dry-run
-            _early_usage_exit "--dry-run has been removed; unattended is the only mode"
-        case --diff
-            _early_usage_exit "--diff has been removed; use --verify-static for read-only drift checks"
-        case -V --verbose
-            set -g QUIET false
-        case --verify-static
-            set MODE verify-static
-            set mode_count (math $mode_count + 1)
-        case --verify-runtime
-            set MODE verify-runtime
-            set mode_count (math $mode_count + 1)
-        case --check
-            set MODE check
-            set mode_count (math $mode_count + 1)
-        case --fix
-            _early_usage_exit "--fix has been removed; ry-install no longer performs in-tool drift repair"
-        case --install-file
-            set MODE install-file
-            set mode_count (math $mode_count + 1)
-            set -l next_i (math $i + 1)
-            if test $next_i -gt (count $argv)
-                _early_usage_exit "--install-file requires an absolute path argument"
-            end
-            set -l next_arg $argv[$next_i]
-            if string match -q -- '/*' "$next_arg"
-                # Canonicalize: collapse //, .., symlinks to prevent bypassing managed-file validation
-                set -l _canon (realpath -m -- "$next_arg" 2>/dev/null)
-                if test -n "$_canon"
-                    set INSTALL_FILE_TARGET "$_canon"
-                else
-                    set INSTALL_FILE_TARGET "$next_arg"
-                end
-                set i $next_i
-            else if string match -q -- '-*' "$next_arg"
-                _early_usage_exit "--install-file requires an absolute path argument (got flag: $next_arg)"
-            else
-                _early_usage_exit "--install-file requires absolute path (got: $next_arg)"
-            end
-        case -h --help
-            _ry_show_help
-            command rm -f -- "$LOG_FILE" 2>/dev/null
-            _ry_exit 0; and return 0; or return 0
-        case -v --version
-            echo "v$VERSION"
-            command rm -f -- "$LOG_FILE" 2>/dev/null
-            _ry_exit 0; and return 0; or return 0
-        case --
-            break
-        case '*'
-            echo "[ERR] Unknown option: $arg" >&2
-            echo >&2
-            _ry_show_help >&2
-            command rm -f -- "$LOG_FILE" 2>/dev/null
-            _ry_exit $EXIT_USAGE; and return $EXIT_USAGE; or return $EXIT_USAGE
+# CLI parser — argparse with --exclusive for mode flags; deprecated flags declared solely to emit specific messages.
+argparse --name=ry-install.fish \
+    --exclusive=verify-static,verify-runtime,check,install-file \
+    'h/help' 'v/version' 'V/verbose' \
+    'verify-static' 'verify-runtime' 'check' 'install-file=' \
+    'a/all' 'n/dry-run' 'diff' 'fix' \
+    -- $argv 2>/dev/null
+set -l _argparse_rc $status
+if test $_argparse_rc -ne 0
+    # argparse already rejected (unknown option, exclusive-group violation, or missing =VALUE). Emit help + exit EXIT_USAGE.
+    echo "[ERR] Invalid arguments: $argv" >&2
+    echo >&2
+    _ry_show_help >&2
+    command rm -f -- "$LOG_FILE" 2>/dev/null
+    _ry_exit $EXIT_USAGE; and return $EXIT_USAGE; or return $EXIT_USAGE
+end
+
+# Deprecated-flag messages — order mirrors prior manual while-loop declaration order; first match wins.
+set -q _flag_all;      and _early_usage_exit "--all is no longer required; unattended is the only mode"
+set -q _flag_dry_run;  and _early_usage_exit "--dry-run has been removed; unattended is the only mode"
+set -q _flag_diff;     and _early_usage_exit "--diff has been removed; use --verify-static for read-only drift checks"
+set -q _flag_fix;      and _early_usage_exit "--fix has been removed; ry-install no longer performs in-tool drift repair"
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+
+# --help / --version: short-circuit modes (exit 0).
+if set -q _flag_help
+    _ry_show_help
+    command rm -f -- "$LOG_FILE" 2>/dev/null
+    _ry_exit 0; and return 0; or return 0
+end
+if set -q _flag_version
+    echo "v$VERSION"
+    command rm -f -- "$LOG_FILE" 2>/dev/null
+    _ry_exit 0; and return 0; or return 0
+end
+
+# -V/--verbose
+set -q _flag_verbose; and set -g QUIET false
+
+# Mode flags — argparse's --exclusive enforces at most one; mode_count retained as defense-in-depth.
+if set -q _flag_verify_static
+    set MODE verify-static
+    set mode_count (math $mode_count + 1)
+end
+if set -q _flag_verify_runtime
+    set MODE verify-runtime
+    set mode_count (math $mode_count + 1)
+end
+if set -q _flag_check
+    set MODE check
+    set mode_count (math $mode_count + 1)
+end
+if set -q _flag_install_file
+    set MODE install-file
+    set mode_count (math $mode_count + 1)
+    set -l _if_val "$_flag_install_file"
+    if not string match -q -- '/*' "$_if_val"
+        if string match -q -- '-*' "$_if_val"
+            _early_usage_exit "--install-file requires an absolute path argument (got flag: $_if_val)"
+        else
+            _early_usage_exit "--install-file requires absolute path (got: $_if_val)"
+        end
     end
-    # Bail checkpoint: if any case (e.g. _early_usage_exit) tripped source-safe bail, return from source frame.
-    test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-    set i (math $i + 1)
+    # Canonicalize: collapse //, .., symlinks to prevent bypassing managed-file validation.
+    set -l _canon (realpath -m -- "$_if_val" 2>/dev/null)
+    if test -n "$_canon"
+        set INSTALL_FILE_TARGET "$_canon"
+    else
+        set INSTALL_FILE_TARGET "$_if_val"
+    end
+end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+
+# Reject positional args (argparse leaves them in $argv post-parse).
+if test (count $argv) -gt 0
+    echo "[ERR] Unexpected positional argument: $argv[1]" >&2
+    echo >&2
+    _ry_show_help >&2
+    command rm -f -- "$LOG_FILE" 2>/dev/null
+    _ry_exit $EXIT_USAGE; and return $EXIT_USAGE; or return $EXIT_USAGE
 end
 
 # Mode exclusivity: exactly one mode flag allowed per invocation
@@ -5904,7 +5960,7 @@ switch $MODE
 end
 
 set -l _log_base_rot "$HOME/ry-install/logs"
-# Null-delimited pipeline handles paths containing newlines: %T@<NUL>%p<NUL> | sort -z by mtime | strip mtime | split0
+# Null-delim pipeline (paths with newlines); sort -z -t \t uses fish escape (literal TAB at cmd line).
 set -l _rot_raw (command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f ! -path "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -z -t \t -k1,1n | string split0)
 set -l _existing_logs
 for _rot_entry in $_rot_raw

@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.0.0 (2026-04-18) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.0.1 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.0.0"
+set -g VERSION "4.0.1"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -115,10 +115,18 @@ end
 set -g LOG_DIR "$HOME/ry-install/logs/$DATE_LABEL"
 # Boot-wipe acknowledgement marker — single source of truth for the preflight gate and the post-success writer
 set -g BOOT_WIPE_MARKER "$HOME/ry-install/.boot-wipe-acknowledged"
+# umask 0077 on mkdir keeps logs/ and logs/YYYY-MM-DD/ at 0700 (parent $HOME/ry-install is forced 0700 below).
+set -l _prev_mkdir_umask (umask)
+umask 0077
 command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
+    umask $_prev_mkdir_umask
     echo "[ERR] Cannot create log directory: $LOG_DIR" >&2
     _ry_exit $EXIT_PREFLIGHT; and return $EXIT_PREFLIGHT; or return $EXIT_PREFLIGHT
 end
+umask $_prev_mkdir_umask
+# Repair any pre-existing log subdirs created under a looser umask by an older run.
+command chmod -- 700 "$HOME/ry-install/logs" 2>/dev/null
+command chmod -- 700 "$LOG_DIR" 2>/dev/null
 set -l _ld_cur_mode (stat -c '%a' -- "$HOME/ry-install" 2>/dev/null)
 if test "$_ld_cur_mode" != 700
     command chmod -- 700 "$HOME/ry-install" 2>/dev/null
@@ -460,6 +468,10 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     # Fallback sweep: find -user $_MY_UID catches ry-* tmpfiles missed by the tracked list (e.g., crash before tracking)
     set -l _tmpdir (set -q TMPDIR; and test -n "$TMPDIR"; and echo "$TMPDIR"; or echo /tmp)
     command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -type f -user $_MY_UID -delete 2>/dev/null
+    # Descend one level to purge abandoned _run dirs (ry-run.XXXXXX/{stdout,stderr}) so the subsequent
+    # -type d -empty delete can reclaim their parent dirs. Without this, a crashed _run leaks ry-run.*
+    # dirs in /tmp indefinitely (maxdepth=1 file sweep above cannot reach files inside them).
+    command find "$_tmpdir" -mindepth 2 -maxdepth 2 -path "$_tmpdir/ry-*" -type f -user $_MY_UID -delete 2>/dev/null
     command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -type d -empty -user $_MY_UID -delete 2>/dev/null
     # Free cached data (harmless but consistent with cleanup discipline)
     set --erase _KCONFIG_DATA
@@ -863,6 +875,20 @@ function _validate_profile --description "Verify loaded profile has all required
             for _elem in $$_list_var
                 if string match -qr -- '[[:space:]"\(\)]' "$_elem"
                     _err "Profile global $_list_var element contains forbidden character (space/quote/paren/newline): '$_elem'"
+                    return 1
+                end
+            end
+        end
+    end
+
+    # Package name sanitization: pacman/paru accept [a-zA-Z0-9._+-], nothing else. Reject metachars
+    # (space, ;, |, &, `, $, <, >, *, ?, quotes, etc.) to prevent profile-originating command shaping
+    # in `pacman -S -- $PKGS_ADD` and similar expansions.
+    for _pkg_list_var in PKGS_ADD PKGS_DEL AUR_PKGS
+        if set -q $_pkg_list_var
+            for _elem in $$_pkg_list_var
+                if not string match -qr '^[a-zA-Z0-9][a-zA-Z0-9._+-]*$' -- "$_elem"
+                    _err "Profile global $_pkg_list_var element is not a valid package name: '$_elem'"
                     return 1
                 end
             end
@@ -1689,6 +1715,14 @@ function _run --description "Execute a command with logging, stdout/stderr captu
             set _run_timeout ""
         else if string match -qr '^[1-9]\d*$' -- "$RY_RUN_TIMEOUT"
             set _run_timeout "$RY_RUN_TIMEOUT"
+        else
+            # Invalid value — warn once per run and fall back to default rather than silently disabling timeout.
+            if not set -q _RY_RUN_TIMEOUT_WARNED
+                set -g _RY_RUN_TIMEOUT_WARNED true
+                _warn "RY_RUN_TIMEOUT='$RY_RUN_TIMEOUT' is invalid (expected positive integer or 0 to disable) — using default 3600s"
+                _log "RY_RUN_TIMEOUT_INVALID: value=$RY_RUN_TIMEOUT — using default 3600"
+            end
+            set _run_timeout 3600
         end
     else
         set _run_timeout 3600
@@ -2187,7 +2221,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     # Phase 2 (parallel): fork independent validation jobs
 
     # Job 1: cross-reference check — per-destination existence and content verification.
-    command timeout --kill-after=5 60 fish -c '
+    command timeout --preserve-status --kill-after=5 60 fish -c '
         set -l errs 0
         set -l genfails 0
         set -l content_dir $argv[1]
@@ -2218,7 +2252,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
             set -a _svc_dsts "$_ud"
         end
     end
-    command timeout --kill-after=5 60 fish -c '
+    command timeout --preserve-status --kill-after=5 60 fish -c '
         set -l errs 0
         set -l content_dir $argv[1]
         set -l val_dir $argv[2]
@@ -2251,7 +2285,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     set -l pid_units $last_pid
 
     # Job 3: fish script syntax + environment.d check
-    command timeout --kill-after=5 60 fish -c '
+    command timeout --preserve-status --kill-after=5 60 fish -c '
         set -l errs 0
         set -l content_dir $argv[1]
         set -l val_dir $argv[2]
@@ -2283,7 +2317,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     set -l pid_scripts $last_pid
 
     # Job 4: INI section-header validation (4 configs)
-    command timeout --kill-after=5 60 fish -c '
+    command timeout --preserve-status --kill-after=5 60 fish -c '
         set -l errs 0
         set -l content_dir $argv[1]
         set -l val_dir $argv[2]
@@ -2296,7 +2330,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
             set -l key (string split "|" -- $check)[1]
             set -l sections_str (string split "|" -- $check)[2]
             set -l sections (string split "," -- $sections_str)
-            set -l f "$content_dir/$key" # lint:ignore
+            set -l f "$content_dir/$key"
             if not test -s "$f"
                 set errs (math $errs + 1)
                 continue
@@ -2313,7 +2347,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     set -l pid_ini $last_pid
 
     # Job 5: simple key-value config validation (3 configs)
-    command timeout --kill-after=5 60 fish -c '
+    command timeout --preserve-status --kill-after=5 60 fish -c '
         set -l errs 0
         set -l content_dir $argv[1]
         set -l val_dir $argv[2]
@@ -2375,9 +2409,10 @@ function _ry_validate_configs --description "Run all embedded config validators"
             end
         end
         if not test -f "$val_dir/$phase.errors"
-            if test "$_phase_rc" = 124
-                _err "Validator '$phase' timed out after 60s (not a validation failure)"
-                _log "VALIDATE_TIMEOUT: $phase rc=124"
+            # timeout(1) returns 124 on SIGTERM deadline; 137 if --kill-after's SIGKILL fired; 143 if child caught SIGTERM.
+            if contains -- "$_phase_rc" 124 137 143
+                _err "Validator '$phase' timed out after 60s (rc=$_phase_rc — not a validation failure)"
+                _log "VALIDATE_TIMEOUT: $phase rc=$_phase_rc"
             else
                 _err "Validation child '$phase' crashed without writing results (rc=$_phase_rc)"
             end
@@ -3307,7 +3342,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
         if test $start_idx -gt $total_dsts
             continue
         end
-        command timeout --kill-after=5 60 fish -c '
+        command timeout --preserve-status --kill-after=5 60 fish -c '
             set -l hash_dir $argv[1]
             set -l start_idx $argv[2]
             set -l end_idx $argv[3]
@@ -3472,7 +3507,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     echo $_has_lvm >"$result_dir/has_lvm"
 
     # Job 1: file content hashes (parallel) — reads pre-serialized hashes from parent
-    command timeout --kill-after=5 60 fish -c '
+    command timeout --preserve-status --kill-after=5 60 fish -c '
         set -l result_dir $argv[1]; set -l content_dir $argv[2]; set -l skip_iwd $argv[3]; set -l my_home $argv[4]
         set -l drift false
         set -l checked 0
@@ -3511,7 +3546,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     set -l pid_hash $last_pid
 
     # Job 2: file permissions (parallel) — reads pre-serialized perms from parent
-    command timeout --kill-after=5 60 fish -c '
+    command timeout --preserve-status --kill-after=5 60 fish -c '
         set -l result_dir $argv[1]; set -l boot_fstype $argv[2]; set -l my_user $argv[3]; set -l my_group $argv[4]
         set -l drift false
         set -l sys_dsts (command cat -- "$result_dir/sys_dsts")
@@ -3549,7 +3584,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     printf '%s\n' $KERNEL_PARAMS >"$result_dir/kparams"
 
     # Job 3: kernel params (parallel) — no sudo needed
-    command timeout --kill-after=5 60 fish -c '
+    command timeout --preserve-status --kill-after=5 60 fish -c '
         set -l result_dir $argv[1]
         set -l drift false
         set -l cmdline (command cat -- /proc/cmdline 2>/dev/null)
@@ -3573,7 +3608,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     set -l _check_show (systemctl show --property=LoadState,ActiveState,UnitFileState -- $_all_check_units 2>/dev/null | string collect --no-trim-newlines)
     set -l _check_parsed (_parse_systemctl_show "$_check_show")
     printf '%s\n' $_check_parsed >"$result_dir/parsed_units"
-    command timeout --kill-after=5 60 fish -c '
+    command timeout --preserve-status --kill-after=5 60 fish -c '
         set -l result_dir $argv[1]
         set -l drift false
         set -l exp_svcs (command cat -- "$result_dir/exp_svcs")
@@ -4923,6 +4958,20 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     sudo rm -f -- "$tmpfstab" 2>/dev/null
     set tmpfstab "$tmpfstab2"
 
+    # Preserve /etc/fstab mode+ownership on the rewrite target. tmpfstab2 was created by sudo mktemp
+    # (0600 root:root); without this step, the atomic mv would regress /etc/fstab from 0644 to 0600,
+    # breaking non-root consumers (df, lsblk, findmnt --tab-file, desktop mount helpers).
+    if not sudo chmod --reference=/etc/fstab -- "$tmpfstab" 2>/dev/null
+        sudo rm -f -- "$tmpfstab" 2>/dev/null
+        _fail "  /etc/fstab: chmod --reference failed (cannot preserve source mode)"
+        return 1
+    end
+    if not sudo chown --reference=/etc/fstab -- "$tmpfstab" 2>/dev/null
+        sudo rm -f -- "$tmpfstab" 2>/dev/null
+        _fail "  /etc/fstab: chown --reference failed (cannot preserve source ownership)"
+        return 1
+    end
+
     if command -q findmnt
         # findmnt --verify exits non-zero on real errors; rely on rc, not free-form output grep
         set -l _verify_out (sudo findmnt --verify --tab-file "$tmpfstab" 2>&1)
@@ -5632,6 +5681,26 @@ function _ry_do_install_file --argument-names target --description "Install a si
             else
                 _run sudo systemctl restart NetworkManager; or _warn "NetworkManager restart failed"
             end
+        else if string match -q '*/sysctl.d/*' -- "$target"
+            _echo
+            if not _run sudo sysctl --system
+                _warn "sysctl --system failed — tunables not applied until reboot"
+                _info "  Retry: sudo sysctl --system"
+            end
+        else if string match -q '*/coredump.conf.d/*' -- "$target"
+            _echo
+            # systemd-coredump is socket-activated — daemon-reload + restart socket propagates new drop-in
+            _run sudo systemctl daemon-reload; or _warn "daemon-reload failed"
+            if systemctl is-enabled systemd-coredump.socket >/dev/null 2>&1
+                _run sudo systemctl restart systemd-coredump.socket; or _warn "systemd-coredump.socket restart failed"
+            else
+                _info "  systemd-coredump.socket not active — new config takes effect on next crash"
+            end
+        else if string match -q '*/environment.d/*' -- "$target"
+            _info "environment.d changed — log out and back in (or restart user session) to apply"
+            _info "  Active systemd --user services retain old environment until restarted"
+        else if string match -q '/etc/drirc' -- "$target"
+            _info "drirc changed — restart Wayland/X session or relaunch affected applications to apply"
         end
     else
         _err "Failed to install: $target"
@@ -5820,7 +5889,7 @@ function _ry_do_test_all --description "Run the full test suite across all subco
         # Canonical label via shared helper; both fork and collect sites must agree.
         set -l label (_test_label $parallel_modes[$i])
         # Timeout 180s: verify modes run sudo reads, dmesg, pacman queries — longer than 60s in-memory validators.
-        command timeout --kill-after=5 180 fish -c '
+        command timeout --preserve-status --kill-after=5 180 fish -c '
             set -l script_path $argv[1]; set -l stderr_file $argv[2]; set -l exit_file $argv[3] # lint:ignore
             set -l mode_args $argv[4..]
             env NO_COLOR=1 fish "$script_path" $mode_args --verbose </dev/null >/dev/null 2>"$stderr_file"

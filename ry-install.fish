@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v3.51.15 (2026-04-17) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.0.0 (2026-04-18) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "3.51.15"
+set -g VERSION "4.0.0"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -607,23 +607,26 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (12 params): ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR; iommu=pt; clocksource=tsc
+    # Kernel (15 params): amd_pstate=active driver; amdgpu.ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151 VGPR; iommu=pt; tsc=reliable
     set -g KERNEL_PARAMS \
         iommu=pt \
+        amd_pstate=active \
         amdgpu.cwsr_enable=0 \
         amdgpu.ppfeaturemask=0xfffd3fff \
-        clocksource=tsc \
+        loglevel=3 \
         module_blacklist=pcspkr \
         nowatchdog \
-        nvme_core.default_ps_max_latency_us=0 \
         pcie_aspm.policy=performance \
         quiet \
+        rd.systemd.show_status=auto \
+        rd.udev.log_level=3 \
         split_lock_detect=off \
+        tsc=reliable \
         usbcore.autosuspend=-1 \
         zswap.enabled=0
 
     # Initramfs
-    set -g MKINITCPIO_MODULES amdgpu nvme
+    set -g MKINITCPIO_MODULES amdgpu
     # systemd hooks — no resume hook (targets masked)
     set -g MKINITCPIO_HOOKS \
         base \
@@ -643,7 +646,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # Udev — ntsync module autoloaded via wine-cachyos's /usr/lib/modules-load.d/10-ntsync.conf (wine-cachyos is a transitive dep of cachyos-gaming-meta via wine-cachyos-opt)
 
     # Network
-    set -g RESOLVED_MDNS no
+    set -g RESOLVED_MDNS resolve
     set -g LOGIND_IGNORE_KEYS \
         HandlePowerKey \
         HandlePowerKeyLongPress \
@@ -669,7 +672,8 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "MESA_SHADER_CACHE_MAX_SIZE=4G" \
         "PROTON_ENABLE_WAYLAND=1" \
         "PROTON_LOCAL_SHADER_CACHE=1" \
-        "RADV_EXPERIMENTAL=transfer_queue" \
+        "RADV_EXPERIMENTAL=transfer_queue,hic" \
+        "RADV_PERFTEST=sam,nircache" \
         "VKD3D_DEBUG=none" \
         "VKD3D_SHADER_DEBUG=none" \
         "WINEDEBUG=-all" \
@@ -680,18 +684,16 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "net.core.default_qdisc=fq" \
         "net.core.netdev_max_backlog=16384" \
         "net.core.rmem_max=134217728" \
-        "net.core.somaxconn=8192" \
         "net.core.wmem_max=134217728" \
         "net.ipv4.tcp_congestion_control=bbr" \
         "net.ipv4.tcp_fastopen=3" \
         "net.ipv4.tcp_mtu_probing=1" \
+        "net.ipv4.tcp_notsent_lowat=131072" \
         "net.ipv4.tcp_rmem=4096 87380 134217728" \
         "net.ipv4.tcp_slow_start_after_idle=0" \
         "net.ipv4.tcp_wmem=4096 65536 134217728" \
         "vm.max_map_count=2147483642" \
         "vm.watermark_boost_factor=0" \
-        "kernel.unprivileged_bpf_disabled=1" \
-        "fs.inotify.max_user_watches=524288" \
         "fs.protected_fifos=2" \
         "fs.protected_regular=2" \
         "vm.compaction_proactiveness=0" \
@@ -699,14 +701,13 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "net.core.busy_poll=50" \
         "net.core.netdev_budget=600"
 
-    # Packages: PKGS_ADD=15 PKGS_DEL=8 AUR=1 EXPECTED_SERVICES=3 must equal README
+    # Packages: PKGS_ADD=14 PKGS_DEL=8 AUR=1 EXPECTED_SERVICES=4 must equal README
     set -g PKGS_ADD \
         mkinitcpio-firmware \
+        nftables \
         nvme-cli \
         cachyos-gaming-meta \
         cachyos-gaming-applications \
-        vulkan-radeon \
-        lib32-vulkan-radeon \
         libva-mesa-driver \
         lib32-libva-mesa-driver \
         fd \
@@ -734,16 +735,16 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # MASK=10 must equal README "Masked Services" count
     set -g MASK \
         ananicy-cpp.service \
-        irqbalance.service \
         power-profiles-daemon.service \
         lvm2-monitor.service \
         NetworkManager-wait-online.service \
+        systemd-coredump.socket \
         sleep.target \
         suspend.target \
         hibernate.target \
         hybrid-sleep.target \
         suspend-then-hibernate.target
-    set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service
+    set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service nftables.service
 
     # Thresholds
     set -g BOOT_SPACE_CRIT 200
@@ -1167,7 +1168,7 @@ ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system
 WantedBy=multi-user.target'
 
         case "/etc/drirc"
-            # RADV unified VRAM heap: prevents UMA APU games from misallocating. Requires Mesa ≥25.0.
+            # RADV unified VRAM heap: prevents UMA APU games from misallocating. Requires Mesa ≥22.3.
             printf '%s\n' '<driconf>' \
                 '  <device>' \
                 '    <application name="Default">' \
@@ -3901,12 +3902,13 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         end
     end
 
+    # Regression detector: nvme_core.default_ps_max_latency_us was removed from KERNEL_PARAMS; a value of 0 means the cmdline param was re-added, blocking APST and raising NVMe idle power.
     if test -f /sys/module/nvme_core/parameters/default_ps_max_latency_us
         set -l sysfs_val (command cat -- /sys/module/nvme_core/parameters/default_ps_max_latency_us 2>/dev/null)
         if test "$sysfs_val" = 0
-            _ok "  nvme_core.default_ps_max_latency_us: $sysfs_val"
+            _fail "  nvme_core.default_ps_max_latency_us: 0 (regression — should be unset; re-check /etc/kernel/cmdline)"
         else
-            _fail "  nvme_core.default_ps_max_latency_us: $sysfs_val (expected: 0)"
+            _ok "  nvme_core.default_ps_max_latency_us: $sysfs_val (APST enabled)"
         end
     end
 
@@ -4143,19 +4145,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         _warn "  SSH_AUTH_SOCK: set but socket missing ($SSH_AUTH_SOCK)"
     else
         _warn "  SSH_AUTH_SOCK: not set (re-login may be required after install)"
-    end
-    _echo
-
-    _echo "── irqbalance (manual IRQ tuning preferred) ──"
-    set -l _irqbal_state (systemctl is-enabled irqbalance.service 2>/dev/null | string trim --)
-    if test "$_irqbal_state" = enabled
-        _fail "  irqbalance.service: enabled (manual IRQ tuning preferred — disable or mask)"
-    else if test "$_irqbal_state" = masked; or test "$_irqbal_state" = disabled
-        _ok "  irqbalance.service: $_irqbal_state"
-    else if test -z "$_irqbal_state"; or test "$_irqbal_state" = not-found
-        _ok "  irqbalance.service: not installed"
-    else
-        _info "  irqbalance.service: $_irqbal_state"
     end
     _echo
 
@@ -5083,8 +5072,10 @@ function _install_configure_services --description "Enable, start, and configure
         set -a sys_enable cpupower-epp.service
     end
 
-    # fstrim.timer
+    # fstrim.timer (ext4 NVMe needs periodic TRIM — no discard=async mount opt for ext4)
     set -a sys_enable fstrim.timer
+    # nftables.service (stateful host firewall — baseline after ufw removal)
+    set -a sys_enable nftables.service
 
     # Batch enable all collected system units; fall back to per-unit on failure
     if test (count $sys_enable) -gt 0

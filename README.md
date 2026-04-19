@@ -1,4 +1,4 @@
-# ry-install v3.51.15
+# ry-install v4.0.0
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
@@ -148,20 +148,23 @@ Each subsection corresponds to a discrete layer of the system. All values are em
 
 ### Kernel Parameters
 
-12 parameters written to `/etc/kernel/cmdline`:
+15 parameters written to `/etc/kernel/cmdline`:
 
 | Parameter | Purpose |
 |---|---|
+| `amd_pstate=active` | Force amd_pstate_epp driver (Zen 5 native MSR CPPC; preferred-core default-on) |
 | `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (see [Known Issues](#known-issues)) |
 | `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
-| `clocksource=tsc` | Force TSC clocksource (prevents HPET demotion, ~10–100× lower read latency) |
 | `iommu=pt` | IOMMU passthrough (preserves IRQ remapping/DMA security on APU, avoids translation overhead; no VFIO/passthrough use) |
+| `loglevel=3` | Suppress kernel info/notice messages during boot |
 | `module_blacklist=pcspkr` | Silence PC speaker beep |
 | `nowatchdog` | Disable software watchdog timers |
-| `nvme_core.default_ps_max_latency_us=0` | Disable NVMe power states |
 | `pcie_aspm.policy=performance` | PCIe ASPM L0 always (framework intact, per-device sysfs control preserved) |
 | `quiet` | Suppress kernel boot messages |
+| `rd.systemd.show_status=auto` | Show initramfs unit status only on errors |
+| `rd.udev.log_level=3` | Suppress udev info/debug messages in initramfs |
 | `split_lock_detect=off` | Disable split-lock #AC exception (gaming) |
+| `tsc=reliable` | Bypass TSC watchdog (Zen 5 TSC is invariant; avoids "marked unstable" demotion) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
 | `zswap.enabled=0` | Disable zswap (ZRAM handles compressed swap) |
 
@@ -184,11 +187,11 @@ Configures systemd-boot and sdboot-manage generation. `editor no` prevents live 
 
 ### Initramfs
 
-`amdgpu` and `nvme` are forced unconditionally — they bypass `autodetect` rather than relying on it to detect them. `zstd -1 -T0` uses all available threads at the fastest compression level — decompression is fast enough that the trade-off favors boot time over archive size.
+`amdgpu` is forced unconditionally — it bypasses `autodetect` rather than relying on it to detect the module. `nvme` is pulled in by the `block` hook + `autodetect` pairing and does not need an explicit module entry. `zstd -1 -T0` uses all available threads at the fastest compression level — decompression is fast enough that the trade-off favors boot time over archive size.
 
 | Setting | Value |
 |---|---|
-| Modules | `amdgpu`, `nvme` |
+| Modules | `amdgpu` |
 | Hooks | `base` → `systemd` → `autodetect` → `microcode` → `modconf` → `kms` → `keyboard` → `sd-vconsole` → `block` → `filesystems` → `fsck` |
 | Compression | `zstd` |
 | Compression Options | `-1 -T0` |
@@ -207,7 +210,7 @@ Three config files lock the WiFi stack to iwd as the NetworkManager backend with
 
 | File | Setting |
 |---|---|
-| `resolved.conf.d` | MulticastDNS=no · LLMNR=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
+| `resolved.conf.d` | MulticastDNS=resolve · LLMNR=no · DNSOverTLS=opportunistic · DNSSEC=allow-downgrade |
 | `iwd/main.conf` | EnableNetworkConfiguration=false · DriverQuirks=`PowerSaveDisable=*` · NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd · wifi.powersave=2 · wifi.iwd.autoconnect=false · logging.level=WARN |
 
@@ -220,7 +223,7 @@ Miscellaneous kernel and userspace tuning not covered by other subsections. `cor
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (9 keys) |
 | `coredump.conf.d` | Storage=none · ProcessSizeMax=0 (disables coredump storage — Wine/Proton multi-GB dumps) |
 | `drirc` | RADV unified VRAM heap on APU |
-| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffer tuning · vm.max_map_count=max · watermark tuning · security hardening (21 net-new tunables) |
+| `sysctl.d` | BBR+fq · tcp_fastopen=3 · tcp_notsent_lowat=128K · 10 GbE buffer tuning · vm.max_map_count=max · watermark tuning · security hardening (19 net-new tunables) |
 | `/etc/fstab` | Adds `noatime,lazytime,commit=10` to ext4 entries (modified in-place, not a managed file) |
 
 ### Environment Variables
@@ -236,10 +239,22 @@ Written to `~/.config/environment.d/10-environment.conf` for systemd user sessio
 | `PROTON_ENABLE_WAYLAND` | `1` |
 | `PROTON_LOCAL_SHADER_CACHE` | `1` |
 | `PROTON_USE_NTSYNC` | `1` (default in current proton-cachyos; explicit pin) |
-| `RADV_EXPERIMENTAL` | `transfer_queue` |
+| `RADV_EXPERIMENTAL` | `transfer_queue,hic` |
+| `RADV_PERFTEST` | `sam,nircache` |
 | `VKD3D_DEBUG` | `none` |
 | `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |
+
+#### Deprecated flags — DO NOT re-introduce
+
+The following environment variables have been removed upstream and must not be re-added to `ENV_VARS`. All four have been absent from this project's history; the list exists to prevent re-introduction during future refactors or contributions.
+
+| Variable | Status | Notes |
+|---|---|---|
+| `DXVK_ASYNC` | removed | GPL (graphics pipeline library) replaced async shader compilation in DXVK 2.3+; DXVK state cache removed in 2.7 |
+| `DXVK_FRAME_RATE` | removed | Upstream removed; use MangoHud or compositor framelimit instead |
+| `WINE_FULLSCREEN_FSR` | removed | Upstream removed; FSR is handled by the game or per-title Proton config |
+| `VKD3D_FRAME_RATE` | **retained** | Still valid in VKD3D-Proton — shown here for contrast only |
 
 ### User Configuration
 
@@ -257,7 +272,7 @@ Package operations run during the Packages phase with `--needed` for idempotency
 
 | Action | Count | Packages |
 |---|---|---|
-| **Install** | 15 | mkinitcpio-firmware, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, vulkan-radeon, lib32-vulkan-radeon, libva-mesa-driver, lib32-libva-mesa-driver, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
+| **Install** | 14 | mkinitcpio-firmware, nftables, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, libva-mesa-driver, lib32-libva-mesa-driver, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove** | 8 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
 | **AUR** | 1 | mt76-mt7925-dkms (via paru; AUR phase fails with `INSTALL_HAD_ERRORS` if paru absent) |
 
@@ -268,10 +283,10 @@ Package operations run during the Packages phase with `--needed` for idempotency
 | Service | Reason |
 |---|---|
 | `ananicy-cpp.service` | Manual tuning preferred |
-| `irqbalance.service` | Manual IRQ tuning preferred |
 | `power-profiles-daemon.service` | Conflicts with cpupower-epp |
 | `lvm2-monitor.service` | Skipped if LVM detected |
 | `NetworkManager-wait-online.service` | Unnecessary boot delay |
+| `systemd-coredump.socket` | Storage=none already suppresses storage; masking the socket eliminates spawn-and-discard overhead on Wine/Proton crashes |
 | `sleep.target` | Desktop — no sleep |
 | `suspend.target` | Desktop — no suspend |
 | `hibernate.target` | Desktop — no hibernate |
@@ -431,12 +446,12 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 <summary>Sample log output</summary>
 
 ```json
-{"ts":"2026-04-14T14:23:01-0700","event":"header","version":"3.51.15","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
-{"ts":"2026-04-14T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
-{"ts":"2026-04-14T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
-{"ts":"2026-04-14T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
-{"ts":"2026-04-14T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-14T14:26:42-0700","event":"footer","finished":"2026-04-14T14:26:42-0700","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
+{"ts":"2026-04-18T14:23:01-0700","event":"header","version":"4.0.0","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-18T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
+{"ts":"2026-04-18T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
+{"ts":"2026-04-18T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
+{"ts":"2026-04-18T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
+{"ts":"2026-04-18T14:26:42-0700","event":"footer","finished":"2026-04-18T14:26:42-0700","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
 ```
 
 </details>

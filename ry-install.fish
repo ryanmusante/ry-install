@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.0.4 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.1.1 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.0.4"
+set -g VERSION "4.1.1"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -525,16 +525,16 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     echo "" >&2
     echo "[WARN] Interrupted - cleaning up..." >&2
     set -g _CLEANUP_DONE true
-    # Fish passes signal name WITHOUT "SIG" prefix as $argv[1] (e.g., "INT", not "SIGINT")
+    # Fish 3.4+ passes the SIG-prefixed signal name as $argv[1] (e.g., "SIGTERM"); match both forms for robustness.
     set -l _sig_exit 130
     switch "$argv[1]"
-        case HUP
+        case HUP SIGHUP
             set _sig_exit 129
-        case INT
+        case INT SIGINT
             set _sig_exit 130
-        case QUIT
+        case QUIT SIGQUIT
             set _sig_exit 131
-        case TERM
+        case TERM SIGTERM
             set _sig_exit 143
     end
     _write_footer "$_sig_exit" interrupted
@@ -1023,9 +1023,7 @@ function _manifest_write --description "Record current profile destinations for 
     end
     # Track tmp for cleanup; on successful mv it disappears (rm -f is harmless), on failure cleanup removes the leftover.
     set -ga _TRACKED_TMPFILES "$tmp"
-    # Include generated completions path so _manifest_check_orphans can detect it across profile/version changes
-    set -l _completions_path "$HOME/.config/fish/completions/ry-install.fish"
-    printf '%s\n' "v$VERSION" "$PROFILE_NAME" $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS "$_completions_path" >"$tmp"
+    printf '%s\n' "v$VERSION" "$PROFILE_NAME" $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS >"$tmp"
     if not command chmod -- 600 "$tmp" 2>/dev/null
         # FS without mode bits (FAT/exFAT $HOME) would silently leave a world-readable manifest with dest paths.
         _warn "Failed to chmod manifest tmpfile to 600 — manifest may be world-readable"
@@ -1060,9 +1058,7 @@ function _manifest_check_orphans --description "Warn about files from previous i
     set -l prev_ver "$manifest_lines[1]"
     set -l prev_profile "$manifest_lines[2]"
     set -l prev_dests $manifest_lines[3..]
-    # Completions path is generated (not in DESTINATIONS) but IS in manifest; in current_dests to dodge orphan flag.
-    set -l _completions_path "$HOME/.config/fish/completions/ry-install.fish"
-    set -l current_dests $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS "$_completions_path"
+    set -l current_dests $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
 
     set -l orphans
     for prev in $prev_dests
@@ -1814,11 +1810,9 @@ VERIFICATION:
   --verify-static   Check config files exist with correct content
   --verify-runtime  Check live system state (run after reboot)
   --check           Silent idempotency probe (exit 0 = clean, exit 3 = prereq fail, exit 10 = drift)
-  --test-all        Run all safe modes and generate NDJSON logs (test suite)
 
 UTILITIES:
   --install-file <path>  Re-deploy a single managed file
-  --completions     Install fish tab-completions for ry-install itself
 
 OPTIONS:
   --                End of options (remaining arguments ignored)
@@ -1829,36 +1823,15 @@ Unattended install is the only mode. There is no preview, diff, or repair mode.
 For drift detection, use --verify-static / --verify-runtime.
 
 EXIT CODES:
-  0   Success
-  1   Non-critical failure (one or more operations failed)
-  2   Usage error (invalid arguments or flag combinations)
-  3   Preflight check failed (deps, disk space, hardware mismatch)
-  4   Boot-critical failure (mkinitcpio, sdboot-manage, vmlinuz missing)
-  5   Lock acquisition failed (another instance running)
-  10  Drift detected (--check mode)
-  130  Interrupted (SIGINT)
-  129/131/143  Interrupted (SIGHUP/SIGQUIT/SIGTERM)
-  141  Broken pipe (SIGPIPE)
-
-EXAMPLES:
-  # Install
-  ./ry-install.fish
-  # Re-deploy single file
-  ./ry-install.fish --install-file /etc/mkinitcpio.conf
-  ./ry-install.fish --test-all
-
-LOG FILE:
-  ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ.jsonl
+  0 ok · 1 non-critical · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 drift
+  129/130/131/143 signal · 141 SIGPIPE
 
 ENVIRONMENT:
-  RY_RUN_TIMEOUT=<seconds>    Wall-clock limit for each _run command. Default 3600. 0=disable. Requires timeout(1).
-  RY_INSTALL_CONFIRM_BOOT_WIPE=1    One-time ack for SDBOOT_REMOVE_EXISTING=yes; marker suppresses until entries grow.
+  RY_RUN_TIMEOUT=<seconds>    Wall-clock limit for each _run. Default 3600. 0=disable.
+  RY_INSTALL_CONFIRM_BOOT_WIPE=1    One-time ack for SDBOOT_REMOVE_EXISTING=yes.
 
-REQUIREMENTS:
-  CachyOS (Arch-based), systemd-boot, fish 3.4+
-
-NOTES:
-  Best-effort pipeline: a failed phase sets INSTALL_HAD_ERRORS and continues. [ERR]=blocking, [WARN]=non-fatal, [FAIL]=verify miss.
+Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ.jsonl
+See README.md for full reference.
 "
 end
 
@@ -4589,27 +4562,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     _echo
 
-    _echo "── Completions ──"
-    set -l comp_dir "$HOME/.config/fish/completions"
-    set -l comp_file "$comp_dir/ry-install.fish"
-    if test -f "$comp_file"
-        set -l comp_perms (stat -c '%a' -- "$comp_file" 2>/dev/null)
-        if test "$comp_perms" = 644
-            _ok "  $comp_file: present (644)"
-        else
-            _warn "  $comp_file: permissions $comp_perms (expected 644)"
-        end
-        set -l comp_ver (head -n 1 "$comp_file" 2>/dev/null | string match -rg -- 'v([0-9.]+)')
-        if test "$comp_ver" = "$VERSION"
-            _ok "  Completions version: v$comp_ver"
-        else if test -n "$comp_ver"
-            _warn "  Completions version: v$comp_ver (script is v$VERSION — run --completions)"
-        end
-    else
-        _info "  Completions not installed (run --completions)"
-    end
-    _echo
-
     _echo "PACKAGE MANAGEMENT"
     _echo
 
@@ -5581,7 +5533,6 @@ function _ry_do_install --description "Full installation: preflight, packages, c
         if not _install_finalize
             set -g INSTALL_HAD_ERRORS true
         end
-        _ry_do_completions; or _warn "Completions install failed (run --completions manually)"
     end
 
     _progress_done
@@ -5783,276 +5734,6 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return 0
 end
 
-# Tab completions: dynamically generated from SYSTEM/USER/SERVICE_DESTINATIONS
-function _ry_do_completions --description "Generate fish shell completions for ry-install"
-    set -l comp_dir "$HOME/.config/fish/completions"
-    set -l comp_dst "$comp_dir/ry-install.fish"
-
-    if not command mkdir -p -- "$comp_dir" 2>/dev/null
-        _warn "Cannot create completions dir: $comp_dir"
-        return 1
-    end
-    # Generate completion script from DESTINATIONS and flag list
-
-    set -l tmpfile (mktemp -p "$comp_dir" .ry-install.XXXXXX 2>/dev/null)
-    if test -z "$tmpfile"
-        # include path context for diagnostics
-        _fail "Failed to create temp file for completions in: $comp_dir"
-        return 1
-    end
-    set -ga _TRACKED_TMPFILES "$tmpfile"
-    if test -L "$tmpfile"
-        command rm -f -- "$tmpfile" 2>/dev/null
-        _fail "Temp file is symlink — aborting completions install"
-        return 1
-    end
-
-    # (per-destination `complete` lines emitted below; no pre-joined target list)
-
-    # Accumulate and write once — ENOSPC mid-build surfaces as printf fail, not post-write `grep '^end$'` heuristic.
-    set -l _comp_lines
-    set -a _comp_lines '# Fish completions for ry-install v'"$VERSION"
-    set -a _comp_lines '# Generated by: ./ry-install.fish --completions'
-    set -a _comp_lines 'for cmd in ry-install ry-install.fish'
-    set -a _comp_lines '    complete -c $cmd -f'
-
-    # Flag completions: "flags|description"
-    set -l _comp_entries \
-        '-s V -l verbose|Show output on terminal' \
-        '-l verify-static|Check config files exist with correct content' \
-        '-l verify-runtime|Check live system state (run after reboot)' \
-        '-l check|Silent idempotency probe (exit 0 = clean, exit 3 = prereq fail, exit 10 = drift)' \
-        '-l test-all|Run all safe modes and generate NDJSON logs (test suite)' \
-        '-l completions|Install fish tab-completions for ry-install itself' \
-        '-s h -l help|Show help' \
-        '-s v -l version|Show version'
-    for _ce in $_comp_entries
-        set -l _flags (string split '|' -- "$_ce")[1]
-        set -l _desc (string split '|' -- "$_ce")[2]
-        # Pre-escape single quotes so a future `_comp_entries` value with `'` cannot corrupt the generated file.
-        set _desc (string replace -a "'" "'\\''" -- $_desc)
-        set -a _comp_lines "    complete -c \$cmd $_flags -d '$_desc'"
-    end
-
-    # --install-file dests: one `complete` per path for space-safe round-trip (latent — current paths space-free).
-    set -a _comp_lines "    complete -c \$cmd -l install-file -d 'Re-deploy a single managed file' -rxa ''"
-    for _dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
-        set -l _dst_q (string replace -a "'" "'\\''" -- $_dst)
-        set -a _comp_lines "    complete -c \$cmd -l install-file -rxa '$_dst_q'"
-    end
-
-    set -a _comp_lines end
-
-    # Single write — atomic from the script's POV; ENOSPC fails loud here.
-    if not printf '%s\n' $_comp_lines >"$tmpfile" 2>/dev/null
-        command rm -f -- "$tmpfile" 2>/dev/null
-        _fail "Failed to write completions (printf failed — disk full?)"
-        return 1
-    end
-
-    if not test -s "$tmpfile"; or not grep -q '^end$' -- "$tmpfile"
-        command rm -f -- "$tmpfile" 2>/dev/null
-        _fail "Failed to write completions (incomplete file)"
-        return 1
-    end
-
-    # Syntax-check generated completions before deploying — catches generation bugs
-    if not fish --no-execute "$tmpfile" 2>/dev/null
-        command rm -f -- "$tmpfile" 2>/dev/null
-        _fail "Failed to install completions (generated file has syntax errors)"
-        return 1
-    end
-
-    if not command chmod -- 0644 "$tmpfile"
-        command rm -f -- "$tmpfile" 2>/dev/null
-        _fail "Failed to install completions (chmod failed)"
-        return 1
-    end
-    if not command mv -- "$tmpfile" "$comp_dst"
-        command rm -f -- "$tmpfile" 2>/dev/null
-        _fail "Failed to install completions (mv failed)"
-        return 1
-    end
-
-    _ok "Completions installed to: $comp_dst"
-end
-
-# Test-suite label transform: strip leading --, fold spaces/slashes to _, preserve interior hyphens.
-function _test_label --description "Canonical filename label for a test mode string"
-    # `--` ends options; args are PATTERN REPLACEMENT STRING; second `--` parses as literal → spurious empty line.
-    string replace -- -- '' $argv[1] | string replace -a ' ' _ | string replace -a / _
-end
-
-# Smoke test: runs verify-static, verify-runtime, check in sequence
-function _ry_do_test_all --description "Run the full test suite across all subcommands"
-    _banner "ry-install v$VERSION - Full Test Suite"
-
-    set -l script_path (status filename)
-
-    # Fast-fail: abort suite on parse errors
-    _info "Syntax check..."
-    if not fish --no-execute "$script_path" 2>/dev/null
-        _err "Script has parse errors — fix before running tests"
-        fish --no-execute "$script_path"
-        return 1
-    end
-    _ok "  fish --no-execute: passed"
-    _echo
-
-    # Managed-file count drift check: _RY_MANAGED_FILE_COUNT must match DESTINATIONS list totals.
-    _info "Managed-case count check..."
-    # Compute from DESTINATIONS lists post-_load_profile, not awk-parsing source.
-    set -l _actual_cases (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
-    if test "$_actual_cases" != "$_RY_MANAGED_FILE_COUNT"
-        _err "  _RY_MANAGED_FILE_COUNT=$_RY_MANAGED_FILE_COUNT but _ry_get_file_content has $_actual_cases cases"
-        _err "  Bump _RY_MANAGED_FILE_COUNT to match, then re-run --test-all"
-        return 1
-    end
-    _ok "  _RY_MANAGED_FILE_COUNT=$_RY_MANAGED_FILE_COUNT matches source"
-    _echo
-
-    # Best-effort sudo cache: version/help need none; check/verify-* degrade via noread path
-    _ensure_sudo_cached
-    or _warn "Sudo unavailable — sudo-dependent sub-tests will degrade or skip"
-
-    set -l parallel_modes \
-        --check \
-        --verify-static \
-        --verify-runtime \
-        --version \
-        --help
-
-    # nproc-scaled — <8 sequential, 8-15 batched, 16+ capped at 16
-    set -l nproc_val (nproc 2>/dev/null)
-    set -l par_batch_size 0
-    if test -n "$nproc_val"; and string match -qr '^\d+$' -- "$nproc_val"
-        if test "$nproc_val" -lt 8
-            _warn "Low CPU count ($nproc_val) — running test modes with batch size 1"
-            set par_batch_size 1
-        else if test "$nproc_val" -lt 16
-            set par_batch_size $nproc_val
-            _info "Mid-range CPU count ($nproc_val) — batching parallel modes in groups of $par_batch_size"
-        else
-            set par_batch_size 16
-            _info "High CPU count ($nproc_val) — capping parallel modes at 16"
-        end
-    end
-
-    # +1 for the completions validation block
-    set -l total (math (count $parallel_modes) + 1)
-    set -l passed 0
-    set -l failed 0
-
-    # Parallel phase: fork all read-only modes
-    set -l test_dir (mktemp -d -t ry-test.XXXXXX)
-    if not test -d "$test_dir"
-        _err "Failed to create test temp directory"
-        return 1
-    end
-    set -ga _TRACKED_TMPFILES "$test_dir"
-    set -l parallel_pids
-
-    _info "Forking "(count $parallel_modes)" parallel read-only modes..."
-    _echo
-
-    for i in (seq (count $parallel_modes))
-        set -l mode_args (string split ' ' -- $parallel_modes[$i])
-        # Canonical label via shared helper; both fork and collect sites must agree.
-        set -l label (_test_label $parallel_modes[$i])
-        # Timeout 180s: verify modes run sudo reads, dmesg, pacman queries — longer than 60s in-memory validators.
-        command timeout --preserve-status --kill-after=5 180 fish -c '
-            set -l script_path $argv[1]; set -l stderr_file $argv[2]; set -l exit_file $argv[3] # lint:ignore
-            set -l mode_args $argv[4..]
-            env NO_COLOR=1 fish "$script_path" $mode_args --verbose </dev/null >/dev/null 2>"$stderr_file"
-            set -l rc $status
-            printf "%d\n" $rc > "$exit_file"
-        ' -- "$script_path" "$test_dir/$label.stderr" "$test_dir/$label.exit" $mode_args &
-        set -a parallel_pids $last_pid
-        # Batch throttle: wait for current batch before forking more (mid-range CPU guard)
-        if test "$par_batch_size" -gt 0; and test (math $i % $par_batch_size) -eq 0
-            wait $parallel_pids
-            set parallel_pids
-        end
-    end
-
-    test (count $parallel_pids) -gt 0; and wait $parallel_pids
-
-    # Collect parallel results in order
-    for i in (seq (count $parallel_modes))
-        set -l label (_test_label $parallel_modes[$i])
-        set -l display_label (string replace -- '--' '' "$parallel_modes[$i]")
-        set -l code (command cat -- "$test_dir/$label.exit" 2>/dev/null)
-        if test -z "$code"
-            set code 999
-        end
-
-        if test "$code" = 0
-            set passed (math $passed + 1)
-            _ok "  $display_label: passed"
-        else
-            set failed (math $failed + 1)
-            _warn "  $display_label: exit code $code"
-            if test -s "$test_dir/$label.stderr"
-                set -l _head (head -n 15 "$test_dir/$label.stderr" | string trim --)
-                for _hl in $_head
-                    _warn "    $_hl"
-                end
-            end
-        end
-    end
-    _echo
-
-    # Validate --completions subs; sandbox HOME to scratch so --test-all doesn't clobber real completions file.
-    _echo "─ Validating completions output..."
-    set -l _comp_sandbox (mktemp -d -t ry-test-comp.XXXXXX)
-    if test -z "$_comp_sandbox"; or not test -d "$_comp_sandbox"
-        _fail "  completions sandbox: mktemp -d failed"
-        set failed (math $failed + 1)
-        set _comp_sandbox ""
-    else
-        set -ga _TRACKED_TMPFILES "$_comp_sandbox"
-        env HOME="$_comp_sandbox" fish "$script_path" --completions >/dev/null 2>&1
-    end
-    set -l _comp_file "$_comp_sandbox/.config/fish/completions/ry-install.fish"
-    set -l _comp_out ""
-    if test -n "$_comp_sandbox"; and test -f "$_comp_file"
-        set _comp_out (command cat -- "$_comp_file" 2>/dev/null)
-    end
-    set -l _comp_ok true
-    if test -z "$_comp_out"
-        _info "  completions file not available (write failed) — skipping content check"
-        set passed (math $passed + 1)
-    else
-        for _expected_cmd in install-file verify-static verify-runtime
-            if not string match -q "*-l $_expected_cmd *" -- "$_comp_out"
-                _warn "  completions missing: --$_expected_cmd"
-                set _comp_ok false
-            end
-        end
-        if test "$_comp_ok" = true
-            set passed (math $passed + 1)
-            _ok "  completions content: passed"
-        else
-            set failed (math $failed + 1)
-            _fail "  completions content: missing subcommands"
-        end
-    end
-    test -n "$_comp_sandbox"; and command rm -rf --preserve-root -- "$_comp_sandbox" 2>/dev/null
-
-    command rm -rf --preserve-root -- "$test_dir"
-
-    _echo
-    if test $failed -eq 0
-        _ok "Test suite complete: $passed/$total passed"
-    else
-        _warn "Test suite complete: $passed passed, $failed failed out of $total"
-    end
-    _echo
-    _info "Log files created in: $LOG_DIR/"
-
-    test $failed -gt 0; and return 1; or return 0
-end
-
 # CLI ARGUMENT PARSING AND DISPATCH
 
 # Shared usage-exit helper: prints message, removes pre-dispatch log, exits EXIT_USAGE.
@@ -6090,14 +5771,8 @@ while test $i -le (count $argv)
         case --check
             set MODE check
             set mode_count (math $mode_count + 1)
-        case --test-all
-            set MODE test-all
-            set mode_count (math $mode_count + 1)
         case --fix
             _early_usage_exit "--fix has been removed; ry-install no longer performs in-tool drift repair"
-        case --completions
-            set MODE completions
-            set mode_count (math $mode_count + 1)
         case --install-file
             set MODE install-file
             set mode_count (math $mode_count + 1)
@@ -6225,7 +5900,7 @@ switch $MODE
             _ry_exit $EXIT_LOCK; and return $EXIT_LOCK; or return $EXIT_LOCK
         end
     case '*'
-        # No lock needed for read-only modes (verify, completions, test-all)
+        # No lock needed for read-only modes (verify, check)
 end
 
 set -l _log_base_rot "$HOME/ry-install/logs"
@@ -6258,12 +5933,6 @@ switch $MODE
         set exit_code $status
     case check
         _ry_do_check
-        set exit_code $status
-    case test-all
-        _ry_do_test_all
-        set exit_code $status
-    case completions
-        _ry_do_completions
         set exit_code $status
     case install-file
         _ry_do_install_file "$INSTALL_FILE_TARGET"

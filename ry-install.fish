@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.0.1 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.0.3 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.0.1"
+set -g VERSION "4.0.3"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -43,7 +43,9 @@ end
 
 # Erase script-set globals, preserve caller-API vars. mode=bail keeps _RY_INSTALL_BAILING for sentinel propagation.
 function _ry_namespace_cleanup --argument-names mode --description "Erase script-set globals; preserve caller-API"
-    set -l _preserve _RY_INSTALL_LAST_EXIT
+    # HOME is preserved because the script may populate it at global scope (L104-108) when sourced from a
+    # shell with empty $HOME (containers, cron, systemd --user); erasing it here would revert the caller.
+    set -l _preserve _RY_INSTALL_LAST_EXIT HOME
     test "$mode" = bail; and set -a _preserve _RY_INSTALL_BAILING
     # Copy snapshot to local — _RY_PRE_GLOBALS is post-snapshot, so the loop would erase it mid-iteration.
     set -l _snap $_RY_PRE_GLOBALS
@@ -521,6 +523,9 @@ set -g VERIFY_FAIL 0
 set -g VERIFY_WARN 0
 # _cleanup writes footer + exits 128+signum; _cleanup_on_exit is the fish_exit fallback
 function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal QUIT --description "Signal handler: clean up on INT/TERM/HUP/QUIT"
+    # Reentrancy guard: double-signal (e.g., two Ctrl+C during _do_cleanup) must not re-enter.
+    # Mirrors the guard in the sibling _cleanup_on_exit handler.
+    test "$_CLEANUP_DONE" = true; and return 0
     echo "" >&2
     echo "[WARN] Interrupted - cleaning up..." >&2
     set -g _CLEANUP_DONE true
@@ -550,6 +555,8 @@ end
 
 # SIGPIPE handler: skip stderr (pipe broken), write JSONL footer, run _do_cleanup, exit 141
 function _cleanup_pipe --on-signal PIPE --description "Signal handler: clean up on SIGPIPE (broken pipe)"
+    # Reentrancy guard: a second SIGPIPE mid-cleanup must not re-enter. Mirrors _cleanup / _cleanup_on_exit.
+    test "$_CLEANUP_DONE" = true; and return 0
     # SIGPIPE: stderr may also be broken — skip all terminal output
     set -g _CLEANUP_DONE true
     _write_footer 141 interrupted
@@ -2476,9 +2483,11 @@ function _content_hash --argument-names dst --description "SHA256 of embedded co
         return 1
     end
     # Capture $pipestatus immediately — any intervening command overwrites it.
+    # pipestatus[1]=_ry_get_file_content generator, pipestatus[2]=string collect (fish builtin, fails only on OOM).
     set -l _content (_ry_get_file_content "$dst" 2>/dev/null | string collect --no-trim-newlines)
     set -l _ps $pipestatus
     test $_ps[1] -ne 0; and return 1
+    test $_ps[2] -ne 0; and return 1
     test -z "$_content"; and return 1
     # Inline index via `string split` replaces external head(1). pipestatus[1..2] covers printf+sha256sum.
     set -l _hash_line (printf '%s' "$_content" | sha256sum)
@@ -2661,11 +2670,23 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         if not sudo -n true 2>/dev/null
             set _hash_fail_reason "sudo credential lapsed"
         else
-            set _actual_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+            # Capture sha256sum output into a variable so pipestatus can be inspected before parsing;
+            # a raw cat-failure (cat fails → sha256sum succeeds on empty stdin → empty-input hash
+            # e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855) would otherwise bypass
+            # the `test -z` guard below and be misclassified as a checksum mismatch.
+            set -l _raw_line (sudo -n cat -- "$dst" 2>/dev/null | sha256sum)
+            set -l _ps $pipestatus
+            if test $_ps[1] -eq 0; and test $_ps[2] -eq 0
+                set _actual_hash (string split ' ' -- "$_raw_line")[1]
+            end
             test -z "$_actual_hash"; and set _hash_fail_reason "filesystem read error after write"
         end
     else
-        set _actual_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+        set -l _raw_line (command cat -- "$dst" 2>/dev/null | sha256sum)
+        set -l _ps $pipestatus
+        if test $_ps[1] -eq 0; and test $_ps[2] -eq 0
+            set _actual_hash (string split ' ' -- "$_raw_line")[1]
+        end
         test -z "$_actual_hash"; and set _hash_fail_reason "filesystem read error after write"
     end
     if test -z "$_actual_hash"
@@ -2741,12 +2762,22 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
         if test "$use_sudo" = true
             # Sudo precheck: if keepalive lapsed, skip the skip-check (force re-deploy via fall-through) rather than silently producing empty hash that fails comparison and re-deploys anyway.
             if sudo -n true 2>/dev/null
-                set _cur_hash (sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+                # Capture sha256sum into variable so pipestatus can be inspected before parsing;
+                # prevents a cat-failure empty-stdin hash from being mistaken for a matching current hash.
+                set -l _raw_line (sudo -n cat -- "$dst" 2>/dev/null | sha256sum)
+                set -l _ps $pipestatus
+                if test $_ps[1] -eq 0; and test $_ps[2] -eq 0
+                    set _cur_hash (string split ' ' -- "$_raw_line")[1]
+                end
             else
                 _log "SKIP_PROBE_SUDO_LAPSED: dst=$dst — re-deploying"
             end
         else
-            set _cur_hash (command cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ')[1]
+            set -l _raw_line (command cat -- "$dst" 2>/dev/null | sha256sum)
+            set -l _ps $pipestatus
+            if test $_ps[1] -eq 0; and test $_ps[2] -eq 0
+                set _cur_hash (string split ' ' -- "$_raw_line")[1]
+            end
         end
         if test -n "$_cur_hash"; and test "$_new_hash" = "$_cur_hash"
             _ok "→ $dst (unchanged)"
@@ -3381,7 +3412,21 @@ function _ry_verify_static --description "Verify installed configs match embedde
         set -a hash_pids $last_pid
     end
 
-    test (count $hash_pids) -gt 0; and wait $hash_pids
+    # Per-pid wait captures each worker's exit status. Batch `wait $pids` returns only the last child's status,
+    # which masks timeout(1) sentinels (124 deadline / 137 SIGKILL via --kill-after / 143 child caught SIGTERM).
+    # These rcs feed the empty-result branch of the collect loop below so timeouts are distinguished from crashes.
+    set -l hash_rcs
+    for p in $hash_pids
+        wait $p
+        set -a hash_rcs $status
+    end
+    set -l _any_hash_worker_timeout false
+    for _rc in $hash_rcs
+        if contains -- "$_rc" 124 137 143
+            set _any_hash_worker_timeout true
+            break
+        end
+    end
 
     for worker in (seq 1 $num_workers)
         if test -s "$hash_dir/worker_$worker.stderr"
@@ -3415,8 +3460,19 @@ function _ry_verify_static --description "Verify installed configs match embedde
             case skip
                 # Intentional skip (no expected content, file unreadable, or NM/IWD not installed)
             case ''
-                # Empty or missing result file — child likely crashed; must be FAIL (unverified ≠ passed)
-                _fail "  $dst: verification incomplete (no result from hash job)"
+                # Empty or missing result file — child likely crashed or timed out; must be FAIL (unverified ≠ passed).
+                # If any hash worker exited with a timeout sentinel (124/137/143), surface that as the likely cause.
+                if test "$_any_hash_worker_timeout" = true
+                    _fail "  $dst: verification incomplete (hash worker timeout; worker rcs=$hash_rcs)"
+                    _log "VERIFY_STATIC_HASH_TIMEOUT: dst=$dst hash_rcs=$hash_rcs"
+                else
+                    _fail "  $dst: verification incomplete (no result from hash job)"
+                end
+            case '*'
+                # Unexpected result payload (e.g., partial write from SIGKILL'd worker mid-echo).
+                # Without this catch-all the destination would be silently unreported.
+                _fail "  $dst: verification incomplete (unexpected result: $result)"
+                _log "VERIFY_STATIC_UNEXPECTED_RESULT: dst=$dst result=$result"
         end
     end
     command rm -rf --preserve-root -- "$hash_dir"
@@ -3488,12 +3544,28 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         set -l safe (string replace -a '/' '_' -- "$dst")
         if string match -q "$my_home/*" -- "$dst"
             if test -r "$dst"
-                sha256sum <"$dst" 2>/dev/null | string split -- ' ' | head -n 1 >"$result_dir/hash_$safe"
+                # Capture sha256sum output first; write hash_$safe only on successful pipeline so the
+                # collect phase's malformed-result detector (L3716-3718) distinguishes read failure from drift.
+                set -l _raw_line (sha256sum <"$dst" 2>/dev/null)
+                set -l _ps $pipestatus
+                if test $_ps[1] -eq 0
+                    set -l _first (string split ' ' -- "$_raw_line")[1]
+                    if test -n "$_first"
+                        printf '%s\n' "$_first" >"$result_dir/hash_$safe"
+                    end
+                end
                 stat -c '%a %U:%G' -- "$dst" 2>/dev/null >"$result_dir/perm_$safe"
             end
         else
             if sudo -n test -r "$dst" 2>/dev/null
-                sudo -n cat -- "$dst" 2>/dev/null | sha256sum | string split -- ' ' | head -n 1 >"$result_dir/hash_$safe"
+                set -l _raw_line (sudo -n cat -- "$dst" 2>/dev/null | sha256sum)
+                set -l _ps $pipestatus
+                if test $_ps[1] -eq 0; and test $_ps[2] -eq 0
+                    set -l _first (string split ' ' -- "$_raw_line")[1]
+                    if test -n "$_first"
+                        printf '%s\n' "$_first" >"$result_dir/hash_$safe"
+                    end
+                end
             end
             if sudo -n test -e "$dst" 2>/dev/null
                 sudo -n stat -c '%a %U:%G' -- "$dst" 2>/dev/null >"$result_dir/perm_$safe"
@@ -5270,7 +5342,15 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         set -l _acknowledged false
         set -l _existing_basenames (sudo find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\n' 2>/dev/null | LC_ALL=C sort)
         set -l _existing_entries (count $_existing_basenames)
-        set -l _existing_hash (printf '%s\n' $_existing_basenames | sha256sum | string split -- ' ')[1]
+        # Capture sha256sum output into a variable so pipestatus can be checked before parsing.
+        # Practically unreachable failure path (printf cannot fail on basename list; sha256sum binary unreadable),
+        # but maintained for consistency with other hash pipelines in this script.
+        set -l _raw_line (printf '%s\n' $_existing_basenames | sha256sum)
+        set -l _ps $pipestatus
+        set -l _existing_hash ""
+        if test $_ps[1] -eq 0; and test $_ps[2] -eq 0
+            set _existing_hash (string split ' ' -- "$_raw_line")[1]
+        end
         if set -q RY_INSTALL_CONFIRM_BOOT_WIPE; and test "$RY_INSTALL_CONFIRM_BOOT_WIPE" = 1
             set _acknowledged true
             _log "BOOT_WIPE_ACK: env var RY_INSTALL_CONFIRM_BOOT_WIPE=1 entries=$_existing_entries hash=$_existing_hash"
@@ -5374,7 +5454,14 @@ function _install_finalize --description "Run post-install verification, cleanup
         set -l _wipe_marker $BOOT_WIPE_MARKER
         set -l _post_basenames (sudo find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\n' 2>/dev/null | LC_ALL=C sort)
         set -l _post_count (count $_post_basenames)
-        set -l _post_hash (printf '%s\n' $_post_basenames | sha256sum | string split -- ' ')[1]
+        # Capture sha256sum output into a variable so pipestatus can be checked before parsing.
+        # Symmetric with the pre-install probe in _install_boot.
+        set -l _raw_line (printf '%s\n' $_post_basenames | sha256sum)
+        set -l _ps $pipestatus
+        set -l _post_hash ""
+        if test $_ps[1] -eq 0; and test $_ps[2] -eq 0
+            set _post_hash (string split ' ' -- "$_raw_line")[1]
+        end
         if test -n "$_post_count"; and string match -qr '^\d+$' -- "$_post_count"
             set -l _marker_dir (dirname -- "$_wipe_marker")
             set -l _marker_tmp (mktemp -p "$_marker_dir" .boot-wipe.XXXXXX 2>/dev/null)
@@ -5646,7 +5733,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
         else if string match -q '*.service' -- "$target"
             if string match -q "$HOME/*" -- "$target"
                 _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
-                if _run systemctl --user enable --now (basename -- "$target")
+                if _run systemctl --user enable --now -- (basename -- "$target")
                     if string match -q '*ssh-agent*' -- "$target"; and set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"
                         _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
                         or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
@@ -5656,7 +5743,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
                 end
             else
                 _run sudo systemctl daemon-reload; or _warn "Systemctl daemon-reload failed"
-                if not _run sudo systemctl enable --now (basename -- "$target")
+                if not _run sudo systemctl enable --now -- (basename -- "$target")
                     _warn "Failed to enable "(basename -- "$target")" (system)"
                 end
             end

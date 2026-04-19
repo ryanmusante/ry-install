@@ -1,5 +1,20 @@
 ry-install changelog
 
+v4.1.4  2026-04-19
+- `_tmpfile_key` (L1337): dropped 8-char sha256 prefix from 4.1.3; returned to `string replace -a '/' '_'`. Parity restored with 8 child-side key derivations in `_ry_validate_configs` (5 jobs), `_ry_verify_static` hash worker, and `_ry_do_check` Jobs 1-2. Producer had been emitting hashed filenames while all consumers read unhashed; `--verify-static`, `--check`, and config validation now match.
+- `_validate_profile`: tmpfile-key collision guard added — rejects any two destinations whose slash→underscore keys collide (e.g. `/a/b` vs `/a_b` → `_a_b`).
+- `_ry_validate_configs` merge loop: removed 5 × `_rc_<phase>` captures, `_phase_rcs` map, and the timeout-vs-crash branch. Fish's `wait` returns 0 regardless of child exit, so the sentinel values `124/137/143` were never observable; the file-presence check handles both cases uniformly.
+- `_ry_verify_static` hash-worker collector: removed `hash_rcs` array and `_any_hash_worker_timeout`; collapsed the phantom "hash worker timeout" branch into the single "no result" FAIL.
+- `_ry_validate_configs` Job 2 (units): added empty `svc_dsts` guard — writes `units.errors=0` and exits when no `.service` destinations are present.
+- `_kill_sudo_keepalive`: `pkill -TERM -P <pid>` added before SIGTERM/SIGKILL to reap descendants (`sleep`, `sudo`) that otherwise orphan when parent fish exits.
+- `_detect_lvm`: `command timeout 5` → `timeout 10` for slow PAM/NSS paths on first sudo after keepalive expiry.
+- `_ry_check_network`: curl probe now uses `--connect-timeout 3 --max-time 5` (was `--max-time 5`).
+- News-feed probe in `_install_rebuild_boot`: curl probe now uses `--connect-timeout 2 --max-time 5`.
+- `_run` stderr dedup: `command sed 's/^ *//'` → `string trim --left` (fish-native).
+- Boot-time parse in `_ry_verify_runtime`: `LC_ALL=C printf "%.0f"` for locale-safe float→int (non-C LC_NUMERIC would return `0`).
+- Multi-line `#` blocks collapsed to single-line across touched functions.
+- Line: 6026 → 6004. README version banner + sample log bumped.
+
 v4.1.3  2026-04-19
 - `_tmpfile_key` (L1319): new helper prepends 8-char sha256 prefix to destination path; replaces naive `string replace -a '/' '_'` at 7 sites. Closes latent `/` vs `_` collision trap.
 - CLI dispatcher: manual `while/switch` → `argparse --exclusive=verify-static,verify-runtime,check,install-file` (L5795). Parity preserved across 13 flag scenarios.

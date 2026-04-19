@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.1.3 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.1.4 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.1.3"
+set -g VERSION "4.1.4"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -215,7 +215,7 @@ end
 
 # Probe shared by _ry_verify_static, _ry_do_check, _install_configure_services; per-site action stays local.
 function _detect_lvm --description "Return 0 (LVM present) or 1 (no LVM / sudo lapsed); sets \$_pvs_output as side channel"
-    set -g _pvs_output (command timeout 5 sudo -n pvs --noheadings 2>/dev/null | string trim --)
+    set -g _pvs_output (command timeout 10 sudo -n pvs --noheadings 2>/dev/null | string trim --)
     test -n "$_pvs_output"
 end
 
@@ -491,10 +491,17 @@ function _kill_sudo_keepalive --description "Terminate the background sudo crede
     if set -q SUDO_KEEPALIVE_PID; and test -n "$SUDO_KEEPALIVE_PID"
         # PID re-verify before kill: closes a narrow PID-reuse race window after wait/reap
         if kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
+            # pkill -P reaps descendants (sleep/sudo) so they don't orphan to init when parent fish exits.
+            if command -q pkill
+                command pkill -TERM -P $SUDO_KEEPALIVE_PID 2>/dev/null
+            end
             command kill -- $SUDO_KEEPALIVE_PID 2>/dev/null
             # SIGTERM→sleep→SIGKILL: child disowned (init reaps); closes SIGTERM-ignoring keepalive window past exit.
             command sleep 0.1 2>/dev/null
             if kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
+                if command -q pkill
+                    command pkill -KILL -P $SUDO_KEEPALIVE_PID 2>/dev/null
+                end
                 command kill -KILL -- $SUDO_KEEPALIVE_PID 2>/dev/null
             end
         end
@@ -907,6 +914,17 @@ function _validate_profile --description "Verify loaded profile has all required
         end
     end
 
+    # Tmpfile-key collision guard: reject destinations that map to the same slash→underscore key (e.g. /a/b and /a_b → _a_b).
+    set -l _seen_keys
+    for _d in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
+        set -l _k (string replace -a '/' '_' -- "$_d")
+        if contains -- "$_k" $_seen_keys
+            _err "Profile destination key collision: '$_d' maps to '$_k' (already used)"
+            return 1
+        end
+        set -a _seen_keys "$_k"
+    end
+
     return 0
 end
 
@@ -1315,11 +1333,9 @@ function _parse_systemctl_show --argument-names raw_output --description "Parse 
     end
 end
 
-# Collision-safe tmpfile key: 8-char sha256 prefix + underscored path. Prevents `/`→`_` collisions between paths.
-function _tmpfile_key --argument-names path --description "Generate collision-free filename key from destination path"
-    set -l _h (printf '%s' "$path" | command sha256sum | string split -m 1 ' ')[1]
-    set -l _p (string replace -a '/' '_' -- "$path")
-    printf '%s_%s\n' (string sub -l 8 -- $_h) "$_p"
+# Tmpfile key: slash→underscore of destination path. Collision guard lives in _validate_profile (rejects /a/b vs /a_b at load time).
+function _tmpfile_key --argument-names path --description "Generate filename key from destination path (slash→underscore)"
+    string replace -a '/' '_' -- "$path"
 end
 
 # LOGGING, MESSAGE OUTPUT, AND VERIFICATION COUNTERS
@@ -1734,7 +1750,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     if test -s "$stderr_tmp"
         set -l total_err (command wc -l < "$stderr_tmp" | string trim --)
         set -l first_lines (command head -n 5 "$stderr_tmp")
-        set -l dedup_lines (command head -n 10000 "$stderr_tmp" | LC_ALL=C command sort | command uniq -c | command sort -rn | command sed 's/^ *//')
+        set -l dedup_lines (command head -n 10000 "$stderr_tmp" | LC_ALL=C command sort | command uniq -c | command sort -rn | string trim --left)
         _log "STDERR: ($total_err lines) first: "(string join -- " | " $first_lines)" | dedup: "(string join -- " | " $dedup_lines)
         if test "$QUIET" = false
             for el in $first_lines
@@ -1959,7 +1975,7 @@ function _ry_check_network --description "Verify network connectivity and DNS re
     if command -q curl
         for _probe in https://archlinux.org https://cachyos.org https://cdn.cloudflare.com
             # fd-order: 2>&1 >/dev/null — stderr to capture pipe BEFORE stdout to /dev/null. Do NOT swap.
-            set -l _curl_err (curl -sf --max-time 5 --head "$_probe" 2>&1 >/dev/null)
+            set -l _curl_err (curl -sf --connect-timeout 3 --max-time 5 --head "$_probe" 2>&1 >/dev/null)
             if test $status -eq 0
                 _ok "Network connectivity: OK"
                 return 0
@@ -2237,6 +2253,11 @@ function _ry_validate_configs --description "Run all embedded config validators"
             echo $errs > "$val_dir/units.errors"
             exit 0
         end
+        if test (count $svc_dsts) -eq 0
+            # No service destinations in this profile — no units to validate.
+            echo $errs > "$val_dir/units.errors"
+            exit 0
+        end
         for dst in $svc_dsts
             set -l unit_key (string replace -a -- "/" "_" "$dst")
             set -l f "$content_dir/$unit_key"
@@ -2363,39 +2384,13 @@ function _ry_validate_configs --description "Run all embedded config validators"
     ' -- "$content_dir" "$val_dir" >/dev/null 2>"$val_dir/simple.stderr" &
     set -l pid_simple $last_pid
 
-    # Wait individually to capture per-phase exit status. Batch `wait` only returns last child's status.
-    wait $pid_xref
-    set -l _rc_xref $status
-    wait $pid_units
-    set -l _rc_units $status
-    wait $pid_scripts
-    set -l _rc_scripts $status
-    wait $pid_ini
-    set -l _rc_ini $status
-    wait $pid_simple
-    set -l _rc_simple $status
+    # Wait for all validation children; fish's wait does not propagate child exit status, so per-phase detection relies on the result-file-presence check below.
+    wait $pid_xref $pid_units $pid_scripts $pid_ini $pid_simple
 
-    # Map phase label → captured rc for the timeout-sentinel branch in the collect loop below
-    set -l _phase_rcs "xref=$_rc_xref" "units=$_rc_units" "scripts=$_rc_scripts" "ini=$_rc_ini" "simple=$_rc_simple"
-
-    # Merge error counts — treat missing result files as child crash (prevents false-pass)
+    # Merge error counts — treat missing result files as child crash/timeout (prevents false-pass).
     for phase in xref units scripts ini simple
-        # Lookup captured rc for this phase (timeout-sentinel distinction)
-        set -l _phase_rc ""
-        for _pr in $_phase_rcs
-            if string match -q "$phase=*" -- "$_pr"
-                set _phase_rc (string split -m1 '=' -- "$_pr")[2]
-                break
-            end
-        end
         if not test -f "$val_dir/$phase.errors"
-            # timeout(1) returns 124 on SIGTERM deadline; 137 if --kill-after's SIGKILL fired; 143 if child caught SIGTERM.
-            if contains -- "$_phase_rc" 124 137 143
-                _err "Validator '$phase' timed out after 60s (rc=$_phase_rc — not a validation failure)"
-                _log "VALIDATE_TIMEOUT: $phase rc=$_phase_rc"
-            else
-                _err "Validation child '$phase' crashed without writing results (rc=$_phase_rc)"
-            end
+            _err "Validation child '$phase' did not write results (crashed or timed out after 60s)"
             if test -s "$val_dir/$phase.stderr"
                 _log "VALIDATE_CHILD_STDERR: ($phase) "(head -n 15 "$val_dir/$phase.stderr")
             end
@@ -3389,19 +3384,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
         set -a hash_pids $last_pid
     end
 
-    # Per-pid wait captures worker rc; batch `wait $pids` masks timeout sentinels 124/137/143 (timeout vs crash).
-    set -l hash_rcs
-    for p in $hash_pids
-        wait $p
-        set -a hash_rcs $status
-    end
-    set -l _any_hash_worker_timeout false
-    for _rc in $hash_rcs
-        if contains -- "$_rc" 124 137 143
-            set _any_hash_worker_timeout true
-            break
-        end
-    end
+    wait $hash_pids
 
     for worker in (seq 1 $num_workers)
         if test -s "$hash_dir/worker_$worker.stderr"
@@ -3435,13 +3418,8 @@ function _ry_verify_static --description "Verify installed configs match embedde
             case skip
                 # Intentional skip (no expected content, file unreadable, or NM/IWD not installed)
             case ''
-                # Empty/missing result — crashed or timed out; must FAIL. rc 124/137/143 surfaces as timeout.
-                if test "$_any_hash_worker_timeout" = true
-                    _fail "  $dst: verification incomplete (hash worker timeout; worker rcs=$hash_rcs)"
-                    _log "VERIFY_STATIC_HASH_TIMEOUT: dst=$dst hash_rcs=$hash_rcs"
-                else
-                    _fail "  $dst: verification incomplete (no result from hash job)"
-                end
+                # Empty/missing result — child crashed or timed out; must FAIL.
+                _fail "  $dst: verification incomplete (no result from hash job)"
             case '*'
                 # Unexpected payload (e.g. partial write from SIGKILL'd worker); catch-all prevents silent miss.
                 _fail "  $dst: verification incomplete (unexpected result: $result)"
@@ -4617,7 +4595,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             # BOOT_TIME_TARGET optional (see _validate_profile); guard so omitting doesn't trip `test: arg expected`.
             if set -q BOOT_TIME_TARGET; and test -n "$BOOT_TIME_TARGET"
                 set -l target $BOOT_TIME_TARGET
-                set -l time_int (printf "%.0f" "$total_sec" 2>/dev/null)
+                set -l time_int (LC_ALL=C printf "%.0f" "$total_sec" 2>/dev/null)
                 if test -n "$time_int"; and test "$time_int" -lt $target
                     _ok "  Boot time under $target""s target"
                 else if test -n "$time_int"
@@ -5286,7 +5264,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         _info "  Or re-run ry-install with RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1"
         if command -q curl
             for url in https://archlinux.org/feeds/news/ https://cachyos.org/feeds/news/
-                set -l _headlines (curl -sf --max-time 5 -- "$url" 2>/dev/null \
+                set -l _headlines (curl -sf --connect-timeout 2 --max-time 5 -- "$url" 2>/dev/null \
                     | string match -ra '<title>([^<]+)</title>' \
                     | head -n 4 | tail -n 3)
                 for _h in $_headlines

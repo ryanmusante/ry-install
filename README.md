@@ -1,4 +1,4 @@
-# ry-install v4.1.4
+# ry-install v4.1.5
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
@@ -423,7 +423,7 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 | Event | Key Fields | Emitted |
 |---|---|---|
 | `header` | version, profile, mode, verbose, command | Run start |
-| `footer` | finished, mode, exit_code, pass, fail, warn; `interrupted:true` on signal exit; `cleanup_exit:true` on fish_exit fallback | Run end |
+| `footer` | mode, exit_code, pass, fail, warn; `interrupted:true` on signal exit; `cleanup_exit:true` on fish_exit fallback | Run end |
 | `ok` | data | Verification pass |
 | `fail` | data | Verification failure |
 | `warn` | data | Non-fatal issue |
@@ -445,12 +445,12 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 <summary>Sample log output</summary>
 
 ```json
-{"ts":"2026-04-19T14:23:01-0700","event":"header","version":"4.1.4","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
-{"ts":"2026-04-18T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
-{"ts":"2026-04-18T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
-{"ts":"2026-04-18T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
-{"ts":"2026-04-18T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-18T14:26:42-0700","event":"footer","finished":"2026-04-18T14:26:42-0700","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
+{"ts":"2026-04-19T14:23:01-0700","event":"header","version":"4.1.5","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-19T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
+{"ts":"2026-04-19T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
+{"ts":"2026-04-19T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
+{"ts":"2026-04-19T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
+{"ts":"2026-04-19T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
 ```
 
 </details>

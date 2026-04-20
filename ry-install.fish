@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.1.4 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.1.5 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.1.4"
+set -g VERSION "4.1.5"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -914,15 +914,24 @@ function _validate_profile --description "Verify loaded profile has all required
         end
     end
 
-    # Tmpfile-key collision guard: reject destinations that map to the same slash→underscore key (e.g. /a/b and /a_b → _a_b).
+    # Destination guard: reject literal duplicates AND slash→underscore key collisions (e.g. /a/b and /a_b → _a_b).
+    set -l _seen_dests
     set -l _seen_keys
+    set -l _seen_owners
     for _d in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
-        set -l _k (string replace -a '/' '_' -- "$_d")
-        if contains -- "$_k" $_seen_keys
-            _err "Profile destination key collision: '$_d' maps to '$_k' (already used)"
+        if contains -- "$_d" $_seen_dests
+            _err "Profile destination duplicated: '$_d' appears more than once in SYSTEM/USER/SERVICE destinations"
             return 1
         end
+        set -l _k (string replace -a '/' '_' -- "$_d")
+        set -l _idx (contains -i -- "$_k" $_seen_keys)
+        if test -n "$_idx"
+            _err "Profile destination key collision: '$_d' and '$_seen_owners[$_idx]' both map to tmpfile key '$_k'"
+            return 1
+        end
+        set -a _seen_dests "$_d"
         set -a _seen_keys "$_k"
+        set -a _seen_owners "$_d"
     end
 
     return 0

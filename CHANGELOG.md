@@ -1,5 +1,12 @@
 ry-install changelog
 
+v4.1.5  2026-04-19
+- `_validate_profile` (L917-935): destination guard split into duplicate-source check + key-collision check. Literal duplicates now emit "Profile destination duplicated: '$_d'"; slash→underscore collisions emit "'$_d' and '$_owner' both map to tmpfile key '$_k'". Prior single-branch guard misreported duplicate sources as "maps to … (already used)".
+- README: `footer` Key Fields row (L426) drops stale `finished` field removed in 4.1.3.
+- README: sample log output (L448-453) drops stale `"finished":…` footer entry; all 6 sample timestamps aligned to 2026-04-19 (header previously 04-19, body lines 04-18).
+- README: sample log header version bumped 4.1.4 → 4.1.5.
+- Known deferral: `_ry_verify_runtime` (842 L) and `_ry_verify_static` (627 L) remain monolithic pending category-split refactor across `_verify_runtime_{cmdline,hardware,modules,services,environment,wifi,files,packages,boot}` and `_verify_static_{boot,system,user,syntax,checksum}`. Tracked for 4.2.0.
+
 v4.1.4  2026-04-19
 - `_tmpfile_key` (L1337): dropped 8-char sha256 prefix from 4.1.3; returned to `string replace -a '/' '_'`. Parity restored with 8 child-side key derivations in `_ry_validate_configs` (5 jobs), `_ry_verify_static` hash worker, and `_ry_do_check` Jobs 1-2. Producer had been emitting hashed filenames while all consumers read unhashed; `--verify-static`, `--check`, and config validation now match.
 - `_validate_profile`: tmpfile-key collision guard added — rejects any two destinations whose slash→underscore keys collide (e.g. `/a/b` vs `/a_b` → `_a_b`).

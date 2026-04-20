@@ -1,4 +1,4 @@
-# ry-install v4.1.5
+# ry-install v4.1.6
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
@@ -445,7 +445,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 <summary>Sample log output</summary>
 
 ```json
-{"ts":"2026-04-19T14:23:01-0700","event":"header","version":"4.1.5","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-19T14:23:01-0700","event":"header","version":"4.1.6","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
 {"ts":"2026-04-19T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
 {"ts":"2026-04-19T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
 {"ts":"2026-04-19T14:23:12-0700","event":"progress","data":"[2/6] Packages"}

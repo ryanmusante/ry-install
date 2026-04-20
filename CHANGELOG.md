@@ -1,5 +1,9 @@
 ry-install changelog
 
+v4.1.6  2026-04-19
+- `_json_str` bug reporter (L1356), `_log` main writer (L1408), `_msg` invalid-level bug reporter (L1425), `_write_step_time` step_time writer (L1577), and top-level header writer (L5922): added `2>/dev/null` to JSONL append redirects to match `_write_footer` (L316) convention. Closes stderr-noise window under signal-triggered log rotation where `rm` races the existence-test inside `_log` (TOCTOU between `test -f "$LOG_FILE"; or return 0` and the append). All 6 JSONL writers now share the same signal-safe redirect pattern.
+- Known deferral: `_ry_verify_runtime` (842 L), `_ry_verify_static` (627 L), `_ry_do_check` (331 L), and `_ry_validate_configs` (262 L) remain monolithic pending category-split refactor across `_verify_runtime_{cmdline,hardware,modules,services,environment,wifi,files,packages,boot}`, `_verify_static_{boot,system,user,syntax,checksum}`, `_do_check_{configs,drift,hashes}`, and `_validate_configs_{xref,units,scripts,ini,simple}`. Tracked for 4.2.0.
+
 v4.1.5  2026-04-19
 - `_validate_profile` (L917-935): destination guard split into duplicate-source check + key-collision check. Literal duplicates now emit "Profile destination duplicated: '$_d'"; slash→underscore collisions emit "'$_d' and '$_owner' both map to tmpfile key '$_k'". Prior single-branch guard misreported duplicate sources as "maps to … (already used)".
 - README: `footer` Key Fields row (L426) drops stale `finished` field removed in 4.1.3.

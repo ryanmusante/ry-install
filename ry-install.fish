@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.1.5 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.1.6 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.1.5"
+set -g VERSION "4.1.6"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -1353,7 +1353,7 @@ end
 function _json_str --description "Escape a string for safe JSON embedding"
     if test (count $argv) -ne 1
         if test -f "$LOG_FILE"
-            printf '{"ts":"%s","event":"bug","data":"_json_str: expected 1 arg, got %d"}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (count $argv) >>"$LOG_FILE"
+            printf '{"ts":"%s","event":"bug","data":"_json_str: expected 1 arg, got %d"}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (count $argv) >>"$LOG_FILE" 2>/dev/null
         end
         printf '\n'
         return 1
@@ -1405,7 +1405,7 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
         end
         set data (string sub -l $cut -- "$data")"..."
     end
-    printf '{"ts":"%s","event":"%s","data":"%s"}\n' "$_ts" "$event" "$data" >>"$LOG_FILE"
+    printf '{"ts":"%s","event":"%s","data":"%s"}\n' "$_ts" "$event" "$data" >>"$LOG_FILE" 2>/dev/null
 end
 
 # Format and emit a leveled [LEVEL] message to stderr; respects NO_COLOR and logs to JSONL
@@ -1422,7 +1422,7 @@ function _msg --argument-names level --description "Format and print a leveled s
     if not contains -- "$level" $valid_levels
         echo "[BUG] _msg called with invalid level: '$level'" >&2
         if test -n "$LOG_FILE"; and test -f "$LOG_FILE"
-            printf '{"ts":"%s","event":"bug","data":"_msg called with invalid level: %s"}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (_json_str "$level") >>"$LOG_FILE"
+            printf '{"ts":"%s","event":"bug","data":"_msg called with invalid level: %s"}\n' (date '+%Y-%m-%dT%H:%M:%S%z') (_json_str "$level") >>"$LOG_FILE" 2>/dev/null
         end
         set level ERR
     end
@@ -1574,7 +1574,7 @@ function _emit_step_time --description "Log elapsed time for the previous progre
         set -l _step_elapsed (math "$_step_now - $_STEP_PREV_START")
         set -l _step_name_esc (_json_str "$_STEP_PREV_NAME")
         printf '{"ts":"%s","event":"step_time","data":"%s","elapsed_s":%d}\n' \
-            (date '+%Y-%m-%dT%H:%M:%S%z') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE"
+            (date '+%Y-%m-%dT%H:%M:%S%z') "$_step_name_esc" "$_step_elapsed" >>"$LOG_FILE" 2>/dev/null
     end
 end
 
@@ -5919,7 +5919,7 @@ end
 set -l _init_cmd (_json_str (string join -- " " (status filename) $argv))
 printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"command":"%s"}\n' \
     (date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" \
-    (test "$QUIET" = false; and echo true; or echo false) "$_init_cmd" >>"$LOG_FILE"
+    (test "$QUIET" = false; and echo true; or echo false) "$_init_cmd" >>"$LOG_FILE" 2>/dev/null
 
 # install / install-file acquire lock; read modes skip
 switch $MODE

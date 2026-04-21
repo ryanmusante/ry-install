@@ -1,4 +1,4 @@
-ry-install changelog
+# ry-install changelog
 
 v4.1.8  2026-04-20
 - `_install_packages`: dropped misleading "Synchronizing package databases..." `_info` (sync is inline in `pacman -Syu`); replaced stale "install then remove" comment with phase-4 cross-reference.

@@ -1,4 +1,4 @@
-# ry-install v4.1.6
+# ry-install v4.1.8
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
@@ -70,16 +70,16 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 
 ## Prerequisites
 
-| Requirement | Verification | Notes |
-|---|---|---|
-| CachyOS (systemd-boot, ext4) | — | Base assumption |
-| Fish 3.4+ | `fish --version` | CachyOS ships 4.5 |
-| Kernel 6.14+ | `uname -r` | ntsync, gfx1151 fixes |
-| Unrestricted sudo | `sudo -l` → `(ALL) ALL` | Required (unattended install) |
-| 2 GB root + 200 MB /boot free | `df -h / /boot` | Packages + initramfs |
-| Network connectivity | `curl -sf --head https://archlinux.org` | Package sync |
-| Current BIOS | [Beelink downloads](https://dr.bee-link.cn/) | See [Hardware Reference](#hardware-reference) |
-| paru (optional) | `command -q paru` | AUR package installation |
+| Requirement | Verification |
+|---|---|
+| CachyOS (systemd-boot, ext4) | — |
+| Fish 3.4+ | `fish --version` |
+| Kernel 6.14+ | `uname -r` |
+| Unrestricted sudo | `sudo -l` → `(ALL) ALL` |
+| 2 GB root + 200 MB /boot free | `df -h / /boot` |
+| Network connectivity | `curl -sf --head https://archlinux.org` |
+| Current BIOS | [Beelink downloads](https://dr.bee-link.cn/) |
+| paru (optional, AUR) | `command -q paru` |
 
 **Recommended pre-flight steps:**
 
@@ -150,21 +150,21 @@ Each subsection corresponds to a discrete layer of the system. All values are em
 
 | Parameter | Purpose |
 |---|---|
-| `amd_pstate=active` | Force amd_pstate_epp driver (Zen 5 native MSR CPPC; preferred-core default-on) |
-| `amdgpu.cwsr_enable=0` | Disable CWSR — gfx1151 VGPR workaround (see [Known Issues](#known-issues)) |
-| `amdgpu.ppfeaturemask=0xfffd3fff` | Bits 14, 15, 17 off (overdrive / GFXOFF / stutter) |
-| `iommu=pt` | IOMMU passthrough (preserves IRQ remapping/DMA security on APU, avoids translation overhead; no VFIO/passthrough use) |
-| `loglevel=3` | Suppress kernel info/notice messages during boot |
-| `module_blacklist=pcspkr` | Silence PC speaker beep |
-| `nowatchdog` | Disable software watchdog timers |
-| `pcie_aspm.policy=performance` | PCIe ASPM L0 always (framework intact, per-device sysfs control preserved) |
+| `amd_pstate=active` | Force amd_pstate_epp (Zen 5 native CPPC) |
+| `amdgpu.cwsr_enable=0` | gfx1151 VGPR workaround |
+| `amdgpu.ppfeaturemask=0xfffd3fff` | Disable overdrive / GFXOFF / stutter (bits 14, 15, 17) |
+| `iommu=pt` | IOMMU passthrough |
+| `loglevel=3` | Suppress kernel info/notice at boot |
+| `module_blacklist=pcspkr` | Silence PC speaker |
+| `nowatchdog` | Disable software watchdog |
+| `pcie_aspm.policy=performance` | PCIe ASPM L0 always |
 | `quiet` | Suppress kernel boot messages |
-| `rd.systemd.show_status=auto` | Show initramfs unit status only on errors |
-| `rd.udev.log_level=3` | Suppress udev info/debug messages in initramfs |
-| `split_lock_detect=off` | Disable split-lock #AC exception (gaming) |
-| `tsc=reliable` | Bypass TSC watchdog (Zen 5 TSC is invariant; avoids "marked unstable" demotion) |
+| `rd.systemd.show_status=auto` | Initramfs unit status on errors only |
+| `rd.udev.log_level=3` | Suppress udev info/debug in initramfs |
+| `split_lock_detect=off` | Disable split-lock #AC (gaming) |
+| `tsc=reliable` | Bypass TSC watchdog (Zen 5 invariant) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
-| `zswap.enabled=0` | Disable zswap (ZRAM handles compressed swap) |
+| `zswap.enabled=0` | Disable zswap (ZRAM in use) |
 
 ### Boot Loader
 
@@ -219,10 +219,10 @@ Miscellaneous kernel and userspace tuning not covered by other subsections. `cor
 | File | Setting |
 |---|---|
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (9 keys) |
-| `coredump.conf.d` | Storage=none · ProcessSizeMax=0 (disables coredump storage — Wine/Proton multi-GB dumps) |
-| `drirc` | RADV unified VRAM heap on APU |
-| `sysctl.d` | BBR+fq · tcp_fastopen=3 · tcp_notsent_lowat=128K · 10 GbE buffer tuning · vm.max_map_count=max · watermark tuning · security hardening (19 net-new tunables) |
-| `/etc/fstab` | Adds `noatime,lazytime,commit=10` to ext4 entries (modified in-place, not a managed file) |
+| `coredump.conf.d` | Storage=none · ProcessSizeMax=0 |
+| `drirc` | RADV unified VRAM heap (APU) |
+| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffers · vm.max_map_count=max · 19 net-new tunables |
+| `/etc/fstab` | `noatime,lazytime,commit=10` on ext4 (in-place) |
 
 ### Environment Variables
 
@@ -247,12 +247,12 @@ Written to `~/.config/environment.d/10-environment.conf` for systemd user sessio
 
 The following environment variables have been removed upstream and must not be re-added to `ENV_VARS`. All four have been absent from this project's history; the list exists to prevent re-introduction during future refactors or contributions.
 
-| Variable | Status | Notes |
-|---|---|---|
-| `DXVK_ASYNC` | removed | GPL (graphics pipeline library) replaced async shader compilation in DXVK 2.3+; DXVK state cache removed in 2.7 |
-| `DXVK_FRAME_RATE` | removed | Upstream removed; use MangoHud or compositor framelimit instead |
-| `WINE_FULLSCREEN_FSR` | removed | Upstream removed; FSR is handled by the game or per-title Proton config |
-| `VKD3D_FRAME_RATE` | **retained** | Still valid in VKD3D-Proton — shown here for contrast only |
+| Variable | Status |
+|---|---|
+| `DXVK_ASYNC` | removed (DXVK 2.3+ uses GPL; state cache removed in 2.7) |
+| `DXVK_FRAME_RATE` | removed (use MangoHud / compositor framelimit) |
+| `WINE_FULLSCREEN_FSR` | removed (handled by game or Proton config) |
+| `VKD3D_FRAME_RATE` | **retained** — still valid in VKD3D-Proton |
 
 ### User Configuration
 
@@ -272,7 +272,7 @@ Package operations run during the Packages phase with `--needed` for idempotency
 |---|---|---|
 | **Install** | 14 | mkinitcpio-firmware, nftables, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, libva-mesa-driver, lib32-libva-mesa-driver, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove** | 8 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
-| **AUR** | 1 | mt76-mt7925-dkms (via paru; AUR phase fails with `INSTALL_HAD_ERRORS` if paru absent) |
+| **AUR** | 1 | mt76-mt7925-dkms (paru required; phase fails if absent) |
 
 ### Masked Services
 
@@ -295,24 +295,24 @@ Package operations run during the Packages phase with `--needed` for idempotency
 
 16 files deployed via atomic writes (tmp → chmod → mv):
 
-| # | Scope | Path |
-|---|---|---|
-| 1 | System | `/boot/loader/loader.conf` |
-| 2 | System | `/etc/kernel/cmdline` |
-| 3 | System | `/etc/sdboot-manage.conf` |
-| 4 | System | `/etc/mkinitcpio.conf` |
-| 5 | System | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` |
-| 6 | System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
-| 7 | System | `/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf` |
-| 8 | System | `/etc/iwd/main.conf` |
-| 9 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
-| 10 | System | `/etc/drirc` |
-| 11 | System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
-| 12 | System | `/etc/udev/rules.d/99-nvme-rqaffinity.rules` |
-| 13 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
-| 14 | User | `~/.config/environment.d/10-environment.conf` |
-| 15 | User | `~/.config/systemd/user/ssh-agent.service` |
-| 16 | Service | `/etc/systemd/system/cpupower-epp.service` |
+| Scope | Path |
+|---|---|
+| System | `/boot/loader/loader.conf` |
+| System | `/etc/kernel/cmdline` |
+| System | `/etc/sdboot-manage.conf` |
+| System | `/etc/mkinitcpio.conf` |
+| System | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` |
+| System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
+| System | `/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf` |
+| System | `/etc/iwd/main.conf` |
+| System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
+| System | `/etc/drirc` |
+| System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
+| System | `/etc/udev/rules.d/99-nvme-rqaffinity.rules` |
+| User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
+| User | `~/.config/environment.d/10-environment.conf` |
+| User | `~/.config/systemd/user/ssh-agent.service` |
+| Service | `/etc/systemd/system/cpupower-epp.service` |
 
 ## Profiles
 
@@ -366,17 +366,17 @@ Profiles execute via `source` with the user's privileges — treat them like any
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → chmod → mv (same filesystem) |
-| fstab edits | Idempotent; validated via `findmnt --verify` before write; **no backup written** — snapshot `/etc/fstab` before first run |
-| Root detection | **Refuses to run as root** — invoke as your normal user; sudo called internally |
+| Atomic writes | tmp → chmod → mv (same FS) |
+| fstab edits | Idempotent; `findmnt --verify` before write; **no backup** — snapshot first |
+| Root detection | **Refuses to run as root** — sudo invoked internally |
 | Instance lock | Atomic mkdir, PID verification, stale reclaim |
-| Credentials | 9 sensitive flag patterns redacted in logs (`--passphrase`, `--password`, `--token`, `--key`, etc.) |
+| Credentials | 9 sensitive flag patterns redacted in logs |
 | Signal handling | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
 | Logging | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl` |
-| Boot safety | Abort on initramfs or bootloader rebuild failure |
+| Boot safety | Abort on initramfs / bootloader rebuild failure |
 | LVM-aware | Skips lvm2-monitor mask when LVM detected |
-| Orphan tracking | Manifest warns on version or profile change |
-| Source-safe | When `source`d, returns exit code via `$_RY_INSTALL_LAST_EXIT` instead of calling `exit` — safe for Fish wrapper scripts |
+| Orphan tracking | Manifest warns on version / profile change |
+| Source-safe | Returns via `$_RY_INSTALL_LAST_EXIT` instead of `exit` when sourced |
 
 ### Exit Codes
 
@@ -400,10 +400,10 @@ Shell variables that modify script behavior at runtime — distinct from the gam
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `RY_RUN_TIMEOUT` | `3600` | Positive integer seconds; wraps every `_run` call with `timeout --preserve-status --kill-after=10`. Default: 3600 (60 min). Set to `0` to explicitly disable (not recommended). |
-| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Set to `1` to acknowledge the first boot-entry wipe (`SDBOOT_REMOVE_EXISTING=yes`). Gate re-prompts if entry count grows after the initial ack. Marker: `~/ry-install/.boot-wipe-acknowledged`. |
-| `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` | unset | Set to `1` to acknowledge unattended `pacman -Syu` during the Boot phase. Without the ack, ry-install prints [archlinux.org/news](https://archlinux.org/news/) + [cachyos.org/news](https://cachyos.org/news/) RSS headlines (3 each, `curl --max-time 5`, non-blocking) and instructs the operator to run `sudo pacman -Syu` manually. Matches project rule: review news before `-Syu`. |
-| `NO_COLOR` | unset | Suppresses ANSI color per no-color.org. Also auto-detected from `TERM=dumb` and non-TTY stderr. |
+| `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). `0` = disable (not recommended). |
+| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Set `1` to ack first boot-entry wipe (`SDBOOT_REMOVE_EXISTING=yes`). Re-prompts if entry count grows. |
+| `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` | unset | Set `1` to ack unattended `pacman -Syu`. Without ack, prints arch/cachyos news headlines and skips `-Syu`. |
+| `NO_COLOR` | unset | Suppress ANSI color (also auto on `TERM=dumb` / non-TTY stderr). |
 
 ### Data Directory
 
@@ -414,7 +414,7 @@ All runtime state lives under `~/ry-install/`. The directory is created on first
 | `~/ry-install/logs/YYYY-MM-DD/` | NDJSON logs (`*.jsonl`) |
 | `~/ry-install/.lock/` | Instance guard |
 | `~/ry-install/.manifest` | Orphan tracking |
-| `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker; suppresses gate on subsequent runs. Delete to re-prompt. |
+| `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker (delete to re-prompt) |
 
 ### Log Format
 
@@ -423,7 +423,7 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 | Event | Key Fields | Emitted |
 |---|---|---|
 | `header` | version, profile, mode, verbose, command | Run start |
-| `footer` | mode, exit_code, pass, fail, warn; `interrupted:true` on signal exit; `cleanup_exit:true` on fish_exit fallback | Run end |
+| `footer` | mode, exit_code, pass, fail, warn (+ `interrupted` / `cleanup_exit` flags) | Run end |
 | `ok` | data | Verification pass |
 | `fail` | data | Verification failure |
 | `warn` | data | Non-fatal issue |
@@ -445,12 +445,12 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 <summary>Sample log output</summary>
 
 ```json
-{"ts":"2026-04-19T14:23:01-0700","event":"header","version":"4.1.6","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
-{"ts":"2026-04-19T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
-{"ts":"2026-04-19T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
-{"ts":"2026-04-19T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
-{"ts":"2026-04-19T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-19T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
+{"ts":"2026-04-20T14:23:01-0700","event":"header","version":"4.1.8","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-20T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
+{"ts":"2026-04-20T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
+{"ts":"2026-04-20T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
+{"ts":"2026-04-20T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
+{"ts":"2026-04-20T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
 ```
 
 </details>
@@ -467,12 +467,12 @@ gfx1151 is a newly-released target with active upstream churn in both the kernel
 
 | Issue | Status | Workaround |
 |---|---|---|
-| CWSR hang — incorrect VGPR count, compute-only | Userspace fix in ROCm 7.2; kernel-mode fix not yet in mainline | `amdgpu.cwsr_enable=0` (still required) |
-| MES page faults | Specific firmware revisions affected | Pin a known-good `linux-firmware` version if encountered |
-| ROCm VRAM allocation | Fixed in kernel 6.16+ | GTT handled automatically — no `ttm.pages_limit` or `amdgpu.gttsize` needed |
-| PSR freeze (eDP only) | Open | `amdgpu.dcdebugmask=0x10` (not needed for HDMI/DP) |
-| Black screen | Reported kernel-version-specific regressions | Downgrade or upgrade as advised |
-| ROCm compute | Requires env vars | `HSA_ENABLE_SDMA=0` and `HSA_OVERRIDE_GFX_VERSION=11.5.1` |
+| CWSR hang (VGPR count, compute) | Userspace fix in ROCm 7.2; kernel fix pending | `amdgpu.cwsr_enable=0` |
+| MES page faults | Firmware-revision specific | Pin known-good `linux-firmware` |
+| ROCm VRAM allocation | Fixed in kernel 6.16+ | None — GTT auto-handled |
+| PSR freeze (eDP only) | Open | `amdgpu.dcdebugmask=0x10` |
+| Black screen | Kernel-version regressions | Downgrade / upgrade |
+| ROCm compute | Requires env vars | `HSA_ENABLE_SDMA=0`, `HSA_OVERRIDE_GFX_VERSION=11.5.1` |
 
 ### MediaTek MT7925 WiFi
 
@@ -480,8 +480,8 @@ The in-tree `mt76` driver has known stability bugs specific to the MT7925 revisi
 
 | Issue | Status | Workaround |
 |---|---|---|
-| Kernel panics (NULL deref in `mt792x_mac_reset_work`) | Driver bug | `paru -S mt76-mt7925-dkms` |
-| TX power reported as 3 dBm | Cosmetic — actual TX follows regulatory limits; kernel patches pending | None (cosmetic) |
+| Kernel panics (NULL deref `mt792x_mac_reset_work`) | Driver bug | `paru -S mt76-mt7925-dkms` |
+| TX power reported as 3 dBm | Cosmetic; kernel patches pending | None |
 | Random deauthentication | Intermittent | None |
 
 ### NetworkManager + iwd
@@ -501,17 +501,17 @@ Start with `--verify-static` and `--verify-runtime` to confirm whether the issue
 | Problem | Diagnostic / Fix |
 |---|---|
 | GPU perf level stuck | `cat /sys/class/drm/card*/device/power_dpm_force_performance_level` |
-| WiFi backend mismatch | `grep wifi.backend /etc/NetworkManager/conf.d/99-cachyos-nm.conf; and pgrep -x iwd` (expect both) |
+| WiFi backend mismatch | `grep wifi.backend /etc/NetworkManager/conf.d/99-cachyos-nm.conf; and pgrep -x iwd` |
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
-| FSR4 on RDNA 3.5 | Per-game: `PROTON_FSR4_RDNA3_UPGRADE=1 %command%` (proton-cachyos / GE-Proton 10-9+) |
-| Profile load failure | `./ry-install.fish --verify-static` reports missing globals (`--check` is silent — QUIET=true); verify file ownership: `stat -c '%U' ~/.config/ry-install/profiles/*.fish` |
-| Stale lock | `rm -rf ~/ry-install/.lock/` (only if no other ry-install process is running: `pgrep -af ry-install`) |
-| Manifest version mismatch | Expected after upgrade — script warns but does not block; re-run install to refresh manifest |
-| AUR pkg not installed | `command -q paru; or sudo pacman -S --needed paru` then re-run install |
-| Sudo cache expiry mid-run | Re-run with fresh sudo: `sudo -v; and ./ry-install.fish` |
-| `drirc` XML rejected by Mesa | `cat /etc/drirc` and validate with `xmllint --noout /etc/drirc` |
-| `--verify-static` reports drift | Re-deploy single file: `./ry-install.fish --install-file /etc/...` |
+| FSR4 on RDNA 3.5 | Per-game: `PROTON_FSR4_RDNA3_UPGRADE=1 %command%` |
+| Profile load failure | `--verify-static` reports missing globals; verify ownership: `stat -c '%U' ~/.config/ry-install/profiles/*.fish` |
+| Stale lock | `rm -rf ~/ry-install/.lock/` (only if no `pgrep -af ry-install`) |
+| Manifest version mismatch | Expected post-upgrade — re-run install to refresh |
+| AUR pkg not installed | `command -q paru; or sudo pacman -S --needed paru` then re-run |
+| Sudo cache expiry mid-run | `sudo -v; and ./ry-install.fish` |
+| `drirc` XML rejected | `xmllint --noout /etc/drirc` |
+| `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
 
 ## References
 

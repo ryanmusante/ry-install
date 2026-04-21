@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.1.6 (2026-04-19) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.1.8 (2026-04-20) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.1.6"
+set -g VERSION "4.1.8"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -1840,7 +1840,7 @@ UTILITIES:
   --install-file <path>  Re-deploy a single managed file
 
 OPTIONS:
-  --                End of options (remaining arguments ignored)
+  --                End of options (positional args after `--` are rejected with exit 2)
   -h, --help        Show this help
   -v, --version     Show version
 
@@ -1855,6 +1855,7 @@ ENVIRONMENT:
   RY_RUN_TIMEOUT=<seconds>    Wall-clock limit for each _run. Default 3600. 0=disable.
   RY_INSTALL_CONFIRM_BOOT_WIPE=1    One-time ack for SDBOOT_REMOVE_EXISTING=yes.
   RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1    Ack for unattended pacman -Syu (review arch/cachy news first).
+  NO_COLOR=1    Suppress ANSI color (also auto on TERM=dumb / non-TTY stderr).
 
 Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ.jsonl
 See README.md for full reference.
@@ -4758,10 +4759,7 @@ function _install_packages --description "Install managed packages via pacman -S
     set -l _fn_err false
     _progress Packages
     _echo
-    _info "Synchronizing package databases..."
-
-    _echo
-    # Install missing packages, then remove unwanted ones
+    # Install missing packages (PKGS_DEL removal: phase 4 in _install_configure_services); `pacman -Syu` below syncs DB inline (no separate -Sy step).
     _info "Package installation..."
 
     set -l pkgs_to_install $PKGS_ADD
@@ -4975,6 +4973,8 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         return 1
     end
     sudo rm -f -- "$tmpfstab" 2>/dev/null
+    # Deregister deleted tmpfstab from cleanup list (cleanup `rm -f` is idempotent, but list should not grow stale).
+    set _TRACKED_TMPFILES (string match -v -- "$tmpfstab" $_TRACKED_TMPFILES)
     set tmpfstab "$tmpfstab2"
 
     # Preserve /etc/fstab mode+own — tmpfstab2 sudo-mktemp 0600 root:root; mv else regresses 0644→0600.
@@ -5193,7 +5193,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     end
 
     # 1. At least one vmlinuz must exist
-    set -l vmlinuz_files (sudo find "$_esp" -maxdepth 1 -name 'vmlinuz-*' -type f 2>/dev/null)
+    set -l vmlinuz_files (sudo find "$_esp" -maxdepth 1 -name 'vmlinuz-*' -type f -print0 2>/dev/null | string split0)
     if test (count $vmlinuz_files) -eq 0
         _err "No vmlinuz found in $_esp/"
         set errors (math $errors + 1)
@@ -5208,7 +5208,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     end
 
     # 2. Every initramfs must be non-zero
-    set -l initrd_files (sudo find "$_esp" -maxdepth 1 -name 'initramfs-*.img' -type f 2>/dev/null)
+    set -l initrd_files (sudo find "$_esp" -maxdepth 1 -name 'initramfs-*.img' -type f -print0 2>/dev/null | string split0)
     for f in $initrd_files
         sudo test -s "$f" 2>/dev/null
         if test $status -ne 0
@@ -5218,7 +5218,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     end
 
     # 3. At least one boot entry .conf must reference an existing kernel
-    set -l confs (sudo find "$_esp/loader/entries" -maxdepth 1 -name '*.conf' -type f 2>/dev/null)
+    set -l confs (sudo find "$_esp/loader/entries" -maxdepth 1 -name '*.conf' -type f -print0 2>/dev/null | string split0)
     if test (count $confs) -eq 0
         _err "No boot loader entries in $_esp/loader/entries/"
         set errors (math $errors + 1)

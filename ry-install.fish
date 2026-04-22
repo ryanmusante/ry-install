@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.1.14 (2026-04-21) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.1.15 (2026-04-22) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.1.14"
+set -g VERSION "4.1.15"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -1151,7 +1151,7 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
             for key in $LOGIND_IGNORE_KEYS
                 if test "$key" = HandleSecureAttentionKey
                     set -l _sd_ver (systemctl --version 2>/dev/null \
-                        | head -n 1 | string match -r -- '\d+' | head -n 1)
+                        | head -n 1 | string match -r -- '\d+')
                     if test -z "$_sd_ver"; or test "$_sd_ver" -lt 256
                         continue
                     end
@@ -1959,7 +1959,7 @@ function _ry_check_deps --description "Verify required packages are installed"
         return 1
     end
 
-    set -l systemd_ver (systemctl --version 2>/dev/null | head -n 1 | string match -r -- '\d+' | head -n 1)
+    set -l systemd_ver (systemctl --version 2>/dev/null | head -n 1 | string match -r -- '\d+')
     # systemd 250+: required for environment.d, systemd-analyze verify --user
     if test -n "$systemd_ver"; and test "$systemd_ver" -lt 250
         _warn "Systemd version $systemd_ver detected; some features require 250+"
@@ -2502,7 +2502,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     end
 
     set -l dst_dir (dirname -- "$dst")
-    # Parent-dir trust: must exist, be a real directory (not symlink), root-owned (uid 0), not group/world-writable.
+    # Parent-dir trust: must exist, be a real dir (not symlink), expected-uid-owned, not group/world-writable. sudo branch: uid=0. non-sudo branch: uid=$_MY_UID.
     if test "$use_sudo" = true
         set -l _dir_stat (LC_ALL=C sudo stat -c '%F %u %a' -- "$dst_dir" 2>/dev/null)
         if test -z "$_dir_stat"
@@ -2513,7 +2513,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         set -l _dir_type "$_dir_fields[1]"
         set -l _dir_uid "$_dir_fields[2]"
         set -l _dir_mode "$_dir_fields[3]"
-        # %F reports 'directory' for real dirs. `sudo stat` follows symlinks, so `sudo test -L` is still needed.
+        # %F reports 'directory' for real dirs; `sudo stat` follows symlinks so `sudo test -L` is still needed.
         if test "$_dir_type" != directory
             _fail "→ $dst (parent dir not a regular directory: type=$_dir_type $dst_dir)"
             return 1
@@ -2527,6 +2527,33 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
             return 1
         end
         # Reject if group or world writable (canonical helper — see _dir_group_or_world_writable)
+        if _dir_group_or_world_writable "$_dir_mode"
+            _fail "→ $dst (parent dir group/world writable: mode=$_dir_mode)"
+            return 1
+        end
+    else
+        # Non-sudo symmetric check: USER_DESTINATIONS parent must be owned by invoking user ($_MY_UID); stat follows symlinks so explicit test -L catches dst_dir-is-symlink.
+        set -l _dir_stat (LC_ALL=C stat -c '%F %u %a' -- "$dst_dir" 2>/dev/null)
+        if test -z "$_dir_stat"
+            _fail "→ $dst (parent dir missing or unreadable: $dst_dir)"
+            return 1
+        end
+        set -l _dir_fields (string split ' ' -- "$_dir_stat")
+        set -l _dir_type "$_dir_fields[1]"
+        set -l _dir_uid "$_dir_fields[2]"
+        set -l _dir_mode "$_dir_fields[3]"
+        if test "$_dir_type" != directory
+            _fail "→ $dst (parent dir not a regular directory: type=$_dir_type $dst_dir)"
+            return 1
+        end
+        if test -L "$dst_dir"
+            _fail "→ $dst (parent dir is a symlink: $dst_dir)"
+            return 1
+        end
+        if test "$_dir_uid" != $_MY_UID
+            _fail "→ $dst (parent dir not owned by uid=$_MY_UID: uid=$_dir_uid)"
+            return 1
+        end
         if _dir_group_or_world_writable "$_dir_mode"
             _fail "→ $dst (parent dir group/world writable: mode=$_dir_mode)"
             return 1
@@ -2707,8 +2734,6 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
         _err "_ry_install_file: expected 2 args (dst use_sudo), got "(count $argv)
         return 1
     end
-    set -l dst $argv[1]
-    set -l use_sudo $argv[2]
 
     # lazy-cache iwd skip state — first call probes, subsequent calls hit cache
     if not set -q _RY_SKIP_IWD_CACHED
@@ -4463,11 +4488,12 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     set -l nm_conn_dir /etc/NetworkManager/system-connections
     if test -d "$nm_conn_dir"
         set -l conn_files (sudo -n find "$nm_conn_dir" -maxdepth 1 -name '*.nmconnection' -type f -print0 2>/dev/null | string split0)
-        if test -n "$conn_files"
+        if test (count $conn_files) -gt 0
             set -l bad_perms 0
             for conn_file in $conn_files
-                set -l perms (sudo -n stat -c '%a' -- "$conn_file" 2>/dev/null)
-                set -l owner (sudo -n stat -c '%U:%G' -- "$conn_file" 2>/dev/null)
+                set -l _po (sudo -n stat -c '%a %U:%G' -- "$conn_file" 2>/dev/null)
+                set -l perms (string split ' ' -- "$_po")[1]
+                set -l owner (string split ' ' -- "$_po")[2]
                 if test "$perms" != 600; or test "$owner" != "root:root"
                     _fail "  $conn_file: $perms $owner (expected: 600 root:root)"
                     set bad_perms (math $bad_perms + 1)
@@ -4517,8 +4543,9 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
                 continue
             end
             set perm_checked (math $perm_checked + 1)
-            set -l perms (sudo -n stat -c '%a' -- "$dst" 2>/dev/null)
-            set -l owner (sudo -n stat -c '%U:%G' -- "$dst" 2>/dev/null)
+            set -l _po (sudo -n stat -c '%a %U:%G' -- "$dst" 2>/dev/null)
+            set -l perms (string split ' ' -- "$_po")[1]
+            set -l owner (string split ' ' -- "$_po")[2]
             set -l expected_perms 644
             if test "$perms" != "$expected_perms"; or test "$owner" != "root:root"
                 _fail "  $dst: $perms $owner (expected: $expected_perms root:root)"
@@ -4530,8 +4557,9 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     for dst in $USER_DESTINATIONS
         if test -f "$dst"
             set perm_checked (math $perm_checked + 1)
-            set -l perms (stat -c '%a' -- "$dst" 2>/dev/null)
-            set -l owner (stat -c '%U:%G' -- "$dst" 2>/dev/null)
+            set -l _po (stat -c '%a %U:%G' -- "$dst" 2>/dev/null)
+            set -l perms (string split ' ' -- "$_po")[1]
+            set -l owner (string split ' ' -- "$_po")[2]
             if test "$perms" != 600; or test "$owner" != "$expected_owner"
                 _fail "  $dst: $perms $owner (expected: 600 $expected_owner)"
                 set perm_bad (math $perm_bad + 1)
@@ -4557,8 +4585,9 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         set -a checked_dirs "$dir"
         if sudo -n test -d "$dir" 2>/dev/null
             set dir_checked (math $dir_checked + 1)
-            set -l perms (sudo -n stat -c '%a' -- "$dir" 2>/dev/null)
-            set -l owner (sudo -n stat -c '%U:%G' -- "$dir" 2>/dev/null)
+            set -l _po (sudo -n stat -c '%a %U:%G' -- "$dir" 2>/dev/null)
+            set -l perms (string split ' ' -- "$_po")[1]
+            set -l owner (string split ' ' -- "$_po")[2]
             # parent-dir mode parse — strip leading on len>3, floor(n/2)%2 verified for 755/775/757/1755/4755
             if test "$owner" != "root:root"
                 _fail "  $dir: $perms $owner (expected: root:root)"
@@ -5016,6 +5045,9 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         _fail "  /etc/fstab: atomic move failed"
         return 1
     end
+
+    # Deregister tmpfstab (aliased to tmpfstab2 at L4987) from cleanup list — mv consumed it; symmetric with L4985-4986.
+    set _TRACKED_TMPFILES (string match -v -- "$tmpfstab" $_TRACKED_TMPFILES)
 
     _ok "  /etc/fstab: noatime,lazytime,commit=10 applied to ext4 entries"
     _log "FSTAB_OPTS: noatime,lazytime,commit=10 applied"

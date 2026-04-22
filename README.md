@@ -1,48 +1,46 @@
-# ry-install v4.1.14
+# ry-install
 
-Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
+[![version](https://img.shields.io/badge/version-4.1.15-blue.svg)](CHANGELOG.md)
+[![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.4-4aae46.svg)](https://fishshell.com/)
+[![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.18.4-orange.svg)](https://www.kernel.org/)
+[![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+> Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
 **Default profile:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware Reference](#hardware-reference).
 
-[Changelog](CHANGELOG.md)
+---
 
 ## Table of Contents
 
-1. [Quick Start](#quick-start)
-2. [Scope](#scope)
-3. [Prerequisites](#prerequisites)
-4. [Hardware Reference](#hardware-reference)
-5. [Usage](#usage)
-6. [Install Flow](#install-flow)
-7. [Configuration Reference](#configuration-reference)
-   - [Kernel Parameters](#kernel-parameters)
-   - [Boot Loader](#boot-loader)
-   - [Initramfs](#initramfs)
-   - [System Services](#system-services)
-   - [Network Stack](#network-stack)
-   - [System Tuning](#system-tuning)
-   - [Environment Variables](#environment-variables)
-   - [User Configuration](#user-configuration)
-   - [Packages](#packages)
-   - [Masked Services](#masked-services)
-8. [Managed Files](#managed-files)
-9. [Profiles](#profiles)
-   - [Required Globals](#required-globals)
-   - [Example Profile](#example-profile)
-   - [Profile Trust Model](#profile-trust-model)
-10. [Safety & Reliability](#safety--reliability)
-    - [Exit Codes](#exit-codes)
-    - [Environment Variables](#environment-variables-1)
-    - [Data Directory](#data-directory)
-    - [Log Format](#log-format)
-11. [Uninstall](#uninstall)
-12. [Known Issues](#known-issues)
-    - [Strix Halo GPU (gfx1151)](#strix-halo-gpu-gfx1151)
-    - [MediaTek MT7925 WiFi](#mediatek-mt7925-wifi)
-    - [NetworkManager + iwd](#networkmanager--iwd)
-13. [Troubleshooting](#troubleshooting)
-14. [References](#references)
-15. [License](#license)
+- [Quick Start](#quick-start)
+- [Scope](#scope)
+- [Prerequisites](#prerequisites)
+- [Hardware Reference](#hardware-reference)
+- [Usage](#usage)
+- [Install Flow](#install-flow)
+- [Configuration Reference](#configuration-reference)
+  - [Kernel Parameters](#kernel-parameters)
+  - [Boot Loader](#boot-loader)
+  - [Initramfs](#initramfs)
+  - [System Services](#system-services)
+  - [Network Stack](#network-stack)
+  - [System Tuning](#system-tuning)
+  - [Environment Variables](#environment-variables)
+  - [User Configuration](#user-configuration)
+  - [Packages](#packages)
+  - [Masked Services](#masked-services)
+- [Managed Files](#managed-files)
+- [Profiles](#profiles)
+- [Safety & Reliability](#safety--reliability)
+- [Uninstall](#uninstall)
+- [Known Issues](#known-issues)
+- [Troubleshooting](#troubleshooting)
+- [References](#references)
+- [License](#license)
+
+---
 
 ## Quick Start
 
@@ -60,6 +58,7 @@ git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
 
 Typical first-run duration: **3–8 minutes** (depends on package mirror speed and initramfs rebuild).
 
+> [!NOTE]
 > **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until your next reboot. On ethernet, run `sudo systemctl restart NetworkManager` once to apply immediately.
 
 ## Scope
@@ -146,7 +145,10 @@ Each subsection corresponds to a discrete layer of the system. All values are em
 
 ### Kernel Parameters
 
-15 parameters written to `/etc/kernel/cmdline`:
+15 parameters written to `/etc/kernel/cmdline`.
+
+<details>
+<summary><b>Show parameter table (15)</b></summary>
 
 | Parameter | Purpose |
 |---|---|
@@ -165,6 +167,8 @@ Each subsection corresponds to a discrete layer of the system. All values are em
 | `tsc=reliable` | Bypass TSC watchdog (Zen 5 invariant) |
 | `usbcore.autosuspend=-1` | Disable USB autosuspend |
 | `zswap.enabled=0` | Disable zswap (ZRAM in use) |
+
+</details>
 
 ### Boot Loader
 
@@ -228,6 +232,9 @@ Miscellaneous kernel and userspace tuning not covered by other subsections. `cor
 
 Written to `~/.config/environment.d/10-environment.conf` for systemd user session pickup. All debug logging is silenced by default; re-enable selectively (`DXVK_LOG_LEVEL`, `VKD3D_DEBUG`, `WINEDEBUG`) only when diagnosing driver or shader issues — they generate significant volume under normal play.
 
+<details>
+<summary><b>Show 13 environment variables</b></summary>
+
 | Variable | Value |
 |---|---|
 | `DXVK_LOG_LEVEL` | `none` |
@@ -244,7 +251,10 @@ Written to `~/.config/environment.d/10-environment.conf` for systemd user sessio
 | `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |
 
-#### Deprecated flags — DO NOT re-introduce
+</details>
+
+<details>
+<summary><b>Deprecated flags — DO NOT re-introduce</b></summary>
 
 The following environment variables have been removed upstream and must not be re-added to `ENV_VARS`. All four have been absent from this project's history; the list exists to prevent re-introduction during future refactors or contributions.
 
@@ -255,7 +265,10 @@ The following environment variables have been removed upstream and must not be r
 | `WINE_FULLSCREEN_FSR` | removed (handled by game or Proton config) |
 | `VKD3D_FRAME_RATE` | **retained** — still valid in VKD3D-Proton |
 
-#### Per-game tuning
+</details>
+
+<details>
+<summary><b>Per-game tuning</b></summary>
 
 Variables unsafe as global defaults but useful per-title. Apply in Steam → right-click game → Properties → Launch Options, prefixed before `%command%`.
 
@@ -265,6 +278,8 @@ Variables unsafe as global defaults but useful per-title. Apply in Steam → rig
 | `DISABLE_LAYER_MESA_ANTI_LAG=1` | Games that crash under the anti-lag layer | No benefit; diagnostic-only |
 | `PROTON_NO_WM_DECORATION=0` | Game needs WM decorations (overrides global `=1`) | Borderless-fullscreen may regress |
 | `PROTON_FSR4_RDNA3_UPGRADE=1` | Force FSR4 on RDNA 3.5 (gfx1151) | Image quality varies per title |
+
+</details>
 
 ### User Configuration
 
@@ -290,6 +305,9 @@ Package operations run during the Packages phase with `--needed` for idempotency
 
 10 units masked — **review before running on laptops:**
 
+<details>
+<summary><b>Show masked services (10)</b></summary>
+
 | Service | Reason |
 |---|---|
 | `ananicy-cpp.service` | Manual tuning preferred |
@@ -303,9 +321,14 @@ Package operations run during the Packages phase with `--needed` for idempotency
 | `hybrid-sleep.target` | Desktop — no hybrid sleep |
 | `suspend-then-hibernate.target` | Desktop — no suspend-then-hibernate |
 
+</details>
+
 ## Managed Files
 
 16 files deployed via atomic writes (tmp → chmod → mv):
+
+<details>
+<summary><b>Show all 16 managed destinations</b></summary>
 
 | Scope | Path |
 |---|---|
@@ -326,6 +349,8 @@ Package operations run during the Packages phase with `--needed` for idempotency
 | User | `~/.config/systemd/user/ssh-agent.service` |
 | Service | `/etc/systemd/system/cpupower-epp.service` |
 
+</details>
+
 ## Profiles
 
 External profiles live at `~/.config/ry-install/profiles/<n>.fish` and define `function _ry_profile_<n>` with all required globals. Resolution: `~/.config/ry-install/default-profile` (single line: profile name) → `gtr9_pro` (hardcoded fallback). Legacy `profile_<n>` naming accepted with a deprecation warning; syntax and name-consistency validated before sourcing.
@@ -334,7 +359,8 @@ External profiles live at `~/.config/ry-install/profiles/<n>.fish` and define `f
 echo my_desktop > ~/.config/ry-install/default-profile
 ```
 
-### Required Globals
+<details>
+<summary><b>Required Globals</b></summary>
 
 **26 unconditional** — preflight fails and reports the variable name if any are missing:
 
@@ -352,7 +378,10 @@ echo my_desktop > ~/.config/ry-install/default-profile
 
 **Optional** (unset-safe): `PKGS_DEL`, `AUR_PKGS`, `BOOT_TIME_TARGET`, `EXPECTED_CPU_MATCH`, `MKINITCPIO_COMPRESSION_OPTIONS`, `EXPECTED_VULKAN_PKGS`.
 
-### Example Profile
+</details>
+
+<details>
+<summary><b>Example Profile</b></summary>
 
 Save as `~/.config/ry-install/profiles/my_desktop.fish`:
 
@@ -370,15 +399,16 @@ end
 
 Run `--verify-static` and `--verify-runtime` before first use.
 
-### Profile Trust Model
+</details>
 
-Profiles execute via `source` with the user's privileges — treat them like any shell script. Only use profiles from trusted sources; verify ownership with `stat -c '%U' ~/.config/ry-install/profiles/*.fish`. No sandboxing — a malicious profile can do anything your account can.
+> [!WARNING]
+> **Profile Trust Model.** Profiles execute via `source` with the user's privileges — treat them like any shell script. Only use profiles from trusted sources; verify ownership with `stat -c '%U' ~/.config/ry-install/profiles/*.fish`. No sandboxing — a malicious profile can do anything your account can.
 
 ## Safety & Reliability
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → chmod → mv (same FS) |
+| Atomic writes | tmp → chmod → mv (same FS); parent-dir trust checks (root-owned or uid=$UID, not symlink, not group/world-writable) |
 | fstab edits | Idempotent; `findmnt --verify` before write; **no backup** — snapshot first |
 | Root detection | **Refuses to run as root** — sudo invoked internally |
 | Instance lock | Atomic mkdir, PID verification, stale reclaim |
@@ -390,7 +420,8 @@ Profiles execute via `source` with the user's privileges — treat them like any
 | Orphan tracking | Manifest warns on version / profile change |
 | Source-safe | Returns via `$_RY_INSTALL_LAST_EXIT` instead of `exit` when sourced |
 
-### Exit Codes
+<details>
+<summary><b>Exit Codes</b></summary>
 
 Codes are designed for scripting — non-zero always means something actionable. Code `10` is exclusive to `--check` (drift detected) and will never appear during a full install run; code `1` during install indicates a non-critical failure that did not abort the run.
 
@@ -406,7 +437,10 @@ Codes are designed for scripting — non-zero always means something actionable.
 | `129/130/131/143` | Signal (HUP / INT / QUIT / TERM) |
 | `141` | SIGPIPE |
 
-### Environment Variables
+</details>
+
+<details>
+<summary><b>Environment Variables (script behavior)</b></summary>
 
 Shell variables that modify script behavior at runtime — distinct from the gaming/Proton variables written to the system. Set them in the invoking shell before running; they are not persisted anywhere by the installer.
 
@@ -417,7 +451,10 @@ Shell variables that modify script behavior at runtime — distinct from the gam
 | `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` | unset | Set `1` to ack unattended `pacman -Syu`. Without ack, prints arch/cachyos news headlines and skips `-Syu`. |
 | `NO_COLOR` | unset | Suppress ANSI color (also auto on `TERM=dumb` / non-TTY stderr). |
 
-### Data Directory
+</details>
+
+<details>
+<summary><b>Data Directory</b></summary>
 
 All runtime state lives under `~/ry-install/`. The directory is created on first run and persists across installs. Logs accumulate per-day and are not pruned automatically — use `jq` against the NDJSON files for post-run analysis.
 
@@ -428,7 +465,10 @@ All runtime state lives under `~/ry-install/`. The directory is created on first
 | `~/ry-install/.manifest` | Orphan tracking |
 | `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker (delete to re-prompt) |
 
-### Log Format
+</details>
+
+<details>
+<summary><b>Log Format</b></summary>
 
 Every mode writes structured NDJSON. Each line is a self-contained JSON object with a `ts` (ISO 8601) field.
 
@@ -453,16 +493,15 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 
 Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
-<details>
-<summary>Sample log output</summary>
+**Sample log output:**
 
 ```json
-{"ts":"2026-04-21T14:23:01-0700","event":"header","version":"4.1.14","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
-{"ts":"2026-04-21T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
-{"ts":"2026-04-21T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
-{"ts":"2026-04-21T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
-{"ts":"2026-04-21T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-21T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
+{"ts":"2026-04-22T14:23:01-0700","event":"header","version":"4.1.15","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-22T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
+{"ts":"2026-04-22T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
+{"ts":"2026-04-22T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
+{"ts":"2026-04-22T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
+{"ts":"2026-04-22T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
 ```
 
 </details>
@@ -473,7 +512,8 @@ ry-install ships no automated uninstaller. `~/ry-install/.manifest` lists every 
 
 ## Known Issues
 
-### Strix Halo GPU (gfx1151)
+<details>
+<summary><b>Strix Halo GPU (gfx1151)</b></summary>
 
 gfx1151 is a newly-released target with active upstream churn in both the kernel and Mesa. Expect regressions to land and get fixed within weeks — track the linux-cachyos changelog and the Mesa gfx1151 issue tracker before any driver or kernel upgrade.
 
@@ -486,7 +526,10 @@ gfx1151 is a newly-released target with active upstream churn in both the kernel
 | Black screen | Kernel-version regressions | Downgrade / upgrade |
 | ROCm compute | Requires env vars | `HSA_ENABLE_SDMA=0`, `HSA_OVERRIDE_GFX_VERSION=11.5.1` |
 
-### MediaTek MT7925 WiFi
+</details>
+
+<details>
+<summary><b>MediaTek MT7925 WiFi</b></summary>
 
 The in-tree `mt76` driver has known stability bugs specific to the MT7925 revision. The `mt76-mt7925-dkms` AUR package carries out-of-tree patches ahead of mainline merge and should be the first remediation step. If instability persists, an Intel AX210 or AX211 is a well-tested drop-in alternative.
 
@@ -496,7 +539,10 @@ The in-tree `mt76` driver has known stability bugs specific to the MT7925 revisi
 | TX power reported as 3 dBm | Cosmetic; kernel patches pending | None |
 | Random deauthentication | Intermittent | None |
 
-### NetworkManager + iwd
+</details>
+
+<details>
+<summary><b>NetworkManager + iwd</b></summary>
 
 These issues are specific to the NM + iwd combination and do not affect wpa_supplicant setups. The boot connectivity failure in particular is intermittent and usually self-resolves after a radio cycle; it does not indicate a misconfigured backend.
 
@@ -505,6 +551,8 @@ These issues are specific to the NM + iwd combination and do not affect wpa_supp
 | Boot connectivity failure | `nmcli radio wifi off && nmcli radio wifi on` |
 | WPA2/3 Enterprise GUI broken with iwd | Use CLI or switch to wpa_supplicant |
 | Monitor mode requires full reboot | Reboot |
+
+</details>
 
 ## Troubleshooting
 
@@ -540,4 +588,4 @@ Upstream sources for hardware quirks, driver status, and the Arch/CachyOS config
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © 2026 Ryan Musante

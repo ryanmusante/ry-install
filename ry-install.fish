@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.1.13 (2026-04-21) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.1.14 (2026-04-21) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.1.13"
+set -g VERSION "4.1.14"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -32,10 +32,12 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
     set -g _RY_INSTALL_LAST_EXIT $code
     # Always run namespace cleanup before exit/return (defense-in-depth for fish exit-as-return-from-source).
     set -g _RY_INSTALL_BAILING true
+    # Capture source-state into local BEFORE cleanup — _RY_INSTALL_SOURCED (L16/L18) is set after _RY_PRE_GLOBALS snapshot (L12), so cleanup erases it.
+    set -l _was_sourced "$_RY_INSTALL_SOURCED"
     # Erase signal/exit handlers so host-fish Ctrl+C/SIGPIPE/exit does not fire into dead script context.
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
     _ry_namespace_cleanup bail
-    if test "$_RY_INSTALL_SOURCED" = true
+    if test "$_was_sourced" = true
         return $code
     end
     exit $code
@@ -43,7 +45,7 @@ end
 
 # Erase script-set globals, preserve caller-API vars. mode=bail keeps _RY_INSTALL_BAILING for sentinel propagation.
 function _ry_namespace_cleanup --argument-names mode --description "Erase script-set globals; preserve caller-API"
-    # HOME preserved: populated at L104-108 when sourced with empty $HOME (containers/cron/systemd --user).
+    # HOME preserved: the HOME-resolution block below populates it from getent passwd when $HOME is empty (containers/cron/systemd --user).
     set -l _preserve _RY_INSTALL_LAST_EXIT HOME
     test "$mode" = bail; and set -a _preserve _RY_INSTALL_BAILING
     # Copy snapshot to local — _RY_PRE_GLOBALS is post-snapshot, so the loop would erase it mid-iteration.
@@ -166,7 +168,7 @@ set -g NM_RESTART_DELAY 3
 
 # Kernel version globals for _ntsync_state ≥6.14 gate
 set -g KVER (uname -r)
-set -g KVER_PARTS (string split '.' -- $KVER)
+set -g KVER_PARTS (string split '.' -- "$KVER")
 set -g KVER_MAJOR $KVER_PARTS[1]
 # Preflight-fail on unparseable uname -r
 if not string match -qr '^\d+$' -- "$KVER_MAJOR"
@@ -216,8 +218,8 @@ function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_
 end
 
 # Probe shared by _ry_verify_static, _ry_do_check, _install_configure_services; per-site action stays local.
-function _detect_lvm --description "Return 0 (LVM present) or 1 (no LVM / sudo lapsed); sets \$_pvs_output as side channel"
-    set -g _pvs_output (command timeout 10 sudo -n pvs --noheadings 2>/dev/null | string trim --)
+function _detect_lvm --description "Return 0 (LVM present) or 1 (no LVM / sudo lapsed)"
+    set -l _pvs_output (command timeout 10 sudo -n pvs --noheadings 2>/dev/null | string trim --)
     test -n "$_pvs_output"
 end
 
@@ -434,7 +436,12 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
             command rm -f -- "$LOG_FILE" 2>/dev/null
             return 1
         end
-        printf '%s\n' $fish_pid >"$LOCK_FILE"
+        if not printf '%s\n' $fish_pid >"$LOCK_FILE" 2>/dev/null
+            command rmdir -- "$LOCK_DIR" 2>/dev/null
+            echo "[ERR] Failed to write lock pid file after reclaim: $LOCK_FILE" >&2
+            command rm -f -- "$LOG_FILE" 2>/dev/null
+            return 1
+        end
         # Yield to let any concurrent reclaimer finish writing, then double-verify ownership
         command sleep 0.1 2>/dev/null; or true
     end
@@ -1119,7 +1126,7 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
         case "/boot/loader/loader.conf"
             printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 
-        case /etc/kernel/cmdline
+        case "/etc/kernel/cmdline"
             if test -z "$_ROOT_UUID"
                 _err "_ry_get_file_content: root UUID not cached (_load_profile may not have run)"
                 return 12
@@ -1217,7 +1224,7 @@ ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system
 [Install]
 WantedBy=multi-user.target'
 
-        case /etc/drirc
+        case "/etc/drirc"
             # RADV unified VRAM heap: prevents UMA APU games from misallocating. Requires Mesa ≥22.3.
             printf '%s\n' '<driconf>' \
                 '  <device>' \
@@ -1566,14 +1573,8 @@ set -g PROGRESS_CURRENT 0
 set -g PROGRESS_WIDTH 40
 set -g PROGRESS_START_TIME 0
 set -g PROGRESS_STEP_START 0
-set -g PROGRESS_STEPS \
-    Preflight \
-    Packages \
-    Configuration \
-    Services \
-    Boot \
-    Finalize
-set -g PROGRESS_TOTAL (count $PROGRESS_STEPS)
+# Step count is the single source of truth for progress; step names live at call sites (_progress Preflight/Packages/Configuration/Services/Boot/Finalize). Runtime mismatch detected by _progress_done.
+set -g PROGRESS_TOTAL 6
 
 function _emit_step_time --description "Log elapsed time for the previous progress step"
     if test -n "$_STEP_PREV_NAME"; and test "$_STEP_PREV_START" -gt 0
@@ -1585,7 +1586,7 @@ function _emit_step_time --description "Log elapsed time for the previous progre
     end
 end
 
-# Reset progress counters and compute PROGRESS_TOTAL from PROGRESS_STEPS list
+# Reset progress counters
 function _progress_init --description "Initialize the step progress counter"
     set -g _STEP_PREV_NAME ""
     set -g _STEP_PREV_START 0
@@ -2662,8 +2663,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         if not sudo -n true 2>/dev/null
             set _hash_fail_reason "sudo credential lapsed"
         else
-            # Capture sha256sum first; cat-fail empty-stdin hash would dodge `test -z` guard (misread as mismatch).
-            # _hash_ps (not _ps) — avoids shadowing function-scope _ps from the earlier tee pipeline.
+            # Capture sha256sum first; cat-fail empty-stdin hash would dodge `test -z` guard (misread as mismatch). _hash_ps (not _ps) avoids shadowing function-scope _ps from the earlier tee pipeline.
             set -l _raw_line (sudo -n cat -- "$dst" 2>/dev/null | sha256sum)
             set -l _hash_ps $pipestatus
             if test $_hash_ps[1] -eq 0; and test $_hash_ps[2] -eq 0
@@ -2963,7 +2963,8 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _echo "── Boot entries ──"
     set -l entry_count 0
     if sudo test -d /boot/loader/entries 2>/dev/null
-        set entry_count (sudo find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" 2>/dev/null | wc -l | string trim --)
+        # Null-delim count (\n-in-filename hazard closure; matches _install_rebuild_boot + _install_finalize boot-wipe marker policy).
+        set entry_count (count (sudo find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
     end
     if test -n "$entry_count"; and string match -qr '^\d+$' -- "$entry_count"; and test "$entry_count" -gt 0
         _ok "  Boot entries: $entry_count found"
@@ -3522,7 +3523,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         set -l safe (_tmpfile_key "$dst")
         if string match -q "$my_home/*" -- "$dst"
             if test -r "$dst"
-                # sha256sum first; write hash_$safe on success; detector L3716 splits read-fail vs drift.
+                # sha256sum first; write hash_$safe on success; the hash-job child distinguishes missing hash (read-fail) from hash-mismatch (drift).
                 set -l _raw_line (sha256sum <"$dst" 2>/dev/null)
                 set -l _ps $pipestatus
                 if test $_ps[1] -eq 0
@@ -5215,8 +5216,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
         end
     end
 
-    # 2. At least one initramfs must exist and all must be non-zero
-    # count==0 guard matches check #1 (vmlinuz) — catches pathological mkinitcpio configs that exit 0 producing no output.
+    # 2. At least one initramfs must exist and all must be non-zero. count==0 guard matches check #1 (vmlinuz) — catches pathological mkinitcpio configs that exit 0 producing no output.
     set -l initrd_files (sudo find "$_esp" -maxdepth 1 -name 'initramfs-*.img' -type f -print0 2>/dev/null | string split0)
     if test (count $initrd_files) -eq 0
         _err "No initramfs found in $_esp/"
@@ -5319,9 +5319,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         # see global; do not re-hardcode the path
         set -l _wipe_marker $BOOT_WIPE_MARKER
         set -l _acknowledged false
-        # Null-delim find + split0 keeps count accurate when an entry filename contains \n (pathological).
-        # Hash input (printf '%s\n' $_existing_basenames) yields same bytes as newline-delim for any given file set,
-        # so pre-v4.1.12 markers remain valid — only the count metric gains accuracy.
+        # Null-delim find + split0 keeps count accurate when an entry filename contains \n (pathological). Hash input (printf '%s\n' $_existing_basenames) yields same bytes as newline-delim for any given file set, so pre-v4.1.12 markers remain valid — only the count metric gains accuracy.
         set -l _existing_basenames (sudo find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
         set -l _existing_entries (count $_existing_basenames)
         # Capture sha256sum first — unreachable path (printf can't fail; binary unreadable); kept for consistency.
@@ -5391,8 +5389,8 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
 
     # Boot-wipe marker written in _install_finalize success only (Fix 9) — partial-failure can't update count.
 
-    set -l entry_count (sudo find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" 2>/dev/null | wc -l)
-    set -l entry_count (string trim -- "$entry_count")
+    # Null-delim count (\n-in-filename hazard closure; matches _install_rebuild_boot + _install_finalize boot-wipe marker policy).
+    set -l entry_count (count (sudo find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
     if test -n "$entry_count"; and string match -qr '^\d+$' -- "$entry_count"; and test "$entry_count" -gt 0
         _ok "Boot entries: $entry_count found in /boot/loader/entries/"
     else
@@ -5403,7 +5401,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     end
 
     # sudo find required: /boot may be ESP (vfat) 0700 root:root — user-context glob yields 0 iter, hides warnings.
-    set -l _initrd_list (sudo find /boot -maxdepth 1 -type f -name 'initramfs-*.img' 2>/dev/null)
+    set -l _initrd_list (sudo find /boot -maxdepth 1 -type f -name 'initramfs-*.img' -print0 2>/dev/null | string split0)
     for initrd in $_initrd_list
         # stat -c %s gives exact bytes; du -m has whole-MB granularity varying by filesystem.
         set -l size_b (sudo stat -c '%s' -- "$initrd" 2>/dev/null)

@@ -1,5 +1,32 @@
 # ry-install changelog
 
+v4.1.13  2026-04-21
+- `_ry_profile_gtr9_pro` SYSCTL_VALUES (L727): +`kernel.split_lock_mitigate=0`, +`vm.swappiness=100`. Count 19 → 21. `split_lock_mitigate=0` pairs with existing `split_lock_detect=off` kernel param — detection off + 10 ms sleep-penalty suppression on. `swappiness=100` tuned for zram-backed swap (`zswap.enabled=0` kernel param documents ZRAM as primary swap tier).
+- `_ry_profile_gtr9_pro` ENV_VARS (L700): `RADV_EXPERIMENTAL=transfer_queue,hic` → `transfer_queue`. HIC default-on for GFX10.3+ in Mesa post-2026-04-21; `hic` token inert on gfx1151. Count 12 → 13: +`PROTON_NO_WM_DECORATION=1` (disables WM titlebars for borderless-fullscreen correctness under COSMIC Wayland). List re-sorted to strict alpha; `PROTON_USE_NTSYNC=1` moved from tail to alpha position (functionally equivalent; environment.d ordering is not semantically significant).
+- `_ry_profile_gtr9_pro` KERNEL_PARAMS / SYSCTL_VALUES comments: inline annotations added documenting `amd_pstate=active` as upstream default since Linux 6.5, `ppfeaturemask=0xfffd3fff` as upstream driver default (bits 14 / 15 / 17 off), and `fs.protected_{fifos,regular}=2` as kernel defaults since 5.0. All treated as drift-pins; explicit settings retained. Multi-line `#` blocks collapsed to single line per project convention.
+- README Prerequisites: Kernel `6.14+` → `≥ 6.18.4` (gfx1151 stability floor; kernels <6.18.4 have known regressions affecting Strix Halo). Fish `3.4+` → `≥ 4.0 recommended (3.4 minimum)`.
+- README Known Issues → Strix Halo GPU, MES page faults row: generic `Pin known-good linux-firmware` → specific guidance (avoid `linux-firmware-20251125`; pin ≤ `20250808-1` for ROCm workloads, or switch to `amdgpu-dkms-firmware`).
+- README Environment Variables table: annotations added — `ENABLE_LAYER_MESA_ANTI_LAG` marked AMD-only (Intel Arc crashes documented); `PROTON_ENABLE_WAYLAND` marked "experimental; breaks Steam Overlay"; `PROTON_NO_WM_DECORATION` row added. sysctl.d summary row count 19 → 21 with "split-lock penalty suppression" annotation.
+- README Kernel Parameters table: `pcie_aspm.policy=performance` annotated with desktop-only scope (trades idle power for NVMe burst latency; degrades thermals on SFF/laptop form factors).
+- README: new `#### Per-game tuning` subsection under Environment Variables covering `MESA_VK_WSI_PRESENT_MODE=mailbox`, `DISABLE_LAYER_MESA_ANTI_LAG=1`, `PROTON_NO_WM_DECORATION=0` (per-game override of the new global), and `PROTON_FSR4_RDNA3_UPGRADE=1`. Distinguishes unsafe-as-global from safe-as-global knobs.
+
+v4.1.12  2026-04-22
+- `_install_rebuild_boot` + `_install_finalize` boot-wipe marker (L5313, L5425): `find -printf '%f\n'` → `-printf '%f\0' | LC_ALL=C sort -z | string split0`. Aligns with v4.1.8 policy of null-delim enumeration for `\n`-in-filename hazard closure (previously applied to `_preflight_boot_sanity` L5207/L5215/L5227). Pre-v4.1.12 markers remain valid — hash input unchanged for any given file set; only `$_existing_entries` count metric gains accuracy when pathological filenames are present.
+- `_preflight_boot_sanity` check #2: added `count == 0` guard before initramfs non-zero loop. Matches check #1 (vmlinuz) symmetry. Catches pathological mkinitcpio configs that exit 0 while producing no `initramfs-*.img` output — previously the for-loop skipped silently and sanity check passed with misleading "initramfs non-zero" verdict.
+
+v4.1.11  2026-04-22
+- `_ry_get_file_content`: function-local rc codes renumbered out of the `EXIT_*` global range to eliminate numeric overlap with `EXIT_USAGE=2`, `EXIT_PREFLIGHT=3`, `EXIT_BOOT_CRIT=4`. Unknown-dst 2→11, missing-prereq 3→12, arity-bug 4→13. Caller switch in `_atomic_write_file` updated in lockstep; all 4 call sites unaffected. Header comment updated.
+- `_atomic_write_file`: post-write hash-verify pipeline inner `_ps` renamed to `_hash_ps` to avoid shadowing the earlier tee-pipeline `_ps`. Block-local shadow was harmless (outer `_ps` dead by reach), but distinct names reduce cognitive load when tracing pipestatus flow.
+
+v4.1.10  2026-04-22
+- `_ry_verify_runtime`: 9 bare `sudo` read-only probes (`stat`, `test`, `find` on NM connection files, installed files, parent directories) switched to `sudo -n` for parity with `_ry_verify_static`. Prevents interactive prompt if sudo timestamp expires mid-run during long verification pass; fails fast to `_warn` instead.
+- Bootstrap: KVER major/minor parse failure paths now `command rm -f -- "$LOG_FILE"` before `_ry_exit`, matching `_load_profile` and dispatcher cleanup symmetry. Eliminates empty stub log left on `uname -r` parse failure after log-file creation.
+
+v4.1.9  2026-04-22
+- `_write_footer`: L307 `begin; …; end; or return 0` expanded to canonical multi-line form.
+- `_tmpfile_key`: L1347 `string replace -a '/' '_'` → unquoted single-char args.
+- Top-level dispatcher: argparse short-form flag spec (L5784-5786) and deprecated-flag dispatch (L5801-5804) normalized to `fish_indent` canonical form (bareword flags; single-space `;` `and` separators). Functional parity preserved; `fish_indent --check` exits 0.
+
 v4.1.8  2026-04-20
 - `_install_packages`: dropped misleading "Synchronizing package databases..." `_info` (sync is inline in `pacman -Syu`); replaced stale "install then remove" comment with phase-4 cross-reference.
 - `_ry_show_help`: `--` description now states positional args after `--` are rejected (matches dispatch behavior); `NO_COLOR` added to ENVIRONMENT block (parity with README).

@@ -1,4 +1,4 @@
-# ry-install v4.1.8
+# ry-install v4.1.13
 
 Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
@@ -73,8 +73,8 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 | Requirement | Verification |
 |---|---|
 | CachyOS (systemd-boot, ext4) | — |
-| Fish 3.4+ | `fish --version` |
-| Kernel 6.14+ | `uname -r` |
+| Fish ≥ 4.0 recommended (3.4 minimum) | `fish --version` |
+| Kernel ≥ 6.18.4 (gfx1151 stability) | `uname -r` |
 | Unrestricted sudo | `sudo -l` → `(ALL) ALL` |
 | 2 GB root + 200 MB /boot free | `df -h / /boot` |
 | Network connectivity | `curl -sf --head https://archlinux.org` |
@@ -157,7 +157,7 @@ Each subsection corresponds to a discrete layer of the system. All values are em
 | `loglevel=3` | Suppress kernel info/notice at boot |
 | `module_blacklist=pcspkr` | Silence PC speaker |
 | `nowatchdog` | Disable software watchdog |
-| `pcie_aspm.policy=performance` | PCIe ASPM L0 always |
+| `pcie_aspm.policy=performance` | PCIe ASPM L0 always (desktop tower only; trades idle power for lower NVMe burst latency) |
 | `quiet` | Suppress kernel boot messages |
 | `rd.systemd.show_status=auto` | Initramfs unit status on errors only |
 | `rd.udev.log_level=3` | Suppress udev info/debug in initramfs |
@@ -221,7 +221,7 @@ Miscellaneous kernel and userspace tuning not covered by other subsections. `cor
 | `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (9 keys) |
 | `coredump.conf.d` | Storage=none · ProcessSizeMax=0 |
 | `drirc` | RADV unified VRAM heap (APU) |
-| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffers · vm.max_map_count=max · 19 net-new tunables |
+| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffers · vm.max_map_count=max · split-lock penalty suppression · 21 net-new tunables |
 | `/etc/fstab` | `noatime,lazytime,commit=10` on ext4 (in-place) |
 
 ### Environment Variables
@@ -232,12 +232,13 @@ Written to `~/.config/environment.d/10-environment.conf` for systemd user sessio
 |---|---|
 | `DXVK_LOG_LEVEL` | `none` |
 | `DXVK_LOG_PATH` | `none` |
-| `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
+| `ENABLE_LAYER_MESA_ANTI_LAG` | `1` (AMD-only; if you later run mixed / Intel Arc hardware, override per-game with `DISABLE_LAYER_MESA_ANTI_LAG=1`) |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
-| `PROTON_ENABLE_WAYLAND` | `1` |
+| `PROTON_ENABLE_WAYLAND` | `1` (experimental; breaks Steam Overlay) |
 | `PROTON_LOCAL_SHADER_CACHE` | `1` |
+| `PROTON_NO_WM_DECORATION` | `1` (disables WM titlebars for borderless-fullscreen correctness under COSMIC; pairs with `PROTON_ENABLE_WAYLAND=1`) |
 | `PROTON_USE_NTSYNC` | `1` (default in current proton-cachyos; explicit pin) |
-| `RADV_EXPERIMENTAL` | `transfer_queue,hic` |
+| `RADV_EXPERIMENTAL` | `transfer_queue` |
 | `RADV_PERFTEST` | `sam,nircache` |
 | `VKD3D_DEBUG` | `none` |
 | `VKD3D_SHADER_DEBUG` | `none` |
@@ -253,6 +254,17 @@ The following environment variables have been removed upstream and must not be r
 | `DXVK_FRAME_RATE` | removed (use MangoHud / compositor framelimit) |
 | `WINE_FULLSCREEN_FSR` | removed (handled by game or Proton config) |
 | `VKD3D_FRAME_RATE` | **retained** — still valid in VKD3D-Proton |
+
+#### Per-game tuning
+
+Variables unsafe as global defaults but useful per-title. Apply in Steam → right-click game → Properties → Launch Options, prefixed before `%command%`.
+
+| Variable | Use case | Trade-off |
+|---|---|---|
+| `MESA_VK_WSI_PRESENT_MODE=mailbox` | Latency-sensitive titles under Wayland | Breaks vsync for FIFO-honoring compositors |
+| `DISABLE_LAYER_MESA_ANTI_LAG=1` | Games that crash under the anti-lag layer | No benefit; diagnostic-only |
+| `PROTON_NO_WM_DECORATION=0` | Game needs WM decorations (overrides global `=1`) | Borderless-fullscreen may regress |
+| `PROTON_FSR4_RDNA3_UPGRADE=1` | Force FSR4 on RDNA 3.5 (gfx1151) | Image quality varies per title |
 
 ### User Configuration
 
@@ -445,12 +457,12 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 <summary>Sample log output</summary>
 
 ```json
-{"ts":"2026-04-20T14:23:01-0700","event":"header","version":"4.1.8","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
-{"ts":"2026-04-20T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
-{"ts":"2026-04-20T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
-{"ts":"2026-04-20T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
-{"ts":"2026-04-20T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-20T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
+{"ts":"2026-04-21T14:23:01-0700","event":"header","version":"4.1.13","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-21T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
+{"ts":"2026-04-21T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
+{"ts":"2026-04-21T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
+{"ts":"2026-04-21T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
+{"ts":"2026-04-21T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
 ```
 
 </details>
@@ -468,7 +480,7 @@ gfx1151 is a newly-released target with active upstream churn in both the kernel
 | Issue | Status | Workaround |
 |---|---|---|
 | CWSR hang (VGPR count, compute) | Userspace fix in ROCm 7.2; kernel fix pending | `amdgpu.cwsr_enable=0` |
-| MES page faults | Firmware-revision specific | Pin known-good `linux-firmware` |
+| MES page faults | Firmware-revision specific | Avoid `linux-firmware-20251125` (breaks ROCm on gfx1151); pin ≤ `20250808-1` for ROCm workloads or switch to `amdgpu-dkms-firmware` |
 | ROCm VRAM allocation | Fixed in kernel 6.16+ | None — GTT auto-handled |
 | PSR freeze (eDP only) | Open | `amdgpu.dcdebugmask=0x10` |
 | Black screen | Kernel-version regressions | Downgrade / upgrade |

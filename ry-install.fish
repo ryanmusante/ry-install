@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.1.8 (2026-04-20) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.1.13 (2026-04-21) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.1.8"
+set -g VERSION "4.1.13"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -171,12 +171,14 @@ set -g KVER_MAJOR $KVER_PARTS[1]
 # Preflight-fail on unparseable uname -r
 if not string match -qr '^\d+$' -- "$KVER_MAJOR"
     echo "[ERR] Cannot parse kernel major version from uname -r: $KVER" >&2
+    command rm -f -- "$LOG_FILE" 2>/dev/null
     _ry_exit $EXIT_PREFLIGHT; and return $EXIT_PREFLIGHT; or return $EXIT_PREFLIGHT
 end
 # Strip non-numeric suffix (e.g., "14-cachyos" → "14") for numeric comparison
 set -g KVER_MINOR (string replace -r '[^0-9].*' '' -- "$KVER_PARTS[2]")
 if test -z "$KVER_MINOR"; or not string match -qr '^\d+$' -- "$KVER_MINOR"
     echo "[ERR] Cannot parse kernel minor version from uname -r: $KVER" >&2
+    command rm -f -- "$LOG_FILE" 2>/dev/null
     _ry_exit $EXIT_PREFLIGHT; and return $EXIT_PREFLIGHT; or return $EXIT_PREFLIGHT
 end
 
@@ -304,7 +306,9 @@ end
 function _write_footer --argument-names exit_code extra_key --description "Append JSONL footer to LOG_FILE; idempotent via _FOOTER_WRITTEN"
     set -q _FOOTER_WRITTEN; and return 0
     set -q LOG_FILE; or return 0
-    begin; test -n "$LOG_FILE"; and test -f "$LOG_FILE"; end; or return 0
+    begin
+        test -n "$LOG_FILE"; and test -f "$LOG_FILE"
+    end; or return 0
     set -g _FOOTER_WRITTEN true
     set -l _mode_esc (_json_str "$MODE")
     set -l _ts (date '+%Y-%m-%dT%H:%M:%S%z')
@@ -628,7 +632,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 
-    # Kernel (15): amd_pstate=active; ppfeaturemask bits 14,15,17 off; cwsr_enable=0 gfx1151; iommu=pt; tsc=reliable.
+    # Kernel (15): amd_pstate=active (upstream default Zen 2+ CPPC since 6.5; drift-pin); ppfeaturemask=0xfffd3fff = upstream driver default (bits 14 OVERDRIVE / 15 GFXOFF / 17 STUTTER_MODE off); cwsr_enable=0 gfx1151; iommu=pt; tsc=reliable.
     set -g KERNEL_PARAMS \
         iommu=pt \
         amd_pstate=active \
@@ -693,14 +697,15 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "MESA_SHADER_CACHE_MAX_SIZE=4G" \
         "PROTON_ENABLE_WAYLAND=1" \
         "PROTON_LOCAL_SHADER_CACHE=1" \
-        "RADV_EXPERIMENTAL=transfer_queue,hic" \
+        "PROTON_NO_WM_DECORATION=1" \
+        "PROTON_USE_NTSYNC=1" \
+        "RADV_EXPERIMENTAL=transfer_queue" \
         "RADV_PERFTEST=sam,nircache" \
         "VKD3D_DEBUG=none" \
         "VKD3D_SHADER_DEBUG=none" \
-        "WINEDEBUG=-all" \
-        "PROTON_USE_NTSYNC=1"
+        "WINEDEBUG=-all"
 
-    # Sysctl — supplements vendor 70-cachyos-settings.conf; netdev_max_backlog overrides 4096→16384 (99-* after 70-*).
+    # Sysctl — supplements vendor 70-cachyos-settings.conf; netdev_max_backlog 4096→16384 (99-* after 70-*); fs.protected_{fifos,regular}=2 are kernel defaults since 5.0 (drift-pin); kernel.split_lock_mitigate=0 pairs with split_lock_detect=off kernel param; vm.swappiness=100 tuned for zram-backed swap.
     set -g SYSCTL_VALUES \
         "net.core.default_qdisc=fq" \
         "net.core.netdev_max_backlog=16384" \
@@ -720,7 +725,9 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "vm.compaction_proactiveness=0" \
         "net.core.busy_read=50" \
         "net.core.busy_poll=50" \
-        "net.core.netdev_budget=600"
+        "net.core.netdev_budget=600" \
+        "kernel.split_lock_mitigate=0" \
+        "vm.swappiness=100"
 
     # Packages: PKGS_ADD=14 PKGS_DEL=8 AUR=1 EXPECTED_SERVICES=4 must equal README
     set -g PKGS_ADD \
@@ -1101,11 +1108,11 @@ function _manifest_check_orphans --description "Warn about files from previous i
     return 0
 end
 
-# Generate config content by destination path; exit 2=unknown, 3=missing prereq, 4=arity
+# Generate config content by destination path; fn-local rc 11=unknown dst, 12=missing prereq, 13=arity bug (non-EXIT_* range)
 function _ry_get_file_content --argument-names dst --description "Return embedded config content for a given destination path"
     if test (count $argv) -ne 1
         _err "_ry_get_file_content: expected 1 argument, got "(count $argv)
-        return 4
+        return 13
     end
     switch "$argv[1]"
 
@@ -1115,7 +1122,7 @@ function _ry_get_file_content --argument-names dst --description "Return embedde
         case /etc/kernel/cmdline
             if test -z "$_ROOT_UUID"
                 _err "_ry_get_file_content: root UUID not cached (_load_profile may not have run)"
-                return 3
+                return 12
             end
             printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
 
@@ -1231,8 +1238,8 @@ WantedBy=multi-user.target'
             end
 
         case '*'
-            # rc=2 signals unknown destination — _atomic_write_file maps this to "Not a managed destination" message.
-            return 2
+            # fn-local rc=11 signals unknown destination — _atomic_write_file maps this to "Not a managed destination" message.
+            return 11
     end
     return 0
 end
@@ -1344,7 +1351,7 @@ end
 
 # Tmpfile key: slash→underscore of destination path. Collision guard lives in _validate_profile (rejects /a/b vs /a_b at load time).
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path (slash→underscore)"
-    string replace -a '/' '_' -- "$path"
+    string replace -a / _ -- "$path"
 end
 
 # LOGGING, MESSAGE OUTPUT, AND VERIFICATION COUNTERS
@@ -2564,13 +2571,13 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         else
             command rm -f -- "$tmpfile" 2>/dev/null
         end
-        # Distinct error messages per generator rc (2=unknown dst, 3=missing prereq, 4=arity bug).
+        # Distinct error messages per generator rc (11=unknown dst, 12=missing prereq, 13=arity bug — fn-local, non-EXIT_* range).
         switch $_ps[1]
-            case 2
+            case 11
                 _err "Not a managed destination: $dst"
-            case 3
+            case 12
                 _err "Content generator missing prerequisite global (e.g. _ROOT_UUID): $dst"
-            case 4
+            case 13
                 _err "Internal bug in _ry_get_file_content arity check (dst=$dst)"
             case '*'
                 _err "Content generator failed for $dst (rc=$_ps[1])"
@@ -2656,17 +2663,18 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
             set _hash_fail_reason "sudo credential lapsed"
         else
             # Capture sha256sum first; cat-fail empty-stdin hash would dodge `test -z` guard (misread as mismatch).
+            # _hash_ps (not _ps) — avoids shadowing function-scope _ps from the earlier tee pipeline.
             set -l _raw_line (sudo -n cat -- "$dst" 2>/dev/null | sha256sum)
-            set -l _ps $pipestatus
-            if test $_ps[1] -eq 0; and test $_ps[2] -eq 0
+            set -l _hash_ps $pipestatus
+            if test $_hash_ps[1] -eq 0; and test $_hash_ps[2] -eq 0
                 set _actual_hash (string split ' ' -- "$_raw_line")[1]
             end
             test -z "$_actual_hash"; and set _hash_fail_reason "filesystem read error after write"
         end
     else
         set -l _raw_line (command cat -- "$dst" 2>/dev/null | sha256sum)
-        set -l _ps $pipestatus
-        if test $_ps[1] -eq 0; and test $_ps[2] -eq 0
+        set -l _hash_ps $pipestatus
+        if test $_hash_ps[1] -eq 0; and test $_hash_ps[2] -eq 0
             set _actual_hash (string split ' ' -- "$_raw_line")[1]
         end
         test -z "$_actual_hash"; and set _hash_fail_reason "filesystem read error after write"
@@ -4453,12 +4461,12 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _echo "── Sensitive files ──"
     set -l nm_conn_dir /etc/NetworkManager/system-connections
     if test -d "$nm_conn_dir"
-        set -l conn_files (sudo find "$nm_conn_dir" -maxdepth 1 -name '*.nmconnection' -type f -print0 2>/dev/null | string split0)
+        set -l conn_files (sudo -n find "$nm_conn_dir" -maxdepth 1 -name '*.nmconnection' -type f -print0 2>/dev/null | string split0)
         if test -n "$conn_files"
             set -l bad_perms 0
             for conn_file in $conn_files
-                set -l perms (sudo stat -c '%a' -- "$conn_file" 2>/dev/null)
-                set -l owner (sudo stat -c '%U:%G' -- "$conn_file" 2>/dev/null)
+                set -l perms (sudo -n stat -c '%a' -- "$conn_file" 2>/dev/null)
+                set -l owner (sudo -n stat -c '%U:%G' -- "$conn_file" 2>/dev/null)
                 if test "$perms" != 600; or test "$owner" != "root:root"
                     _fail "  $conn_file: $perms $owner (expected: 600 root:root)"
                     set bad_perms (math $bad_perms + 1)
@@ -4503,13 +4511,13 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     set -l perm_checked 0
     set -l _boot_fstype (findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
-        if sudo test -f "$dst" 2>/dev/null
+        if sudo -n test -f "$dst" 2>/dev/null
             if string match -q '/boot/*' -- "$dst"; and test "$_boot_fstype" = vfat
                 continue
             end
             set perm_checked (math $perm_checked + 1)
-            set -l perms (sudo stat -c '%a' -- "$dst" 2>/dev/null)
-            set -l owner (sudo stat -c '%U:%G' -- "$dst" 2>/dev/null)
+            set -l perms (sudo -n stat -c '%a' -- "$dst" 2>/dev/null)
+            set -l owner (sudo -n stat -c '%U:%G' -- "$dst" 2>/dev/null)
             set -l expected_perms 644
             if test "$perms" != "$expected_perms"; or test "$owner" != "root:root"
                 _fail "  $dst: $perms $owner (expected: $expected_perms root:root)"
@@ -4546,10 +4554,10 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             continue
         end
         set -a checked_dirs "$dir"
-        if sudo test -d "$dir" 2>/dev/null
+        if sudo -n test -d "$dir" 2>/dev/null
             set dir_checked (math $dir_checked + 1)
-            set -l perms (sudo stat -c '%a' -- "$dir" 2>/dev/null)
-            set -l owner (sudo stat -c '%U:%G' -- "$dir" 2>/dev/null)
+            set -l perms (sudo -n stat -c '%a' -- "$dir" 2>/dev/null)
+            set -l owner (sudo -n stat -c '%U:%G' -- "$dir" 2>/dev/null)
             # parent-dir mode parse — strip leading on len>3, floor(n/2)%2 verified for 755/775/757/1755/4755
             if test "$owner" != "root:root"
                 _fail "  $dir: $perms $owner (expected: root:root)"
@@ -5207,13 +5215,19 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
         end
     end
 
-    # 2. Every initramfs must be non-zero
+    # 2. At least one initramfs must exist and all must be non-zero
+    # count==0 guard matches check #1 (vmlinuz) — catches pathological mkinitcpio configs that exit 0 producing no output.
     set -l initrd_files (sudo find "$_esp" -maxdepth 1 -name 'initramfs-*.img' -type f -print0 2>/dev/null | string split0)
-    for f in $initrd_files
-        sudo test -s "$f" 2>/dev/null
-        if test $status -ne 0
-            _err "Zero-byte initramfs: $f"
-            set errors (math $errors + 1)
+    if test (count $initrd_files) -eq 0
+        _err "No initramfs found in $_esp/"
+        set errors (math $errors + 1)
+    else
+        for f in $initrd_files
+            sudo test -s "$f" 2>/dev/null
+            if test $status -ne 0
+                _err "Zero-byte initramfs: $f"
+                set errors (math $errors + 1)
+            end
         end
     end
 
@@ -5305,7 +5319,10 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         # see global; do not re-hardcode the path
         set -l _wipe_marker $BOOT_WIPE_MARKER
         set -l _acknowledged false
-        set -l _existing_basenames (sudo find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\n' 2>/dev/null | LC_ALL=C sort)
+        # Null-delim find + split0 keeps count accurate when an entry filename contains \n (pathological).
+        # Hash input (printf '%s\n' $_existing_basenames) yields same bytes as newline-delim for any given file set,
+        # so pre-v4.1.12 markers remain valid — only the count metric gains accuracy.
+        set -l _existing_basenames (sudo find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
         set -l _existing_entries (count $_existing_basenames)
         # Capture sha256sum first — unreachable path (printf can't fail; binary unreadable); kept for consistency.
         set -l _raw_line (printf '%s\n' $_existing_basenames | sha256sum)
@@ -5417,7 +5434,8 @@ function _install_finalize --description "Run post-install verification, cleanup
     # Persist boot-wipe acknowledgement on success only. Atomic tmp+mv prevents zero-byte marker from mid-write crash.
     if test "$SDBOOT_REMOVE_EXISTING" = yes
         set -l _wipe_marker $BOOT_WIPE_MARKER
-        set -l _post_basenames (sudo find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\n' 2>/dev/null | LC_ALL=C sort)
+        # Null-delim find + split0 (see _install_rebuild_boot gate for rationale; backward-compatible hash).
+        set -l _post_basenames (sudo find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
         set -l _post_count (count $_post_basenames)
         # Capture sha256sum into var so pipestatus can be checked before parsing; symmetric with _install_boot.
         set -l _raw_line (printf '%s\n' $_post_basenames | sha256sum)
@@ -5781,9 +5799,9 @@ set -l INSTALL_FILE_TARGET ""
 # CLI parser — argparse with --exclusive for mode flags; deprecated flags declared solely to emit specific messages.
 argparse --name=ry-install.fish \
     --exclusive=verify-static,verify-runtime,check,install-file \
-    'h/help' 'v/version' 'V/verbose' \
-    'verify-static' 'verify-runtime' 'check' 'install-file=' \
-    'a/all' 'n/dry-run' 'diff' 'fix' \
+    h/help v/version V/verbose \
+    verify-static verify-runtime check install-file= \
+    a/all n/dry-run diff fix \
     -- $argv 2>/dev/null
 set -l _argparse_rc $status
 if test $_argparse_rc -ne 0
@@ -5796,10 +5814,10 @@ if test $_argparse_rc -ne 0
 end
 
 # Deprecated-flag messages — order mirrors prior manual while-loop declaration order; first match wins.
-set -q _flag_all;      and _early_usage_exit "--all is no longer required; unattended is the only mode"
-set -q _flag_dry_run;  and _early_usage_exit "--dry-run has been removed; unattended is the only mode"
-set -q _flag_diff;     and _early_usage_exit "--diff has been removed; use --verify-static for read-only drift checks"
-set -q _flag_fix;      and _early_usage_exit "--fix has been removed; ry-install no longer performs in-tool drift repair"
+set -q _flag_all; and _early_usage_exit "--all is no longer required; unattended is the only mode"
+set -q _flag_dry_run; and _early_usage_exit "--dry-run has been removed; unattended is the only mode"
+set -q _flag_diff; and _early_usage_exit "--diff has been removed; use --verify-static for read-only drift checks"
+set -q _flag_fix; and _early_usage_exit "--fix has been removed; ry-install no longer performs in-tool drift repair"
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
 # --help / --version: short-circuit modes (exit 0).

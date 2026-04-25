@@ -893,7 +893,7 @@ function _validate_profile --description "Verify loaded profile has all required
     for _list_var in KERNEL_PARAMS MKINITCPIO_MODULES MKINITCPIO_HOOKS
         if set -q $_list_var
             for _elem in $$_list_var
-                if string match -qr -- '[[:space:]"\(\)]' "$_elem"
+                if string match -qr -- '[[:space:]\x22\(\)]' "$_elem"
                     _err "Profile global $_list_var element contains forbidden character (space/quote/paren/newline): '$_elem'"
                     return 1
                 end
@@ -1355,7 +1355,7 @@ end
 
 # LOGGING, MESSAGE OUTPUT, AND VERIFICATION COUNTERS
 
-# Escape \\,",\n,\r,\t for JSON; strip C0/DEL — pacman/sdboot-manage stderr captured via _run contains \t/\r and would fail RFC 8259 inside a JSON string.
+# Escape \\, \x22, \n, \r, \t for JSON; strip C0/DEL — pacman/sdboot-manage stderr captured via _run contains \t/\r and would fail RFC 8259 inside a JSON string.
 function _json_str --description "Escape a string for safe JSON embedding"
     set -l val (string replace -a '\\' '\\\\' -- "$argv[1]" | string collect)
     set val (string replace -a '"' '\\"' -- "$val" | string collect)
@@ -2091,8 +2091,8 @@ function _grep_sysctl_kv --argument-names dst --description "Validate sysctl.d h
     return 0
 end
 
-function _grep_udev_kv --argument-names dst --description 'Validate udev rule shape (KEY==..."val")'
-    string match -qre '[A-Z_]+\s*[!=+:]{1,2}=\s*"' -- $argv[2..-1]; or begin
+function _grep_udev_kv --argument-names dst --description 'Validate udev rule shape (KEY==...<val>)'
+    string match -qre '[A-Z_]+\s*[!=+:]{1,2}=\s*\x22' -- $argv[2..-1]; or begin
         _fail "  $dst: no udev rule found"
         return 1
     end
@@ -2422,7 +2422,7 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
     _echo "── sdboot-manage.conf ──"
     if _chk_file /etc/sdboot-manage.conf
         set -l opts (grep -- '^LINUX_OPTIONS=' /etc/sdboot-manage.conf 2>/dev/null \
-            | string replace -r -- '^LINUX_OPTIONS="([^"]*)".*$' '$1') # lint:ignore (PCRE backref)
+            | string replace -r -- '^LINUX_OPTIONS=\x22([^\x22]*)\x22.*$' '$1') # lint:ignore (PCRE backref)
 
         for param in $KERNEL_PARAMS
             string match -q -- "* $param *" " $opts "

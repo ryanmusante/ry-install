@@ -10,12 +10,13 @@ v4.3.4 - 2026-04-25
 -------------------
 
   Maintenance release. One install-affecting fix exposed during
-  a follow-up syntax-highlighting cleanup, plus the apostrophe
-  analog of v4.3.3's paired-backtick sweep across comments,
-  _warn strings, and multi-line single-quoted heredocs. External
-  contracts preserved (CLI, exit codes, JSONL schema, manifest
-  format, 16 managed destinations, signal handlers, lock
-  semantics).
+  a follow-up syntax-highlighting cleanup, plus apostrophe and
+  double-quote analogs of v4.3.3's paired-backtick sweep across
+  comments, _warn strings, multi-line single-quoted heredocs,
+  and stray `"` inside `'...'` regex patterns and descriptions.
+  External contracts preserved (CLI, exit codes, JSONL schema,
+  manifest format, 16 managed destinations, signal handlers,
+  lock semantics).
 
 [fixes]
 
@@ -76,6 +77,29 @@ v4.3.4 - 2026-04-25
     Functional output verified byte-identical for the four
     non-cpupower-epp blocks; cpupower-epp.service intentionally
     differs (see [fixes]).
+
+  * regex character classes and patterns: 5 stray double-quotes
+    replaced with `\x22` PCRE hex-escape so each line is
+    `"`-balanced. Each `"` inside a single-quoted fish string
+    is fish-correct but flips naive `"`-parity in highlighters
+    that lack `'...'`-scope awareness, painting a several-
+    hundred-line band as in-string and dropping comment scope
+    inside it. Sites:
+      - _validate_profile L896: `'[[:space:]"\(\)]'` character
+        class.
+      - _json_str preamble comment L1358: literal `"` in
+        `# Escape \\,",\n,\r,\t for JSON` rephrased to use
+        `\x22` placeholder text.
+      - _grep_udev_kv L2094 description string: `(KEY==..."val")`
+        rewritten as `(KEY==...<val>)`.
+      - _grep_udev_kv L2095 body: `'...=\s*"'` regex tail.
+      - _verify_static_boot L2425: `'^LINUX_OPTIONS="([^"]*)"
+        .*$'` capture pattern (3 occurrences in one regex).
+    PCRE `\x22` (= 0x22 = `"`) is byte-equivalent in match and
+    replace; verified across the original input space for each
+    pattern. Only remaining odd-`"` lines are 1665/1704, the
+    legitimate `echo "..."` multi-line help banner, which
+    fish-aware highlighters scope correctly.
 
 [version]
 

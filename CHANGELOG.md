@@ -9,173 +9,102 @@ subsystem or function before the change description.
 v4.3.1 - 2026-04-25
 -------------------
 
-  Audit-driven cleanup release. Eighteen verified findings from a
-  line-by-line audit of v4.3.0 addressed: tracked-tmpfile leak fixes,
-  caller-context bleed in _post_boot, regex-safety hardening,
-  diagnostic accuracy, and one cached lookup. No behavior change on
-  the happy path. External contracts (CLI, exit codes, JSONL schema,
-  manifest format, boot-wipe marker, 16 managed destinations, signal
-  handlers, lock semantics) preserved. Net file size +30 lines (5050
-  → 5080) reflects defensive checks and inline rationale comments.
+  Audit-driven cleanup release. Eighteen verified findings from the
+  v4.3.0 audit addressed plus a follow-up simplification pass adding
+  four verifier helpers (_chk_eq, _chk_sysfs_eq, _chk_perms,
+  _chk_present) and trimming inline rationale. External contracts
+  (CLI, exit codes, JSONL schema, manifest format, boot-wipe marker,
+  16 managed destinations, signal handlers, lock semantics)
+  preserved. Output byte-identical for verify-static and
+  verify-runtime modes.
 
 [fixes]
 
-  * _install_fstab_opts: bare `set _TRACKED_TMPFILES` (only site of
-    six that omitted -g) replaced with `set -g`. Worked today only
-    because no local of the same name shadowed it; one future
-    `set -l _TRACKED_TMPFILES` anywhere in the function would have
-    silently broken the untrack.
+  * _install_fstab_opts: bare `set _TRACKED_TMPFILES` -> `set -g`.
 
-  * _atomic_write_file: untrack tmpfile after successful mv. Path
-    no longer exists post-mv; cleanup loop was stat()-ing dead
-    paths and the tracked list grew unbounded across each install
-    run (16 entries per run on gtr9_pro).
+  * _atomic_write_file: untrack tmpfile after successful mv (cleanup
+    loop was stat()-ing dead paths; tracked list grew unbounded).
 
-  * _ensure_sudo_cached: untrack $_sudo_err on both success and
-    failure paths after rm. Same leak class as _atomic_write_file
-    above.
+  * _ensure_sudo_cached: untrack $_sudo_err on both paths after rm.
 
   * _post_boot: remove `_log_section "INSTALL-FILE END"` writes
-    from helper. Caller-context bleed — helper hard-coded a marker
-    that only made sense when called from _ry_do_install_file.
-    _ry_do_install_file now writes END unconditionally on every
-    return path via single-exit refactor.
+    from helper. Caller-context bleed; _ry_do_install_file now
+    writes END unconditionally via single-exit refactor.
 
-  * _ry_do_install_file: convert post-hook dispatch to single-exit
-    pattern. `_post_$_h "$target"; or return $status` bypassed the
-    function's END marker on hook failure; replaced with `set
-    _hook_rc $status` + post-loop _log_section + `return $_hook_rc`.
+  * _ry_do_install_file: post-hook dispatch converted to single-exit.
 
   * _chk_grep: pre-check file existence with `sudo -n test -f` in
-    the /boot path so missing-file vs missing-key are distinguished
-    in the FAIL message. Non-boot path already had this check.
+    /boot path so missing-file vs missing-key distinguishable.
 
   * _grep_kv: escape $key with `string escape --style=regex` before
-    interpolating into `string match -qr`. Current keys are
-    alphanumeric/underscore (regex-safe) but profiles may extend.
+    `string match -qr` interpolation.
 
   * _ry_do_install_file: drop unreachable `or echo "$dst"` fallback
-    on `realpath -m` cmdsubst. realpath -m has no failure mode
-    (always exit 0); the OR branch never fired.
+    on `realpath -m` cmdsubst (realpath -m has no failure mode).
+
+[refactor]
+
+  * verifier helpers: add _chk_eq, _chk_sysfs_eq, _chk_perms,
+    _chk_present; sweep prefcore / CPU boost / usbcore.autosuspend
+    blocks in _verify_runtime_kparams; collapse perm-check loops
+    in _verify_runtime_session; loop-ify static loader.conf,
+    resolved, coredump, sdboot KERNEL_PARAMS, mkinitcpio modules.
+
+  * _chk_grep: label arg now optional (defaults to pattern); 23
+    existing 3-arg call sites unchanged.
+
+  * comments: 11 redundant pre-function comments removed (paraphrased
+    --description); 9 "Pipeline phase N" banners removed; multi-line
+    rationale blocks collapsed to single-line form.
 
 [diagnostics]
 
   * _verify_static_services: surface full LoadState:ActiveState:
-    UnitFileState in masked-service FAIL message. Previously only
-    UnitFileState was shown — error/merged/bad-setting/masked-runtime
-    states all read identically as "expected: masked".
+    UnitFileState in masked-service FAIL message.
 
   * _install_fstab_opts: warn when replacing non-default commit=
-    value in /etc/fstab (e.g. user's commit=30 → commit=10). Was
-    silently overridden.
+    value in /etc/fstab.
 
-  * _ry_do_install: change "INSTALLATION COMPLETE (WITH WARNINGS)"
-    to "INSTALLATION FINISHED WITH WARNINGS" — "complete" implied
-    success in shell-history scrape.
+  * _ry_do_install: "INSTALLATION COMPLETE (WITH WARNINGS)" ->
+    "INSTALLATION FINISHED WITH WARNINGS".
 
 [performance]
 
-  * _content__etc_systemd_logind...: cache systemd version in global
-    _RY_SYSTEMD_VER on first call. Was forking systemctl --version
-    once per content generation (16 forks per verify-static run on
-    gtr9_pro).
+  * _content__etc_systemd_logind...: cache systemd version in
+    _RY_SYSTEMD_VER on first call (was 16 forks per verify-static).
 
 [robustness]
 
-  * cpupower-epp.service: add `ConditionPathExists=/usr/bin/bash` to
-    [Unit] so the service degrades gracefully on minimal images
-    where /usr/bin/bash is absent (instead of failing to start with
-    a confusing exec error).
+  * cpupower-epp.service: add `ConditionPathExists=/usr/bin/bash`.
 
-  * sudo keepalive subshell: quote `$argv[2]` in `test -d --
-    "$argv[2]"`. LOCK_DIR doesn't currently contain spaces but
-    unquoted expansion split-and-globbed inside the test command,
-    which would have failed silently.
-
-[style]
-
-  * _json_str: replace five redundant `set -l val` re-declarations
-    with `set val`. Functionally identical (fish reassigns on
-    redeclare in same scope) but stylistically cleaner.
-
-[docs]
-
-  * _validate_kernel_params: comment now lists the actual nine
-    unchecked params (iommu, amd_pstate, loglevel, module_blacklist,
-    nowatchdog, quiet, rd.systemd.show_status, rd.udev.log_level,
-    tsc) instead of five (two of which weren't even present in
-    KERNEL_PARAMS).
-
-  * _ry_check_disk_space: comment now flags GNU-coreutils-only
-    column-4 assumption — not portable to BusyBox/BSD df layouts.
-
-  * _MY_UID: header comment documents capture-once-at-start
-    invariant.
-
-  * _ry_exit: comment rewrite — sentinel is set unconditionally
-    (was: "sets bail sentinel and returns when sourced", which
-    implied conditional set).
-
-  * _install_fstab_opts: comment documents awk OFS rebuild
-    converting tab-aligned fstab to space-separated (mount(8)
-    accepts any whitespace; cosmetic only).
+  * sudo keepalive: quote `$argv[2]` in `test -d -- "$argv[2]"`.
 
 
 v4.3.0 - 2026-04-25
 -------------------
 
   Decomposition release: completes the four large-function splits
-  scoped in v4.2.0's "4.3.0 Scope (Uncovered)" README section.
-  External contracts (CLI, exit codes, JSONL schema, manifest format,
-  boot-wipe marker, 16 managed destinations, signal handlers, lock
-  semantics) preserved. No behavior change — output is byte-identical
-  to v4.2.1 on the gtr9_pro profile. Net file size +72 lines (4978 →
-  5050) reflects orchestrator overhead absorbing into 22 new helpers.
+  scoped in v4.2.0. External contracts preserved; output
+  byte-identical to v4.2.1 on the gtr9_pro profile.
 
 [refactor]
 
-  * _install_configure_services: decompose 155 lines into 13-line
-    orchestrator + 3 helpers (_configure_services_preset,
-    _configure_services_mask, _configure_services_enable). Unified
-    error-rollup path: each helper returns 0/1; orchestrator
-    OR-collapses into single _ret. INSTALL_HAD_ERRORS side-effect
-    paths preserved (cpupower-epp install fail, sys_enable per-unit
-    retry fail) for caller compatibility.
+  * _install_configure_services: 155 L -> 13-L orchestrator + 3
+    helpers (_configure_services_preset, _mask, _enable).
 
-  * _ry_verify_static: decompose 427 lines into 31-line orchestrator
-    + 7 section helpers (_verify_static_boot, _verify_static_system,
-    _verify_static_user, _verify_static_packages,
-    _verify_static_services, _verify_static_syntax,
-    _verify_static_checksum). Section boundaries match original
-    output groupings; _skip_iwd computation localized to
-    _verify_static_system (only consumer).
+  * _ry_verify_static: 427 L -> 31-L orchestrator + 7 section
+    helpers (_verify_static_boot, _system, _user, _packages,
+    _services, _syntax, _checksum).
 
-  * _ry_verify_runtime: decompose 818 lines into 30-line orchestrator
-    + 4 section helpers per README plan
-    (_verify_runtime_kparams, _verify_runtime_services,
-    _verify_runtime_env, _verify_runtime_session). _dmesg captured
-    once in _verify_runtime_kparams (only consumer; no cross-helper
-    re-fetch). sys_units count drift assertion (positionally coupled
-    to parsed[1..5]) returns 1 from _verify_runtime_services;
-    orchestrator skips env+session helpers on signal.
+  * _ry_verify_runtime: 818 L -> 30-L orchestrator + 4 section
+    helpers (_verify_runtime_kparams, _services, _env, _session).
+    sys_units count drift assertion returns 1; orchestrator skips
+    env+session helpers on signal.
 
-  * _ry_profile_gtr9_pro: decompose 192 lines into 14-line
-    orchestrator + 8 inline helpers grouped by config domain
-    (_ry_profile_gtr9_pro_destinations, _boot, _kernel, _network,
-    _env, _packages, _services, _thresholds). DEVIATION from
-    v4.2.0's stated plan: single-file inline split was chosen over
-    the originally-planned external profile-partials layout
-    (~/.config/ry-install/profiles/gtr9_pro/*.fish) to preserve the
-    "Single Fish script, no required external dependencies" promise
-    in the README. External profile loading via ~/.config/ry-install/
-    profiles/<name>.fish remains unchanged for user-defined profiles.
-
-[documentation]
-
-  * README: remove "4.3.0 Scope (Uncovered)" section (work
-    completed). Bump version badge 4.2.1 -> 4.3.0. Sample log header
-    timestamp aligned to 2026-04-25 (release date) and version field
-    bumped to 4.3.0; subsequent log lines re-dated to match.
+  * _ry_profile_gtr9_pro: 192 L -> 14-L orchestrator + 8 inline
+    helpers grouped by config domain. Single-file inline split
+    chosen over external profile-partials to preserve "single Fish
+    script, no required external dependencies".
 
 [version]
 
@@ -185,89 +114,35 @@ v4.3.0 - 2026-04-25
 v4.2.1 - 2026-04-25
 -------------------
 
-  Targeted hardening pass: extend _json_str escape coverage to all
-  RFC 8259 control bytes, capture pre-argparse argv for log header
-  fidelity, align kernel-version preflight with the README stability
-  floor, reject empty-string scalar profile globals, and tighten the
-  iwd-skip glob. No CLI, JSONL schema, or external-contract changes;
-  semver patch.
+  Targeted hardening pass; semver patch, no CLI/JSONL changes.
 
 [hygiene]
 
-  * _json_str: extend escape pass from {\\, ", \n} to {\\, ", \n, \r,
-    \t}; additionally strip remaining C0 controls (0x00-0x08,
-    0x0B-0x0C, 0x0E-0x1F) and DEL (0x7F) by `?` replacement. External
-    tool stderr captured via _run (pacman, sdboot-manage, find)
-    routinely contains tab and CR; the prior escape set produced
-    JSONL that failed RFC 8259 validation in jq and python json.load
-    on those runs.
+  * _json_str: extend escape pass from {\\, ", \n} to {\\, ", \n,
+    \r, \t}; strip remaining C0 controls (0x00-0x08, 0x0B-0x0C,
+    0x0E-0x1F) and DEL (0x7F).
 
   * argparse + JSONL header: snapshot $argv into _ORIG_ARGV before
-    argparse consumes recognized flags. Header `command` field and
-    the [ERR] Invalid arguments line both now reference _ORIG_ARGV,
-    restoring the full invocation string (argparse strips recognized
-    flags from $argv post-parse).
+    argparse consumes recognized flags.
 
-  * _hash_installed: `echo` -> `printf '%s\n'` for hash output,
-    matching the four other hash-emission sites (_content_hash,
-    _atomic_write_file post-mv probe, --check probe, manifest hash).
-
-  * comments: six multi-line # blocks added across _json_str,
-    _validate_profile, _ry_check_kernel_version,
-    _is_wifi_active_route, and the entry-point _ORIG_ARGV snapshot
-    collapsed to single-line form (project convention).
+  * _hash_installed: `echo` -> `printf '%s\n'` for parity.
 
 [robustness]
 
-  * _ry_check_kernel_version: add soft-warn branch for kernels in
-    [6.14, 6.18.4). 6.14 remains the hard floor (ntsync + gfx1151
-    base support); 6.18.4 surfaces as the documented gfx1151
-    stability floor with a non-blocking _warn. Patch-level parsing
-    extended out of the existing 6.19.0 regression check to cover
-    the new 6.18.x band.
+  * _ry_check_kernel_version: soft-warn for kernels in [6.14,
+    6.18.4); 6.18.4 documented as gfx1151 stability floor.
 
-  * _validate_profile: reject empty-string scalar globals for the 10
-    required globals where empty value emits a malformed config
-    (PROFILE_NAME, PROFILE_DESC, LOADER_DEFAULT, LOADER_CONSOLE_MODE,
-    LOADER_EDITOR, SDBOOT_DEFAULT_ENTRY, SDBOOT_OVERWRITE,
-    SDBOOT_REMOVE_EXISTING, SDBOOT_REMOVE_OBSOLETE,
-    MKINITCPIO_COMPRESSION). Catches `set -g LOADER_DEFAULT ""`
-    (count == 1, prior validator passed) before
-    _content__boot_loader_loader.conf emits `default ` to
-    systemd-boot.
+  * _validate_profile: reject empty-string scalar globals for 10
+    required globals.
 
   * _should_skip_iwd: tighten path glob from `*nm.conf` to
-    `*/NetworkManager/*nm.conf`. Closes incidental match on
-    unrelated paths ending with the literal `nm.conf` substring.
+    `*/NetworkManager/*nm.conf`.
 
-  * _ry_install_file: route iwd-skip through _should_skip_iwd
-    instead of the inline duplicate. Removes the parallel
-    _RY_SKIP_IWD_CACHED memo path (now dead); two stale erase calls
-    in _do_cleanup and the post-package boundary follow.
+  * _ry_install_file: route iwd-skip through _should_skip_iwd.
 
-  * _is_wifi_active_route: detect tun/tap/wg/ppp/gre/gretap/sit/
-    ip6tnl/ipip default-route ifaces. When the route exits a
-    tunnel, scan /sys/class/net for an associated 802.11 phy with
-    operstate=up; return positive if any exists. NM restart in
-    _install_finalize and the install-file post-hook no longer
-    tears VPN-over-WiFi underlays.
-
-  * _ry_validate_mkinitcpio_hooks: order-check loop now references
-    the function-local $hooks instead of $MKINITCPIO_HOOKS. Cosmetic
-    -- current callers either pass --existence-only (returns earlier)
-    or no args (hooks == MKINITCPIO_HOOKS); future custom-list
-    callers will see consistent semantics.
-
-[documentation]
-
-  * README: fish badge aligned with the prerequisites table:
-    `>= 4.0 (3.4+)`. Sample log block header timestamp aligned with
-    the subsequent events (was 2026-04-23 vs 2026-04-22). sysctl
-    summary row clarifies that tunables include vendor overrides
-    rather than being entirely net-new. Safety table gains a
-    "Permission model" row documenting the 0644/0600 system/user
-    split, 0700 on $HOME/ry-install/ and per-day log subdirs, and
-    0600 on log/manifest/marker files.
+  * _is_wifi_active_route: detect tun/tap/wg/ppp/gre/sit/ip6tnl/
+    ipip default-route ifaces; scan /sys/class/net for associated
+    802.11 phy.
 
 [version]
 
@@ -279,258 +154,90 @@ v4.2.0 - 2026-04-23
 
   Simplification release: large-function decompositions, sequential
   rewrites of three parallel `fish -c` workers, removal of dead
-  defense-in-depth, and consolidation of duplicated helpers. External
-  contracts (CLI, exit codes, JSONL schema, manifest format, boot-wipe
-  marker, 16 managed destinations, signal handlers, lock semantics)
-  preserved. Four large functions (_ry_verify_runtime, _ry_verify_static,
-  _ry_profile_gtr9_pro, _install_configure_services) deferred to v4.3.0
-  for further decomposition; see README "4.3.0 Scope (Uncovered)".
+  defense-in-depth, consolidation of duplicated helpers.
 
-  * BUGFIX: three USER_DESTINATIONS `_content_<key>` function
-    declarations had `$HOME` in their function names (e.g.
-    `function _content_$HOME_.config_...`). Fish performs parse-time
-    variable expansion in `function NAME` position and interprets
-    `$HOME_` as variable name `HOME_`, which is unset and triggers
-    "function name required". The 3 user-scope content generators
-    therefore never defined at runtime and `_ry_get_file_content`
-    returned 11 (function not found) for any user destination,
-    breaking --install / --verify-static / --check / --validate-configs
-    for the user-scope managed files. Fix: `_tmpfile_key` substitutes
-    `$HOME` → literal `HOME` token before the slash→underscore pass;
-    user content fn declarations renamed `_content_HOME_...` to match.
-    16/16 destinations dispatch correctly.
+  * BUGFIX: three USER_DESTINATIONS `_content_<key>` declarations
+    had `$HOME` in their function names. Fish parse-time variable
+    expansion in `function NAME` position interpreted `$HOME_` as
+    unset variable; user content generators never defined.
+    _tmpfile_key now substitutes `$HOME` -> literal `HOME` before
+    slash->underscore pass.
 
 [progress]
 
-  * progress bar: replace line-rewriting implementation with stationary
-    bottom-row rendering via DECSTBM scroll region (ESC [ N r).
-    _progress_init opens the region above the last row; _progress_redraw
-    saves cursor (ESC 7), jumps to the pinned row, repaints, and restores
-    (ESC 8). _progress_teardown resets the region on every exit path
-    (signal, SIGPIPE, normal). 113 L across four functions collapse to
-    ~52 L across five. SIGWINCH remains unhandled; mosh sessions suppress
-    the bar (DECSTBM unsupported) and emit JSONL progress events only.
+  * progress bar: line-rewriting -> stationary bottom-row via
+    DECSTBM scroll region (113 L -> ~52 L).
 
 [hygiene]
 
-  * _json_str: reduce escape set from nine byte-class substitutions to
-    three (backslash, double-quote, newline). All call sites are
-    script-controlled (argv, event names, log messages); C1 control
-    bytes do not appear at any call site and UTF-8 passes through.
+  * _json_str: 9 byte-class substitutions -> 3 (backslash, quote,
+    newline).
 
-  * _banner: collapse 25-L Unicode box-drawing + padding math to a
-    3-L `_echo "── $text ──"` form. The one call site (install-file
-    mode) retains a recognizable banner.
+  * _banner: 25-L Unicode box-drawing -> 3-L `_echo "── $text ──"`.
 
-  * fish version gate: merge three separate major/minor parses into a
-    single regex extract + numeric compare. fish 3.3 still rejected;
-    3.4 still accepted; 4.x still accepted; malformed version still
-    rejected.
+  * fish version gate: 3 separate parses -> single regex extract.
 
-  * _ry_exit: drop trailing `and return $C; or return $C` at 26 call
-    sites. _ry_exit already sets the bail sentinel and returns when
-    sourced (else exits); the trailing continuation was a false-premise
-    idiom.
+  * _ry_exit: drop trailing `and return $C; or return $C` at 26
+    sites.
 
-  * _run: drop the per-call argv metachar scan. All callers are
-    internal; the scan was defense-in-depth against bugs in the script's
-    own code.
+  * _run: drop per-call argv metachar scan.
 
-  * defensive arg-count guards: drop `if test (count $argv) -ne N`
-    blocks at the head of internal helpers (_validate_profile,
-    _ry_get_file_content, _json_str, _msg, _chk_file, _chk_grep,
-    _content_hash, _atomic_write_file, _ry_install_file,
-    _dir_group_or_world_writable, _ry_do_install_file). Same rationale:
-    callers are script-internal; tests cover misuse. Argparse-level
-    positional rejection and `--existence-only` flag parsing retained.
+  * defensive arg-count guards: drop in 11 internal helpers.
 
-  * _TRACKED_TMPFILES: collapse five filter-and-reassign loops to
-    single-line `string match -v` forms.
+  * _TRACKED_TMPFILES: 5 filter-and-reassign loops -> single-line
+    `string match -v` forms.
 
-  * _tmpfile_key: route five inline slash→underscore copies through the
-    existing helper.
+  * argparse: drop deprecated-flag block.
 
-  * argparse: drop the deprecated-flag block (--all, --dry-run, --diff,
-    --fix). Native argparse unknown-flag rejection emits EXIT_USAGE (2),
-    same behavior from the user's perspective.
-
-  * _run: simplify log truncation — head -n 100 for stdout JSONL,
-    head -n 5 for stderr terminal display, head -n 50 for stderr JSONL.
-    Drop the 3-tier sort-uniq-dedup pipeline.
-
-  * _install_packages, paccache: merge `paccache -rk2` and
-    `paccache -ruk0` into a single `paccache -rk2 -ruk0` invocation.
-
-  * sudo keepalive: replace the two-retry / 1-s-backoff loop with a
-    single `sudo -n -v || break`. Keepalive fires every 45 s; transient
-    PAM failure self-heals on the next cycle.
-
-  * boot-wipe marker: drop the unreachable-pipestatus capture at the
-    two sha256 sites; require count+hash format; legacy count-only /
-    empty markers trigger one wipe-ack and rewrite.
+  * sudo keepalive: 2-retry / 1-s-backoff -> single
+    `sudo -n -v || break`.
 
 [semantic refactors]
 
-  * _ry_verify_static, _ry_do_check Job 4, _ry_verify_runtime: replace
-    batched `systemctl show --property=P1,P2,P3 -- u1 u2 ...` with
-    per-unit loops. Eliminates positional-coupling assertions and
-    count-mismatch fallbacks. systemd ≥ 230 required.
+  * _ry_verify_static, _ry_do_check Job 4, _ry_verify_runtime:
+    batched `systemctl show` -> per-unit loops. systemd >= 230
+    required.
 
-  * _install_fstab_opts: 121 L → ~85 L. One mktemp, one awk,
-    chmod/chown `--reference=/etc/fstab`, one atomic sudo mv.
+  * _install_fstab_opts: 121 L -> ~85 L. One mktemp, one awk,
+    chmod/chown `--reference`, atomic mv.
 
-  * _cleanup, _cleanup_pipe, _cleanup_on_exit: extract shared body to
-    `_teardown mode` helper; retain three thin wrappers.
+  * _cleanup, _cleanup_pipe, _cleanup_on_exit: shared body extracted
+    to `_teardown mode` helper.
 
-  * _ry_install_files: fold 45-L wrapper into its two
-    _install_system_files call sites. Inline flag handling.
+  * _ry_install_files: fold 45-L wrapper into call sites.
 
-  * _ry_do_install_file: replace 9-branch cascade with a glob→hook
-    table iterator. First-match-wins; no fallthrough on hook failure.
+  * _ry_do_install_file: 9-branch cascade -> glob->hook table.
 
-  * _ry_get_file_content: split the 134-L switch into one
-    `_content_<key>` function per destination.
+  * _ry_get_file_content: 134-L switch -> one `_content_<key>`
+    function per destination.
 
-  * _pregenerate_content_files: delete. Only callers were the parallel
-    workers in _ry_do_check and _ry_validate_configs; both now use
-    sequential loops.
-
-  * _install_rebuild_boot: remove archlinux.org / cachyos.org
-    news-headline curl-and-parse block. Retain `_info "Review news
-    before -Syu: <url>"` instructions.
-
-  * _do_cleanup: trust `_RY_HOLDS_LOCK` sentinel set by _acquire_lock;
-    drop the LOCK_DIR re-read and pid compare.
-
-  * _cleanup_tmpfiles: precompute _SYS_TMP_DIRS / _USR_TMP_DIRS at
-    profile load.
-
-  * _mask_list_effective (new): shared helper for the lvm2-exclude
-    filter. Replaces three near-duplicate loops.
-
-  * _ry_verify_runtime: single-pass parse of
-    `systemctl --user show-environment` into a dict-like lookup.
-
-  * _ry_check_deps: 49 L → ~25 L.
-
-  * _ry_check_network: 45 L → ~15 L. Single curl HEAD plus raw-IP
-    fallback. NOTE: reduces 3-state diagnostic to 2 states; users on
-    hosts with corrupted /etc/resolv.conf but raw-IP reachable will
-    see generic failure rather than DNS-specific guidance.
-
-  * _verify_unit_syntax: 32 L → ~18 L. Retains `command -q
-    systemd-analyze` availability guard for skip-warn behavior.
-
-  * _parse_systemctl_show: delete. No callers remain after the
-    per-unit systemctl show migration.
-
-  * _log: drop the implicit `^=== .* ===$` section-event regex.
-    Callers now pass the event name explicitly via `_log_section`.
-    DOWNSTREAM: ry-analyze and similar JSONL consumers must migrate
-    to explicit section emission.
-
-  * _install_post_package_refresh: inline into _install_packages;
-    17-L single-caller function deleted.
-
-  * udev trigger: gate on presence of `*/udev/*` in SYSTEM_DESTINATIONS.
-
-  * argparse: trust `--exclusive` and delete the `mode_count > 1`
-    bookkeeping.
-
-  * log rotation: replace find-printf + sort -z -t TAB + xargs-under-flock
-    with `find ... -printf '%T@ %p\n' | sort -n | head -n -$MAX_LOGS
-    | cut -d' ' -f2- | xargs -r rm -f`.
+  * _pregenerate_content_files: deleted.
 
 [core rewrites]
 
-  * _ry_do_check: 331 L → ~96 L. Replace four `fish -c` children
-    (hash, perm, kparam, svc) and seven serialization tmpfiles with a
-    five-phase sequential loop. EXIT_DRIFT vs EXIT_OK semantics
-    preserved; EXIT_PREFLIGHT on sudo unavailable preserved.
+  * _ry_do_check: 331 L -> ~96 L. Four `fish -c` children + 7
+    serialization tmpfiles -> 5-phase sequential loop.
 
-  * _ry_validate_configs: 262 L → ~57 L body + 8 new helpers
-    (_verify_unit_content, _grep_kv, _grep_kparam, _grep_sysctl_kv,
-    _grep_udev_kv, _grep_ini_header, _grep_xml_tag, _check_env_ssh_auth_sock).
-    Replace five `fish -c` children with a three-phase sequential loop.
-    EXIT_PREFLIGHT preserved; phase 2 extends coverage to kernel/cmdline,
-    sysctl.d, and udev/rules.d (previously unvalidated).
+  * _ry_validate_configs: 262 L -> ~57 L body + 8 helpers. 5
+    `fish -c` children -> 3-phase sequential loop.
 
-  * _ry_verify_static: 197-L CHECKSUM VERIFICATION block → 22-L
-    sequential `for dst` + switch on `"$expected::$actual"`.
-    --verify-static output matches v4.1.15 on clean and modified
-    systems.
+  * _ry_verify_static CHECKSUM: 197 L -> 22-L sequential
+    `for dst` + switch.
 
-  * _atomic_write_file: extract `_as use_sudo ...` dispatcher.
-    Mktemp/tee/chmod/mv/rm/stat/cat sudo branches collapse via _as
-    or `$_sp` prefix var. 232 L → ~120 L body. Retained: 3 symlink
-    guards (stat-vs-lstat semantic difference), top-of-fn _sp +
-    _expected_uid setup, 2 asymmetric sudo -n credential probes.
+  * _atomic_write_file: 232 L -> ~120 L body via `_as use_sudo`
+    dispatcher.
 
-  * _validate_profile: 155 L → ~135 L. Drop pkg-name charset check
-    (pacman errors natively on invalid names) and destination-path
-    sanitize (metachar set duplicated by KERNEL_PARAMS/MKINITCPIO_*
-    guard, retained). New 9-L key-collision check using _tmpfile_key
-    + sort -u count covers BOTH literal duplicates AND slash→_
-    collisions in one pass.
-
-  * _atomic_write_file: drop 33-L post-mv hash re-read block. Insert
-    12-L pre-mv sudo-credential lapse probe; periodic integrity
-    probing remains the job of --verify-static.
+  * _validate_profile: 155 L -> ~135 L. New 9-L key-collision
+    check via _tmpfile_key + sort -u.
 
 [robustness]
 
-  * _tmpfile_key: substitute `$HOME` → literal `HOME` token before the
-    slash→underscore pass. Required because fish performs parse-time
-    variable expansion in `function NAME` position; an unsubstituted
-    `$HOME` in user-scope `_content_<key>` declarations was interpreted
-    as `$HOME_` (trailing underscore is a valid identifier char), left
-    the three user-scope content generators undefined at runtime, and
-    broke --install / --verify-static / --check / --validate-configs
-    for user-scope managed files. Producer/consumer parity preserved
-    across all _tmpfile_key callers; 16/16 destinations dispatch.
+  * _detect_lvm: two-stage probe (sudo pvs, lsblk fallback).
 
-  * _detect_lvm: two-stage probe — canonical `sudo -n pvs`
-    (root-required, definitive) followed by non-sudo `lsblk` fallback
-    (sees LVM block-device types without root). Closes the
-    unmask-lvm2-services false-negative window on LVM-rooted systems
-    when sudo cache lapses (verify modes, intermittent keepalive).
-    Returns 0 on either positive probe; 1 when both confirm absence.
+  * sudo discipline: 73 unattended `sudo` invocations -> `sudo -n`
+    for fail-fast on cache lapse.
 
-  * sudo discipline: 73 unattended `sudo` invocations across
-    _chk_file, _chk_grep, _atomic_write_file, _ry_install_file,
-    _ry_verify_static, _ry_verify_runtime, _install_packages,
-    _install_fstab_opts, _install_configure_services,
-    _preflight_boot_sanity, _install_rebuild_boot, _install_finalize,
-    and the post-install hooks now carry `-n` (no-prompt mode). Lapsed
-    cache fails fast with a sudo error instead of blocking on a tty
-    password prompt; matches the unattended contract. Bare `sudo`
-    reserved for the three deliberate cache primes
-    (_ensure_sudo_cached, _install_preflight, _ry_do_install_file
-    initial probe) and the _as dispatcher helper. The _sp prefix var
-    in _atomic_write_file is `set _sp sudo -n` (2-element array;
-    expands to `sudo -n` when interpolated as `$_sp`).
-
-  * _ry_verify_static: remove dead-code partial-data fallback in the
-    mask-check block. The per-unit loop above guarantees
-    count($_mask_parsed) == count($_check_mask) by construction, so
-    the `(count $_mask_parsed) -lt (count $_check_mask)` branch is
-    unreachable. ~17 L removed.
-
-  * NO_COLOR: align detection with no-color.org spec — honored only
-    when set AND non-empty. Presence with empty value no longer
-    triggers no-color mode. TERM=dumb force still applies.
-
-[documentation & cleanup]
-
-  * cleanup: drop stale function-name comments at call sites; drop
-    redundant `set -l` after `--argument-names`; single fish_indent
-    canonical pass; drop unused EXIT_DRIFT comment cross-refs.
-
-  * documentation: new ## 4.3.0 Scope (Uncovered) README section
-    lists functions deferred to v4.3.0 (_ry_verify_runtime,
-    _ry_verify_static, _ry_profile_gtr9_pro,
-    _install_configure_services). Mosh DECSTBM limitation added to
-    Known Issues.
+  * NO_COLOR: align with no-color.org spec (set AND non-empty).
 
 [version]
 
@@ -540,42 +247,18 @@ v4.2.0 - 2026-04-23
 v4.1.15 - 2026-04-22
 --------------------
 
-  * _atomic_write_file: add parent-dir trust checks to the non-sudo
-    branch (symmetric with sudo branch). Verifies stat %F=directory,
-    test -L for symlink, %u == $_MY_UID, and calls
-    _dir_group_or_world_writable on %a. Closes pre-existing asymmetry
-    that allowed USER_DESTINATIONS writes under shared or
-    group-writable parents without validation.
+  * _atomic_write_file: parent-dir trust checks added to non-sudo
+    branch (symmetric with sudo branch).
 
-  * _ry_verify_runtime: fold dual stat invocations into one at four
-    call sites (NM connection files, installed system files,
-    installed user files, parent directories). Replace
-    `stat -c '%a'` + `stat -c '%U:%G'` pairs with a single
-    `stat -c '%a %U:%G'` and `string split ' '`. Halves fork count
-    per enumerated file; output is byte-identical.
+  * _ry_verify_runtime: dual stat invocations -> single
+    `stat -c '%a %U:%G'` + split at 4 call sites.
 
   * _ry_install_file: drop redundant `set -l dst $argv[1]` /
-    `set -l use_sudo $argv[2]`. The enclosing
-    `--argument-names dst use_sudo` already creates both as
-    function-local pointing to the same argv slots. Dead code.
+    `set -l use_sudo $argv[2]` (--argument-names already creates
+    them).
 
-  * _install_fstab_opts: deregister tmpfstab (aliased to tmpfstab2
-    at post-awk rename) from _TRACKED_TMPFILES after successful
-    atomic mv. Mirrors the existing tmpfstab-original deregister
-    and keeps the cleanup list from growing stale on the success
-    path. rm -f was already idempotent; no functional impact.
-
-  * _ry_verify_runtime: replace `test -n "$conn_files"` with
-    `test (count $conn_files) -gt 0` at the NM connection scope.
-    Fish quotes the list into a space-joined single arg so
-    test -n was correct but misleading; new form is consistent
-    with `count $conn_files` use elsewhere in the same block.
-
-  * _ry_get_file_content, _ry_check_deps: drop redundant trailing
-    `| head -n 1` after `string match -r -- '\d+'`. Verified
-    against fish 3.7.0: `string match -r` without `-a` returns
-    only the first match per input line, so the pipeline's
-    preceding `| head -n 1` already constrains to a single result.
+  * _install_fstab_opts: deregister tmpfstab from
+    _TRACKED_TMPFILES after atomic mv.
 
   * version: 4.1.14 -> 4.1.15.
 
@@ -584,294 +267,145 @@ v4.1.14 - 2026-04-21
 --------------------
 
   * _ry_exit: capture _RY_INSTALL_SOURCED into function-local
-    _was_sourced before calling _ry_namespace_cleanup bail. The
-    sentinel is set after the _RY_PRE_GLOBALS snapshot and not in
-    the preserve list, so the prior guard always evaluated false
-    and `exit $code` unconditionally ran; worked solely because
-    fish's exit in sourced context is host-safe.
+    _was_sourced before _ry_namespace_cleanup bail.
 
   * _acquire_lock: flock-less stale reclaim error-checks
-    `printf '%s\n' $fish_pid >"$LOCK_FILE"` with rmdir rollback
-    and LOG_FILE cleanup; symmetric with primary-write path.
+    `printf $fish_pid >LOCK_FILE` with rmdir rollback.
 
-  * _detect_lvm: scope _pvs_output function-local (was dead global;
-    no consumer read it).
+  * _ry_verify_static, _install_rebuild_boot:
+    `find ... | wc -l` -> `count (find ... -print0 | string split0)`.
 
-  * _ry_get_file_content: `case /etc/kernel/cmdline` and
-    `case /etc/drirc` quoted for consistency with the other 14
-    case arms.
-
-  * _ry_verify_static, _install_rebuild_boot: switch
-    `find ... *.conf | wc -l` to
-    `count (find ... -print0 | string split0)` at all three sites.
-    Aligns with v4.1.12 null-delim policy.
-
-  * _install_rebuild_boot: _initrd_list enumeration switched to
-    `-print0 | string split0` for parity with boot-wipe marker
-    scans.
-
-  * bootstrap: quote KVER in `string split '.' -- "$KVER"`. Parity
-    with L77-78 and error-message sites.
-
-  * progress bar: remove dead PROGRESS_STEPS list; set -g
-    PROGRESS_TOTAL 6 replaces `(count $PROGRESS_STEPS)`. Step
-    names live at call sites; runtime mismatch still caught by
-    _progress_done assertion.
-
-  * comments: three multi-line # blocks collapsed to single-line
-    form (project convention).
-
-  * comments: stale line-number references replaced with
-    function-name references (L5325/L5438 ->
-    _install_rebuild_boot + _install_finalize boot-wipe marker;
-    detector L3716 -> "hash-job child distinguishes missing hash
-    from hash-mismatch").
-
-  * ChangeLog: v4.1.9-v4.1.12 dates corrected 2026-04-22 ->
-    2026-04-21 (chronology was non-monotonic vs. v4.1.13).
+  * progress bar: remove dead PROGRESS_STEPS list.
 
 
 v4.1.13 - 2026-04-21
 --------------------
 
-  * profile gtr9_pro SYSCTL_VALUES: add kernel.split_lock_mitigate=0
-    and vm.swappiness=100. Count 19 -> 21. split_lock_mitigate=0
-    pairs with the existing split_lock_detect=off kernel param
-    (detection off + 10 ms sleep-penalty suppression on).
-    swappiness=100 tuned for zram-backed swap (zswap.enabled=0
-    kernel param documents ZRAM as primary swap tier).
+  * profile gtr9_pro SYSCTL_VALUES: + kernel.split_lock_mitigate=0,
+    vm.swappiness=100 (count 19 -> 21).
 
-  * profile gtr9_pro ENV_VARS: RADV_EXPERIMENTAL=transfer_queue,hic
-    -> transfer_queue. HIC default-on for GFX10.3+ in Mesa
-    post-2026-04-21; hic token inert on gfx1151. Count 12 -> 13:
-    add PROTON_NO_WM_DECORATION=1 (borderless-fullscreen
-    correctness under COSMIC Wayland). List re-sorted to strict
-    alpha.
+  * profile gtr9_pro ENV_VARS: RADV_EXPERIMENTAL hic token dropped
+    (default-on for GFX10.3+); + PROTON_NO_WM_DECORATION=1
+    (count 12 -> 13).
 
-  * profile gtr9_pro: annotate amd_pstate=active as upstream
-    default since Linux 6.5, ppfeaturemask=0xfffd3fff as upstream
-    driver default (bits 14/15/17 off), and
-    fs.protected_{fifos,regular}=2 as kernel defaults since 5.0.
-    All treated as drift-pins; explicit settings retained.
-
-  * README: Kernel 6.14+ -> >= 6.18.4 (gfx1151 stability floor).
-    Fish 3.4+ -> >= 4.0 recommended (3.4 minimum).
-
-  * README Known Issues (Strix Halo GPU, MES page faults row):
-    generic "Pin known-good linux-firmware" -> specific guidance
-    (avoid linux-firmware-20251125; pin <= 20250808-1 for ROCm, or
-    switch to amdgpu-dkms-firmware).
-
-  * README Environment Variables table:
-    ENABLE_LAYER_MESA_ANTI_LAG marked AMD-only;
-    PROTON_ENABLE_WAYLAND marked "experimental; breaks Steam
-    Overlay"; PROTON_NO_WM_DECORATION row added. sysctl.d summary
-    row count 19 -> 21.
-
-  * README Kernel Parameters table: pcie_aspm.policy=performance
-    annotated with desktop-only scope.
-
-  * README: new "Per-game tuning" subsection covering
-    MESA_VK_WSI_PRESENT_MODE=mailbox,
-    DISABLE_LAYER_MESA_ANTI_LAG=1,
-    PROTON_NO_WM_DECORATION=0, and PROTON_FSR4_RDNA3_UPGRADE=1.
+  * README: kernel >= 6.14 -> >= 6.18.4 (gfx1151 stability floor);
+    fish 3.4+ -> >= 4.0 recommended.
 
 
 v4.1.12 - 2026-04-21
 --------------------
 
-  * _install_rebuild_boot, _install_finalize boot-wipe marker:
-    `find -printf '%f\n'` -> `-printf '%f\0' | LC_ALL=C sort -z |
-    string split0`. Aligns with v4.1.8 null-delim policy for
-    \n-in-filename hazard closure. Pre-v4.1.12 markers remain
-    valid — hash input unchanged for any given file set; only the
-    _existing_entries count metric gains accuracy.
+  * boot-wipe marker: `find -printf '%f\n'` -> `-printf '%f\0' |
+    sort -z | string split0`. Pre-v4.1.12 markers remain valid.
 
-  * _preflight_boot_sanity check #2: add count == 0 guard before
-    the initramfs non-zero loop. Matches check #1 (vmlinuz)
-    symmetry. Catches pathological mkinitcpio configs that exit 0
-    while producing no initramfs-*.img output.
+  * _preflight_boot_sanity: count == 0 guard before initramfs
+    non-zero loop (matches vmlinuz check).
 
 
 v4.1.11 - 2026-04-21
 --------------------
 
-  * _ry_get_file_content: renumber function-local rc codes out of
-    the EXIT_* global range to eliminate numeric overlap with
-    EXIT_USAGE=2, EXIT_PREFLIGHT=3, EXIT_BOOT_CRIT=4.
-    Unknown-dst 2 -> 11, missing-prereq 3 -> 12, arity-bug
-    4 -> 13. Caller switch in _atomic_write_file updated in
-    lockstep.
+  * _ry_get_file_content: rc codes renumbered out of EXIT_* range
+    (2 -> 11, 3 -> 12, 4 -> 13).
 
-  * _atomic_write_file: post-write hash-verify pipeline inner _ps
-    renamed to _hash_ps to avoid shadowing the earlier
-    tee-pipeline _ps. Block-local shadow was harmless but
-    distinct names reduce cognitive load when tracing pipestatus
-    flow.
+  * _atomic_write_file: post-write hash _ps -> _hash_ps to avoid
+    shadow.
 
 
 v4.1.10 - 2026-04-21
 --------------------
 
-  * _ry_verify_runtime: nine bare sudo read-only probes (stat,
-    test, find on NM connection files, installed files, parent
-    directories) switched to `sudo -n` for parity with
-    _ry_verify_static. Prevents interactive prompt if sudo
-    timestamp expires mid-run.
+  * _ry_verify_runtime: 9 bare sudo probes -> `sudo -n` for parity.
 
-  * bootstrap: KVER major/minor parse failure paths now run
-    `command rm -f -- "$LOG_FILE"` before _ry_exit, matching
-    _load_profile and dispatcher cleanup symmetry.
+  * bootstrap: KVER parse failure paths now `rm -f LOG_FILE`
+    before _ry_exit.
 
 
 v4.1.9 - 2026-04-21
 -------------------
 
-  * _write_footer: L307 `begin; ...; end; or return 0` expanded to
-    canonical multi-line form.
-
-  * _tmpfile_key: L1347 `string replace -a '/' '_'` unquoted
-    single-char args.
-
-  * top-level dispatcher: argparse short-form flag spec
-    (L5784-5786) and deprecated-flag dispatch (L5801-5804)
-    normalized to fish_indent canonical form; fish_indent --check
-    exits 0.
+  * _write_footer, _tmpfile_key, top-level dispatcher: fish_indent
+    canonical pass.
 
 
 v4.1.8 - 2026-04-20
 -------------------
 
   * _install_packages: drop misleading "Synchronizing package
-    databases..." _info (sync is inline in pacman -Syu); replace
-    stale "install then remove" comment with phase-4 cross-ref.
+    databases..." _info.
 
-  * _ry_show_help: document that positional args after `--` are
-    rejected; add NO_COLOR to ENVIRONMENT block (README parity).
-
-  * _install_fstab_opts: deregister deleted tmpfstab from
-    _TRACKED_TMPFILES after atomic rename.
-
-  * _preflight_boot_sanity: three find enumerations switched to
-    `-print0 | string split0` for parity with
-    _install_post_package_refresh (L4456) and log rotation
-    (L5952). Closes \n-in-filename hazard.
+  * _preflight_boot_sanity: 3 find enumerations ->
+    `-print0 | string split0`.
 
 
 v4.1.7 - 2026-04-20
 -------------------
 
-  * README: tables trimmed to essential columns/values; Managed
-    Files index col, Prerequisites Notes col, and Deprecated
-    Flags Notes col dropped.
-
-  * README: sample log timestamps + version bumped to 4.1.7 /
-    2026-04-20.
-
-  * ChangeLog: v4.1.6-v4.1.2 entries condensed; line-number noise
-    dropped where redundant with function names.
+  * README: tables trimmed to essential columns.
 
 
 v4.1.6 - 2026-04-19
 -------------------
 
-  * six JSONL writers (_json_str, _log, _msg bug branch,
-    _write_step_time, top-level header, _write_footer) now share
-    `2>/dev/null` on append redirects. Closes TOCTOU stderr-noise
-    window when log rotation races _log's existence test.
-
-  * known deferral: _ry_verify_runtime (842 L),
-    _ry_verify_static (627 L), _ry_do_check (331 L),
-    _ry_validate_configs (262 L) remain monolithic —
-    category-split refactor tracked for 4.2.0.
+  * 6 JSONL writers share `2>/dev/null` on append redirects (TOCTOU
+    closure on log rotation race).
 
 
 v4.1.5 - 2026-04-19
 -------------------
 
-  * _validate_profile: destination guard split — literal
-    duplicates vs. slash->underscore key collisions now report
-    distinct messages.
+  * _validate_profile: literal duplicates vs slash->underscore
+    collisions report distinct messages.
 
 
 v4.1.4 - 2026-04-19
 -------------------
 
-  * _tmpfile_key: revert 4.1.3's sha256 prefix back to
-    `string replace -a '/' '_'`. Producer/consumer parity
-    restored across eight child-side derivations.
+  * _tmpfile_key: revert sha256 -> `string replace -a '/' '_'`.
 
-  * _validate_profile: tmpfile-key collision guard rejects
-    destinations whose slash->underscore keys collide.
+  * _validate_profile: tmpfile-key collision guard.
 
-  * _ry_validate_configs, _ry_verify_static: remove dead
-    timeout-vs-crash branches; collapse phantom timeout paths
-    into single FAIL.
-
-  * _kill_sudo_keepalive: `pkill -TERM -P` reaps descendants
-    before SIGTERM/SIGKILL.
+  * _kill_sudo_keepalive: `pkill -TERM -P` reaps descendants.
 
   * _detect_lvm: timeout 5 -> 10 (slow PAM/NSS first-call).
-
-  * _run: stderr dedup sed -> `string trim --left` (fish-native).
-
-  * boot-time parse: `LC_ALL=C` for locale-safe float->int.
 
 
 v4.1.3 - 2026-04-19
 -------------------
 
   * CLI dispatcher: manual while/switch -> `argparse --exclusive`.
-    13-flag parity preserved.
-
-  * _write_footer: dropped redundant `finished` field.
 
   * _ry_verify_static: implicit_svcs derived from
-    SYSTEM_DESTINATIONS (no longer hardcoded).
+    SYSTEM_DESTINATIONS.
 
-  * _ry_validate_configs: prune val_dir + content_dir from
-    _TRACKED_TMPFILES after rm.
-
-  * _preflight_boot_sanity: BLS path-traversal check now
-    exact-segment match.
+  * _preflight_boot_sanity: BLS path-traversal exact-segment match.
 
 
 v4.1.2 - 2026-04-19
 -------------------
 
-  * _install_preflight: sudo-tag regex `\b!PASSWD\b` failed to
-    anchor; fix to
-    `(\bNOEXEC\b|!PASSWD\b|!SETENV\b|\bLOG_OUTPUT\b)`.
-
-  * _ry_do_install: manifest-write decoupled from
-    INSTALL_HAD_ERRORS.
+  * _install_preflight: sudo-tag regex hardened
+    (`(\bNOEXEC\b|!PASSWD\b|!SETENV\b|\bLOG_OUTPUT\b)`).
 
   * _install_rebuild_boot: sdboot-manage update failure ->
     EXIT_BOOT_CRIT.
 
-  * unattended -Syu now gated behind
-    RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1; without ack prints three
-    RSS headlines per feed.
+  * unattended -Syu gated behind RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1.
 
-  * _acquire_lock: quote "$fish_pid" in sh -c args.
-
-  * _ry_check_deps: flock(1) HARD -> SOFT (fallback exists).
+  * _ry_check_deps: flock(1) HARD -> SOFT.
 
 
 v4.1.1 - 2026-04-19
 -------------------
 
-  * _cleanup: fish 3.4+ passes SIG-prefixed name as $argv[1]; add
-    case HUP SIGHUP, INT SIGINT, QUIT SIGQUIT, TERM SIGTERM. Exit
-    codes 129/130/131/143 correctly distinguished.
+  * _cleanup: handle SIG-prefixed name in $argv[1] (fish 3.4+).
+    Exit codes 129/130/131/143 distinguished.
 
 
 v4.1.0 - 2026-04-19
 -------------------
 
   * remove --test-all (169 L) and --completions (93 L).
-    Pre-commit `fish --no-execute` supersedes the former; README
-    is authoritative for the latter.
 
   * _ry_show_help: 72 -> 49 lines.
 
@@ -880,66 +414,42 @@ v4.0.x - 2026-04-18 -> 2026-04-19
 ---------------------------------
 
   * profile: KERNEL_PARAMS 12 -> 15; SYSCTL_VALUES 21 -> 19;
-    PKGS_ADD 15 -> 14; EXPECTED_SERVICES 3 -> 4; new dep:
-    nftables.
+    PKGS_ADD 15 -> 14; EXPECTED_SERVICES 3 -> 4; + nftables.
 
   * kernel params: amd_pstate=active; iommu=pt; tsc=reliable;
-    loglevel=3; rd.udev.log_level=3;
-    rd.systemd.show_status=auto.
+    loglevel=3.
 
-  * RADV: RADV_EXPERIMENTAL=transfer_queue,hic;
-    RADV_PERFTEST=sam,nircache.
+  * RADV: RADV_EXPERIMENTAL=transfer_queue,hic; RADV_PERFTEST=
+    sam,nircache.
 
-  * RESOLVED_MDNS: no -> resolve (fixes .local under COSMIC).
+  * RESOLVED_MDNS: no -> resolve (.local under COSMIC).
 
-  * MASK: add systemd-coredump.socket; remove irqbalance.service.
+  * MASK: + systemd-coredump.socket; - irqbalance.service.
 
-  * _install_fstab_opts: `chmod/chown --reference=/etc/fstab`
-    before findmnt --verify; commit=10 appended.
+  * _install_fstab_opts: chmod/chown `--reference=/etc/fstab` before
+    findmnt --verify; commit=10 appended.
 
-  * log subdirs created under umask 0077 with chmod 700 repair.
-
-  * eight hash pipelines: capture raw line + snapshot
-    $pipestatus (empty-stdin SHA mask fix).
-
-  * _ry_namespace_cleanup: HOME preserved; source-exit no longer
-    reverts caller HOME.
-
-  * all multi-line # blocks collapsed; fish_indent canonical pass.
+  * _ry_namespace_cleanup: HOME preserved.
 
 
 v3.51.x - 2026-04-13 -> 2026-04-17
 ----------------------------------
 
-  * sourcing detection: `status stack-trace | string match -q
-    '*from sourcing*'`.
+  * sourcing detection via `status stack-trace`.
 
   * _ry_exit: namespace cleanup runs unconditionally.
 
-  * _acquire_lock + keepalive: `%self` -> `$fish_pid`;
-    `flock -n -E 5` reclaim before rmdir+mkdir+PID re-verify.
+  * _acquire_lock + keepalive: %self -> $fish_pid; flock reclaim.
 
-  * _pregenerate_content_files: writes `<safe>.genfail` sentinel
-    on generator failure; consumers detect it.
+  * boot-wipe marker: stores "<count> <sha256-of-sorted-basenames>".
 
-  * boot-wipe marker: stores
-    "<count> <sha256-of-sorted-basenames>"; re-prompts on
-    basename-set change.
+  * _atomic_write_file parent-dir trust: 3 sudo calls -> single
+    `sudo stat` + `sudo test -L`.
 
-  * _install_aur_packages: paru-missing ->
-    INSTALL_HAD_ERRORS=true + return 1 when AUR_PKGS non-empty.
-
-  * _atomic_write_file parent-dir trust: three sudo calls ->
-    single `sudo stat -c '%F %u %a'` + `sudo test -L`.
-
-  * _run: RY_RUN_TIMEOUT defaults to 3600 when unset; invalid ->
-    one-shot _warn + fallback.
+  * _run: RY_RUN_TIMEOUT defaults to 3600 when unset.
 
   * _validate_profile: 26 required globals + numeric type-check +
     element sanitization.
-
-  * _install_fstab_opts: _check_sudo_keepalive first; awk strips
-    strictatime; five write-path _warn -> _fail.
 
   * KERNEL_PARAMS: amd_iommu=off -> iommu=pt.
 
@@ -948,17 +458,12 @@ v3.50.x - 2026-04-13
 --------------------
 
   * profile system: external profiles at
-    `~/.config/ry-install/profiles/<n>.fish`; resolution via
-    `~/.config/ry-install/default-profile` -> gtr9_pro fallback.
+    `~/.config/ry-install/profiles/<n>.fish`.
 
-  * _validate_profile: 26 required globals + numeric type-check +
-    element sanitization.
+  * _validate_profile: 26 required globals + type-check.
 
-  * _manifest_check_orphans: warns on files from previous
-    install/profile.
-
-  * _acquire_lock: stale-lock reclaim uses `flock -n -E 5` before
-    rmdir+mkdir+PID re-verify.
+  * _manifest_check_orphans: warns on previous-install/profile
+    files.
 
 
 v3.49.0 - 2026-04-12
@@ -970,42 +475,28 @@ v3.49.0 - 2026-04-12
 v3.48.x - 2026-04-08 -> 2026-04-09
 ----------------------------------
 
-  * TIMESTAMP suffixed with $fish_pid (concurrent-children
-    log-file race).
+  * TIMESTAMP suffixed with $fish_pid.
 
   * SDBOOT_REMOVE_EXISTING=yes requires
     RY_INSTALL_CONFIRM_BOOT_WIPE=1; marker at
     `~/ry-install/.boot-wipe-acknowledged`.
 
-  * source-safe exit: _ry_exit helper + _RY_INSTALL_BAILING +
-    _RY_INSTALL_SOURCED + _RY_INSTALL_LAST_EXIT (fixes top-level
-    exit killing host shell on source).
+  * source-safe exit: _ry_exit + _RY_INSTALL_BAILING +
+    _RY_INSTALL_SOURCED + _RY_INSTALL_LAST_EXIT.
 
-  * _atomic_write_file: post-write hash distinguishes sudo lapse
-    from fs error.
+  * remove --lint mode (~317 L), --restore-power-targets,
+    _ry_count_managed_cases, _get_boot_time.
 
-  * remove --lint mode (~317 L), undocumented
-    --restore-power-targets, _ry_count_managed_cases,
-    _get_boot_time.
+  * 10 `fish -c` workers wrapped with
+    `timeout --kill-after=5 60`.
 
-  * ten fish -c workers wrapped with `timeout --kill-after=5 60`.
-
-  * _run: RY_RUN_TIMEOUT regex hardened (rejects 0, leading-zero,
-    empty); `</dev/null` added.
-
-  * _dir_group_or_world_writable helper consolidated;
-    BOOT_WIPE_MARKER stores entry count.
-
-  * _install_fstab_opts: awk OFS fix; post-rewrite
-    findmnt --verify.
+  * _dir_group_or_world_writable helper consolidated.
 
 
 v3.x - pre-2026-04-08
 ---------------------
 
-  * profile/manifest/lock infrastructure, multi-mode CLI
-    dispatch, embedded config generators, parallel verify/check
-    workers.
+  * profile/manifest/lock infrastructure, multi-mode CLI dispatch,
+    embedded config generators, parallel verify/check workers.
 
-  * full per-version detail elided — see git log for individual
-    commits.
+  * full per-version detail elided — see git log.

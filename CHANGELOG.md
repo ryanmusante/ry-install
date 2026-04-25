@@ -6,6 +6,121 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.3.1 - 2026-04-25
+-------------------
+
+  Audit-driven cleanup release. Eighteen verified findings from a
+  line-by-line audit of v4.3.0 addressed: tracked-tmpfile leak fixes,
+  caller-context bleed in _post_boot, regex-safety hardening,
+  diagnostic accuracy, and one cached lookup. No behavior change on
+  the happy path. External contracts (CLI, exit codes, JSONL schema,
+  manifest format, boot-wipe marker, 16 managed destinations, signal
+  handlers, lock semantics) preserved. Net file size +30 lines (5050
+  → 5080) reflects defensive checks and inline rationale comments.
+
+[fixes]
+
+  * _install_fstab_opts: bare `set _TRACKED_TMPFILES` (only site of
+    six that omitted -g) replaced with `set -g`. Worked today only
+    because no local of the same name shadowed it; one future
+    `set -l _TRACKED_TMPFILES` anywhere in the function would have
+    silently broken the untrack.
+
+  * _atomic_write_file: untrack tmpfile after successful mv. Path
+    no longer exists post-mv; cleanup loop was stat()-ing dead
+    paths and the tracked list grew unbounded across each install
+    run (16 entries per run on gtr9_pro).
+
+  * _ensure_sudo_cached: untrack $_sudo_err on both success and
+    failure paths after rm. Same leak class as _atomic_write_file
+    above.
+
+  * _post_boot: remove `_log_section "INSTALL-FILE END"` writes
+    from helper. Caller-context bleed — helper hard-coded a marker
+    that only made sense when called from _ry_do_install_file.
+    _ry_do_install_file now writes END unconditionally on every
+    return path via single-exit refactor.
+
+  * _ry_do_install_file: convert post-hook dispatch to single-exit
+    pattern. `_post_$_h "$target"; or return $status` bypassed the
+    function's END marker on hook failure; replaced with `set
+    _hook_rc $status` + post-loop _log_section + `return $_hook_rc`.
+
+  * _chk_grep: pre-check file existence with `sudo -n test -f` in
+    the /boot path so missing-file vs missing-key are distinguished
+    in the FAIL message. Non-boot path already had this check.
+
+  * _grep_kv: escape $key with `string escape --style=regex` before
+    interpolating into `string match -qr`. Current keys are
+    alphanumeric/underscore (regex-safe) but profiles may extend.
+
+  * _ry_do_install_file: drop unreachable `or echo "$dst"` fallback
+    on `realpath -m` cmdsubst. realpath -m has no failure mode
+    (always exit 0); the OR branch never fired.
+
+[diagnostics]
+
+  * _verify_static_services: surface full LoadState:ActiveState:
+    UnitFileState in masked-service FAIL message. Previously only
+    UnitFileState was shown — error/merged/bad-setting/masked-runtime
+    states all read identically as "expected: masked".
+
+  * _install_fstab_opts: warn when replacing non-default commit=
+    value in /etc/fstab (e.g. user's commit=30 → commit=10). Was
+    silently overridden.
+
+  * _ry_do_install: change "INSTALLATION COMPLETE (WITH WARNINGS)"
+    to "INSTALLATION FINISHED WITH WARNINGS" — "complete" implied
+    success in shell-history scrape.
+
+[performance]
+
+  * _content__etc_systemd_logind...: cache systemd version in global
+    _RY_SYSTEMD_VER on first call. Was forking systemctl --version
+    once per content generation (16 forks per verify-static run on
+    gtr9_pro).
+
+[robustness]
+
+  * cpupower-epp.service: add `ConditionPathExists=/usr/bin/bash` to
+    [Unit] so the service degrades gracefully on minimal images
+    where /usr/bin/bash is absent (instead of failing to start with
+    a confusing exec error).
+
+  * sudo keepalive subshell: quote `$argv[2]` in `test -d --
+    "$argv[2]"`. LOCK_DIR doesn't currently contain spaces but
+    unquoted expansion split-and-globbed inside the test command,
+    which would have failed silently.
+
+[style]
+
+  * _json_str: replace five redundant `set -l val` re-declarations
+    with `set val`. Functionally identical (fish reassigns on
+    redeclare in same scope) but stylistically cleaner.
+
+[docs]
+
+  * _validate_kernel_params: comment now lists the actual nine
+    unchecked params (iommu, amd_pstate, loglevel, module_blacklist,
+    nowatchdog, quiet, rd.systemd.show_status, rd.udev.log_level,
+    tsc) instead of five (two of which weren't even present in
+    KERNEL_PARAMS).
+
+  * _ry_check_disk_space: comment now flags GNU-coreutils-only
+    column-4 assumption — not portable to BusyBox/BSD df layouts.
+
+  * _MY_UID: header comment documents capture-once-at-start
+    invariant.
+
+  * _ry_exit: comment rewrite — sentinel is set unconditionally
+    (was: "sets bail sentinel and returns when sourced", which
+    implied conditional set).
+
+  * _install_fstab_opts: comment documents awk OFS rebuild
+    converting tab-aligned fstab to space-separated (mount(8)
+    accepts any whitespace; cosmetic only).
+
+
 v4.3.0 - 2026-04-25
 -------------------
 

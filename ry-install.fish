@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.3.0 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.3.1 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.3.0"
+set -g VERSION "4.3.1"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -26,7 +26,7 @@ set -g EXIT_BOOT_CRIT 4
 set -g EXIT_LOCK 5
 set -g EXIT_DRIFT 10
 
-# _ry_exit: source-safe exit. Exits normally; sets bail sentinel and returns when sourced.
+# _ry_exit: source-safe exit. Always sets bail sentinel; exits when run, returns when sourced.
 function _ry_exit --argument-names code --description "Source-safe exit: set bail sentinel and return when sourced, exit otherwise"
     test -z "$code"; and set code 0
     set -g _RY_INSTALL_LAST_EXIT $code
@@ -94,6 +94,7 @@ set -g DATE_LABEL (date '+%Y-%m-%d')
 set -g TIMESTAMP (date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
 
 # HOME resolution: env → getent passwd → tilde expansion (handles privilege-escalated shells, cron, containers)
+# Captured once at script start; assumed stable across the run (fish has no in-script setuid).
 set -g _MY_UID (id -u)
 if test -z "$HOME"
     set -g HOME (getent passwd $_MY_UID 2>/dev/null | cut -d: -f6)
@@ -230,7 +231,8 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         return 0
     end
 
-    # Map cmdline param prefix → CONFIG_ symbol. Unchecked: iommu, clocksource, module_blacklist, nowatchdog, quiet.
+    # Map cmdline param prefix → CONFIG_ symbol. Unchecked (kernel reports support via dmesg/sysfs, not /proc/config.gz):
+    # iommu, amd_pstate, loglevel, module_blacklist, nowatchdog, quiet, rd.systemd.show_status, rd.udev.log_level, tsc.
     set -l param_config_map \
         "zswap.=CONFIG_ZSWAP" \
         "amdgpu.=CONFIG_DRM_AMDGPU" \
@@ -1126,11 +1128,14 @@ end
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
     printf '%s\n' "[Login]"
+    # Cache systemd version once per process (called by every _content_hash → 16 times per verify-static).
+    if not set -q _RY_SYSTEMD_VER
+        set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null \
+            | head -n 1 | string match -r -- '\d+')
+    end
     for key in $LOGIND_IGNORE_KEYS
         if test "$key" = HandleSecureAttentionKey
-            set -l _sd_ver (systemctl --version 2>/dev/null \
-                | head -n 1 | string match -r -- '\d+')
-            if test -z "$_sd_ver"; or test "$_sd_ver" -lt 256
+            if test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 256
                 continue
             end
         end
@@ -1197,6 +1202,7 @@ Description=Set CPU EPP to performance (amd_pstate=active: powersave governor + 
 After=cpupower.service
 Wants=cpupower.service
 ConditionPathExists=/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference
+ConditionPathExists=/usr/bin/bash
 
 [Service]
 Type=oneshot
@@ -1255,6 +1261,8 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     if test $_rc -ne 0
         set -l _reason (command head -n 1 "$_sudo_err" 2>/dev/null)
         command rm -f -- "$_sudo_err" 2>/dev/null
+        # Untrack: rm consumed it; cleanup loop would otherwise stat() a dead path.
+        set -g _TRACKED_TMPFILES (string match -v -- "$_sudo_err" $_TRACKED_TMPFILES)
         _log "SUDO_CACHE_FAIL: $_reason"
         if test -n "$_reason"
             _err "Sudo credential cache failed: $_reason"
@@ -1264,6 +1272,8 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
         return 1
     end
     command rm -f -- "$_sudo_err" 2>/dev/null
+    # Untrack: rm consumed it; cleanup loop would otherwise stat() a dead path.
+    set -g _TRACKED_TMPFILES (string match -v -- "$_sudo_err" $_TRACKED_TMPFILES)
     return 0
 end
 
@@ -1331,12 +1341,12 @@ end
 # Escape \\,",\n,\r,\t for JSON; strip C0/DEL — pacman/sdboot-manage stderr captured via _run contains \t/\r and would fail RFC 8259 inside a JSON string.
 function _json_str --description "Escape a string for safe JSON embedding"
     set -l val (string replace -a '\\' '\\\\' -- "$argv[1]" | string collect)
-    set -l val (string replace -a '"' '\\"' -- "$val" | string collect)
-    set -l val (string replace -a \n '\\n' -- "$val" | string collect)
-    set -l val (string replace -a \r '\\r' -- "$val" | string collect)
-    set -l val (string replace -a \t '\\t' -- "$val" | string collect)
+    set val (string replace -a '"' '\\"' -- "$val" | string collect)
+    set val (string replace -a \n '\\n' -- "$val" | string collect)
+    set val (string replace -a \r '\\r' -- "$val" | string collect)
+    set val (string replace -a \t '\\t' -- "$val" | string collect)
     # Strip remaining C0 (0x00-0x08, 0x0B-0x0C, 0x0E-0x1F) + DEL (0x7F) by replacement; \b/\f rare in shell output, replace not escape keeps function bounded.
-    set -l val (string replace -ar '[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]' '?' -- "$val")
+    set val (string replace -ar '[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]' '?' -- "$val")
     printf '%s\n' "$val"
 end
 
@@ -1721,6 +1731,11 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
             _fail "  $argv[3]: sudo required for /boot path"
             return 1
         end
+        # Pre-check existence so missing-file vs missing-key are distinguishable in the sudo path.
+        if not sudo -n test -f -- "$argv[1]" 2>/dev/null
+            _fail "  $argv[3]: FILE NOT FOUND"
+            return 1
+        end
         sudo -n grep -qF -- "$argv[2]" "$argv[1]" 2>/dev/null; and set found true
     else
         grep -qF -- "$argv[2]" "$argv[1]" 2>/dev/null; and set found true
@@ -1782,7 +1797,8 @@ end
 function _ry_check_disk_space --description "Verify sufficient free disk space for installation"
     _log "Checking disk space..."
 
-    # df -B1 for byte-precision; -BG/-BM round UP and create false-pass at boundary
+    # df -B1 for byte-precision; -BG/-BM round UP and create false-pass at boundary.
+    # GNU coreutils only — column 4 = Avail; not portable to BusyBox/BSD layouts.
     set -l root_avail_b (LC_ALL=C df -B1 / 2>/dev/null | tail -n 1 | awk '{print $4}')
     set -l root_avail ""
     if test -n "$root_avail_b"; and string match -qr '^\d+$' -- "$root_avail_b"
@@ -1990,7 +2006,9 @@ function _grep_kv --argument-names dst --description "Validate kv pairs (loader.
             set sep '='
     end
     for key in $keys
-        string match -qr -- "^$key$sep" $content; or begin
+        # Escape key (defense — current keys are alphanumeric/underscore, but profile may extend).
+        set -l _key_re (string escape --style=regex -- "$key")
+        string match -qr -- "^$_key_re$sep" $content; or begin
             _fail "  $dst: missing key '$key'"
             return 1
         end
@@ -2262,6 +2280,8 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         return 1
     end
 
+    # Untrack: mv consumed the tmpfile path; cleanup loop would otherwise stat() a dead path.
+    set -g _TRACKED_TMPFILES (string match -v -- "$tmpfile" $_TRACKED_TMPFILES)
     _ok "→ $dst"
     return 0
 end
@@ -2677,7 +2697,8 @@ function _verify_static_services --description "Verify SERVICE_DESTINATIONS file
         else if test "$_rec[3]" = masked
             _ok "  $_svc: masked"
         else
-            _fail "  $_svc: $_rec[3] (expected: masked)"
+            # Surface the actual LoadState (error/merged/bad-setting/masked-runtime) instead of just UnitFileState.
+            _fail "  $_svc: load=$_rec[1] state=$_rec[2] file=$_rec[3] (expected: masked)"
         end
     end
     _echo
@@ -3791,7 +3812,7 @@ function _install_preflight --description "Run all preflight checks before insta
     set -l my_pid $fish_pid
     # Keepalive: 45 s cycle; transient PAM failures self-heal next cycle.
     fish -c '
-        while kill -0 -- $argv[1] 2>/dev/null; and test -d -- $argv[2]
+        while kill -0 -- $argv[1] 2>/dev/null; and test -d -- "$argv[2]"
             sudo -n -v 2>/dev/null; or break
             sleep $argv[3]
         end
@@ -3984,18 +4005,28 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         return 0
     end
     set -l needs_change false
+    set -l _commit_overrides
     for line in $ext4_lines
         set -l opts_field (printf '%s\n' "$line" | awk '{ print $4 }')
         if not string match -q '*noatime*' -- "$opts_field"; or not string match -q '*lazytime*' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"
             set needs_change true
-            break
+            # Surface non-default commit= overrides (commit=30 etc) so the rewrite isn't silent.
+            set -l _existing_commit (string match -r -- '(^|,)commit=([0-9]+)(,|$)' -- "$opts_field")[3]
+            if test -n "$_existing_commit"; and test "$_existing_commit" != 10
+                set -a _commit_overrides "$_existing_commit"
+            end
         end
     end
     if test "$needs_change" = false
         _ok "  /etc/fstab: ext4 entries already have noatime,lazytime,commit=10"
         return 0
     end
+    if test (count $_commit_overrides) -gt 0
+        _warn "  /etc/fstab: replacing existing commit= value(s) with commit=10: $_commit_overrides"
+    end
     # Atomic edit: one mktemp + one awk; preserve mode+own via --reference; one sudo mv.
+    # NOTE: awk's `$4 = out; print` rebuilds the line with OFS=" ", so tab-aligned fstab becomes
+    # space-separated. mount(8) accepts any whitespace, so this is cosmetic only.
     set -l tmpfstab (sudo -n mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null)
     if test -z "$tmpfstab"
         _fail "  /etc/fstab: mktemp failed"
@@ -4051,7 +4082,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         _fail "  /etc/fstab: atomic move failed"
         return 1
     end
-    set _TRACKED_TMPFILES (string match -v -- "$tmpfstab" $_TRACKED_TMPFILES)
+    set -g _TRACKED_TMPFILES (string match -v -- "$tmpfstab" $_TRACKED_TMPFILES)
     _ok "  /etc/fstab: noatime,lazytime,commit=10 applied to ext4 entries"
     _log "FSTAB_OPTS: noatime,lazytime,commit=10 applied"
     return 0
@@ -4600,7 +4631,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
 
     _echo
     if test "$INSTALL_HAD_ERRORS" = true
-        _echo "INSTALLATION COMPLETE (WITH WARNINGS)"
+        _echo "INSTALLATION FINISHED WITH WARNINGS"
     else
         _echo "INSTALLATION COMPLETE"
     end
@@ -4652,17 +4683,17 @@ function _ry_do_install_file --argument-names target --description "Install a si
     set -l valid false
     set -l use_sudo true
     # Canonicalize destinations for comparison — handles symlinked /home (rpm-ostree, systemd-homed).
+    # realpath -m never fails (no -e), so no fallback branch is needed.
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
-        set -l _canon_dst (realpath -m -- "$dst" 2>/dev/null; or echo "$dst")
+        set -l _canon_dst (realpath -m -- "$dst" 2>/dev/null)
         if test "$target" = "$dst"; or test "$target" = "$_canon_dst"
             set valid true
-            # Resolve destination and validate it exists in managed file list
             break
         end
     end
     if test "$valid" = false
         for dst in $USER_DESTINATIONS
-            set -l _canon_dst (realpath -m -- "$dst" 2>/dev/null; or echo "$dst")
+            set -l _canon_dst (realpath -m -- "$dst" 2>/dev/null)
             if test "$target" = "$dst"; or test "$target" = "$_canon_dst"
                 set valid true
                 set use_sudo false
@@ -4711,22 +4742,23 @@ function _ry_do_install_file --argument-names target --description "Install a si
             "*/coredump.conf.d/*|post_coredump" \
             "*/environment.d/*|post_envd" \
             "/etc/drirc|post_drirc"
+        set -l _hook_rc 0
         for _entry in $_post_hooks
             set -l _g (string split '|' -- $_entry)[1]
             set -l _h (string split '|' -- $_entry)[2]
             if string match -q $_g -- "$target"
-                _post_$_h "$target"; or return $status
+                _post_$_h "$target"
+                set _hook_rc $status
                 break
             end
         end
+        _log_section "INSTALL-FILE END"
+        return $_hook_rc
     else
         _err "Failed to install: $target"
         _log_section "INSTALL-FILE END"
         return 1
     end
-
-    _log_section "INSTALL-FILE END"
-    return 0
 end
 
 # ─── Post-install hook helpers (C.5) ──────────────────────────────────
@@ -4746,12 +4778,10 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
     if test $_rc -ne 0
         _err "CRITICAL: boot rebuild cascade failed — DO NOT REBOOT"
         _info "  Fix: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update"
-        _log_section "INSTALL-FILE END"
         return $EXIT_BOOT_CRIT
     end
     if not _preflight_boot_sanity
         _err "CRITICAL: boot sanity check failed after single-file install — DO NOT REBOOT"
-        _log_section "INSTALL-FILE END"
         return $EXIT_BOOT_CRIT
     end
     return 0

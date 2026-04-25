@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.3.2 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.3.3 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -11,13 +11,13 @@ end
 # Snapshot pre-script globals so namespace cleanup erases only script-created globals, never host-shell globals.
 set -g _RY_PRE_GLOBALS (set --names -g)
 set -g _RY_INSTALL_LOADED true
-# Source detection via `status stack-trace` works in both interactive and non-interactive contexts (fish 3.4+).
+# Source detection via 'status stack-trace' works in both interactive and non-interactive contexts (fish 3.4+).
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     set -g _RY_INSTALL_SOURCED true
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.3.2"
+set -g VERSION "4.3.3"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -175,7 +175,7 @@ if test -z "$KVER_MINOR"; or not string match -qr '^\d+$' -- "$KVER_MINOR"
 end
 
 function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy-loaded; empty on missing config)"
-    # sentinel-based gate — `count == 0` re-tested /proc/config.gz on every call when missing
+    # sentinel-based gate — 'count == 0' re-tested /proc/config.gz on every call when missing
     if not set -q _KCONFIG_LOADED
         if test -f /proc/config.gz
             set -g _KCONFIG_DATA (zcat /proc/config.gz 2>/dev/null)
@@ -206,7 +206,7 @@ function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_
     return 0
 end
 
-# LVM probe (_mask_list_effective + _install_configure_services); `sudo -n pvs` then lsblk fallback for sudo-cache lapses.
+# LVM probe (_mask_list_effective + _install_configure_services); 'sudo -n pvs' then lsblk fallback for sudo-cache lapses.
 function _detect_lvm --description "Return 0 (LVM present) or 1 (no LVM detected)"
     if command -q sudo; and sudo -n true 2>/dev/null
         set -l _pvs_output (command timeout 10 sudo -n pvs --noheadings 2>/dev/null | string trim --)
@@ -1208,7 +1208,7 @@ ConditionPathExists=/usr/bin/bash
 Type=oneshot
 RemainAfterExit=yes
 TimeoutStartSec=10
-# @@AUDIT@@ v4.3.2: drop `|| logger` fallback — failure logging now goes through journal via StandardError=journal (always present on systemd hosts; logger from util-linux not guaranteed in stripped chroots).
+# @@AUDIT@@ v4.3.2: drop '|| logger' fallback — failure logging now goes through journal via StandardError=journal (always present on systemd hosts; logger from util-linux not guaranteed in stripped chroots).
 StandardError=journal
 ExecStart=/usr/bin/bash -c \'shopt -s nullglob; rc=0; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo performance > "$cpu" 2>/dev/null || { echo "EPP write failed: $cpu" >&2; rc=1; }; done; exit 0\'
 
@@ -1255,7 +1255,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
         _log "MKTEMP_FAIL: ry-sudo-err — sudo error message will be unavailable"
     end
     test "$_sudo_err" != /dev/null; and set -ga _TRACKED_TMPFILES "$_sudo_err"
-    # Probe `sudo -n -v` first (silent; redirect kills prompt); on miss retry `sudo -v` for tty password prompt.
+    # Probe 'sudo -n -v' first (silent; redirect kills prompt); on miss retry 'sudo -v' for tty password prompt.
     sudo -n -v 2>"$_sudo_err"
     set -l _rc $status
     if test $_rc -ne 0
@@ -1283,6 +1283,11 @@ end
 
 # Tmpfile key: slash→underscore of destination path. Collision guard lives in _validate_profile (rejects /a/b vs /a_b at load time).
 function _as --argument-names use_sudo --description "Prefix command with sudo or command based on use_sudo flag"
+    # @@AUDIT@@ v4.3.3: arity guard — caller error (use_sudo without a real command) previously invoked sudo or command with empty argv.
+    if test (count $argv) -lt 2
+        _log "BUG: _as called without command (argv=$argv)"
+        return 2
+    end
     if test "$use_sudo" = true
         sudo -n $argv[2..-1]
     else
@@ -1291,7 +1296,7 @@ function _as --argument-names use_sudo --description "Prefix command with sudo o
 end
 
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path (\$HOME→HOME literal, then slash→underscore)"
-    # $HOME→HOME substitution before slash-replace keeps user-scope content fn names stable across users (fish rejects `/` in identifiers).
+    # $HOME→HOME substitution before slash-replace keeps user-scope content fn names stable across users (fish rejects '/' in identifiers).
     string replace -a / _ -- (string replace -- "$HOME" HOME "$path")
 end
 
@@ -1359,7 +1364,7 @@ function _log_section --argument-names name --description "Emit a section-event 
 end
 
 
-# INVARIANT: NEVER call _log from a `fish -c` parallel child — no file locking, concurrent writes corrupt JSONL.
+# INVARIANT: NEVER call _log from a 'fish -c' parallel child — no file locking, concurrent writes corrupt JSONL.
 function _log --description "Append a timestamped JSONL line to LOG_FILE"
     test -f "$LOG_FILE"; or return 0
     set -l _ts (date '+%Y-%m-%dT%H:%M:%S%z')
@@ -1374,7 +1379,7 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
         set event (string lower (string match -r '^[A-Z][A-Z_]*' -- "$raw"))
         set data (string replace -r '^[A-Z][A-Z_]*: *' '' -- "$raw")
     end
-    # @@AUDIT@@ v4.3.2: drop redundant `set -l` — `event` and `data` are already locals from L1355-1356; bare `set` re-binds in same scope (verified). Reads as "rebind" intent, not "shadow declaration".
+    # @@AUDIT@@ v4.3.2: drop redundant 'set -l' — 'event' and 'data' are already locals from L1355-1356; bare 'set' re-binds in same scope (verified). Reads as "rebind" intent, not "shadow declaration".
     set event (string replace -ra '[^a-z0-9_]' '' -- "$event")
     set data (_json_str "$data")
     # Cap $data at 4096 chars; step back from cut point if inside a JSON escape sequence to avoid malformed output
@@ -1559,7 +1564,7 @@ function _progress_teardown
     set -g _PROG_PINNED false
 end
 
-# INVARIANT: callers pass pre-expanded argv with no shell metacharacters ([;|&`$\n\t\r<>(){}]); _run rejects them.
+# INVARIANT: callers pass pre-expanded argv with no shell metacharacters ([;|&'$\n\t\r<>(){}]); _run rejects them.
 function _run --description "Execute a command with logging, stdout/stderr capture, and timeout enforcement"
     if test (count $argv) -eq 0
         _log "BUG: _run called with no arguments"
@@ -1616,7 +1621,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     if test -n "$_run_timeout"; and command -q timeout
         command timeout --preserve-status --kill-after=10 "$_run_timeout" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     else
-        # `command` prefix forces external binary — prevents fish function recursion when timeout(1) unavailable.
+        # 'command' prefix forces external binary — prevents fish function recursion when timeout(1) unavailable.
         command $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     end
     set -l ret $status
@@ -1711,6 +1716,11 @@ function _chk_perms --argument-names path expected_perms expected_owner use_sudo
         set _po (sudo -n stat -c '%a %U:%G' -- "$path" 2>/dev/null)
     else
         set _po (stat -c '%a %U:%G' -- "$path" 2>/dev/null)
+    end
+    # @@AUDIT@@ v4.3.3: stat-fail guard — empty $_po (TOCTOU file-disappear, sudo lapse, or unreadable) previously emitted "<path>:   (expected: ...)" with two blank fields.
+    if test -z "$_po"
+        _fail "  $path: stat failed (file disappeared or unreadable)"
+        return 1
     end
     set -l _parts (string split ' ' -- "$_po")
     if test "$_parts[1]" != "$expected_perms"; or test "$_parts[2]" != "$expected_owner"
@@ -2145,7 +2155,8 @@ function _ry_validate_configs --description "Run all embedded config validators"
             case '*.service'
                 _verify_unit_content "$dst" $content; or set errors (math $errors + 1)
             case '*.fish'
-                printf '%s\n' $content | fish --no-execute -; or set errors (math $errors + 1)
+                # @@AUDIT@@ v4.3.3: drop trailing '-' — fish does not special-case '-' as stdin (GH #1039); previous form returned rc=127 and aborted preflight.
+                printf '%s\n' $content | fish --no-execute; or set errors (math $errors + 1)
             case '*/loader.conf' '*/sdboot-manage.conf'
                 _grep_kv "$dst" $content; or set errors (math $errors + 1)
             case '*/kernel/cmdline'
@@ -2192,7 +2203,7 @@ function _content_hash --argument-names dst --description "SHA256 of embedded co
     test $_ps[1] -ne 0; and return 1
     test $_ps[2] -ne 0; and return 1
     test -z "$_content"; and return 1
-    # Inline index via `string split` replaces external head(1). pipestatus[1..2] covers printf+sha256sum.
+    # Inline index via 'string split' replaces external head(1). pipestatus[1..2] covers printf+sha256sum.
     set -l _hash_line (printf '%s' "$_content" | sha256sum)
     set -l _ps $pipestatus
     if test $_ps[1] -ne 0; or test $_ps[2] -ne 0
@@ -2214,7 +2225,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     end
 
     set -l dst_dir (dirname -- "$dst")
-    # Parent-dir trust: exists, real dir, expected-uid-owned, not group/world-writable; `_as env stat` follows symlinks so separate `test -L` guard below (stat vs lstat).
+    # Parent-dir trust: exists, real dir, expected-uid-owned, not group/world-writable; '_as env stat' follows symlinks so separate 'test -L' guard below (stat vs lstat).
     set -l _dir_stat (_as $use_sudo env LC_ALL=C stat -c '%F %u %a' -- "$dst_dir" 2>/dev/null)
     if test -z "$_dir_stat"
         _fail "→ $dst (parent dir missing or unreadable: $dst_dir)"
@@ -2856,7 +2867,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     if test -z "$_cmdline"
         set drift 1
     else
-        # @@AUDIT@@ v4.3.2: whole-word regex match (escaped) — prior `* $_p *` substring check could false-match when one param is a prefix/suffix of another (no current collisions in profile, but defense for future profiles).
+        # @@AUDIT@@ v4.3.2: whole-word regex match (escaped) — prior '* $_p *' substring check could false-match when one param is a prefix/suffix of another (no current collisions in profile, but defense for future profiles).
         for _p in $KERNEL_PARAMS
             set -l _p_re (string escape --style=regex -- "$_p")
             string match -qr -- "(^|\s)$_p_re(\s|\$)" -- "$_cmdline"; or set drift 1
@@ -3608,6 +3619,12 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
         if sudo -n test -d "$dir" 2>/dev/null
             set dir_checked (math $dir_checked + 1)
             set -l _po (sudo -n stat -c '%a %U:%G' -- "$dir" 2>/dev/null)
+            # @@AUDIT@@ v4.3.3: stat-fail guard mirrors _chk_perms; dir-disappear during verify previously logged blank perms/owner.
+            if test -z "$_po"
+                _fail "  $dir: stat failed"
+                set dir_bad (math $dir_bad + 1)
+                continue
+            end
             set -l perms (string split ' ' -- "$_po")[1]
             set -l owner (string split ' ' -- "$_po")[2]
             # parent-dir mode parse — strip leading on len>3, floor(n/2)%2 verified for 755/775/757/1755/4755
@@ -3662,7 +3679,7 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
         _log "BOOT_TIME_CHECK: parsing systemd-analyze output"
         set -l total_sec (printf '%s\n' "$boot_time" | string match -r -- '= ([0-9.]+)s' | tail -n 1)
         if test -n "$total_sec"; and string match -qr '^[0-9.]+$' -- "$total_sec"
-            # BOOT_TIME_TARGET optional (see _validate_profile); guard so omitting doesn't trip `test: arg expected`.
+            # BOOT_TIME_TARGET optional (see _validate_profile); guard so omitting doesn't trip 'test: arg expected'.
             if set -q BOOT_TIME_TARGET; and test -n "$BOOT_TIME_TARGET"
                 set -l target $BOOT_TIME_TARGET
                 set -l time_int (LC_ALL=C printf "%.0f" "$total_sec" 2>/dev/null)
@@ -3777,7 +3794,7 @@ function _install_preflight --description "Run all preflight checks before insta
     set -l _sudo_lines (sudo -n -l 2>/dev/null | grep -v '^\s*#')
     set -l sudo_all 0
     for _sl in $_sudo_lines
-        # `!`-prefixed tags: right-boundary only — PCRE \b needs word↔non-word (space+! are both non-word).
+        # '!'-prefixed tags: right-boundary only — PCRE \b needs word↔non-word (space+! are both non-word).
         if string match -qr -- '(\bNOEXEC\b|!PASSWD\b|!SETENV\b|\bLOG_OUTPUT\b)' "$_sl"
             continue
         end
@@ -3792,11 +3809,11 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
     set -l my_pid $fish_pid
-    # Keepalive: 45 s cycle; transient PAM failures self-heal next cycle.
+    # Keepalive: 45 s cycle; transient PAM failures self-heal next cycle. @@AUDIT@@ v4.3.3: 'command' prefix on kill/sudo/sleep — fish -c subshell loads autoloaded user functions, any of which could shadow these names.
     fish -c '
-        while kill -0 -- $argv[1] 2>/dev/null; and test -d -- "$argv[2]"
-            sudo -n -v 2>/dev/null; or break
-            sleep $argv[3]
+        while command kill -0 -- $argv[1] 2>/dev/null; and test -d -- "$argv[2]"
+            command sudo -n -v 2>/dev/null; or break
+            command sleep $argv[3] 2>/dev/null
         end
     ' -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null &
     set -g SUDO_KEEPALIVE_PID $last_pid
@@ -3841,7 +3858,7 @@ function _install_packages --description "Install managed packages via pacman -S
     set -l _fn_err false
     _progress Packages
     _echo
-    # Install missing packages (PKGS_DEL removal: phase 4 in _install_configure_services); `pacman -Syu` below syncs DB inline (no separate -Sy step).
+    # Install missing packages (PKGS_DEL removal: phase 4 in _install_configure_services); 'pacman -Syu' below syncs DB inline (no separate -Sy step).
     _info "Package installation..."
 
     set -l pkgs_to_install $PKGS_ADD
@@ -4002,7 +4019,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     if test (count $_commit_overrides) -gt 0
         _warn "  /etc/fstab: replacing existing commit= value(s) with commit=10: $_commit_overrides"
     end
-    # Atomic edit: one mktemp + one awk; preserve mode+own via --reference; one sudo mv.; NOTE: awk's `$4 = out; print` rebuilds the line with OFS=" ", so tab-aligned fstab becomes; space-separated. mount(8) accepts any whitespace, so this is cosmetic only.
+    # Atomic edit: one mktemp + one awk; preserve mode+own via --reference; one sudo mv.; NOTE: awk's '$4 = out; print' rebuilds the line with OFS=" ", so tab-aligned fstab becomes; space-separated. mount(8) accepts any whitespace, so this is cosmetic only.
     set -l tmpfstab (sudo -n mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null)
     if test -z "$tmpfstab"
         _fail "  /etc/fstab: mktemp failed"
@@ -4283,7 +4300,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
             # Strip leading 'linux' keyword and optional slash from initrd path to extract the basename.
             set -l linux_line (sudo -n grep -m1 '^linux ' -- "$conf" 2>/dev/null | string replace -r '^linux\s+' '' | string trim --)
             set -l linux_rel (string trim --left --chars=/ -- "$linux_line")
-            # Reject exact `..` path segments (not substring — `foo..bar` is a legal filename in some BLS setups).
+            # Reject exact '..' path segments (not substring — 'foo..bar' is a legal filename in some BLS setups).
             if contains -- ".." (string split '/' -- "$linux_rel")
                 _warn "  Loader entry has non-BLS path (contains ..): $conf"
                 continue
@@ -4536,7 +4553,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _log "VERSION: $VERSION"
     _log "MODE: unattended"
 
-    # Pre-declare _boot_rc at function scope so the bare `set _boot_rc $status` at the post-`_install_rebuild_boot` site updates this local instead of creating a new one inside a later block.
+    # Pre-declare _boot_rc at function scope so the bare 'set _boot_rc $status' at the post-'_install_rebuild_boot' site updates this local instead of creating a new one inside a later block.
     set -l _boot_rc 0
 
     _echo

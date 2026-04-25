@@ -6,6 +6,68 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.3.3 - 2026-04-25
+-------------------
+
+  Maintenance release. One install-blocker fix, three robustness
+  guards, one defensive arity check, and a project-wide rewrite of
+  paired backticks in fish comments that confused GitHub's
+  fish-tmbundle grammar into entering string scope mid-comment and
+  losing syntax highlighting below. External contracts preserved
+  (CLI, exit codes, JSONL schema, manifest format, 16 managed
+  destinations, signal handlers, lock semantics).
+
+[fixes]
+
+  * _ry_validate_configs: drop trailing '-' from 'fish --no-execute'
+    invocation. fish does not special-case '-' as stdin (GH #1039
+    open since 2013); previous form returned rc=127 with "Error
+    reading script file '-': No such file or directory", causing
+    every install attempt to abort at preflight with EXIT_PREFLIGHT
+    before the package phase. After fix: rc=0.
+
+[robustness]
+
+  * _install_preflight: 'command' prefix on kill/sudo/sleep inside
+    the sudo keepalive fish -c subshell. Subshell loads autoloaded
+    user functions; any of those names could shadow the binaries and
+    break the keepalive loop silently. Aligns with the existing
+    'command sleep 0.1' idiom in _kill_sudo_keepalive and
+    _acquire_lock.
+
+  * _chk_perms: stat-fail guard. Empty $_po (TOCTOU file-disappear,
+    sudo lapse, unreadable) previously emitted "<path>: (expected: ...)"
+    with two blank fields and still returned 1; now emits "stat failed
+    (file disappeared or unreadable)" before returning.
+
+  * _verify_runtime_session parent-dirs loop: stat-fail guard mirrors
+    _chk_perms; directory-disappear during verify previously logged
+    blank perms/owner.
+
+  * _as: arity guard. Caller error (_as $use_sudo with no command
+    arg) previously invoked sudo or command with empty argv; now
+    returns rc=2 and logs BUG.
+
+[hygiene]
+
+  * comments: 19 paired backticks in fish comments replaced with
+    single quotes. TextMate-grammar highlighters (used by GitHub's
+    fish syntax view) interpret paired backticks inside
+    comment.line.fish as opening string.interpolated.backtick.fish
+    scope, poisoning highlighting of all subsequent code until the
+    grammar can re-anchor. Fish's runtime parser was unaffected;
+    this is purely a rendering fix. Help-text echo string at L1677
+    retains its single backtick pair (string scope is correctly
+    sandboxed by the grammar).
+
+  * comments: one two-line consecutive comment block in
+    _install_preflight collapsed to a single line.
+
+[version]
+
+  * version: 4.3.2 -> 4.3.3.
+
+
 v4.3.2 - 2026-04-25
 -------------------
 

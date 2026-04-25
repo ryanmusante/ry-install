@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.3.5 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.3.6 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.3.5"
+set -g VERSION "4.3.6"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -4718,21 +4718,22 @@ function _ry_do_install_file --argument-names target --description "Install a si
         _ok "Installed: $target"
 
         # Glob → post-install hook table. First-match-wins; no fallthrough on hook failure.
+        # @@AUDIT@@ v4.3.6: drop redundant `post_` prefix from values — dispatcher at L4742/L4747 is `_post_$_h`, so `post_X` resolved to `_post_post_X` (regression since v4.3.2 added the table); convention elsewhere (`_ry_profile_$name`, `_content_$key`) is bare keys with prefix in the dispatch line.
         set -l _post_hooks \
-            "/boot/*|post_boot" \
-            "/etc/mkinitcpio*|post_boot" \
-            "/etc/sdboot*|post_boot" \
-            "/etc/kernel/cmdline|post_boot" \
-            "*.service|post_service" \
-            "*/udev/rules.d/*|post_udev" \
-            "*/resolved.conf.d/*|post_resolved" \
-            "*/logind.conf.d/*|post_logind" \
-            "*/iwd/main.conf|post_nm" \
-            "*/NetworkManager/conf.d/*|post_nm" \
-            "*/sysctl.d/*|post_sysctl" \
-            "*/coredump.conf.d/*|post_coredump" \
-            "*/environment.d/*|post_envd" \
-            "/etc/drirc|post_drirc"
+            "/boot/*|boot" \
+            "/etc/mkinitcpio*|boot" \
+            "/etc/sdboot*|boot" \
+            "/etc/kernel/cmdline|boot" \
+            "*.service|service" \
+            "*/udev/rules.d/*|udev" \
+            "*/resolved.conf.d/*|resolved" \
+            "*/logind.conf.d/*|logind" \
+            "*/iwd/main.conf|nm" \
+            "*/NetworkManager/conf.d/*|nm" \
+            "*/sysctl.d/*|sysctl" \
+            "*/coredump.conf.d/*|coredump" \
+            "*/environment.d/*|envd" \
+            "/etc/drirc|drirc"
         set -l _hook_rc 0
         for _entry in $_post_hooks
             set -l _g (string split '|' -- $_entry)[1]

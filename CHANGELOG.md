@@ -6,8 +6,47 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
-v4.3.5 - 2026-04-25
+v4.3.6 - 2026-04-25
 -------------------
+
+  Hotfix. Post-install hook dispatcher restored. Single-file
+  install path returns rc=0 again with its post-action actually
+  invoked.
+
+[fix]
+
+  * _ry_install_file post-hook dispatcher: dropped redundant
+    `post_` prefix from all 14 entries in the _post_hooks glob
+    table. Dispatcher at L4742/L4747 is `_post_$_h`, so a value
+    of `post_boot` resolved to `_post_post_boot` — a name that
+    matches no defined function. Every single-file install of a
+    managed config since v4.3.2 (when the table was introduced)
+    has emitted `Internal: post-hook _post_post_X not defined`
+    via the L4741 existence guard and returned rc=1, skipping
+    its post-action: mkinitcpio rebuild, sdboot-manage refresh,
+    daemon-reload + service enable, udev reload-rules + trigger
+    + settle, NetworkManager restart, sysctl reload, resolved
+    restart, coredump.socket reload, drirc/envd session-restart
+    notice, and logind reboot notice. Now consistent with the
+    `_ry_profile_$name` and `_content_$key` dispatchers, which
+    have always used bare keys with the prefix in the dispatch
+    line. Bulk install path (_ry_do_install) was never
+    affected — it calls _ry_install_file directly without the
+    glob table.
+
+  * L4741 existence guard retained as defense-in-depth against
+    future malformed table entries (its original v4.3.2 intent).
+
+[version]
+
+  * VERSION: 4.3.5 -> 4.3.6
+
+[release]
+
+  * banner header: 4.3.6 (2026-04-25)
+
+
+
 
   Hygiene release. Completes the comment-rendering fix line that
   began in v4.3.3. No runtime behavior change; fish parser was

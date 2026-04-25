@@ -6,6 +6,60 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.3.2 - 2026-04-25
+-------------------
+
+  Audit follow-up release. Ten findings from the v4.3.1 line-by-line
+  audit addressed; changes mark with `@@AUDIT@@ v4.3.2` for
+  traceability. External contracts preserved.
+
+[fixes]
+
+  * _cleanup_on_exit: consult $_RY_INSTALL_LAST_EXIT when
+    $_INTENDED_EXIT_CODE is unset; early preflight failures no
+    longer footer with stale $status from the rm/printf in _ry_exit.
+
+  * _ry_do_install_file: redirect stderr on `sudo -n true` probe;
+    aligns with the seven other sudo-probe sites.
+
+  * _ry_do_install_file: `functions -q "_post_$_h"` guard before
+    post-hook dispatch.
+
+[robustness]
+
+  * _load_profile: regex-validate $_ROOT_UUID
+    (`^[0-9a-fA-F-]+$`) before caching.
+
+  * cpupower-epp.service: drop `|| logger` fallback; failure
+    logging now via `StandardError=journal`.
+
+  * _acquire_lock: require both flock(1) AND /bin/sh before the
+    atomic-reclaim branch; fall back on stripped chroots.
+
+  * _ry_do_check: whole-word regex match (escaped) for
+    KERNEL_PARAMS in /proc/cmdline.
+
+  * _load_profile: `head -n 1 | string trim` for default-profile
+    name file.
+
+[diagnostics]
+
+  * _ensure_sudo_cached: log `MKTEMP_FAIL` when ry-sudo-err mktemp
+    falls back to /dev/null.
+
+[hygiene]
+
+  * _log: drop redundant `set -l` on event/data sanitize lines
+    (rebind in same scope verified).
+
+  * comments: 4 stale historical-rationale banners removed
+    (profiles, file ops, runtime verification, pipeline phase 4).
+
+[version]
+
+  * version: 4.3.1 -> 4.3.2.
+
+
 v4.3.1 - 2026-04-25
 -------------------
 

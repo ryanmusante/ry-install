@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.3.1 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.3.2 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.3.1"
+set -g VERSION "4.3.2"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -367,7 +367,8 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     end
     # Stale lock reclaim: (a) flock(1) atomic advisory lock eliminates TOCTOU, (b) fallback rmdir+mkdir with PID re-verify
     set -l _reclaim_parent (dirname -- "$LOCK_DIR")
-    if command -q flock
+    # @@AUDIT@@ v4.3.2: require both flock(1) AND /bin/sh — flock branch invokes /bin/sh -c; on stripped chroots without sh we fall back to the non-atomic rmdir+mkdir path rather than failing opaquely.
+    if command -q flock; and command -q sh
         # flock -n/-E 5: non-blocking, exit 5 on contention. Paths as positional args; PID write inside flocked subshell.
         flock -n -E 5 "$_reclaim_parent" /bin/sh -c '
             rm -f -- "$1/pid" 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)
@@ -552,8 +553,11 @@ end
 # fish_exit fallback: ensures cleanup runs if no signal handler fired; respects _CLEANUP_DONE guard
 function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensure cleanup runs on fish_exit"
     set -l _exit_status $status
+    # @@AUDIT@@ v4.3.2: prefer _RY_INSTALL_LAST_EXIT (set in _ry_exit) over $status; for early preflight failures _INTENDED_EXIT_CODE is unset and $status reflects the rm/printf in _ry_exit (typically 0), masking the real exit code in the JSONL footer.
     if set -q _INTENDED_EXIT_CODE
         set _exit_status $_INTENDED_EXIT_CODE
+    else if set -q _RY_INSTALL_LAST_EXIT
+        set _exit_status $_RY_INSTALL_LAST_EXIT
     end
     if test "$_CLEANUP_DONE" = true
         return 0
@@ -562,8 +566,6 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
 end
 
 # PROFILES — machine-specific configuration
-
-# _ry_profile_gtr9_pro decomposed (v4.3.0): 8 inline helpers grouped by config domain (destinations, boot, kernel, network, env, packages, services, thresholds). All globals set with `set -g` so they persist across helper return; orchestrator calls each in sequence. Single-file inline split chosen over external partials to preserve self-contained delivery.
 
 function _ry_profile_gtr9_pro_destinations --description "gtr9_pro: managed file destinations (12 system + 3 user + 1 service = 16)"
     # 1:1 to _ry_get_file_content(); sys=0644 user=0600; 12+3+1=16 = README count.
@@ -939,7 +941,8 @@ function _load_profile --description "Determine, load, and validate the active p
     set -l default_file "$HOME/.config/ry-install/default-profile"
     set -l _name_from_file false
     if test -f "$default_file"
-        set name (string trim < "$default_file")
+        # @@AUDIT@@ v4.3.2: head -n1 before string trim — multi-line profile name file could otherwise produce embedded-newline name; L953 regex catches it but explicit single-line read is clearer.
+        set name (command head -n 1 -- "$default_file" 2>/dev/null | string trim --)
         test -n "$name"; and set _name_from_file true
     end
     if test -z "$name"
@@ -1000,6 +1003,11 @@ function _load_profile --description "Determine, load, and validate the active p
 
     # 6. Cache root UUID — findmnt called once; eliminates TOCTOU between _ry_install_file compare/write paths.
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
+    # @@AUDIT@@ v4.3.2: validate UUID shape before caching to prevent malformed cmdline injection if findmnt output is corrupt.
+    if test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F-]+$' -- "$_ROOT_UUID"
+        _err "Root UUID has invalid shape (got: $_ROOT_UUID) — refusing to cache"
+        set --erase _ROOT_UUID
+    end
     if test -z "$_ROOT_UUID"
         # Hard-fail on missing root UUID for modes that generate/verify /etc/kernel/cmdline.
         switch "$MODE"
@@ -1200,8 +1208,9 @@ ConditionPathExists=/usr/bin/bash
 Type=oneshot
 RemainAfterExit=yes
 TimeoutStartSec=10
-# Inline bash retained: oneshot unit, no external dep, nullglob handles empty cpufreq dirs
-ExecStart=/usr/bin/bash -c \'shopt -s nullglob; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo performance > "$cpu" 2>/dev/null || logger -t cpupower-epp "EPP write failed: $cpu"; done; exit 0\'
+# @@AUDIT@@ v4.3.2: drop `|| logger` fallback — failure logging now goes through journal via StandardError=journal (always present on systemd hosts; logger from util-linux not guaranteed in stripped chroots).
+StandardError=journal
+ExecStart=/usr/bin/bash -c \'shopt -s nullglob; rc=0; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo performance > "$cpu" 2>/dev/null || { echo "EPP write failed: $cpu" >&2; rc=1; }; done; exit 0\'
 
 [Install]
 WantedBy=multi-user.target'
@@ -1241,6 +1250,10 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
         return 1
     end
     set -l _sudo_err (mktemp -t ry-sudo-err.XXXXXX 2>/dev/null; or echo /dev/null)
+    # @@AUDIT@@ v4.3.2: log when mktemp fails — /dev/null fallback silently masks any subsequent sudo error message in the "_reason" extraction below.
+    if test "$_sudo_err" = /dev/null
+        _log "MKTEMP_FAIL: ry-sudo-err — sudo error message will be unavailable"
+    end
     test "$_sudo_err" != /dev/null; and set -ga _TRACKED_TMPFILES "$_sudo_err"
     # Probe `sudo -n -v` first (silent; redirect kills prompt); on miss retry `sudo -v` for tty password prompt.
     sudo -n -v 2>"$_sudo_err"
@@ -1361,9 +1374,9 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
         set event (string lower (string match -r '^[A-Z][A-Z_]*' -- "$raw"))
         set data (string replace -r '^[A-Z][A-Z_]*: *' '' -- "$raw")
     end
-    # Sanitize event field: strip non-alphanumeric/underscore to prevent JSON injection in JSONL output
-    set -l event (string replace -ra '[^a-z0-9_]' '' -- "$event")
-    set -l data (_json_str "$data")
+    # @@AUDIT@@ v4.3.2: drop redundant `set -l` — `event` and `data` are already locals from L1355-1356; bare `set` re-binds in same scope (verified). Reads as "rebind" intent, not "shadow declaration".
+    set event (string replace -ra '[^a-z0-9_]' '' -- "$event")
+    set data (_json_str "$data")
     # Cap $data at 4096 chars; step back from cut point if inside a JSON escape sequence to avoid malformed output
     if test (string length -- "$data") -gt 4096
         set -l cut 4093
@@ -2375,8 +2388,6 @@ end
 
 # FILE OPERATIONS — diff, install, verify
 
-# _ry_verify_static (v4.3.0): sha256 of embedded vs installed (exit 1 on drift); decomposed into 7 section helpers + thin orchestrator (boot/system/user/packages/services/syntax/checksum). _skip_iwd computed in _verify_static_system.
-
 function _verify_static_boot --description "Verify loader.conf, sdboot-manage, kernel cmdline, mkinitcpio, boot entries"
     _echo "BOOT CONFIGURATION"
     _echo
@@ -2845,8 +2856,10 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     if test -z "$_cmdline"
         set drift 1
     else
+        # @@AUDIT@@ v4.3.2: whole-word regex match (escaped) — prior `* $_p *` substring check could false-match when one param is a prefix/suffix of another (no current collisions in profile, but defense for future profiles).
         for _p in $KERNEL_PARAMS
-            string match -q -- "* $_p *" " $_cmdline "; or set drift 1
+            set -l _p_re (string escape --style=regex -- "$_p")
+            string match -qr -- "(^|\s)$_p_re(\s|\$)" -- "$_cmdline"; or set drift 1
         end
     end
 
@@ -2922,7 +2935,7 @@ function _gather_cpu_state --description "Collect CPU frequency path for represe
     return 0
 end
 
-# RUNTIME VERIFICATION — live sysfs/procfs state checks; exit 1 when state doesn't match config.; _ry_verify_runtime decomposed (v4.3.0): 4 section helpers + thin orchestrator per README plan (services / kparams / env / session). Helpers signal "abort entire run" via return 1; only _verify_runtime_services exercises this path (sys_units count drift assertion).
+# RUNTIME VERIFICATION — live sysfs/procfs state checks
 
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource, coredump"
     _echo "KERNEL CMDLINE"
@@ -4051,8 +4064,6 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     return 0
 end
 
-# Pipeline phase 4: daemon-reload, enable/start, mask units; sets _fn_err + INSTALL_HAD_ERRORS on failure; _install_configure_services decomposed (v4.3.0): preset (udev/resolved/PKGS_DEL) → mask → enable. Each helper returns 0 on success, 1 on critical failure that must propagate. INSTALL_HAD_ERRORS=true side-effect preserved on the same paths as v4.2.1 for caller compatibility.
-
 function _configure_services_preset --description "udev finalize, systemd-resolved restart, PKGS_DEL removal"
     # gate udev finalize on presence of udev rules in SYSTEM_DESTINATIONS
     set -l _has_udev_dst false
@@ -4673,7 +4684,8 @@ function _ry_do_install_file --argument-names target --description "Install a si
             _err "Sudo required"
             return 1
         end
-        sudo -n true; or begin
+        # @@AUDIT@@ v4.3.2: redirect stderr — other sudo-probe sites all use 2>&1; this was the only one leaking sudo's "a password is required" past _err.
+        sudo -n true >/dev/null 2>&1; or begin
             _err "Sudo required"
             return 1
         end
@@ -4705,6 +4717,12 @@ function _ry_do_install_file --argument-names target --description "Install a si
             set -l _g (string split '|' -- $_entry)[1]
             set -l _h (string split '|' -- $_entry)[2]
             if string match -q $_g -- "$target"
+                # @@AUDIT@@ v4.3.2: validate hook function exists before dispatch — prevents fish "Unknown function" stderr leak from a malformed table entry.
+                if not functions -q "_post_$_h"
+                    _err "Internal: post-hook _post_$_h not defined for glob '$_g' (target=$target)"
+                    set _hook_rc 1
+                    break
+                end
                 _post_$_h "$target"
                 set _hook_rc $status
                 break

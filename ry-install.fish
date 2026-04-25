@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.2.1 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.3.0 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.2.1"
+set -g VERSION "4.3.0"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -568,12 +568,10 @@ end
 
 # PROFILES — machine-specific configuration
 
-function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
-    # Identity
-    set -g PROFILE_NAME gtr9_pro
-    set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
+# _ry_profile_gtr9_pro decomposed (v4.3.0): 8 inline helpers grouped by config domain (destinations, boot, kernel, network, env, packages, services, thresholds). All globals set with `set -g` so they persist across helper return; orchestrator calls each in sequence. Single-file inline split chosen over external partials to preserve self-contained delivery.
 
-    # Managed file destinations — 1:1 to _ry_get_file_content(); sys=0644 user=0600; 12+3+1=16 = README count.
+function _ry_profile_gtr9_pro_destinations --description "gtr9_pro: managed file destinations (12 system + 3 user + 1 service = 16)"
+    # 1:1 to _ry_get_file_content(); sys=0644 user=0600; 12+3+1=16 = README count.
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
         /etc/kernel/cmdline \
@@ -595,8 +593,9 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     set -g SERVICE_DESTINATIONS \
         "/etc/systemd/system/cpupower-epp.service"
+end
 
-    # Boot
+function _ry_profile_gtr9_pro_boot --description "gtr9_pro: systemd-boot loader.conf + sdboot-manage.conf settings"
     set -g LOADER_DEFAULT "@saved"
     set -g LOADER_TIMEOUT 0
     set -g LOADER_CONSOLE_MODE keep
@@ -606,8 +605,10 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # REMOVE_EXISTING=yes deletes ALL boot entries before regen — manual entries (rescue, Windows) will be lost
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
+end
 
-    # Kernel params (15) — Zen 2+ defaults: amd_pstate=active, ppfeaturemask=0xfffd3fff, cwsr_enable=0, iommu=pt, tsc=reliable.
+function _ry_profile_gtr9_pro_kernel --description "gtr9_pro: kernel cmdline params (15) + mkinitcpio modules/hooks/compression"
+    # Zen 5 + gfx1151 defaults: amd_pstate=active, ppfeaturemask=0xfffd3fff, cwsr_enable=0, iommu=pt, tsc=reliable.
     set -g KERNEL_PARAMS \
         iommu=pt \
         amd_pstate=active \
@@ -625,9 +626,8 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         usbcore.autosuspend=-1 \
         zswap.enabled=0
 
-    # Initramfs
     set -g MKINITCPIO_MODULES amdgpu
-    # systemd hooks — no resume hook (targets masked)
+    # systemd hooks — no resume hook (sleep/suspend targets masked)
     set -g MKINITCPIO_HOOKS \
         base \
         systemd \
@@ -644,8 +644,9 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
     # Udev — ntsync autoloaded via wine-cachyos modules-load.d/10-ntsync.conf (transitive of gaming-meta).
+end
 
-    # Network
+function _ry_profile_gtr9_pro_network --description "gtr9_pro: resolved + logind + iwd + NetworkManager settings"
     set -g RESOLVED_MDNS resolve
     set -g LOGIND_IGNORE_KEYS \
         HandlePowerKey \
@@ -663,8 +664,9 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     set -g NM_WIFI_BACKEND iwd
     set -g NM_WIFI_POWERSAVE 2
     set -g NM_LOG_LEVEL WARN
+end
 
-    # Environment
+function _ry_profile_gtr9_pro_env --description "gtr9_pro: gaming/Proton ENV_VARS + sysctl tunables (21)"
     set -g ENV_VARS \
         "DXVK_LOG_LEVEL=none" \
         "DXVK_LOG_PATH=none" \
@@ -680,7 +682,7 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "VKD3D_SHADER_DEBUG=none" \
         "WINEDEBUG=-all"
 
-    # Sysctl tunables — supplements vendor 70-cachyos-settings.conf (99-* loads after 70-*); see CHANGELOG for rationale per setting.
+    # Supplements vendor 70-cachyos-settings.conf (99-* loads after 70-*); see CHANGELOG for per-setting rationale.
     set -g SYSCTL_VALUES \
         "net.core.default_qdisc=fq" \
         "net.core.netdev_max_backlog=16384" \
@@ -703,8 +705,10 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         "net.core.netdev_budget=600" \
         "kernel.split_lock_mitigate=0" \
         "vm.swappiness=100"
+end
 
-    # Packages: PKGS_ADD=14 PKGS_DEL=8 AUR=1 EXPECTED_SERVICES=4 must equal README
+function _ry_profile_gtr9_pro_packages --description "gtr9_pro: PKGS_ADD (14) / PKGS_DEL (8) / AUR_PKGS (1) / EXPECTED_VULKAN_PKGS"
+    # PKGS_ADD=14 PKGS_DEL=8 AUR=1 must equal README counts
     set -g PKGS_ADD \
         mkinitcpio-firmware \
         nftables \
@@ -733,8 +737,10 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
     # AUR packages — installed via paru (not pacman)
     set -g AUR_PKGS mt76-mt7925-dkms
 
-    # Services
     set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
+end
+
+function _ry_profile_gtr9_pro_services --description "gtr9_pro: MASK list (10) + EXPECTED_SERVICES (4)"
     # MASK=10 must equal README "Masked Services" count
     set -g MASK \
         ananicy-cpp.service \
@@ -748,8 +754,9 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
         hybrid-sleep.target \
         suspend-then-hibernate.target
     set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service nftables.service
+end
 
-    # Thresholds
+function _ry_profile_gtr9_pro_thresholds --description "gtr9_pro: disk-space, boot-time, and CPU-detection thresholds"
     set -g BOOT_SPACE_CRIT 200
     set -g BOOT_SPACE_WARN 500
     set -g ROOT_AVAIL_CRIT 2
@@ -758,6 +765,20 @@ function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
 
     # Hardware expectations (optional)
     set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
+end
+
+function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
+    set -g PROFILE_NAME gtr9_pro
+    set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
+
+    _ry_profile_gtr9_pro_destinations
+    _ry_profile_gtr9_pro_boot
+    _ry_profile_gtr9_pro_kernel
+    _ry_profile_gtr9_pro_network
+    _ry_profile_gtr9_pro_env
+    _ry_profile_gtr9_pro_packages
+    _ry_profile_gtr9_pro_services
+    _ry_profile_gtr9_pro_thresholds
     return 0
 end
 
@@ -2306,29 +2327,9 @@ end
 
 # FILE OPERATIONS — diff, install, verify
 
-# Checksum verification: sha256 of embedded content vs installed file; exit 1 when drifted.
-function _ry_verify_static --description "Verify installed configs match embedded checksums"
-    _log_section "STATIC VERIFICATION START"
-    _ensure_sudo_cached; or begin
-        _err "Sudo required for verification"
-        # use EXIT_PREFLIGHT constant for consistency with other modes
-        return $EXIT_PREFLIGHT
-    end
+# _ry_verify_static (v4.3.0): sha256 of embedded vs installed (exit 1 on drift); decomposed into 7 section helpers + thin orchestrator (boot/system/user/packages/services/syntax/checksum). _skip_iwd computed in _verify_static_system.
 
-    set -g VERIFY_MODE true
-    set -g VERIFY_OK 0
-    set -g VERIFY_FAIL 0
-    set -g VERIFY_WARN 0
-
-    # Pre-compute iwd state once (avoids 3 independent pacman -Qi calls and TOCTOU between them)
-    set -l _skip_iwd false
-    if not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1
-        set _skip_iwd true
-    end
-
-    _info "Static verification (config files)..."
-    _echo
-
+function _verify_static_boot --description "Verify loader.conf, sdboot-manage, kernel cmdline, mkinitcpio, boot entries"
     _echo "BOOT CONFIGURATION"
     _echo
 
@@ -2449,6 +2450,14 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _info "  System may not boot! Run: sudo sdboot-manage gen --verbose"
     end
     _echo
+end
+
+function _verify_static_system --description "Verify ntsync, udev, resolved, logind, coredump, iwd, NM, drirc, sysctl"
+    # Pre-compute iwd state once (avoids 3 independent pacman -Qi calls and TOCTOU between them)
+    set -l _skip_iwd false
+    if not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1
+        set _skip_iwd true
+    end
 
     _echo "SYSTEM CONFIGURATION"
     _echo
@@ -2543,7 +2552,9 @@ function _ry_verify_static --description "Verify installed configs match embedde
         end
     end
     _echo
+end
 
+function _verify_static_user --description "Verify SSH agent fish script, environment.d, ssh-agent.service unit"
     _echo "USER CONFIGURATION"
     _echo
 
@@ -2563,7 +2574,9 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _chk_grep "$HOME/.config/systemd/user/ssh-agent.service" "WantedBy=default.target" "ssh-agent WantedBy"
     end
     _echo
+end
 
+function _verify_static_packages --description "Verify PKGS_ADD, AUR_PKGS, PKGS_DEL, pacman.conf"
     _echo PACKAGES
     _echo
 
@@ -2628,7 +2641,9 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _warn "  /etc/pacman.conf not found"
     end
     _echo
+end
 
+function _verify_static_services --description "Verify SERVICE_DESTINATIONS files + masked services state"
     _echo SERVICES
     _echo
 
@@ -2666,7 +2681,9 @@ function _ry_verify_static --description "Verify installed configs match embedde
         end
     end
     _echo
+end
 
+function _verify_static_syntax --description "Validate mkinitcpio hooks ordering, systemd unit files, fish scripts"
     _echo "SYNTAX VALIDATION"
     _echo
 
@@ -2698,7 +2715,9 @@ function _ry_verify_static --description "Verify installed configs match embedde
         end
     end
     _echo
+end
 
+function _verify_static_checksum --description "Verify embedded content hash matches installed file SHA256"
     _echo "CHECKSUM VERIFICATION"
     _echo
     _echo "── embedded vs installed ──"
@@ -2725,6 +2744,31 @@ function _ry_verify_static --description "Verify installed configs match embedde
         end
     end
     _echo
+end
+
+function _ry_verify_static --description "Verify installed configs match embedded checksums"
+    _log_section "STATIC VERIFICATION START"
+    _ensure_sudo_cached; or begin
+        _err "Sudo required for verification"
+        return $EXIT_PREFLIGHT
+    end
+
+    set -g VERIFY_MODE true
+    set -g VERIFY_OK 0
+    set -g VERIFY_FAIL 0
+    set -g VERIFY_WARN 0
+
+    _info "Static verification (config files)..."
+    _echo
+
+    # Decomposition: 7 section helpers in original output order (boot → system → user → packages → services → syntax → checksum). Output is byte-identical to v4.2.1.
+    _verify_static_boot
+    _verify_static_system
+    _verify_static_user
+    _verify_static_packages
+    _verify_static_services
+    _verify_static_syntax
+    _verify_static_checksum
 
     _log_section "STATIC VERIFICATION END"
 
@@ -2844,24 +2888,9 @@ function _gather_cpu_state --description "Collect CPU frequency path for represe
 end
 
 # RUNTIME VERIFICATION — live sysfs/procfs state checks; exit 1 when state doesn't match config.
-function _ry_verify_runtime --description "Verify runtime kernel params, services, and modules"
-    _log_section "RUNTIME VERIFICATION START"
+# _ry_verify_runtime decomposed (v4.3.0): 4 section helpers + thin orchestrator per README plan (services / kparams / env / session). Helpers signal "abort entire run" via return 1; only _verify_runtime_services exercises this path (sys_units count drift assertion).
 
-    _ensure_sudo_cached; or begin
-        _err "Sudo required for verification"
-        # use EXIT_PREFLIGHT constant for consistency
-        return $EXIT_PREFLIGHT
-    end
-
-    # VERIFY_* counters are global (read by _msg); all other variables are function-local
-    set -g VERIFY_MODE true
-    set -g VERIFY_OK 0
-    set -g VERIFY_FAIL 0
-    set -g VERIFY_WARN 0
-
-    _info "Runtime verification (live system state)..."
-    _echo
-
+function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource, coredump"
     _echo "KERNEL CMDLINE"
     _echo
 
@@ -3127,7 +3156,9 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         _warn "  coredump: /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf not found"
     end
     _echo
+end
 
+function _verify_runtime_services --description "Verify systemd unit states (sys batch + ssh-agent user) and WiFi runtime"
     _echo "SERVICE STATE"
     _echo
 
@@ -3135,14 +3166,10 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     set -l sys_units cpupower-epp.service \
         fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service \
         NetworkManager.service
-    # Static assertion: sys_units is positionally coupled to parsed[1..5] consumers below; fail loud on drift.
+    # Static assertion: sys_units positionally coupled to parsed[1..5]; return 1 to abort env+session on drift.
     if test (count $sys_units) -ne 5
         _fail "  sys_units count drift: actual="(count $sys_units)" expected=5 — update parsed[N] indices below"
-        _log_section "RUNTIME VERIFICATION END"
-        _verify_summary
-        set -l ret $status
-        set -g VERIFY_MODE false
-        return $ret
+        return 1
     end
     set -l parsed
     for _u in $sys_units
@@ -3245,6 +3272,59 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     end
     _echo
 
+    _echo "WIFI STATE"
+    _echo
+
+    # Gate WiFi state checks on profile actually managing iwd configs
+    set -l _profile_uses_iwd false
+    for _d in $SYSTEM_DESTINATIONS
+        if string match -q '*nm.conf' -- "$_d"; or string match -q '*/iwd/*' -- "$_d"
+            set _profile_uses_iwd true
+            break
+        end
+    end
+
+    if test "$_profile_uses_iwd" = false
+        _info "  Profile does not manage iwd/NM — skipping WiFi state checks"
+    else
+        set -l wlan_iface ""
+        for iface in /sys/class/net/*/wireless
+            if test -d "$iface"
+                set wlan_iface (basename (dirname -- "$iface"))
+                break
+            end
+        end
+
+        if test -n "$wlan_iface"
+            _ok "  WiFi interface: $wlan_iface"
+        else
+            _warn "  WiFi interface: NOT DETECTED"
+        end
+
+        if pgrep -x iwd >/dev/null
+            _ok "  iwd process: running"
+        else
+            _fail "  iwd process: NOT running"
+        end
+
+        if command -q nmcli
+            set -l nm_wifi_backend (nmcli -t -f WIFI general 2>/dev/null | string trim --)
+            if test -n "$nm_wifi_backend"
+                _info "  NM wifi: $nm_wifi_backend"
+            end
+            set -l wifi_state (nmcli -t -f TYPE,STATE device 2>/dev/null | grep '^wifi:' | head -n 1 | cut -d: -f2)
+            if test "$wifi_state" = connected
+                _ok "  WiFi device: connected"
+            else if test -n "$wifi_state"
+                _warn "  WiFi device: $wifi_state (not connected)"
+            end
+        end
+    end
+
+    return 0
+end
+
+function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KSM/ZRAM, fstab, ntsync runtime"
     _echo "ENVIRONMENT STATE"
     _echo
 
@@ -3415,56 +3495,9 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
             _info "ntsync: NOT available (module not loaded)"
     end
     _echo
+end
 
-    _echo "WIFI STATE"
-    _echo
-
-    # Gate WiFi state checks on profile actually managing iwd configs
-    set -l _profile_uses_iwd false
-    for _d in $SYSTEM_DESTINATIONS
-        if string match -q '*nm.conf' -- "$_d"; or string match -q '*/iwd/*' -- "$_d"
-            set _profile_uses_iwd true
-            break
-        end
-    end
-
-    if test "$_profile_uses_iwd" = false
-        _info "  Profile does not manage iwd/NM — skipping WiFi state checks"
-    else
-        set -l wlan_iface ""
-        for iface in /sys/class/net/*/wireless
-            if test -d "$iface"
-                set wlan_iface (basename (dirname -- "$iface"))
-                break
-            end
-        end
-
-        if test -n "$wlan_iface"
-            _ok "  WiFi interface: $wlan_iface"
-        else
-            _warn "  WiFi interface: NOT DETECTED"
-        end
-
-        if pgrep -x iwd >/dev/null
-            _ok "  iwd process: running"
-        else
-            _fail "  iwd process: NOT running"
-        end
-
-        if command -q nmcli
-            set -l nm_wifi_backend (nmcli -t -f WIFI general 2>/dev/null | string trim --)
-            if test -n "$nm_wifi_backend"
-                _info "  NM wifi: $nm_wifi_backend"
-            end
-            set -l wifi_state (nmcli -t -f TYPE,STATE device 2>/dev/null | grep '^wifi:' | head -n 1 | cut -d: -f2)
-            if test "$wifi_state" = connected
-                _ok "  WiFi device: connected"
-            else if test -n "$wifi_state"
-                _warn "  WiFi device: $wifi_state (not connected)"
-            end
-        end
-    end
-
+function _verify_runtime_session --description "Verify file perms, parent dirs, Vulkan packages, boot performance"
     _echo "FILE PERMISSIONS"
     _echo
 
@@ -3648,6 +3681,30 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         _warn "  systemd-analyze not available"
     end
     _echo
+end
+
+function _ry_verify_runtime --description "Verify runtime kernel params, services, and modules"
+    _log_section "RUNTIME VERIFICATION START"
+
+    _ensure_sudo_cached; or begin
+        _err "Sudo required for verification"
+        return $EXIT_PREFLIGHT
+    end
+
+    set -g VERIFY_MODE true
+    set -g VERIFY_OK 0
+    set -g VERIFY_FAIL 0
+    set -g VERIFY_WARN 0
+
+    _info "Runtime verification (live system state)..."
+    _echo
+
+    # Decomposition: kparams → services → env → session per README v4.3.0 plan. _verify_runtime_services returns nonzero on sys_units count drift; env+session are skipped because their parsed[N] indices would reference invalid data.
+    _verify_runtime_kparams
+    if _verify_runtime_services
+        _verify_runtime_env
+        _verify_runtime_session
+    end
 
     _log_section "RUNTIME VERIFICATION END"
 
@@ -4001,14 +4058,10 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
 end
 
 # Pipeline phase 4: daemon-reload, enable/start, mask units; sets _fn_err + INSTALL_HAD_ERRORS on failure
-function _install_configure_services --description "Enable, start, and configure systemd services"
-    _check_sudo_keepalive
-    set -l _fn_err false
-    _progress Services
-    _echo
-    _info "Post-installation tasks..."
+# _install_configure_services decomposed (v4.3.0): preset (udev/resolved/PKGS_DEL) → mask → enable. Each helper returns 0 on success, 1 on critical failure that must propagate. INSTALL_HAD_ERRORS=true side-effect preserved on the same paths as v4.2.1 for caller compatibility.
 
-    # C.19: gate udev finalize on presence of udev rules in SYSTEM_DESTINATIONS
+function _configure_services_preset --description "udev finalize, systemd-resolved restart, PKGS_DEL removal"
+    # gate udev finalize on presence of udev rules in SYSTEM_DESTINATIONS
     set -l _has_udev_dst false
     for _d in $SYSTEM_DESTINATIONS
         if string match -q '*/udev/*' -- "$_d"
@@ -4075,7 +4128,10 @@ function _install_configure_services --description "Enable, start, and configure
             _log "PKG_REMOVE_BATCH_OK: $to_del"
         end
     end
+    return 0
+end
 
+function _configure_services_mask --description "Apply MASK list (LVM-aware via _mask_list_effective)"
     set -l safe_mask (_mask_list_effective)
     if test (count $safe_mask) -lt (count $MASK)
         _warn "LVM DETECTED - lvm2 services will NOT be masked"
@@ -4088,8 +4144,11 @@ function _install_configure_services --description "Enable, start, and configure
             _warn "Failed to mask some services"
         end
     end
+    return 0
+end
 
-    # Batch system-scope enable --now
+function _configure_services_enable --description "Install cpupower-epp, batch-enable system units, enable ssh-agent (user)"
+    set -l _ret 0
     set -l sys_enable
 
     # NM-dispatcher
@@ -4104,7 +4163,7 @@ function _install_configure_services --description "Enable, start, and configure
     if not _ry_install_file "/etc/systemd/system/cpupower-epp.service" true
         _err "Failed to install cpupower-epp.service"
         set -g INSTALL_HAD_ERRORS true
-        set _fn_err true
+        set _ret 1
     else
         if not _run sudo -n systemctl daemon-reload
             _warn "Systemctl daemon-reload failed"
@@ -4125,7 +4184,7 @@ function _install_configure_services --description "Enable, start, and configure
                 if not _run sudo -n systemctl enable --now -- $_unit
                     _err "Failed to enable: $_unit"
                     set -g INSTALL_HAD_ERRORS true
-                    set _fn_err true
+                    set _ret 1
                 else
                     _ok "Enabled: $_unit"
                 end
@@ -4153,8 +4212,21 @@ function _install_configure_services --description "Enable, start, and configure
         _warn "Ssh-agent.service user unit not found"
         _info "  Expected at ~/.config/systemd/user/ssh-agent.service"
     end
-    test "$_fn_err" = true; and return 1
-    return 0
+    return $_ret
+end
+
+function _install_configure_services --description "Enable, start, and configure systemd services"
+    _check_sudo_keepalive
+    _progress Services
+    _echo
+    _info "Post-installation tasks..."
+
+    # Decomposition: preset (udev/resolved/PKGS_DEL) → mask → enable. Unified rollup: any helper returning 1 propagates to caller; INSTALL_HAD_ERRORS side-effects preserved per-path.
+    set -l _ret 0
+    _configure_services_preset; or set _ret 1
+    _configure_services_mask; or set _ret 1
+    _configure_services_enable; or set _ret 1
+    return $_ret
 end
 
 # Post-rebuild gate: vmlinuz/initramfs non-zero, ≥1 entry references existing kernel; blocks reboot

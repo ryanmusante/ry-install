@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.2.1-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.3.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.18.4-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -497,12 +497,12 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-04-22T14:23:01-0700","event":"header","version":"4.2.1","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
-{"ts":"2026-04-22T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
-{"ts":"2026-04-22T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
-{"ts":"2026-04-22T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
-{"ts":"2026-04-22T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-22T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
+{"ts":"2026-04-25T14:23:01-0700","event":"header","version":"4.3.0","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-25T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
+{"ts":"2026-04-25T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
+{"ts":"2026-04-25T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
+{"ts":"2026-04-25T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
+{"ts":"2026-04-25T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
 ```
 
 </details>
@@ -565,48 +565,6 @@ are emitted. All other output is unaffected. Workaround: run under
 SSH, tmux, or a local terminal.
 
 </details>
-
-## 4.3.0 Scope (Uncovered)
-
-The following functions remain large after v4.2.0 simplification and
-are explicitly scoped for v4.3.0. They remain functional and tested;
-decomposition was deferred because the refactor scope exceeds a
-single-release simplification pass.
-
-### `_ry_verify_runtime`
-
-812 lines (from 846 at v4.1.15; trimmed by per-unit `systemctl show`
-migration and one-pass `show-environment` parse). Runtime verifier
-covering service masks, unit states, kernel params, environment, sudo
-cache, and ssh-agent. Decomposition plan: split into
-`_verify_runtime_services`, `_verify_runtime_kparams`,
-`_verify_runtime_env`, `_verify_runtime_session` with a top-level
-dispatcher.
-
-### `_ry_verify_static`
-
-426 lines (from 628 at v4.1.15; trimmed by sequential CHECKSUM block
-and removal of unreachable mask-check fallback). Static verifier
-covering file content, permissions, ownership, existence, and profile
-coverage. Decomposition plan: extract per-check phases (checksum,
-perms, owner, existence) into named helpers; retain top-level
-orchestrator.
-
-### `_ry_profile_gtr9_pro`
-
-192 lines. Profile data (package lists, destinations, kernel params,
-fstab options, masks). Not a functional refactor target — size reflects
-declarative data rather than logic. v4.3.0 will introduce a
-profile-partials layout (`~/.config/ry-install/profiles/gtr9_pro/*.fish`)
-that sources each declarative group from a separate file.
-
-### `_install_configure_services`
-
-155 lines (from 168 at v4.1.15; trimmed by migration to the shared
-`_mask_list_effective` helper). Service enablement, mask, preset, and
-runtime-tuning pipeline. Decomposition plan: split into
-`_configure_services_enable`, `_configure_services_mask`,
-`_configure_services_preset` with a unified error-rollup path.
 
 ## Troubleshooting
 

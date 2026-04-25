@@ -6,6 +6,67 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.3.0 - 2026-04-25
+-------------------
+
+  Decomposition release: completes the four large-function splits
+  scoped in v4.2.0's "4.3.0 Scope (Uncovered)" README section.
+  External contracts (CLI, exit codes, JSONL schema, manifest format,
+  boot-wipe marker, 16 managed destinations, signal handlers, lock
+  semantics) preserved. No behavior change — output is byte-identical
+  to v4.2.1 on the gtr9_pro profile. Net file size +72 lines (4978 →
+  5050) reflects orchestrator overhead absorbing into 22 new helpers.
+
+[refactor]
+
+  * _install_configure_services: decompose 155 lines into 13-line
+    orchestrator + 3 helpers (_configure_services_preset,
+    _configure_services_mask, _configure_services_enable). Unified
+    error-rollup path: each helper returns 0/1; orchestrator
+    OR-collapses into single _ret. INSTALL_HAD_ERRORS side-effect
+    paths preserved (cpupower-epp install fail, sys_enable per-unit
+    retry fail) for caller compatibility.
+
+  * _ry_verify_static: decompose 427 lines into 31-line orchestrator
+    + 7 section helpers (_verify_static_boot, _verify_static_system,
+    _verify_static_user, _verify_static_packages,
+    _verify_static_services, _verify_static_syntax,
+    _verify_static_checksum). Section boundaries match original
+    output groupings; _skip_iwd computation localized to
+    _verify_static_system (only consumer).
+
+  * _ry_verify_runtime: decompose 818 lines into 30-line orchestrator
+    + 4 section helpers per README plan
+    (_verify_runtime_kparams, _verify_runtime_services,
+    _verify_runtime_env, _verify_runtime_session). _dmesg captured
+    once in _verify_runtime_kparams (only consumer; no cross-helper
+    re-fetch). sys_units count drift assertion (positionally coupled
+    to parsed[1..5]) returns 1 from _verify_runtime_services;
+    orchestrator skips env+session helpers on signal.
+
+  * _ry_profile_gtr9_pro: decompose 192 lines into 14-line
+    orchestrator + 8 inline helpers grouped by config domain
+    (_ry_profile_gtr9_pro_destinations, _boot, _kernel, _network,
+    _env, _packages, _services, _thresholds). DEVIATION from
+    v4.2.0's stated plan: single-file inline split was chosen over
+    the originally-planned external profile-partials layout
+    (~/.config/ry-install/profiles/gtr9_pro/*.fish) to preserve the
+    "Single Fish script, no required external dependencies" promise
+    in the README. External profile loading via ~/.config/ry-install/
+    profiles/<name>.fish remains unchanged for user-defined profiles.
+
+[documentation]
+
+  * README: remove "4.3.0 Scope (Uncovered)" section (work
+    completed). Bump version badge 4.2.1 -> 4.3.0. Sample log header
+    timestamp aligned to 2026-04-25 (release date) and version field
+    bumped to 4.3.0; subsequent log lines re-dated to match.
+
+[version]
+
+  * version: 4.2.1 -> 4.3.0.
+
+
 v4.2.1 - 2026-04-25
 -------------------
 

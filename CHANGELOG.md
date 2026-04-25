@@ -6,6 +6,82 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.3.4 - 2026-04-25
+-------------------
+
+  Maintenance release. One install-affecting fix exposed during
+  a follow-up syntax-highlighting cleanup, plus the apostrophe
+  analog of v4.3.3's paired-backtick sweep across comments,
+  _warn strings, and multi-line single-quoted heredocs. External
+  contracts preserved (CLI, exit codes, JSONL schema, manifest
+  format, 16 managed destinations, signal handlers, lock
+  semantics).
+
+[fixes]
+
+  * _content__etc_systemd_system_cpupower-epp.service: fix
+    premature termination of the multi-line single-quoted printf
+    body at the unescaped apostrophe pair around the OR-fallback
+    token in the L1211 @@AUDIT@@ v4.3.2 comment. Fish parsed the
+    construct as `printf '%s\n' '...drop ' || logger '...rest'`;
+    printf succeeded, `||` short-circuited, no error was
+    surfaced, and the generated unit file was missing
+    StandardError=journal, ExecStart=, the blank separator, and
+    the entire [Install] section. v4.3.0 through v4.3.3
+    installed a 12-line unit instead of the intended 17 lines;
+    `systemctl start cpupower-epp.service` would fail with "Unit
+    has no ExecStart= setting" but the install run never
+    observed it. Generator rewritten as per-line `printf '%s\n'`
+    arguments; @@AUDIT@@ v4.3.4 marker added inline. Hosts that
+    ran v4.3.0 through v4.3.3 should reinstall or verify
+    /etc/systemd/system/cpupower-epp.service is complete (17
+    lines, contains ExecStart= and [Install]).
+
+[hygiene]
+
+  * comments: 13 contractions (can't, won't, don't, doesn't,
+    isn't, aren't, hasn't, awk's, script's, sudo's) rewritten to
+    expanded forms. Lone apostrophes inside fish line-comments
+    confuse single-quote-parity highlighters into treating
+    subsequent code or comments as string content. Apostrophe
+    analog of the v4.3.3 paired-backtick fix.
+
+  * _warn strings (cpupower-epp, fstrim.timer, NetworkManager,
+    ssh-agent): four occurrences of "won't persist" rewritten to
+    "will not persist". Apostrophe inside double-quoted message
+    strings; same parity reason. Aligns with the rest of
+    _warn/_err/_fail style which already avoids contractions.
+
+  * _run preamble (L1567): bare apostrophe inside the shell-
+    metacharacter character class `[;|&'$\n\t\r<>(){}]` replaced
+    with `\x27`. Unbalanced inside a comment; matches the form
+    that _run validates against in argv at runtime.
+
+  * multi-line single-quoted blocks rewritten for per-line
+    parity:
+      - _content_HOME_.config_fish_conf.d_10-ssh-auth-sock.fish,
+        _content_HOME_.config_systemd_user_ssh-agent.service,
+        and _content__etc_systemd_system_cpupower-epp.service:
+        multi-line printf body rewritten as per-line
+        `printf '%s\n'` arguments.
+      - _acquire_lock /bin/sh -c body, _install_preflight fish
+        -c keepalive body, and _install_fstab_opts awk body:
+        rewritten as `string join \n ... | string collect`,
+        passed via `"$var"` to the consuming command. The
+        `| string collect` terminator is required; without it,
+        fish command substitution splits the joined output on
+        newlines into argv elements that re-concatenate with
+        spaces when expanded, flattening the script body and
+        merging statements onto one line.
+    Functional output verified byte-identical for the four
+    non-cpupower-epp blocks; cpupower-epp.service intentionally
+    differs (see [fixes]).
+
+[version]
+
+  * version: 4.3.3 -> 4.3.4.
+
+
 v4.3.3 - 2026-04-25
 -------------------
 

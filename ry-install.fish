@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.3.3"
+set -g VERSION "4.3.4"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -347,7 +347,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     command mkdir -p -- (dirname -- "$LOCK_DIR") 2>/dev/null; or true
 
     if command mkdir -- "$LOCK_DIR" 2>/dev/null
-        # Check pid write; on disk-full mkdir/echo race, rmdir and bail so stale-reclaim can't evict own empty lock.
+        # Check pid write; on disk-full mkdir/echo race, rmdir and bail so stale-reclaim cannot evict own empty lock.
         if not printf '%s\n' $fish_pid >"$LOCK_FILE" 2>/dev/null
             command rmdir -- "$LOCK_DIR" 2>/dev/null
             echo "[ERR] Failed to write lock pid file: $LOCK_FILE" >&2
@@ -370,13 +370,13 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     # @@AUDIT@@ v4.3.2: require both flock(1) AND /bin/sh — flock branch invokes /bin/sh -c; on stripped chroots without sh we fall back to the non-atomic rmdir+mkdir path rather than failing opaquely.
     if command -q flock; and command -q sh
         # flock -n/-E 5: non-blocking, exit 5 on contention. Paths as positional args; PID write inside flocked subshell.
-        flock -n -E 5 "$_reclaim_parent" /bin/sh -c '
-            rm -f -- "$1/pid" 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)
-            find "$1" -maxdepth 1 -type f -delete 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)
-            rmdir -- "$1" 2>/dev/null || true  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
-            mkdir -- "$1" 2>/dev/null || exit 1  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
-            printf "%s\n" "$2" > "$1/pid" 2>/dev/null || exit 2  # lint:ignore (sh, not fish — embedded /bin/sh -c block)
-        ' _ "$LOCK_DIR" "$fish_pid" 2>/dev/null
+        set -l _sh_script (string join \n \
+            'rm -f -- "$1/pid" 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)' \
+            'find "$1" -maxdepth 1 -type f -delete 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)' \
+            'rmdir -- "$1" 2>/dev/null || true  # lint:ignore (sh, not fish — embedded /bin/sh -c block)' \
+            'mkdir -- "$1" 2>/dev/null || exit 1  # lint:ignore (sh, not fish — embedded /bin/sh -c block)' \
+            'printf "%s\n" "$2" > "$1/pid" 2>/dev/null || exit 2  # lint:ignore (sh, not fish — embedded /bin/sh -c block)' | string collect)
+        flock -n -E 5 "$_reclaim_parent" /bin/sh -c "$_sh_script" _ "$LOCK_DIR" "$fish_pid" 2>/dev/null
         set -l _flock_rc $status
         if test $_flock_rc -eq 5
             echo "[ERR] Failed to reclaim stale lock — another instance is reclaiming" >&2
@@ -441,7 +441,7 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     # Fallback sweep: find -user $_MY_UID catches ry-* tmpfiles missed by the tracked list (e.g., crash before tracking)
     set -l _tmpdir (set -q TMPDIR; and test -n "$TMPDIR"; and printf '%s\n' "$TMPDIR"; or printf '%s\n' /tmp)
     command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -type f -user $_MY_UID -delete 2>/dev/null
-    # Descend to purge abandoned ry-run.* dirs; -type d -empty reclaims parents (maxdepth=1 sweep can't reach in).
+    # Descend to purge abandoned ry-run.* dirs; -type d -empty reclaims parents (maxdepth=1 sweep cannot reach in).
     command find "$_tmpdir" -mindepth 2 -maxdepth 2 -path "$_tmpdir/ry-*" -type f -user $_MY_UID -delete 2>/dev/null
     command find "$_tmpdir" -maxdepth 1 -name 'ry-*' -type d -empty -user $_MY_UID -delete 2>/dev/null
     # Free cached data (harmless but consistent with cleanup discipline)
@@ -459,7 +459,7 @@ function _kill_sudo_keepalive --description "Terminate the background sudo crede
     if set -q SUDO_KEEPALIVE_PID; and test -n "$SUDO_KEEPALIVE_PID"
         # PID re-verify before kill: closes a narrow PID-reuse race window after wait/reap
         if kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
-            # pkill -P reaps descendants (sleep/sudo) so they don't orphan to init when parent fish exits.
+            # pkill -P reaps descendants (sleep/sudo) so they do not orphan to init when parent fish exits.
             if command -q pkill
                 command pkill -TERM -P $SUDO_KEEPALIVE_PID 2>/dev/null
             end
@@ -1164,14 +1164,15 @@ function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf
 end
 
 function _content_HOME_.config_fish_conf.d_10-ssh-auth-sock.fish
-    printf '%s\n' '# SSH agent socket for fish shell -- priority: forwarded > gcr > systemd
-if status is-interactive; and set -q XDG_RUNTIME_DIR; and not set -q SSH_CONNECTION
-    if test -S "$XDG_RUNTIME_DIR/gcr/ssh"
-        set -gx SSH_AUTH_SOCK "$XDG_RUNTIME_DIR/gcr/ssh"
-    else if test -S "$XDG_RUNTIME_DIR/ssh-agent.socket"
-        set -gx SSH_AUTH_SOCK "$XDG_RUNTIME_DIR/ssh-agent.socket"
-    end
-end'
+    printf '%s\n' \
+        '# SSH agent socket for fish shell -- priority: forwarded > gcr > systemd' \
+        'if status is-interactive; and set -q XDG_RUNTIME_DIR; and not set -q SSH_CONNECTION' \
+        '    if test -S "$XDG_RUNTIME_DIR/gcr/ssh"' \
+        '        set -gx SSH_AUTH_SOCK "$XDG_RUNTIME_DIR/gcr/ssh"' \
+        '    else if test -S "$XDG_RUNTIME_DIR/ssh-agent.socket"' \
+        '        set -gx SSH_AUTH_SOCK "$XDG_RUNTIME_DIR/ssh-agent.socket"' \
+        '    end' \
+        'end'
 end
 
 function _content_HOME_.config_environment.d_10-environment.conf
@@ -1183,37 +1184,44 @@ function _content_HOME_.config_environment.d_10-environment.conf
 end
 
 function _content_HOME_.config_systemd_user_ssh-agent.service
-    printf '%s\n' '[Unit]
-Description=SSH authentication agent
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/ssh-agent -D -a %t/ssh-agent.socket
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=default.target'
+    printf '%s\n' \
+        '[Unit]' \
+        'Description=SSH authentication agent' \
+        '' \
+        '[Service]' \
+        'Type=simple' \
+        'ExecStart=/usr/bin/ssh-agent -D -a %t/ssh-agent.socket' \
+        'Restart=on-failure' \
+        'RestartSec=5' \
+        '' \
+        '[Install]' \
+        'WantedBy=default.target'
 end
 
 function _content__etc_systemd_system_cpupower-epp.service
-    printf '%s\n' '[Unit]
-Description=Set CPU EPP to performance (amd_pstate=active: powersave governor + performance EPP)
-After=cpupower.service
-Wants=cpupower.service
-ConditionPathExists=/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference
-ConditionPathExists=/usr/bin/bash
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-TimeoutStartSec=10
-# @@AUDIT@@ v4.3.2: drop '|| logger' fallback — failure logging now goes through journal via StandardError=journal (always present on systemd hosts; logger from util-linux not guaranteed in stripped chroots).
-StandardError=journal
-ExecStart=/usr/bin/bash -c \'shopt -s nullglob; rc=0; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo performance > "$cpu" 2>/dev/null || { echo "EPP write failed: $cpu" >&2; rc=1; }; done; exit 0\'
-
-[Install]
-WantedBy=multi-user.target'
+    # @@AUDIT@@ v4.3.4: per-line printf args. Previous multi-line single-quoted body
+    # was truncated at the L1211 @@AUDIT@@ comment whose unescaped apostrophes around
+    # the OR-fallback token \x27|| logger\x27 closed the printf string early at "drop ",
+    # emitting a 12-line unit missing StandardError, ExecStart, and [Install] in
+    # v4.3.0 through v4.3.3. printf rc=0, || short-circuited, error never surfaced.
+    printf '%s\n' \
+        '[Unit]' \
+        'Description=Set CPU EPP to performance (amd_pstate=active: powersave governor + performance EPP)' \
+        'After=cpupower.service' \
+        'Wants=cpupower.service' \
+        'ConditionPathExists=/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference' \
+        'ConditionPathExists=/usr/bin/bash' \
+        '' \
+        '[Service]' \
+        'Type=oneshot' \
+        'RemainAfterExit=yes' \
+        'TimeoutStartSec=10' \
+        '# @@AUDIT@@ v4.3.2: drop \'|| logger\' fallback — failure logging now goes through journal via StandardError=journal (always present on systemd hosts; logger from util-linux not guaranteed in stripped chroots).' \
+        'StandardError=journal' \
+        'ExecStart=/usr/bin/bash -c \'shopt -s nullglob; rc=0; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo performance > "$cpu" 2>/dev/null || { echo "EPP write failed: $cpu" >&2; rc=1; }; done; exit 0\'' \
+        '' \
+        '[Install]' \
+        'WantedBy=multi-user.target'
 end
 
 function _content__etc_drirc
@@ -1564,7 +1572,7 @@ function _progress_teardown
     set -g _PROG_PINNED false
 end
 
-# INVARIANT: callers pass pre-expanded argv with no shell metacharacters ([;|&'$\n\t\r<>(){}]); _run rejects them.
+# INVARIANT: callers pass pre-expanded argv with no shell metacharacters ([;|&\x27$\n\t\r<>(){}]); _run rejects them.
 function _run --description "Execute a command with logging, stdout/stderr capture, and timeout enforcement"
     if test (count $argv) -eq 0
         _log "BUG: _run called with no arguments"
@@ -1645,7 +1653,7 @@ end
 
 # Display full usage, options, exit codes, and examples to stdout
 function _ry_show_help --description "Display usage information and available subcommands"
-    # Fallback: use compile-time constant if profile hasn't loaded (--help exits before _load_profile)
+    # Fallback: use compile-time constant if profile has not loaded (--help exits before _load_profile)
     set -l _file_count "$MANAGED_FILE_COUNT"
     if test -z "$_file_count"
         set _file_count $_RY_MANAGED_FILE_COUNT
@@ -3219,7 +3227,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
         if test "$rec[3]" = enabled
             _ok "  cpupower-epp.service: $rec[2] (enabled)"
         else
-            _warn "  cpupower-epp.service: $rec[2] but $rec[3] (won't persist)"
+            _warn "  cpupower-epp.service: $rec[2] but $rec[3] (will not persist)"
         end
     else if test -f /etc/systemd/system/cpupower-epp.service
         _fail "  cpupower-epp.service: $rec[2] (expected: active)"
@@ -3233,7 +3241,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
         if test "$rec[3]" = enabled
             _ok "  fstrim.timer: active (enabled)"
         else
-            _warn "  fstrim.timer: active but $rec[3] (won't persist)"
+            _warn "  fstrim.timer: active but $rec[3] (will not persist)"
         end
     else
         _fail "  fstrim.timer: NOT active"
@@ -3267,7 +3275,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
         if test "$rec[3]" = enabled
             _ok "  NetworkManager.service: active (enabled)"
         else
-            _warn "  NetworkManager.service: active but $rec[3] (won't persist)"
+            _warn "  NetworkManager.service: active but $rec[3] (will not persist)"
         end
     else
         _fail "  NetworkManager.service: $rec[2] (expected: active)"
@@ -3281,7 +3289,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
         if test "$_u[3]" = enabled
             _ok "  ssh-agent.service: active (enabled)"
         else
-            _warn "  ssh-agent.service: active but $_u[3] (won't persist)"
+            _warn "  ssh-agent.service: active but $_u[3] (will not persist)"
         end
     else if test -f "$HOME/.config/systemd/user/ssh-agent.service"
         _fail "  ssh-agent.service: $_u[2] (expected: active)"
@@ -3679,7 +3687,7 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
         _log "BOOT_TIME_CHECK: parsing systemd-analyze output"
         set -l total_sec (printf '%s\n' "$boot_time" | string match -r -- '= ([0-9.]+)s' | tail -n 1)
         if test -n "$total_sec"; and string match -qr '^[0-9.]+$' -- "$total_sec"
-            # BOOT_TIME_TARGET optional (see _validate_profile); guard so omitting doesn't trip 'test: arg expected'.
+            # BOOT_TIME_TARGET optional (see _validate_profile); guard so omitting does not trip 'test: arg expected'.
             if set -q BOOT_TIME_TARGET; and test -n "$BOOT_TIME_TARGET"
                 set -l target $BOOT_TIME_TARGET
                 set -l time_int (LC_ALL=C printf "%.0f" "$total_sec" 2>/dev/null)
@@ -3755,7 +3763,7 @@ function _dir_group_or_world_writable --argument-names mode --description "True 
 end
 
 function _is_wifi_active_route --description "True if the default route exits via a wireless interface (handles VPN over WiFi)"
-    # Check both v4 and v6 default routes so IPv6-only hosts aren't misreported as wired.
+    # Check both v4 and v6 default routes so IPv6-only hosts are not misreported as wired.
     set -l _def_iface (ip -4 route show default 2>/dev/null | awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}') # lint:ignore (awk field reference, not fish cmdsubst)
     if test -z "$_def_iface"
         set _def_iface (ip -6 route show default 2>/dev/null | awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}') # lint:ignore (awk field reference, not fish cmdsubst)
@@ -3763,7 +3771,7 @@ function _is_wifi_active_route --description "True if the default route exits vi
     test -z "$_def_iface"; and return 1
     # Direct hit: default route exits a physical wireless iface.
     test -d "/sys/class/net/$_def_iface/wireless"; and return 0
-    # Tunnel hit: route is virtual (tun*/wg*/ppp*/gre*/tap*); positive when any 802.11 phy is operstate=up so NM restart won't tear the underlay.
+    # Tunnel hit: route is virtual (tun*/wg*/ppp*/gre*/tap*); positive when any 802.11 phy is operstate=up so NM restart will not tear the underlay.
     switch "$_def_iface"
         case 'tun*' 'tap*' 'wg*' 'ppp*' 'gre*' 'gretap*' 'sit*' 'ip6tnl*' 'ipip*'
             for _phy in /sys/class/net/*/wireless
@@ -3785,7 +3793,7 @@ function _install_preflight --description "Run all preflight checks before insta
         _err "Sudo required for installation"
         return $EXIT_PREFLIGHT
     end
-    # redirect to keep sudo lecture text out of the script's banner stream
+    # redirect to keep sudo lecture text out of the script banner stream
     sudo -n true >/dev/null 2>&1; or begin
         _err "Sudo required for installation"
         return $EXIT_PREFLIGHT
@@ -3810,12 +3818,12 @@ function _install_preflight --description "Run all preflight checks before insta
     end
     set -l my_pid $fish_pid
     # Keepalive: 45 s cycle; transient PAM failures self-heal next cycle. @@AUDIT@@ v4.3.3: 'command' prefix on kill/sudo/sleep — fish -c subshell loads autoloaded user functions, any of which could shadow these names.
-    fish -c '
-        while command kill -0 -- $argv[1] 2>/dev/null; and test -d -- "$argv[2]"
-            command sudo -n -v 2>/dev/null; or break
-            command sleep $argv[3] 2>/dev/null
-        end
-    ' -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null &
+    set -l _ka_script (string join \n \
+        'while command kill -0 -- $argv[1] 2>/dev/null; and test -d -- "$argv[2]"' \
+        '    command sudo -n -v 2>/dev/null; or break' \
+        '    command sleep $argv[3] 2>/dev/null' \
+        'end' | string collect)
+    fish -c "$_ka_script" -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null &
     set -g SUDO_KEEPALIVE_PID $last_pid
     if not kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
         _warn "Sudo keepalive process failed to start — long installs may require re-auth"
@@ -4005,7 +4013,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         set -l opts_field (printf '%s\n' "$line" | awk '{ print $4 }')
         if not string match -q '*noatime*' -- "$opts_field"; or not string match -q '*lazytime*' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"
             set needs_change true
-            # Surface non-default commit= overrides (commit=30 etc) so the rewrite isn't silent.
+            # Surface non-default commit= overrides (commit=30 etc) so the rewrite is not silent.
             set -l _existing_commit (string match -r -- '(^|,)commit=([0-9]+)(,|$)' -- "$opts_field")[3]
             if test -n "$_existing_commit"; and test "$_existing_commit" != 10
                 set -a _commit_overrides "$_existing_commit"
@@ -4019,35 +4027,35 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     if test (count $_commit_overrides) -gt 0
         _warn "  /etc/fstab: replacing existing commit= value(s) with commit=10: $_commit_overrides"
     end
-    # Atomic edit: one mktemp + one awk; preserve mode+own via --reference; one sudo mv.; NOTE: awk's '$4 = out; print' rebuilds the line with OFS=" ", so tab-aligned fstab becomes; space-separated. mount(8) accepts any whitespace, so this is cosmetic only.
+    # Atomic edit: one mktemp + one awk; preserve mode+own via --reference; one sudo mv.; NOTE: awk '$4 = out; print' rebuilds the line with OFS=" ", so tab-aligned fstab becomes; space-separated. mount(8) accepts any whitespace, so this is cosmetic only.
     set -l tmpfstab (sudo -n mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null)
     if test -z "$tmpfstab"
         _fail "  /etc/fstab: mktemp failed"
         return 1
     end
     set -ga _TRACKED_TMPFILES "$tmpfstab"
-    if not sudo -n awk '
-        BEGIN { OFS = " " }
-        /^[[:space:]]*#/ || NF < 4 { print; next }
-        $3 != "ext4" { print; next }
-        {
-            n = split($4, opts, ",")
-            has_noat = 0; has_lazy = 0; out = ""
-            for (i = 1; i <= n; i++) {
-                o = opts[i]
-                if (o == "relatime" || o == "atime" || o == "strictatime") continue
-                if (o ~ /^commit=/) continue
-                if (o == "noatime") has_noat = 1
-                if (o == "lazytime") has_lazy = 1
-                out = (out == "" ? o : out "," o)
-            }
-            if (!has_noat)  out = (out == "" ? "noatime"  : out ",noatime")
-            if (!has_lazy)  out = (out == "" ? "lazytime" : out ",lazytime")
-            out = (out == "" ? "commit=10" : out ",commit=10")
-            $4 = out
-            print
-        }
-    ' /etc/fstab | sudo -n tee -- "$tmpfstab" >/dev/null
+    set -l _awk_script (string join \n \
+        'BEGIN { OFS = " " }' \
+        '/^[[:space:]]*#/ || NF < 4 { print; next }' \
+        '$3 != "ext4" { print; next }' \
+        '{' \
+        '    n = split($4, opts, ",")' \
+        '    has_noat = 0; has_lazy = 0; out = ""' \
+        '    for (i = 1; i <= n; i++) {' \
+        '        o = opts[i]' \
+        '        if (o == "relatime" || o == "atime" || o == "strictatime") continue' \
+        '        if (o ~ /^commit=/) continue' \
+        '        if (o == "noatime") has_noat = 1' \
+        '        if (o == "lazytime") has_lazy = 1' \
+        '        out = (out == "" ? o : out "," o)' \
+        '    }' \
+        '    if (!has_noat)  out = (out == "" ? "noatime"  : out ",noatime")' \
+        '    if (!has_lazy)  out = (out == "" ? "lazytime" : out ",lazytime")' \
+        '    out = (out == "" ? "commit=10" : out ",commit=10")' \
+        '    $4 = out' \
+        '    print' \
+        '}' | string collect)
+    if not sudo -n awk "$_awk_script" /etc/fstab | sudo -n tee -- "$tmpfstab" >/dev/null
         sudo -n rm -f -- "$tmpfstab" 2>/dev/null
         _fail "  /etc/fstab: awk/tee rewrite failed"
         return 1
@@ -4109,7 +4117,7 @@ function _configure_services_preset --description "udev finalize, systemd-resolv
         if contains -- "$pkg" $_del_installed
             # Check reverse dependencies before removing $pkg; skip if other packages depend on it
             if command -q pactree
-                # pactree -ru -u lists pkg+rdeps flat; filter PKGS_DEL siblings so intra-batch deps don't shortcut.
+                # pactree -ru -u lists pkg+rdeps flat; filter PKGS_DEL siblings so intra-batch deps do not shortcut.
                 set -l _rdeps_raw (pactree -ru "$pkg" 2>/dev/null | string match -v -- "$pkg" | string match -rv '^$')
                 set -l _rdeps
                 for _r in $_rdeps_raw
@@ -4424,7 +4432,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         return $EXIT_BOOT_CRIT
     end
 
-    # Boot-wipe marker written in _install_finalize success only (Fix 9) — partial-failure can't update count.
+    # Boot-wipe marker written in _install_finalize success only (Fix 9) — partial-failure cannot update count.
 
     # Null-delim count (\n-in-filename hazard closure; matches _install_rebuild_boot + _install_finalize boot-wipe marker policy).
     set -l entry_count (count (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
@@ -4701,7 +4709,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
             _err "Sudo required"
             return 1
         end
-        # @@AUDIT@@ v4.3.2: redirect stderr — other sudo-probe sites all use 2>&1; this was the only one leaking sudo's "a password is required" past _err.
+        # @@AUDIT@@ v4.3.2: redirect stderr — other sudo-probe sites all use 2>&1; this was the only one leaking sudo "a password is required" past _err.
         sudo -n true >/dev/null 2>&1; or begin
             _err "Sudo required"
             return 1

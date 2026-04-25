@@ -6,6 +6,85 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.3.7 - 2026-04-25
+-------------------
+
+  Audit-driven hardening release. Five low-severity findings
+  closed: profile validator metachar gap, keepalive comment vs
+  code mismatch, dead rc tracking in cpupower-epp ExecStart,
+  network-failure message accuracy, and twin redundant guards
+  on post-rebuild boot-entry counts. No execution-flow changes
+  beyond the cpupower-epp content hash, which will redeploy on
+  next install and re-baseline verify-static for that file.
+
+[security]
+
+  * _validate_profile element regex: extend forbidden-char class
+    from [[:space:]"()] to [[:space:]"$'\`()\\;&|<>] (whitespace,
+    double-quote, dollar, apostrophe, backtick, parens, backslash,
+    semicolon, ampersand, pipe, less, greater). Profile elements
+    in KERNEL_PARAMS / MKINITCPIO_MODULES / MKINITCPIO_HOOKS are
+    interpolated into /etc/mkinitcpio.conf, which mkinitcpio(8)
+    sources as root. The prior class missed bash command-substi-
+    tution (backtick), variable-expansion ($), statement separa-
+    tors (; & |), redirects (< >), apostrophe, and bare back-
+    slash. No privilege escalation in single-user trust model
+    (user has full sudo anyway), but defense-in-depth closes the
+    gap for shared/repo-pulled profiles. Comment at L893 already
+    asserted intent to "reject shell-metachars... embedded into
+    config files" — code now matches the intent.
+
+[fix]
+
+  * _content__etc_systemd_system_cpupower-epp.service ExecStart:
+    drop dead `rc=0` and `; rc=1` from per-CPU loop. Variable
+    was assigned but never observed (literal `exit 0` follows
+    unconditionally). Service intentionally succeeds on partial
+    EPP write failure; per-CPU errors continue to reach the
+    journal via StandardError=journal. Dropping the assignment
+    removes a maintenance hazard (future reader assuming `rc`
+    participates in exit code) without changing semantics. This
+    is the only content-hash change in v4.3.7; verify-static
+    will report drift on /etc/systemd/system/cpupower-epp.service
+    until the next install redeploys the unit.
+
+  * _verify_static_boot + _install_rebuild_boot: drop redundant
+    `test -n "$entry_count"` and `string match -qr '^\d+$'`
+    guards on the `count(1)` result. `count` always emits a
+    non-negative integer string, so both prefix guards are
+    unreachable-false. Single `test "$entry_count" -gt 0`
+    suffices. Twin sites updated together for consistency.
+
+[doc]
+
+  * _install_preflight keepalive comment: replace misleading
+    "transient PAM failures self-heal next cycle" claim with
+    accurate "loop bails on first sudo -n -v failure (fail-fast)"
+    description. The `or break` after `command sudo -n -v` exits
+    the loop on any failure; there is no retry path. Parent
+    surfaces death via _check_sudo_keepalive at each privileged
+    phase. Comment now matches code.
+
+  * _ry_check_network: when curl https://archlinux.org fails but
+    ping 1.1.1.1 succeeds, message reworded from "HTTPS down
+    (raw IP reachable; check /etc/resolv.conf)" to "HTTPS or DNS
+    unreachable (raw-IP ICMP works; check /etc/resolv.conf or
+    443 egress)". Both DNS-broken and 443-egress-blocked failure
+    modes produce identical signals from this evidence; prior
+    wording presumed only DNS. Functional behavior unchanged
+    (both branches return 1).
+
+[version]
+
+  * VERSION: 4.3.6 -> 4.3.7
+
+[release]
+
+  * banner header: 4.3.7 (2026-04-25)
+
+
+
+
 v4.3.6 - 2026-04-25
 -------------------
 

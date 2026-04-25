@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.3.6 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.3.7 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.3.6"
+set -g VERSION "4.3.7"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -889,12 +889,12 @@ function _validate_profile --description "Verify loaded profile has all required
         end
     end
 
-    # Element sanitization: reject shell-metachars in profile globals embedded into config files (cmdline, mkinitcpio).
+    # Element sanitization: reject shell-metachars in profile globals embedded into config files (cmdline, mkinitcpio). @@AUDIT@@ v4.3.7: extend forbidden-char class beyond [[:space:]"()] to cover the full shell-metachar set evaluated by bash when mkinitcpio(8) sources /etc/mkinitcpio.conf as root: $ ` ' \ ; & | < > . Single-user trust model gives no privilege escalation (user has full sudo), but defense-in-depth closes a supply-chain gap for shared/repo-pulled profiles. Char class members: \x22="  \x24=$  \x27='  \x5c=\  \x60=`  literal ( ) ; & | < > .
     for _list_var in KERNEL_PARAMS MKINITCPIO_MODULES MKINITCPIO_HOOKS
         if set -q $_list_var
             for _elem in $$_list_var
-                if string match -qr -- '[[:space:]\x22\(\)]' "$_elem"
-                    _err "Profile global $_list_var element contains forbidden character (space/quote/paren/newline): '$_elem'"
+                if string match -qr -- '[[:space:]\x22\x24\x27\x5c\x60\(\);&|<>]' "$_elem"
+                    _err "Profile global $_list_var element contains forbidden shell metacharacter (space/quote/apostrophe/paren/backslash/backtick/semicolon/ampersand/pipe/redirect/newline): '$_elem'"
                     return 1
                 end
             end
@@ -1213,8 +1213,9 @@ function _content__etc_systemd_system_cpupower-epp.service
         'RemainAfterExit=yes' \
         'TimeoutStartSec=10' \
         '# @@AUDIT@@ v4.3.2: drop \'|| logger\' fallback — failure logging now goes through journal via StandardError=journal (always present on systemd hosts; logger from util-linux not guaranteed in stripped chroots).' \
+        '# @@AUDIT@@ v4.3.7: drop dead rc tracking — variable was assigned but never observed (literal `exit 0` follows). Service intentionally succeeds on partial EPP write failure; per-CPU errors land in journal via StandardError=journal.' \
         'StandardError=journal' \
-        'ExecStart=/usr/bin/bash -c \'shopt -s nullglob; rc=0; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo performance > "$cpu" 2>/dev/null || { echo "EPP write failed: $cpu" >&2; rc=1; }; done; exit 0\'' \
+        'ExecStart=/usr/bin/bash -c \'shopt -s nullglob; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo performance > "$cpu" 2>/dev/null || echo "EPP write failed: $cpu" >&2; done; exit 0\'' \
         '' \
         '[Install]' \
         'WantedBy=multi-user.target'
@@ -1842,7 +1843,8 @@ function _ry_check_network --description "Verify network connectivity (single HE
         end
     end
     if ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1
-        _err "Network connectivity: HTTPS down (raw IP reachable; check /etc/resolv.conf)"
+        # @@AUDIT@@ v4.3.7: cover both DNS-broken and 443-egress-blocked modes; raw-IP ICMP success rules out only L3 reachability.
+        _err "Network connectivity: HTTPS or DNS unreachable (raw-IP ICMP works; check /etc/resolv.conf or 443 egress)"
         return 1
     end
     _err "Network connectivity: FAILED — cannot reach archlinux.org or 1.1.1.1"
@@ -2502,7 +2504,8 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
         # Null-delim count (\n-in-filename hazard closure; matches _install_rebuild_boot + _install_finalize boot-wipe marker policy).
         set entry_count (count (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
     end
-    if test -n "$entry_count"; and string match -qr '^\d+$' -- "$entry_count"; and test "$entry_count" -gt 0
+    # @@AUDIT@@ v4.3.7: count(1) always emits non-negative integer; -n guard and ^\d+$ regex are unreachable-false. Single -gt 0 check suffices.
+    if test "$entry_count" -gt 0
         _ok "  Boot entries: $entry_count found"
     else
         _fail "  Boot entries: NONE in /boot/loader/entries/"
@@ -3813,7 +3816,7 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
     set -l my_pid $fish_pid
-    # Keepalive: 45 s cycle; transient PAM failures self-heal next cycle. @@AUDIT@@ v4.3.3: command prefix on kill/sudo/sleep — fish -c subshell loads autoloaded user functions, any of which could shadow these names.
+    # Keepalive: 45 s cycle; loop bails on first sudo -n -v failure (fail-fast). Parent surfaces death via _check_sudo_keepalive at each privileged phase. @@AUDIT@@ v4.3.7: removed misleading "transient PAM failures self-heal next cycle" claim — `or break` exits the loop on the first failure, no retry path exists. @@AUDIT@@ v4.3.3: command prefix on kill/sudo/sleep — fish -c subshell loads autoloaded user functions, any of which could shadow these names.
     set -l _ka_script (string join \n \
         'while command kill -0 -- $argv[1] 2>/dev/null; and test -d -- "$argv[2]"' \
         '    command sudo -n -v 2>/dev/null; or break' \
@@ -4432,7 +4435,8 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
 
     # Null-delim count (\n-in-filename hazard closure; matches _install_rebuild_boot + _install_finalize boot-wipe marker policy).
     set -l entry_count (count (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
-    if test -n "$entry_count"; and string match -qr '^\d+$' -- "$entry_count"; and test "$entry_count" -gt 0
+    # @@AUDIT@@ v4.3.7: count(1) always emits non-negative integer; -n guard and ^\d+$ regex are unreachable-false. Single -gt 0 check suffices (twin of _verify_static_boot site).
+    if test "$entry_count" -gt 0
         _ok "Boot entries: $entry_count found in /boot/loader/entries/"
     else
         _err "No boot entries found in /boot/loader/entries/"
@@ -4717,8 +4721,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
         _echo
         _ok "Installed: $target"
 
-        # Glob → post-install hook table. First-match-wins; no fallthrough on hook failure.
-        # @@AUDIT@@ v4.3.6: drop redundant `post_` prefix from values — dispatcher at L4742/L4747 is `_post_$_h`, so `post_X` resolved to `_post_post_X` (regression since v4.3.2 added the table); convention elsewhere (`_ry_profile_$name`, `_content_$key`) is bare keys with prefix in the dispatch line.
+        # Glob → post-install hook table. First-match-wins; no fallthrough on hook failure. @@AUDIT@@ v4.3.6: drop redundant `post_` prefix from values — dispatcher at L4742/L4747 is `_post_$_h`, so `post_X` resolved to `_post_post_X` (regression since v4.3.2 added the table); convention elsewhere (`_ry_profile_$name`, `_content_$key`) is bare keys with prefix in the dispatch line.
         set -l _post_hooks \
             "/boot/*|boot" \
             "/etc/mkinitcpio*|boot" \
@@ -4775,7 +4778,7 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
     end
     if test $_rc -ne 0
         _err "CRITICAL: boot rebuild cascade failed — DO NOT REBOOT"
-        _info "  Fix: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update"
+        _info "  Fix: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update" # lint:ignore (user-facing shell advice)
         return $EXIT_BOOT_CRIT
     end
     if not _preflight_boot_sanity

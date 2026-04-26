@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.1 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.2 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.1"
+set -g VERSION "4.4.2"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -67,8 +67,7 @@ if begin
 else
     set -g NO_COLOR false
 end
-# @@AUDIT@@ v4.4.1: root check moved past --help/--version short-circuits — informational flags must work for any user.
-# Original placement here blocked `sudo ./ry-install.fish --help` with EXIT_USAGE before help could print.
+# @@AUDIT@@ v4.4.1: root check moved past --help/--version short-circuits — informational flags must work for any user (original placement blocked `sudo ./ry-install.fish --help` with EXIT_USAGE).
 
 # Fish version gate — 3.4+ required (set --function, string collect --allow-empty)
 set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n1)
@@ -897,10 +896,7 @@ function _validate_profile --description "Verify loaded profile has all required
         end
     end
 
-    # @@AUDIT@@ v4.4.1: control-char sanitization for config-value globals interpolated into newline-delimited
-    # config files (environment.d, sysctl.d, logind.conf.d, iwd/main.conf). Narrower than the cmdline regex above:
-    # rejects only NUL/LF/CR — these globals legitimately contain spaces (sysctl multi-value), `=` (env vars),
-    # and `*` (iwd glob quirks). LF/CR in any element would split the config and silently change semantics.
+    # @@AUDIT@@ v4.4.1: NUL/LF/CR sanitization for config-value globals (environment.d, sysctl.d, logind.conf.d, iwd/main.conf); narrower than cmdline regex — allows spaces, `=`, `*` (legitimate sysctl multi-value, env vars, iwd glob quirks). LF/CR would split the config and silently change semantics.
     for _list_var in ENV_VARS SYSCTL_VALUES LOGIND_IGNORE_KEYS IWD_DRIVER_QUIRKS
         if set -q $_list_var
             for _elem in $$_list_var
@@ -1033,15 +1029,19 @@ function _load_profile --description "Determine, load, and validate the active p
 
     # 6. Cache root UUID — findmnt called once; eliminates TOCTOU between _ry_install_file compare/write paths.
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
-    # @@AUDIT@@ v4.3.2: validate UUID shape before caching to prevent malformed cmdline injection if findmnt output
-    if test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F-]+$' -- "$_ROOT_UUID"
+    # @@AUDIT@@ v4.4.2: tightened from `^[0-9a-fA-F-]+$` (accepted '----' and bare hex) to canonical UUID form.
+    if test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -- "$_ROOT_UUID"
         _err "Root UUID has invalid shape (got: $_ROOT_UUID) — refusing to cache"
         set --erase _ROOT_UUID
     end
     if test -z "$_ROOT_UUID"
-        # Hard-fail on missing root UUID for modes that generate/verify /etc/kernel/cmdline.
+        # @@AUDIT@@ v4.4.2: route --check through _log so help-documented "silent idempotency probe" contract is honored on preflight failure (exit 3 with no stderr).
         switch "$MODE"
-            case install install-file verify-static verify-runtime check
+            case check
+                _log "ROOT_UUID_UNAVAILABLE: findmnt failed (silent for --check)"
+                command rm -f -- "$LOG_FILE" 2>/dev/null
+                _ry_exit $EXIT_PREFLIGHT
+            case install install-file verify-static verify-runtime
                 _err "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline cannot be generated"
                 command rm -f -- "$LOG_FILE" 2>/dev/null
                 _ry_exit $EXIT_PREFLIGHT
@@ -1335,9 +1335,7 @@ function _tmpfile_key --argument-names path --description "Generate filename key
     string replace -a / _ -- (string replace -- "$HOME" HOME "$path")
 end
 
-# @@AUDIT@@ v4.4.1: extracted from inline `string match -v` patterns at six call sites — the v4.4.0 audit hardened
-# _run against glob metacharacters in $TMPDIR but left the same idiom in five other untrack paths. This helper
-# enforces the explicit-loop literal-equality compare uniformly.
+# @@AUDIT@@ v4.4.1: extracted from inline `string match -v` patterns at six call sites — v4.4.0 hardened _run against glob metacharacters in $TMPDIR but left the same idiom in five other untrack paths; this helper enforces explicit-loop literal-equality compare uniformly.
 function _untrack_tmpfile --argument-names path --description "Remove a single literal path from _TRACKED_TMPFILES (no glob)"
     set -l _new
     for _tf in $_TRACKED_TMPFILES
@@ -4938,8 +4936,7 @@ set -l INSTALL_FILE_TARGET ""
 # Snapshot $argv pre-argparse so the JSONL header records the full invocation (argparse strips recognized flags
 set -l _ORIG_ARGV $argv
 
-# CLI parser — argparse with --exclusive for mode flags; deprecated flags declared solely to emit specific messages.
-# @@AUDIT@@ v4.4.0: argparse stderr captured via temp file to preserve fish's specific error message (unknown option / exclusive-group violation / missing =VALUE).
+# CLI parser — argparse with --exclusive mode flags; @@AUDIT@@ v4.4.0: stderr captured via temp file to preserve fish's specific error message (unknown option / exclusive-group violation / missing =VALUE).
 set -l _ap_errfile (mktemp -t ry-argparse-err.XXXXXX 2>/dev/null)
 test -z "$_ap_errfile"; and set _ap_errfile /dev/null
 test "$_ap_errfile" != /dev/null; and set -ga _TRACKED_TMPFILES "$_ap_errfile"
@@ -4968,9 +4965,7 @@ test "$_ap_errfile" != /dev/null; and command rm -f -- "$_ap_errfile" 2>/dev/nul
 
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
-# @@AUDIT@@ v4.4.1: rmdir -p added alongside existing `rm -f $LOG_FILE` in every refused/informational early-exit
-# path so root and non-root informational invocations leave no scaffolding behind. rmdir of non-empty parents
-# fails harmlessly under 2>/dev/null — only today's empty subdir + ancestors that become empty are removed.
+# @@AUDIT@@ v4.4.1: rmdir -p paired with rm -f LOG_FILE in every refused/informational early-exit path so root and non-root informational invocations leave no scaffolding behind (rmdir of non-empty parents fails harmlessly under 2>/dev/null — only today's empty subdir + ancestors that become empty are removed).
 
 # --help / --version: short-circuit modes (exit 0).
 if set -q _flag_help
@@ -4986,9 +4981,7 @@ if set -q _flag_version
     _ry_exit 0
 end
 
-# @@AUDIT@@ v4.4.1: root check sits after --help/--version short-circuits so informational flags work for any user.
-# rmdir -p removes today's empty log subdir + ancestors that become empty (logs/, ry-install/) — restores the
-# pre-patch property that root invocations leave no trace. Non-empty parents fail harmlessly under 2>/dev/null.
+# @@AUDIT@@ v4.4.1: root check sits after --help/--version short-circuits so informational flags work for any user; rmdir -p removes today's empty log subdir + ancestors that become empty (logs/, ry-install/) so root invocations leave no trace (non-empty parents fail harmlessly under 2>/dev/null).
 if test (id -u) -eq 0
     echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
@@ -5154,8 +5147,7 @@ if test "$MODE" != check
 end
 
 if test "$_RY_INSTALL_SOURCED" = true
-    # Sourced: do NOT exit (kills host fish). Release resources, erase handlers, clean namespace, return.
-    # @@AUDIT@@ v4.4.0: _do_cleanup added before handler erase — fish_exit does not fire on sourced return.
+    # Sourced: do NOT exit (kills host fish) — release resources, erase handlers, clean namespace, return. @@AUDIT@@ v4.4.0: _do_cleanup added before handler erase — fish_exit does not fire on sourced return.
     set -g _RY_INSTALL_LAST_EXIT $exit_code
     _do_cleanup
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null

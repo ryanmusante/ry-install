@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.0 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.1 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.0"
+set -g VERSION "4.4.1"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -67,10 +67,8 @@ if begin
 else
     set -g NO_COLOR false
 end
-if test (id -u) -eq 0
-    echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2
-    _ry_exit $EXIT_USAGE
-end
+# @@AUDIT@@ v4.4.1: root check moved past --help/--version short-circuits — informational flags must work for any user.
+# Original placement here blocked `sudo ./ry-install.fish --help` with EXIT_USAGE before help could print.
 
 # Fish version gate — 3.4+ required (set --function, string collect --allow-empty)
 set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n1)
@@ -899,6 +897,21 @@ function _validate_profile --description "Verify loaded profile has all required
         end
     end
 
+    # @@AUDIT@@ v4.4.1: control-char sanitization for config-value globals interpolated into newline-delimited
+    # config files (environment.d, sysctl.d, logind.conf.d, iwd/main.conf). Narrower than the cmdline regex above:
+    # rejects only NUL/LF/CR — these globals legitimately contain spaces (sysctl multi-value), `=` (env vars),
+    # and `*` (iwd glob quirks). LF/CR in any element would split the config and silently change semantics.
+    for _list_var in ENV_VARS SYSCTL_VALUES LOGIND_IGNORE_KEYS IWD_DRIVER_QUIRKS
+        if set -q $_list_var
+            for _elem in $$_list_var
+                if string match -qr -- '[\x00\x0a\x0d]' "$_elem"
+                    _err "Profile global $_list_var element contains forbidden control character (NUL/LF/CR): '$_elem'"
+                    return 1
+                end
+            end
+        end
+    end
+
     # Destination key uniqueness — covers BOTH literal dst duplicates AND slash→_ key collisions in one pass.
     set -l _keys
     for _d in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
@@ -1075,7 +1088,7 @@ function _manifest_write --description "Record current profile destinations for 
         return 1
     end
     # Success: remove tmp from tracked list (mv consumed it)
-    set -g _TRACKED_TMPFILES (string match -v -- "$tmp" $_TRACKED_TMPFILES)
+    _untrack_tmpfile "$tmp"
     _log "MANIFEST_WRITTEN: $MANIFEST_FILE ($MANAGED_FILE_COUNT destinations)"
     return 0
 end
@@ -1288,7 +1301,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
         set -l _reason (command head -n 1 "$_sudo_err" 2>/dev/null)
         command rm -f -- "$_sudo_err" 2>/dev/null
         # Untrack: rm consumed it; cleanup loop would otherwise stat() a dead path.
-        set -g _TRACKED_TMPFILES (string match -v -- "$_sudo_err" $_TRACKED_TMPFILES)
+        _untrack_tmpfile "$_sudo_err"
         _log "SUDO_CACHE_FAIL: $_reason"
         if test -n "$_reason"
             _err "Sudo credential cache failed: $_reason"
@@ -1299,7 +1312,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     end
     command rm -f -- "$_sudo_err" 2>/dev/null
     # Untrack: rm consumed it; cleanup loop would otherwise stat() a dead path.
-    set -g _TRACKED_TMPFILES (string match -v -- "$_sudo_err" $_TRACKED_TMPFILES)
+    _untrack_tmpfile "$_sudo_err"
     return 0
 end
 
@@ -1320,6 +1333,18 @@ end
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path (\$HOME→HOME literal, then slash→underscore)"
     # $HOME→HOME substitution before slash-replace keeps user-scope content fn names stable across users (fish
     string replace -a / _ -- (string replace -- "$HOME" HOME "$path")
+end
+
+# @@AUDIT@@ v4.4.1: extracted from inline `string match -v` patterns at six call sites — the v4.4.0 audit hardened
+# _run against glob metacharacters in $TMPDIR but left the same idiom in five other untrack paths. This helper
+# enforces the explicit-loop literal-equality compare uniformly.
+function _untrack_tmpfile --argument-names path --description "Remove a single literal path from _TRACKED_TMPFILES (no glob)"
+    set -l _new
+    for _tf in $_TRACKED_TMPFILES
+        test "$_tf" = "$path"; and continue
+        set -a _new "$_tf"
+    end
+    set -g _TRACKED_TMPFILES $_new
 end
 
 # ─── Shared helpers (D.1 / D.2 / D.3) ─────────────────────────────────
@@ -2072,7 +2097,7 @@ function _verify_unit_content --argument-names dst --description "Verify systemd
     _verify_unit_syntax "$tmp" (basename -- "$dst")
     set -l rc $status
     command rm -f -- "$tmp" 2>/dev/null
-    set -g _TRACKED_TMPFILES (string match -v -- "$tmp" $_TRACKED_TMPFILES)
+    _untrack_tmpfile "$tmp"
     return $rc
 end
 
@@ -2319,8 +2344,6 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
                 _err "Not a managed destination: $dst"
             case 12
                 _err "Content generator missing prerequisite global (e.g. _ROOT_UUID): $dst"
-            case 13
-                _err "Internal bug in _ry_get_file_content arity check (dst=$dst)"
             case '*'
                 _err "Content generator failed for $dst (rc=$_ps[1])"
         end
@@ -2366,7 +2389,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     end
 
     # Untrack: mv consumed the tmpfile path; cleanup loop would otherwise stat() a dead path.
-    set -g _TRACKED_TMPFILES (string match -v -- "$tmpfile" $_TRACKED_TMPFILES)
+    _untrack_tmpfile "$tmpfile"
     _ok "→ $dst"
     return 0
 end
@@ -2723,7 +2746,7 @@ function _verify_static_packages --description "Verify PKGS_ADD, AUR_PKGS, PKGS_
         else
             _info "  No IgnorePkg set"
         end
-        set -l parallel (grep -n -- '^ParallelDownloads' /etc/pacman.conf 2>/dev/null)
+        set -l parallel (grep -nE -- '^ParallelDownloads[[:space:]]*=' /etc/pacman.conf 2>/dev/null)
         if test -n "$parallel"
             _ok "  $parallel"
         else
@@ -4113,7 +4136,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         _fail "  /etc/fstab: atomic move failed"
         return 1
     end
-    set -g _TRACKED_TMPFILES (string match -v -- "$tmpfstab" $_TRACKED_TMPFILES)
+    _untrack_tmpfile "$tmpfstab"
     _ok "  /etc/fstab: noatime,lazytime,commit=10 applied to ext4 entries"
     _log "FSTAB_OPTS: noatime,lazytime,commit=10 applied"
     return 0
@@ -4904,6 +4927,7 @@ end
 function _early_usage_exit --description "Print usage error to stderr, remove pre-dispatch log, exit EXIT_USAGE"
     echo "[ERR] $argv" >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
+    command rmdir -p -- "$LOG_DIR" 2>/dev/null
     _ry_exit $EXIT_USAGE
 end
 
@@ -4937,22 +4961,39 @@ if test $_argparse_rc -ne 0
     echo >&2
     _ry_show_help >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
+    command rmdir -p -- "$LOG_DIR" 2>/dev/null
     _ry_exit $EXIT_USAGE
 end
 test "$_ap_errfile" != /dev/null; and command rm -f -- "$_ap_errfile" 2>/dev/null
 
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
+# @@AUDIT@@ v4.4.1: rmdir -p added alongside existing `rm -f $LOG_FILE` in every refused/informational early-exit
+# path so root and non-root informational invocations leave no scaffolding behind. rmdir of non-empty parents
+# fails harmlessly under 2>/dev/null — only today's empty subdir + ancestors that become empty are removed.
+
 # --help / --version: short-circuit modes (exit 0).
 if set -q _flag_help
     _ry_show_help
     command rm -f -- "$LOG_FILE" 2>/dev/null
+    command rmdir -p -- "$LOG_DIR" 2>/dev/null
     _ry_exit 0
 end
 if set -q _flag_version
     echo "v$VERSION"
     command rm -f -- "$LOG_FILE" 2>/dev/null
+    command rmdir -p -- "$LOG_DIR" 2>/dev/null
     _ry_exit 0
+end
+
+# @@AUDIT@@ v4.4.1: root check sits after --help/--version short-circuits so informational flags work for any user.
+# rmdir -p removes today's empty log subdir + ancestors that become empty (logs/, ry-install/) — restores the
+# pre-patch property that root invocations leave no trace. Non-empty parents fail harmlessly under 2>/dev/null.
+if test (id -u) -eq 0
+    echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2
+    command rm -f -- "$LOG_FILE" 2>/dev/null
+    command rmdir -p -- "$LOG_DIR" 2>/dev/null
+    _ry_exit $EXIT_USAGE
 end
 
 # -V/--verbose
@@ -4994,6 +5035,7 @@ if test (count $argv) -gt 0
     echo >&2
     _ry_show_help >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
+    command rmdir -p -- "$LOG_DIR" 2>/dev/null
     _ry_exit $EXIT_USAGE
 end
 
@@ -5008,7 +5050,7 @@ _load_profile
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 # @@AUDIT@@ v4.4.0: drift check between hardcoded help-fallback constant and active profile count.
 if set -q MANAGED_FILE_COUNT; and test "$MANAGED_FILE_COUNT" -ne "$_RY_MANAGED_FILE_COUNT"
-    _warn "_RY_MANAGED_FILE_COUNT ($_RY_MANAGED_FILE_COUNT) drifts from active profile ($MANAGED_FILE_COUNT) — update the constant near line 153"
+    _warn "_RY_MANAGED_FILE_COUNT ($_RY_MANAGED_FILE_COUNT) drifts from active profile ($MANAGED_FILE_COUNT) — update the constant in the bootstrap globals block"
 end
 
 set -l mode_label $MODE

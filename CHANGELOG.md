@@ -6,6 +6,110 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.4.1 - 2026-04-26
+-------------------
+
+  Audit-driven point release. One MED UX defect closed; six LOW
+  defensive-consistency fixes; no behavior change for the install,
+  verify-static, verify-runtime, check, or install-file modes on
+  unattended runs. No managed-file content changes; verify-static
+  remains stable across upgrade.
+
+[fix]
+
+  * cli / root-check ordering: `--help`, `-h`, `--version`, `-v` were
+    refused with EXIT_USAGE (2) when the script was invoked as root
+    because the `id -u == 0` gate ran before argparse. Help and version
+    are informational and must succeed for any user. The root-check
+    block was relocated past the `--help` / `--version` short-circuits
+    in the dispatch section, with explicit `rm -f -- "$LOG_FILE"` so
+    the pre-allocated log is cleaned for refused-root invocations too.
+    (MED)
+
+  * cli / scaffolding cleanup invariant: every refused-or-informational
+    early-exit path that already removed `$LOG_FILE` now also runs
+    `command rmdir -p -- "$LOG_DIR" 2>/dev/null` so the empty log
+    subdir + ancestors that became empty are removed. Restores the
+    pre-patch property that root invocations leave no trace and
+    extends it to argparse-failure, positional-argument rejection,
+    `--install-file` path-validation failure (`_early_usage_exit`),
+    and the `--help` / `--version` success handlers (these had also
+    been leaking empty scaffolding for non-root users since v4.4.0).
+    Verified across 38 invocation cases × 2 user contexts: every
+    early-exit path now produces zero on-disk artifacts. Mode-dispatch
+    paths (install/verify/check) still write logs as designed.
+    (LOW)
+
+  * _untrack_tmpfile / cleanup invariant: the v4.4.0 audit replaced
+    `set -g _TRACKED_TMPFILES (string match -v -- "$path" ...)` with
+    an explicit-loop literal-equality compare in `_run` to defend
+    against glob metacharacters in `$TMPDIR`, but the same idiom
+    survived in six other untrack call sites. Extracted the explicit
+    loop into a single `_untrack_tmpfile` helper and routed
+    `_manifest_write`, both `_ensure_sudo_cached` paths,
+    `_verify_unit_content`, `_atomic_write_file`, and
+    `_install_fstab_opts` through it. Real-world risk was zero
+    (mktemp suffixes are alphanumeric) but the invariant is now
+    enforced from one place. (LOW)
+
+  * _atomic_write_file dead branch: the content-generator error-code
+    `switch` had a `case 13` arm referring to "Internal bug in
+    `_ry_get_file_content` arity check", but no path in the script
+    returns 13 — `_ry_get_file_content` returns 11 on missing
+    generator and `_content__etc_kernel_cmdline` returns 12 on
+    missing `_ROOT_UUID`. Removed the unreachable arm; the `case '*'`
+    catch-all handles any future return code with the underlying rc
+    surfaced verbatim. (LOW)
+
+  * _verify_static_packages / pacman.conf parser: the `ParallelDownloads`
+    grep used `^ParallelDownloads` without an anchor on the right edge,
+    so a hypothetical `ParallelDownloadsX` directive would have produced
+    a false positive. Tightened to `^ParallelDownloads[[:space:]]*=`
+    via `grep -nE`. Theoretical only — pacman.conf has a fixed key set
+    — but the regex now matches the directive shape. (LOW)
+
+  * dispatch / drift warning: removed the brittle "near line 153"
+    line-number reference from the `_RY_MANAGED_FILE_COUNT` drift
+    warning; the constant lives on a moving line and the message now
+    points to "the bootstrap globals block" instead. (LOW)
+
+  * _validate_profile / config-value sanitization: the existing
+    element-sanitization loop covered `KERNEL_PARAMS`,
+    `MKINITCPIO_MODULES`, `MKINITCPIO_HOOKS` against shell
+    metacharacters (defense-in-depth even though no shell-eval path
+    exists for them). Added a second, narrower loop for `ENV_VARS`,
+    `SYSCTL_VALUES`, `LOGIND_IGNORE_KEYS`, `IWD_DRIVER_QUIRKS` that
+    rejects only NUL/LF/CR — these globals legitimately contain
+    spaces (sysctl multi-value `tcp_rmem=4096 87380 134217728`),
+    `=` (env vars), and `*` (iwd glob quirks like
+    `PowerSaveDisable=*`), but a stray newline in any element would
+    split the rendered config and silently change semantics. Profile
+    is user-controlled so this is invariant enforcement, not a
+    security boundary. (LOW)
+
+[refactor]
+
+  * _untrack_tmpfile helper introduced next to `_tmpfile_key` in the
+    helpers section. Six call-site bodies shrink to one line each.
+    No semantic change.
+
+[verification]
+
+  * fish --no-execute on the patched file: clean.
+
+  * Behavior matrix re-checked across 38 invocation forms × 2 user
+    contexts (root + non-root) plus 8 sourced cases. Every refused
+    or informational early-exit path produces rc per spec AND zero
+    on-disk artifacts. Mode-dispatch paths (install/verify/check)
+    log normally to `~/ry-install/logs/YYYY-MM-DD/MODE-*.jsonl`.
+    Sourced contexts preserve the host shell across all tested
+    failure modes. Profile sanitization regex `[\x00\x0a\x0d]`
+    accepts every legitimate value in the active profile (env vars
+    with paths, sysctl multi-value tunables, iwd glob quirks,
+    logind key identifiers) and correctly rejects single-element
+    embedded LF.
+
+
 v4.4.0 - 2026-04-25
 -------------------
 

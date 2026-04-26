@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.3.9 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.0 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.3.9"
+set -g VERSION "4.4.0"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -29,12 +29,13 @@ set -g EXIT_DRIFT 10
 function _ry_exit --argument-names code --description "Source-safe exit: set bail sentinel and return when sourced, exit otherwise"
     test -z "$code"; and set code 0
     set -g _RY_INSTALL_LAST_EXIT $code
-    # Always run namespace cleanup before exit/return (defense-in-depth for fish exit-as-return-from-source).
+    # @@AUDIT@@ v4.4.0: _do_cleanup added (guarded by functions -q to skip pre-bootstrap calls).
     set -g _RY_INSTALL_BAILING true
-    # Capture source-state into local BEFORE cleanup
     set -l _was_sourced "$_RY_INSTALL_SOURCED"
-    # Erase signal/exit handlers so host-fish Ctrl+C/SIGPIPE/exit does not fire into dead script context.
+    # Erase signal/exit handlers FIRST so host-fish Ctrl+C/SIGPIPE/exit does not fire into dead script context.
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
+    # Then explicit cleanup — idempotent; functions -q guards calls before _do_cleanup is defined (line ~430).
+    functions -q _do_cleanup; and _do_cleanup
     _ry_namespace_cleanup bail
     if test "$_was_sourced" = true
         return $code
@@ -43,7 +44,7 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
 end
 
 function _ry_namespace_cleanup --argument-names mode --description "Erase script-set globals; preserve caller-API"
-    # HOME preserved: the HOME-resolution block below populates it from getent passwd when $HOME is empty ...
+    # HOME preserved: the HOME-resolution block below populates it from getent passwd when $HOME is empty
     set -l _preserve _RY_INSTALL_LAST_EXIT HOME
     test "$mode" = bail; and set -a _preserve _RY_INSTALL_BAILING
     # Copy snapshot to local — _RY_PRE_GLOBALS is post-snapshot, so the loop would erase it mid-iteration.
@@ -212,7 +213,7 @@ function _detect_lvm --description "Return 0 (LVM present) or 1 (no LVM detected
         set -l _pvs_output (command timeout 10 sudo -n pvs --noheadings 2>/dev/null | string trim --)
         test -n "$_pvs_output"; and return 0
     end
-    # Non-sudo fallback: lsblk reports LVM block-device types without root, catching LVM-rooted systems on stale ...
+    # Non-sudo fallback: lsblk reports LVM block-device types without root, catching LVM-rooted systems on stale
     if command -q lsblk
         lsblk -no TYPE 2>/dev/null | string match -q lvm; and return 0
     end
@@ -227,7 +228,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
         return 0
     end
 
-    # Map cmdline param prefix → CONFIG_ symbol. Unchecked (kernel reports support via dmesg/sysfs, not ...
+    # Map cmdline param prefix → CONFIG_ symbol. Unchecked (kernel reports support via dmesg/sysfs, not
     set -l param_config_map \
         "zswap.=CONFIG_ZSWAP" \
         "amdgpu.=CONFIG_DRM_AMDGPU" \
@@ -365,7 +366,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         command rm -f -- "$LOG_FILE" 2>/dev/null
         return 1
     end
-    # Stale lock reclaim: (a) flock(1) atomic advisory lock eliminates TOCTOU, (b) fallback rmdir+mkdir with PID ...
+    # Stale lock reclaim: (a) flock(1) atomic advisory lock eliminates TOCTOU, (b) fallback rmdir+mkdir with PID
     set -l _reclaim_parent (dirname -- "$LOCK_DIR")
     # @@AUDIT@@ v4.3.2: require both flock(1) AND /bin/sh — flock branch invokes /bin/sh -c
     if command -q flock; and command -q sh
@@ -414,12 +415,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         command rm -f -- "$LOG_FILE" 2>/dev/null
         return 1
     end
-    set -l verify_pid2 (command cat -- "$LOCK_FILE" 2>/dev/null)
-    if test "$verify_pid2" != "$my_pid"
-        echo "[ERR] Lock reclaim lost to late writer (PID $verify_pid2)" >&2
-        command rm -f -- "$LOG_FILE" 2>/dev/null
-        return 1
-    end
+    # @@AUDIT@@ v4.4.0: dropped redundant verify_pid2 — second adjacent read provided no protection (no time gap in flock branch; fallback already has 100ms yield before the first read).
     set -g _RY_HOLDS_LOCK true
     _log "LOCK_RECLAIMED: stale pid=$old_pid, new pid=$fish_pid"
     return 0
@@ -503,7 +499,9 @@ function _teardown --argument-names mode --description "Unified cleanup: progres
             _write_footer 141 interrupted
             _do_cleanup
         case exit
+            # @@AUDIT@@ v4.4.0: _do_cleanup added — normal exit must release lock + tmpfiles + keepalive
             _write_footer "$argv[2]" cleanup_exit
+            _do_cleanup
         case '*'
             _err "_teardown: unknown mode '$mode'"
             return 1
@@ -966,6 +964,25 @@ function _load_profile --description "Determine, load, and validate the active p
     if functions -q "_ry_profile_$name"
         _ry_profile_$name
     else if test -f "$profile_path"
+        # @@AUDIT@@ v4.4.0: ownership + mode check before source — README documents trust model; enforce in code.
+        set -l _po (stat -c '%u %a' -- "$profile_path" 2>/dev/null)
+        if test -z "$_po"
+            _err "Cannot stat profile: $profile_path"
+            command rm -f -- "$LOG_FILE" 2>/dev/null
+            _ry_exit $EXIT_USAGE
+        end
+        set -l _pp (string split ' ' -- "$_po")
+        if test "$_pp[1]" != "$_MY_UID"
+            _err "Profile not owned by current user (uid $_pp[1] != $_MY_UID): $profile_path"
+            command rm -f -- "$LOG_FILE" 2>/dev/null
+            _ry_exit $EXIT_USAGE
+        end
+        # Reject group/other write bits — pattern: owner=any, group/other in {0,1,4,5}.
+        if not string match -qr '^[0-7][0145][0145]$' -- "$_pp[2]"
+            _err "Profile mode too permissive (mode=$_pp[2]; group/world write bit set): $profile_path"
+            command rm -f -- "$LOG_FILE" 2>/dev/null
+            _ry_exit $EXIT_USAGE
+        end
         if not fish --no-execute "$profile_path" 2>/dev/null
             _err "Profile file has syntax errors: $profile_path"
             command rm -f -- "$LOG_FILE" 2>/dev/null
@@ -993,7 +1010,7 @@ function _load_profile --description "Determine, load, and validate the active p
 
     # 4. Validate
     if not _validate_profile "$name"
-        # EXIT_PREFLIGHT (not EXIT_USAGE): profile loaded but failed structural validation (missing globals, type ...
+        # EXIT_PREFLIGHT (not EXIT_USAGE): profile loaded but failed structural validation (missing globals, type
         command rm -f -- "$LOG_FILE" 2>/dev/null
         _ry_exit $EXIT_PREFLIGHT
     end
@@ -1003,7 +1020,7 @@ function _load_profile --description "Determine, load, and validate the active p
 
     # 6. Cache root UUID — findmnt called once; eliminates TOCTOU between _ry_install_file compare/write paths.
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
-    # @@AUDIT@@ v4.3.2: validate UUID shape before caching to prevent malformed cmdline injection if findmnt output ...
+    # @@AUDIT@@ v4.3.2: validate UUID shape before caching to prevent malformed cmdline injection if findmnt output
     if test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F-]+$' -- "$_ROOT_UUID"
         _err "Root UUID has invalid shape (got: $_ROOT_UUID) — refusing to cache"
         set --erase _ROOT_UUID
@@ -1044,7 +1061,7 @@ function _manifest_write --description "Record current profile destinations for 
         _warn "Failed to write manifest (mktemp failed)"
         return 1
     end
-    # Track tmp for cleanup; on successful mv it disappears (rm -f is harmless), on failure cleanup removes the ...
+    # Track tmp for cleanup; on successful mv it disappears (rm -f is harmless), on failure cleanup removes the
     set -ga _TRACKED_TMPFILES "$tmp"
     printf '%s\n' "v$VERSION" "$PROFILE_NAME" $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS >"$tmp"
     if not command chmod -- 600 "$tmp" 2>/dev/null
@@ -1199,7 +1216,7 @@ function _content_HOME_.config_systemd_user_ssh-agent.service
 end
 
 function _content__etc_systemd_system_cpupower-epp.service
-    # @@AUDIT@@ v4.3.4: per-line printf args. Previous multi-line single-quoted body was truncated at the L1211 ...
+    # @@AUDIT@@ v4.3.4: per-line printf args. Previous multi-line single-quoted body was truncated at the L1211
     printf '%s\n' \
         '[Unit]' \
         'Description=Set CPU EPP to performance (amd_pstate=active: powersave governor + performance EPP)' \
@@ -1286,9 +1303,9 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     return 0
 end
 
-# Tmpfile key: slash→underscore of destination path. Collision guard lives in _validate_profile (rejects /a/b vs ...
+# Tmpfile key: slash→underscore of destination path. Collision guard lives in _validate_profile (rejects /a/b vs
 function _as --argument-names use_sudo --description "Prefix command with sudo or command based on use_sudo flag"
-    # @@AUDIT@@ v4.3.3: arity guard — caller error (use_sudo without a real command) previously invoked sudo or ...
+    # @@AUDIT@@ v4.3.3: arity guard — caller error (use_sudo without a real command) previously invoked sudo or
     if test (count $argv) -lt 2
         _log "BUG: _as called without command (argv=$argv)"
         return 2
@@ -1301,7 +1318,7 @@ function _as --argument-names use_sudo --description "Prefix command with sudo o
 end
 
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path (\$HOME→HOME literal, then slash→underscore)"
-    # $HOME→HOME substitution before slash-replace keeps user-scope content fn names stable across users (fish ...
+    # $HOME→HOME substitution before slash-replace keeps user-scope content fn names stable across users (fish
     string replace -a / _ -- (string replace -- "$HOME" HOME "$path")
 end
 
@@ -1643,8 +1660,13 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     # stdout_tmp and stderr_tmp are inside _run_dir; single rm -rf below cleans both
     if test -n "$_run_dir"; and test -d "$_run_dir"
         command rm -rf --preserve-root -- "$_run_dir" 2>/dev/null
-        # remove from tracked list (cleanup already happened)
-        set -g _TRACKED_TMPFILES (string match -v -- "$_run_dir" $_TRACKED_TMPFILES)
+        # @@AUDIT@@ v4.4.0: explicit loop replaces `string match -v` glob — defensive against metacharacters in $TMPDIR.
+        set -l _new_tracked
+        for _tf in $_TRACKED_TMPFILES
+            test "$_tf" = "$_run_dir"; and continue
+            set -a _new_tracked "$_tf"
+        end
+        set -g _TRACKED_TMPFILES $_new_tracked
     end
     _log "EXIT: $ret cmd=$log_cmd"
     return $ret
@@ -2833,7 +2855,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _info "Static verification (config files)..."
     _echo
 
-    # Decomposition: 7 section helpers in original output order (boot → system → user → packages → services → ...
+    # Decomposition: 7 section helpers in original output order (boot → system → user → packages → services →
     _verify_static_boot
     _verify_static_system
     _verify_static_user
@@ -3739,7 +3761,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _info "Runtime verification (live system state)..."
     _echo
 
-    # Decomposition: kparams → services → env → session per README v4.3.0 plan. _verify_runtime_services returns ...
+    # Decomposition: kparams → services → env → session per README v4.3.0 plan. _verify_runtime_services returns
     _verify_runtime_kparams
     if _verify_runtime_services
         _verify_runtime_env
@@ -3822,7 +3844,7 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
     set -l my_pid $fish_pid
-    # Keepalive: 45 s cycle; loop bails on first sudo -n -v failure (fail-fast). Parent surfaces death via ...
+    # Keepalive: 45 s cycle; loop bails on first sudo -n -v failure (fail-fast). Parent surfaces death via
     set -l _ka_script (string join \n \
         'while command kill -0 -- $argv[1] 2>/dev/null; and test -d -- "$argv[2]"' \
         '    command sudo -n -v 2>/dev/null; or break' \
@@ -4258,7 +4280,7 @@ function _install_configure_services --description "Enable, start, and configure
     _echo
     _info "Post-installation tasks..."
 
-    # Decomposition: preset (udev/resolved/PKGS_DEL) → mask → enable. Unified rollup: any helper returning 1 ...
+    # Decomposition: preset (udev/resolved/PKGS_DEL) → mask → enable. Unified rollup: any helper returning 1
     set -l _ret 0
     _configure_services_preset; or set _ret 1
     _configure_services_mask; or set _ret 1
@@ -4573,7 +4595,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _log "VERSION: $VERSION"
     _log "MODE: unattended"
 
-    # Pre-declare _boot_rc at function scope so the bare set _boot_rc $status at the post-_install_rebuild_boot ...
+    # Pre-declare _boot_rc at function scope so the bare set _boot_rc $status at the post-_install_rebuild_boot
     set -l _boot_rc 0
 
     _echo
@@ -4889,24 +4911,35 @@ set -g MODE install
 
 set -l INSTALL_FILE_TARGET ""
 
-# Snapshot $argv pre-argparse so the JSONL header records the full invocation (argparse strips recognized flags ...
+# Snapshot $argv pre-argparse so the JSONL header records the full invocation (argparse strips recognized flags
 set -l _ORIG_ARGV $argv
 
 # CLI parser — argparse with --exclusive for mode flags; deprecated flags declared solely to emit specific messages.
+# @@AUDIT@@ v4.4.0: argparse stderr captured via temp file to preserve fish's specific error message (unknown option / exclusive-group violation / missing =VALUE).
+set -l _ap_errfile (mktemp -t ry-argparse-err.XXXXXX 2>/dev/null)
+test -z "$_ap_errfile"; and set _ap_errfile /dev/null
+test "$_ap_errfile" != /dev/null; and set -ga _TRACKED_TMPFILES "$_ap_errfile"
 argparse --name=ry-install.fish \
     --exclusive=verify-static,verify-runtime,check,install-file \
     h/help v/version V/verbose \
     verify-static verify-runtime check install-file= \
-    -- $argv 2>/dev/null
+    -- $argv 2>"$_ap_errfile"
 set -l _argparse_rc $status
 if test $_argparse_rc -ne 0
-    # argparse already rejected (unknown option, exclusive-group violation, or missing =VALUE). Emit help + exit ...
-    echo "[ERR] Invalid arguments: $_ORIG_ARGV" >&2
+    # Forward argparse's specific message; fall back to generic on capture failure.
+    set -l _ap_msg ""
+    if test "$_ap_errfile" != /dev/null; and test -s "$_ap_errfile"
+        set _ap_msg (command cat -- "$_ap_errfile" 2>/dev/null | string trim --)
+    end
+    test -n "$_ap_msg"; or set _ap_msg "Invalid arguments: $_ORIG_ARGV"
+    echo "[ERR] $_ap_msg" >&2
+    test "$_ap_errfile" != /dev/null; and command rm -f -- "$_ap_errfile" 2>/dev/null
     echo >&2
     _ry_show_help >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
     _ry_exit $EXIT_USAGE
 end
+test "$_ap_errfile" != /dev/null; and command rm -f -- "$_ap_errfile" 2>/dev/null
 
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
@@ -4973,6 +5006,10 @@ end
 # Load machine profile — must be after arg parsing but before any mode that reads config globals
 _load_profile
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+# @@AUDIT@@ v4.4.0: drift check between hardcoded help-fallback constant and active profile count.
+if set -q MANAGED_FILE_COUNT; and test "$MANAGED_FILE_COUNT" -ne "$_RY_MANAGED_FILE_COUNT"
+    _warn "_RY_MANAGED_FILE_COUNT ($_RY_MANAGED_FILE_COUNT) drifts from active profile ($MANAGED_FILE_COUNT) — update the constant near line 153"
+end
 
 set -l mode_label $MODE
 # NOTE: path format mirrored at LOG_FILE init site ($LOG_DIR/install-$TIMESTAMP.jsonl). Keep both in sync.
@@ -5075,8 +5112,10 @@ if test "$MODE" != check
 end
 
 if test "$_RY_INSTALL_SOURCED" = true
-    # Sourced: do NOT exit (kills host fish). Erase handlers, clean namespace, return exit code.
+    # Sourced: do NOT exit (kills host fish). Release resources, erase handlers, clean namespace, return.
+    # @@AUDIT@@ v4.4.0: _do_cleanup added before handler erase — fish_exit does not fire on sourced return.
     set -g _RY_INSTALL_LAST_EXIT $exit_code
+    _do_cleanup
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
     _ry_namespace_cleanup
     return $exit_code

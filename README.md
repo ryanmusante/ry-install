@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.3.9-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.4.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.18.4-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -402,7 +402,7 @@ Run `--verify-static` and `--verify-runtime` before first use.
 </details>
 
 > [!WARNING]
-> **Profile Trust Model.** Profiles execute via `source` with the user's privileges — treat them like any shell script. Only use profiles from trusted sources; verify ownership with `stat -c '%U' ~/.config/ry-install/profiles/*.fish`. No sandboxing — a malicious profile can do anything your account can.
+> **Profile Trust Model.** Profiles execute via `source` with the user's privileges — treat them like any shell script. Since v4.4.0, profile files are rejected at load time if they are not owned by the invoking UID or if their mode has the group/world write bit set; the script will exit with `EXIT_USAGE` (2) before sourcing. This is a basic guardrail, not a sandbox — a malicious profile owned by you can still do anything your account can.
 
 ## Safety & Reliability
 
@@ -410,11 +410,13 @@ Run `--verify-static` and `--verify-runtime` before first use.
 |---|---|
 | Atomic writes | tmp → chmod → mv (same FS); parent-dir trust checks (root-owned or uid=$UID, not symlink, not group/world-writable) |
 | Permission model | system files 0644 (world-readable configs); user files 0600 (private); 0700 on `~/ry-install/` and per-day log subdirs; 0600 on log/manifest/marker files |
+| Profile trust | External profiles validated for owner=$UID and mode≤0755 (no group/world write) before `source` (v4.4.0+) |
 | fstab edits | Idempotent; `findmnt --verify` before write; **no backup** — snapshot first |
 | Root detection | **Refuses to run as root** — sudo invoked internally |
 | Instance lock | Atomic mkdir, PID verification, stale reclaim |
 | Credentials | 9 sensitive flag patterns redacted in logs |
 | Signal handling | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
+| Cleanup invariant | Lock + tracked tmpfiles + sudo keepalive released on every exit path: signal, SIGPIPE, normal exit, sourced return, early bail (v4.4.0+) |
 | Logging | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl` |
 | Boot safety | Abort on initramfs / bootloader rebuild failure |
 | LVM-aware | Skips lvm2-monitor mask when LVM detected |

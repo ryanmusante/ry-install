@@ -6,6 +6,165 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.4.0 - 2026-04-25
+-------------------
+
+  Audit-driven release. Two HIGH cleanup-invariant defects closed,
+  two MED diagnostic and trust-model gaps closed, two LOW correctness
+  fixes, and one drift assertion. Same root cause for both HIGHs: the
+  resource-cleanup function (`_do_cleanup`) was reachable only from
+  signal-handler paths (SIGINT/SIGTERM/SIGHUP/SIGQUIT/SIGPIPE), never
+  from normal exit, sourced return, or early bail. Symptom: every run
+  of v4.3.x and earlier left `~/ry-install/.lock/` on disk, forcing the
+  stale-reclaim path on the next invocation. No managed-file content
+  changes; verify-static remains stable across upgrade.
+
+[fix]
+
+  * _teardown / _cleanup_on_exit cleanup invariant: `_do_cleanup` is
+    now called from the `case exit` arm of `_teardown`, so the
+    fish_exit handler (`_cleanup_on_exit`) releases LOCK_DIR, removes
+    tracked tmpfiles, and terminates the sudo-keepalive child on
+    every normal exit. Previously the `case exit` arm wrote the JSONL
+    footer and returned without calling `_do_cleanup`, so LOCK_DIR
+    was retained until either the host fish process exited or a
+    subsequent run hit the stale-reclaim path. Affected all four
+    primary modes (install, install-file, verify-static,
+    verify-runtime) plus --check. Location: L506 (_teardown body).
+
+  * end-of-script sourced-return path cleanup: the sourced branch
+    that runs when `_RY_INSTALL_SOURCED=true` now calls `_do_cleanup`
+    before erasing the signal/exit handlers, instead of jumping
+    straight to `_ry_namespace_cleanup` (which only erases globals).
+    Symptom for sourced workflows: lock leaked on every successful
+    run; the user had to `rm -rf ~/ry-install/.lock/` between
+    sessions. fish_exit does not fire on `return` from a sourced
+    script, so this could not be picked up by the exit handler.
+    Location: L5077-5085 (top-level dispatch tail).
+
+  * _ry_exit early-bail cleanup: `_ry_exit` (the source-safe exit
+    helper used by 25 preflight/usage rejection sites) now invokes
+    `_do_cleanup` between the handler-erase and `_ry_namespace_cleanup`
+    calls, guarded by `functions -q _do_cleanup` so calls before the
+    function is defined (during early bootstrap, e.g. fish-version
+    gate, HOME resolution, LOG_DIR creation) silently skip cleanup
+    where there is nothing to clean. After the function is defined
+    (line ~430), every `_ry_exit` call releases resources idempotently.
+    Location: L29-43 (function body).
+
+  * argparse stderr capture: argparse output is now captured to a
+    tracked tempfile and forwarded into the `[ERR]` line emitted on
+    parse failure, replacing the previous generic "Invalid arguments:
+    $_ORIG_ARGV" message. Users now see fish's specific diagnostic
+    (`--bogus: unknown option`, `check verify-static: options cannot
+    be used together`, `Option '--install-file' requires an argument`)
+    before the help text. The previous behavior swallowed argparse's
+    stderr via `2>/dev/null`. The capture file is added to
+    `_TRACKED_TMPFILES` and explicitly removed on both success and
+    failure paths. Location: L4895-4922 (CLI parser block).
+
+  * profile ownership + mode check: external profile files at
+    `~/.config/ry-install/profiles/<name>.fish` are now stat'd before
+    `source`. The script refuses to load any profile not owned by
+    the invoking UID, or any profile whose group/other mode digits
+    have the write bit set (mode digit must match `[0145]`). The
+    profile-name regex was already path-traversal-safe; this fix
+    closes the gap where the README documented a trust model that
+    the script did not enforce. Failure exits `EXIT_USAGE` (2) with
+    the offending uid or mode named in the error. Location: L965-985
+    (_load_profile body).
+
+  * _acquire_lock dead code: the redundant `verify_pid2` block in
+    the stale-reclaim path was removed. Both `verify_pid` and
+    `verify_pid2` reads were issued back-to-back with no time gap
+    in the flock(1) branch (which had already atomically written
+    our PID), and the fallback branch already performs a 100 ms
+    yield before the first read, leaving no semantic difference
+    between the two adjacent reads. The "late writer" failure
+    mode the second read claimed to detect cannot occur after the
+    flock-protected write or the fallback yield. Location: L417-426.
+
+  * _run tracked-tmpfile filter glob safety: `_TRACKED_TMPFILES`
+    no longer uses `string match -v` (which interprets glob
+    metacharacters in the pattern argument) to filter out a removed
+    `_run_dir`. Replaced with an explicit for-loop using literal
+    string equality. mktemp output is alphanumeric in practice so
+    the original code was not exploitable, but a non-default `TMPDIR`
+    containing a `*` or `?` would have caused the filter to either
+    drop unrelated entries or fail to drop the intended one.
+    Location: L1660-1671 (end of _run body).
+
+[diag]
+
+  * managed-file count drift assertion: after `_load_profile`, the
+    script now compares the active profile's `MANAGED_FILE_COUNT`
+    against the hardcoded `_RY_MANAGED_FILE_COUNT` constant (used as
+    a fallback in `_ry_show_help` before profile load) and emits a
+    `[WARN]` if they differ. Catches the maintenance hazard where
+    profile destinations are added or removed but the help-text
+    fallback constant is not kept in sync. Location: L5008-5012
+    (post-_load_profile dispatch tail).
+
+  * comment style cleanup: 17 comment lines that ended in trailing
+    " ..." truncation artifacts (legacy from an earlier mechanical
+    line-shortening pass) have had the ellipsis stripped. The
+    affected comments now end with the last meaningful word.
+    Mid-line semantic ellipsis (notation like `begin...end`,
+    `KEY=...`, `(ALL,...)`, systemd output format strings) is
+    preserved. Header (L1-2) and `lint:ignore` directives are
+    untouched. No code paths affected.
+
+[deferred]
+
+  * function length cap: 24 functions exceed the 50-LOC project
+    rule, 9 exceed 100. Largest is `_verify_runtime_kparams` at
+    242 LOC, followed by `_verify_runtime_session` (175),
+    `_verify_runtime_env` (174), `_verify_runtime_services` (165),
+    `_install_rebuild_boot` (136), `_validate_profile` (130). The
+    verify-runtime family is mostly flat per-parameter or
+    per-subsystem switch logic and would split cleanly along
+    natural seams. Mechanical splitting risks regressions in the
+    verify-mode counter wiring (VERIFY_OK/FAIL/WARN updates flow
+    through `_msg`); deferred to a dedicated refactor with
+    verify-mode regression coverage.
+
+[verified]
+
+  * fish --no-execute: clean (RC=0).
+  * --version: returns `v4.4.0` as expected, exit 0.
+  * --help: renders with v4.4.0 in header, all sections present, exit 0.
+  * --bogus: stderr now contains `[ERR] ry-install.fish: --bogus:
+    unknown option` (was: `[ERR] Invalid arguments: --bogus`),
+    exit 2.
+  * --verify-static --check: stderr now contains `[ERR]
+    ry-install.fish: check verify-static: options cannot be used
+    together` (was: same generic line as --bogus), exit 2.
+  * --install-file=relative/path: rejected with absolute-path
+    requirement, exit 2.
+  * positional argument: rejected with named-positional error,
+    exit 2.
+  * --check on non-CachyOS host: exits EXIT_PREFLIGHT (3), no
+    crash.
+  * Cleanup invariant (v4.4.0 HIGH#1+#2 fix): three consecutive
+    --check invocations followed by an --install-file invocation
+    that acquires the lock then fails at preflight — LOCK_DIR
+    absent on disk after every run.
+  * Sourced execution: `source ry-install.fish --version` and
+    `source ry-install.fish --bogus` both return into the host
+    fish (exit 0 / exit 2) without killing it. After cleanup,
+    only `_RY_INSTALL_LAST_EXIT` and `_RY_INSTALL_BAILING` remain
+    in the host namespace — both intentionally preserved by
+    `_ry_namespace_cleanup` for caller use.
+  * Re-source: a second `source` after the first succeeds (no
+    "already loaded" rejection), confirming `_RY_INSTALL_LOADED`
+    is correctly erased on cleanup.
+  * 8 `@@AUDIT@@ v4.4.0` markers placed at every fix site.
+  * Total LOC change: 5085 → 5124 (+39, all from the seven inline
+    fixes plus the audit markers and one drift-warning line).
+    Comment-trim pass changed 17 comment lines in place
+    (no LOC delta).
+
+
 v4.3.9 - 2026-04-25
 -------------------
 

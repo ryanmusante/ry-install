@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.4.10-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.4.11-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.18.4-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -422,7 +422,7 @@ Run `--verify-static` and `--verify-runtime` before first use.
 | Instance lock | Atomic mkdir, PID verification, `flock(1)` stale reclaim (required, not fallback as of v4.4.4); sudo keepalive captures the lock-dir inode at start and aborts if a concurrent instance recreates the directory (v4.4.8+) |
 | Credentials | 9 sensitive flag patterns redacted in logs |
 | Signal handling | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
-| Cleanup invariant | Lock + tracked tmpfiles + sudo keepalive released on every exit path: signal, SIGPIPE, normal exit, sourced return, early bail (v4.4.0+); `_CLEANUP_DONE` is set before cleanup runs so signals arriving mid-cleanup short-circuit the handler instead of double-firing (v4.4.8+); `_ry_exit` and `_ry_namespace_cleanup` are idempotent across re-entry so a second bail (e.g. `--version` → root-check) cannot erase parent-shell `PATH`/`LANG`/`USER`/`fish_*` when sourced (v4.4.9+); `_load_profile` propagates the bail sentinel after each interior `_ry_exit` so source-mode unwinds immediately rather than continuing to execute against erased globals (v4.4.10+) |
+| Cleanup invariant | Lock + tracked tmpfiles + sudo keepalive released on every exit path: signal, SIGPIPE, normal exit, sourced return, early bail (v4.4.0+); `_CLEANUP_DONE` is set before cleanup runs so signals arriving mid-cleanup short-circuit the handler instead of double-firing (v4.4.8+); `_ry_exit` and `_ry_namespace_cleanup` are idempotent across re-entry so a second bail (e.g. `--version` → root-check) cannot erase parent-shell `PATH`/`LANG`/`USER`/`fish_*` when sourced (v4.4.9+); `_load_profile` propagates the bail sentinel after each interior `_ry_exit` so source-mode unwinds immediately rather than continuing to execute against erased globals (v4.4.10+); `_ry_exit` sets `_CLEANUP_DONE` before any other sentinel so a signal arriving between sentinel sets cannot fork the cleanup path, and `_ry_do_install` polls `_RY_INSTALL_BAILING` between every install phase so source-mode signal unwinds the dispatch tree instead of continuing past the handler (v4.4.11+) |
 | Logging | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl` |
 | Boot safety | Abort on initramfs / bootloader rebuild failure; under `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1`, a failed `pacman -Syu` aborts before initramfs regeneration so torn package state cannot ship to `/boot` (v4.4.10+) |
 | LVM-aware | Skips lvm2-monitor mask when LVM detected |

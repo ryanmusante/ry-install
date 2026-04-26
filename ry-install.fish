@@ -1,5 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v4.4.10 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.11 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
+# Dynamic dispatch: _ry_get_file_content → _content_<key>; _load_profile → _ry_profile_<n>; install loop → _post_<hook>
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -8,7 +9,7 @@ if set -q _RY_INSTALL_LOADED
         exit 1
     end
 end
-# Fresh load: reset bail sentinel + last-exit so a 2nd `source` in a session that previously bailed (BAILING preserved by namespace cleanup _preserve list) doesn't immediately re-bail at the first bail-check during bootstrap. Caller must read _RY_INSTALL_LAST_EXIT before re-sourcing if they care about the prior exit code.
+# Reset bail sentinel + last-exit on fresh load so a 2nd source after a bailed session can re-run cleanly
 set -e _RY_INSTALL_BAILING 2>/dev/null
 set -e _RY_INSTALL_LAST_EXIT 2>/dev/null
 set -g _RY_PRE_GLOBALS (set --names -g)
@@ -18,7 +19,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.10"
+set -g VERSION "4.4.11"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -29,7 +30,7 @@ set -g EXIT_DRIFT 10
 
 function _ry_exit --argument-names code --description "Source-safe exit: set bail sentinel and return when sourced, exit otherwise"
     test -z "$code"; and set code 0
-    # IDEMPOTENCY GUARD (v4.4.9): a 2nd _ry_exit must NOT re-run cleanup. The 1st pass erased _RY_PRE_GLOBALS itself (snapshot was taken before _RY_PRE_GLOBALS was assigned, so it was outside the snapshot's protected set). A 2nd pass would dereference an empty snapshot and erase parent-shell environment (PATH/LANG/USER/fish_*). _RY_INSTALL_BAILING is in the cleanup _preserve list so it survives across calls — safe sentinel for re-entry detection.
+    # IDEMPOTENCY GUARD: 2nd _ry_exit short-circuits via BAILING sentinel — prevents 2nd-pass cleanup erasing parent shell env
     if set -q _RY_INSTALL_BAILING; and test "$_RY_INSTALL_BAILING" = true
         set -g _RY_INSTALL_LAST_EXIT $code
         if test "$_RY_INSTALL_SOURCED" = true
@@ -37,11 +38,11 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
         end
         exit $code
     end
+    # Order matters: _CLEANUP_DONE first closes the race where a signal between sentinel sets would re-run cleanup
+    set -g _CLEANUP_DONE true
     set -g _RY_INSTALL_LAST_EXIT $code
     set -g _RY_INSTALL_BAILING true
     set -l _was_sourced "$_RY_INSTALL_SOURCED"
-    # _CLEANUP_DONE set first so signals during cleanup short-circuit via the handler guard; handlers erased after cleanup completes.
-    set -g _CLEANUP_DONE true
     functions -q _do_cleanup; and _do_cleanup
     _ry_namespace_cleanup bail
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
@@ -52,7 +53,7 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
 end
 
 function _ry_namespace_cleanup --argument-names mode --description "Erase script-set globals; preserve caller-API"
-    # IDEMPOTENCY GUARD (v4.4.9): if snapshot already lost, skip — a 2nd pass with an empty snapshot would erase PATH/LANG/USER/fish runtime globals from the caller's shell.
+    # IDEMPOTENCY GUARD: snapshot already lost → skip (2nd pass with empty snapshot would erase parent-shell PATH/LANG/USER/fish_*)
     set -q _RY_PRE_GLOBALS; or return 0
     set -l _preserve _RY_INSTALL_LAST_EXIT HOME
     test "$mode" = bail; and set -a _preserve _RY_INSTALL_BAILING
@@ -119,7 +120,7 @@ test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g DATE_LABEL (date '+%Y-%m-%d')
 set -g TIMESTAMP (date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
 
-# HOME resolution: env → getent passwd (handles privilege-escalated shells, cron, containers). No `~` fallback: fish's `~` expansion requires $HOME be set; it cannot recover an unset $HOME on its own.
+# HOME resolution: env → getent passwd (handles privilege-escalated shells, cron, containers); no `~` fallback (fish ~ requires $HOME set)
 set -g _MY_UID (id -u)
 if test -z "$HOME"
     set -g HOME (getent passwd $_MY_UID 2>/dev/null | cut -d: -f6)
@@ -1867,7 +1868,7 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
         end
         sudo -n grep -qF -- "$pattern" "$file" 2>/dev/null; and set found true
     else
-        grep -qF -- "$pattern" "$file" 2>/dev/null; and set found true
+        command grep -qF -- "$pattern" "$file" 2>/dev/null; and set found true
     end
 
     if test "$found" = true
@@ -2297,7 +2298,7 @@ end
 
 function _ry_mkinitcpio_array --argument-names key file --description "First non-comment KEY=... line from a conf file"
     test -z "$file"; and set file /etc/mkinitcpio.conf
-    grep -E "^[[:space:]]*$key=" "$file" 2>/dev/null | grep -v '^[[:space:]]*#' | head -n 1
+    command grep -E "^[[:space:]]*$key=" "$file" 2>/dev/null | command grep -v '^[[:space:]]*#' | head -n 1
 end
 
 function _content_bytes --argument-names dst --description "Raw bytes of embedded content for a destination, or empty on generator failure"
@@ -4619,14 +4620,17 @@ function _ry_do_install --description "Full installation: preflight, packages, c
 
     _install_preflight
     or return $EXIT_PREFLIGHT
+    test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
     _echo
 
     if not _install_packages
         set -g INSTALL_HAD_ERRORS true
     end
+    test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
     _install_aur_packages; or set -g INSTALL_HAD_ERRORS true
+    test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
     set --erase _RY_SKIP_IWD
     if command -q updatedb
@@ -4635,22 +4639,27 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     if command -q pkgfile
         _run sudo -n pkgfile --update; or _warn "Pkgfile update failed"
     end
+    test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
     if not _install_system_files
         set -g INSTALL_HAD_ERRORS true
     end
+    test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
     _install_fstab_opts; or set -g INSTALL_HAD_ERRORS true
+    test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
     if not _install_configure_services
         set -g INSTALL_HAD_ERRORS true
     end
+    test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
     _install_rebuild_boot
     set _boot_rc $status
     if test $_boot_rc -ne 0
         set -g INSTALL_HAD_ERRORS true
     end
+    test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
     if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
         _err "Boot-critical failure — skipping finalization"
@@ -5099,45 +5108,45 @@ if test $_rot_count -gt $MAX_LOGS
 end
 command find "$_log_base_rot" -mindepth 1 -maxdepth 1 -type d -empty -delete 2>/dev/null
 
-set -g exit_code 0
+set -g _RY_EXIT_CODE 0
 switch $MODE
     case verify-static
         _ry_verify_static
-        set exit_code $status
+        set _RY_EXIT_CODE $status
     case verify-runtime
         _ry_verify_runtime
-        set exit_code $status
+        set _RY_EXIT_CODE $status
     case check
         _ry_do_check
-        set exit_code $status
+        set _RY_EXIT_CODE $status
     case install-file
         _ry_do_install_file "$INSTALL_FILE_TARGET"
-        set exit_code $status
+        set _RY_EXIT_CODE $status
     case install
         _ry_do_install
-        set exit_code $status
+        set _RY_EXIT_CODE $status
     case '*'
         _err "Unknown mode: $MODE"
-        set exit_code $EXIT_USAGE
+        set _RY_EXIT_CODE $EXIT_USAGE
 end
 if test "$_RY_INSTALL_BAILING" = true
-    set -g _RY_INSTALL_LAST_EXIT $exit_code
-    return $exit_code
+    set -g _RY_INSTALL_LAST_EXIT $_RY_EXIT_CODE
+    return $_RY_EXIT_CODE
 end
-set -g _INTENDED_EXIT_CODE $exit_code
+set -g _INTENDED_EXIT_CODE $_RY_EXIT_CODE
 
-_write_footer "$exit_code" ""
+_write_footer "$_RY_EXIT_CODE" ""
 
 if test "$MODE" != check
     echo "[i] Log file: $LOG_FILE" >&2
 end
 
 if test "$_RY_INSTALL_SOURCED" = true
-    set -g _RY_INSTALL_LAST_EXIT $exit_code
+    set -g _RY_INSTALL_LAST_EXIT $_RY_EXIT_CODE
     _do_cleanup
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
     _ry_namespace_cleanup
-    return $exit_code
+    return $_RY_EXIT_CODE
 end
 
-exit $exit_code
+exit $_RY_EXIT_CODE

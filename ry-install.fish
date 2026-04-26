@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.7 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.10 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -8,6 +8,9 @@ if set -q _RY_INSTALL_LOADED
         exit 1
     end
 end
+# Fresh load: reset bail sentinel + last-exit so a 2nd `source` in a session that previously bailed (BAILING preserved by namespace cleanup _preserve list) doesn't immediately re-bail at the first bail-check during bootstrap. Caller must read _RY_INSTALL_LAST_EXIT before re-sourcing if they care about the prior exit code.
+set -e _RY_INSTALL_BAILING 2>/dev/null
+set -e _RY_INSTALL_LAST_EXIT 2>/dev/null
 set -g _RY_PRE_GLOBALS (set --names -g)
 set -g _RY_INSTALL_LOADED true
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -15,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.7"
+set -g VERSION "4.4.10"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -26,12 +29,22 @@ set -g EXIT_DRIFT 10
 
 function _ry_exit --argument-names code --description "Source-safe exit: set bail sentinel and return when sourced, exit otherwise"
     test -z "$code"; and set code 0
+    # IDEMPOTENCY GUARD (v4.4.9): a 2nd _ry_exit must NOT re-run cleanup. The 1st pass erased _RY_PRE_GLOBALS itself (snapshot was taken before _RY_PRE_GLOBALS was assigned, so it was outside the snapshot's protected set). A 2nd pass would dereference an empty snapshot and erase parent-shell environment (PATH/LANG/USER/fish_*). _RY_INSTALL_BAILING is in the cleanup _preserve list so it survives across calls — safe sentinel for re-entry detection.
+    if set -q _RY_INSTALL_BAILING; and test "$_RY_INSTALL_BAILING" = true
+        set -g _RY_INSTALL_LAST_EXIT $code
+        if test "$_RY_INSTALL_SOURCED" = true
+            return $code
+        end
+        exit $code
+    end
     set -g _RY_INSTALL_LAST_EXIT $code
     set -g _RY_INSTALL_BAILING true
     set -l _was_sourced "$_RY_INSTALL_SOURCED"
-    functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
+    # _CLEANUP_DONE set first so signals during cleanup short-circuit via the handler guard; handlers erased after cleanup completes.
+    set -g _CLEANUP_DONE true
     functions -q _do_cleanup; and _do_cleanup
     _ry_namespace_cleanup bail
+    functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
     if test "$_was_sourced" = true
         return $code
     end
@@ -39,6 +52,8 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
 end
 
 function _ry_namespace_cleanup --argument-names mode --description "Erase script-set globals; preserve caller-API"
+    # IDEMPOTENCY GUARD (v4.4.9): if snapshot already lost, skip — a 2nd pass with an empty snapshot would erase PATH/LANG/USER/fish runtime globals from the caller's shell.
+    set -q _RY_PRE_GLOBALS; or return 0
     set -l _preserve _RY_INSTALL_LAST_EXIT HOME
     test "$mode" = bail; and set -a _preserve _RY_INSTALL_BAILING
     set -l _snap $_RY_PRE_GLOBALS
@@ -68,6 +83,7 @@ if not string match -qr '^\d+$' -- "$parts[1]"
     echo "[ERR] fish version unparseable: '$fish_ver'" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 if test "$parts[1]" -lt 3
     or begin
         test "$parts[1]" -eq 3; and test "$parts[2]" -lt 4
@@ -75,6 +91,7 @@ if test "$parts[1]" -lt 3
     echo "[ERR] fish 3.4+ required (found: $fish_ver)" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
 # TMPDIR writability gate — _run / mktemp / sudo-err sites assume a writable working tmp dir
 set -l _ry_tmpprobe_dir (set -q TMPDIR; and test -n "$TMPDIR"; and printf '%s' "$TMPDIR"; or printf '%s' /tmp)
@@ -82,29 +99,36 @@ if not test -w "$_ry_tmpprobe_dir"
     echo "[ERR] tmp dir not writable: $_ry_tmpprobe_dir" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
 # GNU sort -z probe — boot-wipe basename hash + log rotation depend on NUL-delimited sort
-if not printf '' | command sort -z </dev/null 2>/dev/null
+if not printf '' | command sort -z 2>/dev/null
     echo "[ERR] GNU sort with -z required (busybox/BSD sort detected)" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+
+# GNU stat -c probe — 13 sites use stat -c '%a'/'%u %a'/'%F %u %a'/'%U:%G'/'%i'/'%s'; BSD stat is incompatible.
+if not command stat -c '%a' / >/dev/null 2>&1
+    echo "[ERR] GNU stat with -c format flag required (BSD stat detected)" >&2
+    _ry_exit $EXIT_PREFLIGHT
+end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
 # Timestamps: DATE_LABEL (ISO date) for dirs, TIMESTAMP (compact+PID) for filenames; two date calls avoid %Y dup.
 set -g DATE_LABEL (date '+%Y-%m-%d')
 set -g TIMESTAMP (date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
 
-# HOME resolution: env → getent passwd → tilde (handles privilege-escalated shells, cron, containers)
+# HOME resolution: env → getent passwd (handles privilege-escalated shells, cron, containers). No `~` fallback: fish's `~` expansion requires $HOME be set; it cannot recover an unset $HOME on its own.
 set -g _MY_UID (id -u)
 if test -z "$HOME"
     set -g HOME (getent passwd $_MY_UID 2>/dev/null | cut -d: -f6)
-    if test -z "$HOME"
-        set -g HOME ~
-    end
     if test -z "$HOME"; or not test -d "$HOME"
         echo "Error: Cannot determine HOME directory" >&2
         _ry_exit $EXIT_PREFLIGHT
     end
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
 set -g LOG_DIR "$HOME/ry-install/logs/$DATE_LABEL"
 # Boot-wipe acknowledgement marker — single source of truth for the preflight gate and the post-success writer
@@ -117,6 +141,7 @@ command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
     echo "[ERR] Cannot create log directory: $LOG_DIR" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 umask $_prev_mkdir_umask
 command chmod -- 700 "$HOME/ry-install/logs" 2>/dev/null
 command chmod -- 700 "$LOG_DIR" 2>/dev/null
@@ -129,12 +154,12 @@ if test "$_ld_mode" != 700
     echo "[ERR] Log dir mode is $_ld_mode (expected 700): $HOME/ry-install" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g LOG_FILE "$LOG_DIR/install-$TIMESTAMP.jsonl"
 # NOTE: path format mirrored at dispatch-time rename site; umask 0177 makes touch+chmod fallback race-free
 set -l _prev_umask (umask)
 umask 0177
-command install -m 0600 -- /dev/null "$LOG_FILE" 2>/dev/null
-or begin
+command install -m 0600 -- /dev/null "$LOG_FILE" 2>/dev/null; or begin
     command touch -- "$LOG_FILE" 2>/dev/null
     command chmod -- 600 "$LOG_FILE" 2>/dev/null
 end
@@ -143,6 +168,7 @@ if not test -f "$LOG_FILE"
     echo "[ERR] Failed to create log file: $LOG_FILE" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g INSTALL_HAD_ERRORS false
 set -g _TRACKED_TMPFILES
 
@@ -161,12 +187,14 @@ if not string match -qr '^\d+$' -- "$KVER_MAJOR"
     command rm -f -- "$LOG_FILE" 2>/dev/null
     _ry_exit $EXIT_PREFLIGHT
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g KVER_MINOR (string replace -r '[^0-9].*' '' -- "$KVER_PARTS[2]")
 if test -z "$KVER_MINOR"; or not string match -qr '^\d+$' -- "$KVER_MINOR"
     echo "[ERR] Cannot parse kernel minor version from uname -r: $KVER" >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
     _ry_exit $EXIT_PREFLIGHT
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
 function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy-loaded; empty on missing config)"
     # sentinel-based gate — count == 0 re-tested /proc/config.gz on every call when missing
@@ -958,6 +986,7 @@ function _load_profile --description "Determine, load, and validate the active p
         _err "Invalid profile name: '$name' (must be lowercase alphanumeric, starting with [a-z0-9])"
         command rm -f -- "$LOG_FILE" 2>/dev/null
         _ry_exit $EXIT_USAGE
+        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
     end
 
     # 3. Load profile function — file-based takes precedence over built-in (allows user override)
@@ -971,23 +1000,27 @@ function _load_profile --description "Determine, load, and validate the active p
             _err "Cannot stat profile: $profile_path"
             command rm -f -- "$LOG_FILE" 2>/dev/null
             _ry_exit $EXIT_USAGE
+            test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
         end
         set -l _pp (string split ' ' -- "$_po")
         if test "$_pp[1]" != "$_MY_UID"
             _err "Profile not owned by current user (uid $_pp[1] != $_MY_UID): $profile_path"
             command rm -f -- "$LOG_FILE" 2>/dev/null
             _ry_exit $EXIT_USAGE
+            test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
         end
         # Reject group/other write bits — pattern: owner=any, group/other in {0,1,4,5}
         if not string match -qr '^[0-7][0145][0145]$' -- "$_pp[2]"
             _err "Profile mode too permissive (mode=$_pp[2]; group/world write bit set): $profile_path"
             command rm -f -- "$LOG_FILE" 2>/dev/null
             _ry_exit $EXIT_USAGE
+            test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
         end
         if not fish --no-execute "$profile_path" 2>/dev/null
             _err "Profile file has syntax errors: $profile_path"
             command rm -f -- "$LOG_FILE" 2>/dev/null
             _ry_exit $EXIT_USAGE
+            test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
         end
         if functions -q "_ry_profile_$name"
             _log "PROFILE_OVERRIDE: file '$profile_path' overrides built-in _ry_profile_$name"
@@ -1006,6 +1039,7 @@ function _load_profile --description "Determine, load, and validate the active p
             _err "Profile file does not define function _ry_profile_$name: $profile_path"
             command rm -f -- "$LOG_FILE" 2>/dev/null
             _ry_exit $EXIT_USAGE
+            test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
         end
     else if functions -q "_ry_profile_$name"
         _ry_profile_$name
@@ -1013,12 +1047,14 @@ function _load_profile --description "Determine, load, and validate the active p
         _err "Unknown profile: $name"
         command rm -f -- "$LOG_FILE" 2>/dev/null
         _ry_exit $EXIT_USAGE
+        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
     end
 
     if not _validate_profile "$name"
         # EXIT_PREFLIGHT (not EXIT_USAGE): profile loaded but failed structural validation (missing globals, type
         command rm -f -- "$LOG_FILE" 2>/dev/null
         _ry_exit $EXIT_PREFLIGHT
+        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
     end
 
     set -g MANAGED_FILE_COUNT (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
@@ -1036,10 +1072,12 @@ function _load_profile --description "Determine, load, and validate the active p
                 _log "ROOT_UUID_UNAVAILABLE: findmnt failed (silent for --check)"
                 command rm -f -- "$LOG_FILE" 2>/dev/null
                 _ry_exit $EXIT_PREFLIGHT
+                test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
             case install install-file verify-static verify-runtime
                 _err "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline cannot be generated"
                 command rm -f -- "$LOG_FILE" 2>/dev/null
                 _ry_exit $EXIT_PREFLIGHT
+                test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
             case '*'
                 _log "ROOT_UUID_UNAVAILABLE: mode=$MODE — non-fatal for this mode"
         end
@@ -1525,15 +1563,15 @@ function _verify_summary --description "Print verification pass/fail/warn summar
 
     if test "$snap_fail" -gt 0
         _fail "$summary"
-        echo "VERIFY:FAIL:$snap_ok:$snap_fail:$snap_warn"
+        _log "VERIFY_RESULT: status=fail ok=$snap_ok fail=$snap_fail warn=$snap_warn"
         return 1
     else if test "$snap_warn" -gt 0
         _warn "$summary"
-        echo "VERIFY:WARN:$snap_ok:$snap_fail:$snap_warn"
+        _log "VERIFY_RESULT: status=warn ok=$snap_ok fail=$snap_fail warn=$snap_warn"
         return 0
     else
         _ok "$summary"
-        echo "VERIFY:OK:$snap_ok:$snap_fail:$snap_warn"
+        _log "VERIFY_RESULT: status=ok ok=$snap_ok fail=$snap_fail warn=$snap_warn"
         return 0
     end
 end
@@ -1653,7 +1691,8 @@ function _run --description "Execute a command with logging, stdout/stderr captu
         set _run_timeout 3600
     end
     if test -n "$_run_timeout"; and command -q timeout
-        command timeout --preserve-status --kill-after=10 "$_run_timeout" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
+        # No --preserve-status: a child that catches SIGTERM and exits 0 must still surface as failure (124) on timeout, not silent success.
+        command timeout --kill-after=10 "$_run_timeout" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     else
         # command prefix forces external binary — prevents fish function recursion when timeout(1) unavailable.
         command $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
@@ -2067,8 +2106,13 @@ function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODU
 end
 
 function _verify_unit_content --argument-names dst --description "Verify systemd unit content via tmpfile+_verify_unit_syntax"
+    if test (count $argv) -lt 2
+        _log "BUG: _verify_unit_content called without content (dst=$dst)"
+        return 2
+    end
     set -l content $argv[2..-1]
     command -q systemd-analyze; or return 0
+    # mktemp --suffix is GNU coreutils only (CachyOS ships GNU); systemd-analyze needs *.service basename to apply unit syntax rules.
     set -l tmp (mktemp -t ry-val-unit.XXXXXX --suffix=.service 2>/dev/null)
     test -n "$tmp"; or begin
         _fail "  $dst: mktemp failed"
@@ -2107,6 +2151,10 @@ function _grep_kv --argument-names dst --description "Validate kv pairs (loader.
 end
 
 function _grep_kparam --argument-names dst --description "Validate kernel cmdline has required tokens"
+    if test (count $argv) -lt 2
+        _log "BUG: _grep_kparam called without content (dst=$dst)"
+        return 2
+    end
     string match -qr -- '(^|\s)root=UUID=' $argv[2..-1]; or begin
         _fail "  $dst: missing required token 'root=UUID='"
         return 1
@@ -2115,6 +2163,10 @@ function _grep_kparam --argument-names dst --description "Validate kernel cmdlin
 end
 
 function _grep_sysctl_kv --argument-names dst --description "Validate sysctl.d has ≥1 'key = value' line"
+    if test (count $argv) -lt 2
+        _log "BUG: _grep_sysctl_kv called without content (dst=$dst)"
+        return 2
+    end
     string match -qre '^[a-zA-Z._0-9-]+\s*=\s*\S' -- $argv[2..-1]; or begin
         _fail "  $dst: no 'key = value' lines found"
         return 1
@@ -2123,6 +2175,10 @@ function _grep_sysctl_kv --argument-names dst --description "Validate sysctl.d h
 end
 
 function _grep_udev_kv --argument-names dst --description 'Validate udev rule shape (KEY==...<val>)'
+    if test (count $argv) -lt 2
+        _log "BUG: _grep_udev_kv called without content (dst=$dst)"
+        return 2
+    end
     string match -qre '[A-Z_]+\s*[!=+:]{1,2}=\s*\x22' -- $argv[2..-1]; or begin
         _fail "  $dst: no udev rule found"
         return 1
@@ -2131,6 +2187,10 @@ function _grep_udev_kv --argument-names dst --description 'Validate udev rule sh
 end
 
 function _grep_ini_header --argument-names dst --description 'Validate ≥1 [Section] header present'
+    if test (count $argv) -lt 2
+        _log "BUG: _grep_ini_header called without content (dst=$dst)"
+        return 2
+    end
     string match -qre '^\[[^]]+\]$' -- $argv[2..-1]; or begin
         _fail "  $dst: no [Section] header found"
         return 1
@@ -2139,6 +2199,10 @@ function _grep_ini_header --argument-names dst --description 'Validate ≥1 [Sec
 end
 
 function _grep_xml_tag --argument-names dst --description "Validate drirc XML has required tags"
+    if test (count $argv) -lt 2
+        _log "BUG: _grep_xml_tag called without content (dst=$dst)"
+        return 2
+    end
     set -l content $argv[2..-1]
     for tag in '<driconf>' '<device>' '<application'
         string match -qe -- "$tag" $content; or begin
@@ -3811,7 +3875,9 @@ function _install_preflight --description "Run all preflight checks before insta
     end
     set -l my_pid $fish_pid
     set -l _ka_script (string join \n \
+        'set -l _start_inode (command stat -c %i -- "$argv[2]" 2>/dev/null); or exit 0' \
         'while command kill -0 -- $argv[1] 2>/dev/null; and test -d -- "$argv[2]"' \
+        '    test "$_start_inode" = (command stat -c %i -- "$argv[2]" 2>/dev/null); or break' \
         '    command sudo -n -v 2>/dev/null; or break' \
         '    command sleep $argv[3] 2>/dev/null' \
         'end' | string collect)
@@ -4286,13 +4352,20 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
         set -l valid_entry false
         for conf in $confs
             set -l linux_line (sudo -n grep -m1 '^linux ' -- "$conf" 2>/dev/null | string replace -r '^linux\s+' '' | string trim --)
-            set -l linux_rel (string trim --left --chars=/ -- "$linux_line")
+            test -n "$linux_line"; or continue
             # Reject exact dot-dot path segments (not substring — foo..bar is a legal filename in some BLS setups).
-            if contains -- ".." (string split '/' -- "$linux_rel")
+            if contains -- ".." (string split '/' -- "$linux_line")
                 _warn "  Loader entry has non-BLS path (contains ..): $conf"
                 continue
             end
-            if test -n "$linux_rel"; and sudo -n test -f "$_esp/$linux_rel" 2>/dev/null
+            # Accept absolute paths verbatim; treat relative paths as ESP-rooted (BLS spec mandates relative).
+            set -l linux_check
+            if string match -q -- '/*' "$linux_line"
+                set linux_check "$linux_line"
+            else
+                set linux_check "$_esp/$linux_line"
+            end
+            if sudo -n test -f "$linux_check" 2>/dev/null
                 set valid_entry true
                 break
             end
@@ -4332,8 +4405,12 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     else
         _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
         if not _run sudo -n pacman -Syu --noconfirm
-            _warn "System upgrade failed or was interrupted"
+            _err "System upgrade failed or was interrupted — package state may be torn"
+            _err "CRITICAL: refusing to regenerate initramfs against partial -Syu state"
+            _info "  Resolve manually: sudo pacman -Syu (review pacman.log for the failed package)"
+            _info "  Then re-run ry-install"
             set -g INSTALL_HAD_ERRORS true
+            return $EXIT_BOOT_CRIT
         else
             _ok "System upgrade complete"
         end
@@ -4840,15 +4917,12 @@ set -l INSTALL_FILE_TARGET ""
 set -l _ORIG_ARGV $argv
 
 set -l _ap_errfile (mktemp -t ry-argparse-err.XXXXXX 2>/dev/null)
+# mktemp fail → /dev/null only. Never fall back to LOG_FILE (raw stderr would corrupt JSONL format).
 if test -z "$_ap_errfile"
-    if test -n "$LOG_FILE"; and test -f "$LOG_FILE"
-        set _ap_errfile "$LOG_FILE"
-    else
-        set _ap_errfile /dev/null
-    end
+    set _ap_errfile /dev/null
 end
-test "$_ap_errfile" != /dev/null; and test "$_ap_errfile" != "$LOG_FILE"; and set -ga _TRACKED_TMPFILES "$_ap_errfile"
-argparse --name=ry-install.fish \
+test "$_ap_errfile" != /dev/null; and set -ga _TRACKED_TMPFILES "$_ap_errfile"
+argparse --name=(basename -- (status filename)) \
     --exclusive=verify-static,verify-runtime,check,install-file \
     h/help v/version V/verbose \
     verify-static verify-runtime check install-file= \
@@ -4861,14 +4935,20 @@ if test $_argparse_rc -ne 0
     end
     test -n "$_ap_msg"; or set _ap_msg "Invalid arguments: $_ORIG_ARGV"
     echo "[ERR] $_ap_msg" >&2
-    test "$_ap_errfile" != /dev/null; and test "$_ap_errfile" != "$LOG_FILE"; and command rm -f -- "$_ap_errfile" 2>/dev/null
+    if test "$_ap_errfile" != /dev/null
+        command rm -f -- "$_ap_errfile" 2>/dev/null
+        _untrack_tmpfile "$_ap_errfile"
+    end
     echo >&2
     _ry_show_help >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
     command rmdir -p -- "$LOG_DIR" 2>/dev/null
     _ry_exit $EXIT_USAGE
 end
-test "$_ap_errfile" != /dev/null; and test "$_ap_errfile" != "$LOG_FILE"; and command rm -f -- "$_ap_errfile" 2>/dev/null
+if test "$_ap_errfile" != /dev/null
+    command rm -f -- "$_ap_errfile" 2>/dev/null
+    _untrack_tmpfile "$_ap_errfile"
+end
 
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
@@ -4878,12 +4958,15 @@ if set -q _flag_help
     command rmdir -p -- "$LOG_DIR" 2>/dev/null
     _ry_exit 0
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+
 if set -q _flag_version
     echo "v$VERSION"
     command rm -f -- "$LOG_FILE" 2>/dev/null
     command rmdir -p -- "$LOG_DIR" 2>/dev/null
     _ry_exit 0
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
 # root check after --help/--version; rmdir -p clears empty log dirs so root leaves no trace.
 if test (id -u) -eq 0
@@ -4892,6 +4975,7 @@ if test (id -u) -eq 0
     command rmdir -p -- "$LOG_DIR" 2>/dev/null
     _ry_exit $EXIT_USAGE
 end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
 set -q _flag_verbose; and set -g QUIET false
 
@@ -4960,8 +5044,7 @@ end
 if not test -f "$LOG_FILE"
     set -l _prev_umask (umask)
     umask 0177
-    command install -m 0600 -- /dev/null "$LOG_FILE" 2>/dev/null
-    or begin
+    command install -m 0600 -- /dev/null "$LOG_FILE" 2>/dev/null; or begin
         command touch -- "$LOG_FILE" 2>/dev/null
         command chmod -- 600 "$LOG_FILE" 2>/dev/null; or _warn "Chmod 600 failed on $LOG_FILE"
     end

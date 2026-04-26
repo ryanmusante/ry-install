@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.4.7-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.4.10-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.18.4-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -77,6 +77,7 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 | Unrestricted sudo, no `requiretty` / `tty_tickets` / `timestamp_timeout=0` | `sudo -l` |
 | Writable `$TMPDIR` (or `/tmp` if unset) | `test -w "${TMPDIR:-/tmp}"; and echo ok` |
 | GNU `coreutils` `sort -z` (NUL-delimited) | `printf '' \| sort -z </dev/null; and echo ok` |
+| GNU `coreutils` `stat -c` (BSD stat incompatible) | `stat -c '%a' / >/dev/null; and echo ok` |
 | 2 GB root + 200 MB /boot free | `df -h / /boot` |
 | Network connectivity | `curl -sf --head https://archlinux.org` |
 | Current BIOS | [Beelink downloads](https://dr.bee-link.cn/) |
@@ -134,7 +135,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | Phase | Description |
 |---|---|
-| **Preflight** | Validate prerequisites (Fish ≥ 3.4, writable `$TMPDIR`, GNU `sort -z`, sudo without `requiretty` / `tty_tickets` / `timestamp_timeout=0`), acquire lock, load profile |
+| **Preflight** | Validate prerequisites (Fish ≥ 3.4, writable `$TMPDIR`, GNU `sort -z`, GNU `stat -c`, sudo without `requiretty` / `tty_tickets` / `timestamp_timeout=0`), acquire lock, load profile |
 | **Packages** | Sync repos, install/remove packages, AUR via paru |
 | **Configuration** | Deploy 16 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
@@ -418,12 +419,12 @@ Run `--verify-static` and `--verify-runtime` before first use.
 | Profile sanitization | KERNEL_PARAMS / MKINITCPIO_MODULES / MKINITCPIO_HOOKS reject shell + glob metachars (`*` `?` `[` `]` `{` `}`); ENV_VARS / SYSCTL_VALUES / LOGIND_IGNORE_KEYS / IWD_DRIVER_QUIRKS / SYSTEM\_/USER\_/SERVICE\_DESTINATIONS reject NUL/LF/CR; ENV_VARS enforced KEY=VALUE shape; SYSCTL_VALUES enforced key=value with non-empty value; SUDO_KEEPALIVE_INTERVAL / NM_RESTART_DELAY validated as positive integers (invalid values reset to documented defaults) |
 | fstab edits | Idempotent; `findmnt --verify` before write; symlinked `/etc/fstab` rejected (v4.4.4+); **no backup** — snapshot first |
 | Root detection | **Refuses to run as root** — sudo invoked internally |
-| Instance lock | Atomic mkdir, PID verification, `flock(1)` stale reclaim (required, not fallback as of v4.4.4) |
+| Instance lock | Atomic mkdir, PID verification, `flock(1)` stale reclaim (required, not fallback as of v4.4.4); sudo keepalive captures the lock-dir inode at start and aborts if a concurrent instance recreates the directory (v4.4.8+) |
 | Credentials | 9 sensitive flag patterns redacted in logs |
 | Signal handling | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
-| Cleanup invariant | Lock + tracked tmpfiles + sudo keepalive released on every exit path: signal, SIGPIPE, normal exit, sourced return, early bail (v4.4.0+) |
+| Cleanup invariant | Lock + tracked tmpfiles + sudo keepalive released on every exit path: signal, SIGPIPE, normal exit, sourced return, early bail (v4.4.0+); `_CLEANUP_DONE` is set before cleanup runs so signals arriving mid-cleanup short-circuit the handler instead of double-firing (v4.4.8+); `_ry_exit` and `_ry_namespace_cleanup` are idempotent across re-entry so a second bail (e.g. `--version` → root-check) cannot erase parent-shell `PATH`/`LANG`/`USER`/`fish_*` when sourced (v4.4.9+); `_load_profile` propagates the bail sentinel after each interior `_ry_exit` so source-mode unwinds immediately rather than continuing to execute against erased globals (v4.4.10+) |
 | Logging | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl` |
-| Boot safety | Abort on initramfs / bootloader rebuild failure |
+| Boot safety | Abort on initramfs / bootloader rebuild failure; under `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1`, a failed `pacman -Syu` aborts before initramfs regeneration so torn package state cannot ship to `/boot` (v4.4.10+) |
 | LVM-aware | Skips lvm2-monitor mask when LVM detected |
 | Orphan tracking | Manifest warns on version / profile change |
 | Source-safe | Returns via `$_RY_INSTALL_LAST_EXIT` instead of `exit` when sourced |
@@ -504,7 +505,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-04-26T14:23:01-0700","event":"header","version":"4.4.7","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"2026-04-26T14:23:01-0700","event":"header","version":"4.4.8","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
 {"ts":"2026-04-25T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
 {"ts":"2026-04-25T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
 {"ts":"2026-04-25T14:23:12-0700","event":"progress","data":"[2/6] Packages"}

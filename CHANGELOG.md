@@ -6,6 +6,309 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.4.10 - 2026-04-26
+--------------------
+
+  Source-mode and boot-critical correctness pass. Five
+  follow-on items in code paths that operate after a bail
+  sentinel is set or after a partial system upgrade, plus
+  three smaller robustness items.
+
+  When sourced, `_ry_exit` calls inside `_load_profile`
+  returned control to `_load_profile` rather than unwinding
+  to the dispatcher, leaving subsequent statements to
+  execute against the namespace-cleanup-erased global set.
+  The eventual top-level `_RY_INSTALL_BAILING` check at the
+  dispatcher entry still caught the bail and returned the
+  correct exit code, but the intervening statements ran
+  with `$LOG_FILE`, `$VERSION`, `$EXIT_*`, and other
+  globals erased. The bootstrap and dispatcher already
+  carried the standard `test "$_RY_INSTALL_BAILING" = true;
+  and return $_RY_INSTALL_LAST_EXIT` guard after each
+  `_ry_exit`; only `_load_profile` was inconsistent
+  internally — one such guard existed (post-`source`),
+  eight call sites did not.
+
+  In the install pipeline, a failed `pacman -Syu` under
+  `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1` previously surfaced
+  as a warning and proceeded to `mkinitcpio -P` against a
+  potentially torn package state. Initramfs regeneration
+  succeeding against half-upgraded kernel files is the
+  documented hazard `EXIT_BOOT_CRIT` exists to prevent;
+  the failure path now matches the documented contract.
+
+  Two smaller items: the dead `set -g HOME ~` fallback in
+  the bootstrap (fish cannot expand `~` once `$HOME` is
+  unset, so the recovery branch always produced an empty
+  string and fired the next test-z guard) and the
+  `/boot/loader/entries` verifier rejecting non-spec
+  absolute `linux ` paths via doubled ESP prefix.
+
+  No managed-file content changes. No JSONL schema
+  changes. No new flags or environment variables.
+  `--verify-static` remains stable across upgrade.
+
+[fix]
+
+  * `_load_profile` (bail propagation): added
+    `test "$_RY_INSTALL_BAILING" = true; and return
+    $_RY_INSTALL_LAST_EXIT` after each interior `_ry_exit`
+    call (invalid profile name, stat failure, ownership
+    mismatch, mode too permissive, fish-syntax check
+    failure, missing profile fn, unknown profile,
+    `_validate_profile` failure, `ROOT_UUID` resolution
+    failure for `--check` and for install/install-file/
+    verify-static/verify-runtime). Mirrors the pattern
+    the bootstrap and dispatcher already use. Source-mode
+    early-return now unwinds immediately on first bail
+    instead of running through subsequent code with the
+    namespace-cleanup snapshot already consumed.
+
+  * `_install_rebuild_boot` (post-`-Syu` abort): when the
+    explicit unattended `-Syu` fails, the function now
+    sets `INSTALL_HAD_ERRORS=true` and returns
+    `EXIT_BOOT_CRIT` instead of warning and proceeding.
+    Initramfs and bootloader regeneration are skipped
+    against torn package state. Recovery message tells
+    the user to resolve the failure manually (review
+    pacman.log) and re-run.
+
+  * bootstrap (HOME resolution): removed the dead
+    `set -g HOME ~` tilde fallback. Fish's `~` expansion
+    requires `$HOME` to be set; with `$HOME` empty it
+    returns the empty string, leaving the next test-z
+    guard to fire. The first-tier fallback (`getent
+    passwd $_MY_UID`) covers the cases the tilde fallback
+    was meant to cover. Comment updated to reflect the
+    chain.
+
+  * `_preflight_boot_sanity` (BLS path acceptance):
+    `/boot/loader/entries/*.conf` entries with absolute
+    `linux ` paths (non-BLS but legal on some setups)
+    were silently failing the kernel-image existence
+    check via doubled ESP prefix. The verifier now
+    treats absolute paths verbatim and only ESP-roots
+    relative paths.
+
+  * `_verify_summary` (output streaming): the three
+    `echo "VERIFY:OK|WARN|FAIL:..."` lines were writing
+    to stdout from `--verify-static` and `--verify-
+    runtime`, with no caller capture and no
+    documentation. They are now emitted via `_log` as
+    `VERIFY_RESULT: status=... ok=N fail=N warn=N`. The
+    same counts are already carried by the JSONL footer
+    event, so transcript content is unchanged; only the
+    interactive-stdout leak is removed.
+
+  * `_grep_kparam`, `_grep_sysctl_kv`, `_grep_udev_kv`,
+    `_grep_ini_header`, `_grep_xml_tag` (arity guards):
+    added `count $argv -lt 2 → return 2` guard mirroring
+    the pattern `_as` and `_verify_unit_content` already
+    use. Behaviour is unchanged for valid callers; arity
+    bugs in future refactors now surface explicitly with
+    a `BUG:`-prefixed log line rather than silently
+    returning success on an empty range slice.
+
+  * bootstrap (GNU `stat -c` probe): added a
+    `command stat -c '%a' /` probe alongside the GNU
+    `sort -z` probe at preflight. The script's thirteen
+    `stat -c` sites previously assumed GNU coreutils
+    without an explicit gate; busybox/BSD environments
+    now fail fast with a clear error before reaching the
+    first `stat -c` site.
+
+  * bootstrap (`sort -z` probe redirection): dropped the
+    redundant `</dev/null` after the pipe. The pipe input
+    is empty by construction; the explicit redirect was
+    overriding the pipe and reading from `/dev/null`.
+    Both forms produce the same result today, but the
+    redirect masked the pipe semantics.
+
+[notes]
+
+  * Inline `#`-comment blocks across the bootstrap and
+    helpers consolidated to single-line form where they
+    were not protected by `lint:ignore` markers. No
+    behavioural change.
+
+  * Net line count change: -8 (5151 → 5143 lines).
+
+
+v4.4.9 - 2026-04-26
+-------------------
+
+  Source-mode correctness pass. When the script is sourced
+  (rather than executed), a second `_ry_exit` invocation —
+  reachable via `--help` → root-check, `--version` → root-
+  check, or any bootstrap precondition failure that leaves
+  control flowing into the next preflight block — would
+  re-enter `_ry_namespace_cleanup` with an empty
+  `_RY_PRE_GLOBALS` snapshot (the snapshot itself was erased
+  by the first cleanup pass) and proceed to erase every
+  global the parent fish shell relies on: `PATH`, `LANG`,
+  `USER`, `IFS`, `fish_function_path`, `fish_complete_path`,
+  and roughly thirty more. The caller's shell would then
+  fail to resolve any external command. Direct execution
+  was never affected because `_ry_exit` calls `exit` which
+  terminates the process; only the sourced path could
+  re-enter. No managed-file content changes, no schema
+  changes to the JSONL log, no new flags or environment
+  variables. Verify-static remains stable across upgrade.
+
+[fix]
+
+  * `_ry_exit` (re-entry guard): added an early-return
+    check at function entry. If `_RY_INSTALL_BAILING` is
+    already true — which it will be on any second
+    invocation, since the first pass sets it before
+    cleanup and `_ry_namespace_cleanup` keeps it via the
+    `_preserve` list — the function now updates
+    `_RY_INSTALL_LAST_EXIT` and returns/exits without
+    re-running `_do_cleanup` or `_ry_namespace_cleanup`.
+    First-call behaviour is unchanged.
+
+  * `_ry_namespace_cleanup` (snapshot guard): added
+    `set -q _RY_PRE_GLOBALS; or return 0` at the top.
+    A second pass with an empty snapshot would treat
+    every parent-shell global as "added by the script"
+    and erase it. The guard makes the function a no-op
+    once the snapshot has been consumed, so even a
+    direct second call (bypassing `_ry_exit`) is safe.
+
+  * dispatcher (post-`--help` and post-`--version` bail
+    checks): added `test "$_RY_INSTALL_BAILING" = true;
+    and return $_RY_INSTALL_LAST_EXIT` immediately after
+    the `--help` and `--version` `if` blocks. Prior code
+    fell through to the root-check (`if test (id -u)
+    -eq 0`), which fired on every root user even though
+    the script had already bailed out of the version
+    print. This was the trigger for the second
+    `_ry_exit` reached by the cleanup re-entry path.
+
+  * bootstrap (preflight bail checks): added the same
+    BAILING short-circuit after each of the ten top-
+    level `_ry_exit` sites between `set -g VERSION` and
+    the function-definition section — fish version
+    parse, fish version floor, TMPDIR writability,
+    GNU `sort -z` probe, HOME determination,
+    `mkdir -p $LOG_DIR`, log-dir mode check, log-file
+    creation, KVER major parse, KVER minor parse. When
+    sourced, a `_ry_exit` from any of these no longer
+    cascades into the next block (which previously
+    operated on now-stale or unparseable state, e.g.
+    `test "$parts[1]" -lt 3` after parts[1]="abc").
+
+  * fresh-source reset (sentinel hygiene): after the
+    `_RY_INSTALL_LOADED` re-source guard and before the
+    new `_RY_PRE_GLOBALS` snapshot, the script now
+    explicitly erases `_RY_INSTALL_BAILING` and
+    `_RY_INSTALL_LAST_EXIT`. Both are kept across a
+    cleanup pass (so the in-flight bail can still
+    return its exit code), which means a second
+    `source ./ry-install.fish` in the same fish session
+    would otherwise inherit BAILING=true from the prior
+    run and short-circuit at the very first preflight
+    bail check. Callers that care about the prior exit
+    code must read `_RY_INSTALL_LAST_EXIT` before
+    re-sourcing.
+
+
+v4.4.8 - 2026-04-26
+-------------------
+
+  Correctness pass on the exit path, the `_run` timeout
+  guard, the argparse error sink, and the sudo keepalive
+  worker. No managed-file content changes, no schema
+  changes to the JSONL log, no new flags or environment
+  variables. Verify-static remains stable across upgrade.
+
+[fix]
+
+  * `_ry_exit` (cleanup ordering): `_CLEANUP_DONE` is now
+    set before `_do_cleanup` runs and `_ry_namespace_cleanup`
+    finalizes; the signal-handler erase is deferred until
+    afterward. Prior order erased `_cleanup` /
+    `_cleanup_pipe` / `_cleanup_on_exit` first, leaving a
+    window in which a SIGINT/SIGTERM arriving during the
+    bail path hit fish's default action (terminate) and
+    could leave the lock dir, the keepalive child, or
+    tracked tmpfiles behind. New order short-circuits any
+    such signal via the existing `_CLEANUP_DONE` guard
+    inside the handlers, so the bail path is now signal-
+    safe end to end.
+
+  * `_run` (timeout integrity): dropped `--preserve-status`
+    from `command timeout`. With `--preserve-status`, a
+    child that catches SIGTERM and exits 0 — which a
+    well-behaved daemon, package manager hook, or signal-
+    aware mkinitcpio install hook can — would surface to
+    `_run` as success even though the wall-clock cap was
+    hit, and the install pipeline (which only checks
+    `if not _run`) would proceed past a hung command.
+    Without `--preserve-status`, timeout(1) always returns
+    124 on expiry regardless of how the child exits, and
+    `if not _run` correctly reports failure.
+
+  * argparse error sink (LOG_FILE fallback removed): on
+    `mktemp` failure for the argparse stderr scratch
+    file, the script now falls straight to `/dev/null`
+    instead of redirecting argparse's raw error text into
+    the active JSONL log file. Prior fallback corrupted
+    the log schema (one non-JSON line wedged between the
+    header and body events) and broke `jq -c .` and any
+    other JSONL consumer used to monitor unattended runs.
+    The user-facing `[ERR]` message at the top of the
+    parse-failure block still prints; only the
+    argparse-specific detail string is lost on the
+    mktemp-fail path.
+
+  * argparse error sink (tmpfile bookkeeping): each `rm`
+    of `_ap_errfile` is now followed by
+    `_untrack_tmpfile` so `_TRACKED_TMPFILES` does not
+    retain dead paths across sourced re-loads.
+
+  * `_install_preflight` (sudo keepalive worker): the
+    background `fish -c` loop now snapshots the lock
+    directory's inode with `stat -c %i` before its
+    refresh loop and re-checks it on every iteration. If
+    a concurrent ry-install instance reclaims the lock
+    dir via `flock(1)` rmdir+mkdir while a previous
+    keepalive is still alive, the inode changes and the
+    keepalive breaks instead of refreshing the new
+    instance's sudo credential. PID and `test -d` guards
+    remain; the inode check sits between them.
+
+  * `_verify_unit_content` (arity guard): explicit
+    `count $argv -lt 2` check at function entry. Prior
+    contract relied on callers passing both `dst` and at
+    least one content line; a future caller passing only
+    `dst` would silently emit an empty unit file and
+    `systemd-analyze verify` would treat it as a valid
+    empty unit. New guard returns 2 with a `BUG:` log
+    line so the caller error surfaces.
+
+[style]
+
+  * Bootstrap and dispatch-time `command install -m 0600`
+    sites: re-joined the trailing `or begin` onto the
+    preceding command line so both call sites use the
+    same `; or begin` inline form the rest of the file
+    uses. No semantic change.
+
+  * `_ry_exit`, `_run` timeout, argparse stderr fallback,
+    `_verify_unit_content` mktemp: condensed the new
+    explanatory comments to a single line each, in line
+    with the v4.4.7 narration sweep.
+
+[note]
+
+  * `mktemp --suffix=.service` in `_verify_unit_content`
+    is GNU coreutils only. CachyOS ships GNU coreutils so
+    this is not a portability bug; an inline comment now
+    annotates the dependency for readers landing in that
+    function from a busybox recovery shell.
+
+
 v4.4.7 - 2026-04-26
 -------------------
 

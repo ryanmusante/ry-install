@@ -6,6 +6,59 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.4.7 - 2026-04-26
+-------------------
+
+  Size and clarity pass. SHA256 dropped from the verify and
+  install paths in favor of direct byte comparison; comment
+  density reduced. No managed-file content changes; no
+  user-visible behavior change; verify-static remains stable.
+
+[change]
+
+  * Verify-static / install-file skip-probe (`_content_bytes`,
+    `_installed_bytes`): replaces the prior SHA256 hash pair
+    (`_content_hash` and `_hash_installed`) with byte-wise
+    capture and `test "$expected" = "$actual"` equality. The
+    files compared are at most a few KB; a cryptographic digest
+    was overkill for an equality test on small text and
+    introduced its own pitfalls (empty-stdin canonical hash
+    collision, pipestatus capture across two pipe stages, the
+    extra `string split ' '` field extraction). The new path
+    has fewer failure modes and removes ~50 lines of helper
+    code plus one inline duplicate in `_install_file`.
+
+  * SHA256 retained at exactly two sites and one dependency
+    probe: `_install_rebuild_boot` and `_install_finalize`
+    fingerprint the set of `/boot/loader/entries/*.conf`
+    basenames so the boot-wipe acknowledgement marker can
+    detect set-equality across runs. That use is legitimate
+    (compact, stable identifier for a multi-element set) and
+    is unchanged.
+
+[style]
+
+  * Removed approximately 175 standalone narration comments
+    that paraphrased an immediately-following code line without
+    adding load-bearing rationale. Preserved: the script header,
+    every `# lint:ignore` marker, `INVARIANT:` / `SECURITY:` /
+    `MAINTENANCE:` annotations, section dividers, validator
+    phase labels, generator preconditions, race-window and
+    cleanup-protocol explanations, fish-specific idioms (e.g.
+    bare `set` re-binding outer scope inside `if`/`else`), and
+    the rationale for any non-obvious sudo / awk / find / sort
+    invocation.
+
+  * Trimmed nine excess blank lines (consecutive blanks inside
+    function bodies; blank line immediately after a `function
+    ... --description` header; blank line immediately before a
+    closing `end`).
+
+[size]
+
+  * 5275 → 5060 lines (-215, -4.1 percent). Function count and
+  public surface unchanged.
+
 v4.4.6 - 2026-04-26
 -------------------
 

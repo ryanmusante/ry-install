@@ -6,6 +6,39 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.3.9 - 2026-04-25
+-------------------
+
+  Audit-driven release. One UX-blocking sudo-flow inconsistency
+  closed: install-mode and install-file-mode now interactively
+  prompt for sudo password when not pre-cached, matching the
+  long-standing behavior of verify modes. No content-hash
+  changes; verify-static remains stable across upgrade.
+
+[fix]
+
+  * _install_preflight + _ry_do_install_file sudo flow: replace
+    bare `sudo -n true` (non-interactive only, no fallback) with
+    `_ensure_sudo_cached` (probes `sudo -n -v` then falls back
+    to interactive `sudo -v`). Symptom: a user running the
+    script without first running `sudo -v` saw the leading
+    "[INFO] Sudo password required for installation..." message
+    followed by "[ERR] Sudo required for installation" and an
+    immediate EXIT_PREFLIGHT (3), with NO opportunity to enter
+    a password. Affected both unattended install (default mode)
+    and `--install-file` for system-scope targets. The verify
+    modes (`--verify-static`, `--verify-runtime`) already used
+    `_ensure_sudo_cached` and behaved correctly. Fix unifies the
+    pattern across all four privileged entry points. Locations:
+    L3802-3807 (_install_preflight) and L4723-4725
+    (_ry_do_install_file). No new dependencies; no new exit
+    codes. Verified: `fish --no-execute` clean; existing CLI
+    flag matrix (`--help`/`-h`/`--version`/`-v`/`--check`/
+    `--verify-static`/`--verify-runtime`/`--foo`/positional/
+    exclusive-violation/`--install-file=`empty/relative/flag-
+    as-arg) all return the same exit codes as v4.3.8.
+
+
 v4.3.8 - 2026-04-25
 -------------------
 
@@ -79,6 +112,37 @@ v4.3.8 - 2026-04-25
     site in _install_fstab_opts ext4-detection (L4006). Marker
     count: 14 → 21. No semantic change; convention parity with
     pre-existing markers in the same patterns.
+
+  * test coverage: end-to-end execution suite verified on Linux
+    sandbox (Ubuntu 24.04 + fish 3.7.0). 26 tests covering all
+    --options, exit-code matrix, source-mode bail, NO_COLOR /
+    TERM=dumb honoring, log-perm chain (0700/0600), JSONL parse-
+    ability, and SIGINT mid-run footer interruption marker. All
+    pass. CachyOS-specific paths (pacman, mkinitcpio, sdboot-
+    manage, real boot artifacts) require host execution.
+
+[style]
+
+  * lint:ignore marker convention: relocate inline markers to
+    above-line position (16 of 21 markers moved; 5 inside string
+    literals stay in-place per construction). Aligns with the
+    industry standard (shellcheck, clippy, mypy noqa-block).
+    Future contributors: place `# lint:ignore (reason)` on its
+    own line directly above the offending statement.
+
+  * comment line-length: enforce single-line ≤120 chars across
+    the whole script. 64 long comments were condensed to fit by
+    dropping trailing @@AUDIT@@ historical clauses, parenthet-
+    ical asides, em-dash trailing detail, or by word-boundary
+    truncation with ellipsis. Operational essence preserved on
+    every line; full historical context remains available in
+    git log + this CHANGELOG. Decorative `─── header ───`
+    dividers collapsed to plain `# header`. Multi-line comment
+    blocks: 0. Pure-comment lines >120 chars: 0. Out of scope:
+    79 pure-code lines (printf strings, profile-data lists,
+    regex patterns where shortening changes semantics) and 13
+    `#`-in-string-literal lines (shell scripts inside /bin/sh
+    -c blocks) — these are not real comments.
 
   * test coverage: end-to-end execution suite verified on Linux
     sandbox (Ubuntu 24.04 + fish 3.7.0). 26 tests covering all

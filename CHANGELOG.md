@@ -6,6 +6,88 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.3.8 - 2026-04-25
+-------------------
+
+  Audit-driven release. One install-blocking defect closed
+  (_ry_install_file user-dir mkdir failed under timeout(1) due
+  to `command` builtin shadowing), one privilege scope reduction
+  in fstab rewrite, two defense-in-depth hardening fixes (sysctl
+  key regex, boot-wipe marker hash boundary), and one documenta-
+  tion strengthening for _run argv invariant. No content-hash
+  changes; verify-static remains stable across upgrade.
+
+[fix]
+
+  * _ry_install_file user-dir mkdir: drop `command` prefix from
+    `_run command mkdir -p -- "$dir"` (L2362). _run wraps argv
+    with timeout(1), and timeout(1) cannot exec the `command`
+    builtin (rc=127 "failed to run command 'command': No such
+    file or directory"). Symptom on first install: user-dir
+    deployments to non-existent paths (~/.config/environment.d,
+    ~/.config/systemd/user) failed with "Cannot create direc-
+    tory" because mkdir was never invoked. Sudo branch (L2358)
+    was unaffected — sudo is a real binary. Root cause: undocu-
+    mented assumption that `command` builtin would pass through
+    timeout. Verified reproducer: `command timeout 5 command
+    mkdir /tmp/x` → rc=127. Fix: drop the `command` prefix; _run
+    resolves argv[1] via PATH directly. Single-instance bug; rg
+    audit confirmed no other `_run <builtin>` callers.
+
+[security]
+
+  * _install_fstab_opts: drop sudo from awk side of the rewrite
+    pipeline (L4039). /etc/fstab is 0644 root:root (world-read-
+    able per filesystem package); awk reads as user, only tee
+    needs sudo to write into the sudo-mktemp'd /etc/.ry-install.
+    fstab.* tmpfile. Reduces privilege scope by one process and
+    halves sudo invocations on this hot path. No behavior change
+    for fstab readability — same input, same output.
+
+[defense]
+
+  * _grep_sysctl_kv key regex: extend [a-zA-Z._0-9]+ to include
+    `-` (L2087). Current SYSCTL_VALUES has no hyphenated keys,
+    but sysctl(8) keys may legally contain hyphens; future-proof
+    for profile additions or upstream kernel sysctl renames.
+
+  * Boot-wipe marker hash: switch sha256sum input delimiter from
+    LF to NUL at both writer (L4482) and reader (L4374) sites.
+    BLS spec rare-but-valid filename-with-newline would have
+    collapsed adjacent entries in the LF-joined hash input; NUL-
+    delimited stream preserves boundaries. sha256sum is byte-
+    stream, algorithm unchanged; hash format compatibility hand-
+    led by the legacy-marker accept-once path already present at
+    L4395. Twin update keeps writer/reader synchronized.
+
+[doc]
+
+  * _run header: strengthen INVARIANT comment to explicitly for-
+    bid fish/POSIX builtins as argv[1] (L1572). Documents the
+    timeout(1)-cannot-dispatch-builtins constraint that produced
+    the L2362 regression. Two-line block merged to single line
+    per project comment style.
+
+  * lint:ignore markers: add 7 missing markers on awk field-
+    reference and PCRE backref sites that a fish static analyzer
+    would otherwise flag. Two PCRE-backref `'$1'` sites in _run
+    secret redaction (L1585-L1586), four `awk '{print $4}'` /
+    `awk '{ print $4 }'` field-reference sites in _ry_check_disk_
+    space (L1859, L1877), _verify_runtime_env fstab opts probe
+    (L3497), and _install_fstab_opts opts probe (L4014), plus
+    one `awk '$3 == "ext4"'` field-reference + boolean-operators
+    site in _install_fstab_opts ext4-detection (L4006). Marker
+    count: 14 → 21. No semantic change; convention parity with
+    pre-existing markers in the same patterns.
+
+  * test coverage: end-to-end execution suite verified on Linux
+    sandbox (Ubuntu 24.04 + fish 3.7.0). 26 tests covering all
+    --options, exit-code matrix, source-mode bail, NO_COLOR /
+    TERM=dumb honoring, log-perm chain (0700/0600), JSONL parse-
+    ability, and SIGINT mid-run footer interruption marker. All
+    pass. CachyOS-specific paths (pacman, mkinitcpio, sdboot-
+    manage, real boot artifacts) require host execution.
+
 v4.3.7 - 2026-04-25
 -------------------
 

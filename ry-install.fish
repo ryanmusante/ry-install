@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.3.7 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.3.8 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.3.7"
+set -g VERSION "4.3.8"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -1569,7 +1569,7 @@ function _progress_teardown
     set -g _PROG_PINNED false
 end
 
-# INVARIANT: callers pass pre-expanded argv with no shell metacharacters ([;|&\x27$\n\t\r<>(){}]); _run rejects them.
+# INVARIANT: callers pass pre-expanded argv with no shell metacharacters ([;|&\x27$\n\t\r<>(){}]); _run rejects them. argv[1] must be a PATH-resolvable external binary, not a fish/POSIX builtin (e.g. `command`, `set`, `string`) — timeout(1) execs argv[1] directly and cannot dispatch shell builtins. @@AUDIT@@ v4.3.8: documented after L2362 _run command mkdir bug.
 function _run --description "Execute a command with logging, stdout/stderr capture, and timeout enforcement"
     if test (count $argv) -eq 0
         _log "BUG: _run called with no arguments"
@@ -1582,8 +1582,8 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     for _secret_flag in --passphrase --password --token --key --secret --api-key --psk --wpa-psk --private-key
         if string match -q "* $_secret_flag=*" -- " $log_cmd"; or string match -q "* $_secret_flag *" -- " $log_cmd"
             set -l _escaped_flag (string escape --style=regex -- "$_secret_flag")
-            set log_cmd (string replace -r -- "(^| )$_escaped_flag=[^ ]+" '$1'"$_secret_flag=[REDACTED]" "$log_cmd")
-            set log_cmd (string replace -r -- "(^| )$_escaped_flag [^ ]+" '$1'"$_secret_flag [REDACTED]" "$log_cmd")
+            set log_cmd (string replace -r -- "(^| )$_escaped_flag=[^ ]+" '$1'"$_secret_flag=[REDACTED]" "$log_cmd") # lint:ignore (PCRE backref)
+            set log_cmd (string replace -r -- "(^| )$_escaped_flag [^ ]+" '$1'"$_secret_flag [REDACTED]" "$log_cmd") # lint:ignore (PCRE backref)
         end
     end
 
@@ -1856,7 +1856,7 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
     _log "Checking disk space..."
 
     # df -B1 for byte-precision; -BG/-BM round UP and create false-pass at boundary.; GNU coreutils only — column 4 = Avail; not portable to BusyBox/BSD layouts.
-    set -l root_avail_b (LC_ALL=C df -B1 / 2>/dev/null | tail -n 1 | awk '{print $4}')
+    set -l root_avail_b (LC_ALL=C df -B1 / 2>/dev/null | tail -n 1 | awk '{print $4}') # lint:ignore (awk field reference, not fish cmdsubst)
     set -l root_avail ""
     if test -n "$root_avail_b"; and string match -qr '^\d+$' -- "$root_avail_b"
         set root_avail (math "floor($root_avail_b / 1073741824)")
@@ -1874,7 +1874,7 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
         _warn "Could not determine disk space for /"
     end
 
-    set -l boot_avail_b (LC_ALL=C df -B1 /boot 2>/dev/null | tail -n 1 | awk '{print $4}')
+    set -l boot_avail_b (LC_ALL=C df -B1 /boot 2>/dev/null | tail -n 1 | awk '{print $4}') # lint:ignore (awk field reference, not fish cmdsubst)
     set -l boot_avail ""
     if test -n "$boot_avail_b"; and string match -qr '^\d+$' -- "$boot_avail_b"
         set boot_avail (math "floor($boot_avail_b / 1048576)")
@@ -2082,7 +2082,8 @@ function _grep_kparam --argument-names dst --description "Validate kernel cmdlin
 end
 
 function _grep_sysctl_kv --argument-names dst --description "Validate sysctl.d has ≥1 'key = value' line"
-    string match -qre '^[a-zA-Z._0-9]+\s*=\s*\S' -- $argv[2..-1]; or begin
+    # @@AUDIT@@ v4.3.8: include `-` in key class — current SYSCTL_VALUES has none, but sysctl(8) keys may contain hyphens; future-proof.
+    string match -qre '^[a-zA-Z._0-9-]+\s*=\s*\S' -- $argv[2..-1]; or begin
         _fail "  $dst: no 'key = value' lines found"
         return 1
     end
@@ -2359,7 +2360,8 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
             return 1
         end
     else
-        if not _run command mkdir -p -- "$dir"
+        # @@AUDIT@@ v4.3.8: drop `command` prefix — _run wraps argv with timeout(1), and timeout(1) cannot exec the `command` builtin (rc=127 "No such file or directory"). User-dir mkdir would silently fail to create non-existent paths (e.g. ~/.config/environment.d on first install). _run's PATH lookup finds /usr/bin/mkdir directly.
+        if not _run mkdir -p -- "$dir"
             _fail "Cannot create directory: $dir"
             return 1
         end
@@ -3492,7 +3494,7 @@ function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KS
     if test -n "$_fstab_ext4"
         set -l _fstab_ok true
         for _fl in $_fstab_ext4
-            set -l _opts (printf '%s\n' "$_fl" | awk '{ print $4 }')
+            set -l _opts (printf '%s\n' "$_fl" | awk '{ print $4 }') # lint:ignore (awk field reference, not fish cmdsubst)
             # Independent if blocks (not else-if): report every missing option per line in one pass
             if not string match -q '*noatime*' -- "$_opts"
                 _fail "  ext4 entry missing noatime: $_fl"
@@ -4001,7 +4003,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         return 0
     end
     # Detect any ext4 entry missing the desired opts (field-based: $3==ext4)
-    set -l ext4_lines (awk '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }' /etc/fstab 2>/dev/null)
+    set -l ext4_lines (awk '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }' /etc/fstab 2>/dev/null) # lint:ignore (awk field reference + boolean operators, not fish cmdsubst)
     if test -z "$ext4_lines"
         _info "  No ext4 entries in /etc/fstab"
         return 0
@@ -4009,7 +4011,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     set -l needs_change false
     set -l _commit_overrides
     for line in $ext4_lines
-        set -l opts_field (printf '%s\n' "$line" | awk '{ print $4 }')
+        set -l opts_field (printf '%s\n' "$line" | awk '{ print $4 }') # lint:ignore (awk field reference, not fish cmdsubst)
         if not string match -q '*noatime*' -- "$opts_field"; or not string match -q '*lazytime*' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"
             set needs_change true
             # Surface non-default commit= overrides (commit=30 etc) so the rewrite is not silent.
@@ -4054,7 +4056,8 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         '    $4 = out' \
         '    print' \
         '}' | string collect)
-    if not sudo -n awk "$_awk_script" /etc/fstab | sudo -n tee -- "$tmpfstab" >/dev/null
+    # @@AUDIT@@ v4.3.8: drop sudo from awk side — /etc/fstab is 0644 root:root (world-readable per filesystem package); awk reads as user, only tee needs sudo to write into /etc/.ry-install.fstab.* (created by sudo mktemp above).
+    if not awk "$_awk_script" /etc/fstab | sudo -n tee -- "$tmpfstab" >/dev/null
         sudo -n rm -f -- "$tmpfstab" 2>/dev/null
         _fail "  /etc/fstab: awk/tee rewrite failed"
         return 1
@@ -4376,7 +4379,8 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         # Null-delim find + split0 keeps count accurate when entry filenames contain newlines (pathological); pre-v4.1.12 markers remain valid.
         set -l _existing_basenames (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
         set -l _existing_entries (count $_existing_basenames)
-        set -l _existing_hash (printf '%s\n' $_existing_basenames | sha256sum | string split ' ')[1]
+        # @@AUDIT@@ v4.3.8: NUL-delimit hash input — printf '%s\n' on filename-with-newline (BLS spec rare but valid) collapses entries; '%s\0' preserves boundaries. sha256sum is byte-stream; delimiter choice does not change algorithm. Marker hash format unchanged (legacy-marker accept-once path absorbs the one-time re-baseline).
+        set -l _existing_hash (printf '%s\0' $_existing_basenames | sha256sum | string split ' ')[1]
         if set -q RY_INSTALL_CONFIRM_BOOT_WIPE; and test "$RY_INSTALL_CONFIRM_BOOT_WIPE" = 1
             set _acknowledged true
             _log "BOOT_WIPE_ACK: env var RY_INSTALL_CONFIRM_BOOT_WIPE=1 entries=$_existing_entries hash=$_existing_hash"
@@ -4479,7 +4483,8 @@ function _install_finalize --description "Run post-install verification, cleanup
         # Null-delim find + split0 (see _install_rebuild_boot gate for rationale; backward-compatible hash).
         set -l _post_basenames (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
         set -l _post_count (count $_post_basenames)
-        set -l _post_hash (printf '%s\n' $_post_basenames | sha256sum | string split ' ')[1]
+        # @@AUDIT@@ v4.3.8: NUL-delimit hash input — see _install_rebuild_boot site for rationale. Twin update keeps writer/reader hash format synchronized.
+        set -l _post_hash (printf '%s\0' $_post_basenames | sha256sum | string split ' ')[1]
         if test -n "$_post_count"; and string match -qr '^\d+$' -- "$_post_count"
             set -l _marker_dir (dirname -- "$_wipe_marker")
             set -l _marker_tmp (mktemp -p "$_marker_dir" .boot-wipe.XXXXXX 2>/dev/null)

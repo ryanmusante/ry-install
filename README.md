@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.4.4-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.4.6-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.18.4-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -74,7 +74,9 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 | CachyOS (systemd-boot, ext4) | — |
 | Fish ≥ 4.0 recommended (3.4 minimum) | `fish --version` |
 | Kernel ≥ 6.18.4 (gfx1151 stability) | `uname -r` |
-| Unrestricted sudo | `sudo -l` → `(ALL) ALL` |
+| Unrestricted sudo, no `requiretty` / `tty_tickets` / `timestamp_timeout=0` | `sudo -l` |
+| Writable `$TMPDIR` (or `/tmp` if unset) | `test -w "${TMPDIR:-/tmp}"; and echo ok` |
+| GNU `coreutils` `sort -z` (NUL-delimited) | `printf '' \| sort -z </dev/null; and echo ok` |
 | 2 GB root + 200 MB /boot free | `df -h / /boot` |
 | Network connectivity | `curl -sf --head https://archlinux.org` |
 | Current BIOS | [Beelink downloads](https://dr.bee-link.cn/) |
@@ -132,7 +134,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | Phase | Description |
 |---|---|
-| **Preflight** | Validate prerequisites, acquire lock, load profile |
+| **Preflight** | Validate prerequisites (Fish ≥ 3.4, writable `$TMPDIR`, GNU `sort -z`, sudo without `requiretty` / `tty_tickets` / `timestamp_timeout=0`), acquire lock, load profile |
 | **Packages** | Sync repos, install/remove packages, AUR via paru |
 | **Configuration** | Deploy 16 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
@@ -353,7 +355,9 @@ Package operations run during the Packages phase with `--needed` for idempotency
 
 ## Profiles
 
-External profiles live at `~/.config/ry-install/profiles/<n>.fish` and define `function _ry_profile_<n>` with all required globals. Resolution: `~/.config/ry-install/default-profile` (single line: profile name) → `gtr9_pro` (hardcoded fallback). Legacy `profile_<n>` naming accepted with a deprecation warning; syntax and name-consistency validated before sourcing.
+External profiles live at `~/.config/ry-install/profiles/<name>.fish` and define `function _ry_profile_<name>` with all required globals. Resolution: `~/.config/ry-install/default-profile` (single line: profile name) → `gtr9_pro` (hardcoded fallback). Legacy `profile_<name>` naming accepted with a deprecation warning; syntax and name-consistency validated before sourcing.
+
+**Precedence (v4.4.6+):** when a file at `~/.config/ry-install/profiles/<name>.fish` exists, it takes precedence over a built-in `_ry_profile_<name>` of the same name. The override is recorded in the JSONL log as `PROFILE_OVERRIDE` so the active source is auditable. Earlier releases had this reversed and silently shadowed file profiles.
 
 ```fish
 echo my_desktop > ~/.config/ry-install/default-profile
@@ -411,7 +415,7 @@ Run `--verify-static` and `--verify-runtime` before first use.
 | Atomic writes | tmp → chmod → mv (same FS); parent-dir trust checks (root-owned or uid=$UID, not symlink, not group/world-writable) |
 | Permission model | system files 0644 (world-readable configs); user files 0600 (private); 0700 on `~/ry-install/` and per-day log subdirs; 0600 on log/manifest/marker files |
 | Profile trust | External profiles validated for owner=$UID and mode≤0755 (no group/world write) before `source` (v4.4.0+) |
-| Profile sanitization | KERNEL_PARAMS / MKINITCPIO_MODULES / MKINITCPIO_HOOKS reject shell metachars (v4.4.0+); ENV_VARS / SYSCTL_VALUES / LOGIND_IGNORE_KEYS / IWD_DRIVER_QUIRKS reject NUL/LF/CR (v4.4.1+) |
+| Profile sanitization | KERNEL_PARAMS / MKINITCPIO_MODULES / MKINITCPIO_HOOKS reject shell + glob metachars (`*` `?` `[` `]` `{` `}`); ENV_VARS / SYSCTL_VALUES / LOGIND_IGNORE_KEYS / IWD_DRIVER_QUIRKS / SYSTEM\_/USER\_/SERVICE\_DESTINATIONS reject NUL/LF/CR; ENV_VARS enforced KEY=VALUE shape; SYSCTL_VALUES enforced key=value with non-empty value; SUDO_KEEPALIVE_INTERVAL / NM_RESTART_DELAY validated as positive integers (invalid values reset to documented defaults) |
 | fstab edits | Idempotent; `findmnt --verify` before write; symlinked `/etc/fstab` rejected (v4.4.4+); **no backup** — snapshot first |
 | Root detection | **Refuses to run as root** — sudo invoked internally |
 | Instance lock | Atomic mkdir, PID verification, `flock(1)` stale reclaim (required, not fallback as of v4.4.4) |
@@ -478,8 +482,8 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 
 | Event | Key Fields | Emitted |
 |---|---|---|
-| `header` | version, profile, mode, verbose, command | Run start |
-| `footer` | mode, exit_code, pass, fail, warn (+ `interrupted` / `cleanup_exit` flags) | Run end |
+| `header` | version, profile, mode, verbose, argv | Run start (argv is a JSON array preserving argument boundaries) |
+| `footer` | mode, exit_code, pass, fail, warn, gen_fail (+ `interrupted` / `cleanup_exit` flags) | Run end |
 | `ok` | data | Verification pass |
 | `fail` | data | Verification failure |
 | `warn` | data | Non-fatal issue |
@@ -500,12 +504,12 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-04-25T14:23:01-0700","event":"header","version":"4.4.4","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-26T14:23:01-0700","event":"header","version":"4.4.6","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
 {"ts":"2026-04-25T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
 {"ts":"2026-04-25T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
 {"ts":"2026-04-25T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
 {"ts":"2026-04-25T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-25T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0}
+{"ts":"2026-04-25T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0,"gen_fail":0}
 ```
 
 </details>

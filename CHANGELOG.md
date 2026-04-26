@@ -6,6 +6,255 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.4.6 - 2026-04-26
+-------------------
+
+  Hardening pass on profile validation, hash-comparison, and
+  preflight gating; one schema addition to the JSONL footer
+  (`gen_fail` counter); profile-resolution order changed to
+  prefer file-based profiles over built-ins. No managed-file
+  content changes; verify-static remains stable across upgrade.
+
+[fix]
+
+  * `_validate_profile` (L878): glob metacharacters (`*` `?`
+    `[` `]` `{` `}`) added to the rejected-character class for
+    `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, and `MKINITCPIO_HOOKS`.
+    Prior class blocked shell metachars (whitespace, quotes,
+    redirect, semicolon, ampersand, pipe, paren, backslash,
+    backtick) but not glob metachars. Three downstream sites
+    (`_chk_sdboot_param`, `_chk_kernel_cmdline_param`, runtime
+    `/proc/cmdline` check) ran the captured element through
+    `string match -q -- "* $param *"` — a literal `*` in any
+    such element matched any non-empty cmdline and falsely
+    reported every parameter as present.
+
+  * `_validate_profile` (L887): control-character rejection
+    extended to cover the destination lists. Previously only
+    `ENV_VARS`, `SYSCTL_VALUES`, `LOGIND_IGNORE_KEYS`, and
+    `IWD_DRIVER_QUIRKS` rejected NUL/LF/CR; now `SYSTEM_DESTINATIONS`,
+    `USER_DESTINATIONS`, and `SERVICE_DESTINATIONS` are checked
+    too. `_manifest_write` emits one path per `printf '%s\n'`,
+    so an embedded LF would corrupt the line/profile/destinations
+    framing read back by `_manifest_check_orphans`.
+
+  * `_validate_profile` (new, two checks): `ENV_VARS` elements
+    now required to match `^[A-Za-z_][A-Za-z0-9_]*=`; malformed
+    entries (e.g. `MESA_DEBUG` without `=`) previously passed
+    validation and were emitted verbatim into
+    `~/.config/environment.d/10-environment.conf`, where
+    `systemd-environment-d-generator` silently dropped them.
+    `SYSCTL_VALUES` elements now required to match
+    `^[A-Za-z][A-Za-z0-9._-]*=\S`; entries without `=` previously
+    produced lines like `key = ` (empty value) that `sysctl
+    --system` rejects on apply.
+
+  * `_hash_installed` (L1361): rewritten to use the same
+    `pipestatus`-checked pattern as `_content_hash`. The old
+    `(sudo -n cat | sha256sum)` capture did not distinguish a
+    failed `sudo -n cat` (cache lapse mid-run) from successful
+    empty input. On lapse, sha256sum hashed empty stdin and
+    returned `e3b0c44…`, the canonical empty-input digest, which
+    `test -n "$_raw"` could not catch — `_ry_do_check` and
+    `_verify_static_checksum` then reported drift on a perfectly
+    consistent file. Now returns empty (read-fail signal) when
+    either pipe stage exits non-zero.
+
+  * `_acquire_lock` (L346): pid file written via `mktemp` inside
+    the just-created `LOCK_DIR` and atomically renamed into
+    place. The previous `printf '%s\n' $fish_pid > "$LOCK_FILE"`
+    was non-atomic; a crash or disk-full between `mkdir` and the
+    `printf` could leave a 0-byte pid file on disk. The flock-based
+    stale-lock reclaim path was already tolerant of this, but the
+    write is now correct in its own right.
+
+  * `_install_preflight` (L3848): sudoers scan now also rejects
+    per-line `Defaults requiretty`, `Defaults tty_tickets`, and
+    `Defaults timestamp_timeout=0`. The keepalive child relies
+    on a non-tty `sudo -n -v` succeeding against a live sudo
+    timestamp; any of these three Defaults breaks that contract
+    and would surface as silent keepalive death rather than a
+    diagnostic at preflight.
+
+  * `_check_env_ssh_auth_sock` (L1212): adds a systemd version
+    check for the embedded `${XDG_RUNTIME_DIR}` reference in
+    `~/.config/environment.d/10-environment.conf`. Variable
+    expansion in `environment.d` requires systemd ≥ 232; older
+    hosts (stripped chroots, very old containers) get a clear
+    warning rather than a silent unexpanded literal in the
+    SSH_AUTH_SOCK path.
+
+  * Boot/runtime `/proc/cmdline` check (L3018): falls back to
+    `sudo -n cat` when the unprivileged read returns empty.
+    AppArmor profiles with `kernel.dmesg_restrict=1` plus
+    `kptr_restrict=2` sometimes also restrict `/proc/cmdline`;
+    the fallback removes the false-negative on those hosts.
+
+  * Three `string match` sites (L2480, L2497, L3019): switched
+    from glob match `"* $param *"` to regex match
+    `"(^|\s)$_param_re(\s|\$)"` with `string escape --style=regex`
+    on the parameter. Defends against future profile elements
+    that contain `*` or other glob metachars even if the L878
+    sanitizer were ever loosened, and matches the idiom already
+    used at `_ry_do_check` L2935.
+
+  * `_chk_grep`: docstring corrected to reflect substring-match
+    semantics (`grep -qF`); no behavior change. The matcher is
+    now consistent with the regex-bounded sites above.
+
+  * `_kill_sudo_keepalive` background spawn (L3878): keepalive
+    `fish -c` child now redirects stdout and stderr to
+    `/dev/null` in addition to stdin. Prevents spurious child
+    output from leaking past the parent's log redirection.
+
+  * `awk` invocations (L3580, L3585, L3857, L3860, L4095, L4119):
+    every `awk` callsite now invokes `command awk` to bypass
+    autoloaded user-defined `awk` functions in
+    `~/.config/fish/functions/`. Pure defense-in-depth; matches
+    the discipline already applied to `command rm`, `command
+    cat`, `command find`, `command head`.
+
+[change]
+
+  * Profile resolution order (`_load_profile`, L989): a file at
+    `~/.config/ry-install/profiles/<n>.fish` now takes precedence
+    over a built-in `_ry_profile_<n>` of the same name. Earlier
+    releases had the reverse: a same-named file was silently
+    shadowed. The override path erases the built-in function
+    before sourcing the file and emits a `PROFILE_OVERRIDE` line
+    to the JSONL log so the active source is auditable.
+    Documented user-override path now actually works.
+
+  * JSONL header `argv` (L5102): `command` field replaced with
+    `argv` as a JSON array. The old form joined `(status filename)`
+    with positional args via `string join " "`, losing argument
+    boundaries for paths that contain whitespace (e.g.
+    `--install-file '/path with space'`). The new form preserves
+    every boundary and parses cleanly with `jq -r '.argv[]'`.
+
+  * JSONL footer schema: `gen_fail` counter added. Counts
+    destinations whose embedded-content generator returned an
+    empty string during `--verify-static`, distinct from
+    `read-fail` and `mismatch`. Distinguishes "config drifted"
+    from "generator broken" in dashboards. Field is always
+    present; value is `0` when no generators failed.
+
+[preflight]
+
+  * Two new gates run between the Fish version check and any
+    privileged action. Both fail with `EXIT_PREFLIGHT (3)` and
+    a single-line error to stderr.
+
+  * Writable working tmp directory: probes `${TMPDIR:-/tmp}` with
+    `test -w`. Removes a class of late, confusing failures where
+    `mktemp` calls inside `_run`, `_atomic_write`, sudo-error
+    capture, and unit verification all failed mid-install with
+    distinct messages. Now a single early diagnostic.
+
+  * GNU `coreutils` sort with `-z`: probes `printf '' | command
+    sort -z </dev/null`. Boot-wipe basename hashing
+    (`SDBOOT_REMOVE_EXISTING=yes` gate) and log rotation both
+    require NUL-delimited sort to be safe across paths with
+    whitespace. busybox/BSD sort produce unsorted output for
+    `-z` without erroring, which silently broke both flows on
+    non-GNU bases.
+
+[security]
+
+  * `_run` log redaction (L1626): tmp paths matching
+    `/tmp/ry-[A-Za-z0-9_.-]+` are now replaced with
+    `/tmp/ry-[REDACTED]` before the command line is logged.
+    Prevents `$TMPDIR` location and per-run randomness from
+    bleeding into `~/ry-install/logs/`.
+
+[style]
+
+  * Removed every `# @@AUDIT@@ vX.Y.Z: …` change-history comment
+    from the source (39 occurrences). Two of them (L1245-1246
+    inside `_content__etc_systemd_system_cpupower-epp.service`)
+    were positional arguments to `printf` and were therefore
+    being emitted into the deployed unit body. The remaining 37
+    were source-only and pure noise once the change history is
+    in this file. Substantive comments at those lines are
+    preserved or rewritten to drop the version prefix.
+
+  * Multi-line comment runs collapsed to single lines except
+    where adjacent to a `# lint:ignore` marker (which has to
+    stay on its own line by tooling convention).
+
+v4.4.5 - 2026-04-26
+-------------------
+
+  Audit-driven cleanup pass: one MED, three LOW, one INFO finding
+  closed. No behavior change on the supported CachyOS profile;
+  no managed-file content changes; verify-static remains stable
+  across upgrade.
+
+[fix]
+
+  * Log rotation (L5129): replaced the `find -printf '%T@ %p\n' |
+    sort -n | head -n -$MAX_LOGS | cut -d' ' -f2- | xargs -r rm -f`
+    pipeline with a NUL-framed fish-native rotation. Old pipeline
+    was newline-framed and `cut -d' '` plus `xargs` re-split paths
+    on whitespace — any space anywhere in `$HOME` (and therefore
+    `_log_base_rot=$HOME/ry-install/logs`) silently mis-parsed
+    rotation candidates. Replacement uses `find -printf '%T@\t%p\0'`
+    + `LC_ALL=C sort -zn` + `string split0`, then iterates with
+    `string split -m 1 \t` to extract the path. Also drops the
+    `head -n -N` GNU-coreutils-only dependency. Smoke-tested
+    against 8 logs with one space-bearing filename: drops the
+    oldest 5, keeps the 3 newest, including the space-bearing
+    name when it falls within the keep window.
+
+  * `_run` / `_ensure_sudo_cached` (L1306, L1681, L1682, L1685):
+    four `command head -n N "$file"` callsites missing the `--`
+    end-of-options separator. Inconsistent with the L939 sibling
+    which already used it. No exploit path today (`mktemp` names
+    are always `.ry-install.*` or `ry-*.XXXXXX`), pure convention
+    drift; now uniformly `command head -n N -- "$file"` across
+    all five callsites.
+
+  * `_load_profile` (L1049-1060): two profile-overridable timing
+    globals — `SUDO_KEEPALIVE_INTERVAL` (default 45) and
+    `NM_RESTART_DELAY` (default 3) — were consumed by `sleep(1)`
+    and the keepalive loop without any input validation. A profile
+    that set either to a non-positive-integer (negative, zero,
+    decimal, or non-numeric) would propagate junk into `sleep`
+    and the keepalive `fish -c` invocation, producing silent
+    hangs or fail-fast loops with no diagnostic. Both globals are
+    now validated via the same `string match -qr '^[1-9][0-9]*$'`
+    idiom already applied to `MAX_LOGS` at the log-rotation site;
+    invalid values warn, log `PROFILE_INVALID_*`, and reset to
+    documented defaults.
+
+[style]
+
+  * Function descriptions: 20 functions previously defined without
+    `--description` now carry one-line descriptions for `functions`
+    builtin introspection and completion display. Affected: 16
+    `_content_*` embedded-content builders (L1118-1253, every
+    managed destination from `/boot/loader/loader.conf` through
+    `/etc/sysctl.d/99-cachyos-sysctl.conf`) plus the four-function
+    `_progress*` family (L1564, L1577, L1588, L1598). Brings
+    coverage to 141/141 functions documented.
+
+[meta]
+
+  * VERSION: bumped 4.4.4 → 4.4.5 in shebang header (L2),
+    VERSION global (L20), and README badge.
+  * Verification: `fish --no-execute ry-install.fish` exit 0
+    across the full 5183-line file post-patch.
+  * Audit reference: findings F1 (MED, log rotation), F2 (LOW,
+    head separator), F3+F4 (LOW, function descriptions), and F5
+    (INFO, timing-globals validation) closed in this release.
+    F6 (INFO, `_hash_installed` return contract) reviewed and
+    dismissed — the existing `--description` string already
+    documents `"empty on read failure; sudo-aware"` and both
+    callers (verify-static at L2834 and check at L2900) rely on
+    the documented empty-string sentinel rather than the return
+    code, so any change would be cosmetic.
+
+
 v4.4.4 - 2026-04-25
 -------------------
 

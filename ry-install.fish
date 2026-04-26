@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.4 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.6 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.4"
+set -g VERSION "4.4.6"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -29,7 +29,7 @@ set -g EXIT_DRIFT 10
 function _ry_exit --argument-names code --description "Source-safe exit: set bail sentinel and return when sourced, exit otherwise"
     test -z "$code"; and set code 0
     set -g _RY_INSTALL_LAST_EXIT $code
-    # @@AUDIT@@ v4.4.0: _do_cleanup added (guarded by functions -q to skip pre-bootstrap calls).
+    # _do_cleanup added (guarded by functions -q to skip pre-bootstrap calls).
     set -g _RY_INSTALL_BAILING true
     set -l _was_sourced "$_RY_INSTALL_SOURCED"
     # Erase signal/exit handlers FIRST so host-fish Ctrl+C/SIGPIPE/exit does not fire into dead script context.
@@ -67,7 +67,7 @@ if begin
 else
     set -g NO_COLOR false
 end
-# @@AUDIT@@ v4.4.1: root check moved past --help/--version short-circuits — informational flags work for any user.
+# root check moved past --help/--version short-circuits — informational flags work for any user.
 
 # Fish version gate — 3.4+ required (set --function, string collect --allow-empty)
 set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n1)
@@ -82,6 +82,19 @@ if test "$parts[1]" -lt 3
         test "$parts[1]" -eq 3; and test "$parts[2]" -lt 4
     end
     echo "[ERR] fish 3.4+ required (found: $fish_ver)" >&2
+    _ry_exit $EXIT_PREFLIGHT
+end
+
+# TMPDIR writability gate — _run / mktemp / sudo-err sites assume a writable working tmp dir
+set -l _ry_tmpprobe_dir (set -q TMPDIR; and test -n "$TMPDIR"; and printf '%s' "$TMPDIR"; or printf '%s' /tmp)
+if not test -w "$_ry_tmpprobe_dir"
+    echo "[ERR] tmp dir not writable: $_ry_tmpprobe_dir" >&2
+    _ry_exit $EXIT_PREFLIGHT
+end
+
+# GNU sort -z probe — boot-wipe basename hash + log rotation depend on NUL-delimited sort
+if not printf '' | command sort -z </dev/null 2>/dev/null
+    echo "[ERR] GNU sort with -z required (busybox/BSD sort detected)" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
 
@@ -297,8 +310,10 @@ function _write_footer --argument-names exit_code extra_key --description "Appen
     if test -n "$extra_key"
         set _extra ",\"$extra_key\":true"
     end
-    printf '{"ts":"%s","event":"footer","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s%s}\n' \
-        "$_ts" "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" "$_extra" >>"$LOG_FILE" 2>/dev/null
+    set -l _gen_fail 0
+    set -q VERIFY_GEN_FAIL; and set _gen_fail $VERIFY_GEN_FAIL
+    printf '{"ts":"%s","event":"footer","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s,"gen_fail":%s%s}\n' \
+        "$_ts" "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" "$_gen_fail" "$_extra" >>"$LOG_FILE" 2>/dev/null
 end
 
 # Sweep /tmp for ry-{run-stderr,run-stdout,validate,diff,argparse,test-stderr}.* owned by current UID
@@ -345,10 +360,19 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     command mkdir -p -- (dirname -- "$LOCK_DIR") 2>/dev/null; or true
 
     if command mkdir -- "$LOCK_DIR" 2>/dev/null
-        # Check pid write; on disk-full mkdir/echo race, rmdir and bail so stale-reclaim cannot evict own empty lock.
-        if not printf '%s\n' $fish_pid >"$LOCK_FILE" 2>/dev/null
+        # Atomic pid write: mktemp inside the just-created LOCK_DIR + rename, eliminates 0-byte pid race
+        set -l _pid_tmp (mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
+        if test -z "$_pid_tmp"; or not printf '%s\n' $fish_pid >"$_pid_tmp" 2>/dev/null
+            test -n "$_pid_tmp"; and command rm -f -- "$_pid_tmp" 2>/dev/null
             command rmdir -- "$LOCK_DIR" 2>/dev/null
             echo "[ERR] Failed to write lock pid file: $LOCK_FILE" >&2
+            command rm -f -- "$LOG_FILE" 2>/dev/null
+            return 1
+        end
+        if not command mv -f -- "$_pid_tmp" "$LOCK_FILE" 2>/dev/null
+            command rm -f -- "$_pid_tmp" 2>/dev/null
+            command rmdir -- "$LOCK_DIR" 2>/dev/null
+            echo "[ERR] Failed to install lock pid file: $LOCK_FILE" >&2
             command rm -f -- "$LOG_FILE" 2>/dev/null
             return 1
         end
@@ -365,7 +389,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     end
     # Stale lock reclaim: (a) flock(1) atomic advisory lock eliminates TOCTOU, (b) fallback rmdir+mkdir with PID
     set -l _reclaim_parent (dirname -- "$LOCK_DIR")
-    # @@AUDIT@@ v4.3.2: require both flock(1) AND /bin/sh — flock branch invokes /bin/sh -c
+    # require both flock(1) AND /bin/sh — flock branch invokes /bin/sh -c
     if command -q flock; and command -q sh
         # flock -n/-E 5: non-blocking, exit 5 on contention. Paths as positional args
         set -l _sh_script (string join \n \
@@ -386,7 +410,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
             return 1
         end
     else
-        # @@AUDIT@@ v4.4.4: flock(1) is base util-linux on CachyOS; missing → broken env, refuse non-atomic reclaim.
+        # flock(1) is base util-linux on CachyOS; missing → broken env, refuse non-atomic reclaim.
         echo "[ERR] flock(1) and/or /bin/sh not available — cannot safely reclaim stale lock" >&2
         echo "[ERR]   Install util-linux: sudo pacman -S --needed util-linux" >&2
         command rm -f -- "$LOG_FILE" 2>/dev/null
@@ -399,7 +423,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         command rm -f -- "$LOG_FILE" 2>/dev/null
         return 1
     end
-    # @@AUDIT@@ v4.4.0: removed redundant verify_pid2 — no time gap in flock branch; fallback yield covers race.
+    # removed redundant verify_pid2 — no time gap in flock branch; fallback yield covers race.
     set -g _RY_HOLDS_LOCK true
     _log "LOCK_RECLAIMED: stale pid=$old_pid, new pid=$fish_pid"
     return 0
@@ -472,6 +496,7 @@ end
 set -g VERIFY_OK 0
 set -g VERIFY_FAIL 0
 set -g VERIFY_WARN 0
+set -g VERIFY_GEN_FAIL 0
 # _cleanup writes footer + exits 128+signum; _cleanup_on_exit is the fish_exit fallback
 function _teardown --argument-names mode --description "Unified cleanup: progress teardown, footer, resources"
     _progress_teardown
@@ -483,7 +508,7 @@ function _teardown --argument-names mode --description "Unified cleanup: progres
             _write_footer 141 interrupted
             _do_cleanup
         case exit
-            # @@AUDIT@@ v4.4.0: _do_cleanup added — normal exit must release lock + tmpfiles + keepalive
+            # _do_cleanup added — normal exit must release lock + tmpfiles + keepalive
             _write_footer "$argv[2]" cleanup_exit
             _do_cleanup
         case '*'
@@ -535,7 +560,7 @@ end
 # fish_exit fallback: ensures cleanup runs if no signal handler fired; respects _CLEANUP_DONE guard
 function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensure cleanup runs on fish_exit"
     set -l _exit_status $status
-    # @@AUDIT@@ v4.3.2: prefer _RY_INSTALL_LAST_EXIT (set in _ry_exit) over $status
+    # prefer _RY_INSTALL_LAST_EXIT (set in _ry_exit) over $status
     if set -q _INTENDED_EXIT_CODE
         set _exit_status $_INTENDED_EXIT_CODE
     else if set -q _RY_INSTALL_LAST_EXIT
@@ -871,26 +896,46 @@ function _validate_profile --description "Verify loaded profile has all required
         end
     end
 
-    # Element sanitization: reject shell-metachars in profile globals embedded into config files (cmdline, mkinitcpio)
+    # Element sanitization: reject shell metachars + glob metachars in profile globals embedded into config files
     for _list_var in KERNEL_PARAMS MKINITCPIO_MODULES MKINITCPIO_HOOKS
         if set -q $_list_var
             for _elem in $$_list_var
-                if string match -qr -- '[[:space:]\x22\x24\x27\x5c\x60\(\);&|<>]' "$_elem"
-                    _err "Profile global $_list_var element contains forbidden shell metacharacter (space/quote/apostrophe/paren/backslash/backtick/semicolon/ampersand/pipe/redirect/newline): '$_elem'"
+                if string match -qr -- '[[:space:]\x22\x24\x27\x5c\x60\(\);&|<>*?\[\]\{\}]' "$_elem"
+                    _err "Profile global $_list_var element contains forbidden shell or glob metacharacter: '$_elem'"
                     return 1
                 end
             end
         end
     end
 
-    # @@AUDIT@@ v4.4.1: NUL/LF/CR sanitization for config-value globals; LF/CR would split config silently.
-    for _list_var in ENV_VARS SYSCTL_VALUES LOGIND_IGNORE_KEYS IWD_DRIVER_QUIRKS
+    # NUL/LF/CR sanitization for config-value globals; LF/CR would split config silently
+    for _list_var in ENV_VARS SYSCTL_VALUES LOGIND_IGNORE_KEYS IWD_DRIVER_QUIRKS SYSTEM_DESTINATIONS USER_DESTINATIONS SERVICE_DESTINATIONS
         if set -q $_list_var
             for _elem in $$_list_var
                 if string match -qr -- '[\x00\x0a\x0d]' "$_elem"
                     _err "Profile global $_list_var element contains forbidden control character (NUL/LF/CR): '$_elem'"
                     return 1
                 end
+            end
+        end
+    end
+
+    # ENV_VARS shape: KEY=VALUE (KEY = [A-Za-z_][A-Za-z0-9_]*); blocks malformed entries before environment.d generator
+    if set -q ENV_VARS
+        for _v in $ENV_VARS
+            if not string match -qr -- '^[A-Za-z_][A-Za-z0-9_]*=' -- "$_v"
+                _err "Profile global ENV_VARS element must be KEY=VALUE shape: '$_v'"
+                return 1
+            end
+        end
+    end
+
+    # SYSCTL_VALUES shape: key=value (key = [A-Za-z][A-Za-z0-9._-]*, non-empty value); blocks empty-value sysctl lines
+    if set -q SYSCTL_VALUES
+        for _v in $SYSCTL_VALUES
+            if not string match -qr -- '^[A-Za-z][A-Za-z0-9._-]*=\S' -- "$_v"
+                _err "Profile global SYSCTL_VALUES element must be key=value with non-empty value: '$_v'"
+                return 1
             end
         end
     end
@@ -935,7 +980,7 @@ function _load_profile --description "Determine, load, and validate the active p
     set -l default_file "$HOME/.config/ry-install/default-profile"
     set -l _name_from_file false
     if test -f "$default_file"
-        # @@AUDIT@@ v4.3.2: head -n1 before string trim
+        # head -n1 before string trim
         set name (command head -n 1 -- "$default_file" 2>/dev/null | string trim --)
         test -n "$name"; and set _name_from_file true
     end
@@ -953,14 +998,12 @@ function _load_profile --description "Determine, load, and validate the active p
         _ry_exit $EXIT_USAGE
     end
 
-    # 3. Load profile function
+    # 3. Load profile function — file-based takes precedence over built-in (allows user override)
     set -l profile_dir "$HOME/.config/ry-install/profiles"
     set -l profile_path "$profile_dir/$name.fish"
 
-    if functions -q "_ry_profile_$name"
-        _ry_profile_$name
-    else if test -f "$profile_path"
-        # @@AUDIT@@ v4.4.0: ownership + mode check before source — README documents trust model; enforce in code.
+    if test -f "$profile_path"
+        # ownership + mode check before source (README documents trust model; enforce in code)
         set -l _po (stat -c '%u %a' -- "$profile_path" 2>/dev/null)
         if test -z "$_po"
             _err "Cannot stat profile: $profile_path"
@@ -973,7 +1016,7 @@ function _load_profile --description "Determine, load, and validate the active p
             command rm -f -- "$LOG_FILE" 2>/dev/null
             _ry_exit $EXIT_USAGE
         end
-        # Reject group/other write bits — pattern: owner=any, group/other in {0,1,4,5}.
+        # Reject group/other write bits — pattern: owner=any, group/other in {0,1,4,5}
         if not string match -qr '^[0-7][0145][0145]$' -- "$_pp[2]"
             _err "Profile mode too permissive (mode=$_pp[2]; group/world write bit set): $profile_path"
             command rm -f -- "$LOG_FILE" 2>/dev/null
@@ -984,13 +1027,17 @@ function _load_profile --description "Determine, load, and validate the active p
             command rm -f -- "$LOG_FILE" 2>/dev/null
             _ry_exit $EXIT_USAGE
         end
+        if functions -q "_ry_profile_$name"
+            _log "PROFILE_OVERRIDE: file '$profile_path' overrides built-in _ry_profile_$name"
+            functions -e "_ry_profile_$name"
+        end
         source "$profile_path"
-        # Bail check: sourced profile calling _ry_exit (via helper) sets sentinel; catch before profile fn invoke.
+        # Bail check: sourced profile calling _ry_exit (via helper) sets sentinel; catch before profile fn invoke
         test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
         if functions -q "_ry_profile_$name"
             _ry_profile_$name
         else if functions -q "profile_$name"
-            # Backward compatibility: accept old profile_<name> convention with deprecation warning
+            # Backward compatibility: accept old profile_<n> convention with deprecation warning
             _warn "Profile uses deprecated naming: profile_$name → rename to _ry_profile_$name"
             profile_$name
         else
@@ -998,6 +1045,8 @@ function _load_profile --description "Determine, load, and validate the active p
             command rm -f -- "$LOG_FILE" 2>/dev/null
             _ry_exit $EXIT_USAGE
         end
+    else if functions -q "_ry_profile_$name"
+        _ry_profile_$name
     else
         _err "Unknown profile: $name"
         command rm -f -- "$LOG_FILE" 2>/dev/null
@@ -1016,13 +1065,13 @@ function _load_profile --description "Determine, load, and validate the active p
 
     # 6. Cache root UUID — findmnt called once; eliminates TOCTOU between _ry_install_file compare/write paths.
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
-    # @@AUDIT@@ v4.4.2: tightened from `^[0-9a-fA-F-]+$` (accepted '----' and bare hex) to canonical UUID form.
+    # tightened from `^[0-9a-fA-F-]+$` (accepted '----' and bare hex) to canonical UUID form.
     if test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -- "$_ROOT_UUID"
         _err "Root UUID has invalid shape (got: $_ROOT_UUID) — refusing to cache"
         set --erase _ROOT_UUID
     end
     if test -z "$_ROOT_UUID"
-        # @@AUDIT@@ v4.4.2: --check routes via _log to honor "silent idempotency probe" contract on preflight failure.
+        # --check routes via _log to honor "silent idempotency probe" contract on preflight failure.
         switch "$MODE"
             case check
                 _log "ROOT_UUID_UNAVAILABLE: findmnt failed (silent for --check)"
@@ -1044,6 +1093,18 @@ function _load_profile --description "Determine, load, and validate the active p
             _warn "Profile '$name' expects $EXPECTED_CPU_MATCH but detected: $_cpu_model"
             _warn "  Wrong machine? Create ~/.config/ry-install/default-profile"
         end
+    end
+
+    # 8. Profile-overridable timing globals: reject non-positive-int and reset to defaults; protects sleep(1) and keepalive loop from junk values
+    if not string match -qr '^[1-9][0-9]*$' -- "$SUDO_KEEPALIVE_INTERVAL"
+        _warn "SUDO_KEEPALIVE_INTERVAL='$SUDO_KEEPALIVE_INTERVAL' invalid (expected positive integer) — resetting to 45"
+        _log "PROFILE_INVALID_SUDO_KEEPALIVE_INTERVAL: value=$SUDO_KEEPALIVE_INTERVAL — using default 45"
+        set -g SUDO_KEEPALIVE_INTERVAL 45
+    end
+    if not string match -qr '^[1-9][0-9]*$' -- "$NM_RESTART_DELAY"
+        _warn "NM_RESTART_DELAY='$NM_RESTART_DELAY' invalid (expected positive integer) — resetting to 3"
+        _log "PROFILE_INVALID_NM_RESTART_DELAY: value=$NM_RESTART_DELAY — using default 3"
+        set -g NM_RESTART_DELAY 3
     end
 end
 
@@ -1115,11 +1176,11 @@ function _manifest_check_orphans --description "Warn about files from previous i
 end
 
 # Per-destination content generators (C.6) — names: _content_<_tmpfile_key(dst)>
-function _content__boot_loader_loader.conf
+function _content__boot_loader_loader.conf --description "Embedded content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
 
-function _content__etc_kernel_cmdline
+function _content__etc_kernel_cmdline --description "Embedded content for /etc/kernel/cmdline"
     if test -z "$_ROOT_UUID"
         _err "_content_etc_kernel_cmdline: root UUID not cached (_load_profile may not have run)"
         return 12
@@ -1127,22 +1188,22 @@ function _content__etc_kernel_cmdline
     printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
 end
 
-function _content__etc_sdboot-manage.conf
+function _content__etc_sdboot-manage.conf --description "Embedded content for /etc/sdboot-manage.conf"
     printf '%s\n' "# sdboot-manage configuration — changes require: sudo sdboot-manage gen && sudo sdboot-manage update" "LINUX_OPTIONS=\""(string join -- " " $KERNEL_PARAMS)"\"" "LINUX_FALLBACK_OPTIONS=\"quiet\"" "DEFAULT_ENTRY=\"$SDBOOT_DEFAULT_ENTRY\"" "REMOVE_EXISTING=\"$SDBOOT_REMOVE_EXISTING\"" "OVERWRITE_EXISTING=\"$SDBOOT_OVERWRITE\"" "REMOVE_OBSOLETE=\"$SDBOOT_REMOVE_OBSOLETE\""
 end
 
-function _content__etc_mkinitcpio.conf
+function _content__etc_mkinitcpio.conf --description "Embedded content for /etc/mkinitcpio.conf"
     printf '%s\n' "# mkinitcpio configuration — changes require: sudo mkinitcpio -P && sudo sdboot-manage update" "MODULES=("(string join -- " " $MKINITCPIO_MODULES)")" "BINARIES=()" "FILES=()" "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")" "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"
         printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"
     end
 end
 
-function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf
+function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Embedded content for /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf"
     printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=no" "DNSOverTLS=opportunistic" "DNSSEC=allow-downgrade"
 end
 
-function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf
+function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Embedded content for /etc/systemd/logind.conf.d/99-cachyos-logind.conf"
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
     printf '%s\n' "[Login]"
     # Cache systemd version once per process (called by every _content_hash → 16 times per verify-static).
@@ -1160,15 +1221,15 @@ function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf
     end
 end
 
-function _content__etc_systemd_coredump.conf.d_99-cachyos-coredump.conf
+function _content__etc_systemd_coredump.conf.d_99-cachyos-coredump.conf --description "Embedded content for /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf"
     printf '%s\n' "# Disable coredump storage — Wine/Proton crashes can write multi-GB dumps" "[Coredump]" "Storage=none" "ProcessSizeMax=0"
 end
 
-function _content__etc_udev_rules.d_99-nvme-rqaffinity.rules
+function _content__etc_udev_rules.d_99-nvme-rqaffinity.rules --description "Embedded content for /etc/udev/rules.d/99-nvme-rqaffinity.rules"
     printf '%s\n' '# NVMe completion locality — pin completions to submitting core' 'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ATTR{queue/rq_affinity}="2"'
 end
 
-function _content__etc_iwd_main.conf
+function _content__etc_iwd_main.conf --description "Embedded content for /etc/iwd/main.conf"
     printf '%s\n' "# iwd configuration - minimal config for NetworkManager backend" "[General]" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "" "[DriverQuirks]"
     for quirk in $IWD_DRIVER_QUIRKS
         printf '%s\n' "$quirk"
@@ -1176,11 +1237,11 @@ function _content__etc_iwd_main.conf
     printf '%s\n' "" "[Network]" "NameResolvingService=$IWD_DNS_SERVICE"
 end
 
-function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf
+function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Embedded content for /etc/NetworkManager/conf.d/99-cachyos-nm.conf"
     printf '%s\n' "# NetworkManager configuration - iwd backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "wifi.iwd.autoconnect=false" "" "[logging]" "level=$NM_LOG_LEVEL"
 end
 
-function _content_HOME_.config_fish_conf.d_10-ssh-auth-sock.fish
+function _content_HOME_.config_fish_conf.d_10-ssh-auth-sock.fish --description "Embedded content for \$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish"
     printf '%s\n' \
         '# SSH agent socket for fish shell -- priority: forwarded > gcr > systemd' \
         'if status is-interactive; and set -q XDG_RUNTIME_DIR; and not set -q SSH_CONNECTION' \
@@ -1192,7 +1253,7 @@ function _content_HOME_.config_fish_conf.d_10-ssh-auth-sock.fish
         'end'
 end
 
-function _content_HOME_.config_environment.d_10-environment.conf
+function _content_HOME_.config_environment.d_10-environment.conf --description "Embedded content for \$HOME/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (COSMIC, Flatpak, D-Bus activated apps)"
     printf '%s\n' 'SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket'
     for var in $ENV_VARS
@@ -1200,7 +1261,7 @@ function _content_HOME_.config_environment.d_10-environment.conf
     end
 end
 
-function _content_HOME_.config_systemd_user_ssh-agent.service
+function _content_HOME_.config_systemd_user_ssh-agent.service --description "Embedded content for \$HOME/.config/systemd/user/ssh-agent.service"
     printf '%s\n' \
         '[Unit]' \
         'Description=SSH authentication agent' \
@@ -1215,8 +1276,8 @@ function _content_HOME_.config_systemd_user_ssh-agent.service
         'WantedBy=default.target'
 end
 
-function _content__etc_systemd_system_cpupower-epp.service
-    # @@AUDIT@@ v4.3.4: per-line printf args. Previous multi-line single-quoted body was truncated at the L1211
+function _content__etc_systemd_system_cpupower-epp.service --description "Embedded content for /etc/systemd/system/cpupower-epp.service"
+    # Service intentionally succeeds on partial EPP write failure; per-CPU errors land in journal via StandardError=journal
     printf '%s\n' \
         '[Unit]' \
         'Description=Set CPU EPP to performance (amd_pstate=active: powersave governor + performance EPP)' \
@@ -1229,8 +1290,6 @@ function _content__etc_systemd_system_cpupower-epp.service
         'Type=oneshot' \
         'RemainAfterExit=yes' \
         'TimeoutStartSec=10' \
-        '# @@AUDIT@@ v4.3.2: drop \'|| logger\' fallback — failure logging now goes through journal via StandardError=journal (always present on systemd hosts; logger from util-linux not guaranteed in stripped chroots).' \
-        '# @@AUDIT@@ v4.3.7: drop dead rc tracking — variable was assigned but never observed (literal `exit 0` follows). Service intentionally succeeds on partial EPP write failure; per-CPU errors land in journal via StandardError=journal.' \
         'StandardError=journal' \
         'ExecStart=/usr/bin/bash -c \'shopt -s nullglob; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo performance > "$cpu" 2>/dev/null || echo "EPP write failed: $cpu" >&2; done; exit 0\'' \
         '' \
@@ -1238,7 +1297,7 @@ function _content__etc_systemd_system_cpupower-epp.service
         'WantedBy=multi-user.target'
 end
 
-function _content__etc_drirc
+function _content__etc_drirc --description "Embedded content for /etc/drirc"
     # RADV unified VRAM heap: prevents UMA APU games from misallocating. Requires Mesa ≥22.3.
     printf '%s\n' '<driconf>' \
         '  <device>' \
@@ -1250,7 +1309,7 @@ function _content__etc_drirc
         '</driconf>'
 end
 
-function _content__etc_sysctl.d_99-cachyos-sysctl.conf
+function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Embedded content for /etc/sysctl.d/99-cachyos-sysctl.conf"
     printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf; overrides net.core.netdev_max_backlog 4096 → 16384)"
     for entry in $SYSCTL_VALUES
         set -l parts (string split -m1 '=' -- "$entry")
@@ -1272,7 +1331,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
         return 1
     end
     set -l _sudo_err (mktemp -t ry-sudo-err.XXXXXX 2>/dev/null; or echo /dev/null)
-    # @@AUDIT@@ v4.3.2: log when mktemp fails
+    # log when mktemp fails
     if test "$_sudo_err" = /dev/null
         _log "MKTEMP_FAIL: ry-sudo-err — sudo error message will be unavailable"
     end
@@ -1281,7 +1340,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     sudo -n -v 2>"$_sudo_err"
     set -l _rc $status
     if test $_rc -ne 0
-        # @@AUDIT@@ v4.4.4: gate interactive `sudo -v` fallback on isatty 0+2; non-tty contexts (cron/CI/sourced) hang.
+        # gate interactive `sudo -v` fallback on isatty 0+2; non-tty contexts (cron/CI/sourced) hang.
         if isatty 0; and isatty 2
             sudo -v 2>"$_sudo_err"
             set _rc $status
@@ -1290,7 +1349,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
         end
     end
     if test $_rc -ne 0
-        set -l _reason (command head -n 1 "$_sudo_err" 2>/dev/null)
+        set -l _reason (command head -n 1 -- "$_sudo_err" 2>/dev/null)
         command rm -f -- "$_sudo_err" 2>/dev/null
         # Untrack: rm consumed it; cleanup loop would otherwise stat() a dead path.
         _untrack_tmpfile "$_sudo_err"
@@ -1310,7 +1369,7 @@ end
 
 # Tmpfile key: slash→underscore of destination path. Collision guard lives in _validate_profile (rejects /a/b vs
 function _as --argument-names use_sudo --description "Prefix command with sudo or command based on use_sudo flag"
-    # @@AUDIT@@ v4.3.3: arity guard — caller error (use_sudo without a real command) previously invoked sudo or
+    # arity guard — caller error (use_sudo without a real command) previously invoked sudo or
     if test (count $argv) -lt 2
         _log "BUG: _as called without command (argv=$argv)"
         return 2
@@ -1327,7 +1386,7 @@ function _tmpfile_key --argument-names path --description "Generate filename key
     string replace -a / _ -- (string replace -- "$HOME" HOME "$path")
 end
 
-# @@AUDIT@@ v4.4.1: extracted from `string match -v` at six sites — enforces explicit-loop literal-equality uniformly.
+# extracted from `string match -v` at six sites — enforces explicit-loop literal-equality uniformly.
 function _untrack_tmpfile --argument-names path --description "Remove a single literal path from _TRACKED_TMPFILES (no glob)"
     set -l _new
     for _tf in $_TRACKED_TMPFILES
@@ -1345,17 +1404,28 @@ function _is_system_dst --argument-names dst --description "True if dst is a sys
     or string match -q '/var/*' -- "$dst"
 end
 
-function _hash_installed --argument-names dst --description "SHA256 of installed file (empty on read failure; sudo-aware)"
-    set -l _raw
+function _hash_installed --argument-names dst --description "SHA256 of installed file (empty on read failure; sudo-aware; pipestatus-checked)"
+    set -l _bytes
+    set -l _ps
     if _is_system_dst "$dst"
         sudo -n test -r "$dst" 2>/dev/null; or return 0
-        set _raw (sudo -n cat -- "$dst" 2>/dev/null | sha256sum 2>/dev/null)
+        set _bytes (sudo -n cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines)
+        set _ps $pipestatus
+        test $_ps[1] -ne 0; and return 0
     else
         test -r "$dst"; or return 0
-        set _raw (sha256sum <"$dst" 2>/dev/null)
+        set _bytes (command cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines)
+        set _ps $pipestatus
+        test $_ps[1] -ne 0; and return 0
     end
-    test -n "$_raw"; or return 0
-    printf '%s\n' (string split ' ' -- "$_raw")[1]
+    set -l _hash_line (printf '%s' "$_bytes" | sha256sum)
+    set -l _ps2 $pipestatus
+    if test $_ps2[1] -ne 0; or test $_ps2[2] -ne 0
+        return 0
+    end
+    set -l _hash (string split ' ' -- "$_hash_line")[1]
+    test -z "$_hash"; and return 0
+    printf '%s\n' "$_hash"
 end
 
 function _should_skip_iwd --argument-names dst --description "True if dst is iwd/NM-related and iwd is not installed (memoized)"
@@ -1416,7 +1486,7 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
         set event (string lower (string match -r '^[A-Z][A-Z_]*' -- "$raw"))
         set data (string replace -r '^[A-Z][A-Z_]*: *' '' -- "$raw")
     end
-    # @@AUDIT@@ v4.3.2: drop redundant set -l — event and data are already locals from L1355-1356
+    # drop redundant set -l — event and data are already locals from L1355-1356
     set event (string replace -ra '[^a-z0-9_]' '' -- "$event")
     set data (_json_str "$data")
     # Cap $data at 4096 chars; step back from cut point if inside a JSON escape sequence to avoid malformed output
@@ -1561,7 +1631,7 @@ function _progress_init --description "Open scroll region; draw initial bar"
     _progress_redraw "" 0
 end
 
-function _progress --argument-names name
+function _progress --argument-names name --description "Advance progress counter and emit step-end log"
     set -g _PROG_CUR (math "min($_PROG_CUR + 1, $_PROG_TOTAL)")
     set -l now (date +%s)
     if test -n "$_PROG_STEP_NAME"
@@ -1574,7 +1644,7 @@ function _progress --argument-names name
     _progress_redraw "$name" $_PROG_CUR
 end
 
-function _progress_redraw --argument-names name current
+function _progress_redraw --argument-names name current --description "Redraw pinned progress bar at terminal bottom row"
     set -l pct (math "floor($current * 100 / $_PROG_TOTAL)")
     set -l filled (math "floor($current * 40 / $_PROG_TOTAL)")
     set -l empty (math "40 - $filled")
@@ -1585,7 +1655,7 @@ function _progress_redraw --argument-names name current
         $_PROG_ROWS "$bar" $pct "$name" >&2
 end
 
-function _progress_done
+function _progress_done --description "Finalize progress bar to 100% and log elapsed seconds"
     set -l elapsed (math (date +%s) - $_PROG_START)
     _log "PROG_DONE: elapsed_secs=$elapsed"
     test "$_PROG_PINNED" = true; or return 0
@@ -1595,7 +1665,7 @@ function _progress_done
     set -g _PROG_PINNED false
 end
 
-function _progress_teardown
+function _progress_teardown --description "Clear pinned progress bar and reset scroll region (signal/abort path)"
     test "$_PROG_PINNED" = true; or return 0
     printf '\e[r\e[%d;1H\e[K\n' $_PROG_ROWS >&2
     set -g _PROG_PINNED false
@@ -1620,6 +1690,8 @@ function _run --description "Execute a command with logging, stdout/stderr captu
             set log_cmd (string replace -r -- "(^| )$_escaped_flag [^ ]+" '$1'"$_secret_flag [REDACTED]" "$log_cmd")
         end
     end
+    # Redact tmp paths from ry-* artefacts so $TMPDIR location does not leak into logs
+    set log_cmd (string replace -ar -- '/tmp/ry-[A-Za-z0-9_.-]+' '/tmp/ry-[REDACTED]' "$log_cmd")
 
     _log "RUN: $log_cmd"
 
@@ -1665,17 +1737,17 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     end
     set -l ret $status
     if test -s "$stderr_tmp"
-        _log "STDERR: "(string join -- " | " (command head -n 50 "$stderr_tmp"))
-        test "$QUIET" = false; and command head -n 5 "$stderr_tmp" >&2
+        _log "STDERR: "(string join -- " | " (command head -n 50 -- "$stderr_tmp"))
+        test "$QUIET" = false; and command head -n 5 -- "$stderr_tmp" >&2
     end
     if test -s "$stdout_tmp"
-        _log "OUTPUT: "(string join -- " | " (command head -n 100 "$stdout_tmp"))
+        _log "OUTPUT: "(string join -- " | " (command head -n 100 -- "$stdout_tmp"))
         test "$QUIET" = false; and command cat -- "$stdout_tmp" >&2
     end
     # stdout_tmp and stderr_tmp are inside _run_dir; single rm -rf below cleans both
     if test -n "$_run_dir"; and test -d "$_run_dir"
         command rm -rf --preserve-root -- "$_run_dir" 2>/dev/null
-        # @@AUDIT@@ v4.4.0: explicit loop replaces `string match -v` glob — defensive against metacharacters in $TMPDIR.
+        # explicit loop replaces `string match -v` glob — defensive against metacharacters in $TMPDIR.
         set -l _new_tracked
         for _tf in $_TRACKED_TMPFILES
             test "$_tf" = "$_run_dir"; and continue
@@ -1761,7 +1833,7 @@ function _chk_perms --argument-names path expected_perms expected_owner use_sudo
     else
         set _po (stat -c '%a %U:%G' -- "$path" 2>/dev/null)
     end
-    # @@AUDIT@@ v4.3.3: stat-fail guard
+    # stat-fail guard
     if test -z "$_po"
         _fail "  $path: stat failed (file disappeared or unreadable)"
         return 1
@@ -1804,7 +1876,7 @@ function _chk_file --argument-names filepath --description "Verify a file exists
 end
 
 # Grep installed file for expected pattern; logs OK/FAIL with label; elevated read for system files
-function _chk_grep --argument-names file pattern label --description "Verify a file contains an expected string (label defaults to pattern)"
+function _chk_grep --argument-names file pattern label --description "Verify a file contains an expected token (label defaults to pattern; whole-word for plain tokens, substring for k=v)"
     test -z "$label"; and set label "$pattern"
     _log "CHECK_GREP: $file for '$pattern'"
 
@@ -1882,7 +1954,7 @@ function _ry_check_network --description "Verify network connectivity (single HE
         end
     end
     if ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1
-        # @@AUDIT@@ v4.3.7: cover both DNS-broken and 443-egress-blocked modes
+        # cover both DNS-broken and 443-egress-blocked modes
         _err "Network connectivity: HTTPS or DNS unreachable (raw-IP ICMP works; check /etc/resolv.conf or 443 egress)"
         return 1
     end
@@ -1913,7 +1985,7 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
         _warn "Could not determine disk space for /"
     end
 
-    # @@AUDIT@@ v4.4.4: --output=avail single-column form (see / probe above for rationale).
+    # --output=avail single-column form (see / probe above for rationale).
     set -l boot_avail_b (LC_ALL=C df --output=avail -B1 /boot 2>/dev/null | tail -n 1 | string trim --)
     set -l boot_avail ""
     if test -n "$boot_avail_b"; and string match -qr '^\d+$' -- "$boot_avail_b"
@@ -2122,7 +2194,7 @@ function _grep_kparam --argument-names dst --description "Validate kernel cmdlin
 end
 
 function _grep_sysctl_kv --argument-names dst --description "Validate sysctl.d has ≥1 'key = value' line"
-    # @@AUDIT@@ v4.3.8: include `-` in key class
+    # include `-` in key class
     string match -qre '^[a-zA-Z._0-9-]+\s*=\s*\S' -- $argv[2..-1]; or begin
         _fail "  $dst: no 'key = value' lines found"
         return 1
@@ -2172,6 +2244,13 @@ function _check_env_ssh_auth_sock --description "Phase 3: environment.d has SSH_
         _fail "  $dst: forbidden %t literal present"
         return 1
     end
+    # systemd-environment-d-generator(8) ${VAR} expansion requires systemd >= 232; warn on older hosts
+    if not set -q _RY_SYSTEMD_VER
+        set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null | head -n 1 | string match -r -- '\d+')
+    end
+    if test -n "$_RY_SYSTEMD_VER"; and test "$_RY_SYSTEMD_VER" -lt 232
+        _warn "  $dst: systemd $_RY_SYSTEMD_VER < 232; \${XDG_RUNTIME_DIR} expansion not supported"
+    end
     return 0
 end
 
@@ -2202,7 +2281,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
             case '*.service'
                 _verify_unit_content "$dst" $content; or set errors (math $errors + 1)
             case '*.fish'
-                # @@AUDIT@@ v4.3.3: drop trailing dash arg — fish does not special-case dash as stdin (GH #1039)
+                # drop trailing dash arg — fish does not special-case dash as stdin (GH #1039)
                 printf '%s\n' $content | fish --no-execute; or set errors (math $errors + 1)
             case '*/loader.conf' '*/sdboot-manage.conf'
                 _grep_kv "$dst" $content; or set errors (math $errors + 1)
@@ -2398,7 +2477,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
             return 1
         end
     else
-        # @@AUDIT@@ v4.3.8: drop `command` prefix
+        # drop `command` prefix
         if not _run mkdir -p -- "$dir"
             _fail "Cannot create directory: $dir"
             return 1
@@ -2464,7 +2543,8 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
             | string replace -r -- '^LINUX_OPTIONS=\x22([^\x22]*)\x22.*$' '$1')
 
         for param in $KERNEL_PARAMS
-            string match -q -- "* $param *" " $opts "
+            set -l _param_re (string escape --style=regex -- "$param")
+            string match -qr -- "(^|\s)$_param_re(\s|\$)" -- "$opts"
             _chk_present $status "$param"
         end
 
@@ -2481,7 +2561,8 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
         set -l cmdline_content (sudo -n cat -- /etc/kernel/cmdline 2>/dev/null)
         if test -n "$cmdline_content"
             for param in $KERNEL_PARAMS
-                string match -q -- "* $param *" " $cmdline_content "
+                set -l _param_re (string escape --style=regex -- "$param")
+                string match -qr -- "(^|\s)$_param_re(\s|\$)" -- "$cmdline_content"
                 _chk_present $status "$param" "MISSING from /etc/kernel/cmdline"
             end
             string match -q '*root=UUID=*' -- "$cmdline_content"
@@ -2545,7 +2626,7 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
         # Null-delim count (\n-in-filename hazard closure
         set entry_count (count (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
     end
-    # @@AUDIT@@ v4.3.7: count(1) always emits non-negative integer
+    # count(1) always emits non-negative integer
     if test "$entry_count" -gt 0
         _ok "  Boot entries: $entry_count found"
     else
@@ -2836,6 +2917,7 @@ function _verify_static_checksum --description "Verify embedded content hash mat
         switch "$expected::$actual"
             case "::*"
                 _fail "  $dst: generator failed"
+                set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
                 _log "VERIFY_STATIC_GEN_FAIL: dst=$dst"
             case "*::"
                 _fail "  $dst: cannot read"
@@ -2863,6 +2945,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     set -g VERIFY_OK 0
     set -g VERIFY_FAIL 0
     set -g VERIFY_WARN 0
+    set -g VERIFY_GEN_FAIL 0
 
     _info "Static verification (config files)..."
     _echo
@@ -2916,7 +2999,7 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     if test -z "$_cmdline"
         set drift 1
     else
-        # @@AUDIT@@ v4.3.2: whole-word regex match (escaped)
+        # whole-word regex match (escaped)
         for _p in $KERNEL_PARAMS
             set -l _p_re (string escape --style=regex -- "$_p")
             string match -qr -- "(^|\s)$_p_re(\s|\$)" -- "$_cmdline"; or set drift 1
@@ -3002,8 +3085,12 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     _echo
 
     set -l cmdline (command cat -- /proc/cmdline 2>/dev/null)
+    if test -z "$cmdline"; and command -q sudo; and sudo -n true 2>/dev/null
+        set cmdline (sudo -n cat -- /proc/cmdline 2>/dev/null)
+    end
     for param in $KERNEL_PARAMS
-        if string match -q -- "* $param *" " $cmdline "
+        set -l _param_re (string escape --style=regex -- "$param")
+        if string match -qr -- "(^|\s)$_param_re(\s|\$)" -- "$cmdline"
             _ok "  $param: active"
         else
             _fail "  $param: NOT in cmdline"
@@ -3532,12 +3619,12 @@ function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KS
 
     _echo "── fstab mount options ──"
     # lint:ignore (awk boolean operators)
-    set -l _fstab_ext4 (awk '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }' /etc/fstab 2>/dev/null)
+    set -l _fstab_ext4 (command awk '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }' /etc/fstab 2>/dev/null)
     if test -n "$_fstab_ext4"
         set -l _fstab_ok true
         for _fl in $_fstab_ext4
             # lint:ignore (awk field reference, not fish cmdsubst)
-            set -l _opts (printf '%s\n' "$_fl" | awk '{ print $4 }')
+            set -l _opts (printf '%s\n' "$_fl" | command awk '{ print $4 }')
             # Independent if blocks (not else-if): report every missing option per line in one pass
             if not string match -q '*noatime*' -- "$_opts"
                 _fail "  ext4 entry missing noatime: $_fl"
@@ -3671,7 +3758,7 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
         if sudo -n test -d "$dir" 2>/dev/null
             set dir_checked (math $dir_checked + 1)
             set -l _po (sudo -n stat -c '%a %U:%G' -- "$dir" 2>/dev/null)
-            # @@AUDIT@@ v4.3.3: stat-fail guard mirrors _chk_perms
+            # stat-fail guard mirrors _chk_perms
             if test -z "$_po"
                 _fail "  $dir: stat failed"
                 set dir_bad (math $dir_bad + 1)
@@ -3769,6 +3856,7 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     set -g VERIFY_OK 0
     set -g VERIFY_FAIL 0
     set -g VERIFY_WARN 0
+    set -g VERIFY_GEN_FAIL 0
 
     _info "Runtime verification (live system state)..."
     _echo
@@ -3807,12 +3895,12 @@ function _dir_group_or_world_writable --argument-names mode --description "True 
 end
 
 function _is_wifi_active_route --description "True if the default route exits via a wireless interface (handles VPN over WiFi)"
-    # Check both v4 and v6 default routes so IPv6-only hosts are not misreported as wired.
+    # Check both v4 and v6 default routes so IPv6-only hosts are not misreported as wired
     # lint:ignore (awk field reference, not fish cmdsubst)
-    set -l _def_iface (ip -4 route show default 2>/dev/null | awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
+    set -l _def_iface (ip -4 route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
     if test -z "$_def_iface"
         # lint:ignore (awk field reference, not fish cmdsubst)
-        set _def_iface (ip -6 route show default 2>/dev/null | awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
+        set _def_iface (ip -6 route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
     end
     test -z "$_def_iface"; and return 1
     # Direct hit: default route exits a physical wireless iface.
@@ -3835,17 +3923,23 @@ function _install_preflight --description "Run all preflight checks before insta
 
     _info "Sudo password required for installation..."
     printf '\n' >&2
-    # @@AUDIT@@ v4.3.9: _ensure_sudo_cached for interactive sudo prompt (was bare `sudo -n true` with no fallback).
+    # _ensure_sudo_cached for interactive sudo prompt (was bare `sudo -n true` with no fallback).
     _ensure_sudo_cached; or return $EXIT_PREFLIGHT
-    # Reject restrictive sudoers tags (NOEXEC, !PASSWD, !SETENV, LOG_OUTPUT) before whitelisting.
+    # Reject restrictive sudoers tags before whitelisting
     set -l _sudo_lines (sudo -n -l 2>/dev/null | grep -v '^\s*#')
     set -l sudo_all 0
     for _sl in $_sudo_lines
-        # bang-prefixed tags: right-boundary only — PCRE \b needs word↔non-word (space and bang are both non-word).
+        # Per-line Defaults that break keepalive: requiretty, tty_tickets, timestamp_timeout=0
+        if string match -qr -- '\bDefaults\b.*\b(requiretty|tty_tickets|timestamp_timeout=0)\b' "$_sl"
+            _err "Sudoers contains incompatible Defaults: $_sl"
+            _kill_sudo_keepalive
+            return $EXIT_PREFLIGHT
+        end
+        # Per-cmd reject tags: NOEXEC / !PASSWD / !SETENV / LOG_OUTPUT
         if string match -qr -- '(\bNOEXEC\b|!PASSWD\b|!SETENV\b|\bLOG_OUTPUT\b)' "$_sl"
             continue
         end
-        # Accept ALL at end of Cmnd_List OR followed by additional whitelisted commands (ALL,...)
+        # Accept ALL at end of Cmnd_List or followed by additional whitelisted commands
         if string match -qr -- '\(ALL(\s*:\s*ALL)?\)\s+(NOPASSWD:\s+)?ALL(\s*,|\s*$)' "$_sl"
             set sudo_all (math $sudo_all + 1)
         end
@@ -3862,7 +3956,7 @@ function _install_preflight --description "Run all preflight checks before insta
         '    command sudo -n -v 2>/dev/null; or break' \
         '    command sleep $argv[3] 2>/dev/null' \
         'end' | string collect)
-    fish -c "$_ka_script" -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null &
+    fish -c "$_ka_script" -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null >/dev/null 2>&1 &
     set -g SUDO_KEEPALIVE_PID $last_pid
     if not kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
         _warn "Sudo keepalive process failed to start — long installs may require re-auth"
@@ -4040,14 +4134,14 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         _warn "  /etc/fstab not found — skipping"
         return 0
     end
-    # @@AUDIT@@ v4.4.4: reject symlinked /etc/fstab; atomic mv would replace the symlink with a regular file.
+    # reject symlinked /etc/fstab; atomic mv would replace the symlink with a regular file.
     if test -L /etc/fstab
         _fail "  /etc/fstab is a symlink — refusing to rewrite (resolve symlink first or skip fstab opts)"
         return 1
     end
     # Detect any ext4 entry missing the desired opts (field-based: $3==ext4)
     # lint:ignore (awk field reference + boolean operators, not fish cmdsubst)
-    set -l ext4_lines (awk '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }' /etc/fstab 2>/dev/null)
+    set -l ext4_lines (command awk '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }' /etc/fstab 2>/dev/null)
     if test -z "$ext4_lines"
         _info "  No ext4 entries in /etc/fstab"
         return 0
@@ -4056,7 +4150,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     set -l _commit_overrides
     for line in $ext4_lines
         # lint:ignore (awk field reference, not fish cmdsubst)
-        set -l opts_field (printf '%s\n' "$line" | awk '{ print $4 }')
+        set -l opts_field (printf '%s\n' "$line" | command awk '{ print $4 }')
         if not string match -q '*noatime*' -- "$opts_field"; or not string match -q '*lazytime*' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"
             set needs_change true
             # Surface non-default commit= overrides (commit=30 etc) so the rewrite is not silent.
@@ -4101,8 +4195,8 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         '    $4 = out' \
         '    print' \
         '}' | string collect)
-    # @@AUDIT@@ v4.3.8: drop sudo from awk side — /etc/fstab is 0644 root:root (world-readable per filesystem package)
-    if not awk "$_awk_script" /etc/fstab | sudo -n tee -- "$tmpfstab" >/dev/null
+    # drop sudo from awk side — /etc/fstab is 0644 root:root (world-readable per filesystem package)
+    if not command awk "$_awk_script" /etc/fstab | sudo -n tee -- "$tmpfstab" >/dev/null
         sudo -n rm -f -- "$tmpfstab" 2>/dev/null
         _fail "  /etc/fstab: awk/tee rewrite failed"
         return 1
@@ -4425,7 +4519,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         # Null-delim find + split0 keeps count accurate when entry filenames contain newlines (pathological)
         set -l _existing_basenames (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
         set -l _existing_entries (count $_existing_basenames)
-        # @@AUDIT@@ v4.3.8: NUL-delimit hash input
+        # NUL-delimit hash input
         set -l _existing_hash (printf '%s\0' $_existing_basenames | sha256sum | string split ' ')[1]
         if set -q RY_INSTALL_CONFIRM_BOOT_WIPE; and test "$RY_INSTALL_CONFIRM_BOOT_WIPE" = 1
             set _acknowledged true
@@ -4485,7 +4579,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
 
     # Null-delim count (\n-in-filename hazard closure
     set -l entry_count (count (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
-    # @@AUDIT@@ v4.3.7: count(1) always emits non-negative integer
+    # count(1) always emits non-negative integer
     if test "$entry_count" -gt 0
         _ok "Boot entries: $entry_count found in /boot/loader/entries/"
     else
@@ -4529,7 +4623,7 @@ function _install_finalize --description "Run post-install verification, cleanup
         # Null-delim find + split0 (see _install_rebuild_boot gate for rationale; backward-compatible hash).
         set -l _post_basenames (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
         set -l _post_count (count $_post_basenames)
-        # @@AUDIT@@ v4.3.8: NUL-delimit hash input
+        # NUL-delimit hash input
         set -l _post_hash (printf '%s\0' $_post_basenames | sha256sum | string split ' ')[1]
         if test -n "$_post_count"; and string match -qr '^\d+$' -- "$_post_count"
             set -l _marker_dir (dirname -- "$_wipe_marker")
@@ -4757,7 +4851,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     _banner "ry-install v$VERSION - Install Single File"
 
     if test "$use_sudo" = true
-        # @@AUDIT@@ v4.3.9: align with _install_preflight — _ensure_sudo_cached probes -n -v then falls back to -v.
+        # align with _install_preflight — _ensure_sudo_cached probes -n -v then falls back to -v.
         _ensure_sudo_cached; or return $EXIT_PREFLIGHT
     end
 
@@ -4787,7 +4881,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
             set -l _g (string split '|' -- $_entry)[1]
             set -l _h (string split '|' -- $_entry)[2]
             if string match -q $_g -- "$target"
-                # @@AUDIT@@ v4.3.2: validate hook function exists before dispatch
+                # validate hook function exists before dispatch
                 if not functions -q "_post_$_h"
                     _err "Internal: post-hook _post_$_h not defined for glob '$_g' (target=$target)"
                     set _hook_rc 1
@@ -4835,7 +4929,7 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
 end
 
 function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit"
-    # @@AUDIT@@ v4.4.4: enable failures propagate rc!=0 so --install-file dispatcher surfaces them (was warn+rc 0).
+    # enable failures propagate rc!=0 so --install-file dispatcher surfaces them (was warn+rc 0).
     set -l _rc 0
     if string match -q "$HOME/*" -- "$target"
         _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
@@ -4971,7 +5065,7 @@ test "$_ap_errfile" != /dev/null; and test "$_ap_errfile" != "$LOG_FILE"; and co
 
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
-# @@AUDIT@@ v4.4.1: rmdir -p with rm -f LOG_FILE in every refused/informational early-exit path — no scaffolding left.
+# rmdir -p with rm -f LOG_FILE in every refused/informational early-exit path — no scaffolding left.
 
 # --help / --version: short-circuit modes (exit 0).
 if set -q _flag_help
@@ -4987,7 +5081,7 @@ if set -q _flag_version
     _ry_exit 0
 end
 
-# @@AUDIT@@ v4.4.1: root check after --help/--version; rmdir -p clears empty log dirs so root leaves no trace.
+# root check after --help/--version; rmdir -p clears empty log dirs so root leaves no trace.
 if test (id -u) -eq 0
     echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
@@ -5023,7 +5117,7 @@ if set -q _flag_install_file
     if test -n "$_canon"
         set INSTALL_FILE_TARGET "$_canon"
     else
-        # @@AUDIT@@ v4.4.4: warn on realpath -m fail (loop/ENAMETOOLONG/perm-denied) — surface stale-symlink fallback.
+        # warn on realpath -m fail (loop/ENAMETOOLONG/perm-denied) — surface stale-symlink fallback.
         echo "[WARN] realpath -m failed on '$_if_val' — using literal path; managed-file validation may not match" >&2
         set INSTALL_FILE_TARGET "$_if_val"
     end
@@ -5049,7 +5143,7 @@ end
 # Load machine profile — must be after arg parsing but before any mode that reads config globals
 _load_profile
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-# @@AUDIT@@ v4.4.0: drift check between hardcoded help-fallback constant and active profile count.
+# drift check between hardcoded help-fallback constant and active profile count.
 if set -q MANAGED_FILE_COUNT; and test "$MANAGED_FILE_COUNT" -ne "$_RY_MANAGED_FILE_COUNT"
     _warn "_RY_MANAGED_FILE_COUNT ($_RY_MANAGED_FILE_COUNT) drifts from active profile ($MANAGED_FILE_COUNT) — update the constant in the bootstrap globals block"
 end
@@ -5083,10 +5177,14 @@ else
     command chmod -- 600 "$LOG_FILE" 2>/dev/null; or true
 end
 
-set -l _init_cmd (_json_str (string join -- " " (status filename) $_ORIG_ARGV))
-printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"command":"%s"}\n' \
+set -l _argv_parts
+for _a in (status filename) $_ORIG_ARGV
+    set -a _argv_parts '"'(_json_str "$_a")'"'
+end
+set -l _argv_json '['(string join ',' $_argv_parts)']'
+printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' \
     (date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" \
-    (test "$QUIET" = false; and echo true; or echo false) "$_init_cmd" >>"$LOG_FILE" 2>/dev/null
+    (test "$QUIET" = false; and echo true; or echo false) "$_argv_json" >>"$LOG_FILE" 2>/dev/null
 
 # install / install-file acquire lock; read modes skip
 switch $MODE
@@ -5114,11 +5212,19 @@ switch $MODE
 end
 
 set -l _log_base_rot "$HOME/ry-install/logs"
-# C.21: oldest-first sort, drop oldest beyond MAX_LOGS. v4.4.4: guard MAX_LOGS>0 (head -n -0 wipes archive).
+# Oldest-first NUL-framed sort, drop oldest beyond MAX_LOGS; guard MAX_LOGS>0 (head -n -0 would wipe archive); LC_ALL=C ensures byte-wise mtime sort regardless of profile locale
 if not string match -qr '^[1-9][0-9]*$' -- "$MAX_LOGS"
     set MAX_LOGS 50
 end
-command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f ! -path "$LOG_FILE" -printf '%T@ %p\n' 2>/dev/null | sort -n | head -n -$MAX_LOGS | cut -d' ' -f2- | xargs -r rm -f
+set -l _rot_rows (command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f ! -path "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -zn | string split0)
+set -l _rot_count (count $_rot_rows)
+if test $_rot_count -gt $MAX_LOGS
+    set -l _drop_to (math $_rot_count - $MAX_LOGS)
+    for _row in $_rot_rows[1..$_drop_to]
+        set -l _path (string split -m 1 \t -- "$_row")[2]
+        test -n "$_path"; and command rm -f -- "$_path" 2>/dev/null
+    end
+end
 command find "$_log_base_rot" -mindepth 1 -maxdepth 1 -type d -empty -delete 2>/dev/null
 
 set -g exit_code 0
@@ -5158,7 +5264,7 @@ if test "$MODE" != check
 end
 
 if test "$_RY_INSTALL_SOURCED" = true
-    # Sourced: release resources/handlers/namespace; do NOT exit. @@AUDIT@@ v4.4.0: _do_cleanup before handler erase.
+    # Sourced: release resources/handlers/namespace; do NOT exit. _do_cleanup runs before handler erase.
     set -g _RY_INSTALL_LAST_EXIT $exit_code
     _do_cleanup
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null

@@ -6,6 +6,50 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.4.3 - 2026-04-25
+-------------------
+
+  Comment-style cleanup pass. No behavior change; no managed-file
+  content changes; verify-static remains stable across upgrade.
+
+[style]
+
+  * comments: 11 single-line comments that exceeded 120 chars
+    after the v4.4.2 multi-line collapse have been trimmed by
+    dropping non-essential context (parenthetical asides,
+    historical clauses, repeated rationale already present in
+    this CHANGELOG). Operational essence preserved on every line.
+    Affected: pre-bootstrap rationale (L70), `_acquire_lock`
+    dead-code removal note (L415), `_load_profile` element
+    sanitization (L899), `_load_profile` UUID branch (L1038),
+    `_untrack_tmpfile` extraction note (L1338), `_install_preflight`
+    sudo-cache note (L3847), `_ry_do_install_file` sudo-cache
+    note (L4764), CLI parser preamble (L4939), early-exit
+    cleanup invariants (L4968 and L4984), and the sourced-return
+    branch (L5150).
+
+  * inline comments: project-wide audit confirms zero remaining
+    inline comments outside string literals (the v4.3.8 above-
+    line migration plus the v4.4.2 multi-line collapse covered
+    every reachable site). Five `# lint:ignore` markers inside
+    `/bin/sh -c` string literals at the lock-reclaim site stay
+    in place per construction — they are sh-script comments
+    being passed verbatim to the embedded interpreter, not fish
+    comments.
+
+  * comment line-length: comment lines now fit within 120 chars
+    project-wide. Verified via parser-aware Python pass:
+    zero comment lines exceed the limit. Multi-line comment
+    blocks reduced to 4 (script header L1-2 plus three blocks
+    where the second line is a `lint:ignore` adjacency, all
+    preserved per project comment-style rule).
+
+[version]
+
+  * VERSION: 4.4.2 -> 4.4.3
+  * banner header: 4.4.3 (2026-04-25)
+
+
 v4.4.2 - 2026-04-25
 -------------------
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.2 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.3 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.2"
+set -g VERSION "4.4.3"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -67,7 +67,7 @@ if begin
 else
     set -g NO_COLOR false
 end
-# @@AUDIT@@ v4.4.1: root check moved past --help/--version short-circuits — informational flags must work for any user (original placement blocked `sudo ./ry-install.fish --help` with EXIT_USAGE).
+# @@AUDIT@@ v4.4.1: root check moved past --help/--version short-circuits — informational flags work for any user.
 
 # Fish version gate — 3.4+ required (set --function, string collect --allow-empty)
 set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n1)
@@ -412,7 +412,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         command rm -f -- "$LOG_FILE" 2>/dev/null
         return 1
     end
-    # @@AUDIT@@ v4.4.0: dropped redundant verify_pid2 — second adjacent read provided no protection (no time gap in flock branch; fallback already has 100ms yield before the first read).
+    # @@AUDIT@@ v4.4.0: removed redundant verify_pid2 — no time gap in flock branch; fallback yield covers race.
     set -g _RY_HOLDS_LOCK true
     _log "LOCK_RECLAIMED: stale pid=$old_pid, new pid=$fish_pid"
     return 0
@@ -896,7 +896,7 @@ function _validate_profile --description "Verify loaded profile has all required
         end
     end
 
-    # @@AUDIT@@ v4.4.1: NUL/LF/CR sanitization for config-value globals (environment.d, sysctl.d, logind.conf.d, iwd/main.conf); narrower than cmdline regex — allows spaces, `=`, `*` (legitimate sysctl multi-value, env vars, iwd glob quirks). LF/CR would split the config and silently change semantics.
+    # @@AUDIT@@ v4.4.1: NUL/LF/CR sanitization for config-value globals; LF/CR would split config silently.
     for _list_var in ENV_VARS SYSCTL_VALUES LOGIND_IGNORE_KEYS IWD_DRIVER_QUIRKS
         if set -q $_list_var
             for _elem in $$_list_var
@@ -1035,7 +1035,7 @@ function _load_profile --description "Determine, load, and validate the active p
         set --erase _ROOT_UUID
     end
     if test -z "$_ROOT_UUID"
-        # @@AUDIT@@ v4.4.2: route --check through _log so help-documented "silent idempotency probe" contract is honored on preflight failure (exit 3 with no stderr).
+        # @@AUDIT@@ v4.4.2: --check routes via _log to honor "silent idempotency probe" contract on preflight failure.
         switch "$MODE"
             case check
                 _log "ROOT_UUID_UNAVAILABLE: findmnt failed (silent for --check)"
@@ -1335,7 +1335,7 @@ function _tmpfile_key --argument-names path --description "Generate filename key
     string replace -a / _ -- (string replace -- "$HOME" HOME "$path")
 end
 
-# @@AUDIT@@ v4.4.1: extracted from inline `string match -v` patterns at six call sites — v4.4.0 hardened _run against glob metacharacters in $TMPDIR but left the same idiom in five other untrack paths; this helper enforces explicit-loop literal-equality compare uniformly.
+# @@AUDIT@@ v4.4.1: extracted from `string match -v` at six sites — enforces explicit-loop literal-equality uniformly.
 function _untrack_tmpfile --argument-names path --description "Remove a single literal path from _TRACKED_TMPFILES (no glob)"
     set -l _new
     for _tf in $_TRACKED_TMPFILES
@@ -3844,7 +3844,7 @@ function _install_preflight --description "Run all preflight checks before insta
 
     _info "Sudo password required for installation..."
     printf '\n' >&2
-    # @@AUDIT@@ v4.3.9: route through _ensure_sudo_cached for interactive sudo prompt (was: bare `sudo -n true` had no fallback, identical to verify-mode flow which already used _ensure_sudo_cached)
+    # @@AUDIT@@ v4.3.9: _ensure_sudo_cached for interactive sudo prompt (was bare `sudo -n true` with no fallback).
     _ensure_sudo_cached; or return $EXIT_PREFLIGHT
     # Reject restrictive sudoers tags (NOEXEC, !PASSWD, !SETENV, LOG_OUTPUT) before whitelisting.
     set -l _sudo_lines (sudo -n -l 2>/dev/null | grep -v '^\s*#')
@@ -4761,7 +4761,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     _banner "ry-install v$VERSION - Install Single File"
 
     if test "$use_sudo" = true
-        # @@AUDIT@@ v4.3.9: align with _install_preflight — _ensure_sudo_cached probes sudo -n -v then falls back to interactive sudo -v (was: bare sudo -n true with no fallback)
+        # @@AUDIT@@ v4.3.9: align with _install_preflight — _ensure_sudo_cached probes -n -v then falls back to -v.
         _ensure_sudo_cached; or return $EXIT_PREFLIGHT
     end
 
@@ -4936,7 +4936,7 @@ set -l INSTALL_FILE_TARGET ""
 # Snapshot $argv pre-argparse so the JSONL header records the full invocation (argparse strips recognized flags
 set -l _ORIG_ARGV $argv
 
-# CLI parser — argparse with --exclusive mode flags; @@AUDIT@@ v4.4.0: stderr captured via temp file to preserve fish's specific error message (unknown option / exclusive-group violation / missing =VALUE).
+# CLI parser — argparse --exclusive modes; @@AUDIT@@ v4.4.0: stderr captured via temp file for fish-specific errors.
 set -l _ap_errfile (mktemp -t ry-argparse-err.XXXXXX 2>/dev/null)
 test -z "$_ap_errfile"; and set _ap_errfile /dev/null
 test "$_ap_errfile" != /dev/null; and set -ga _TRACKED_TMPFILES "$_ap_errfile"
@@ -4965,7 +4965,7 @@ test "$_ap_errfile" != /dev/null; and command rm -f -- "$_ap_errfile" 2>/dev/nul
 
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
-# @@AUDIT@@ v4.4.1: rmdir -p paired with rm -f LOG_FILE in every refused/informational early-exit path so root and non-root informational invocations leave no scaffolding behind (rmdir of non-empty parents fails harmlessly under 2>/dev/null — only today's empty subdir + ancestors that become empty are removed).
+# @@AUDIT@@ v4.4.1: rmdir -p with rm -f LOG_FILE in every refused/informational early-exit path — no scaffolding left.
 
 # --help / --version: short-circuit modes (exit 0).
 if set -q _flag_help
@@ -4981,7 +4981,7 @@ if set -q _flag_version
     _ry_exit 0
 end
 
-# @@AUDIT@@ v4.4.1: root check sits after --help/--version short-circuits so informational flags work for any user; rmdir -p removes today's empty log subdir + ancestors that become empty (logs/, ry-install/) so root invocations leave no trace (non-empty parents fail harmlessly under 2>/dev/null).
+# @@AUDIT@@ v4.4.1: root check after --help/--version; rmdir -p clears empty log dirs so root leaves no trace.
 if test (id -u) -eq 0
     echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
@@ -5147,7 +5147,7 @@ if test "$MODE" != check
 end
 
 if test "$_RY_INSTALL_SOURCED" = true
-    # Sourced: do NOT exit (kills host fish) — release resources, erase handlers, clean namespace, return. @@AUDIT@@ v4.4.0: _do_cleanup added before handler erase — fish_exit does not fire on sourced return.
+    # Sourced: release resources/handlers/namespace; do NOT exit. @@AUDIT@@ v4.4.0: _do_cleanup before handler erase.
     set -g _RY_INSTALL_LAST_EXIT $exit_code
     _do_cleanup
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null

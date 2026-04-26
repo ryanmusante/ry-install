@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.3 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.4 (2026-04-25) — CachyOS config manager | Ryan Musante | MIT
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.3"
+set -g VERSION "4.4.4"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -386,24 +386,11 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
             return 1
         end
     else
-        # Fallback: rmdir+mkdir not atomic; yield + double PID verify narrows the race window
-        echo "[WARN] flock(1) not available — using non-atomic stale lock reclaim" >&2
-        command rm -f -- "$LOCK_FILE" 2>/dev/null
-        command find "$LOCK_DIR" -maxdepth 1 -type f -delete 2>/dev/null
-        command rmdir -- "$LOCK_DIR" 2>/dev/null; or true
-        if not command mkdir -- "$LOCK_DIR" 2>/dev/null
-            echo "[ERR] Failed to reclaim stale lock — another instance may have started" >&2
-            command rm -f -- "$LOG_FILE" 2>/dev/null
-            return 1
-        end
-        if not printf '%s\n' $fish_pid >"$LOCK_FILE" 2>/dev/null
-            command rmdir -- "$LOCK_DIR" 2>/dev/null
-            echo "[ERR] Failed to write lock pid file after reclaim: $LOCK_FILE" >&2
-            command rm -f -- "$LOG_FILE" 2>/dev/null
-            return 1
-        end
-        # Yield to let any concurrent reclaimer finish writing, then double-verify ownership
-        command sleep 0.1 2>/dev/null; or true
+        # @@AUDIT@@ v4.4.4: flock(1) is base util-linux on CachyOS; missing → broken env, refuse non-atomic reclaim.
+        echo "[ERR] flock(1) and/or /bin/sh not available — cannot safely reclaim stale lock" >&2
+        echo "[ERR]   Install util-linux: sudo pacman -S --needed util-linux" >&2
+        command rm -f -- "$LOG_FILE" 2>/dev/null
+        return 1
     end
     set -l verify_pid (command cat -- "$LOCK_FILE" 2>/dev/null)
     set -l my_pid $fish_pid
@@ -1294,8 +1281,13 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     sudo -n -v 2>"$_sudo_err"
     set -l _rc $status
     if test $_rc -ne 0
-        sudo -v 2>"$_sudo_err"
-        set _rc $status
+        # @@AUDIT@@ v4.4.4: gate interactive `sudo -v` fallback on isatty 0+2; non-tty contexts (cron/CI/sourced) hang.
+        if isatty 0; and isatty 2
+            sudo -v 2>"$_sudo_err"
+            set _rc $status
+        else
+            _log "SUDO_CACHE_NONINTERACTIVE: stdin or stderr is not a tty — refusing interactive sudo -v"
+        end
     end
     if test $_rc -ne 0
         set -l _reason (command head -n 1 "$_sudo_err" 2>/dev/null)
@@ -1902,9 +1894,8 @@ end
 function _ry_check_disk_space --description "Verify sufficient free disk space for installation"
     _log "Checking disk space..."
 
-    # df -B1 for byte-precision; -BG/-BM round UP and create false-pass at boundary.; GNU coreutils only
-    # lint:ignore (awk field reference, not fish cmdsubst)
-    set -l root_avail_b (LC_ALL=C df -B1 / 2>/dev/null | tail -n 1 | awk '{print $4}')
+    # df -B1 byte-precision (-BG/-BM round up); GNU only. v4.4.4: --output=avail single-column; tail -1 drops header.
+    set -l root_avail_b (LC_ALL=C df --output=avail -B1 / 2>/dev/null | tail -n 1 | string trim --)
     set -l root_avail ""
     if test -n "$root_avail_b"; and string match -qr '^\d+$' -- "$root_avail_b"
         set root_avail (math "floor($root_avail_b / 1073741824)")
@@ -1922,8 +1913,8 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
         _warn "Could not determine disk space for /"
     end
 
-    # lint:ignore (awk field reference, not fish cmdsubst)
-    set -l boot_avail_b (LC_ALL=C df -B1 /boot 2>/dev/null | tail -n 1 | awk '{print $4}')
+    # @@AUDIT@@ v4.4.4: --output=avail single-column form (see / probe above for rationale).
+    set -l boot_avail_b (LC_ALL=C df --output=avail -B1 /boot 2>/dev/null | tail -n 1 | string trim --)
     set -l boot_avail ""
     if test -n "$boot_avail_b"; and string match -qr '^\d+$' -- "$boot_avail_b"
         set boot_avail (math "floor($boot_avail_b / 1048576)")
@@ -2271,7 +2262,7 @@ function _content_hash --argument-names dst --description "SHA256 of embedded co
     return 0
 end
 
-# Atomic write: mktemp→symlink-check→write→symlink-recheck→chmod→hash→mv→verify→chown
+# Atomic write: dir-trust→mktemp→symlink-check→write→symlink-recheck→chmod→sudo-recheck→mv (v4.4.4: realigned)
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write with symlink and integrity checks"
     set -l _sp command
     set -l _expected_uid $_MY_UID
@@ -4049,6 +4040,11 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         _warn "  /etc/fstab not found — skipping"
         return 0
     end
+    # @@AUDIT@@ v4.4.4: reject symlinked /etc/fstab; atomic mv would replace the symlink with a regular file.
+    if test -L /etc/fstab
+        _fail "  /etc/fstab is a symlink — refusing to rewrite (resolve symlink first or skip fstab opts)"
+        return 1
+    end
     # Detect any ext4 entry missing the desired opts (field-based: $3==ext4)
     # lint:ignore (awk field reference + boolean operators, not fish cmdsubst)
     set -l ext4_lines (awk '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }' /etc/fstab 2>/dev/null)
@@ -4839,6 +4835,8 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
 end
 
 function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit"
+    # @@AUDIT@@ v4.4.4: enable failures propagate rc!=0 so --install-file dispatcher surfaces them (was warn+rc 0).
+    set -l _rc 0
     if string match -q "$HOME/*" -- "$target"
         _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
         if _run systemctl --user enable --now -- (basename -- "$target")
@@ -4848,14 +4846,16 @@ function _post_service --argument-names target --description "Post-hook: daemon-
             end
         else
             _warn "Failed to enable "(basename -- "$target")" (user)"
+            set _rc 1
         end
     else
         _run sudo -n systemctl daemon-reload; or _warn "Systemctl daemon-reload failed"
         if not _run sudo -n systemctl enable --now -- (basename -- "$target")
             _warn "Failed to enable "(basename -- "$target")" (system)"
+            set _rc 1
         end
     end
-    return 0
+    return $_rc
 end
 
 function _post_udev --argument-names target --description "Post-hook: udev reload-rules + trigger + settle"
@@ -4936,10 +4936,16 @@ set -l INSTALL_FILE_TARGET ""
 # Snapshot $argv pre-argparse so the JSONL header records the full invocation (argparse strips recognized flags
 set -l _ORIG_ARGV $argv
 
-# CLI parser — argparse --exclusive modes; @@AUDIT@@ v4.4.0: stderr captured via temp file for fish-specific errors.
+# argparse --exclusive modes; v4.4.0: stderr → tmpfile for fish-specific errors. v4.4.4: tmpfile fail → $LOG_FILE.
 set -l _ap_errfile (mktemp -t ry-argparse-err.XXXXXX 2>/dev/null)
-test -z "$_ap_errfile"; and set _ap_errfile /dev/null
-test "$_ap_errfile" != /dev/null; and set -ga _TRACKED_TMPFILES "$_ap_errfile"
+if test -z "$_ap_errfile"
+    if test -n "$LOG_FILE"; and test -f "$LOG_FILE"
+        set _ap_errfile "$LOG_FILE"
+    else
+        set _ap_errfile /dev/null
+    end
+end
+test "$_ap_errfile" != /dev/null; and test "$_ap_errfile" != "$LOG_FILE"; and set -ga _TRACKED_TMPFILES "$_ap_errfile"
 argparse --name=ry-install.fish \
     --exclusive=verify-static,verify-runtime,check,install-file \
     h/help v/version V/verbose \
@@ -4954,14 +4960,14 @@ if test $_argparse_rc -ne 0
     end
     test -n "$_ap_msg"; or set _ap_msg "Invalid arguments: $_ORIG_ARGV"
     echo "[ERR] $_ap_msg" >&2
-    test "$_ap_errfile" != /dev/null; and command rm -f -- "$_ap_errfile" 2>/dev/null
+    test "$_ap_errfile" != /dev/null; and test "$_ap_errfile" != "$LOG_FILE"; and command rm -f -- "$_ap_errfile" 2>/dev/null
     echo >&2
     _ry_show_help >&2
     command rm -f -- "$LOG_FILE" 2>/dev/null
     command rmdir -p -- "$LOG_DIR" 2>/dev/null
     _ry_exit $EXIT_USAGE
 end
-test "$_ap_errfile" != /dev/null; and command rm -f -- "$_ap_errfile" 2>/dev/null
+test "$_ap_errfile" != /dev/null; and test "$_ap_errfile" != "$LOG_FILE"; and command rm -f -- "$_ap_errfile" 2>/dev/null
 
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
@@ -5017,6 +5023,8 @@ if set -q _flag_install_file
     if test -n "$_canon"
         set INSTALL_FILE_TARGET "$_canon"
     else
+        # @@AUDIT@@ v4.4.4: warn on realpath -m fail (loop/ENAMETOOLONG/perm-denied) — surface stale-symlink fallback.
+        echo "[WARN] realpath -m failed on '$_if_val' — using literal path; managed-file validation may not match" >&2
         set INSTALL_FILE_TARGET "$_if_val"
     end
 end
@@ -5106,7 +5114,10 @@ switch $MODE
 end
 
 set -l _log_base_rot "$HOME/ry-install/logs"
-# C.21: oldest-first sort, drop oldest beyond MAX_LOGS retention.
+# C.21: oldest-first sort, drop oldest beyond MAX_LOGS. v4.4.4: guard MAX_LOGS>0 (head -n -0 wipes archive).
+if not string match -qr '^[1-9][0-9]*$' -- "$MAX_LOGS"
+    set MAX_LOGS 50
+end
 command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f ! -path "$LOG_FILE" -printf '%T@ %p\n' 2>/dev/null | sort -n | head -n -$MAX_LOGS | cut -d' ' -f2- | xargs -r rm -f
 command find "$_log_base_rot" -mindepth 1 -maxdepth 1 -type d -empty -delete 2>/dev/null
 

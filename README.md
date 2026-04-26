@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.4.3-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.4.4-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.18.4-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -412,9 +412,9 @@ Run `--verify-static` and `--verify-runtime` before first use.
 | Permission model | system files 0644 (world-readable configs); user files 0600 (private); 0700 on `~/ry-install/` and per-day log subdirs; 0600 on log/manifest/marker files |
 | Profile trust | External profiles validated for owner=$UID and mode≤0755 (no group/world write) before `source` (v4.4.0+) |
 | Profile sanitization | KERNEL_PARAMS / MKINITCPIO_MODULES / MKINITCPIO_HOOKS reject shell metachars (v4.4.0+); ENV_VARS / SYSCTL_VALUES / LOGIND_IGNORE_KEYS / IWD_DRIVER_QUIRKS reject NUL/LF/CR (v4.4.1+) |
-| fstab edits | Idempotent; `findmnt --verify` before write; **no backup** — snapshot first |
+| fstab edits | Idempotent; `findmnt --verify` before write; symlinked `/etc/fstab` rejected (v4.4.4+); **no backup** — snapshot first |
 | Root detection | **Refuses to run as root** — sudo invoked internally |
-| Instance lock | Atomic mkdir, PID verification, stale reclaim |
+| Instance lock | Atomic mkdir, PID verification, `flock(1)` stale reclaim (required, not fallback as of v4.4.4) |
 | Credentials | 9 sensitive flag patterns redacted in logs |
 | Signal handling | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
 | Cleanup invariant | Lock + tracked tmpfiles + sudo keepalive released on every exit path: signal, SIGPIPE, normal exit, sourced return, early bail (v4.4.0+) |
@@ -500,7 +500,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-04-25T14:23:01-0700","event":"header","version":"4.4.3","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
+{"ts":"2026-04-25T14:23:01-0700","event":"header","version":"4.4.4","profile":"gtr9_pro","mode":"install","verbose":false,"command":"./ry-install.fish"}
 {"ts":"2026-04-25T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
 {"ts":"2026-04-25T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
 {"ts":"2026-04-25T14:23:12-0700","event":"progress","data":"[2/6] Packages"}

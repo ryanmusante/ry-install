@@ -6,6 +6,100 @@ entries grouped under a dated heading, each bullet names the
 subsystem or function before the change description.
 
 
+v4.4.4 - 2026-04-25
+-------------------
+
+  Hardening pass: nine fixes across robustness, error propagation,
+  and comment-vs-code drift. No managed-file content changes;
+  verify-static remains stable across upgrade.
+
+[fix]
+
+  * `_atomic_write_file` (L2270): comment claimed pipeline ended with
+    `→hash→mv→verify→chown`. No `hash`, no post-mv `verify`, and no
+    `chown` step exists — the function ends at atomic `mv`. Comment
+    realigned to actual pipeline: `dir-trust → mktemp →
+    symlink-check → write → symlink-recheck → chmod → sudo-recheck
+    → mv`.
+
+  * `_acquire_lock` (L388): non-atomic stale-lock reclaim fallback
+    (rmdir+mkdir+sleep 0.1) deleted. flock(1) ships in util-linux,
+    which is part of the Arch base group and always present on
+    CachyOS — its absence indicates a broken environment, not a
+    legitimate config. Missing flock now hard-fails with an
+    actionable `pacman -S util-linux` hint instead of attempting a
+    reclaim that loses the race window during double-yield.
+
+  * `_ensure_sudo_cached` (L1285): bare `sudo -v` interactive
+    fallback after `sudo -n -v` miss could hang indefinitely under
+    cron, CI, or sourced startup contexts. Gated on
+    `isatty 0; and isatty 2` — non-interactive callers now log
+    `SUDO_CACHE_NONINTERACTIVE` and return failure cleanly instead
+    of blocking on an unread tty prompt.
+
+  * `_ry_check_disk_space` (L1900, L1920): `df -B1 / | tail -n 1
+    | awk '{print $4}'` is brittle on long device source paths
+    where df wraps output across two lines and `$4` becomes an
+    unrelated column. Replaced both / and /boot probes with
+    `df --output=avail -B1 ...` single-column form, dropping the
+    awk dependency entirely. `string trim --` strips the column
+    header.
+
+  * `_post_service` (L4844): system-scope `systemctl enable --now`
+    failures emitted a `_warn` but the function unconditionally
+    returned 0, so `--install-file <some-unit>.service` exited
+    success even when the unit failed to enable. Both user and
+    system branches now propagate `return 1` on enable failure
+    while preserving the warn-level message — `_ry_do_install_file`
+    surfaces this in its dispatcher exit code.
+
+  * Log rotation (L5128): `head -n -$MAX_LOGS` with `MAX_LOGS=0`
+    outputs every line, feeding every log file to `xargs rm -f`
+    and wiping the entire archive. While the global is set to 50
+    in pre-bootstrap and not exposed to env override, defense-in-
+    depth guard now validates `MAX_LOGS` matches `^[1-9][0-9]*$`
+    before the find pipeline; invalid values reset to 50.
+
+  * argparse stderr capture (L4947): on `mktemp` failure for
+    `_ap_errfile`, the fish-specific argparse error message was
+    silently dropped to /dev/null and only the generic
+    `Invalid arguments: $_ORIG_ARGV` reached the user. Fallback
+    now reuses `$LOG_FILE` (already created in pre-bootstrap and
+    empty at this point in the flow) so the argparse message is
+    preserved in the JSONL log. Both rm-cleanup sites guarded so
+    the LOG_FILE is never deleted when used as fallback.
+
+  * `_install_fstab_opts` (L4048): function rewrote `/etc/fstab`
+    via tmpfile-then-mv without checking whether the target was a
+    symlink. On systems that intentionally symlink `/etc/fstab`
+    (rare but legal — e.g., dotfile-managed configs), the
+    atomic mv would replace the symlink with a regular file,
+    silently breaking the indirection. Now mirrors the
+    `_atomic_write_file` symlink invariant: refuses to rewrite
+    when `test -L /etc/fstab` is true and emits an actionable
+    `_fail` message.
+
+  * `--install-file` canonicalization (L5035): `realpath -m`
+    failure caused the script to silently fall back to the literal
+    `_if_val`, which means managed-file validation might match a
+    different physical path than what the user supplied (or fail
+    entirely). The fallback path now emits an explicit `[WARN]`
+    so the substitution is visible.
+
+[meta]
+
+  * VERSION: bumped 4.4.3 → 4.4.4 in shebang header (L2),
+    VERSION global (L20), README badge, and JSONL header sample.
+  * Comments: nine new fix-site comments collapsed to single lines
+    matching the v4.4.3 line-length rule (≤120 chars). Three
+    pre-existing multi-line comment blocks (df-precision rationale,
+    argparse stderr capture preamble, log-rotation C.21 marker)
+    folded into single lines that retain both historical context
+    and the new note.
+  * Verification: `fish --no-execute ry-install.fish` exit 0 across
+    the full 5169-line file post-patch.
+
+
 v4.4.3 - 2026-04-25
 -------------------
 

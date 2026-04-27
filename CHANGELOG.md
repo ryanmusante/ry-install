@@ -6,8 +6,21 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
-v4.4.14 - 2026-04-26
+v4.4.15 - 2026-04-26
 --------------------
+
+  * _ry_install_ssh_agent / _post_service: collapse the two-line
+    `_run … \n or _warn …` SSH_AUTH_SOCK propagation pattern to the
+    project-standard `; or _warn …` form. Functionally identical;
+    aligns with the 12 sibling sites that already use the same-line
+    combinator. Two occurrences (install path and re-deploy path).
+  * Comments: trim ten multi-line `@@AUDIT@@` blocks and the `_log`
+    INVARIANT block to single-line form. Script header (lines 1-2)
+    and embedded `lint:ignore` markers preserved verbatim. No
+    semantic change; reduces script line count without losing intent.
+
+
+
 
   * _content_bytes: terminate pipeline with `string collect
     --no-trim-newlines` so the outer command sub preserves the trailing

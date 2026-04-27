@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.14 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.15 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>; _load_profile → _ry_profile_<n>; install loop → _post_<hook>
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -19,7 +19,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.14"
+set -g VERSION "4.4.15"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -1227,9 +1227,7 @@ function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --descriptio
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
     printf '%s\n' "[Login]"
     if not set -q _RY_SYSTEMD_VER
-        # @@AUDIT@@ v4.4.14: anchored to 'systemd <major>' line prefix; the unanchored '\d+' worked only by
-        # accident (first digit run in the version line happens to be the major) and would silently break
-        # if upstream prepended a build/serial number.
+        # @@AUDIT@@ v4.4.14: anchor 'systemd <major>'; unanchored '\d+' broke if upstream prepended a build/serial.
         set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null \
             | head -n 1 | string match -rg -- '^systemd (\d+)')
     end
@@ -1472,8 +1470,7 @@ function _log_section --argument-names name --description "Emit a section-event 
     _log "=== $name ==="
 end
 
-# INVARIANT: NEVER call _log from a fish -c parallel child — no file locking, concurrent writes corrupt JSONL.
-# Enforcement: parallel children inherit _RY_NO_LOG=1 and _log returns 0 immediately.
+# INVARIANT: NEVER call _log from a fish -c parallel child — no file locking; parallel children inherit _RY_NO_LOG=1 and _log returns 0 immediately.
 function _log --description "Append a timestamped JSONL line to LOG_FILE"
     set -q _RY_NO_LOG; and return 0
     test -f "$LOG_FILE"; or return 0
@@ -1604,8 +1601,7 @@ end
 # Progress bar: stationary bottom-row rendering via DECSTBM scroll region
 
 function _progress_init --description "Open scroll region; draw initial bar"
-    # @@AUDIT@@ v4.4.14: _PROG_TOTAL derived from a single source of truth. Adding/removing a phase now
-    # requires only updating _PROG_STEPS — the percentage math at _progress / _progress_redraw stays valid.
+    # @@AUDIT@@ v4.4.14: _PROG_TOTAL derived from _PROG_STEPS — single source of truth keeps percentage math valid on phase add/remove.
     set -g _PROG_STEPS Preflight Packages Configuration Services Boot Finalize
     set -g _PROG_CUR 0
     set -g _PROG_TOTAL (count $_PROG_STEPS)
@@ -1631,9 +1627,7 @@ function _progress --argument-names name outcome --description "Advance progress
     end
     set -g _PROG_STEP_NAME $name
     set -g _PROG_STEP_START $now
-    # @@AUDIT@@ v4.4.14: optional 2nd arg `outcome` (e.g. "skip" when boot-critical bypass fires) is now
-    # recorded in PROG_STEP_START rather than silently dropped; downstream log parsers can distinguish
-    # ran-vs-skipped phases.
+    # @@AUDIT@@ v4.4.14: optional `outcome` arg (e.g. "skip" on boot-critical bypass) recorded in PROG_STEP_START so log parsers can distinguish ran-vs-skipped phases.
     set -l _outcome_marker
     test -n "$outcome"; and set _outcome_marker " outcome=$outcome"
     _log "PROG_STEP_START: [$_PROG_CUR/$_PROG_TOTAL] $name$_outcome_marker"
@@ -1941,10 +1935,7 @@ end
 # Test HTTPS connectivity to archlinux.org and DNS resolution before package operations
 function _ry_check_network --description "Verify network connectivity (single HEAD + raw-IP fallback)"
     _log "Checking network connectivity..."
-    # @@AUDIT@@ v4.4.14: curl is now a required dep (see _ry_check_deps) so the
-    # `command -q curl` gate is gone — a missing curl is caught upfront with an
-    # accurate "missing: curl" message instead of falling through to ping and
-    # producing a misleading "HTTPS or DNS unreachable" diagnostic.
+    # @@AUDIT@@ v4.4.14: curl is a required dep (see _ry_check_deps) — missing curl is caught upfront with "missing: curl" instead of falling through to ping with a misleading "HTTPS or DNS unreachable" diagnostic.
     if curl -sfI --connect-timeout 3 --max-time 5 https://archlinux.org >/dev/null 2>&1
         _ok "Network connectivity: OK"
         return 0
@@ -2328,10 +2319,7 @@ function _content_bytes --argument-names dst --description "Raw bytes of embedde
     test $_ps[1] -ne 0; and return 1
     test $_ps[2] -ne 0; and return 1
     test -z "$_content"; and return 1
-    # @@AUDIT@@ v4.4.14: terminate pipeline with string collect --no-trim-newlines so the outer command sub
-    # preserves the trailing \n and matches _installed_bytes semantics. Without this, every comparison site
-    # (install short-circuit 2471, verify-static checksum 2879, --check drift 2945) reports a 1-byte diff
-    # for every managed file with a trailing \n (which is all of them).
+    # @@AUDIT@@ v4.4.14: terminate pipeline with `string collect --no-trim-newlines` so the outer command sub preserves the trailing \n and matches _installed_bytes semantics — without it, comparison sites (install short-circuit 2471, verify-static checksum 2879, --check drift 2945) report a 1-byte diff for every managed file.
     printf '%s' "$_content" | string collect --no-trim-newlines
 end
 
@@ -2905,8 +2893,7 @@ function _verify_static_checksum --description "Verify embedded content hash mat
                     _ok "  $dst: match"
                 else
                     _fail "  $dst: MISMATCH"
-                    # @@AUDIT@@ v4.4.14: log SHA256 of each side instead of raw bytes — bounded line length,
-                    # no managed-config content leak, and SHA mismatch alone is enough to flag drift.
+                    # @@AUDIT@@ v4.4.14: log SHA256 of each side instead of raw bytes — bounded line length, no managed-config content leak, and SHA mismatch alone is enough to flag drift.
                     set -l _exp_sha (printf '%s' "$expected" | sha256sum 2>/dev/null | string split ' ')[1]
                     set -l _act_sha (printf '%s' "$actual" | sha256sum 2>/dev/null | string split ' ')[1]
                     _log "VERIFY_STATIC_MISMATCH: dst=$dst expected_sha=$_exp_sha actual_sha=$_act_sha expected_bytes="(string length -- "$expected")" actual_bytes="(string length -- "$actual")
@@ -3081,10 +3068,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
 
     _validate_kernel_params
 
-    # @@AUDIT@@ v4.4.14: dmesg is no longer captured into a fish variable. Two grep pipelines below now
-    # invoke `sudo -n dmesg` directly so the kernel ring (potentially several MB on verbose drivers)
-    # never materializes as a fish list. Kernel-side cost is two extra reads of the ring buffer; fish-side
-    # memory cost goes from O(ring_size) to O(matched_lines).
+    # @@AUDIT@@ v4.4.14: dmesg is no longer captured into a fish variable; two grep pipelines invoke `sudo -n dmesg` directly so the kernel ring (potentially several MB) never materializes as a fish list — fish-side memory cost goes from O(ring_size) to O(matched_lines).
     _echo "── Preemption model ──"
     set -l _preempt (sudo -n dmesg 2>/dev/null | grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
     if test -n "$_preempt"
@@ -3913,9 +3897,7 @@ function _install_preflight --description "Run all preflight checks before insta
         '    command sudo -n -v 2>/dev/null; or break' \
         '    command sleep $argv[3] 2>/dev/null' \
         'end' | string collect)
-    # @@AUDIT@@ v4.4.14: _RY_NO_LOG=1 is a belt-and-braces guard; the keepalive script body does not call
-    # _log today, but inheriting the sentinel makes accidental future log calls a silent no-op rather than
-    # a JSONL corruption hazard.
+    # @@AUDIT@@ v4.4.14: _RY_NO_LOG=1 is a belt-and-braces guard — the keepalive script body does not call _log today, but inheriting the sentinel makes accidental future log calls a silent no-op rather than JSONL corruption.
     env _RY_NO_LOG=1 fish -c "$_ka_script" -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null >/dev/null 2>&1 &
     set -g SUDO_KEEPALIVE_PID $last_pid
     if not kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
@@ -4107,8 +4089,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         set -l opts_field (printf '%s\n' "$line" | command awk '{ print $4 }')
         if not string match -q '*noatime*' -- "$opts_field"; or not string match -q '*lazytime*' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"
             set needs_change true
-            # @@AUDIT@@ v4.4.14: -rg + non-capturing groups returns the digits directly, removing the
-            # fragile [3] capture-index dependency that broke silently on regex changes.
+            # @@AUDIT@@ v4.4.14: -rg + non-capturing groups returns the digits directly, removing the fragile [3] capture-index dependency that broke silently on regex changes.
             set -l _existing_commit (string match -rg -- '(?:^|,)commit=([0-9]+)(?:,|$)' -- "$opts_field")
             if test -n "$_existing_commit"; and test "$_existing_commit" != 10
                 set -a _commit_overrides "$_existing_commit"
@@ -4304,8 +4285,7 @@ function _configure_services_enable --description "Install cpupower-epp, batch-e
             _warn "Failed to enable ssh-agent.service"
         else
             if set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"
-                _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
-                or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
+                _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"; or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
             else
                 _info "  SSH_AUTH_SOCK propagation skipped (no active user D-Bus session)"
             end
@@ -4855,8 +4835,7 @@ function _post_service --argument-names target --description "Post-hook: daemon-
         _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
         if _run systemctl --user enable --now -- (basename -- "$target")
             if string match -q '*ssh-agent*' -- "$target"; and set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"
-                _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"
-                or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
+                _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"; or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
             end
         else
             _warn "Failed to enable "(basename -- "$target")" (user)"

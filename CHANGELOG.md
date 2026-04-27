@@ -6,6 +6,43 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.4.16 - 2026-04-26
+--------------------
+
+  * audit (v4.4.15 line-by-line review): six INFO-tier observations
+    recorded but deliberately unaddressed in this release —
+    bootstrap-phase [ERR] echo (L84-195) and post-footer "[i] Log
+    file:" notice (L5135) bypass _msg's NO_COLOR/QUIET/TTY logic;
+    bail-via-_ry_exit returns before L5132 _write_footer (currently
+    safe — every post-LOG _ry_exit site pre-rm's the log; forward-
+    compat risk if a future _ry_do_* adds a bail after work has been
+    logged); _INTENDED_EXIT_CODE (L5130) name overlaps semantically
+    with _RY_INSTALL_LAST_EXIT; _progress_init scroll-region
+    sequences (L1620, L1648) lack $TERM-shape guard beyond
+    isatty+tput; L5135 log-path notice not gated on isatty 2.
+    Cosmetic / forward-compat only; verified zero defect.
+  * _json_str: collapse the five-step `set val (string replace … |
+    string collect)` chain to a single `printf '%s' | string replace
+    -a … | string replace -ar … | string collect --allow-empty`
+    pipeline. Drops 5 intermediate `string collect` calls and the
+    trailing `printf '%s\n'`. Output bytes identical (verified with
+    17/17 round-trip cases including all 5 escape targets, C0/DEL
+    range, multi-line input, and the empty-string edge case).
+    Trailing `string collect --allow-empty` (fish 3.4+, already
+    required) preserves count=1 on empty input — without it, callers
+    using `'"'(_json_str "$x")'"'` cartesian-concat (top-level header
+    L5063) drop empty argv entries.
+  * Comments: re-wrap eight `@@AUDIT@@` audit notes (110-330 cols) and
+    four other long inline comments (HOME-resolution, profile-timing,
+    _log INVARIANT, --preserve-status rationale) at ~78 cols. GitHub
+    web/mobile renders the wrapped form without overflow; prior
+    single-line form (post-v4.4.15 collapse) wrapped awkwardly.
+  * _json_str: rewrite the leading `# Escape \\, \x22, \n, \r, \t for
+    JSON` comment to `# JSON-escape: backslash, double-quote, LF, CR,
+    TAB; strip remaining C0+DEL`. Removes literal escape glyphs from
+    a comment body that several syntax highlighters mis-tokenize.
+
+
 v4.4.15 - 2026-04-26
 --------------------
 

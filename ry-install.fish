@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.15 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.16 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>; _load_profile → _ry_profile_<n>; install loop → _post_<hook>
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -19,7 +19,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.15"
+set -g VERSION "4.4.16"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -120,7 +120,8 @@ test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g DATE_LABEL (date '+%Y-%m-%d')
 set -g TIMESTAMP (date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
 
-# HOME resolution: env → getent passwd (handles privilege-escalated shells, cron, containers); no `~` fallback (fish ~ requires $HOME set)
+# HOME resolution: env → getent passwd (handles privilege-escalated shells,
+# cron, containers); no `~` fallback (fish ~ requires $HOME set)
 set -g _MY_UID (id -u)
 if test -z "$HOME"
     set -g HOME (getent passwd $_MY_UID 2>/dev/null | cut -d: -f6)
@@ -1116,7 +1117,8 @@ function _load_profile --description "Determine, load, and validate the active p
         end
     end
 
-    # 8. Profile-overridable timing globals: reject non-positive-int and reset to defaults; protects sleep(1) and keepalive loop from junk values
+    # 8. Profile-overridable timing globals: reject non-positive-int and reset
+    # to defaults; protects sleep(1) and keepalive loop from junk values
     if not string match -qr '^[1-9][0-9]*$' -- "$SUDO_KEEPALIVE_INTERVAL"
         _warn "SUDO_KEEPALIVE_INTERVAL='$SUDO_KEEPALIVE_INTERVAL' invalid (expected positive integer) — resetting to 45"
         _log "PROFILE_INVALID_SUDO_KEEPALIVE_INTERVAL: value=$SUDO_KEEPALIVE_INTERVAL — using default 45"
@@ -1454,23 +1456,28 @@ end
 
 # LOGGING, MESSAGE OUTPUT, AND VERIFICATION COUNTERS
 
-# Escape \\, \x22, \n, \r, \t for JSON
+# JSON-escape: backslash, double-quote, LF, CR, TAB; strip remaining C0+DEL
 function _json_str --description "Escape a string for safe JSON embedding"
-    set -l val (string replace -a '\\' '\\\\' -- "$argv[1]" | string collect)
-    set val (string replace -a '"' '\\"' -- "$val" | string collect)
-    set val (string replace -a \n '\\n' -- "$val" | string collect)
-    set val (string replace -a \r '\\r' -- "$val" | string collect)
-    set val (string replace -a \t '\\t' -- "$val" | string collect)
-    # Strip remaining C0 (0x00-0x08, 0x0B-0x0C, 0x0E-0x1F) + DEL (0x7F) by replacement
-    set val (string replace -ar '[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]' '?' -- "$val")
-    printf '%s\n' "$val"
+    # @@AUDIT@@ v4.4.16: trailing `string collect --allow-empty` preserves
+    # count=1 on empty input — without it, callers using cartesian-concat
+    # `'"'(_json_str "$x")'"'` (top-level header argv emit) drop empty
+    # entries entirely. Requires fish 3.4+ (already enforced at preflight).
+    printf '%s' "$argv[1]" \
+        | string replace -a '\\' '\\\\' \
+        | string replace -a '"' '\\"' \
+        | string replace -a \n '\\n' \
+        | string replace -a \r '\\r' \
+        | string replace -a \t '\\t' \
+        | string replace -ar '[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]' '?' \
+        | string collect --allow-empty
 end
 
 function _log_section --argument-names name --description "Emit a section-event JSONL marker"
     _log "=== $name ==="
 end
 
-# INVARIANT: NEVER call _log from a fish -c parallel child — no file locking; parallel children inherit _RY_NO_LOG=1 and _log returns 0 immediately.
+# INVARIANT: NEVER call _log from a fish -c parallel child — no file locking;
+# parallel children inherit _RY_NO_LOG=1 and _log returns 0 immediately.
 function _log --description "Append a timestamped JSONL line to LOG_FILE"
     set -q _RY_NO_LOG; and return 0
     test -f "$LOG_FILE"; or return 0
@@ -1601,7 +1608,8 @@ end
 # Progress bar: stationary bottom-row rendering via DECSTBM scroll region
 
 function _progress_init --description "Open scroll region; draw initial bar"
-    # @@AUDIT@@ v4.4.14: _PROG_TOTAL derived from _PROG_STEPS — single source of truth keeps percentage math valid on phase add/remove.
+    # @@AUDIT@@ v4.4.14: _PROG_TOTAL derived from _PROG_STEPS — single source of
+    # truth keeps percentage math valid on phase add/remove.
     set -g _PROG_STEPS Preflight Packages Configuration Services Boot Finalize
     set -g _PROG_CUR 0
     set -g _PROG_TOTAL (count $_PROG_STEPS)
@@ -1627,7 +1635,9 @@ function _progress --argument-names name outcome --description "Advance progress
     end
     set -g _PROG_STEP_NAME $name
     set -g _PROG_STEP_START $now
-    # @@AUDIT@@ v4.4.14: optional `outcome` arg (e.g. "skip" on boot-critical bypass) recorded in PROG_STEP_START so log parsers can distinguish ran-vs-skipped phases.
+    # @@AUDIT@@ v4.4.14: optional `outcome` arg (e.g. "skip" on boot-critical
+    # bypass) recorded in PROG_STEP_START so log parsers can distinguish
+    # ran-vs-skipped phases.
     set -l _outcome_marker
     test -n "$outcome"; and set _outcome_marker " outcome=$outcome"
     _log "PROG_STEP_START: [$_PROG_CUR/$_PROG_TOTAL] $name$_outcome_marker"
@@ -1718,7 +1728,8 @@ function _run --description "Execute a command with logging, stdout/stderr captu
         set _run_timeout 3600
     end
     if test -n "$_run_timeout"; and command -q timeout
-        # No --preserve-status: a child that catches SIGTERM and exits 0 must still surface as failure (124) on timeout, not silent success.
+        # No --preserve-status: a child that catches SIGTERM and exits 0 must
+        # still surface as failure (124) on timeout, not silent success.
         command timeout --kill-after=10 "$_run_timeout" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     else
         # command prefix forces external binary — prevents fish function recursion when timeout(1) unavailable.
@@ -1935,7 +1946,9 @@ end
 # Test HTTPS connectivity to archlinux.org and DNS resolution before package operations
 function _ry_check_network --description "Verify network connectivity (single HEAD + raw-IP fallback)"
     _log "Checking network connectivity..."
-    # @@AUDIT@@ v4.4.14: curl is a required dep (see _ry_check_deps) — missing curl is caught upfront with "missing: curl" instead of falling through to ping with a misleading "HTTPS or DNS unreachable" diagnostic.
+    # @@AUDIT@@ v4.4.14: curl is a required dep (see _ry_check_deps) — missing
+    # curl is caught upfront with "missing: curl" instead of falling through to
+    # ping with a misleading "HTTPS or DNS unreachable" diagnostic.
     if curl -sfI --connect-timeout 3 --max-time 5 https://archlinux.org >/dev/null 2>&1
         _ok "Network connectivity: OK"
         return 0
@@ -2319,7 +2332,11 @@ function _content_bytes --argument-names dst --description "Raw bytes of embedde
     test $_ps[1] -ne 0; and return 1
     test $_ps[2] -ne 0; and return 1
     test -z "$_content"; and return 1
-    # @@AUDIT@@ v4.4.14: terminate pipeline with `string collect --no-trim-newlines` so the outer command sub preserves the trailing \n and matches _installed_bytes semantics — without it, comparison sites (install short-circuit 2471, verify-static checksum 2879, --check drift 2945) report a 1-byte diff for every managed file.
+    # @@AUDIT@@ v4.4.14: terminate pipeline with `string collect --no-trim-newlines`
+    # so the outer command sub preserves the trailing newline and matches
+    # _installed_bytes semantics — without it, comparison sites (install
+    # short-circuit 2471, verify-static checksum 2879, --check drift 2945)
+    # report a 1-byte diff for every managed file.
     printf '%s' "$_content" | string collect --no-trim-newlines
 end
 
@@ -2893,7 +2910,9 @@ function _verify_static_checksum --description "Verify embedded content hash mat
                     _ok "  $dst: match"
                 else
                     _fail "  $dst: MISMATCH"
-                    # @@AUDIT@@ v4.4.14: log SHA256 of each side instead of raw bytes — bounded line length, no managed-config content leak, and SHA mismatch alone is enough to flag drift.
+                    # @@AUDIT@@ v4.4.14: log SHA256 of each side instead of raw
+                    # bytes — bounded line length, no managed-config content
+                    # leak, and SHA mismatch alone is enough to flag drift.
                     set -l _exp_sha (printf '%s' "$expected" | sha256sum 2>/dev/null | string split ' ')[1]
                     set -l _act_sha (printf '%s' "$actual" | sha256sum 2>/dev/null | string split ' ')[1]
                     _log "VERIFY_STATIC_MISMATCH: dst=$dst expected_sha=$_exp_sha actual_sha=$_act_sha expected_bytes="(string length -- "$expected")" actual_bytes="(string length -- "$actual")
@@ -3068,7 +3087,10 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
 
     _validate_kernel_params
 
-    # @@AUDIT@@ v4.4.14: dmesg is no longer captured into a fish variable; two grep pipelines invoke `sudo -n dmesg` directly so the kernel ring (potentially several MB) never materializes as a fish list — fish-side memory cost goes from O(ring_size) to O(matched_lines).
+    # @@AUDIT@@ v4.4.14: dmesg is no longer captured into a fish variable; two
+    # grep pipelines invoke `sudo -n dmesg` directly so the kernel ring
+    # (potentially several MB) never materializes as a fish list — fish-side
+    # memory cost goes from O(ring_size) to O(matched_lines).
     _echo "── Preemption model ──"
     set -l _preempt (sudo -n dmesg 2>/dev/null | grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
     if test -n "$_preempt"
@@ -3897,7 +3919,10 @@ function _install_preflight --description "Run all preflight checks before insta
         '    command sudo -n -v 2>/dev/null; or break' \
         '    command sleep $argv[3] 2>/dev/null' \
         'end' | string collect)
-    # @@AUDIT@@ v4.4.14: _RY_NO_LOG=1 is a belt-and-braces guard — the keepalive script body does not call _log today, but inheriting the sentinel makes accidental future log calls a silent no-op rather than JSONL corruption.
+    # @@AUDIT@@ v4.4.14: _RY_NO_LOG=1 is a belt-and-braces guard — the
+    # keepalive script body does not call _log today, but inheriting the
+    # sentinel makes accidental future log calls a silent no-op rather than
+    # JSONL corruption.
     env _RY_NO_LOG=1 fish -c "$_ka_script" -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null >/dev/null 2>&1 &
     set -g SUDO_KEEPALIVE_PID $last_pid
     if not kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
@@ -4089,7 +4114,9 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         set -l opts_field (printf '%s\n' "$line" | command awk '{ print $4 }')
         if not string match -q '*noatime*' -- "$opts_field"; or not string match -q '*lazytime*' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"
             set needs_change true
-            # @@AUDIT@@ v4.4.14: -rg + non-capturing groups returns the digits directly, removing the fragile [3] capture-index dependency that broke silently on regex changes.
+            # @@AUDIT@@ v4.4.14: -rg + non-capturing groups returns the digits
+            # directly, removing the fragile [3] capture-index dependency that
+            # broke silently on regex changes.
             set -l _existing_commit (string match -rg -- '(?:^|,)commit=([0-9]+)(?:,|$)' -- "$opts_field")
             if test -n "$_existing_commit"; and test "$_existing_commit" != 10
                 set -a _commit_overrides "$_existing_commit"

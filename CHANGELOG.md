@@ -6,6 +6,17 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.4.23 - 2026-04-26
+--------------------
+
+  * Strings: replace `\'` inside single-quoted ExecStart on L1310
+    (`_content__etc_systemd_system_cpupower-epp.service`) with
+    POSIX-toggle `'\''…'\'`. Bytes preserved (sha256 unchanged).
+    fish-tmbundle's single-quote pattern lacks the `\'` escape, so
+    GitHub mis-colored ~850 lines downstream as alternating
+    string/code until quote pairs re-aligned.
+
+
 v4.4.22 - 2026-04-26
 --------------------
 

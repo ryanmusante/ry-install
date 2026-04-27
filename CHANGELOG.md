@@ -6,119 +6,71 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.4.22 - 2026-04-26
+--------------------
+
+  * Comments: fix 2 unbalanced parens in `# Null-delim count (\n` form
+    on L2596 + L4490 (TextMate fish grammar mis-colors comments
+    after an unclosed `(` as code).
+  * Hygiene gate: 9-category audit clean (backtick / single-quote /
+    double-quote / paren / bracket / brace pair-balance, trailing
+    `\`, control-chars, U+2026).
+
+
+v4.4.21 - 2026-04-26
+--------------------
+
+  * Comments: close 3 unbalanced quotes/backticks left by the
+    v4.4.19 truncator (L1091 `"`, L1459+L2323 `` ` ``). Caused
+    GitHub's fish grammar to mis-color comments as code after
+    each unclosed delimiter.
+
+
 v4.4.20 - 2026-04-26
 --------------------
 
-  * Ellipsis sweep: remove all U+2026 horizontal-ellipsis chars from
-    script, CHANGELOG, and README. Script `ry-install.fish` already
-    had zero (v4.4.19 shrinker used clean word-boundary cuts).
-    CHANGELOG had 8 in v4.4.14-v4.4.18 entries used as placeholder
-    text in inline code quotes; rewritten with concrete placeholders
-    (e.g. `=== title ===`, `commit=\d+`, `_run CMD ARGS`, `string
-    replace -a X Y`). README had 1 in JSONL schema description
-    rewritten as `{"ts":TS,"event":NAME,"data":STR}`. Final sweep
-    across all 3 files: 0/0/0 U+2026 chars.
-  * Scope: targets `#`-comments only. ASCII `...` in functional
-    output strings (`_info/_warn/_log` progress messages, `_log`
-    truncation marker, fn `--description` `KEY=...` placeholder)
-    preserved as UX-meaningful semantics. Comment lines verified
-    zero `...` and zero U+2026.
-  * No semantic change.
+  * Ellipsis: drop all U+2026 from script (0), CHANGELOG (was 8),
+    README (was 1). ASCII `...` in functional output strings kept.
 
 
 v4.4.19 - 2026-04-26
 --------------------
 
-  * Comments: abbreviate all `#`-comments to fit ≤60-col mobile
-    viewport. Applied via 7-pass shrinker: (1) ~90 substitutions
-    (configuration→config, function→fn, with→w/, etc.), (2) em-dash
-    `—` → `; ` separator, (3) drop trailing parenthetical, (4) drop
-    inline parenthetical, (5) drop after first `;` clause, (6) drop
-    after first `. ` sentence, (7) drop at last word boundary. Zero
-    ellipsis truncation — clean word-boundary drops only.
-    Distribution: 106 lines ≤52 cols, 68 at 53-60, 4 at 61-62
-    (unbreakable arrow chains / quoted identifiers). Preserves:
-    shebang+header (L1-2), `lint:ignore` markers, `@@AUDIT@@`
-    markers (kept on first line), `=== title ===`/`--- title ---` dividers.
-    Supporting clauses dropped from long comments are documented in
-    CHANGELOG entries v4.4.14-v4.4.18 (single source of truth for
-    rationale; comments are pointers, CHANGELOG is the record).
-  * No semantic change. _json_str trailing-pipe (v4.4.17),
-    `string collect --allow-empty` terminator (v4.4.16), and
-    `# JSON-escape:` header preserved.
+  * Comments: abbreviate to ≤60 cols via 7-pass shrinker (subs +
+    em-dash + paren drop + clause drop + word-boundary cut). No
+    ellipsis. 106 ≤52, 70 at 53-60.
 
 
 v4.4.18 - 2026-04-26
 --------------------
 
-  * Comments: collapse all multi-line `#`-comment blocks back to
-    single-line form (reverts the v4.4.17 textwrap pass at ≤60 cols
-    and the v4.4.16 manual wraps at ≤78 cols). Joins consecutive
-    same-indent `#` lines on single space. Preserves: shebang+header
-    (L1-2), `lint:ignore` markers, `@@AUDIT@@` markers,
-    `=== title ===`/`--- title ---` section dividers. File shrinks
-    5370→5147 lines (-223). Long single-line comments accepted as
-    project style; soft-wrap behaviour deferred to viewer/IDE.
-  * No semantic change. _json_str trailing-pipe form (v4.4.17) and
-    `string collect --allow-empty` terminator (v4.4.16) preserved.
+  * Comments: collapse multi-line `#` blocks back to single-line
+    (reverts v4.4.16 + v4.4.17 wraps). 5370→5147 lines.
 
 
 v4.4.17 - 2026-04-26
 --------------------
 
-  * Comments: re-wrap all 169 inline `#`-comment blocks (after
-    v4.4.16 partial pass) to ≤60 cols total. Joins consecutive
-    same-indent `#` lines into logical paragraphs first, then
-    re-wraps via textwrap (no break_long_words / break_on_hyphens).
-    Targets GitHub mobile/narrow viewport (~52 col cutoff observed).
-    Preserves: shebang+header (L1-2), `lint:ignore` markers,
-    `@@AUDIT@@` markers (re-flow body with marker on first line),
-    section dividers (`=== title ===` and `--- title ---` style).
-    File grows 5173→5369 lines (+196); zero semantic change.
-  * _json_str: convert leading-pipe continuation (`cmd \` then
-    `| nextcmd`) to trailing-pipe form (`cmd |` then `nextcmd`).
-    Fish 3.x supports both, but GitHub's TextMate fish grammar
-    flags the leading-pipe form with a syntax-error gutter marker.
-    Trailing-pipe is universally parseable. No behaviour change;
-    drops 8 trailing `\` continuations.
+  * Comments: re-wrap inline `#` blocks to ≤60 cols (textwrap pass).
+  * _json_str: leading-pipe `\` `| cmd` → trailing-pipe `cmd |`
+    (universally parseable; GitHub fish grammar gutter clean).
 
 
 v4.4.16 - 2026-04-26
 --------------------
 
-  * audit (v4.4.15 line-by-line review): six INFO-tier observations
-    recorded but deliberately unaddressed in this release —
-    bootstrap-phase [ERR] echo (L84-195) and post-footer "[i] Log
-    file:" notice (L5135) bypass _msg's NO_COLOR/QUIET/TTY logic;
-    bail-via-_ry_exit returns before L5132 _write_footer (currently
-    safe — every post-LOG _ry_exit site pre-rm's the log; forward-
-    compat risk if a future _ry_do_* adds a bail after work has been
-    logged); _INTENDED_EXIT_CODE (L5130) name overlaps semantically
-    with _RY_INSTALL_LAST_EXIT; _progress_init scroll-region
-    sequences (L1620, L1648) lack $TERM-shape guard beyond
-    isatty+tput; L5135 log-path notice not gated on isatty 2.
-    Cosmetic / forward-compat only; verified zero defect.
-  * _json_str: collapse the five-step `set val (string replace -a X
-    Y | string collect)` chain to a single pipeline `printf '%s' |
-    string replace -a X Y | string replace -ar PAT REPL | string
-    collect --allow-empty`. Drops 5 intermediate `string collect`
-    calls and the trailing `printf '%s\n'`. Output bytes identical
-    (verified with 17/17 round-trip cases including all 5 escape
-    targets, C0/DEL
-    range, multi-line input, and the empty-string edge case).
-    Trailing `string collect --allow-empty` (fish 3.4+, already
-    required) preserves count=1 on empty input — without it, callers
-    using `'"'(_json_str "$x")'"'` cartesian-concat (top-level header
-    L5063) drop empty argv entries.
-  * Comments: re-wrap eight `@@AUDIT@@` audit notes (110-330 cols) and
-    four other long inline comments (HOME-resolution, profile-timing,
-    _log INVARIANT, --preserve-status rationale) at ~78 cols. GitHub
-    web/mobile renders the wrapped form without overflow; prior
-    single-line form (post-v4.4.15 collapse) wrapped awkwardly.
-  * _json_str: rewrite the leading `# Escape \\, \x22, \n, \r, \t for
-    JSON` comment to `# JSON-escape: backslash, double-quote, LF, CR,
-    TAB; strip remaining C0+DEL`. Removes literal escape glyphs from
-    a comment body that several syntax highlighters mis-tokenize.
+  * audit: 6 INFO-tier observations from v4.4.15 line-by-line
+    review — bootstrap [ERR] echo + L5135 notice bypass _msg
+    NO_COLOR/QUIET/TTY logic; bail-via-_ry_exit forward-compat
+    risk; _INTENDED_EXIT_CODE name overlap; _progress_init lacks
+    $TERM-shape guard. Zero defect; deferred.
+  * _json_str: 5-step `set val (string replace -a X Y | collect)` chain
+    → single pipeline. Trailing `string collect --allow-empty`
+    keeps count=1 on empty input (preserves cartesian-concat
+    contract at L5063 argv emit). 17/17 round-trip equivalent.
+  * Comments: rewrap 8 `@@AUDIT@@` notes + 4 long inlines at ~78
+    cols. Rewrite `# Escape \\, \x22, \n, \r, \t for JSON` to
+    plain English (highlighter-safe).
 
 
 v4.4.15 - 2026-04-26

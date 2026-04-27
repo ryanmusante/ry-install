@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.20 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.22 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -19,7 +19,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.20"
+set -g VERSION "4.4.22"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -1088,7 +1088,7 @@ function _load_profile --description "Determine, load, and validate the active p
         set --erase _ROOT_UUID
     end
     if test -z "$_ROOT_UUID"
-        # --check routes via _log to honor "silent
+        # --check routes via _log to honor silent contract
         switch "$MODE"
             case check
                 _log "ROOT_UUID_UNAVAILABLE: findmnt failed (silent for --check)"
@@ -1456,7 +1456,7 @@ end
 
 # JSON-escape: backslash, double-quote, LF, CR, TAB
 function _json_str --description "Escape a string for safe JSON embedding"
-    # @@AUDIT@@ v4.4.16: trailing `string collect
+    # @@AUDIT@@ v4.4.16: trailing string-collect allow-empty
     printf '%s' "$argv[1]" |
         string replace -a '\\' '\\\\' |
         string replace -a '"' '\\"' |
@@ -2320,7 +2320,7 @@ function _content_bytes --argument-names dst --description "Raw bytes of embedde
     test $_ps[1] -ne 0; and return 1
     test $_ps[2] -ne 0; and return 1
     test -z "$_content"; and return 1
-    # @@AUDIT@@ v4.4.14: terminate pipeline w/ `string
+    # @@AUDIT@@ v4.4.14: pipeline ends w/ string-collect
     printf '%s' "$_content" | string collect --no-trim-newlines
 end
 
@@ -2593,7 +2593,7 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
     _echo "── Boot entries ──"
     set -l entry_count 0
     if sudo -n test -d /boot/loader/entries 2>/dev/null
-        # Null-delim count (\n-in-filename hazard closure
+        # Null-delim count: closes \n-in-filename hazard
         set entry_count (count (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
     end
     # count(1) always emits non-negative integer
@@ -4487,7 +4487,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         return $EXIT_BOOT_CRIT
     end
 
-    # Null-delim count (\n-in-filename hazard closure
+    # Null-delim count: closes \n-in-filename hazard
     set -l entry_count (count (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
     # count(1) always emits non-negative integer
     if test "$entry_count" -gt 0

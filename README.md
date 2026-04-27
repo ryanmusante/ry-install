@@ -1,12 +1,12 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.4.11-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.4.14-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
-[![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.18.4-orange.svg)](https://www.kernel.org/)
+[![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> Self-contained CachyOS configuration manager with profile support. Single Fish script, 16 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
+> Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
 **Default profile:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware Reference](#hardware-reference).
 
@@ -73,13 +73,14 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 |---|---|
 | CachyOS (systemd-boot, ext4) | — |
 | Fish ≥ 4.0 recommended (3.4 minimum) | `fish --version` |
-| Kernel ≥ 6.18.4 (gfx1151 stability) | `uname -r` |
+| Kernel ≥ 6.14 hard (≥ 6.18.4 recommended for gfx1151) | `uname -r` |
 | Unrestricted sudo, no `requiretty` / `tty_tickets` / `timestamp_timeout=0` | `sudo -l` |
 | Writable `$TMPDIR` (or `/tmp` if unset) | `test -w "${TMPDIR:-/tmp}"; and echo ok` |
 | GNU `coreutils` `sort -z` (NUL-delimited) | `printf '' \| sort -z </dev/null; and echo ok` |
 | GNU `coreutils` `stat -c` (BSD stat incompatible) | `stat -c '%a' / >/dev/null; and echo ok` |
 | 2 GB root + 200 MB /boot free | `df -h / /boot` |
 | Network connectivity | `curl -sf --head https://archlinux.org` |
+| `curl` (required for HTTPS preflight, validated in `_ry_check_deps`) | `command -q curl` |
 | Current BIOS | [Beelink downloads](https://dr.bee-link.cn/) |
 | paru (optional, AUR) | `command -q paru` |
 
@@ -137,7 +138,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | **Preflight** | Validate prerequisites (Fish ≥ 3.4, writable `$TMPDIR`, GNU `sort -z`, GNU `stat -c`, sudo without `requiretty` / `tty_tickets` / `timestamp_timeout=0`), acquire lock, load profile |
 | **Packages** | Sync repos, install/remove packages, AUR via paru |
-| **Configuration** | Deploy 16 embedded config files (atomic writes) |
+| **Configuration** | Deploy 15 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
 | **Boot** | Rebuild initramfs, update systemd-boot entries |
 | **Finalize** | Daemon-reload, cache cleanup, NM restart (deferred on active WiFi), write manifest |
@@ -328,10 +329,10 @@ Package operations run during the Packages phase with `--needed` for idempotency
 
 ## Managed Files
 
-16 files deployed via atomic writes (tmp → chmod → mv):
+15 files deployed via atomic writes (tmp → chmod → mv):
 
 <details>
-<summary><b>Show all 16 managed destinations</b></summary>
+<summary><b>Show all 15 managed destinations</b></summary>
 
 | Scope | Path |
 |---|---|
@@ -346,7 +347,6 @@ Package operations run during the Packages phase with `--needed` for idempotency
 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
 | System | `/etc/drirc` |
 | System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
-| System | `/etc/udev/rules.d/99-nvme-rqaffinity.rules` |
 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
 | User | `~/.config/environment.d/10-environment.conf` |
 | User | `~/.config/systemd/user/ssh-agent.service` |
@@ -415,7 +415,7 @@ Run `--verify-static` and `--verify-runtime` before first use.
 |---|---|
 | Atomic writes | tmp → chmod → mv (same FS); parent-dir trust checks (root-owned or uid=$UID, not symlink, not group/world-writable) |
 | Permission model | system files 0644 (world-readable configs); user files 0600 (private); 0700 on `~/ry-install/` and per-day log subdirs; 0600 on log/manifest/marker files |
-| Profile trust | External profiles validated for owner=$UID and mode≤0755 (no group/world write) before `source` (v4.4.0+) |
+| Profile trust | External profiles validated for owner=$UID and no group/world write bit (regex `^[0-7][0145][0145]$` on `stat -c '%a'`) before `source` (v4.4.0+) |
 | Profile sanitization | KERNEL_PARAMS / MKINITCPIO_MODULES / MKINITCPIO_HOOKS reject shell + glob metachars (`*` `?` `[` `]` `{` `}`); ENV_VARS / SYSCTL_VALUES / LOGIND_IGNORE_KEYS / IWD_DRIVER_QUIRKS / SYSTEM\_/USER\_/SERVICE\_DESTINATIONS reject NUL/LF/CR; ENV_VARS enforced KEY=VALUE shape; SYSCTL_VALUES enforced key=value with non-empty value; SUDO_KEEPALIVE_INTERVAL / NM_RESTART_DELAY validated as positive integers (invalid values reset to documented defaults) |
 | fstab edits | Idempotent; `findmnt --verify` before write; symlinked `/etc/fstab` rejected (v4.4.4+); **no backup** — snapshot first |
 | Root detection | **Refuses to run as root** — sudo invoked internally |
@@ -492,25 +492,26 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 | `info` | data | Progress / non-actionable status |
 | `echo` | data | Plain message (no level prefix) |
 | `bug` | data | Internal assertion failure (invalid level or arg count) |
-| `step_time` | data, elapsed_s | Install step completed |
-| `progress` | data | Install phase advance ([N/M] label) |
+| `prog_step_start` | data (`[N/M] label`) | Install phase advance |
+| `prog_step_end` | data (`name=X secs=N`) | Install step completed |
+| `prog_done` | data (`elapsed_secs=N`) | Install run completed |
 | `run` | data | Command executed |
 | `stderr` | data | Captured stderr |
 | `section` | data | Phase boundary |
 
-> ~50 additional prefix-routed event types (`lock_acquired`, `manifest_written`, `pkg_remove_ok`, `ntsync_check`, etc.) follow the same `{"ts":…,"event":…,"data":…}` schema and are queryable with jq.
+> ~70 additional prefix-routed event types (`lock_acquired`, `manifest_written`, `pkg_remove_ok`, `ntsync_check`, etc.) follow the same `{"ts":…,"event":…,"data":…}` schema and are queryable with jq.
 
 Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
 **Sample log output:**
 
 ```json
-{"ts":"2026-04-26T14:23:01-0700","event":"header","version":"4.4.8","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
-{"ts":"2026-04-25T14:23:04-0700","event":"progress","data":"[1/6] Preflight"}
-{"ts":"2026-04-25T14:23:12-0700","event":"step_time","data":"Preflight","elapsed_s":8}
-{"ts":"2026-04-25T14:23:12-0700","event":"progress","data":"[2/6] Packages"}
-{"ts":"2026-04-25T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-25T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0,"gen_fail":0}
+{"ts":"2026-04-26T14:23:01-0700","event":"header","version":"4.4.14","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"2026-04-26T14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
+{"ts":"2026-04-26T14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
+{"ts":"2026-04-26T14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}
+{"ts":"2026-04-26T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
+{"ts":"2026-04-26T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0,"gen_fail":0}
 ```
 
 </details>

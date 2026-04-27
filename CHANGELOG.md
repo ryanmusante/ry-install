@@ -6,6 +6,83 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.4.20 - 2026-04-26
+--------------------
+
+  * Ellipsis sweep: remove all U+2026 horizontal-ellipsis chars from
+    script, CHANGELOG, and README. Script `ry-install.fish` already
+    had zero (v4.4.19 shrinker used clean word-boundary cuts).
+    CHANGELOG had 8 in v4.4.14-v4.4.18 entries used as placeholder
+    text in inline code quotes; rewritten with concrete placeholders
+    (e.g. `=== title ===`, `commit=\d+`, `_run CMD ARGS`, `string
+    replace -a X Y`). README had 1 in JSONL schema description
+    rewritten as `{"ts":TS,"event":NAME,"data":STR}`. Final sweep
+    across all 3 files: 0/0/0 U+2026 chars.
+  * Scope: targets `#`-comments only. ASCII `...` in functional
+    output strings (`_info/_warn/_log` progress messages, `_log`
+    truncation marker, fn `--description` `KEY=...` placeholder)
+    preserved as UX-meaningful semantics. Comment lines verified
+    zero `...` and zero U+2026.
+  * No semantic change.
+
+
+v4.4.19 - 2026-04-26
+--------------------
+
+  * Comments: abbreviate all `#`-comments to fit ≤60-col mobile
+    viewport. Applied via 7-pass shrinker: (1) ~90 substitutions
+    (configuration→config, function→fn, with→w/, etc.), (2) em-dash
+    `—` → `; ` separator, (3) drop trailing parenthetical, (4) drop
+    inline parenthetical, (5) drop after first `;` clause, (6) drop
+    after first `. ` sentence, (7) drop at last word boundary. Zero
+    ellipsis truncation — clean word-boundary drops only.
+    Distribution: 106 lines ≤52 cols, 68 at 53-60, 4 at 61-62
+    (unbreakable arrow chains / quoted identifiers). Preserves:
+    shebang+header (L1-2), `lint:ignore` markers, `@@AUDIT@@`
+    markers (kept on first line), `=== title ===`/`--- title ---` dividers.
+    Supporting clauses dropped from long comments are documented in
+    CHANGELOG entries v4.4.14-v4.4.18 (single source of truth for
+    rationale; comments are pointers, CHANGELOG is the record).
+  * No semantic change. _json_str trailing-pipe (v4.4.17),
+    `string collect --allow-empty` terminator (v4.4.16), and
+    `# JSON-escape:` header preserved.
+
+
+v4.4.18 - 2026-04-26
+--------------------
+
+  * Comments: collapse all multi-line `#`-comment blocks back to
+    single-line form (reverts the v4.4.17 textwrap pass at ≤60 cols
+    and the v4.4.16 manual wraps at ≤78 cols). Joins consecutive
+    same-indent `#` lines on single space. Preserves: shebang+header
+    (L1-2), `lint:ignore` markers, `@@AUDIT@@` markers,
+    `=== title ===`/`--- title ---` section dividers. File shrinks
+    5370→5147 lines (-223). Long single-line comments accepted as
+    project style; soft-wrap behaviour deferred to viewer/IDE.
+  * No semantic change. _json_str trailing-pipe form (v4.4.17) and
+    `string collect --allow-empty` terminator (v4.4.16) preserved.
+
+
+v4.4.17 - 2026-04-26
+--------------------
+
+  * Comments: re-wrap all 169 inline `#`-comment blocks (after
+    v4.4.16 partial pass) to ≤60 cols total. Joins consecutive
+    same-indent `#` lines into logical paragraphs first, then
+    re-wraps via textwrap (no break_long_words / break_on_hyphens).
+    Targets GitHub mobile/narrow viewport (~52 col cutoff observed).
+    Preserves: shebang+header (L1-2), `lint:ignore` markers,
+    `@@AUDIT@@` markers (re-flow body with marker on first line),
+    section dividers (`=== title ===` and `--- title ---` style).
+    File grows 5173→5369 lines (+196); zero semantic change.
+  * _json_str: convert leading-pipe continuation (`cmd \` then
+    `| nextcmd`) to trailing-pipe form (`cmd |` then `nextcmd`).
+    Fish 3.x supports both, but GitHub's TextMate fish grammar
+    flags the leading-pipe form with a syntax-error gutter marker.
+    Trailing-pipe is universally parseable. No behaviour change;
+    drops 8 trailing `\` continuations.
+
+
 v4.4.16 - 2026-04-26
 --------------------
 
@@ -21,12 +98,13 @@ v4.4.16 - 2026-04-26
     sequences (L1620, L1648) lack $TERM-shape guard beyond
     isatty+tput; L5135 log-path notice not gated on isatty 2.
     Cosmetic / forward-compat only; verified zero defect.
-  * _json_str: collapse the five-step `set val (string replace … |
-    string collect)` chain to a single `printf '%s' | string replace
-    -a … | string replace -ar … | string collect --allow-empty`
-    pipeline. Drops 5 intermediate `string collect` calls and the
-    trailing `printf '%s\n'`. Output bytes identical (verified with
-    17/17 round-trip cases including all 5 escape targets, C0/DEL
+  * _json_str: collapse the five-step `set val (string replace -a X
+    Y | string collect)` chain to a single pipeline `printf '%s' |
+    string replace -a X Y | string replace -ar PAT REPL | string
+    collect --allow-empty`. Drops 5 intermediate `string collect`
+    calls and the trailing `printf '%s\n'`. Output bytes identical
+    (verified with 17/17 round-trip cases including all 5 escape
+    targets, C0/DEL
     range, multi-line input, and the empty-string edge case).
     Trailing `string collect --allow-empty` (fish 3.4+, already
     required) preserves count=1 on empty input — without it, callers
@@ -47,8 +125,8 @@ v4.4.15 - 2026-04-26
 --------------------
 
   * _ry_install_ssh_agent / _post_service: collapse the two-line
-    `_run … \n or _warn …` SSH_AUTH_SOCK propagation pattern to the
-    project-standard `; or _warn …` form. Functionally identical;
+    `_run CMD ARGS \n or _warn MSG` SSH_AUTH_SOCK propagation pattern
+    to the project-standard `; or _warn MSG` form. Functionally identical;
     aligns with the 12 sibling sites that already use the same-line
     combinator. Two occurrences (install path and re-deploy path).
   * Comments: trim ten multi-line `@@AUDIT@@` blocks and the `_log`
@@ -74,7 +152,7 @@ v4.4.15 - 2026-04-26
     now caught upfront with an accurate "missing: curl" preflight error
     instead of falling through to ping and producing a misleading
     "HTTPS or DNS unreachable" diagnostic.
-  * _install_fstab_opts: replace `(string match -r '(^|,)commit=…')[3]`
+  * _install_fstab_opts: replace `(string match -r '(^|,)commit=\d+')[3]`
     with `(string match -rg '(?:^|,)commit=([0-9]+)(?:,|$)')`. Removes
     the fragile capture-index dependency that broke silently on regex
     edits and returns the digits directly via `--groups-only`.

@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.23 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.24 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -1307,7 +1307,7 @@ function _content__etc_systemd_system_cpupower-epp.service --description "Embedd
         'RemainAfterExit=yes' \
         'TimeoutStartSec=10' \
         'StandardError=journal' \
-        'ExecStart=/usr/bin/bash -c '\''shopt -s nullglob; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo performance > "$cpu" 2>/dev/null || echo "EPP write failed: $cpu" >&2; done; exit 0'\' \
+        'ExecStart=/usr/bin/bash -c \'shopt -s nullglob; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo performance > "$cpu" 2>/dev/null || echo "EPP write failed: $cpu" >&2; done; exit 0\'' \
         '' \
         '[Install]' \
         'WantedBy=multi-user.target'
@@ -1458,7 +1458,7 @@ end
 function _json_str --description "Escape a string for safe JSON embedding"
     # @@AUDIT@@ v4.4.16: trailing string-collect allow-empty
     printf '%s' "$argv[1]" |
-        string replace -a '\\' '\\\\' |
+        string replace -a \\ \\\\ |
         string replace -a '"' '\\"' |
         string replace -a \n '\\n' |
         string replace -a \r '\\r' |

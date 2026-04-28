@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.24 (2026-04-26) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.26 (2026-04-27) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -19,7 +19,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.22"
+set -g VERSION "4.4.26"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -116,12 +116,28 @@ if not command stat -c '%a' / >/dev/null 2>&1
 end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
+# F22: GNU find -printf probe (BSD find lacks -printf)
+if not command find /tmp -maxdepth 0 -printf '' 2>/dev/null
+    echo "[ERR] GNU find with -printf required (BSD find detected)" >&2
+    _ry_exit $EXIT_PREFLIGHT
+end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+
+# F21: GNU df --output probe (BSD df lacks --output)
+if not command df --output=avail / >/dev/null 2>&1
+    echo "[ERR] GNU df with --output required (BSD df detected)" >&2
+    _ry_exit $EXIT_PREFLIGHT
+end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+
 # Timestamps: DATE_LABEL for dirs
 set -g DATE_LABEL (date '+%Y-%m-%d')
 set -g TIMESTAMP (date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
 
 # HOME resolution: env → getent passwd; no `~` fallback
 set -g _MY_UID (id -u)
+# F10: parallel-child log guard — _log silently no-ops when fish_pid != owner. `-gx` ensures fish -c subshells inherit the var; without export the child would see the var unset and fall through to logging (defeating the guard).
+set -gx _RY_LOG_OWNER_PID $fish_pid
 if test -z "$HOME"
     set -g HOME (getent passwd $_MY_UID 2>/dev/null | cut -d: -f6)
     if test -z "$HOME"; or not test -d "$HOME"
@@ -175,6 +191,7 @@ set -g _TRACKED_TMPFILES
 
 set -g MAX_LOGS 50
 
+# F58: bootstrap fallback only — overridden by profile MANAGED_FILE_COUNT during _load_profile. Drift between this constant and active profile is warned in the dispatch tail block.
 set -g _RY_MANAGED_FILE_COUNT 15
 
 set -g SUDO_KEEPALIVE_INTERVAL 45
@@ -462,6 +479,9 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     set --erase _KCONFIG_DATA
     set --erase _KCONFIG_LOADED
     set --erase _RY_SKIP_IWD
+    # @@AUDIT@@ v4.4.26: also erase memoized caches set by _resolve_esp and the _RY_SYSTEMD_VER probe. _ry_namespace_cleanup catches at fish_exit / bail; this aligns explicit cleanup with the rest.
+    set --erase _RY_ESP_PATH
+    set --erase _RY_SYSTEMD_VER
     # Release LOCK_DIR mutex
     if set -q _RY_HOLDS_LOCK; and set -q LOCK_DIR
         command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
@@ -898,8 +918,10 @@ function _validate_profile --description "Verify loaded profile has all required
         end
     end
 
-    # Element sanitization: reject shell metachars + glob
-    for _list_var in KERNEL_PARAMS MKINITCPIO_MODULES MKINITCPIO_HOOKS
+    # Element sanitization: reject shell metachars + glob. F9: extended to MASK, EXPECTED_SERVICES, EXPECTED_VULKAN_PKGS, PKGS_*, AUR_PKGS — these flow into systemctl / pacman / paru argv and were previously unsanitized.
+    for _list_var in KERNEL_PARAMS MKINITCPIO_MODULES MKINITCPIO_HOOKS \
+        MASK EXPECTED_SERVICES EXPECTED_VULKAN_PKGS \
+        PKGS_ADD PKGS_DEL AUR_PKGS
         if set -q $_list_var
             for _elem in $$_list_var
                 if string match -qr -- '[[:space:]\x22\x24\x27\x5c\x60\(\);&|<>*?\[\]\{\}]' "$_elem"
@@ -927,6 +949,12 @@ function _validate_profile --description "Verify loaded profile has all required
         for _v in $ENV_VARS
             if not string match -qr -- '^[A-Za-z_][A-Za-z0-9_]*=' -- "$_v"
                 _err "Profile global ENV_VARS element must be KEY=VALUE shape: '$_v'"
+                return 1
+            end
+            # F29: SSH_AUTH_SOCK is hardcoded into environment.d by _content_HOME_.config_environment.d_10-environment.conf; a profile-supplied entry would create a duplicate key (last-wins per systemd-env-d-generator(8) — non-deterministic depending on iteration order).
+            set -l _ev_key (string split -m1 '=' -- "$_v")[1]
+            if test "$_ev_key" = SSH_AUTH_SOCK
+                _err "Profile global ENV_VARS cannot define SSH_AUTH_SOCK (managed by environment.d generator): '$_v'"
                 return 1
             end
         end
@@ -1202,7 +1230,8 @@ end
 
 function _content__etc_kernel_cmdline --description "Embedded content for /etc/kernel/cmdline"
     if test -z "$_ROOT_UUID"
-        _err "_content_etc_kernel_cmdline: root UUID not cached (_load_profile may not have run)"
+        # @@AUDIT@@ v4.4.26: function name had single underscore; real name is _content__etc_kernel_cmdline (double; leading slash of /etc maps to '_' via _tmpfile_key).
+        _err "_content__etc_kernel_cmdline: root UUID not cached (_load_profile may not have run)"
         return 12
     end
     printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
@@ -1365,9 +1394,11 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     end
     if test $_rc -ne 0
         set -l _reason (command head -n 1 -- "$_sudo_err" 2>/dev/null)
-        command rm -f -- "$_sudo_err" 2>/dev/null
-        # Untrack: rm consumed it
-        _untrack_tmpfile "$_sudo_err"
+        # @@AUDIT@@ v4.4.26: gate on /dev/null sentinel; previously attempted `rm -f -- /dev/null` when mktemp failed. Silent EPERM, but a sloppy pattern.
+        if test "$_sudo_err" != /dev/null
+            command rm -f -- "$_sudo_err" 2>/dev/null
+            _untrack_tmpfile "$_sudo_err"
+        end
         _log "SUDO_CACHE_FAIL: $_reason"
         if test -n "$_reason"
             _err "Sudo credential cache failed: $_reason"
@@ -1376,9 +1407,10 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
         end
         return 1
     end
-    command rm -f -- "$_sudo_err" 2>/dev/null
-    # Untrack: rm consumed it
-    _untrack_tmpfile "$_sudo_err"
+    if test "$_sudo_err" != /dev/null
+        command rm -f -- "$_sudo_err" 2>/dev/null
+        _untrack_tmpfile "$_sudo_err"
+    end
     return 0
 end
 
@@ -1471,9 +1503,13 @@ function _log_section --argument-names name --description "Emit a section-event 
     _log "=== $name ==="
 end
 
-# INVARIANT: NEVER call _log from a fish -c parallel child
+# INVARIANT: NEVER call _log from a fish -c parallel child. F10: enforced at runtime — children inherit fish_pid mismatch with _RY_LOG_OWNER_PID and silently no-op rather than racing on LOG_FILE.
 function _log --description "Append a timestamped JSONL line to LOG_FILE"
     set -q _RY_NO_LOG; and return 0
+    # F10: parallel-child guard — _RY_LOG_OWNER_PID is set to the original script PID at startup; subshells (fish -c "...") and forks have a different fish_pid and silently no-op.
+    if set -q _RY_LOG_OWNER_PID; and test "$_RY_LOG_OWNER_PID" != "$fish_pid"
+        return 0
+    end
     test -f "$LOG_FILE"; or return 0
     set -l _ts (date '+%Y-%m-%dT%H:%M:%S%z')
     set -l raw (string join -- " " $argv)
@@ -1611,6 +1647,10 @@ function _progress_init --description "Open scroll region; draw initial bar"
     set -g _PROG_STEP_NAME ""
     set -g _PROG_PINNED false
     isatty 2; or return 0
+    # F45: ncurses-tinfo may be absent on minimal installs; skip pinned bar
+    command -q tput; or return 0
+    # F42: tmux scroll-region intercepts DEC save/restore-cursor; skip
+    set -q TMUX; and return 0
     set -l rows (tput lines 2>/dev/null)
     string match -qr '^\d+$' -- "$rows"; or return 0
     test $rows -ge 10; or return 0
@@ -1621,6 +1661,10 @@ function _progress_init --description "Open scroll region; draw initial bar"
 end
 
 function _progress --argument-names name outcome --description "Advance progress counter and emit step-end log; optional outcome marker (e.g. 'skip')"
+    # F27: validate name against known step list to catch caller drift early
+    if not contains -- "$name" $_PROG_STEPS
+        _log "BUG: _progress called with unknown step name='$name' (known: "(string join ',' -- $_PROG_STEPS)")"
+    end
     set -g _PROG_CUR (math "min($_PROG_CUR + 1, $_PROG_TOTAL)")
     set -l now (date +%s)
     if test -n "$_PROG_STEP_NAME"
@@ -1883,7 +1927,8 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
         end
     end
 
-    set -l found false
+    # F8: grep exit codes are 0=found, 1=not-found, ≥2=error (binary, I/O, regex). Treat ≥2 as a diagnostic warning, not a MISSING failure.
+    set -l _grep_rc 1
     if test "$is_boot" = true
         if not command -q sudo
             _fail "  $label: sudo required for /boot path"
@@ -1893,24 +1938,34 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
             _fail "  $label: FILE NOT FOUND"
             return 1
         end
-        sudo -n grep -qF -- "$pattern" "$file" 2>/dev/null; and set found true
+        sudo -n grep -qF -- "$pattern" "$file" 2>/dev/null
+        set _grep_rc $status
     else
-        command grep -qF -- "$pattern" "$file" 2>/dev/null; and set found true
+        command grep -qF -- "$pattern" "$file" 2>/dev/null
+        set _grep_rc $status
     end
 
-    if test "$found" = true
-        _ok "  $label: present"
-        return 0
-    else
-        _fail "  $label: MISSING"
-        return 1
+    switch $_grep_rc
+        case 0
+            _ok "  $label: present"
+            return 0
+        case 1
+            _fail "  $label: MISSING"
+            return 1
+        case '*'
+            _warn "  $label: grep error rc=$_grep_rc (binary/IO/regex) — cannot determine presence"
+            return 1
     end
 end
 
 function _ry_check_deps --description "Verify required packages are installed"
     _log "Checking dependencies..."
     set -l missing
-    for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum stat date curl
+    # F19+F20+F56: hard deps — coreutils, util-linux, network, pacman. timeout, mktemp, awk, head, find, grep, sort, sha256sum, realpath are used by core install/verify paths; missing any is a hard fail.
+    for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
+               stat date curl timeout mktemp awk head tail cut sed find \
+               grep sort cat printf chmod chown mv rm tee ip getent \
+               realpath basename dirname id flock bootctl
         command -q $cmd; or set -a missing $cmd
     end
     if test (count $missing) -gt 0
@@ -1921,7 +1976,9 @@ function _ry_check_deps --description "Verify required packages are installed"
     if test -n "$systemd_ver"; and test "$systemd_ver" -lt 250
         _warn "Systemd version $systemd_ver detected; some features require 250+"
     end
-    for cmd in journalctl dmesg modinfo pgrep free uptime
+    # F24: zcat is used by _kconfig_cache for /proc/config.gz; if missing, _validate_kernel_params silently falls through. Warn so user knows config-validation is degraded.
+    for cmd in journalctl dmesg modinfo pgrep free uptime zcat tput \
+               swapon zramctl lsmod modprobe pkill nmcli
         command -q $cmd; or _warn "Expected tool not found: $cmd (from base packages)"
     end
     if set -q AUR_PKGS; and test (count $AUR_PKGS) -gt 0; and not command -q paru
@@ -2096,6 +2153,7 @@ function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS 
         set -l order_checks \
             "autodetect:modconf" \
             "systemd:sd-vconsole" \
+            "systemd:keyboard" \
             "keyboard:sd-vconsole" \
             "modconf:kms" \
             "block:filesystems"
@@ -2121,11 +2179,12 @@ function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS 
     return 1
 end
 function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODULES array entries"
-    if not command -q modprobe
+    # F60: modprobe -n is a dry-run that returns 0 even for missing modules in some scenarios; modinfo verifies a module's metadata is loadable.
+    if not command -q modinfo
         return 0
     end
     for mod in $MKINITCPIO_MODULES
-        if not modprobe -n "$mod" 2>/dev/null
+        if not modinfo "$mod" >/dev/null 2>&1
             _warn "Module may not exist: $mod (continuing anyway)"
         end
     end
@@ -2165,6 +2224,10 @@ function _grep_kv --argument-names dst --description "Validate kv pairs (loader.
         case '*/sdboot-manage.conf'
             set keys LINUX_OPTIONS LINUX_FALLBACK_OPTIONS DEFAULT_ENTRY REMOVE_EXISTING OVERWRITE_EXISTING REMOVE_OBSOLETE
             set sep '='
+        case '*'
+            # @@AUDIT@@ v4.4.26: defensive default; previously silently returned 0 for unsupported dst. No live caller hits this path (dispatcher in _ry_validate_configs gates by pattern), but a future caller could mis-route and pass validation.
+            _log "BUG: _grep_kv called for unsupported dst=$dst"
+            return 2
     end
     for key in $keys
         # Escape key.
@@ -2219,7 +2282,8 @@ function _grep_xml_tag --argument-names dst --description "Validate drirc XML ha
         return 2
     end
     set -l content $argv[2..-1]
-    for tag in '<driconf>' '<device>' '<application'
+    # @@AUDIT@@ v4.4.26: tightened '<application' → '<application ' (trailing space). Prior partial-tag form would also match a hypothetical '<applicationFoo'; current generator output has '<application name="..."' so the space-anchored form is exact.
+    for tag in '<driconf>' '<device>' '<application '
         string match -qe -- "$tag" $content; or begin
             _fail "  $dst: missing XML tag '$tag'"
             return 1
@@ -2318,9 +2382,7 @@ function _content_bytes --argument-names dst --description "Raw bytes of embedde
     set -l _content (_ry_get_file_content "$dst" 2>/dev/null | string collect --no-trim-newlines)
     set -l _ps $pipestatus
     test $_ps[1] -ne 0; and return 1
-    test $_ps[2] -ne 0; and return 1
-    test -z "$_content"; and return 1
-    # @@AUDIT@@ v4.4.14: pipeline ends w/ string-collect
+    # _ps[2] (string collect) returns 1 on empty input — treat as success here since generator rc was 0; an empty managed file is allowed by contract. @@AUDIT@@ v4.4.25: F6 — drop test -z guard; conflated empty-but-valid output with generator failure. Sole failure signal is _ps[1].
     printf '%s' "$_content" | string collect --no-trim-newlines
 end
 
@@ -2371,25 +2433,30 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         return 1
     end
     set -ga _TRACKED_TMPFILES "$tmpfile"
+    # @@AUDIT@@ v4.4.26: failure paths below now call _untrack_tmpfile alongside `rm -f` so _TRACKED_TMPFILES never carries dead entries. Prior versions left stale paths until _do_cleanup; functional but accumulated bookkeeping waste across multiple atomic-write retries.
 
     if test "$use_sudo" = true
         if sudo -n test -L "$tmpfile"
             _as $use_sudo rm -f -- "$tmpfile" 2>/dev/null
+            _untrack_tmpfile "$tmpfile"
             _fail "→ $dst (temp file is symlink — aborting)"
             return 1
         end
     else
         if test -L "$tmpfile"
             _as $use_sudo rm -f -- "$tmpfile" 2>/dev/null
+            _untrack_tmpfile "$tmpfile"
             _fail "→ $dst (temp file is symlink — aborting)"
             return 1
         end
     end
 
+    # F11: tee runs unconditionally. Generator failure (_ps[1] != 0) is detected below and tmpfile is removed BEFORE chmod/mv. Future edits MUST keep this _ps[1] check before the chmod step, or zero-byte writes will reach the destination.
     _ry_get_file_content "$dst" | _as $use_sudo tee -- "$tmpfile" >/dev/null
     set -l _ps $pipestatus
     if test $_ps[1] -ne 0
         _as $use_sudo rm -f -- "$tmpfile" 2>/dev/null
+        _untrack_tmpfile "$tmpfile"
         switch $_ps[1]
             case 11
                 _err "Not a managed destination: $dst"
@@ -2402,6 +2469,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     end
     if test $_ps[2] -ne 0
         _as $use_sudo rm -f -- "$tmpfile" 2>/dev/null
+        _untrack_tmpfile "$tmpfile"
         _fail "→ $dst (write to temp failed)"
         return 1
     end
@@ -2409,12 +2477,14 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     if test "$use_sudo" = true
         if sudo -n test -L "$tmpfile"
             _as $use_sudo rm -f -- "$tmpfile" 2>/dev/null
+            _untrack_tmpfile "$tmpfile"
             _fail "→ $dst (temp file replaced with symlink during write — aborting)"
             return 1
         end
     else
         if test -L "$tmpfile"
             _as $use_sudo rm -f -- "$tmpfile" 2>/dev/null
+            _untrack_tmpfile "$tmpfile"
             _fail "→ $dst (temp file replaced with symlink during write — aborting)"
             return 1
         end
@@ -2422,6 +2492,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
 
     if not _run $_sp chmod -- $perms "$tmpfile"
         _as $use_sudo rm -f -- "$tmpfile" 2>/dev/null
+        _untrack_tmpfile "$tmpfile"
         _fail "→ $dst (chmod failed)"
         return 1
     end
@@ -2429,11 +2500,13 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     if test "$use_sudo" = true; and not sudo -n true 2>/dev/null
         _err "sudo credential lapsed before atomic mv of $dst"
         _as $use_sudo rm -f -- "$tmpfile" 2>/dev/null
+        _untrack_tmpfile "$tmpfile"
         return $EXIT_BOOT_CRIT
     end
 
     if not _run $_sp mv -- "$tmpfile" "$dst"
         _as $use_sudo rm -f -- "$tmpfile" 2>/dev/null
+        _untrack_tmpfile "$tmpfile"
         _fail "→ $dst (atomic move failed)"
         return 1
     end
@@ -2591,16 +2664,17 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
     _echo
 
     _echo "── Boot entries ──"
+    set -l _esp (_resolve_esp)
     set -l entry_count 0
-    if sudo -n test -d /boot/loader/entries 2>/dev/null
+    if sudo -n test -d "$_esp/loader/entries" 2>/dev/null
         # Null-delim count: closes \n-in-filename hazard
-        set entry_count (count (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
+        set entry_count (count (sudo -n find "$_esp/loader/entries" -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
     end
     # count(1) always emits non-negative integer
     if test "$entry_count" -gt 0
         _ok "  Boot entries: $entry_count found"
     else
-        _fail "  Boot entries: NONE in /boot/loader/entries/"
+        _fail "  Boot entries: NONE in $_esp/loader/entries/"
         _info "  System may not boot! Run: sudo sdboot-manage gen --verbose"
     end
     _echo
@@ -2651,7 +2725,16 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
 
     _echo "── logind.conf ──"
     if _chk_file /etc/systemd/logind.conf.d/99-cachyos-logind.conf
+        # @@AUDIT@@ v4.4.26: mirror generator's systemd<256 skip for HandleSecureAttentionKey (introduced in systemd 256). Without this gate, verify reports false FAIL on older systemd because the generator omits the line but verify checks for it.
+        if not set -q _RY_SYSTEMD_VER
+            set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
+        end
         for key in $LOGIND_IGNORE_KEYS
+            if test "$key" = HandleSecureAttentionKey
+                if test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 256
+                    continue
+                end
+            end
             _chk_grep /etc/systemd/logind.conf.d/99-cachyos-logind.conf "$key=ignore" "$key"
         end
     end
@@ -2777,7 +2860,7 @@ function _verify_static_packages --description "Verify PKGS_ADD, AUR_PKGS, PKGS_
 
     _echo "── pacman.conf ──"
     if test -f /etc/pacman.conf
-        set -l ignore_lines (grep -n -- '^IgnorePkg' /etc/pacman.conf 2>/dev/null)
+        set -l ignore_lines (grep -nE -- '^[[:space:]]*IgnorePkg' /etc/pacman.conf 2>/dev/null)
         if test -n "$ignore_lines"
             for line in $ignore_lines
                 _ok "  $line"
@@ -2785,7 +2868,7 @@ function _verify_static_packages --description "Verify PKGS_ADD, AUR_PKGS, PKGS_
         else
             _info "  No IgnorePkg set"
         end
-        set -l parallel (grep -nE -- '^ParallelDownloads[[:space:]]*=' /etc/pacman.conf 2>/dev/null)
+        set -l parallel (grep -nE -- '^[[:space:]]*ParallelDownloads[[:space:]]*=' /etc/pacman.conf 2>/dev/null)
         if test -n "$parallel"
             _ok "  $parallel"
         else
@@ -2881,24 +2964,21 @@ function _verify_static_checksum --description "Verify embedded content hash mat
         _should_skip_iwd "$dst"; and continue
         set -l expected (_content_bytes "$dst")
         set -l actual (_installed_bytes "$dst")
-        switch "$expected::$actual"
-            case "::*"
-                _fail "  $dst: generator failed"
-                set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
-                _log "VERIFY_STATIC_GEN_FAIL: dst=$dst"
-            case "*::"
-                _fail "  $dst: cannot read"
-                _log "VERIFY_STATIC_READ_FAIL: dst=$dst"
-            case "*"
-                if test "$expected" = "$actual"
-                    _ok "  $dst: match"
-                else
-                    _fail "  $dst: MISMATCH"
-                    # @@AUDIT@@ v4.4.14: log SHA256 of
-                    set -l _exp_sha (printf '%s' "$expected" | sha256sum 2>/dev/null | string split ' ')[1]
-                    set -l _act_sha (printf '%s' "$actual" | sha256sum 2>/dev/null | string split ' ')[1]
-                    _log "VERIFY_STATIC_MISMATCH: dst=$dst expected_sha=$_exp_sha actual_sha=$_act_sha expected_bytes="(string length -- "$expected")" actual_bytes="(string length -- "$actual")
-                end
+        # @@AUDIT@@ v4.4.26: replaced switch "$expected::$actual" with explicit checks. Prior form had latent ambiguity if a future managed config legitimately contained '::' (IPv6, C++ syntax, etc.). No live trigger today; refactor for robustness.
+        if test -z "$expected"
+            _fail "  $dst: generator failed"
+            set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
+            _log "VERIFY_STATIC_GEN_FAIL: dst=$dst"
+        else if test -z "$actual"
+            _fail "  $dst: cannot read"
+            _log "VERIFY_STATIC_READ_FAIL: dst=$dst"
+        else if test "$expected" = "$actual"
+            _ok "  $dst: match"
+        else
+            _fail "  $dst: MISMATCH"
+            set -l _exp_sha (printf '%s' "$expected" | sha256sum 2>/dev/null | string split ' ')[1]
+            set -l _act_sha (printf '%s' "$actual" | sha256sum 2>/dev/null | string split ' ')[1]
+            _log "VERIFY_STATIC_MISMATCH: dst=$dst expected_sha=$_exp_sha actual_sha=$_act_sha expected_bytes="(string length -- "$expected")" actual_bytes="(string length -- "$actual")
         end
     end
     _echo
@@ -3053,6 +3133,12 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     _echo "KERNEL CMDLINE"
     _echo
 
+    # F33: capture dmesg once for downstream use (preempt, ReBAR, TSC). Original v4.4.14 comment claimed it was no longer captured, but the TSC-demotion branch at L3268 references $_dmesg with no surrounding set, so the diagnostic always reported "no markers found".
+    set -l _dmesg
+    if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
+        set _dmesg (sudo -n dmesg 2>/dev/null)
+    end
+
     set -l cmdline (command cat -- /proc/cmdline 2>/dev/null)
     if test -z "$cmdline"; and command -q sudo; and sudo -n true 2>/dev/null
         set cmdline (sudo -n cat -- /proc/cmdline 2>/dev/null)
@@ -3069,9 +3155,8 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
 
     _validate_kernel_params
 
-    # @@AUDIT@@ v4.4.14: dmesg is no longer captured into
     _echo "── Preemption model ──"
-    set -l _preempt (sudo -n dmesg 2>/dev/null | grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
+    set -l _preempt (printf '%s\n' $_dmesg | grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
     if test -n "$_preempt"
         if string match -q '*full*' -- "$_preempt"
             _ok "  $_preempt"
@@ -3110,7 +3195,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     _echo
 
     _echo "── ReBAR/SAM status ──"
-    set -l rebar_status (sudo -n dmesg 2>/dev/null | grep -i 'BAR' | grep -i -E 'resize|rebar|large|above.4g' | head -n 1)
+    set -l rebar_status (printf '%s\n' $_dmesg | grep -i 'BAR' | grep -i -E 'resize|rebar|large|above.4g' | head -n 1)
     if test -n "$rebar_status"
         if string match -qi '*enabled*' -- "$rebar_status"; or string match -qi '*resiz*' -- "$rebar_status"
             _ok "  ReBAR/SAM: enabled"
@@ -3370,8 +3455,13 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
     end
 
     set -l _u (systemctl --user show --value --property=LoadState,ActiveState,UnitFileState -- ssh-agent.service 2>/dev/null | string split \n)
+    # F44: count<3 branch is reachable when no user-bus session (headless boot, sudo-i shell, no XDG_RUNTIME_DIR/bus). The original 'returned no data' message was ambiguous; clarify the cause.
     if test (count $_u) -lt 3
-        _warn "  ssh-agent.service: systemctl --user show returned no data"
+        if not set -q XDG_RUNTIME_DIR
+            _warn "  ssh-agent.service: no user-bus session (XDG_RUNTIME_DIR unset — likely sudo or headless)"
+        else
+            _warn "  ssh-agent.service: systemctl --user returned no data"
+        end
     else if test "$_u[2]" = active
         if test "$_u[3]" = enabled
             _ok "  ssh-agent.service: active (enabled)"
@@ -3402,15 +3492,8 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
     _echo "WIFI STATE"
     _echo
 
-    set -l _profile_uses_iwd false
-    for _d in $SYSTEM_DESTINATIONS
-        if string match -q '*nm.conf' -- "$_d"; or string match -q '*/iwd/*' -- "$_d"
-            set _profile_uses_iwd true
-            break
-        end
-    end
-
-    if test "$_profile_uses_iwd" = false
+    # F14: use cached _PROFILE_USES_NM rather than re-deriving locally
+    if test "$_PROFILE_USES_NM" = false
         _info "  Profile does not manage iwd/NM — skipping WiFi state checks"
     else
         set -l wlan_iface ""
@@ -3434,9 +3517,10 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
         end
 
         if command -q nmcli
-            set -l nm_wifi_backend (nmcli -t -f WIFI general 2>/dev/null | string trim --)
-            if test -n "$nm_wifi_backend"
-                _info "  NM wifi: $nm_wifi_backend"
+            # F34: `nmcli -t -f WIFI general` returns enabled/disabled, not a backend name. Renamed to reflect actual semantics.
+            set -l nm_wifi_enabled (nmcli -t -f WIFI general 2>/dev/null | string trim --)
+            if test -n "$nm_wifi_enabled"
+                _info "  NM wifi radio: $nm_wifi_enabled"
             end
             set -l wifi_state (nmcli -t -f TYPE,STATE device 2>/dev/null | grep '^wifi:' | head -n 1 | cut -d: -f2)
             if test "$wifi_state" = connected
@@ -4110,8 +4194,9 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         return 1
     end
     set -ga _TRACKED_TMPFILES "$tmpfstab"
+    # @@AUDIT@@ v4.4.26: every failure branch below now calls _untrack_tmpfile after rm. See _atomic_write_file rationale. F35: OFS=tab preserves /etc/fstab convention; mount(8) accepts whitespace-separated fields. Single-space output (the prior behavior) was functionally equivalent but visually mangled column-aligned hand-edited fstab files.
     set -l _awk_script (string join \n \
-        'BEGIN { OFS = " " }' \
+        'BEGIN { OFS = "\t" }' \
         '/^[[:space:]]*#/ || NF < 4 { print; next }' \
         '$3 != "ext4" { print; next }' \
         '{' \
@@ -4133,16 +4218,19 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         '}' | string collect)
     if not command awk "$_awk_script" /etc/fstab | sudo -n tee -- "$tmpfstab" >/dev/null
         sudo -n rm -f -- "$tmpfstab" 2>/dev/null
+        _untrack_tmpfile "$tmpfstab"
         _fail "  /etc/fstab: awk/tee rewrite failed"
         return 1
     end
     if not sudo -n chmod --reference=/etc/fstab -- "$tmpfstab" 2>/dev/null
         sudo -n rm -f -- "$tmpfstab" 2>/dev/null
+        _untrack_tmpfile "$tmpfstab"
         _fail "  /etc/fstab: chmod --reference failed"
         return 1
     end
     if not sudo -n chown --reference=/etc/fstab -- "$tmpfstab" 2>/dev/null
         sudo -n rm -f -- "$tmpfstab" 2>/dev/null
+        _untrack_tmpfile "$tmpfstab"
         _fail "  /etc/fstab: chown --reference failed"
         return 1
     end
@@ -4150,12 +4238,14 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         set -l _verify_out (sudo -n findmnt --verify --tab-file "$tmpfstab" 2>&1)
         if test $status -ne 0
             sudo -n rm -f -- "$tmpfstab" 2>/dev/null
+            _untrack_tmpfile "$tmpfstab"
             _fail "  /etc/fstab: findmnt --verify failed: "(printf '%s\n' $_verify_out | head -n 3 | string join '; ')
             return 1
         end
     end
     if not sudo -n mv -- "$tmpfstab" /etc/fstab
         sudo -n rm -f -- "$tmpfstab" 2>/dev/null
+        _untrack_tmpfile "$tmpfstab"
         _fail "  /etc/fstab: atomic move failed"
         return 1
     end
@@ -4179,8 +4269,8 @@ function _configure_services_preset --description "systemd-resolved restart, PKG
         if contains -- "$pkg" $_del_installed
             # Check reverse deps before removing $pkg
             if command -q pactree
-                # pactree -ru -u lists pkg+rdeps flat
-                set -l _rdeps_raw (pactree -ru "$pkg" 2>/dev/null | string match -v -- "$pkg" | string match -rv '^$')
+                # pactree -ru -u lists pkg+rdeps flat @@AUDIT@@ v4.4.26: trim leading/trailing whitespace before exact-string filter; defensive against pactree versions that may emit indentation.
+                set -l _rdeps_raw (pactree -ru "$pkg" 2>/dev/null | string trim -- | string match -v -- "$pkg" | string match -rv '^$')
                 set -l _rdeps
                 for _r in $_rdeps_raw
                     contains -- "$_r" $PKGS_DEL; and continue
@@ -4288,7 +4378,9 @@ function _configure_services_enable --description "Install cpupower-epp, batch-e
             if set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"
                 _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"; or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
             else
+                # F38: log skip reason for post-install diagnostics
                 _info "  SSH_AUTH_SOCK propagation skipped (no active user D-Bus session)"
+                _log "SSH_AUTH_SOCK_PROPAGATION_SKIPPED: no_dbus_session"
             end
         end
     else
@@ -4312,12 +4404,25 @@ function _install_configure_services --description "Enable, start, and configure
 end
 
 # Post-rebuild gate: vmlinuz/initramfs non-zero
+function _resolve_esp --description "Resolve EFI system partition path (cached); falls back to /boot. F7."
+    if set -q _RY_ESP_PATH; and test -n "$_RY_ESP_PATH"
+        echo "$_RY_ESP_PATH"
+        return 0
+    end
+    set -l _p ""
+    if command -q bootctl
+        set _p (sudo -n bootctl -p 2>/dev/null | string trim --)
+    end
+    if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
+        set _p /boot
+    end
+    set -g _RY_ESP_PATH "$_p"
+    echo "$_p"
+end
+
 function _preflight_boot_sanity --description "Verify boot artifacts are viable after rebuild"
     set -l errors 0
-    set -l _esp (sudo -n bootctl -p 2>/dev/null | string trim --)
-    if test -z "$_esp"; or not sudo -n test -d "$_esp" 2>/dev/null
-        set _esp /boot
-    end
+    set -l _esp (_resolve_esp)
 
     set -l vmlinuz_files (sudo -n find "$_esp" -maxdepth 1 -name 'vmlinuz-*' -type f -print0 2>/dev/null | string split0)
     if test (count $vmlinuz_files) -eq 0
@@ -4358,19 +4463,26 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
         for conf in $confs
             set -l linux_line (sudo -n grep -m1 '^linux ' -- "$conf" 2>/dev/null | string replace -r '^linux\s+' '' | string trim --)
             test -n "$linux_line"; or continue
-            # Reject exact dot-dot path segments.
-            if contains -- ".." (string split '/' -- "$linux_line")
-                _warn "  Loader entry has non-BLS path (contains ..): $conf"
-                continue
-            end
-            # Accept absolute paths verbatim
+            # Build candidate path: absolute lines verbatim, otherwise relative to ESP
             set -l linux_check
             if string match -q -- '/*' "$linux_line"
                 set linux_check "$linux_line"
             else
                 set linux_check "$_esp/$linux_line"
             end
-            if sudo -n test -f "$linux_check" 2>/dev/null
+            # F40: canonicalize via realpath -m (no resolve of missing parts) and require the result to live under the ESP. Closes the gap where the original `..` segment-rejection missed paths like `/boot/../etc/passwd` (no exact `..` segment after slash split if the entry author used unusual encoding) or mixed segments like `subdir/..foo` that were not rejected.
+            set -l linux_canon (command realpath -m -- "$linux_check" 2>/dev/null)
+            if test -z "$linux_canon"
+                _warn "  Loader entry path could not be canonicalized: $conf ($linux_line)"
+                continue
+            end
+            # Require canonical path to start with ESP path + '/' (or equal ESP)
+            set -l _esp_re (string escape --style=regex -- "$_esp")
+            if not string match -qr -- "^"$_esp_re"(/|\$)" -- "$linux_canon"
+                _warn "  Loader entry escapes ESP boundary: $conf -> $linux_canon"
+                continue
+            end
+            if sudo -n test -f "$linux_canon" 2>/dev/null
                 set valid_entry true
                 break
             end
@@ -4429,9 +4541,16 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     end
 
     if test "$SDBOOT_REMOVE_EXISTING" = yes
+        set -l _esp (_resolve_esp)
         set -l _wipe_marker $BOOT_WIPE_MARKER
         set -l _acknowledged false
-        set -l _existing_basenames (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
+        set -l _existing_basenames (sudo -n find "$_esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
+        # F52: defensive log of pipeline failure (gate logic still errs to refuse-wipe even on enumeration failure — empty _existing_basenames produces hash mismatch against any saved marker).
+        set -l _pre_pipe_ok true
+        for _ps_rc in $pipestatus
+            test "$_ps_rc" = 0; or set _pre_pipe_ok false
+        end
+        test "$_pre_pipe_ok" = false; and _log "BOOT_WIPE_PRECHECK_PIPE_FAIL: pipestatus="(string join ',' -- $pipestatus)
         set -l _existing_entries (count $_existing_basenames)
         # NUL-delimit hash input
         set -l _existing_hash (printf '%s\0' $_existing_basenames | sha256sum | string split ' ')[1]
@@ -4463,7 +4582,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         end
 
         if test "$_acknowledged" = false
-            _err "SDBOOT_REMOVE_EXISTING=yes will delete $_existing_entries existing /boot/loader/entries/*.conf file(s)"
+            _err "SDBOOT_REMOVE_EXISTING=yes will delete $_existing_entries existing $_esp/loader/entries/*.conf file(s)"
             _err "  Manual entries (rescue, Windows, custom kernels) will be LOST."
             _err "  To proceed (one-time): RY_INSTALL_CONFIRM_BOOT_WIPE=1 ./ry-install.fish"
             _err "  After the first successful run, marker file $_wipe_marker will record the entry count and suppress this gate until entries grow."
@@ -4471,7 +4590,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
             return $EXIT_BOOT_CRIT
         end
 
-        _warn "SDBOOT_REMOVE_EXISTING=yes — all existing /boot/loader/entries/*.conf will be deleted and regenerated."
+        _warn "SDBOOT_REMOVE_EXISTING=yes — all existing $_esp/loader/entries/*.conf will be deleted and regenerated."
         _warn "Manual entries (rescue, Windows, custom kernels) will be LOST."
     end
     if not _run sudo -n sdboot-manage gen
@@ -4487,20 +4606,21 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         return $EXIT_BOOT_CRIT
     end
 
+    set -l _esp (_resolve_esp)
     # Null-delim count: closes \n-in-filename hazard
-    set -l entry_count (count (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
+    set -l entry_count (count (sudo -n find "$_esp/loader/entries" -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
     # count(1) always emits non-negative integer
     if test "$entry_count" -gt 0
-        _ok "Boot entries: $entry_count found in /boot/loader/entries/"
+        _ok "Boot entries: $entry_count found in $_esp/loader/entries/"
     else
-        _err "No boot entries found in /boot/loader/entries/"
+        _err "No boot entries found in $_esp/loader/entries/"
         _info "  System may not boot! Check /etc/sdboot-manage.conf LINUX_OPTIONS"
         _info "  Try: sudo sdboot-manage gen --verbose"
         set -g INSTALL_HAD_ERRORS true
     end
 
-    # sudo find required: /boot may be ESP 0700 root:root
-    set -l _initrd_list (sudo -n find /boot -maxdepth 1 -type f -name 'initramfs-*.img' -print0 2>/dev/null | string split0)
+    # sudo find required: ESP may be 0700 root:root
+    set -l _initrd_list (sudo -n find "$_esp" -maxdepth 1 -type f -name 'initramfs-*.img' -print0 2>/dev/null | string split0)
     for initrd in $_initrd_list
         # stat -c %s gives exact bytes
         set -l size_b (sudo -n stat -c '%s' -- "$initrd" 2>/dev/null)
@@ -4528,13 +4648,25 @@ function _install_finalize --description "Run post-install verification, cleanup
     _progress Finalize
 
     if test "$SDBOOT_REMOVE_EXISTING" = yes
+        set -l _esp (_resolve_esp)
         set -l _wipe_marker $BOOT_WIPE_MARKER
-        # Null-delim find + split0.
-        set -l _post_basenames (sudo -n find /boot/loader/entries -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
+        # Null-delim find + split0; verify pipestatus across find→sort→split0
+        set -l _post_basenames (sudo -n find "$_esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
+        set -l _post_pipe_ok true
+        for _ps_rc in $pipestatus
+            test "$_ps_rc" = 0; or set _post_pipe_ok false
+        end
         set -l _post_count (count $_post_basenames)
-        # NUL-delimit hash input
-        set -l _post_hash (printf '%s\0' $_post_basenames | sha256sum | string split ' ')[1]
-        if test -n "$_post_count"; and string match -qr '^\d+$' -- "$_post_count"
+        # F3: refuse to write marker for empty entry-set (e.g. find failed, sudo lapsed, sdboot-manage gen produced nothing). A 0-count marker would silently mask a future legitimate wipe-confirmation gate.
+        if test "$_post_pipe_ok" = false
+            _warn "Failed to enumerate /boot/loader/entries for marker update — leaving marker untouched"
+            _log "BOOT_WIPE_MARKER_SKIP: pipestatus failure during enumeration"
+        else if test "$_post_count" -lt 1
+            _warn "No boot loader entries present after rebuild — refusing to write 0-count marker"
+            _log "BOOT_WIPE_MARKER_SKIP: post_count=0"
+        else
+            # NUL-delimit hash input — only meaningful for non-empty list
+            set -l _post_hash (printf '%s\0' $_post_basenames | sha256sum | string split ' ')[1]
             set -l _marker_dir (dirname -- "$_wipe_marker")
             set -l _marker_tmp (mktemp -p "$_marker_dir" .boot-wipe.XXXXXX 2>/dev/null)
             if test -n "$_marker_tmp"
@@ -4542,13 +4674,16 @@ function _install_finalize --description "Run post-install verification, cleanup
                 if printf '%s %s\n' "$_post_count" "$_post_hash" >"$_marker_tmp" 2>/dev/null
                     command chmod -- 600 "$_marker_tmp" 2>/dev/null
                     if command mv -f -- "$_marker_tmp" "$_wipe_marker" 2>/dev/null
+                        _untrack_tmpfile "$_marker_tmp"
                         _log "BOOT_WIPE_MARKER_UPDATED: $_wipe_marker count=$_post_count hash=$_post_hash"
                     else
                         command rm -f -- "$_marker_tmp" 2>/dev/null
+                        _untrack_tmpfile "$_marker_tmp"
                         _warn "Failed to atomically install boot-wipe marker"
                     end
                 else
                     command rm -f -- "$_marker_tmp" 2>/dev/null
+                    _untrack_tmpfile "$_marker_tmp"
                     _warn "Failed to write boot-wipe marker tmpfile"
                 end
             else
@@ -4574,15 +4709,8 @@ function _install_finalize --description "Run post-install verification, cleanup
         end
     end
 
-    set -l _profile_uses_iwd false
-    for _dst in $SYSTEM_DESTINATIONS
-        if string match -q '*nm.conf' -- "$_dst"; or string match -q '*/iwd/*' -- "$_dst"
-            set _profile_uses_iwd true
-            break
-        end
-    end
-
-    if test "$_profile_uses_iwd" = false
+    # F14: use cached _PROFILE_USES_NM rather than re-deriving locally
+    if test "$_PROFILE_USES_NM" = false
         _info "Profile does not manage iwd/NetworkManager — skipping NM restart"
     else if command -q pacman; and pacman -Qi iwd >/dev/null 2>&1
         if _is_wifi_active_route
@@ -4807,18 +4935,24 @@ end
 function _post_boot --argument-names target --description "Post-hook: rebuild boot entries (mkinitcpio + sdboot-manage)"
     _echo
     set -l _rc 0
+    set -l _failed_step ""
     if not _run sudo -n mkinitcpio -P
         _err "Mkinitcpio failed"
         set _rc 1
+        set _failed_step mkinitcpio
     else if not _run sudo -n sdboot-manage gen
         _err "Sdboot-manage gen failed"
         set _rc 1
+        set _failed_step "sdboot-manage gen"
     else if not _run sudo -n sdboot-manage update
         _err "Sdboot-manage update failed"
         set _rc 1
+        set _failed_step "sdboot-manage update"
     end
     if test $_rc -ne 0
-        _err "CRITICAL: boot rebuild cascade failed — DO NOT REBOOT"
+        # F28: name the failed step in the diagnostic log
+        _log "BOOT_REBUILD_FAILED: step='$_failed_step' target=$target"
+        _err "CRITICAL: boot rebuild cascade failed at '$_failed_step' — DO NOT REBOOT"
         # lint:ignore (user-facing shell advice)
         _info "  Fix: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update"
         return $EXIT_BOOT_CRIT
@@ -5088,7 +5222,8 @@ switch $MODE
     case '*'
 end
 
-set -l _log_base_rot "$HOME/ry-install/logs"
+# F46: derive from LOG_DIR rather than hardcoded HOME path
+set -l _log_base_rot (dirname -- "$LOG_DIR")
 if not string match -qr '^[1-9][0-9]*$' -- "$MAX_LOGS"
     set MAX_LOGS 50
 end

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.4.24-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.4.26-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -416,15 +416,16 @@ Run `--verify-static` and `--verify-runtime` before first use.
 | Atomic writes | tmp → chmod → mv (same FS); parent-dir trust checks (root-owned or uid=$UID, not symlink, not group/world-writable) |
 | Permission model | system files 0644 (world-readable configs); user files 0600 (private); 0700 on `~/ry-install/` and per-day log subdirs; 0600 on log/manifest/marker files |
 | Profile trust | External profiles validated for owner=$UID and no group/world write bit (regex `^[0-7][0145][0145]$` on `stat -c '%a'`) before `source` (v4.4.0+) |
-| Profile sanitization | KERNEL_PARAMS / MKINITCPIO_MODULES / MKINITCPIO_HOOKS reject shell + glob metachars (`*` `?` `[` `]` `{` `}`); ENV_VARS / SYSCTL_VALUES / LOGIND_IGNORE_KEYS / IWD_DRIVER_QUIRKS / SYSTEM\_/USER\_/SERVICE\_DESTINATIONS reject NUL/LF/CR; ENV_VARS enforced KEY=VALUE shape; SYSCTL_VALUES enforced key=value with non-empty value; SUDO_KEEPALIVE_INTERVAL / NM_RESTART_DELAY validated as positive integers (invalid values reset to documented defaults) |
+| Profile sanitization | KERNEL_PARAMS / MKINITCPIO_MODULES / MKINITCPIO_HOOKS / MASK / EXPECTED_SERVICES / EXPECTED_VULKAN_PKGS / PKGS_ADD / PKGS_DEL / AUR_PKGS reject shell + glob metachars (`*` `?` `[` `]` `{` `}`) (v4.4.25+); ENV_VARS / SYSCTL_VALUES / LOGIND_IGNORE_KEYS / IWD_DRIVER_QUIRKS / SYSTEM\_/USER\_/SERVICE\_DESTINATIONS reject NUL/LF/CR; ENV_VARS enforced KEY=VALUE shape and rejects SSH_AUTH_SOCK collision with managed environment.d generator (v4.4.25+); SYSCTL_VALUES enforced key=value with non-empty value; SUDO_KEEPALIVE_INTERVAL / NM_RESTART_DELAY validated as positive integers (invalid values reset to documented defaults) |
 | fstab edits | Idempotent; `findmnt --verify` before write; symlinked `/etc/fstab` rejected (v4.4.4+); **no backup** — snapshot first |
 | Root detection | **Refuses to run as root** — sudo invoked internally |
 | Instance lock | Atomic mkdir, PID verification, `flock(1)` stale reclaim (required, not fallback as of v4.4.4); sudo keepalive captures the lock-dir inode at start and aborts if a concurrent instance recreates the directory (v4.4.8+) |
 | Credentials | 9 sensitive flag patterns redacted in logs |
 | Signal handling | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
 | Cleanup invariant | Lock + tracked tmpfiles + sudo keepalive released on every exit path: signal, SIGPIPE, normal exit, sourced return, early bail (v4.4.0+); `_CLEANUP_DONE` is set before cleanup runs so signals arriving mid-cleanup short-circuit the handler instead of double-firing (v4.4.8+); `_ry_exit` and `_ry_namespace_cleanup` are idempotent across re-entry so a second bail (e.g. `--version` → root-check) cannot erase parent-shell `PATH`/`LANG`/`USER`/`fish_*` when sourced (v4.4.9+); `_load_profile` propagates the bail sentinel after each interior `_ry_exit` so source-mode unwinds immediately rather than continuing to execute against erased globals (v4.4.10+); `_ry_exit` sets `_CLEANUP_DONE` before any other sentinel so a signal arriving between sentinel sets cannot fork the cleanup path, and `_ry_do_install` polls `_RY_INSTALL_BAILING` between every install phase so source-mode signal unwinds the dispatch tree instead of continuing past the handler (v4.4.11+) |
-| Logging | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl` |
-| Boot safety | Abort on initramfs / bootloader rebuild failure; under `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1`, a failed `pacman -Syu` aborts before initramfs regeneration so torn package state cannot ship to `/boot` (v4.4.10+) |
+| Boot safety | Abort on initramfs / bootloader rebuild failure; under `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1`, a failed `pacman -Syu` aborts before initramfs regeneration so torn package state cannot ship to `/boot` (v4.4.10+); ESP path resolved via `bootctl -p` and cached, replacing hardcoded `/boot` paths so non-`/boot` ESP layouts work (v4.4.25+); loader-entry kernel paths canonicalized via `realpath -m` and required to live under the ESP boundary, replacing earlier dot-dot segment heuristic (v4.4.25+); boot-wipe acknowledgement marker refuses to write 0-count records that could mask a future legitimate gate (v4.4.25+) |
+| Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; `_log` enforces single-writer guard via `_RY_LOG_OWNER_PID` so `fish -c` subshells silently no-op rather than racing on `LOG_FILE` append (v4.4.25+); rotation base derived from `LOG_DIR` (v4.4.25+) |
+| Verify drift | `--verify-static` mirrors the generator's systemd<256 skip for `HandleSecureAttentionKey` so older systemd installs no longer falsely fail this check; checksum compare uses explicit empty-side branches instead of a `::`-joined switch (v4.4.26+) |
 | LVM-aware | Skips lvm2-monitor mask when LVM detected |
 | Orphan tracking | Manifest warns on version / profile change |
 | Source-safe | Returns via `$_RY_INSTALL_LAST_EXIT` instead of `exit` when sourced |
@@ -506,12 +507,12 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-04-26T14:23:01-0700","event":"header","version":"4.4.24","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
-{"ts":"2026-04-26T14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
-{"ts":"2026-04-26T14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
-{"ts":"2026-04-26T14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}
-{"ts":"2026-04-26T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-26T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0,"gen_fail":0}
+{"ts":"2026-04-27T14:23:01-0700","event":"header","version":"4.4.26","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"2026-04-27T14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
+{"ts":"2026-04-27T14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
+{"ts":"2026-04-27T14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}
+{"ts":"2026-04-27T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
+{"ts":"2026-04-27T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0,"gen_fail":0}
 ```
 
 </details>

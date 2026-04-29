@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.4.28-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.4.30-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -73,14 +73,14 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 |---|---|
 | CachyOS (systemd-boot, ext4) | — |
 | Fish ≥ 4.0 recommended (3.4 minimum) | `fish --version` |
-| Kernel ≥ 6.14 hard (≥ 6.18.4 recommended for gfx1151) | `uname -r` |
-| Unrestricted sudo, no `requiretty` / `tty_tickets` / `timestamp_timeout=0` | `sudo -l` |
-| Writable `$TMPDIR` (or `/tmp` if unset) | `test -w "${TMPDIR:-/tmp}"; and echo ok` |
-| GNU `coreutils` `sort -z` (NUL-delimited) | `printf '' \| sort -z </dev/null; and echo ok` |
-| GNU `coreutils` `stat -c` (BSD stat incompatible) | `stat -c '%a' / >/dev/null; and echo ok` |
-| 2 GB root + 200 MB /boot free | `df -h / /boot` |
+| Kernel ≥ 6.14 (≥ 6.18.4 rec. for gfx1151) | `uname -r` |
+| Unrestricted sudo — no `requiretty`, `tty_tickets`, or `timestamp_timeout=0` | `sudo -l` |
+| Writable `$TMPDIR` (or `/tmp`) | `test -w "${TMPDIR:-/tmp}"` |
+| GNU `sort -z` (NUL-delimited; BSD sort incompatible) | `sort -z </dev/null` |
+| GNU `stat -c` (BSD stat incompatible) | `stat -c '%a' /` |
+| 2 GB root + 200 MB `/boot` free | `df -h / /boot` |
 | Network connectivity | `curl -sf --head https://archlinux.org` |
-| `curl` (required for HTTPS preflight, validated in `_ry_check_deps`) | `command -q curl` |
+| `curl` | `command -q curl` |
 | Current BIOS | [Beelink downloads](https://dr.bee-link.cn/) |
 | paru (optional, AUR) | `command -q paru` |
 
@@ -100,8 +100,8 @@ The default `gtr9_pro` profile targets this specific machine. All kernel paramet
 
 | Component | Detail |
 |---|---|
-| BIOS | Latest available from Beelink (P110+ recommended for Strix Halo stability) |
-| CPU | Ryzen AI Max+ 395 — Zen 5, 16C/32T, 5.1 GHz, 55 W default TDP (cTDP 45–120 W, Beelink: 140 W) |
+| BIOS | Latest from Beelink — P110+ recommended |
+| CPU | Ryzen AI Max+ 395 — Zen 5, 16C/32T, 5.1 GHz · TDP 55 W (cTDP 45–120 W; Beelink: 140 W) |
 | GPU | Radeon 8060S — RDNA 3.5, gfx1151, 40 CUs |
 | RAM | 128 GB LPDDR5x-8000 |
 | WiFi | MediaTek MT7925 (WiFi 7) |
@@ -226,10 +226,10 @@ Miscellaneous kernel and userspace tuning not covered by other subsections. `cor
 
 | File | Setting |
 |---|---|
-| `logind.conf.d` | Ignore power/suspend/hibernate/reboot keys + long-press (9 keys) |
+| `logind.conf.d` | Ignore 9 power/suspend/hibernate/reboot key events |
 | `coredump.conf.d` | Storage=none · ProcessSizeMax=0 |
 | `drirc` | RADV unified VRAM heap (APU) |
-| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffers · vm.max_map_count=max · split-lock penalty suppression · 21 sysctl tunables (some override vendor 70-cachyos-settings.conf) |
+| `sysctl.d` | BBR+fq · tcp_fastopen=3 · 10 GbE buffers · vm.max_map_count=max · split-lock suppression · 21 tunables |
 | `/etc/fstab` | `noatime,lazytime,commit=10` on ext4 (in-place) |
 
 ### Environment Variables
@@ -413,21 +413,21 @@ Run `--verify-static` and `--verify-runtime` before first use.
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → chmod → mv (same FS); parent-dir trust checks (root-owned or uid=$UID, not symlink, not group/world-writable) |
-| Permission model | system files 0644 (world-readable configs); user files 0600 (private); 0700 on `~/ry-install/` and per-day log subdirs; 0600 on log/manifest/marker files |
-| Profile trust | External profiles validated for owner=$UID and no group/world write bit (regex `^[0-7][0145][0145]$` on `stat -c '%a'`) before `source` (v4.4.0+) |
-| Profile sanitization | KERNEL_PARAMS / MKINITCPIO_MODULES / MKINITCPIO_HOOKS / MASK / EXPECTED_SERVICES / EXPECTED_VULKAN_PKGS / PKGS_ADD / PKGS_DEL / AUR_PKGS reject shell + glob metachars (`*` `?` `[` `]` `{` `}`) (v4.4.25+); ENV_VARS / SYSCTL_VALUES / LOGIND_IGNORE_KEYS / IWD_DRIVER_QUIRKS / SYSTEM\_/USER\_/SERVICE\_DESTINATIONS reject NUL/LF/CR; ENV_VARS enforced KEY=VALUE shape and rejects SSH_AUTH_SOCK collision with managed environment.d generator (v4.4.25+); SYSCTL_VALUES enforced key=value with non-empty value; SUDO_KEEPALIVE_INTERVAL / NM_RESTART_DELAY validated as positive integers (invalid values reset to documented defaults) |
-| fstab edits | Idempotent; `findmnt --verify` before write; symlinked `/etc/fstab` rejected (v4.4.4+); **no backup** — snapshot first |
-| Root detection | **Refuses to run as root** — sudo invoked internally |
-| Instance lock | Atomic mkdir, PID verification, `flock(1)` stale reclaim (required, not fallback as of v4.4.4); sudo keepalive captures the lock-dir inode at start and aborts if a concurrent instance recreates the directory (v4.4.8+) |
+| Atomic writes | tmp → chmod → mv (same FS); parent dir must be root-owned or uid=$UID, not a symlink, not group/world-writable |
+| Permission model | System 0644 · user 0600 · `~/ry-install/` and per-day log dirs 0700 · log/manifest/marker files 0600 |
+| Profile trust | Owner=$UID, no group/world write bit validated before `source` |
+| Profile sanitization | Kernel/hook/mask/service/package vars reject shell+glob metachars; ENV_VARS enforced KEY=VALUE, rejects SSH_AUTH_SOCK collision; SYSCTL_VALUES enforced key=value with malformed-entry skip-guard at the generator |
+| fstab edits | Idempotent; `findmnt --verify` before write; symlinked `/etc/fstab` rejected; **no backup** — snapshot first |
+| Root detection | Refuses to run as root; sudo invoked internally |
+| Instance lock | Atomic mkdir + `flock(1)` stale reclaim; sudo keepalive aborts on concurrent-instance directory recreation |
 | Credentials | 9 sensitive flag patterns redacted in logs |
 | Signal handling | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
-| Cleanup invariant | Lock + tracked tmpfiles + sudo keepalive released on every exit path: signal, SIGPIPE, normal exit, sourced return, early bail (v4.4.0+); `_CLEANUP_DONE` is set before cleanup runs so signals arriving mid-cleanup short-circuit the handler instead of double-firing (v4.4.8+); `_ry_exit` and `_ry_namespace_cleanup` are idempotent across re-entry so a second bail (e.g. `--version` → root-check) cannot erase parent-shell `PATH`/`LANG`/`USER`/`fish_*` when sourced (v4.4.9+); `_load_profile` propagates the bail sentinel after each interior `_ry_exit` so source-mode unwinds immediately rather than continuing to execute against erased globals (v4.4.10+); `_ry_exit` sets `_CLEANUP_DONE` before any other sentinel so a signal arriving between sentinel sets cannot fork the cleanup path, and `_ry_do_install` polls `_RY_INSTALL_BAILING` between every install phase so source-mode signal unwinds the dispatch tree instead of continuing past the handler (v4.4.11+); main-dispatch flow polls `_RY_INSTALL_BAILING` immediately after each pre-dispatch exit (`_early_usage_exit`, positional-arg reject, pre-dispatch switch) so source-mode unwinds before `realpath` / `INSTALL_FILE_TARGET` / `_load_profile` / `_ry_do_install` / `_ry_do_install_file` / verify entrypoints execute against a bailed state, and the post-switch bail-guard writes a `footer interrupted` JSONL line so `_ry_exit $EXIT_LOCK` paths no longer leave header-only logs when sourced (v4.4.28+) |
-| Boot safety | Abort on initramfs / bootloader rebuild failure; under `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1`, a failed `pacman -Syu` aborts before initramfs regeneration so torn package state cannot ship to `/boot` (v4.4.10+); ESP path resolved via `bootctl -p` and cached, replacing hardcoded `/boot` paths so non-`/boot` ESP layouts work (v4.4.25+); loader-entry kernel paths canonicalized via `realpath -m` and required to live under the ESP boundary, replacing earlier dot-dot segment heuristic (v4.4.25+); boot-wipe acknowledgement marker refuses to write 0-count records that could mask a future legitimate gate (v4.4.25+) |
-| Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; `_log` enforces single-writer guard via `_RY_LOG_OWNER_PID` so `fish -c` subshells silently no-op rather than racing on `LOG_FILE` append (v4.4.25+); rotation base derived from `LOG_DIR` (v4.4.25+) |
-| Verify drift | `--verify-static` mirrors the generator's systemd<256 skip for `HandleSecureAttentionKey` so older systemd installs no longer falsely fail this check; checksum compare uses explicit empty-side branches instead of a `::`-joined switch (v4.4.26+) |
+| Cleanup invariant | Lock, tmpfiles, and sudo keepalive released on every exit path; cleanup is idempotent and re-entry-guarded; `_RY_INSTALL_BAILING` polled between all install phases so source-mode signals unwind the dispatch tree |
+| Boot safety | Aborts on initramfs/bootloader failure; failed `pacman -Syu` aborts before initramfs regeneration; ESP path resolved via `bootctl -p`; loader-entry kernel paths canonicalized and ESP-boundary-checked |
+| Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard prevents subshell races; embedded newlines correctly escaped in JSONL payloads |
+| Verify drift | `--verify-static` mirrors the generator's systemd<256 skip for `HandleSecureAttentionKey` |
 | LVM-aware | Skips lvm2-monitor mask when LVM detected |
-| Orphan tracking | Manifest warns on version / profile change |
+| Orphan tracking | Manifest warns on version/profile change |
 | Source-safe | Returns via `$_RY_INSTALL_LAST_EXIT` instead of `exit` when sourced |
 
 <details>
@@ -507,7 +507,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-04-27T14:23:01-0700","event":"header","version":"4.4.28","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"2026-04-28T14:23:01-0700","event":"header","version":"4.4.30","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
 {"ts":"2026-04-27T14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
 {"ts":"2026-04-27T14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
 {"ts":"2026-04-27T14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}

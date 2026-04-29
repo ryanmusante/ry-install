@@ -6,6 +6,72 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.4.30 - 2026-04-28
+--------------------
+
+  * Validation: `_check_env_ssh_auth_sock` now fails the deploy
+    when `_RY_SYSTEMD_VER < 232` (was warn-only, return 0).
+    systemd <232 cannot expand `${VAR}` in environment.d files,
+    so 10-environment.conf would deploy with literal
+    `${XDG_RUNTIME_DIR}/ssh-agent.socket` and ssh-agent would be
+    unreachable until manual fix. Block-and-report instead of
+    silent breakage.
+  * Dispatch: `_tmpfile_key` `$HOME→HOME` substitution is now
+    anchored. Prior unanchored `string replace` mismatched on
+    (a) trailing-slash `$HOME` (lost the / separator), and
+    (b) `$HOME` being a path-prefix of unrelated paths
+    (mid-path mangling, e.g. `$HOME=/home/ry` would substitute
+    inside `/home/ryan/...`). Failure mode was loud (dispatcher
+    rc=11) but UX-degrading on non-canonical $HOME. Fixed by
+    `string match -q -- "$HOME/*" $path` gate before substring
+    replace.
+  * Logging: 6 narrative `_log` calls normalized to KEY-style
+    events for JSONL parseability — `Checking dependencies...`
+    → `DEPS_CHECK_START`, `All dependencies satisfied` →
+    `DEPS_CHECK_OK`, `Checking network connectivity...` →
+    `NET_CHECK_START`, `Checking disk space...` →
+    `DISK_CHECK_START`, `INSTALL SYSTEM FILES` and
+    `INSTALL USER FILES` → `=== ... ===` section markers
+    (recognized by `_log` itself as event=section).
+  * Header: top-of-file DESIGN-NOTE block documents the
+    module-state convention (`set -g` writes from inside
+    functions for cross-function lifecycle/profile/counter
+    state, segregated via `_RY_*` / `_*` / SCREAMING_SNAKE_CASE
+    naming, erased in `_ry_namespace_cleanup` on exit).
+  * Style: `# lint:ignore (literal printf-arg, not a block
+    terminator)` annotation on the trailing `'end'` printf-arg
+    in `_content_HOME_.config_fish_conf.d_10-ssh-auth-sock.fish`
+    + comment block warning against `fish_indent -w` on the
+    file. fish_indent rewrites the quoted literal as bare
+    keyword (parses identically because of `\`-continuation,
+    but obscures intent).
+
+
+v4.4.29 - 2026-04-28
+--------------------
+
+  * Bootstrap: KVER major/minor parse failure paths now call
+    `_ry_exit` instead of `_pre_dispatch_exit`. The latter is
+    defined post-dispatch (L4961); fish parses top-down, so the
+    call at top-level resolved as "Unknown command" and execution
+    fell through past the intended bail point.
+  * Logging: `_json_str` rewritten in argument-mode `string
+    replace`. Pipe-mode splits stdin on `\n` before any replace
+    runs, so the `\n→\\n` step was a no-op and JSONL footer
+    payloads with embedded newlines emitted invalid JSON. Per-step
+    `string collect` re-joins the cmdsub-split list; terminal
+    `string collect --allow-empty` preserves the count=1 contract
+    for empty input.
+  * Sysctl: `_content__etc_sysctl.d_99-cachyos-sysctl.conf` adds a
+    skip-guard for malformed `SYSCTL_VALUES` entries (no `=`,
+    empty key, empty value). Skipped entries are logged via
+    `SYSCTL_SKIP_MALFORMED`. Without the guard, the validator's
+    "≥1 good line" rule let bad entries through deploy and they
+    failed at sysctl-apply with "malformed setting".
+  * Comments: multi-line `#` blocks collapsed to single lines;
+    `lint:ignore` annotations and shebang/header preserved.
+
+
 v4.4.28 - 2026-04-27
 --------------------
 

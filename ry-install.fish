@@ -1,6 +1,18 @@
 #!/usr/bin/env fish
-# ry-install v4.4.28 (2026-04-27) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.30 (2026-04-28) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
+#
+# DESIGN-NOTE (module-state convention): fish has no struct/object/module scope,
+# so cross-function state (lifecycle flags, profile config arrays, lock paths,
+# verify counters, progress state) is held in `set -g`-scoped variables with the
+# `_RY_*` / `_*` / SCREAMING_SNAKE_CASE naming convention as the namespace
+# segregator. Functions writing globals are: profile builders
+# (_ry_profile_gtr9_pro_*), lifecycle helpers (_ry_exit, _cleanup*, _acquire_lock,
+# _write_footer), error/state flags (INSTALL_HAD_ERRORS, SYSTEM_UPGRADED,
+# _RY_INSTALL_BAILING), counters (_msg → VERIFY_*, _progress → _PROG_*), and
+# the kconfig memo (_kconfig_cache → _KCONFIG_DATA/_KCONFIG_LOADED). All such
+# globals are erased in `_ry_namespace_cleanup` on exit, and re-source guard
+# (`_RY_INSTALL_LOADED`) prevents stale state on second load.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -19,7 +31,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.28"
+set -g VERSION "4.4.30"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -195,13 +207,15 @@ set -g KVER_PARTS (string split '.' -- "$KVER")
 set -g KVER_MAJOR $KVER_PARTS[1]
 if not string match -qr '^\d+$' -- "$KVER_MAJOR"
     echo "[ERR] Cannot parse kernel major version from uname -r: $KVER" >&2
-    _pre_dispatch_exit $EXIT_PREFLIGHT
+    # @@AUDIT@@ v4.4.29: was _pre_dispatch_exit; forward-ref bug, function defined L4961.
+    _ry_exit $EXIT_PREFLIGHT
 end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g KVER_MINOR (string replace -r '[^0-9].*' '' -- "$KVER_PARTS[2]")
 if test -z "$KVER_MINOR"; or not string match -qr '^\d+$' -- "$KVER_MINOR"
     echo "[ERR] Cannot parse kernel minor version from uname -r: $KVER" >&2
-    _pre_dispatch_exit $EXIT_PREFLIGHT
+    # @@AUDIT@@ v4.4.29: was _pre_dispatch_exit; forward-ref bug, see above.
+    _ry_exit $EXIT_PREFLIGHT
 end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
@@ -1249,6 +1263,10 @@ function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "E
 end
 
 function _content_HOME_.config_fish_conf.d_10-ssh-auth-sock.fish --description "Embedded content for \$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish"
+    # @@AUDIT@@ v4.4.30: do NOT run `fish_indent -w` on this file. fish_indent
+    # rewrites the trailing `'end'` printf-arg below as a bare `end` (parses
+    # identically because of `\`-continuation, but reads as a fish keyword and
+    # obscures the literal-string intent). Keep the explicit single-quoted form.
     printf '%s\n' \
         '# SSH agent socket for fish shell -- priority: forwarded > gcr > systemd' \
         'if status is-interactive; and set -q XDG_RUNTIME_DIR; and not set -q SSH_CONNECTION' \
@@ -1257,7 +1275,7 @@ function _content_HOME_.config_fish_conf.d_10-ssh-auth-sock.fish --description "
         '    else if test -S "$XDG_RUNTIME_DIR/ssh-agent.socket"' \
         '        set -gx SSH_AUTH_SOCK "$XDG_RUNTIME_DIR/ssh-agent.socket"' \
         '    end' \
-        'end'
+        'end' # lint:ignore (literal printf-arg, not a block terminator)
 end
 
 function _content_HOME_.config_environment.d_10-environment.conf --description "Embedded content for \$HOME/.config/environment.d/10-environment.conf"
@@ -1319,6 +1337,11 @@ end
 function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Embedded content for /etc/sysctl.d/99-cachyos-sysctl.conf"
     printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf; overrides net.core.netdev_max_backlog 4096 → 16384)"
     for entry in $SYSCTL_VALUES
+        # @@AUDIT@@ v4.4.29: skip-guard for malformed SYSCTL_VALUES entries; require non-empty key=value.
+        if not string match -qr '^\s*\S[^=]*=\s*\S' -- "$entry"
+            functions -q _log; and _log "SYSCTL_SKIP_MALFORMED: '$entry' (require non-empty key=value)"
+            continue
+        end
         set -l parts (string split -m1 '=' -- "$entry")
         set -l key (string trim -- "$parts[1]")
         set -l val (string trim -- "$parts[2]")
@@ -1391,8 +1414,17 @@ function _as --argument-names use_sudo --description "Prefix command with sudo o
 end
 
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path (\$HOME→HOME literal, then slash→underscore)"
-    # $HOME→HOME substitution before slash-replace keeps
-    string replace -a / _ -- (string replace -- "$HOME" HOME "$path")
+    # @@AUDIT@@ v4.4.30: anchor $HOME match — only substitute when path equals
+    # $HOME or path starts with $HOME/. Prior unanchored `string replace`
+    # mismatched on (a) trailing-slash $HOME (lost the / separator), and (b)
+    # $HOME being a path-prefix of unrelated paths (mid-path mangling).
+    set -l p $path
+    if string match -q -- "$HOME/*" "$p"
+        set p HOME(string sub -s (math (string length -- "$HOME") + 1) -- "$p")
+    else if test "$p" = "$HOME"
+        set p HOME
+    end
+    string replace -a / _ -- "$p"
 end
 
 function _untrack_tmpfile --argument-names path --description "Remove a single literal path from _TRACKED_TMPFILES (no glob)"
@@ -1450,15 +1482,15 @@ end
 
 # JSON-escape: backslash, double-quote, LF, CR, TAB
 function _json_str --description "Escape a string for safe JSON embedding"
-    # @@AUDIT@@ v4.4.16: trailing string-collect allow-empty
-    printf '%s' "$argv[1]" |
-        string replace -a \\ \\\\ |
-        string replace -a '"' '\\"' |
-        string replace -a \n '\\n' |
-        string replace -a \r '\\r' |
-        string replace -a \t '\\t' |
-        string replace -ar '[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]' '?' |
-        string collect --allow-empty
+    # @@AUDIT@@ v4.4.29: argument-mode `string replace` (was pipe-mode, \n→\\n was no-op since fish splits stdin on \n before replace); per-step `string collect` rejoins cmdsub list, terminal `string collect --allow-empty` preserves count=1 for empty input.
+    set -l s "$argv[1]"
+    set s (string replace -a -- \\ \\\\ "$s" | string collect)
+    set s (string replace -a -- '"' '\\"' "$s" | string collect)
+    set s (string replace -a -- \n '\\n' "$s" | string collect)
+    set s (string replace -a -- \r '\\r' "$s" | string collect)
+    set s (string replace -a -- \t '\\t' "$s" | string collect)
+    set s (string replace -ar -- '[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]' '?' "$s" | string collect)
+    printf '%s' "$s" | string collect --allow-empty
 end
 
 function _log_section --argument-names name --description "Emit a section-event JSONL marker"
@@ -1936,7 +1968,7 @@ function _chk_token_in --argument-names line token label --description "Verify a
 end
 
 function _ry_check_deps --description "Verify required packages are installed"
-    _log "Checking dependencies..."
+    _log "DEPS_CHECK_START"
     set -l missing
     # F19+F20+F56: hard deps.
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
@@ -1963,13 +1995,13 @@ function _ry_check_deps --description "Verify required packages are installed"
         set -g INSTALL_HAD_ERRORS true
         return 1
     end
-    _log "All dependencies satisfied"
+    _log "DEPS_CHECK_OK"
     return 0
 end
 
 # Test HTTPS connectivity to archlinux.org & DNS
 function _ry_check_network --description "Verify network connectivity (single HEAD + raw-IP fallback)"
-    _log "Checking network connectivity..."
+    _log "NET_CHECK_START"
     # @@AUDIT@@ v4.4.14: curl is a reqd dep
     if curl -sfI --connect-timeout 3 --max-time 5 https://archlinux.org >/dev/null 2>&1
         _ok "Network connectivity: OK"
@@ -2007,7 +2039,7 @@ function _check_avail --argument-names path divisor unit crit warn --description
 end
 
 function _ry_check_disk_space --description "Verify sufficient free disk space for installation"
-    _log "Checking disk space..."
+    _log "DISK_CHECK_START"
     _check_avail /     1073741824 GB $ROOT_AVAIL_CRIT $ROOT_AVAIL_WARN; or return 1
     _check_avail /boot 1048576    MB $BOOT_SPACE_CRIT $BOOT_SPACE_WARN; or return 1
     return 0
@@ -2272,7 +2304,13 @@ function _check_env_ssh_auth_sock --description "Phase 3: environment.d has SSH_
         set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
     end
     if test -n "$_RY_SYSTEMD_VER"; and test "$_RY_SYSTEMD_VER" -lt 232
-        _warn "  $dst: systemd $_RY_SYSTEMD_VER < 232; \${XDG_RUNTIME_DIR} expansion not supported"
+        # @@AUDIT@@ v4.4.30: was _warn — promoted to _fail. systemd <232
+        # cannot expand ${VAR} in environment.d files, so the deployed
+        # 10-environment.conf would leave SSH_AUTH_SOCK as the literal
+        # string `${XDG_RUNTIME_DIR}/ssh-agent.socket` (silent breakage,
+        # ssh-agent unreachable). Block the deploy instead of proceeding.
+        _fail "  $dst: systemd $_RY_SYSTEMD_VER < 232; \${XDG_RUNTIME_DIR} expansion not supported (upgrade systemd or pin SSH_AUTH_SOCK to /run/user/\$UID/ssh-agent.socket)"
+        return 1
     end
     return 0
 end
@@ -4030,7 +4068,7 @@ function _install_system_files --description "Deploy all embedded config files t
     _progress Configuration
     _echo
     _info "Installing system configuration files..."
-    _log "INSTALL SYSTEM FILES"
+    _log "=== INSTALL SYSTEM FILES ==="
     set -l _had_failure false
     for dst in $SYSTEM_DESTINATIONS
         if not _ry_install_file "$dst" true
@@ -4046,7 +4084,7 @@ function _install_system_files --description "Deploy all embedded config files t
 
     _echo
     _info "Installing user configuration files..."
-    _log "INSTALL USER FILES"
+    _log "=== INSTALL USER FILES ==="
     set -l _had_failure false
     for dst in $USER_DESTINATIONS
         if not _ry_install_file "$dst" false

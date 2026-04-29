@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.30 (2026-04-28) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.31 (2026-04-28) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
 #
 # DESIGN-NOTE (module-state convention): fish has no struct/object/module scope,
@@ -22,8 +22,9 @@ if set -q _RY_INSTALL_LOADED
     end
 end
 # Reset bail sentinel + last-exit on fresh load so a 2nd
-set -e _RY_INSTALL_BAILING 2>/dev/null
-set -e _RY_INSTALL_LAST_EXIT 2>/dev/null
+# @@AUDIT@@ v4.4.31: bare `set -e` (no 2>/dev/null); writes nothing to stderr on unset, redirect was cosmetic.
+set -e _RY_INSTALL_BAILING
+set -e _RY_INSTALL_LAST_EXIT
 set -g _RY_PRE_GLOBALS (set --names -g)
 set -g _RY_INSTALL_LOADED true
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -31,7 +32,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.30"
+set -g VERSION "4.4.31"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -56,8 +57,9 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
     set -g _RY_INSTALL_BAILING true
     set -l _was_sourced "$_RY_INSTALL_SOURCED"
     functions -q _do_cleanup; and _do_cleanup
-    _ry_namespace_cleanup bail
+    # @@AUDIT@@ v4.4.31: erase handlers before namespace cleanup; mirrors dispatch-bottom order (L5230-5232).
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
+    _ry_namespace_cleanup bail
     if test "$_was_sourced" = true
         return $code
     end
@@ -107,9 +109,9 @@ if not test -w "$_ry_tmpprobe_dir"
 end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 
-# GNU sort -z probe
-if not printf '' | command sort -z 2>/dev/null
-    echo "[ERR] GNU sort with -z required (busybox/BSD sort detected)" >&2
+# GNU sort -z probe — @@AUDIT@@ v4.4.31: feed NUL-delimited tokens out of order; bare empty-input probe accepts BSD/busybox sort.
+if not printf 'b\0a\0' | command sort -z 2>/dev/null | tr -d '\0' | grep -q '^ab$'
+    echo "[ERR] GNU sort with NUL-delimited sort (-z) required (busybox/BSD sort detected)" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
@@ -348,7 +350,8 @@ function _write_footer --argument-names exit_code extra_key --description "Appen
     end
     set -l _gen_fail 0
     set -q VERIFY_GEN_FAIL; and set _gen_fail $VERIFY_GEN_FAIL
-    printf '{"ts":"%s","event":"footer","mode":"%s","exit_code":%s,"pass":%s,"fail":%s,"warn":%s,"gen_fail":%s%s}\n' \
+    # @@AUDIT@@ v4.4.31: %d (was %s) for JSON number fields; %s emits invalid JSON on empty value.
+    printf '{"ts":"%s","event":"footer","mode":"%s","exit_code":%d,"pass":%d,"fail":%d,"warn":%d,"gen_fail":%d%s}\n' \
         "$_ts" "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" "$_gen_fail" "$_extra" >>"$LOG_FILE" 2>/dev/null
 end
 
@@ -1038,14 +1041,15 @@ function _load_profile --description "Determine, load, and validate the active p
             _pre_dispatch_exit $EXIT_USAGE
             test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
         end
-        set -l _pp (string split ' ' -- "$_po")
+        # @@AUDIT@@ v4.4.31: --no-empty tolerates double-space stat output (GNU emits one space; defensive against PATH hijack).
+        set -l _pp (string split -n ' ' -- "$_po")
         if test "$_pp[1]" != "$_MY_UID"
             _err "Profile not owned by current user (uid $_pp[1] != $_MY_UID): $profile_path"
             _pre_dispatch_exit $EXIT_USAGE
             test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
         end
-        # Reject group/other write bits
-        if not string match -qr '^[0-7][0145][0145]$' -- "$_pp[2]"
+        # Reject group/other write bits — @@AUDIT@@ v4.4.31: optional leading digit accepts 4-digit modes (setuid/setgid/sticky); bits irrelevant for fish source.
+        if not string match -qr '^[0-7]?[0-7][0145][0145]$' -- "$_pp[2]"
             _err "Profile mode too permissive (mode=$_pp[2]; group/world write bit set): $profile_path"
             _pre_dispatch_exit $EXIT_USAGE
             test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
@@ -1263,10 +1267,7 @@ function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "E
 end
 
 function _content_HOME_.config_fish_conf.d_10-ssh-auth-sock.fish --description "Embedded content for \$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish"
-    # @@AUDIT@@ v4.4.30: do NOT run `fish_indent -w` on this file. fish_indent
-    # rewrites the trailing `'end'` printf-arg below as a bare `end` (parses
-    # identically because of `\`-continuation, but reads as a fish keyword and
-    # obscures the literal-string intent). Keep the explicit single-quoted form.
+    # @@AUDIT@@ v4.4.30: do NOT run `fish_indent -w` on this file; rewrites trailing quoted `'end'` printf-arg as bare keyword.
     printf '%s\n' \
         '# SSH agent socket for fish shell -- priority: forwarded > gcr > systemd' \
         'if status is-interactive; and set -q XDG_RUNTIME_DIR; and not set -q SSH_CONNECTION' \
@@ -1414,10 +1415,7 @@ function _as --argument-names use_sudo --description "Prefix command with sudo o
 end
 
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path (\$HOME→HOME literal, then slash→underscore)"
-    # @@AUDIT@@ v4.4.30: anchor $HOME match — only substitute when path equals
-    # $HOME or path starts with $HOME/. Prior unanchored `string replace`
-    # mismatched on (a) trailing-slash $HOME (lost the / separator), and (b)
-    # $HOME being a path-prefix of unrelated paths (mid-path mangling).
+    # @@AUDIT@@ v4.4.30: anchor $HOME match via `string match -q -- "$HOME/*"`; unanchored replace mismatched trailing-slash $HOME and path-prefix collisions.
     set -l p $path
     if string match -q -- "$HOME/*" "$p"
         set p HOME(string sub -s (math (string length -- "$HOME") + 1) -- "$p")
@@ -2304,11 +2302,7 @@ function _check_env_ssh_auth_sock --description "Phase 3: environment.d has SSH_
         set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
     end
     if test -n "$_RY_SYSTEMD_VER"; and test "$_RY_SYSTEMD_VER" -lt 232
-        # @@AUDIT@@ v4.4.30: was _warn — promoted to _fail. systemd <232
-        # cannot expand ${VAR} in environment.d files, so the deployed
-        # 10-environment.conf would leave SSH_AUTH_SOCK as the literal
-        # string `${XDG_RUNTIME_DIR}/ssh-agent.socket` (silent breakage,
-        # ssh-agent unreachable). Block the deploy instead of proceeding.
+        # @@AUDIT@@ v4.4.30: was _warn, promoted to _fail; systemd <232 cannot expand ${VAR} in environment.d so SSH_AUTH_SOCK would deploy as literal string.
         _fail "  $dst: systemd $_RY_SYSTEMD_VER < 232; \${XDG_RUNTIME_DIR} expansion not supported (upgrade systemd or pin SSH_AUTH_SOCK to /run/user/\$UID/ssh-agent.socket)"
         return 1
     end
@@ -4167,10 +4161,13 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
         '    $4 = out' \
         '    print' \
         '}' | string collect)
-    if not command awk "$_awk_script" /etc/fstab | sudo -n tee -- "$tmpfstab" >/dev/null
+    # @@AUDIT@@ v4.4.31: capture $pipestatus; `if not pipeline` tests only last stage so awk silent-fail + tee rc=0 yields corrupt fstab.
+    command awk "$_awk_script" /etc/fstab | sudo -n tee -- "$tmpfstab" >/dev/null
+    set -l _fstab_ps $pipestatus
+    if test "$_fstab_ps[1]" -ne 0; or test "$_fstab_ps[2]" -ne 0
         sudo -n rm -f -- "$tmpfstab" 2>/dev/null
         _untrack_tmpfile "$tmpfstab"
-        _fail "  /etc/fstab: awk/tee rewrite failed"
+        _fail "  /etc/fstab: awk/tee rewrite failed (pipestatus=$_fstab_ps[1],$_fstab_ps[2])"
         return 1
     end
     if not sudo -n chmod --reference=/etc/fstab -- "$tmpfstab" 2>/dev/null
@@ -4364,8 +4361,19 @@ function _resolve_esp --description "Resolve EFI system partition path (cached);
     if command -q bootctl
         set _p (sudo -n bootctl -p 2>/dev/null | string trim --)
     end
+    # @@AUDIT@@ v4.4.31: findmnt vfat fallback over /efi, /boot/efi, /boot before defaulting to /boot; logs ESP_RESOLVE_FALLBACK.
+    if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
+        for _candidate in /efi /boot/efi /boot
+            set -l _fs (command findmnt -no FSTYPE -- "$_candidate" 2>/dev/null)
+            if test "$_fs" = vfat
+                set _p "$_candidate"
+                break
+            end
+        end
+    end
     if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
         set _p /boot
+        functions -q _log; and _log "ESP_RESOLVE_FALLBACK: bootctl/findmnt failed, defaulting to /boot"
     end
     set -g _RY_ESP_PATH "$_p"
     echo "$_p"
@@ -4503,8 +4511,12 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         end
         test "$_pre_pipe_ok" = false; and _log "BOOT_WIPE_PRECHECK_PIPE_FAIL: pipestatus="(string join ',' -- $pipestatus)
         set -l _existing_entries (count $_existing_basenames)
-        # NUL-delimit hash input
-        set -l _existing_hash (printf '%s\0' $_existing_basenames | sha256sum | string split ' ')[1]
+        # @@AUDIT@@ v4.4.31: zero-entry guard; printf '%s\0' on empty list emits one NUL, sha256sum returns wrong-semantics hash.
+        set -l _existing_hash ""
+        if test "$_existing_entries" -gt 0
+            # NUL-delimit hash input
+            set _existing_hash (printf '%s\0' $_existing_basenames | sha256sum | string split ' ')[1]
+        end
         if set -q RY_INSTALL_CONFIRM_BOOT_WIPE; and test "$RY_INSTALL_CONFIRM_BOOT_WIPE" = 1
             set _acknowledged true
             _log "BOOT_WIPE_ACK: env var RY_INSTALL_CONFIRM_BOOT_WIPE=1 entries=$_existing_entries hash=$_existing_hash"

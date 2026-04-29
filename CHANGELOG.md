@@ -6,6 +6,53 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.4.31 - 2026-04-28
+--------------------
+
+  * Fstab: `_install_fstab_opts` awk/tee pipeline gates on
+    `$pipestatus[1]` and `$pipestatus[2]`. Fish `if not pipeline`
+    tests only the last stage's rc; an awk silent-fail with
+    tee rc=0 would let `findmnt --verify` pass against an empty
+    fstab and `mv` it into place.
+  * Cleanup: `_ry_exit` erases `_cleanup` / `_cleanup_pipe` /
+    `_cleanup_on_exit` before `_ry_namespace_cleanup bail`;
+    mirrors dispatch-bottom order (L5230-5232). Reversed order
+    let SIGINT firing after `_CLEANUP_DONE` was cleared but
+    before handler erasure re-enter `_cleanup`.
+  * Boot: `_resolve_esp` adds `findmnt -no FSTYPE` vfat
+    fallback over `/efi`, `/boot/efi`, `/boot` before
+    defaulting to bare `/boot`; logs `ESP_RESOLVE_FALLBACK`.
+    Prior code silently targeted `/boot` even on systems with
+    `/efi` as the actual ESP when `bootctl -p` returned empty.
+  * Boot: `_install_rebuild_boot` zero-entry guard before
+    `_existing_hash`. Empty `$_existing_basenames` yields
+    `printf '%s\0'` → one NUL → deterministic non-empty hash
+    with no semantic meaning for a zero-entry set. Mirrors
+    the post-write `_post_count -lt 1` guard.
+  * Preflight: GNU `sort -z` probe rewritten to feed two
+    NUL-separated tokens out of order (`b\0a\0`) and verify
+    the join equals `ab`. Prior probe (`printf '' | sort -z`)
+    accepted modern BSD sort and some busybox builds.
+  * Profile: `_load_profile` mode regex
+    `^[0-7]?[0-7][0145][0145]$` accepts 4-digit modes (4755,
+    2755, 1755). Special bits irrelevant — fish source is not
+    setuid-honored. Prior 3-digit-only regex rejected such
+    files with the misleading "group/world write bit set".
+  * Profile: `_load_profile` `string split -n ' '`
+    (--no-empty) on `stat -c '%u %a'` output; tolerates
+    double-space from non-standard stat impls.
+  * Logging: `_write_footer` printf format string switches
+    `exit_code` / `pass` / `fail` / `warn` / `gen_fail` from
+    `%s` to `%d`; `%s` would emit invalid JSON on empty value.
+  * Style: bare `set -e _RY_INSTALL_BAILING` and
+    `set -e _RY_INSTALL_LAST_EXIT` at re-source guard;
+    `2>/dev/null` redirect was cosmetic (Fish 3.4+ writes
+    nothing to stderr on unset-erase).
+  * Comments: multi-line `#` blocks collapsed to single lines;
+    lint annotations and shebang/header preserved.
+  * Header: top-of-file version updated to v4.4.31.
+
+
 v4.4.30 - 2026-04-28
 --------------------
 

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.4.30-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.4.31-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -76,7 +76,7 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 | Kernel ≥ 6.14 (≥ 6.18.4 rec. for gfx1151) | `uname -r` |
 | Unrestricted sudo — no `requiretty`, `tty_tickets`, or `timestamp_timeout=0` | `sudo -l` |
 | Writable `$TMPDIR` (or `/tmp`) | `test -w "${TMPDIR:-/tmp}"` |
-| GNU `sort -z` (NUL-delimited; BSD sort incompatible) | `sort -z </dev/null` |
+| GNU `sort -z` (NUL-delimited; BSD/busybox sort incompatible) | `printf 'b\0a\0' \| sort -z \| tr -d '\0'` (expect `ab`) |
 | GNU `stat -c` (BSD stat incompatible) | `stat -c '%a' /` |
 | 2 GB root + 200 MB `/boot` free | `df -h / /boot` |
 | Network connectivity | `curl -sf --head https://archlinux.org` |
@@ -415,15 +415,15 @@ Run `--verify-static` and `--verify-runtime` before first use.
 |---|---|
 | Atomic writes | tmp → chmod → mv (same FS); parent dir must be root-owned or uid=$UID, not a symlink, not group/world-writable |
 | Permission model | System 0644 · user 0600 · `~/ry-install/` and per-day log dirs 0700 · log/manifest/marker files 0600 |
-| Profile trust | Owner=$UID, no group/world write bit validated before `source` |
+| Profile trust | Owner=$UID, no group/world write bit validated before `source` (3- and 4-digit modes accepted; setuid/setgid/sticky bits ignored as fish source is not setuid-honored) |
 | Profile sanitization | Kernel/hook/mask/service/package vars reject shell+glob metachars; ENV_VARS enforced KEY=VALUE, rejects SSH_AUTH_SOCK collision; SYSCTL_VALUES enforced key=value with malformed-entry skip-guard at the generator |
-| fstab edits | Idempotent; `findmnt --verify` before write; symlinked `/etc/fstab` rejected; **no backup** — snapshot first |
+| fstab edits | Idempotent; `findmnt --verify` before write; awk/tee pipeline guarded via `$pipestatus` (both stages) before mv; symlinked `/etc/fstab` rejected; **no backup** — snapshot first |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + `flock(1)` stale reclaim; sudo keepalive aborts on concurrent-instance directory recreation |
 | Credentials | 9 sensitive flag patterns redacted in logs |
 | Signal handling | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
 | Cleanup invariant | Lock, tmpfiles, and sudo keepalive released on every exit path; cleanup is idempotent and re-entry-guarded; `_RY_INSTALL_BAILING` polled between all install phases so source-mode signals unwind the dispatch tree |
-| Boot safety | Aborts on initramfs/bootloader failure; failed `pacman -Syu` aborts before initramfs regeneration; ESP path resolved via `bootctl -p`; loader-entry kernel paths canonicalized and ESP-boundary-checked |
+| Boot safety | Aborts on initramfs/bootloader failure; failed `pacman -Syu` aborts before initramfs regeneration; ESP path resolved via `bootctl -p` with `findmnt` vfat fallback (logs `ESP_RESOLVE_FALLBACK` to JSONL); loader-entry kernel paths canonicalized and ESP-boundary-checked |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard prevents subshell races; embedded newlines correctly escaped in JSONL payloads |
 | Verify drift | `--verify-static` mirrors the generator's systemd<256 skip for `HandleSecureAttentionKey` |
 | LVM-aware | Skips lvm2-monitor mask when LVM detected |
@@ -507,7 +507,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-04-28T14:23:01-0700","event":"header","version":"4.4.30","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"2026-04-28T14:23:01-0700","event":"header","version":"4.4.31","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
 {"ts":"2026-04-27T14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
 {"ts":"2026-04-27T14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
 {"ts":"2026-04-27T14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}

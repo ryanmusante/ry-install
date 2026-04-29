@@ -6,6 +6,18 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.4.33 - 2026-04-29
+--------------------
+
+  * Profile: `SYSTEM_DESTINATIONS` quoting normalised. Two paths
+    (`/etc/kernel/cmdline`, `/etc/drirc`) were bareword while the
+    other ten were double-quoted. Cosmetic only — fish parses
+    barewords identically when they contain no metacharacters or
+    `$`-expansion — but the visual asymmetry surfaced in audits.
+    All twelve entries now uniformly double-quoted.
+  * Header: top-of-file version updated to v4.4.33.
+
+
 v4.4.32 - 2026-04-28
 --------------------
 

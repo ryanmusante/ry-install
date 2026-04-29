@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.32 (2026-04-28) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.33 (2026-04-29) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
 #
 # Module-state convention: fish has no module scope, so cross-function state
@@ -25,7 +25,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.32"
+set -g VERSION "4.4.33"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -603,7 +603,7 @@ function _ry_profile_gtr9_pro_destinations --description "gtr9_pro: managed file
     # 1:1 to _ry_get_file_content()
     set -g SYSTEM_DESTINATIONS \
         "/boot/loader/loader.conf" \
-        /etc/kernel/cmdline \
+        "/etc/kernel/cmdline" \
         "/etc/sdboot-manage.conf" \
         "/etc/mkinitcpio.conf" \
         "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
@@ -611,7 +611,7 @@ function _ry_profile_gtr9_pro_destinations --description "gtr9_pro: managed file
         "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
         "/etc/iwd/main.conf" \
         "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        /etc/drirc \
+        "/etc/drirc" \
         "/etc/sysctl.d/99-cachyos-sysctl.conf"
 
     set -g USER_DESTINATIONS \

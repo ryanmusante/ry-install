@@ -6,6 +6,38 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.4.32 - 2026-04-28
+--------------------
+
+  * Header: top-of-file module-state note collapsed from 12 lines
+    to 4. Architectural rationale (no module scope → `set -g`
+    namespacing, `_ry_namespace_cleanup` on exit, re-source guard
+    `_RY_INSTALL_LOADED`) preserved; per-function-category list
+    and example function names dropped (covered by per-function
+    descriptions).
+  * Comments: 5 truncated mid-sentence comments completed —
+    `_ry_exit` idempotency-guard short-circuits via
+    `_RY_INSTALL_BAILING`; `_CLEANUP_DONE` set first to gate
+    signal-handler re-entry; `/etc/drirc` RADV unified VRAM
+    heap lets UMA APUs treat system RAM as unified VRAM;
+    progress-bar section header notes terminal scroll-region
+    escapes; `_PROG_TOTAL` derived from `count $_PROG_STEPS`,
+    not hardcoded.
+  * README: Safety & Reliability section trimmed 107 → 95 lines.
+    Three implementation-detail rows removed (verify-static
+    HandleSecureAttentionKey skip, lvm2-monitor mask skip on
+    LVM-detected systems, source-mode last-exit return path).
+    Five table cells tightened (Profile trust, Profile
+    sanitization, fstab edits, Cleanup invariant, Boot safety)
+    by removing nested parentheticals. Log Format event table
+    folded from 16 rows to 6 categorical groupings; sample
+    JSONL output retained. Inner Environment Variables
+    subsection renamed to Runtime Variables to resolve heading
+    collision with Configuration Reference > Environment
+    Variables.
+  * Header: top-of-file version updated to v4.4.32.
+
+
 v4.4.31 - 2026-04-28
 --------------------
 

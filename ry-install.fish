@@ -1,18 +1,11 @@
 #!/usr/bin/env fish
-# ry-install v4.4.31 (2026-04-28) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.32 (2026-04-28) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
 #
-# DESIGN-NOTE (module-state convention): fish has no struct/object/module scope,
-# so cross-function state (lifecycle flags, profile config arrays, lock paths,
-# verify counters, progress state) is held in `set -g`-scoped variables with the
-# `_RY_*` / `_*` / SCREAMING_SNAKE_CASE naming convention as the namespace
-# segregator. Functions writing globals are: profile builders
-# (_ry_profile_gtr9_pro_*), lifecycle helpers (_ry_exit, _cleanup*, _acquire_lock,
-# _write_footer), error/state flags (INSTALL_HAD_ERRORS, SYSTEM_UPGRADED,
-# _RY_INSTALL_BAILING), counters (_msg → VERIFY_*, _progress → _PROG_*), and
-# the kconfig memo (_kconfig_cache → _KCONFIG_DATA/_KCONFIG_LOADED). All such
-# globals are erased in `_ry_namespace_cleanup` on exit, and re-source guard
-# (`_RY_INSTALL_LOADED`) prevents stale state on second load.
+# Module-state convention: fish has no module scope, so cross-function state
+# uses `set -g` globals namespaced with `_RY_*` / `_*` / SCREAMING_SNAKE_CASE.
+# All such globals are erased in `_ry_namespace_cleanup` on exit; re-source
+# guard `_RY_INSTALL_LOADED` prevents stale state on second load.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -21,7 +14,7 @@ if set -q _RY_INSTALL_LOADED
         exit 1
     end
 end
-# Reset bail sentinel + last-exit on fresh load so a 2nd
+# Reset bail sentinel + last-exit on fresh load
 # @@AUDIT@@ v4.4.31: bare `set -e` (no 2>/dev/null); writes nothing to stderr on unset, redirect was cosmetic.
 set -e _RY_INSTALL_BAILING
 set -e _RY_INSTALL_LAST_EXIT
@@ -32,7 +25,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.31"
+set -g VERSION "4.4.32"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -43,7 +36,7 @@ set -g EXIT_DRIFT 10
 
 function _ry_exit --argument-names code --description "Source-safe exit: set bail sentinel and return when sourced, exit otherwise"
     test -z "$code"; and set code 0
-    # IDEMPOTENCY GUARD: 2nd _ry_exit short-circuits via
+    # IDEMPOTENCY GUARD: 2nd _ry_exit short-circuits via _RY_INSTALL_BAILING flag
     if set -q _RY_INSTALL_BAILING; and test "$_RY_INSTALL_BAILING" = true
         set -g _RY_INSTALL_LAST_EXIT $code
         if test "$_RY_INSTALL_SOURCED" = true
@@ -51,7 +44,7 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
         end
         exit $code
     end
-    # Order matters: _CLEANUP_DONE first closes race where
+    # Order matters: _CLEANUP_DONE set first to gate signal-handler re-entry
     set -g _CLEANUP_DONE true
     set -g _RY_INSTALL_LAST_EXIT $code
     set -g _RY_INSTALL_BAILING true
@@ -1324,7 +1317,7 @@ function _content__etc_systemd_system_cpupower-epp.service --description "Embedd
 end
 
 function _content__etc_drirc --description "Embedded content for /etc/drirc"
-    # RADV unified VRAM heap: prevents UMA APU games from
+    # RADV unified VRAM heap: lets UMA APUs treat system RAM as unified VRAM
     printf '%s\n' '<driconf>' \
         '  <device>' \
         '    <application name="Default">' \
@@ -1623,10 +1616,10 @@ function _verify_summary --description "Print verification pass/fail/warn summar
     end
 end
 
-# Progress bar: stationary bottom-row rendering via
+# Progress bar: stationary bottom-row rendering via terminal scroll-region escapes
 
 function _progress_init --description "Open scroll region; draw initial bar"
-    # @@AUDIT@@ v4.4.14: _PROG_TOTAL derived from
+    # @@AUDIT@@ v4.4.14: _PROG_TOTAL derived from count $_PROG_STEPS, not hardcoded
     set -g _PROG_STEPS Preflight Packages Configuration Services Boot Finalize
     set -g _PROG_CUR 0
     set -g _PROG_TOTAL (count $_PROG_STEPS)

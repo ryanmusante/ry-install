@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.4.31-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.4.32-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -415,20 +415,17 @@ Run `--verify-static` and `--verify-runtime` before first use.
 |---|---|
 | Atomic writes | tmp → chmod → mv (same FS); parent dir must be root-owned or uid=$UID, not a symlink, not group/world-writable |
 | Permission model | System 0644 · user 0600 · `~/ry-install/` and per-day log dirs 0700 · log/manifest/marker files 0600 |
-| Profile trust | Owner=$UID, no group/world write bit validated before `source` (3- and 4-digit modes accepted; setuid/setgid/sticky bits ignored as fish source is not setuid-honored) |
-| Profile sanitization | Kernel/hook/mask/service/package vars reject shell+glob metachars; ENV_VARS enforced KEY=VALUE, rejects SSH_AUTH_SOCK collision; SYSCTL_VALUES enforced key=value with malformed-entry skip-guard at the generator |
-| fstab edits | Idempotent; `findmnt --verify` before write; awk/tee pipeline guarded via `$pipestatus` (both stages) before mv; symlinked `/etc/fstab` rejected; **no backup** — snapshot first |
+| Profile trust | Owner=$UID and no group/world write bit validated before `source` |
+| Profile sanitization | Profile-supplied vars reject shell/glob metachars; `ENV_VARS` and `SYSCTL_VALUES` enforced as `KEY=VALUE` |
+| fstab edits | Idempotent; `findmnt --verify` before write; symlinked `/etc/fstab` rejected; **no backup** — snapshot first |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + `flock(1)` stale reclaim; sudo keepalive aborts on concurrent-instance directory recreation |
 | Credentials | 9 sensitive flag patterns redacted in logs |
 | Signal handling | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
-| Cleanup invariant | Lock, tmpfiles, and sudo keepalive released on every exit path; cleanup is idempotent and re-entry-guarded; `_RY_INSTALL_BAILING` polled between all install phases so source-mode signals unwind the dispatch tree |
-| Boot safety | Aborts on initramfs/bootloader failure; failed `pacman -Syu` aborts before initramfs regeneration; ESP path resolved via `bootctl -p` with `findmnt` vfat fallback (logs `ESP_RESOLVE_FALLBACK` to JSONL); loader-entry kernel paths canonicalized and ESP-boundary-checked |
+| Cleanup invariant | Lock, tmpfiles, and sudo keepalive released on every exit path; cleanup is idempotent and re-entry-guarded |
+| Boot safety | Aborts on initramfs/bootloader failure; loader-entry kernel paths canonicalized and ESP-boundary-checked |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard prevents subshell races; embedded newlines correctly escaped in JSONL payloads |
-| Verify drift | `--verify-static` mirrors the generator's systemd<256 skip for `HandleSecureAttentionKey` |
-| LVM-aware | Skips lvm2-monitor mask when LVM detected |
 | Orphan tracking | Manifest warns on version/profile change |
-| Source-safe | Returns via `$_RY_INSTALL_LAST_EXIT` instead of `exit` when sourced |
 
 <details>
 <summary><b>Exit Codes</b></summary>
@@ -450,7 +447,7 @@ Codes are designed for scripting — non-zero always means something actionable.
 </details>
 
 <details>
-<summary><b>Environment Variables (script behavior)</b></summary>
+<summary><b>Runtime Variables</b></summary>
 
 Shell variables that modify script behavior at runtime — distinct from the gaming/Proton variables written to the system. Set them in the invoking shell before running; they are not persisted anywhere by the installer.
 
@@ -484,21 +481,12 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 
 | Event | Key Fields | Emitted |
 |---|---|---|
-| `header` | version, profile, mode, verbose, argv | Run start (argv is a JSON array preserving argument boundaries) |
-| `footer` | mode, exit_code, pass, fail, warn, gen_fail (+ `interrupted` / `cleanup_exit` flags) | Run end |
-| `ok` | data | Verification pass |
-| `fail` | data | Verification failure |
-| `warn` | data | Non-fatal issue |
-| `err` | data | Blocking error |
-| `info` | data | Progress / non-actionable status |
-| `echo` | data | Plain message (no level prefix) |
-| `bug` | data | Internal assertion failure (invalid level or arg count) |
-| `prog_step_start` | data (`[N/M] label`) | Install phase advance |
-| `prog_step_end` | data (`name=X secs=N`) | Install step completed |
-| `prog_done` | data (`elapsed_secs=N`) | Install run completed |
-| `run` | data | Command executed |
-| `stderr` | data | Captured stderr |
+| `header` / `footer` | version, profile, mode, argv (header); exit_code, pass/fail/warn counts (footer) | Run start / end |
+| `ok` / `fail` / `warn` / `err` / `info` | data | Verification results and status |
+| `prog_step_start` / `prog_step_end` / `prog_done` | data (`[N/M] label`, `name=X secs=N`, `elapsed_secs=N`) | Phase progression |
+| `run` / `stderr` | data | Subprocess execution and captured stderr |
 | `section` | data | Phase boundary |
+| `bug` | data | Internal assertion failure |
 
 > ~70 additional prefix-routed event types (`lock_acquired`, `manifest_written`, `pkg_remove_ok`, `ntsync_check`, etc.) follow the same `{"ts":TS,"event":NAME,"data":STR}` schema and are queryable with jq.
 
@@ -507,7 +495,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-04-28T14:23:01-0700","event":"header","version":"4.4.31","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"2026-04-28T14:23:01-0700","event":"header","version":"4.4.32","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
 {"ts":"2026-04-27T14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
 {"ts":"2026-04-27T14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
 {"ts":"2026-04-27T14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}

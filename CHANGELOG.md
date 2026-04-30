@@ -6,8 +6,91 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
-v4.4.35 - 2026-04-29
+v4.4.36 - 2026-04-29
 --------------------
+
+  * Bootstrap: fish version gate raised from 3.4 to 3.6.
+    Three required language/builtin features were added in
+    3.5/3.6: omitted-end slice `[N..]` (3.6, 5 sites),
+    `string match -rg` / `--groups-only` (3.5, 6 sites), and
+    reliable `set $pipestatus` capture immediately after a
+    cmdsub'd pipeline (3.6, #6820/#6998, 4 sites). Pre-3.6
+    runs would silently malfunction rather than refuse to
+    start. Error message updated to "fish 3.6+ required".
+  * Validation: `_chk_grep` strips comment-only lines via
+    `grep -v '^[[:space:]]*#'` upstream of the pattern grep,
+    and uses `-qwF` (whole-word) for plain tokens versus `-qF`
+    (substring) for `=`-shaped k=v patterns. Prior `grep -qF`
+    was substring-only across all callers, so a `# token`
+    comment-line mention satisfied verify-static checks for
+    plain-token verifiers (SSH_AUTH_SOCK, ssh-agent,
+    radv_enable_unified_heap_on_apu). Pipestatus[2] is
+    captured to preserve the original 3-state semantics
+    (0=found, 1=missing, ≥2=grep error).
+  * Validation: `_ry_check_kernel_version` now switches all
+    five `_ntsync_state` returns. Prior if/else only treated
+    `unavailable` as a warning; `loaded_nodev` (module loaded
+    but `/dev/ntsync` missing) and `missing` (kernel ≥6.14
+    capable but module not loaded) reported as `_ok`,
+    masking partial/absent ntsync on a capable kernel.
+    Mirrors the runtime-side switch at `_verify_runtime_env`.
+  * IO: `_installed_bytes` adopts capture-then-emit pattern
+    (mirror `_content_bytes` v4.4.29). Prior streamed cat
+    output before checking pipestatus, so a partial-write
+    mid-read silently emitted truncated bytes to callers
+    using `set -l x (_installed_bytes …)`. Final emit uses
+    `string collect --no-trim-newlines --allow-empty` plus
+    explicit `return 0` to preserve the original empty-file
+    status-0 contract.
+  * AUR: `_install_aur_packages` now returns 1 when any
+    per-package install fails after the batch retry, not
+    just on the no-paru path. Prior the per-package failure
+    branch reached `return 0`, so the caller's
+    `or set -g INSTALL_HAD_ERRORS true` was a dead branch
+    in that case. Function still sets the global directly,
+    so behaviour was correct; the contract is now
+    consistent with peer `_install_*` functions.
+  * UX: progress bar now renders `Aborted at N%` instead of
+    `100% Done` when finalisation is skipped on a
+    boot-critical failure. New `_PROG_FINALIZED_SKIP`
+    sentinel is set by `_ry_do_install` before calling
+    `_progress Finalize skip` and read by `_progress_done`.
+  * UX: new `_progress_on_winch` SIGWINCH handler re-anchors
+    the pinned bar after terminal resize. `_PROG_ROWS` was
+    previously captured once at `_progress_init`, so a
+    resize during install left the bar at the old row.
+    Handler is registered alongside `_cleanup`,
+    `_cleanup_pipe`, `_cleanup_on_exit` and erased on every
+    bail/exit/cleanup path.
+  * Validation: profile-name regex `^[a-z0-9][a-z0-9_-]*$`
+    permitted unbounded length and a `_` prefix that
+    collides with the internal `_ry_profile_*` namespace.
+    Length is now capped at 64 chars and names starting
+    with `_` are rejected with `EXIT_USAGE`.
+  * Boot: `_progress_done` log line now includes the
+    `skip=` field for post-mortem inspection.
+  * Validation: `systemd-analyze` boot-time regex tightened
+    from `^[0-9.]+$` to `^\d+(\.\d+)?$`. `printf %.0f` on a
+    multi-dot input still extracted a numeric prefix, so the
+    boot-time threshold check ran on a wrong-but-bounded
+    number rather than crashing; now it skips cleanly.
+  * Robustness: keepalive subshell args `$my_pid` and
+    `$SUDO_KEEPALIVE_INTERVAL` are now quoted at the
+    `fish -c` invocation site. Both are validated as positive
+    integers upstream so the change is defensive only.
+  * Hygiene: `_pre_dispatch_log_cleanup` and
+    `_pre_dispatch_exit` now use a bounded 3-level
+    `rmdir LOG_DIR; rmdir logs/; rmdir ry-install/` chain
+    instead of `rmdir -p`. Behaviour matches original
+    (rmdir refuses non-empty, so `$HOME` is never touched);
+    intent is now explicit and bounded to this run's
+    footprint.
+  * Comments: dispatch-time `case '*'` empty body annotated
+    to flag verify-static, verify-runtime, and check as
+    read-only modes that intentionally skip lock acquisition.
+
+
+
 
   * Docs: README Prerequisites table simplified — the
     Verification command column is dropped and the two

@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.35 (2026-04-29) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.36 (2026-04-29) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
 #
 # Module-state convention: fish has no module scope, so cross-function state
@@ -25,7 +25,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.35"
+set -g VERSION "4.4.36"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -51,7 +51,7 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
     set -l _was_sourced "$_RY_INSTALL_SOURCED"
     functions -q _do_cleanup; and _do_cleanup
     # @@AUDIT@@ v4.4.31: erase handlers before namespace cleanup; mirrors dispatch-bottom order (L5230-5232).
-    functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
+    functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null
     _ry_namespace_cleanup bail
     if test "$_was_sourced" = true
         return $code
@@ -88,8 +88,8 @@ if not string match -qr '^\d+$' -- "$parts[1]"
     _ry_exit $EXIT_PREFLIGHT
 end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-if test "$parts[1]" -lt 3; or begin; test "$parts[1]" -eq 3; and test "$parts[2]" -lt 4; end
-    echo "[ERR] fish 3.4+ required (found: $fish_ver)" >&2
+if test "$parts[1]" -lt 3; or begin; test "$parts[1]" -eq 3; and test "$parts[2]" -lt 6; end
+    echo "[ERR] fish 3.6+ required (found: $fish_ver)" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
@@ -562,7 +562,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     if test "$_RY_INSTALL_SOURCED" = true
         set -g _RY_INSTALL_LAST_EXIT $_sig_exit
         set -g _RY_INSTALL_BAILING true
-        functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
+        functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null
         return $_sig_exit
     end
     exit $_sig_exit
@@ -576,7 +576,7 @@ function _cleanup_pipe --on-signal PIPE --description "Signal handler: clean up 
     if test "$_RY_INSTALL_SOURCED" = true
         set -g _RY_INSTALL_LAST_EXIT 141
         set -g _RY_INSTALL_BAILING true
-        functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
+        functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null
         return 141
     end
     exit 141
@@ -1016,6 +1016,18 @@ function _load_profile --description "Determine, load, and validate the active p
         end
     end
 
+    # @@AUDIT@@ v4.4.36: cap length (regex permitted unbounded) and reject
+    # leading underscore (reserved for internal _ry_profile_ functions).
+    if test (string length -- "$name") -gt 64
+        _err "Profile name too long (>64 chars): '$name'"
+        _pre_dispatch_exit $EXIT_USAGE
+        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+    end
+    if string match -q '_*' -- "$name"
+        _err "Profile names starting with '_' are reserved: '$name'"
+        _pre_dispatch_exit $EXIT_USAGE
+        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+    end
     if not string match -qr '^[a-z0-9][a-z0-9_-]*$' -- "$name"
         _err "Invalid profile name: '$name' (must be lowercase alphanumeric, starting with [a-z0-9])"
         _pre_dispatch_exit $EXIT_USAGE
@@ -1441,15 +1453,23 @@ function _is_system_dst --argument-names dst --description "True if dst is a sys
 end
 
 function _installed_bytes --argument-names dst --description "Raw bytes of installed file (empty on read failure; sudo-aware)"
+    # @@AUDIT@@ v4.4.36: capture-then-emit (mirror _content_bytes L2378–2384).
+    # Was streaming cat output before pipestatus check, so partial-write
+    # masked read failure for callers using cmdsub `set -l x (_installed_bytes)`.
+    set -l _bytes
     if _is_system_dst "$dst"
         sudo -n test -r "$dst" 2>/dev/null; or return 1
-        sudo -n cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines
-        test $pipestatus[1] -eq 0
-        return
+        set _bytes (sudo -n cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines)
+        set -l _ps $pipestatus
+        test $_ps[1] -eq 0; or return 1
+    else
+        test -r "$dst"; or return 1
+        set _bytes (command cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines)
+        set -l _ps $pipestatus
+        test $_ps[1] -eq 0; or return 1
     end
-    test -r "$dst"; or return 1
-    command cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines
-    test $pipestatus[1] -eq 0
+    printf '%s' "$_bytes" | string collect --no-trim-newlines --allow-empty
+    return 0
 end
 
 function _should_skip_iwd --argument-names dst --description "True if dst is iwd/NM-related and iwd is not installed (memoized)"
@@ -1678,13 +1698,23 @@ function _progress_redraw --argument-names name current --description "Redraw pi
         $_PROG_ROWS "$bar" $pct "$name" >&2
 end
 
-function _progress_done --description "Finalize progress bar to 100% and log elapsed seconds"
+function _progress_done --description "Finalize progress bar (or hold position on skip-cascade) and log elapsed seconds"
     set -l elapsed (math (date +%s) - $_PROG_START)
-    _log "PROG_DONE: elapsed_secs=$elapsed"
+    set -l _skip false
+    set -q _PROG_FINALIZED_SKIP; and test "$_PROG_FINALIZED_SKIP" = true; and set _skip true
+    _log "PROG_DONE: elapsed_secs=$elapsed skip=$_skip"
     test "$_PROG_PINNED" = true; or return 0
     printf '\e[r' >&2
-    printf '\e[%d;1H\e[K[%s] 100%% Done (%ds)\n' \
-        $_PROG_ROWS (string repeat -n 40 '█') $elapsed >&2
+    if test "$_skip" = true
+        # @@AUDIT@@ v4.4.36: skip-cascade (boot-critical) — hold at last
+        # completed pct, don't claim 100% Done. UX honesty.
+        set -l pct (math "floor($_PROG_CUR * 100 / $_PROG_TOTAL)")
+        printf '\e[%d;1H\e[K[%s] %3d%% Aborted (%ds)\n' \
+            $_PROG_ROWS (string repeat -n 40 '░') $pct $elapsed >&2
+    else
+        printf '\e[%d;1H\e[K[%s] 100%% Done (%ds)\n' \
+            $_PROG_ROWS (string repeat -n 40 '█') $elapsed >&2
+    end
     set -g _PROG_PINNED false
 end
 
@@ -1692,6 +1722,18 @@ function _progress_teardown --description "Clear pinned progress bar and reset s
     test "$_PROG_PINNED" = true; or return 0
     printf '\e[r\e[%d;1H\e[K\n' $_PROG_ROWS >&2
     set -g _PROG_PINNED false
+end
+
+function _progress_on_winch --on-signal WINCH --description "Re-anchor progress bar on terminal resize"
+    # @@AUDIT@@ v4.4.36: re-read tput lines on SIGWINCH; without this, a
+    # terminal resize during install leaves the bar stranded at the old row.
+    test "$_PROG_PINNED" = true; or return 0
+    set -l _new_rows (tput lines 2>/dev/null)
+    string match -qr '^\d+$' -- "$_new_rows"; or return 0
+    test "$_new_rows" -lt 10; and return 0
+    set -g _PROG_ROWS $_new_rows
+    printf '\e[1;%dr' (math $_PROG_ROWS - 1) >&2
+    _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
 end
 
 # INVARIANT: argv[1] must be a PATH-resolvable external
@@ -1926,6 +1968,11 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     end
 
     # F8: grep exit codes are 0=found, 1=not-found, ≥2=error.
+    # @@AUDIT@@ v4.4.36: strip comment-only lines before grep so a # mention
+    # of a token doesn't satisfy "configured" semantics. Plain tokens use
+    # -wF (whole-word) per docstring; k=v patterns use -F (substring).
+    set -l _grep_flags -qF
+    string match -q '*=*' -- "$pattern"; or set _grep_flags -qwF
     set -l _grep_rc 1
     if test "$is_boot" = true
         if not command -q sudo
@@ -1936,11 +1983,11 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
             _fail "  $label: FILE NOT FOUND"
             return 1
         end
-        sudo -n grep -qF -- "$pattern" "$file" 2>/dev/null
-        set _grep_rc $status
+        sudo -n grep -v '^[[:space:]]*#' -- "$file" 2>/dev/null | command grep $_grep_flags -- "$pattern" 2>/dev/null
+        set _grep_rc $pipestatus[2]
     else
-        command grep -qF -- "$pattern" "$file" 2>/dev/null
-        set _grep_rc $status
+        command grep -v '^[[:space:]]*#' -- "$file" 2>/dev/null | command grep $_grep_flags -- "$pattern" 2>/dev/null
+        set _grep_rc $pipestatus[2]
     end
 
     switch $_grep_rc
@@ -2076,10 +2123,20 @@ function _ry_check_kernel_version --description "Verify running kernel version m
     end
 
     set -l _ns (_ntsync_state)
-    if test "$_ns" = unavailable
-        _warn "Kernel $kver: ntsync not available (expected builtin or module)"
-    else
-        _ok "Kernel $kver: ntsync $_ns"
+    # @@AUDIT@@ v4.4.36: switch all 5 returns; was if/else only handling
+    # `unavailable`, so `loaded_nodev` and `missing` reported as OK despite
+    # indicating partial or absent ntsync on a capable kernel.
+    switch $_ns
+        case unavailable
+            _warn "Kernel $kver: ntsync not available (expected builtin or module)"
+        case loaded_nodev
+            _warn "Kernel $kver: ntsync module loaded but /dev/ntsync missing"
+        case missing
+            _warn "Kernel $kver: ntsync module not loaded (kernel ≥6.14 supports it; check MODULES list)"
+        case builtin loaded
+            _ok "Kernel $kver: ntsync $_ns"
+        case '*'
+            _warn "Kernel $kver: ntsync unknown state '$_ns'"
     end
 
     # CHK-03: Kernel 6.19.0 black screen regression on Strix Halo (gfx1151); 6.19.1+ fixes; warn if exact match.
@@ -3805,7 +3862,7 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
 
         _log "BOOT_TIME_CHECK: parsing systemd-analyze output"
         set -l total_sec (printf '%s\n' "$boot_time" | string match -r -- '= ([0-9.]+)s' | tail -n 1)
-        if test -n "$total_sec"; and string match -qr '^[0-9.]+$' -- "$total_sec"
+        if test -n "$total_sec"; and string match -qr '^\d+(\.\d+)?$' -- "$total_sec"
             if set -q BOOT_TIME_TARGET; and test -n "$BOOT_TIME_TARGET"
                 set -l target $BOOT_TIME_TARGET
                 set -l time_int (LC_ALL=C printf "%.0f" "$total_sec" 2>/dev/null)
@@ -3935,7 +3992,7 @@ function _install_preflight --description "Run all preflight checks before insta
         '    command sleep $argv[3] 2>/dev/null' \
         'end' | string collect)
     # @@AUDIT@@ v4.4.14: _RY_NO_LOG=1 is a belt-and-braces
-    env _RY_NO_LOG=1 fish -c "$_ka_script" -- $my_pid "$LOCK_DIR" $SUDO_KEEPALIVE_INTERVAL </dev/null >/dev/null 2>&1 &
+    env _RY_NO_LOG=1 fish -c "$_ka_script" -- "$my_pid" "$LOCK_DIR" "$SUDO_KEEPALIVE_INTERVAL" </dev/null >/dev/null 2>&1 &
     set -g SUDO_KEEPALIVE_PID $last_pid
     if not kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
         _warn "Sudo keepalive process failed to start — long installs may require re-auth"
@@ -4051,15 +4108,21 @@ function _install_aur_packages --description "Install AUR packages via paru"
         set -g INSTALL_HAD_ERRORS true
         return 1
     end
+    # @@AUDIT@@ v4.4.36: track per-package failure flag and return non-zero
+    # so caller's `or set INSTALL_HAD_ERRORS true` reflects per-pkg failures
+    # (was always returning 0 from this branch — caller's `or` was dead).
+    set -l _had_fail false
     if not _run paru -S --needed --noconfirm -- $AUR_PKGS
         _warn "AUR batch install failed — retrying per-package to identify failures"
         for pkg in $AUR_PKGS
             if not _run paru -S --needed --noconfirm -- "$pkg"
                 _warn "AUR install failed: $pkg"
                 set -g INSTALL_HAD_ERRORS true
+                set _had_fail true
             end
         end
     end
+    test "$_had_fail" = true; and return 1
     return 0
 end
 
@@ -4772,6 +4835,8 @@ function _ry_do_install --description "Full installation: preflight, packages, c
         _err "Boot-critical failure — skipping finalization"
         # lint:ignore (user-facing shell advice)
         _err "Fix boot issue first: sudo mkinitcpio -P && sudo sdboot-manage gen"
+        # @@AUDIT@@ v4.4.36: signal _progress_done to render 'Aborted' instead of '100% Done'
+        set -g _PROG_FINALIZED_SKIP true
         _progress Finalize skip
     else
         if not _install_finalize
@@ -5017,12 +5082,20 @@ end
 
 function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/dir (no exit; for caller-managed return paths)"
     command rm -f -- "$LOG_FILE" 2>/dev/null
-    command rmdir -p -- "$LOG_DIR" 2>/dev/null
+    # @@AUDIT@@ v4.4.36: bounded rmdir chain (was -p, walked unboundedly).
+    # Three explicit levels: $LOG_DIR (logs/YYYY-MM-DD) → logs/ → ry-install/.
+    # rmdir refuses non-empty so HOME is never touched.
+    command rmdir -- "$LOG_DIR" 2>/dev/null
+    command rmdir -- (dirname -- "$LOG_DIR") 2>/dev/null
+    command rmdir -- "$HOME/ry-install" 2>/dev/null
 end
 
 function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: remove pre-dispatch log file/dir, then exit"
     command rm -f -- "$LOG_FILE" 2>/dev/null
-    command rmdir -p -- "$LOG_DIR" 2>/dev/null
+    # @@AUDIT@@ v4.4.36: bounded rmdir chain (matches _pre_dispatch_log_cleanup).
+    command rmdir -- "$LOG_DIR" 2>/dev/null
+    command rmdir -- (dirname -- "$LOG_DIR") 2>/dev/null
+    command rmdir -- "$HOME/ry-install" 2>/dev/null
     _ry_exit $code
 end
 
@@ -5194,6 +5267,8 @@ switch $MODE
             _ry_exit $EXIT_LOCK
         end
     case '*'
+        # @@AUDIT@@ v4.4.36: verify-static, verify-runtime, check are read-only
+        # modes — no instance lock acquired (no destinations are mutated).
 end
 if test "$_RY_INSTALL_BAILING" = true
     _write_footer "$_RY_INSTALL_LAST_EXIT" interrupted
@@ -5252,7 +5327,7 @@ end
 if test "$_RY_INSTALL_SOURCED" = true
     set -g _RY_INSTALL_LAST_EXIT $_RY_EXIT_CODE
     _do_cleanup
-    functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null
+    functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null
     _ry_namespace_cleanup
     return $_RY_EXIT_CODE
 end

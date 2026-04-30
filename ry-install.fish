@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.34 (2026-04-29) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.35 (2026-04-29) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
 #
 # Module-state convention: fish has no module scope, so cross-function state
@@ -25,7 +25,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.34"
+set -g VERSION "4.4.35"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2

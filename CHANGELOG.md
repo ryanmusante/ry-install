@@ -6,6 +6,17 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.4.35 - 2026-04-29
+--------------------
+
+  * Docs: README Prerequisites table simplified — the
+    Verification command column is dropped and the two
+    GNU coreutils rows (`sort -z`, `stat -c`) folded into
+    a single Coreutils row. Same requirements; runtime
+    checks remain covered by `--check` and the pre-flight
+    block immediately below the table. No code change.
+
+
 v4.4.34 - 2026-04-29
 --------------------
 

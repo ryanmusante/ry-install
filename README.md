@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.4.34-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.4.35-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.4%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -69,20 +69,18 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 
 ## Prerequisites
 
-| Requirement | Verification |
+| Requirement | Detail |
 |---|---|
-| CachyOS (systemd-boot, ext4) | — |
-| Fish ≥ 4.0 recommended (3.4 minimum) | `fish --version` |
-| Kernel ≥ 6.14 (≥ 6.18.4 rec. for gfx1151) | `uname -r` |
-| Unrestricted sudo — no `requiretty`, `tty_tickets`, or `timestamp_timeout=0` | `sudo -l` |
-| Writable `$TMPDIR` (or `/tmp`) | `test -w "${TMPDIR:-/tmp}"` |
-| GNU `sort -z` (NUL-delimited; BSD/busybox sort incompatible) | `printf 'b\0a\0' \| sort -z \| tr -d '\0'` (expect `ab`) |
-| GNU `stat -c` (BSD stat incompatible) | `stat -c '%a' /` |
-| 2 GB root + 200 MB `/boot` free | `df -h / /boot` |
-| Network connectivity | `curl -sf --head https://archlinux.org` |
-| `curl` | `command -q curl` |
-| Current BIOS | [Beelink downloads](https://dr.bee-link.cn/) |
-| paru (optional, AUR) | `command -q paru` |
+| CachyOS | systemd-boot, ext4 |
+| Fish | ≥ 4.0 recommended (3.4 minimum) |
+| Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
+| Sudo | Unrestricted — no `requiretty`, `tty_tickets`, or `timestamp_timeout=0` |
+| `$TMPDIR` (or `/tmp`) | Writable |
+| Coreutils | GNU `sort` and `stat` (BSD/busybox incompatible) |
+| Free space | 2 GB on `/`, 200 MB on `/boot` |
+| Network + `curl` | Required |
+| BIOS | Current — [Beelink downloads](https://dr.bee-link.cn/) |
+| paru | Optional, for AUR |
 
 **Recommended pre-flight steps:**
 
@@ -495,7 +493,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-04-29T14:23:01-0700","event":"header","version":"4.4.34","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"2026-04-29T14:23:01-0700","event":"header","version":"4.4.35","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
 {"ts":"2026-04-27T14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
 {"ts":"2026-04-27T14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
 {"ts":"2026-04-27T14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}

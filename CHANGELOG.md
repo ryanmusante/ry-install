@@ -6,6 +6,57 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.4.34 - 2026-04-29
+--------------------
+
+  * Bootstrap: `_RY_INSTALL_LOADED` is now set before the
+    `_RY_PRE_GLOBALS` snapshot so `_ry_namespace_cleanup`
+    preserves it as caller-API state. Prior order let cleanup
+    wipe the flag on every exit path; the re-source guard at
+    L9 therefore never fired after a normal sourced run, only
+    after abnormal termination.
+  * Boot: `_install_rebuild_boot` boot-wipe precheck captures
+    `$pipestatus` into `_pre_ps` immediately after the
+    find/sort/split0 cmdsub. The late
+    `BOOT_WIPE_PRECHECK_PIPE_FAIL` log emit now reports the
+    captured pipeline status rather than `$pipestatus` after
+    the loop body's inner `test` commands have clobbered it.
+    Detection itself was correct (fish does not clobber
+    `$pipestatus` on `set -l`), but the log message was
+    misleading. Same shape as the v4.4.31 fstab pipestatus
+    capture.
+  * Boot: `_install_finalize` post-rebuild marker write
+    captures `$pipestatus` into `_post_ps` for defensive
+    consistency. No behavioural change at this site (no late
+    `$pipestatus` reference today); guards against future
+    maintainers inserting a clobberer between the cmdsub and
+    the loop.
+  * Validation: `_chk_perms` stat-output split now uses
+    `string split -n ' '`; tolerates double-space `%a %U:%G`
+    output from non-standard stat impls. Mirrors the v4.4.31
+    fix in `_load_profile`.
+  * Manifest: `_manifest_write` gates `printf >"$tmp"` on
+    exit status. Prior code silently installed an empty or
+    truncated manifest if the redirect failed. Failure path
+    now removes the tmpfile, untracks it, warns, and returns 1.
+  * Validation: `_verify_unit_content` gates `printf >"$tmp"`
+    on exit status. Prior silent failure surfaced as a
+    misleading `systemd-analyze verify` syntax error.
+  * Comments: `_atomic_write_file` post-write
+    symlink-then-chmod TOCTOU window documented as irreducible
+    in userspace fish without O_NOFOLLOW-aware syscalls.
+  * Comments: `NO_COLOR` deviation rationale expanded to cite
+    the spec and the partial `env -u NO_COLOR` case;
+    `_resolve_esp` fallback cache stickiness for the run
+    documented inline; the two captions above each were merged
+    into the marker comment to keep one logical comment per
+    physical line.
+  * Comments: 13 truncated mid-sentence comments completed
+    (lines 153, 249, 261, 633, 1151, 1398, 1656, 2078, 2089,
+    3340, 3351, 4393, 4849).
+  * Header: top-of-file version updated to v4.4.34.
+
+
 v4.4.33 - 2026-04-29
 --------------------
 

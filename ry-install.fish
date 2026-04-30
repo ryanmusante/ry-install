@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.33 (2026-04-29) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.4.34 (2026-04-29) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
 #
 # Module-state convention: fish has no module scope, so cross-function state
@@ -14,18 +14,18 @@ if set -q _RY_INSTALL_LOADED
         exit 1
     end
 end
-# Reset bail sentinel + last-exit on fresh load
-# @@AUDIT@@ v4.4.31: bare `set -e` (no 2>/dev/null); writes nothing to stderr on unset, redirect was cosmetic.
+# @@AUDIT@@ v4.4.31: reset bail sentinel + last-exit on fresh load — bare `set -e` (no 2>/dev/null), redirect was cosmetic, writes nothing to stderr on unset.
 set -e _RY_INSTALL_BAILING
 set -e _RY_INSTALL_LAST_EXIT
-set -g _RY_PRE_GLOBALS (set --names -g)
+# @@AUDIT@@ v4.4.34: set _RY_INSTALL_LOADED before _RY_PRE_GLOBALS snapshot so namespace_cleanup preserves it as caller-API state; without this, the re-source guard at L9 never fires after a normal sourced run because cleanup wipes the flag.
 set -g _RY_INSTALL_LOADED true
+set -g _RY_PRE_GLOBALS (set --names -g)
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     set -g _RY_INSTALL_SOURCED true
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.33"
+set -g VERSION "4.4.34"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -73,7 +73,7 @@ function _ry_namespace_cleanup --argument-names mode --description "Erase script
 end
 
 set -g QUIET true
-# NO_COLOR: honored when set AND non-empty; or TERM=dumb
+# @@AUDIT@@ v4.4.34: NO_COLOR honored when set AND non-empty (or TERM=dumb); deviation from no-color.org which suppresses whenever NO_COLOR is *present* — non-empty matches GNU coreutils' --color=auto family and treats NO_COLOR= (set, empty) as "not requested", avoiding false-suppress when callers `env -u NO_COLOR` partially.
 set -l _no_color_env (set -q NO_COLOR; and printf '%s' "$NO_COLOR")
 set -g NO_COLOR false
 test -n "$_no_color_env"; and set -g NO_COLOR true
@@ -150,7 +150,7 @@ test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g LOG_DIR "$HOME/ry-install/logs/$DATE_LABEL"
 # Boot-wipe acknowledgement marker
 set -g BOOT_WIPE_MARKER "$HOME/ry-install/.boot-wipe-acknowledged"
-# umask 0077 on mkdir keeps logs/ & logs/YYYY-MM-DD/ at
+# umask 0077 on mkdir keeps logs/ and logs/YYYY-MM-DD/ at mode 0700; restored to caller umask after.
 set -l _prev_mkdir_umask (umask)
 umask 0077
 command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
@@ -246,7 +246,7 @@ function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_
     return 0
 end
 
-# LVM probe; sudo -n pvs then lsblk fallback for
+# LVM probe; sudo -n pvs then lsblk fallback for non-privileged callers (pvs requires CAP_SYS_ADMIN).
 function _detect_lvm --description "Return 0 (LVM present) or 1 (no LVM detected)"
     if command -q sudo; and sudo -n true 2>/dev/null
         set -l _pvs_output (command timeout 10 sudo -n pvs --noheadings 2>/dev/null | string trim --)
@@ -258,7 +258,7 @@ function _detect_lvm --description "Return 0 (LVM present) or 1 (no LVM detected
     return 1
 end
 
-# Cross-check KERNEL_PARAMS against /proc/config.gz to
+# Cross-check KERNEL_PARAMS against /proc/config.gz to flag params that reference kernel features not compiled in.
 function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference features not compiled into running kernel"
     # Only useful if /proc/config.gz exists
     if not test -f /proc/config.gz
@@ -630,7 +630,7 @@ function _ry_profile_gtr9_pro_boot --description "gtr9_pro: systemd-boot loader.
     set -g LOADER_EDITOR no
     set -g SDBOOT_DEFAULT_ENTRY manual
     set -g SDBOOT_OVERWRITE yes
-    # REMOVE_EXISTING=yes deletes ALL boot entries before
+    # REMOVE_EXISTING=yes deletes ALL boot entries before regenerating; gated by BOOT_WIPE_MARKER acknowledgement.
     set -g SDBOOT_REMOVE_EXISTING yes
     set -g SDBOOT_REMOVE_OBSOLETE yes
 end
@@ -1146,9 +1146,15 @@ function _manifest_write --description "Record current profile destinations for 
     end
     # Track tmp for cleanup
     set -ga _TRACKED_TMPFILES "$tmp"
-    printf '%s\n' "v$VERSION" "$PROFILE_NAME" $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS >"$tmp"
+    # @@AUDIT@@ v4.4.34: gate printf redirect; silent corruption masks orphan detection on next run.
+    if not printf '%s\n' "v$VERSION" "$PROFILE_NAME" $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS >"$tmp" 2>/dev/null
+        command rm -f -- "$tmp" 2>/dev/null
+        _untrack_tmpfile "$tmp"
+        _warn "Failed to write manifest (printf redirect failed)"
+        return 1
+    end
     if not command chmod -- 600 "$tmp" 2>/dev/null
-        # FS w/o mode bits would silently leave a
+        # FS w/o mode bits (e.g., FAT) would silently leave a world-readable manifest; warn but continue.
         _warn "Failed to chmod manifest tmpfile to 600 — manifest may be world-readable"
         _log "MANIFEST_CHMOD_FAIL: tmp=$tmp"
     end
@@ -1395,7 +1401,7 @@ end
 
 # Tmpfile key: slash→underscore of dst path
 function _as --argument-names use_sudo --description "Prefix command with sudo or command based on use_sudo flag"
-    # arity guard; caller error previously invoked sudo or
+    # arity guard; caller error previously invoked sudo or command with no command-name argument, which silently no-op'd.
     if test (count $argv) -lt 2
         _log "BUG: _as called without command (argv=$argv)"
         return 2
@@ -1653,7 +1659,7 @@ function _progress --argument-names name outcome --description "Advance progress
     end
     set -g _PROG_STEP_NAME $name
     set -g _PROG_STEP_START $now
-    # @@AUDIT@@ v4.4.14: opt `outcome` arg recorded in
+    # @@AUDIT@@ v4.4.14: opt outcome arg recorded in PROG_STEP_START JSONL event for post-mortem step-state inspection.
     set -l _outcome_marker
     test -n "$outcome"; and set _outcome_marker " outcome=$outcome"
     _log "PROG_STEP_START: [$_PROG_CUR/$_PROG_TOTAL] $name$_outcome_marker"
@@ -1852,7 +1858,8 @@ function _chk_perms --argument-names path expected_perms expected_owner use_sudo
         _fail "  $path: stat failed (file disappeared or unreadable)"
         return 1
     end
-    set -l _parts (string split ' ' -- "$_po")
+    # @@AUDIT@@ v4.4.34: --no-empty tolerates double-space stat output; mirrors v4.4.31 fix in _load_profile (L1037).
+    set -l _parts (string split -n ' ' -- "$_po")
     if test "$_parts[1]" != "$expected_perms"; or test "$_parts[2]" != "$expected_owner"
         _fail "  $path: $_parts[1] $_parts[2] (expected: $expected_perms $expected_owner)"
         return 1
@@ -2075,7 +2082,7 @@ function _ry_check_kernel_version --description "Verify running kernel version m
         _ok "Kernel $kver: ntsync $_ns"
     end
 
-    # CHK-03: Kernel 6.19.0 black screen regression on
+    # CHK-03: Kernel 6.19.0 black screen regression on Strix Halo (gfx1151); 6.19.1+ fixes; warn if exact match.
     if test "$major" -eq 6; and test "$minor" -eq 19
         if test "$kver_patch" = 0
             _warn "Kernel 6.19.0: black screen regression on Strix Halo (CachyOS #23042)"
@@ -2086,7 +2093,7 @@ function _ry_check_kernel_version --description "Verify running kernel version m
     return 0
 end
 
-# Config validation pipeline: pre-flight checks on
+# Config validation pipeline: pre-flight checks on embedded content before deploy (mkinitcpio, env.d, unit syntax).
 
 # Validate HOOKS ordering & hook existence
 function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS ordering and presence"
@@ -2187,7 +2194,13 @@ function _verify_unit_content --argument-names dst --description "Verify systemd
         return 1
     end
     set -ga _TRACKED_TMPFILES "$tmp"
-    printf '%s\n' $content >"$tmp"
+    # @@AUDIT@@ v4.4.34: gate printf redirect; silent write failure would route through systemd-analyze and surface as a misleading "syntax error".
+    if not printf '%s\n' $content >"$tmp" 2>/dev/null
+        command rm -f -- "$tmp" 2>/dev/null
+        _untrack_tmpfile "$tmp"
+        _fail "  $dst: failed to write unit tmpfile for verification"
+        return 1
+    end
     _verify_unit_syntax "$tmp" (basename -- "$dst")
     set -l rc $status
     command rm -f -- "$tmp" 2>/dev/null
@@ -2474,6 +2487,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         end
     end
 
+    # @@AUDIT@@ v4.4.34: best-effort symlink guard — irreducible TOCTOU window between the post-write test -L above and the chmod below; cannot be eliminated in userspace fish without O_NOFOLLOW-aware syscalls. Symlink check immediately precedes chmod; this is the smallest possible window.
     if not _run $_sp chmod -- $perms "$tmpfile"
         _as $use_sudo rm -f -- "$tmpfile" 2>/dev/null
         _untrack_tmpfile "$tmpfile"
@@ -3337,7 +3351,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
     set -l sys_units cpupower-epp.service \
         fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service \
         NetworkManager.service
-    # Static assertion: sys_units positionally coupled to
+    # Static assertion: sys_units positionally coupled to $parsed[1..5] indices below; count drift fails fast.
     if test (count $sys_units) -ne 5
         _fail "  sys_units count drift: actual="(count $sys_units)" expected=5 — update parsed[N] indices below"
         return 1
@@ -3348,7 +3362,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
         set -a parsed "$_v[1]:$_v[2]:$_v[3]"
     end
 
-    # MAINTENANCE: parsed[] is positionally coupled to
+    # MAINTENANCE: parsed[] is positionally coupled to $sys_units; indices [1..5] map 1:1. Update both together.
 
     set -l rec (string split ':' -- "$parsed[1]")
     if test "$rec[1]" = not-found
@@ -4368,6 +4382,7 @@ function _resolve_esp --description "Resolve EFI system partition path (cached);
         set _p /boot
         functions -q _log; and _log "ESP_RESOLVE_FALLBACK: bootctl/findmnt failed, defaulting to /boot"
     end
+    # @@AUDIT@@ v4.4.34: cache is sticky for this run; a transient bootctl/findmnt failure pins the result to /boot until _do_cleanup erases _RY_ESP_PATH (intentional — re-probing during install would risk inconsistent ESP across mkinitcpio/sdboot-manage stages).
     set -g _RY_ESP_PATH "$_p"
     echo "$_p"
 end
@@ -4390,7 +4405,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
         end
     end
 
-    # 2. At least one initramfs must exist & all must be
+    # 2. At least one initramfs must exist and all must be non-zero size (zero-byte initramfs would brick boot).
     set -l initrd_files (sudo -n find "$_esp" -maxdepth 1 -name 'initramfs-*.img' -type f -print0 2>/dev/null | string split0)
     if test (count $initrd_files) -eq 0
         _err "No initramfs found in $_esp/"
@@ -4497,12 +4512,14 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         set -l _wipe_marker $BOOT_WIPE_MARKER
         set -l _acknowledged false
         set -l _existing_basenames (sudo -n find "$_esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
+        # @@AUDIT@@ v4.4.34: capture $pipestatus before any other command clobbers it; same fix shape as v4.4.31 fstab pipestatus capture (L4159).
+        set -l _pre_ps $pipestatus
         # F52: defensive log of pipeline failure.
         set -l _pre_pipe_ok true
-        for _ps_rc in $pipestatus
+        for _ps_rc in $_pre_ps
             test "$_ps_rc" = 0; or set _pre_pipe_ok false
         end
-        test "$_pre_pipe_ok" = false; and _log "BOOT_WIPE_PRECHECK_PIPE_FAIL: pipestatus="(string join ',' -- $pipestatus)
+        test "$_pre_pipe_ok" = false; and _log "BOOT_WIPE_PRECHECK_PIPE_FAIL: pipestatus="(string join ',' -- $_pre_ps)
         set -l _existing_entries (count $_existing_basenames)
         # @@AUDIT@@ v4.4.31: zero-entry guard; printf '%s\0' on empty list emits one NUL, sha256sum returns wrong-semantics hash.
         set -l _existing_hash ""
@@ -4608,8 +4625,10 @@ function _install_finalize --description "Run post-install verification, cleanup
         set -l _wipe_marker $BOOT_WIPE_MARKER
         # Null-delim find + split0; verify pipestatus across find→sort→split0
         set -l _post_basenames (sudo -n find "$_esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
+        # @@AUDIT@@ v4.4.34: capture $pipestatus before any other command clobbers it; same fix shape as v4.4.31 fstab pipestatus capture (L4159).
+        set -l _post_ps $pipestatus
         set -l _post_pipe_ok true
-        for _ps_rc in $pipestatus
+        for _ps_rc in $_post_ps
             test "$_ps_rc" = 0; or set _post_pipe_ok false
         end
         set -l _post_count (count $_post_basenames)
@@ -4846,7 +4865,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     end
 
     if _ry_install_file "$target" $use_sudo
-        # Post-install: rebuild boot entries if target is
+        # Post-install: rebuild boot entries if target is in /boot or matches a kernel/mkinitcpio/sdboot config path.
         _echo
         _ok "Installed: $target"
 

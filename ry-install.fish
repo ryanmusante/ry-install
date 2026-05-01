@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.4.36 (2026-04-29) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.0 (2026-04-30) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
 #
 # Module-state convention: fish has no module scope, so cross-function state
@@ -25,7 +25,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.4.36"
+set -g VERSION "4.5.0"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -191,7 +191,7 @@ set -g _TRACKED_TMPFILES
 
 set -g MAX_LOGS 50
 
-# F58: bootstrap fallback only.
+# Sole authoritative count for managed destinations (post-profile-removal).
 set -g _RY_MANAGED_FILE_COUNT 15
 
 set -g SUDO_KEEPALIVE_INTERVAL 45
@@ -597,386 +597,236 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
     _teardown exit $_exit_status
 end
 
-# PROFILES — machine-specific configuration
+# === GTR9_PRO BUILT-IN DEFAULTS ===
+# @@AUDIT@@ v4.5.0: inlined from _ry_profile_gtr9_pro_*
+set -g PROFILE_NAME gtr9_pro
+set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
 
-function _ry_profile_gtr9_pro_destinations --description "gtr9_pro: managed file destinations (11 system + 3 user + 1 service = 15)"
-    # 1:1 to _ry_get_file_content()
-    set -g SYSTEM_DESTINATIONS \
-        "/boot/loader/loader.conf" \
-        "/etc/kernel/cmdline" \
-        "/etc/sdboot-manage.conf" \
-        "/etc/mkinitcpio.conf" \
-        "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
-        "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
-        "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
-        "/etc/iwd/main.conf" \
-        "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-        "/etc/drirc" \
-        "/etc/sysctl.d/99-cachyos-sysctl.conf"
+# 1:1 to _ry_get_file_content()
+set -g SYSTEM_DESTINATIONS \
+    "/boot/loader/loader.conf" \
+    "/etc/kernel/cmdline" \
+    "/etc/sdboot-manage.conf" \
+    "/etc/mkinitcpio.conf" \
+    "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
+    "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
+    "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
+    "/etc/iwd/main.conf" \
+    "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
+    "/etc/drirc" \
+    "/etc/sysctl.d/99-cachyos-sysctl.conf"
 
-    set -g USER_DESTINATIONS \
-        "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
-        "$HOME/.config/environment.d/10-environment.conf" \
-        "$HOME/.config/systemd/user/ssh-agent.service"
+set -g USER_DESTINATIONS \
+    "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
+    "$HOME/.config/environment.d/10-environment.conf" \
+    "$HOME/.config/systemd/user/ssh-agent.service"
 
-    set -g SERVICE_DESTINATIONS \
-        "/etc/systemd/system/cpupower-epp.service"
-end
+set -g SERVICE_DESTINATIONS \
+    "/etc/systemd/system/cpupower-epp.service"
 
-function _ry_profile_gtr9_pro_boot --description "gtr9_pro: systemd-boot loader.conf + sdboot-manage.conf settings"
-    set -g LOADER_DEFAULT "@saved"
-    set -g LOADER_TIMEOUT 0
-    set -g LOADER_CONSOLE_MODE keep
-    set -g LOADER_EDITOR no
-    set -g SDBOOT_DEFAULT_ENTRY manual
-    set -g SDBOOT_OVERWRITE yes
-    # REMOVE_EXISTING=yes deletes ALL boot entries before regenerating; gated by BOOT_WIPE_MARKER acknowledgement.
-    set -g SDBOOT_REMOVE_EXISTING yes
-    set -g SDBOOT_REMOVE_OBSOLETE yes
-end
+set -g LOADER_DEFAULT "@saved"
+set -g LOADER_TIMEOUT 0
+set -g LOADER_CONSOLE_MODE keep
+set -g LOADER_EDITOR no
+set -g SDBOOT_DEFAULT_ENTRY manual
+set -g SDBOOT_OVERWRITE yes
+# REMOVE_EXISTING=yes deletes ALL boot entries before regenerating; gated by BOOT_WIPE_MARKER acknowledgement.
+set -g SDBOOT_REMOVE_EXISTING yes
+set -g SDBOOT_REMOVE_OBSOLETE yes
 
-function _ry_profile_gtr9_pro_kernel --description "gtr9_pro: kernel cmdline params (15) + mkinitcpio modules/hooks/compression"
-    # Zen 5 + gfx1151 defaults: amd_pstate=active
-    set -g KERNEL_PARAMS \
-        iommu=pt \
-        amd_pstate=active \
-        amdgpu.cwsr_enable=0 \
-        amdgpu.ppfeaturemask=0xfffd3fff \
-        loglevel=3 \
-        module_blacklist=pcspkr \
-        nowatchdog \
-        pcie_aspm.policy=performance \
-        quiet \
-        rd.systemd.show_status=auto \
-        rd.udev.log_level=3 \
-        split_lock_detect=off \
-        tsc=reliable \
-        usbcore.autosuspend=-1 \
-        zswap.enabled=0
+# Zen 5 + gfx1151 defaults: amd_pstate=active
+set -g KERNEL_PARAMS \
+    iommu=pt \
+    amd_pstate=active \
+    amdgpu.cwsr_enable=0 \
+    amdgpu.ppfeaturemask=0xfffd3fff \
+    loglevel=3 \
+    module_blacklist=pcspkr \
+    nowatchdog \
+    pcie_aspm.policy=performance \
+    quiet \
+    rd.systemd.show_status=auto \
+    rd.udev.log_level=3 \
+    split_lock_detect=off \
+    tsc=reliable \
+    usbcore.autosuspend=-1 \
+    zswap.enabled=0
 
-    set -g MKINITCPIO_MODULES amdgpu
-    # systemd hooks; no resume hook
-    set -g MKINITCPIO_HOOKS \
-        base \
-        systemd \
-        autodetect \
-        microcode \
-        modconf \
-        kms \
-        keyboard \
-        sd-vconsole \
-        block \
-        filesystems \
-        fsck
-    set -g MKINITCPIO_COMPRESSION zstd
-    set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
+set -g MKINITCPIO_MODULES amdgpu
+# systemd hooks; no resume hook
+set -g MKINITCPIO_HOOKS \
+    base \
+    systemd \
+    autodetect \
+    microcode \
+    modconf \
+    kms \
+    keyboard \
+    sd-vconsole \
+    block \
+    filesystems \
+    fsck
+set -g MKINITCPIO_COMPRESSION zstd
+set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
-    # Udev; ntsync autoloaded via wine-cachyos
-end
+# Udev; ntsync autoloaded via wine-cachyos
 
-function _ry_profile_gtr9_pro_network --description "gtr9_pro: resolved + logind + iwd + NetworkManager settings"
-    set -g RESOLVED_MDNS resolve
-    set -g LOGIND_IGNORE_KEYS \
-        HandlePowerKey \
-        HandlePowerKeyLongPress \
-        HandleSuspendKey \
-        HandleSuspendKeyLongPress \
-        HandleHibernateKey \
-        HandleHibernateKeyLongPress \
-        HandleRebootKey \
-        HandleRebootKeyLongPress \
-        HandleSecureAttentionKey
-    set -g IWD_ENABLE_NETWORK_CONFIG false
-    set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"
-    set -g IWD_DNS_SERVICE systemd
-    set -g NM_WIFI_BACKEND iwd
-    set -g NM_WIFI_POWERSAVE 2
-    set -g NM_LOG_LEVEL WARN
-end
+set -g RESOLVED_MDNS resolve
+set -g LOGIND_IGNORE_KEYS \
+    HandlePowerKey \
+    HandlePowerKeyLongPress \
+    HandleSuspendKey \
+    HandleSuspendKeyLongPress \
+    HandleHibernateKey \
+    HandleHibernateKeyLongPress \
+    HandleRebootKey \
+    HandleRebootKeyLongPress \
+    HandleSecureAttentionKey
+set -g IWD_ENABLE_NETWORK_CONFIG false
+set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"
+set -g IWD_DNS_SERVICE systemd
+set -g NM_WIFI_BACKEND iwd
+set -g NM_WIFI_POWERSAVE 2
+set -g NM_LOG_LEVEL WARN
 
-function _ry_profile_gtr9_pro_env --description "gtr9_pro: gaming/Proton ENV_VARS + sysctl tunables (21)"
-    set -g ENV_VARS \
-        "DXVK_LOG_LEVEL=none" \
-        "DXVK_LOG_PATH=none" \
-        "ENABLE_LAYER_MESA_ANTI_LAG=1" \
-        "MESA_SHADER_CACHE_MAX_SIZE=4G" \
-        "PROTON_ENABLE_WAYLAND=1" \
-        "PROTON_LOCAL_SHADER_CACHE=1" \
-        "PROTON_NO_WM_DECORATION=1" \
-        "PROTON_USE_NTSYNC=1" \
-        "RADV_EXPERIMENTAL=transfer_queue" \
-        "RADV_PERFTEST=sam,nircache" \
-        "VKD3D_DEBUG=none" \
-        "VKD3D_SHADER_DEBUG=none" \
-        "WINEDEBUG=-all"
+set -g ENV_VARS \
+    "DXVK_LOG_LEVEL=none" \
+    "DXVK_LOG_PATH=none" \
+    "ENABLE_LAYER_MESA_ANTI_LAG=1" \
+    "MESA_SHADER_CACHE_MAX_SIZE=4G" \
+    "PROTON_ENABLE_WAYLAND=1" \
+    "PROTON_LOCAL_SHADER_CACHE=1" \
+    "PROTON_NO_WM_DECORATION=1" \
+    "PROTON_USE_NTSYNC=1" \
+    "RADV_EXPERIMENTAL=transfer_queue" \
+    "RADV_PERFTEST=sam,nircache" \
+    "VKD3D_DEBUG=none" \
+    "VKD3D_SHADER_DEBUG=none" \
+    "WINEDEBUG=-all"
 
-    # Supplements vendor 70-cachyos-settings.conf
-    set -g SYSCTL_VALUES \
-        "net.core.default_qdisc=fq" \
-        "net.core.netdev_max_backlog=16384" \
-        "net.core.rmem_max=134217728" \
-        "net.core.wmem_max=134217728" \
-        "net.ipv4.tcp_congestion_control=bbr" \
-        "net.ipv4.tcp_fastopen=3" \
-        "net.ipv4.tcp_mtu_probing=1" \
-        "net.ipv4.tcp_notsent_lowat=131072" \
-        "net.ipv4.tcp_rmem=4096 87380 134217728" \
-        "net.ipv4.tcp_slow_start_after_idle=0" \
-        "net.ipv4.tcp_wmem=4096 65536 134217728" \
-        "vm.max_map_count=2147483642" \
-        "vm.watermark_boost_factor=0" \
-        "fs.protected_fifos=2" \
-        "fs.protected_regular=2" \
-        "vm.compaction_proactiveness=0" \
-        "net.core.busy_read=50" \
-        "net.core.busy_poll=50" \
-        "net.core.netdev_budget=600" \
-        "kernel.split_lock_mitigate=0" \
-        "vm.swappiness=100"
-end
+# Supplements vendor 70-cachyos-settings.conf
+set -g SYSCTL_VALUES \
+    "net.core.default_qdisc=fq" \
+    "net.core.netdev_max_backlog=16384" \
+    "net.core.rmem_max=134217728" \
+    "net.core.wmem_max=134217728" \
+    "net.ipv4.tcp_congestion_control=bbr" \
+    "net.ipv4.tcp_fastopen=3" \
+    "net.ipv4.tcp_mtu_probing=1" \
+    "net.ipv4.tcp_notsent_lowat=131072" \
+    "net.ipv4.tcp_rmem=4096 87380 134217728" \
+    "net.ipv4.tcp_slow_start_after_idle=0" \
+    "net.ipv4.tcp_wmem=4096 65536 134217728" \
+    "vm.max_map_count=2147483642" \
+    "vm.watermark_boost_factor=0" \
+    "fs.protected_fifos=2" \
+    "fs.protected_regular=2" \
+    "vm.compaction_proactiveness=0" \
+    "net.core.busy_read=50" \
+    "net.core.busy_poll=50" \
+    "net.core.netdev_budget=600" \
+    "kernel.split_lock_mitigate=0" \
+    "vm.swappiness=100"
 
-function _ry_profile_gtr9_pro_packages --description "gtr9_pro: PKGS_ADD (14) / PKGS_DEL (8) / AUR_PKGS (1) / EXPECTED_VULKAN_PKGS"
-    # PKGS_ADD=14 PKGS_DEL=8 AUR=1 must equal README counts
-    set -g PKGS_ADD \
-        mkinitcpio-firmware \
-        nftables \
-        nvme-cli \
-        cachyos-gaming-meta \
-        cachyos-gaming-applications \
-        libva-mesa-driver \
-        lib32-libva-mesa-driver \
-        fd \
-        sd \
-        dust \
-        procs \
-        bottom \
-        git-delta \
-        lm_sensors
-    set -g PKGS_DEL \
-        plymouth \
-        cachyos-plymouth-bootanimation \
-        cachyos-plymouth-theme \
-        ufw \
-        octopi \
-        micro \
-        cachyos-micro-settings \
-        btop
+# PKGS_ADD=14 PKGS_DEL=8 AUR=1 must equal README counts
+set -g PKGS_ADD \
+    mkinitcpio-firmware \
+    nftables \
+    nvme-cli \
+    cachyos-gaming-meta \
+    cachyos-gaming-applications \
+    libva-mesa-driver \
+    lib32-libva-mesa-driver \
+    fd \
+    sd \
+    dust \
+    procs \
+    bottom \
+    git-delta \
+    lm_sensors
+set -g PKGS_DEL \
+    plymouth \
+    cachyos-plymouth-bootanimation \
+    cachyos-plymouth-theme \
+    ufw \
+    octopi \
+    micro \
+    cachyos-micro-settings \
+    btop
 
-    # AUR packages — installed via paru (not pacman)
-    set -g AUR_PKGS mt76-mt7925-dkms
+# AUR packages — installed via paru (not pacman)
+set -g AUR_PKGS mt76-mt7925-dkms
 
-    set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
-end
+set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
 
-function _ry_profile_gtr9_pro_services --description "gtr9_pro: MASK list (10) + EXPECTED_SERVICES (4)"
-    # MASK=10 must equal README Masked Services count
-    set -g MASK \
-        ananicy-cpp.service \
-        power-profiles-daemon.service \
-        lvm2-monitor.service \
-        NetworkManager-wait-online.service \
-        systemd-coredump.socket \
-        sleep.target \
-        suspend.target \
-        hibernate.target \
-        hybrid-sleep.target \
-        suspend-then-hibernate.target
-    set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service nftables.service
-end
+# MASK=10 must equal README Masked Services count
+set -g MASK \
+    ananicy-cpp.service \
+    power-profiles-daemon.service \
+    lvm2-monitor.service \
+    NetworkManager-wait-online.service \
+    systemd-coredump.socket \
+    sleep.target \
+    suspend.target \
+    hibernate.target \
+    hybrid-sleep.target \
+    suspend-then-hibernate.target
+set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service nftables.service
 
-function _ry_profile_gtr9_pro_thresholds --description "gtr9_pro: disk-space, boot-time, and CPU-detection thresholds"
-    set -g BOOT_SPACE_CRIT 200
-    set -g BOOT_SPACE_WARN 500
-    set -g ROOT_AVAIL_CRIT 2
-    set -g ROOT_AVAIL_WARN 5
-    set -g BOOT_TIME_TARGET 15
+set -g BOOT_SPACE_CRIT 200
+set -g BOOT_SPACE_WARN 500
+set -g ROOT_AVAIL_CRIT 2
+set -g ROOT_AVAIL_WARN 5
+set -g BOOT_TIME_TARGET 15
 
-    set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
-end
+set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
+# @@REVERT@@ v4.5.0: restore L602–810
 
-function _ry_profile_gtr9_pro --description "Beelink GTR9 Pro (Strix Halo)"
-    set -g PROFILE_NAME gtr9_pro
-    set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
-
-    _ry_profile_gtr9_pro_destinations
-    _ry_profile_gtr9_pro_boot
-    _ry_profile_gtr9_pro_kernel
-    _ry_profile_gtr9_pro_network
-    _ry_profile_gtr9_pro_env
-    _ry_profile_gtr9_pro_packages
-    _ry_profile_gtr9_pro_services
-    _ry_profile_gtr9_pro_thresholds
-    return 0
-end
-
-# PROFILE LOADER
-
-function _validate_profile --description "Verify loaded profile has all required globals" --argument-names expected_name
-    set -l required \
-        PROFILE_NAME \
-        PROFILE_DESC \
-        KERNEL_PARAMS \
-        SYSTEM_DESTINATIONS \
-        USER_DESTINATIONS \
-        SERVICE_DESTINATIONS \
-        PKGS_ADD \
-        MASK \
-        MKINITCPIO_MODULES \
-        MKINITCPIO_HOOKS \
-        MKINITCPIO_COMPRESSION \
-        LOADER_DEFAULT \
-        LOADER_TIMEOUT \
-        LOADER_CONSOLE_MODE \
-        LOADER_EDITOR \
-        SDBOOT_DEFAULT_ENTRY \
-        SDBOOT_OVERWRITE \
-        SDBOOT_REMOVE_EXISTING \
-        SDBOOT_REMOVE_OBSOLETE \
-        EXPECTED_SERVICES \
-        ENV_VARS \
-        LOGIND_IGNORE_KEYS \
-        BOOT_SPACE_CRIT \
-        BOOT_SPACE_WARN \
-        ROOT_AVAIL_CRIT \
-        ROOT_AVAIL_WARN
-
-    for dst in $SYSTEM_DESTINATIONS
-        switch "$dst"
-            case '*/iwd/*'
-                for nw_var in IWD_ENABLE_NETWORK_CONFIG IWD_DNS_SERVICE IWD_DRIVER_QUIRKS
-                    if not contains -- $nw_var $required
-                        set -a required $nw_var
-                    end
-                end
-            case '*nm.conf'
-                for nw_var in NM_WIFI_BACKEND NM_WIFI_POWERSAVE NM_LOG_LEVEL
-                    if not contains -- $nw_var $required
-                        set -a required $nw_var
-                    end
-                end
-            case '*/resolved.conf.d/*'
-                if not contains -- RESOLVED_MDNS $required
-                    set -a required RESOLVED_MDNS
-                end
-            case '*/sysctl.d/*'
-                if not contains -- SYSCTL_VALUES $required
-                    set -a required SYSCTL_VALUES
-                end
+function _init_runtime --description "Cache root UUID, validate hardware sanity, validate timing globals, precompute tmp-dir cache"
+    # @@AUDIT@@ v4.5.0: salvaged from _load_profile L1101–1142 + _validate_profile L979–996.
+    # @@REVERT@@ v4.5.0: restore _load_profile (L1002–1143), _validate_profile (L814–999), and sub-fns.
+    # 1. Cache root UUID (load-bearing for _content__etc_kernel_cmdline)
+    set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
+    if test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -- "$_ROOT_UUID"
+        _err "Root UUID has invalid shape (got: $_ROOT_UUID) — refusing to cache"
+        set --erase _ROOT_UUID
+    end
+    if test -z "$_ROOT_UUID"
+        switch "$MODE"
+            case check
+                _log "ROOT_UUID_UNAVAILABLE: findmnt failed (silent for --check)"
+                _pre_dispatch_exit $EXIT_PREFLIGHT
+                test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+            case install install-file verify-static verify-runtime
+                _err "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline cannot be generated"
+                _pre_dispatch_exit $EXIT_PREFLIGHT
+                test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+            case '*'
+                _log "ROOT_UUID_UNAVAILABLE: mode=$MODE — non-fatal for this mode"
         end
     end
 
-    set -l missing
-    set -l empty_scalar
-    set -l _scalar_required \
-        PROFILE_NAME PROFILE_DESC \
-        LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR \
-        SDBOOT_DEFAULT_ENTRY SDBOOT_OVERWRITE \
-        SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE \
-        MKINITCPIO_COMPRESSION
-    for var_name in $required
-        if not set -q $var_name
-            set -a missing $var_name
-        else
-            set -l val $$var_name
-            if test (count $val) -eq 0
-                set -a missing $var_name
-            else if contains -- $var_name $_scalar_required; and test -z "$val"
-                set -a empty_scalar $var_name
-            end
+    # 2. Hardware sanity (wrong-machine warning)
+    if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
+        set -l _cpu_model (grep -m1 -- 'model name' /proc/cpuinfo 2>/dev/null | sed 's/.*: //')
+        if test -n "$_cpu_model"; and not string match -q -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"
+            _warn "Built-in defaults expect $EXPECTED_CPU_MATCH but detected: $_cpu_model"
         end
     end
 
-    if test (count $missing) -gt 0
-        _err "Profile missing required globals: $missing"
-        return 1
+    # 3. Defensive bounds on timing globals
+    if not string match -qr '^[1-9][0-9]*$' -- "$SUDO_KEEPALIVE_INTERVAL"
+        _warn "SUDO_KEEPALIVE_INTERVAL='$SUDO_KEEPALIVE_INTERVAL' invalid — resetting to 45"
+        _log "INVALID_SUDO_KEEPALIVE_INTERVAL: value=$SUDO_KEEPALIVE_INTERVAL — using default 45"
+        set -g SUDO_KEEPALIVE_INTERVAL 45
+    end
+    if not string match -qr '^[1-9][0-9]*$' -- "$NM_RESTART_DELAY"
+        _warn "NM_RESTART_DELAY='$NM_RESTART_DELAY' invalid — resetting to 3"
+        _log "INVALID_NM_RESTART_DELAY: value=$NM_RESTART_DELAY — using default 3"
+        set -g NM_RESTART_DELAY 3
     end
 
-    if test (count $empty_scalar) -gt 0
-        _err "Profile required globals set to empty string: $empty_scalar"
-        return 1
-    end
-
-    if test -n "$expected_name"; and test "$PROFILE_NAME" != "$expected_name"
-        _err "Profile function _ry_profile_$expected_name set PROFILE_NAME='$PROFILE_NAME' (expected '$expected_name')"
-        return 1
-    end
-
-    for num_var in LOADER_TIMEOUT \
-        BOOT_SPACE_CRIT BOOT_SPACE_WARN ROOT_AVAIL_CRIT \
-        ROOT_AVAIL_WARN BOOT_TIME_TARGET
-        if set -q $num_var
-            set -l val $$num_var
-            if not string match -qr '^\d+$' -- "$val"
-                _err "Profile global $num_var must be numeric (got '$val')"
-                return 1
-            end
-        end
-    end
-
-    # Element sanitization: reject shell metachars + glob.
-    for _list_var in KERNEL_PARAMS MKINITCPIO_MODULES MKINITCPIO_HOOKS \
-        MASK EXPECTED_SERVICES EXPECTED_VULKAN_PKGS \
-        PKGS_ADD PKGS_DEL AUR_PKGS
-        if set -q $_list_var
-            for _elem in $$_list_var
-                if string match -qr -- '[[:space:]\x22\x24\x27\x5c\x60\(\);&|<>*?\[\]\{\}]' "$_elem"
-                    _err "Profile global $_list_var element contains forbidden shell or glob metacharacter: '$_elem'"
-                    return 1
-                end
-            end
-        end
-    end
-
-    # NUL/LF/CR sanitization for config-value globals
-    for _list_var in ENV_VARS SYSCTL_VALUES LOGIND_IGNORE_KEYS IWD_DRIVER_QUIRKS SYSTEM_DESTINATIONS USER_DESTINATIONS SERVICE_DESTINATIONS
-        if set -q $_list_var
-            for _elem in $$_list_var
-                if string match -qr -- '[\x00\x0a\x0d]' "$_elem"
-                    _err "Profile global $_list_var element contains forbidden control character (NUL/LF/CR): '$_elem'"
-                    return 1
-                end
-            end
-        end
-    end
-
-    # ENV_VARS shape: KEY=VALUE
-    if set -q ENV_VARS
-        for _v in $ENV_VARS
-            if not string match -qr -- '^[A-Za-z_][A-Za-z0-9_]*=' -- "$_v"
-                _err "Profile global ENV_VARS element must be KEY=VALUE shape: '$_v'"
-                return 1
-            end
-            # F29: SSH_AUTH_SOCK is hardcoded into environment.d by _content_HOME_.config_environment.d_10-environment.conf.
-            set -l _ev_key (string split -m1 '=' -- "$_v")[1]
-            if test "$_ev_key" = SSH_AUTH_SOCK
-                _err "Profile global ENV_VARS cannot define SSH_AUTH_SOCK (managed by environment.d generator): '$_v'"
-                return 1
-            end
-        end
-    end
-
-    # SYSCTL_VALUES shape: key=value
-    if set -q SYSCTL_VALUES
-        for _v in $SYSCTL_VALUES
-            if not string match -qr -- '^[A-Za-z][A-Za-z0-9._-]*=\S' -- "$_v"
-                _err "Profile global SYSCTL_VALUES element must be key=value with non-empty value: '$_v'"
-                return 1
-            end
-        end
-    end
-
-    # Destination key uniqueness
-    set -l _keys
-    for _d in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
-        set -a _keys (_tmpfile_key "$_d")
-    end
-    test (count $_keys) -eq (count (printf '%s\n' $_keys | sort -u))
-    or begin
-        _err "Profile destination keys collide (literal duplicate or slash-to-underscore collision)"
-        return 1
-    end
-
-    # Precompute tmp dir lists for _cleanup_tmpfiles.
+    # 4. Precompute tmp-dir cache for _cleanup_tmpfiles (salvaged from _validate_profile L979–996)
     set -g _SYS_TMP_DIRS
     for _d in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         set -l _dir (dirname -- "$_d")
@@ -994,224 +844,6 @@ function _validate_profile --description "Verify loaded profile has all required
             break
         end
     end
-
-    return 0
-end
-
-# Resolve profile name
-function _load_profile --description "Determine, load, and validate the active profile"
-    set -l name
-    set -l default_file "$HOME/.config/ry-install/default-profile"
-    set -l _name_from_file false
-    if test -f "$default_file"
-        set name (command head -n 1 -- "$default_file" 2>/dev/null | string trim --)
-        test -n "$name"; and set _name_from_file true
-    end
-    if test -z "$name"
-        set name gtr9_pro
-        if test "$_name_from_file" = false
-            set -l _why "no $default_file"
-            test -f "$default_file"; and set _why "$default_file is empty"
-            _log "PROFILE_DEFAULT: $_why — using built-in default '$name'"
-        end
-    end
-
-    # @@AUDIT@@ v4.4.36: cap length (regex permitted unbounded) and reject
-    # leading underscore (reserved for internal _ry_profile_ functions).
-    if test (string length -- "$name") -gt 64
-        _err "Profile name too long (>64 chars): '$name'"
-        _pre_dispatch_exit $EXIT_USAGE
-        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-    end
-    if string match -q '_*' -- "$name"
-        _err "Profile names starting with '_' are reserved: '$name'"
-        _pre_dispatch_exit $EXIT_USAGE
-        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-    end
-    if not string match -qr '^[a-z0-9][a-z0-9_-]*$' -- "$name"
-        _err "Invalid profile name: '$name' (must be lowercase alphanumeric, starting with [a-z0-9])"
-        _pre_dispatch_exit $EXIT_USAGE
-        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-    end
-
-    # 3. Load profile fn
-    set -l profile_dir "$HOME/.config/ry-install/profiles"
-    set -l profile_path "$profile_dir/$name.fish"
-
-    if test -f "$profile_path"
-        # ownership + mode check before source
-        set -l _po (stat -c '%u %a' -- "$profile_path" 2>/dev/null)
-        if test -z "$_po"
-            _err "Cannot stat profile: $profile_path"
-            _pre_dispatch_exit $EXIT_USAGE
-            test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-        end
-        # @@AUDIT@@ v4.4.31: --no-empty tolerates double-space stat output (GNU emits one space; defensive against PATH hijack).
-        set -l _pp (string split -n ' ' -- "$_po")
-        if test "$_pp[1]" != "$_MY_UID"
-            _err "Profile not owned by current user (uid $_pp[1] != $_MY_UID): $profile_path"
-            _pre_dispatch_exit $EXIT_USAGE
-            test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-        end
-        # Reject group/other write bits — @@AUDIT@@ v4.4.31: optional leading digit accepts 4-digit modes (setuid/setgid/sticky); bits irrelevant for fish source.
-        if not string match -qr '^[0-7]?[0-7][0145][0145]$' -- "$_pp[2]"
-            _err "Profile mode too permissive (mode=$_pp[2]; group/world write bit set): $profile_path"
-            _pre_dispatch_exit $EXIT_USAGE
-            test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-        end
-        if not fish --no-execute "$profile_path" 2>/dev/null
-            _err "Profile file has syntax errors: $profile_path"
-            _pre_dispatch_exit $EXIT_USAGE
-            test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-        end
-        if functions -q "_ry_profile_$name"
-            _log "PROFILE_OVERRIDE: file '$profile_path' overrides built-in _ry_profile_$name"
-            functions -e "_ry_profile_$name"
-        end
-        source "$profile_path"
-        # Bail check: sourced profile calling _ry_exit
-        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-        if functions -q "_ry_profile_$name"
-            _ry_profile_$name
-        else if functions -q "profile_$name"
-            # Backward compat: accept old profile_<n>
-            _warn "Profile uses deprecated naming: profile_$name → rename to _ry_profile_$name"
-            profile_$name
-        else
-            _err "Profile file does not define function _ry_profile_$name: $profile_path"
-            _pre_dispatch_exit $EXIT_USAGE
-            test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-        end
-    else if functions -q "_ry_profile_$name"
-        _ry_profile_$name
-    else
-        _err "Unknown profile: $name"
-        _pre_dispatch_exit $EXIT_USAGE
-        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-    end
-
-    if not _validate_profile "$name"
-        # EXIT_PREFLIGHT: profile loaded but failed
-        _pre_dispatch_exit $EXIT_PREFLIGHT
-        test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-    end
-
-    set -g MANAGED_FILE_COUNT (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
-
-    # 6. Cache root UUID
-    set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
-    if test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -- "$_ROOT_UUID"
-        _err "Root UUID has invalid shape (got: $_ROOT_UUID) — refusing to cache"
-        set --erase _ROOT_UUID
-    end
-    if test -z "$_ROOT_UUID"
-        # --check routes via _log to honor silent contract
-        switch "$MODE"
-            case check
-                _log "ROOT_UUID_UNAVAILABLE: findmnt failed (silent for --check)"
-                _pre_dispatch_exit $EXIT_PREFLIGHT
-                test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-            case install install-file verify-static verify-runtime
-                _err "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline cannot be generated"
-                _pre_dispatch_exit $EXIT_PREFLIGHT
-                test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-            case '*'
-                _log "ROOT_UUID_UNAVAILABLE: mode=$MODE — non-fatal for this mode"
-        end
-    end
-
-    # 7. Lightweight hardware sanity
-    if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
-        set -l _cpu_model (grep -m1 -- 'model name' /proc/cpuinfo 2>/dev/null | sed 's/.*: //')
-        if test -n "$_cpu_model"; and not string match -q -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"
-            _warn "Profile '$name' expects $EXPECTED_CPU_MATCH but detected: $_cpu_model"
-            _warn "  Wrong machine? Create ~/.config/ry-install/default-profile"
-        end
-    end
-
-    # 8. Profile-overridable timing globals: reject
-    if not string match -qr '^[1-9][0-9]*$' -- "$SUDO_KEEPALIVE_INTERVAL"
-        _warn "SUDO_KEEPALIVE_INTERVAL='$SUDO_KEEPALIVE_INTERVAL' invalid (expected positive integer) — resetting to 45"
-        _log "PROFILE_INVALID_SUDO_KEEPALIVE_INTERVAL: value=$SUDO_KEEPALIVE_INTERVAL — using default 45"
-        set -g SUDO_KEEPALIVE_INTERVAL 45
-    end
-    if not string match -qr '^[1-9][0-9]*$' -- "$NM_RESTART_DELAY"
-        _warn "NM_RESTART_DELAY='$NM_RESTART_DELAY' invalid (expected positive integer) — resetting to 3"
-        _log "PROFILE_INVALID_NM_RESTART_DELAY: value=$NM_RESTART_DELAY — using default 3"
-        set -g NM_RESTART_DELAY 3
-    end
-end
-
-# MANIFEST; orphan tracking across versions & profile
-
-set -g MANIFEST_FILE "$HOME/ry-install/.manifest"
-
-function _manifest_write --description "Record current profile destinations for orphan detection"
-    # Create tmpfile in same dir as manifest for same-fs
-    set -l manifest_dir (dirname -- "$MANIFEST_FILE")
-    # defensive mkdir -p
-    command mkdir -p -- "$manifest_dir" 2>/dev/null
-    set -l tmp (mktemp -p "$manifest_dir" .ry-install.manifest.XXXXXX 2>/dev/null)
-    if test -z "$tmp"
-        _warn "Failed to write manifest (mktemp failed)"
-        return 1
-    end
-    # Track tmp for cleanup
-    set -ga _TRACKED_TMPFILES "$tmp"
-    # @@AUDIT@@ v4.4.34: gate printf redirect; silent corruption masks orphan detection on next run.
-    if not printf '%s\n' "v$VERSION" "$PROFILE_NAME" $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS >"$tmp" 2>/dev/null
-        command rm -f -- "$tmp" 2>/dev/null
-        _untrack_tmpfile "$tmp"
-        _warn "Failed to write manifest (printf redirect failed)"
-        return 1
-    end
-    if not command chmod -- 600 "$tmp" 2>/dev/null
-        # FS w/o mode bits (e.g., FAT) would silently leave a world-readable manifest; warn but continue.
-        _warn "Failed to chmod manifest tmpfile to 600 — manifest may be world-readable"
-        _log "MANIFEST_CHMOD_FAIL: tmp=$tmp"
-    end
-    if not command mv -f -- "$tmp" "$MANIFEST_FILE" 2>/dev/null
-        command rm -f -- "$tmp" 2>/dev/null
-        _warn "Failed to write manifest"
-        return 1
-    end
-    _untrack_tmpfile "$tmp"
-    _log "MANIFEST_WRITTEN: $MANIFEST_FILE ($MANAGED_FILE_COUNT destinations)"
-    return 0
-end
-
-function _manifest_check_orphans --description "Warn about files from previous install/profile not in current destinations"
-    if not test -f "$MANIFEST_FILE"
-        return 0
-    end
-    set -l manifest_lines (command cat -- "$MANIFEST_FILE" 2>/dev/null)
-    if test (count $manifest_lines) -lt 3
-        return 0
-    end
-    set -l prev_ver "$manifest_lines[1]"
-    set -l prev_profile "$manifest_lines[2]"
-    set -l prev_dests $manifest_lines[3..]
-    set -l current_dests $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
-
-    set -l orphans
-    for prev in $prev_dests
-        if not contains -- "$prev" $current_dests
-            set -a orphans "$prev"
-        end
-    end
-
-    if test (count $orphans) -gt 0
-        if test "$prev_profile" != "$PROFILE_NAME"
-            _warn "Profile changed: $prev_profile → $PROFILE_NAME"
-        else
-            _warn "Destinations changed since $prev_ver"
-        end
-        for orphan in $orphans
-            _warn "  ORPHAN: $orphan (no longer managed)"
-        end
-        _info "  Review and remove orphaned files manually"
-    end
-    return 0
 end
 
 # Per-dst content generators
@@ -1222,7 +854,7 @@ end
 function _content__etc_kernel_cmdline --description "Embedded content for /etc/kernel/cmdline"
     if test -z "$_ROOT_UUID"
         # @@AUDIT@@ v4.4.26: function name had single underscore.
-        _err "_content__etc_kernel_cmdline: root UUID not cached (_load_profile may not have run)"
+        _err "_content__etc_kernel_cmdline: root UUID not cached (_init_runtime may not have run)"
         return 12
     end
     printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
@@ -1813,15 +1445,8 @@ function _run --description "Execute a command with logging, stdout/stderr captu
 end
 
 function _ry_show_help --description "Display usage information and available subcommands"
-    # Fallback: use compile-time constant if profile has
-    set -l _file_count "$MANAGED_FILE_COUNT"
-    if test -z "$_file_count"
-        set _file_count $_RY_MANAGED_FILE_COUNT
-    end
-    set -l _profile_desc "Beelink GTR9 Pro (Strix Halo)"
-    if set -q PROFILE_DESC; and test -n "$PROFILE_DESC"
-        set _profile_desc "$PROFILE_DESC"
-    end
+    set -l _file_count $_RY_MANAGED_FILE_COUNT
+    set -l _profile_desc "$PROFILE_DESC"
     echo "
 ry-install v$VERSION
 Self-contained CachyOS configuration for $_profile_desc
@@ -1900,7 +1525,7 @@ function _chk_perms --argument-names path expected_perms expected_owner use_sudo
         _fail "  $path: stat failed (file disappeared or unreadable)"
         return 1
     end
-    # @@AUDIT@@ v4.4.34: --no-empty tolerates double-space stat output; mirrors v4.4.31 fix in _load_profile (L1037).
+    # @@AUDIT@@ v4.4.34: --no-empty tolerates double-space stat output (defensive against PATH hijack).
     set -l _parts (string split -n ' ' -- "$_po")
     if test "$_parts[1]" != "$expected_perms"; or test "$_parts[2]" != "$expected_owner"
         _fail "  $path: $_parts[1] $_parts[2] (expected: $expected_perms $expected_owner)"
@@ -3518,7 +3143,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
 
     # F14: use cached _PROFILE_USES_NM rather than re-deriving locally
     if test "$_PROFILE_USES_NM" = false
-        _info "  Profile does not manage iwd/NM — skipping WiFi state checks"
+        _info "  iwd/NetworkManager not managed — skipping WiFi state checks"
     else
         set -l wlan_iface ""
         for iface in /sys/class/net/*/wireless
@@ -3836,7 +3461,7 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
 
     _echo "── Vulkan driver packages ──"
     if not set -q EXPECTED_VULKAN_PKGS; or test (count $EXPECTED_VULKAN_PKGS) -eq 0
-        _info "  EXPECTED_VULKAN_PKGS not defined in profile — skipping"
+        _info "  EXPECTED_VULKAN_PKGS not defined — skipping"
     else
         set -l _vk_missing 0
         for _vk_pkg in $EXPECTED_VULKAN_PKGS
@@ -3873,7 +3498,7 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
                     _info "  Run 'systemd-analyze blame' to identify slow services"
                 end
             else
-                _info "  BOOT_TIME_TARGET not set in profile — skipping target comparison"
+                _info "  BOOT_TIME_TARGET not set — skipping target comparison"
             end
         end
 
@@ -4749,7 +4374,7 @@ function _install_finalize --description "Run post-install verification, cleanup
 
     # F14: use cached _PROFILE_USES_NM rather than re-deriving locally
     if test "$_PROFILE_USES_NM" = false
-        _info "Profile does not manage iwd/NetworkManager — skipping NM restart"
+        _info "iwd/NetworkManager not managed — skipping NM restart"
     else if command -q pacman; and pacman -Qi iwd >/dev/null 2>&1
         if _is_wifi_active_route
             _warn "NetworkManager restart deferred — WiFi is the active route."
@@ -4765,7 +4390,7 @@ function _install_finalize --description "Run post-install verification, cleanup
             _run sleep $NM_RESTART_DELAY; or _warn "Sleep interrupted during NM restart settle window"
         end
     else
-        _warn "Profile manages iwd configs but iwd package is not installed"
+        _warn "iwd configs deployed but iwd package is not installed"
         set -g INSTALL_HAD_ERRORS true
     end
 
@@ -4783,8 +4408,6 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _echo
     _echo "ry-install v$VERSION"
     _echo
-
-    _manifest_check_orphans
 
     _progress_init
 
@@ -4876,10 +4499,9 @@ function _ry_do_install --description "Full installation: preflight, packages, c
 
     _log_section "INSTALLATION END"
     if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
-        _log "MANIFEST_SKIP: boot-critical failure — partial deploy not recorded"
+        _log "INSTALL_BAILOUT: boot-critical failure → returning EXIT_BOOT_CRIT"
         return $EXIT_BOOT_CRIT
     end
-    _manifest_write; or _log "MANIFEST_WRITE_FAILED: install succeeded, manifest deferred (cosmetic — orphan detection next run)"
     test "$INSTALL_HAD_ERRORS" = true; and return $EXIT_FAIL
     return $EXIT_OK
 end
@@ -5207,11 +4829,8 @@ if test "$MODE" != install; and test "$MODE" != check
     set -g QUIET false
 end
 
-_load_profile
+_init_runtime
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-if set -q MANAGED_FILE_COUNT; and test "$MANAGED_FILE_COUNT" -ne "$_RY_MANAGED_FILE_COUNT"
-    _warn "_RY_MANAGED_FILE_COUNT ($_RY_MANAGED_FILE_COUNT) drifts from active profile ($MANAGED_FILE_COUNT) — update the constant in the bootstrap globals block"
-end
 
 set -l mode_label $MODE
 # NOTE: path format mirrored at LOG_FILE init site

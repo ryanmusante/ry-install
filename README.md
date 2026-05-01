@@ -1,14 +1,14 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.4.36-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.6%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> Self-contained CachyOS configuration manager with profile support. Single Fish script, 15 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
+> Self-contained CachyOS configuration manager. Single Fish script, 15 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
 
-**Default profile:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware Reference](#hardware-reference).
+**Target system:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware Reference](#hardware-reference).
 
 ---
 
@@ -32,7 +32,7 @@
   - [Packages](#packages)
   - [Masked Services](#masked-services)
 - [Managed Files](#managed-files)
-- [Profiles](#profiles)
+- [Customization](#customization)
 - [Safety & Reliability](#safety--reliability)
 - [Uninstall](#uninstall)
 - [Known Issues](#known-issues)
@@ -65,7 +65,7 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 
 **In scope:** system-wide CachyOS configuration (kernel cmdline, initramfs, systemd units, network stack, sysctl, gaming env vars), package install/remove via pacman + paru, masking of laptop power-management units for desktop use, single-user systemd `--user` units (ssh-agent, environment.d).
 
-**Out of scope:** dotfiles, shell prompts, editor config, application settings, secrets/credentials management, backup orchestration, multi-user provisioning, non-CachyOS distributions, laptops without a custom profile (the default `gtr9_pro` profile masks all sleep/suspend targets).
+**Out of scope:** dotfiles, shell prompts, editor config, application settings, secrets/credentials management, backup orchestration, multi-user provisioning, non-CachyOS distributions, laptops (the script masks all sleep/suspend targets — adjust `MASK` in the inlined defaults if needed).
 
 ## Prerequisites
 
@@ -90,11 +90,11 @@ sudo -v                          # warm sudo cache; confirms unrestricted sudo
 df -h / /boot                    # verify space (≥2 GB / and ≥200 MB /boot)
 ```
 
-Then review the [Masked Services](#masked-services) table — the default profile masks all sleep/suspend targets — laptop users must override `MASK`. Check [CachyOS news](https://wiki.cachyos.org) and [Arch news](https://archlinux.org/news/) for breaking changes before any `pacman -Syu`.
+Then review the [Masked Services](#masked-services) table — the script masks all sleep/suspend targets — laptop users must edit `MASK` in the inlined defaults block (marked `# === GTR9_PRO BUILT-IN DEFAULTS ===`) at the top of `ry-install.fish`. Check [CachyOS news](https://wiki.cachyos.org) and [Arch news](https://archlinux.org/news/) for breaking changes before any `pacman -Syu`.
 
 ## Hardware Reference
 
-The default `gtr9_pro` profile targets this specific machine. All kernel parameters, driver workarounds, and tuning values in this repo are calibrated against the components below. Other hardware requires a custom profile.
+All kernel parameters, driver workarounds, and tuning values are calibrated against the components below. Other hardware requires forking and editing the inlined defaults block at the top of `ry-install.fish`.
 
 | Component | Detail |
 |---|---|
@@ -134,16 +134,16 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | Phase | Description |
 |---|---|
-| **Preflight** | Validate prerequisites (Fish ≥ 3.6, writable `$TMPDIR`, GNU `sort -z`, GNU `stat -c`, sudo without `requiretty` / `tty_tickets` / `timestamp_timeout=0`), acquire lock, load profile |
+| **Preflight** | Validate prerequisites (Fish ≥ 3.6, writable `$TMPDIR`, GNU `sort -z`, GNU `stat -c`, sudo without `requiretty` / `tty_tickets` / `timestamp_timeout=0`), acquire lock, validate runtime (root UUID, CPU model, timing globals) |
 | **Packages** | Sync repos, install/remove packages, AUR via paru |
 | **Configuration** | Deploy 15 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
 | **Boot** | Rebuild initramfs, update systemd-boot entries |
-| **Finalize** | Daemon-reload, cache cleanup, NM restart (deferred on active WiFi), write manifest |
+| **Finalize** | Daemon-reload, cache cleanup, NM restart (deferred on active WiFi) |
 
 ## Configuration Reference
 
-Each subsection corresponds to a discrete layer of the system. All values are embedded in the script and deployed via the paths listed in [Managed Files](#managed-files). Override any setting by creating a custom profile rather than editing the managed files directly — doing so will cause `--verify-static` to report drift.
+Each subsection corresponds to a discrete layer of the system. All values are embedded in the script and deployed via the paths listed in [Managed Files](#managed-files). Override any setting by editing the inlined defaults block at the top of `ry-install.fish` rather than the deployed managed files directly — doing so will cause `--verify-static` to report drift.
 
 ### Kernel Parameters
 
@@ -352,69 +352,16 @@ Package operations run during the Packages phase with `--needed` for idempotency
 
 </details>
 
-## Profiles
+## Customization
 
-External profiles live at `~/.config/ry-install/profiles/<name>.fish` and define `function _ry_profile_<name>` with all required globals. Resolution: `~/.config/ry-install/default-profile` (single line: profile name) → `gtr9_pro` (hardcoded fallback). Legacy `profile_<name>` naming accepted with a deprecation warning; syntax and name-consistency validated before sourcing.
-
-**Precedence (v4.4.6+):** when a file at `~/.config/ry-install/profiles/<name>.fish` exists, it takes precedence over a built-in `_ry_profile_<name>` of the same name. The override is recorded in the JSONL log as `PROFILE_OVERRIDE` so the active source is auditable. Earlier releases had this reversed and silently shadowed file profiles.
-
-```fish
-echo my_desktop > ~/.config/ry-install/default-profile
-```
-
-<details>
-<summary><b>Required Globals</b></summary>
-
-**26 unconditional** — preflight fails and reports the variable name if any are missing:
-
-| Category | Globals |
-|---|---|
-| Identity | `PROFILE_NAME`, `PROFILE_DESC` |
-| Destinations | `SYSTEM_DESTINATIONS`, `USER_DESTINATIONS`, `SERVICE_DESTINATIONS` |
-| Kernel + initramfs | `KERNEL_PARAMS`, `MKINITCPIO_MODULES`, `MKINITCPIO_HOOKS`, `MKINITCPIO_COMPRESSION` |
-| Boot loader | `LOADER_DEFAULT`, `LOADER_TIMEOUT`, `LOADER_CONSOLE_MODE`, `LOADER_EDITOR`, `SDBOOT_DEFAULT_ENTRY`, `SDBOOT_OVERWRITE`, `SDBOOT_REMOVE_EXISTING`, `SDBOOT_REMOVE_OBSOLETE` |
-| Packages + services | `PKGS_ADD`, `MASK`, `EXPECTED_SERVICES` |
-| Environment | `ENV_VARS`, `LOGIND_IGNORE_KEYS` |
-| Thresholds | `BOOT_SPACE_CRIT`, `BOOT_SPACE_WARN`, `ROOT_AVAIL_CRIT`, `ROOT_AVAIL_WARN` |
-
-**8 conditional** (required when the matching glob appears in `SYSTEM_DESTINATIONS`): `*/iwd/*` → `IWD_ENABLE_NETWORK_CONFIG`, `IWD_DRIVER_QUIRKS`, `IWD_DNS_SERVICE` · `*nm.conf` → `NM_WIFI_BACKEND`, `NM_WIFI_POWERSAVE`, `NM_LOG_LEVEL` · `*/resolved.conf.d/*` → `RESOLVED_MDNS` · `*/sysctl.d/*` → `SYSCTL_VALUES`.
-
-**Optional** (unset-safe): `PKGS_DEL`, `AUR_PKGS`, `BOOT_TIME_TARGET`, `EXPECTED_CPU_MATCH`, `MKINITCPIO_COMPRESSION_OPTIONS`, `EXPECTED_VULKAN_PKGS`.
-
-</details>
-
-<details>
-<summary><b>Example Profile</b></summary>
-
-Save as `~/.config/ry-install/profiles/my_desktop.fish`:
-
-```fish
-function _ry_profile_my_desktop --description "Example desktop profile"
-    set -g PROFILE_NAME my_desktop
-    set -g PROFILE_DESC "My Desktop — AMD Ryzen 7 7800X3D / RX 7900 XTX"
-
-    # Copy SYSTEM_DESTINATIONS / USER_DESTINATIONS / SERVICE_DESTINATIONS
-    # from the built-in gtr9_pro profile and adjust paths as needed.
-    # Then define the 26 unconditional + applicable conditional globals
-    # listed in the Required Globals table above.
-end
-```
-
-Run `--verify-static` and `--verify-runtime` before first use.
-
-</details>
-
-> [!WARNING]
-> **Profile Trust Model.** Profiles execute via `source` with the user's privileges — treat them like any shell script. Since v4.4.0, profile files are rejected at load time if they are not owned by the invoking UID or if their mode has the group/world write bit set; the script will exit with `EXIT_USAGE` (2) before sourcing. This is a basic guardrail, not a sandbox — a malicious profile owned by you can still do anything your account can.
+Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.fish` to retune for different hardware. Re-run `./ry-install.fish --verify-static` after changes.
 
 ## Safety & Reliability
 
 | Feature | Detail |
 |---|---|
 | Atomic writes | tmp → chmod → mv (same FS); parent dir must be root-owned or uid=$UID, not a symlink, not group/world-writable |
-| Permission model | System 0644 · user 0600 · `~/ry-install/` and per-day log dirs 0700 · log/manifest/marker files 0600 |
-| Profile trust | Owner=$UID and no group/world write bit validated before `source` |
-| Profile sanitization | Profile-supplied vars reject shell/glob metachars; `ENV_VARS` and `SYSCTL_VALUES` enforced as `KEY=VALUE` |
+| Permission model | System 0644 · user 0600 · `~/ry-install/` and per-day log dirs 0700 · log/marker files 0600 |
 | fstab edits | Idempotent; `findmnt --verify` before write; symlinked `/etc/fstab` rejected; **no backup** — snapshot first |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + `flock(1)` stale reclaim; sudo keepalive aborts on concurrent-instance directory recreation |
@@ -423,7 +370,6 @@ Run `--verify-static` and `--verify-runtime` before first use.
 | Cleanup invariant | Lock, tmpfiles, and sudo keepalive released on every exit path; cleanup is idempotent and re-entry-guarded |
 | Boot safety | Aborts on initramfs/bootloader failure; loader-entry kernel paths canonicalized and ESP-boundary-checked |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard prevents subshell races; embedded newlines correctly escaped in JSONL payloads |
-| Orphan tracking | Manifest warns on version/profile change |
 
 <details>
 <summary><b>Exit Codes</b></summary>
@@ -467,7 +413,6 @@ All runtime state lives under `~/ry-install/`. The directory is created on first
 |---|---|
 | `~/ry-install/logs/YYYY-MM-DD/` | NDJSON logs (`*.jsonl`) |
 | `~/ry-install/.lock/` | Instance guard |
-| `~/ry-install/.manifest` | Orphan tracking |
 | `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker (delete to re-prompt) |
 
 </details>
@@ -479,14 +424,14 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 
 | Event | Key Fields | Emitted |
 |---|---|---|
-| `header` / `footer` | version, profile, mode, argv (header); exit_code, pass/fail/warn counts (footer) | Run start / end |
+| `header` / `footer` | version, mode, argv (header); exit_code, pass/fail/warn counts (footer) | Run start / end |
 | `ok` / `fail` / `warn` / `err` / `info` | data | Verification results and status |
 | `prog_step_start` / `prog_step_end` / `prog_done` | data (`[N/M] label`, `name=X secs=N`, `elapsed_secs=N`) | Phase progression |
 | `run` / `stderr` | data | Subprocess execution and captured stderr |
 | `section` | data | Phase boundary |
 | `bug` | data | Internal assertion failure |
 
-> ~70 additional prefix-routed event types (`lock_acquired`, `manifest_written`, `pkg_remove_ok`, `ntsync_check`, etc.) follow the same `{"ts":TS,"event":NAME,"data":STR}` schema and are queryable with jq.
+> ~70 additional prefix-routed event types (`lock_acquired`, `service_unmasked`, `pkg_remove_ok`, `ntsync_check`, etc.) follow the same `{"ts":TS,"event":NAME,"data":STR}` schema and are queryable with jq.
 
 Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
@@ -505,7 +450,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 
 ## Uninstall
 
-ry-install ships no automated uninstaller. `~/ry-install/.manifest` lists every deployed file as the source of truth for manual rollback. To revert: unmask the units in [Masked Services](#masked-services), `rm` the paths in [Managed Files](#managed-files), restore `/etc/fstab` from your own snapshot, optionally `pacman -S` the removed packages and `pacman -Rns` the installed ones, then `mkinitcpio -P && sdboot-manage gen` and reboot.
+ry-install ships no automated uninstaller. The [Managed Files](#managed-files) table lists every deployed file as the source of truth for manual rollback. To revert: unmask the units in [Masked Services](#masked-services), `rm` the paths in [Managed Files](#managed-files), restore `/etc/fstab` from your own snapshot, optionally `pacman -S` the removed packages and `pacman -Rns` the installed ones, then `mkinitcpio -P && sdboot-manage gen` and reboot.
 
 ## Known Issues
 
@@ -573,9 +518,7 @@ Start with `--verify-static` and `--verify-runtime` to confirm whether the issue
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
 | FSR4 on RDNA 3.5 | Per-game: `PROTON_FSR4_RDNA3_UPGRADE=1 %command%` |
-| Profile load failure | `--verify-static` reports missing globals; verify ownership: `stat -c '%U' ~/.config/ry-install/profiles/*.fish` |
 | Stale lock | `rm -rf ~/ry-install/.lock/` (only if no `pgrep -af ry-install`) |
-| Manifest version mismatch | Expected post-upgrade — re-run install to refresh |
 | AUR pkg not installed | `command -q paru; or sudo pacman -S --needed paru` then re-run |
 | Sudo cache expiry mid-run | `sudo -v; and ./ry-install.fish` |
 | `drirc` XML rejected | `xmllint --noout /etc/drirc` |

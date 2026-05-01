@@ -6,6 +6,70 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.5.0 - 2026-04-30
+-------------------
+
+  * Profile subsystem: removed entirely. _load_profile,
+    _validate_profile, _ry_profile_gtr9_pro_* (8 sub-fns + entry),
+    and the ~/.config/ry-install/profiles/<name>.fish override
+    path are deleted. gtr9_pro defaults are now inlined as a flat
+    set -g block at module init under
+    # === GTR9_PRO BUILT-IN DEFAULTS ===. Single-machine focus;
+    forking the script is the supported path for alternative
+    hardware.
+  * Manifest / orphan tracking: removed. _manifest_write,
+    _manifest_check_orphans, and the ~/ry-install/.manifest
+    file are deleted. Stale files from prior installs are no
+    longer auto-detected.
+  * Bootstrap: _init_runtime (63 lines) replaces _load_profile.
+    Salvages _ROOT_UUID caching, EXPECTED_CPU_MATCH wrong-machine
+    warning (collapsed from 2 _warn calls to 1 — no longer
+    references the removed default-profile path),
+    SUDO_KEEPALIVE_INTERVAL / NM_RESTART_DELAY defensive
+    validation, and the _SYS_TMP_DIRS / _USR_TMP_DIRS /
+    _PROFILE_USES_NM precompute cache (formerly tail of
+    _validate_profile; consumed by _cleanup_tmpfiles,
+    verify-runtime WIFI checks, and the finalize NM-restart path).
+  * Validation: MANAGED_FILE_COUNT drift warning removed from
+    dispatch preamble. _RY_MANAGED_FILE_COUNT at L195 is now the
+    sole authoritative count. Help-text fallback at _ry_show_help
+    L1816–1820 collapsed to an unconditional read of the constant.
+  * Help text: tagline now reads the full PROFILE_DESC
+    ("Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S")
+    instead of the prior truncated fallback string
+    ("Beelink GTR9 Pro (Strix Halo)") — single-line drift,
+    cosmetic only.
+  * Logging: JSONL log-event identifiers reduced and renamed —
+    see Migration below. Header still emits "profile":"gtr9_pro"
+    as a constant string.
+  * Documentation: ## Profiles section removed from README;
+    references to manifest, profile trust, profile sanitization,
+    and external override paths purged. ## Customization note
+    added pointing at the inlined defaults block.
+  * Footprint: script LOC 5,335 → 4,954 (−381, −7.1%);
+    bytes 210,899 → ~194,360 (−16,540, −7.8%).
+
+  Migration:
+    For existing v4.4.x installs, manually clear the now-orphaned
+    user-config and manifest files:
+        rm -rf ~/.config/ry-install/profiles
+        rm -f  ~/.config/ry-install/default-profile
+        rm -f  ~/ry-install/.manifest
+    If you maintained a custom external profile, fork the script
+    and edit the # === GTR9_PRO BUILT-IN DEFAULTS === block.
+    No automated migration.
+
+    JSONL log-event identifier changes (external consumers):
+        REMOVED: PROFILE_DEFAULT, PROFILE_OVERRIDE,
+                 MANIFEST_CHMOD_FAIL, MANIFEST_WRITTEN,
+                 MANIFEST_WRITE_FAILED
+        RENAMED: MANIFEST_SKIP                       → INSTALL_BAILOUT
+                 PROFILE_INVALID_SUDO_KEEPALIVE_INTERVAL
+                                                     → INVALID_SUDO_KEEPALIVE_INTERVAL
+                 PROFILE_INVALID_NM_RESTART_DELAY    → INVALID_NM_RESTART_DELAY
+        UNCHANGED: header "profile" field (constant "gtr9_pro")
+
+
 v4.4.36 - 2026-04-29
 --------------------
 

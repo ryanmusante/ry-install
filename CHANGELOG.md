@@ -45,9 +45,20 @@ v4.5.0 - 2026-04-30
   * Documentation: ## Profiles section removed from README;
     references to manifest, profile trust, profile sanitization,
     and external override paths purged. ## Customization note
-    added pointing at the inlined defaults block.
-  * Footprint: script LOC 5,335 → 4,954 (−381, −7.1%);
-    bytes 210,899 → ~194,360 (−16,540, −7.8%).
+    added pointing at the inlined defaults block. JSONL header
+    sample version synced 4.4.36 → 4.5.0.
+  * Comments: multi-line `#` blocks collapsed to single lines (8
+    blocks total); shebang/header banner, lint annotations, and
+    adjacent-but-distinct comments (section header + change-tracking
+    marker, F-marker + change-tracking marker) preserved.
+  * Comments: stale numeric line cross-refs dropped from code
+    annotations and replaced with symbol-name references —
+    `(L5230-5232)` (dispatch-bottom order, drift since v4.4.31),
+    `(L4159)` (was already off by 75 lines in v4.4.36; actual peer
+    anchor at v4.4.36 L4234), `_content_bytes L2378–2384` (was off
+    by 57 lines in v4.4.36).
+  * Footprint: script LOC 5,335 → 4,941 (−394, −7.4%);
+    bytes 210,899 → 194,932 (−15,967, −7.6%).
 
   Migration:
     For existing v4.4.x installs, manually clear the now-orphaned

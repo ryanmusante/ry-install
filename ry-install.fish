@@ -50,7 +50,7 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
     set -g _RY_INSTALL_BAILING true
     set -l _was_sourced "$_RY_INSTALL_SOURCED"
     functions -q _do_cleanup; and _do_cleanup
-    # @@AUDIT@@ v4.4.31: erase handlers before namespace cleanup; mirrors dispatch-bottom order (L5230-5232).
+    # @@AUDIT@@ v4.4.31: erase handlers before namespace cleanup.
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null
     _ry_namespace_cleanup bail
     if test "$_was_sourced" = true
@@ -1085,9 +1085,7 @@ function _is_system_dst --argument-names dst --description "True if dst is a sys
 end
 
 function _installed_bytes --argument-names dst --description "Raw bytes of installed file (empty on read failure; sudo-aware)"
-    # @@AUDIT@@ v4.4.36: capture-then-emit (mirror _content_bytes L2378–2384).
-    # Was streaming cat output before pipestatus check, so partial-write
-    # masked read failure for callers using cmdsub `set -l x (_installed_bytes)`.
+    # @@AUDIT@@ v4.4.36: capture-then-emit (mirror _content_bytes). Was streaming cat output before pipestatus check, so partial-write masked read failure for callers using cmdsub `set -l x (_installed_bytes)`.
     set -l _bytes
     if _is_system_dst "$dst"
         sudo -n test -r "$dst" 2>/dev/null; or return 1
@@ -1338,8 +1336,7 @@ function _progress_done --description "Finalize progress bar (or hold position o
     test "$_PROG_PINNED" = true; or return 0
     printf '\e[r' >&2
     if test "$_skip" = true
-        # @@AUDIT@@ v4.4.36: skip-cascade (boot-critical) — hold at last
-        # completed pct, don't claim 100% Done. UX honesty.
+        # @@AUDIT@@ v4.4.36: skip-cascade (boot-critical) — hold at last completed pct, don't claim 100% Done. UX honesty.
         set -l pct (math "floor($_PROG_CUR * 100 / $_PROG_TOTAL)")
         printf '\e[%d;1H\e[K[%s] %3d%% Aborted (%ds)\n' \
             $_PROG_ROWS (string repeat -n 40 '░') $pct $elapsed >&2
@@ -1357,8 +1354,7 @@ function _progress_teardown --description "Clear pinned progress bar and reset s
 end
 
 function _progress_on_winch --on-signal WINCH --description "Re-anchor progress bar on terminal resize"
-    # @@AUDIT@@ v4.4.36: re-read tput lines on SIGWINCH; without this, a
-    # terminal resize during install leaves the bar stranded at the old row.
+    # @@AUDIT@@ v4.4.36: re-read tput lines on SIGWINCH; without this, a terminal resize during install leaves the bar stranded at the old row.
     test "$_PROG_PINNED" = true; or return 0
     set -l _new_rows (tput lines 2>/dev/null)
     string match -qr '^\d+$' -- "$_new_rows"; or return 0
@@ -1593,9 +1589,7 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     end
 
     # F8: grep exit codes are 0=found, 1=not-found, ≥2=error.
-    # @@AUDIT@@ v4.4.36: strip comment-only lines before grep so a # mention
-    # of a token doesn't satisfy "configured" semantics. Plain tokens use
-    # -wF (whole-word) per docstring; k=v patterns use -F (substring).
+    # @@AUDIT@@ v4.4.36: strip comment-only lines before grep so a # mention of a token doesn't satisfy "configured" semantics. Plain tokens use -wF (whole-word) per docstring; k=v patterns use -F (substring).
     set -l _grep_flags -qF
     string match -q '*=*' -- "$pattern"; or set _grep_flags -qwF
     set -l _grep_rc 1
@@ -1748,9 +1742,7 @@ function _ry_check_kernel_version --description "Verify running kernel version m
     end
 
     set -l _ns (_ntsync_state)
-    # @@AUDIT@@ v4.4.36: switch all 5 returns; was if/else only handling
-    # `unavailable`, so `loaded_nodev` and `missing` reported as OK despite
-    # indicating partial or absent ntsync on a capable kernel.
+    # @@AUDIT@@ v4.4.36: switch all 5 returns; was if/else only handling `unavailable`, so `loaded_nodev` and `missing` reported as OK despite indicating partial or absent ntsync on a capable kernel.
     switch $_ns
         case unavailable
             _warn "Kernel $kver: ntsync not available (expected builtin or module)"
@@ -3733,9 +3725,7 @@ function _install_aur_packages --description "Install AUR packages via paru"
         set -g INSTALL_HAD_ERRORS true
         return 1
     end
-    # @@AUDIT@@ v4.4.36: track per-package failure flag and return non-zero
-    # so caller's `or set INSTALL_HAD_ERRORS true` reflects per-pkg failures
-    # (was always returning 0 from this branch — caller's `or` was dead).
+    # @@AUDIT@@ v4.4.36: track per-package failure flag and return non-zero so caller's `or set INSTALL_HAD_ERRORS true` reflects per-pkg failures (was always returning 0 from this branch — caller's `or` was dead).
     set -l _had_fail false
     if not _run paru -S --needed --noconfirm -- $AUR_PKGS
         _warn "AUR batch install failed — retrying per-package to identify failures"
@@ -4200,7 +4190,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         set -l _wipe_marker $BOOT_WIPE_MARKER
         set -l _acknowledged false
         set -l _existing_basenames (sudo -n find "$_esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
-        # @@AUDIT@@ v4.4.34: capture $pipestatus before any other command clobbers it; same fix shape as v4.4.31 fstab pipestatus capture (L4159).
+        # @@AUDIT@@ v4.4.34: capture $pipestatus before any other command clobbers it; mirrors v4.4.31 fstab pipestatus capture in _install_fstab_opts.
         set -l _pre_ps $pipestatus
         # F52: defensive log of pipeline failure.
         set -l _pre_pipe_ok true
@@ -4313,7 +4303,7 @@ function _install_finalize --description "Run post-install verification, cleanup
         set -l _wipe_marker $BOOT_WIPE_MARKER
         # Null-delim find + split0; verify pipestatus across find→sort→split0
         set -l _post_basenames (sudo -n find "$_esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
-        # @@AUDIT@@ v4.4.34: capture $pipestatus before any other command clobbers it; same fix shape as v4.4.31 fstab pipestatus capture (L4159).
+        # @@AUDIT@@ v4.4.34: capture $pipestatus before any other command clobbers it; mirrors v4.4.31 fstab pipestatus capture in _install_fstab_opts.
         set -l _post_ps $pipestatus
         set -l _post_pipe_ok true
         for _ps_rc in $_post_ps
@@ -4704,9 +4694,7 @@ end
 
 function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/dir (no exit; for caller-managed return paths)"
     command rm -f -- "$LOG_FILE" 2>/dev/null
-    # @@AUDIT@@ v4.4.36: bounded rmdir chain (was -p, walked unboundedly).
-    # Three explicit levels: $LOG_DIR (logs/YYYY-MM-DD) → logs/ → ry-install/.
-    # rmdir refuses non-empty so HOME is never touched.
+    # @@AUDIT@@ v4.4.36: bounded rmdir chain (was -p, walked unboundedly). Three explicit levels: $LOG_DIR (logs/YYYY-MM-DD) → logs/ → ry-install/. rmdir refuses non-empty so HOME is never touched.
     command rmdir -- "$LOG_DIR" 2>/dev/null
     command rmdir -- (dirname -- "$LOG_DIR") 2>/dev/null
     command rmdir -- "$HOME/ry-install" 2>/dev/null
@@ -4886,8 +4874,7 @@ switch $MODE
             _ry_exit $EXIT_LOCK
         end
     case '*'
-        # @@AUDIT@@ v4.4.36: verify-static, verify-runtime, check are read-only
-        # modes — no instance lock acquired (no destinations are mutated).
+        # @@AUDIT@@ v4.4.36: verify-static, verify-runtime, check are read-only modes — no instance lock acquired (no destinations are mutated).
 end
 if test "$_RY_INSTALL_BAILING" = true
     _write_footer "$_RY_INSTALL_LAST_EXIT" interrupted

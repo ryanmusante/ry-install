@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.1-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.2-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.6%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -61,6 +61,9 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 > [!NOTE]
 > **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until your next reboot. On ethernet, run `sudo systemctl restart NetworkManager` once to apply immediately.
 
+> [!IMPORTANT]
+> **v4.5.2 behavior change:** initramfs rebuild now refuses to run when an earlier phase reported errors (torn-package guard). Set `RY_INSTALL_FORCE_BOOT_REBUILD=1` to override after manual remediation.
+
 ## Scope
 
 **In scope:** system-wide CachyOS configuration (kernel cmdline, initramfs, systemd units, network stack, sysctl, gaming env vars), package install/remove via pacman + paru, masking of laptop power-management units for desktop use, single-user systemd `--user` units (ssh-agent, environment.d).
@@ -76,7 +79,7 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | Sudo | Unrestricted — no `requiretty`, `tty_tickets`, or `timestamp_timeout=0` |
 | `$TMPDIR` (or `/tmp`) | Writable |
-| Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `timeout` (BSD/busybox incompatible) |
+| Coreutils | GNU `sort -z`, `stat -c`, `find -printf`/`-samefile`, `df --output`, `timeout` (BSD/busybox incompatible) |
 | Free space | 2 GB on `/`, 200 MB on `/boot` |
 | Network + `curl` | Required |
 | BIOS | Current — [Beelink downloads](https://dr.bee-link.cn/) |
@@ -115,7 +118,7 @@ All modes are non-interactive. The bare invocation is the primary path; verifica
 | Flag | Description |
 |---|---|
 | (no args) | Full unattended install (the only install path) |
-| `-V, --verbose` | Show output on terminal |
+| `-V, --verbose` | Show output on terminal (errors are surfaced on rc≠0 regardless) |
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |
 | `--check` | Silent idempotency probe (exit 0 = clean, 3 = prereq fail, 10 = drift) |
@@ -138,7 +141,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | **Packages** | Sync repos, install/remove packages, AUR via paru |
 | **Configuration** | Deploy 15 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
-| **Boot** | Rebuild initramfs, update systemd-boot entries |
+| **Boot** | Rebuild initramfs (gated on no-prior-errors), update systemd-boot entries |
 | **Finalize** | Daemon-reload, cache cleanup, NM restart (deferred on active WiFi) |
 
 ## Configuration Reference
@@ -172,6 +175,9 @@ Each subsection corresponds to a discrete layer of the system. All values are em
 
 </details>
 
+> [!NOTE]
+> Single value per parameter. Comma-separated multi-value lists are not supported by the verifier — split into separate params or extend `_grep_kparam` if you need them.
+
 ### Boot Loader
 
 Configures systemd-boot and sdboot-manage generation. `editor no` prevents live kernel cmdline tampering at the boot prompt; `timeout 0` boots the saved entry immediately with no menu delay.
@@ -200,6 +206,9 @@ Configures systemd-boot and sdboot-manage generation. `editor no` prevents live 
 | Compression | `zstd` |
 | Compression Options | `-1 -T0` |
 
+> [!IMPORTANT]
+> Since v4.5.2, `mkinitcpio -P` is **not** invoked when an earlier install phase reported errors (e.g., pacman db lock, AUR dep failure). Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish`.
+
 ### System Services
 
 One custom unit is created and enabled. `power-profiles-daemon` is masked separately (see [Masked Services](#masked-services)) to prevent it from fighting `cpupower-epp` over the EPP sysfs knob.
@@ -220,7 +229,7 @@ Three config files lock the WiFi stack to iwd as the NetworkManager backend with
 
 ### System Tuning
 
-Miscellaneous kernel and userspace tuning not covered by other subsections. `coredump.conf.d` is particularly important on this hardware — Wine and Proton processes can produce multi-GB core dumps that silently fill `/var`. Note that `/etc/fstab` is the only path modified outside the managed-file checksum pipeline; the rewrite itself is still atomic (tmp → `findmnt --verify` → `sudo mv`) — see [Safety & Reliability](#safety--reliability).
+Miscellaneous kernel and userspace tuning not covered by other subsections. `coredump.conf.d` is particularly important on this hardware — Wine and Proton processes can produce multi-GB core dumps that silently fill `/var`. Note that `/etc/fstab` is the only path modified outside the managed-file checksum pipeline; the rewrite itself is still atomic (tmp → post-mktemp symlink check → `findmnt --verify` → `sudo mv`) — see [Safety & Reliability](#safety--reliability).
 
 | File | Setting |
 |---|---|
@@ -295,7 +304,7 @@ Three files deploy to the calling user's home. The SSH agent runs with `-D` (no 
 
 ### Packages
 
-Package operations run during the Packages phase with `--needed` for idempotency — already-installed packages are skipped on subsequent runs. The single AUR package (`mt76-mt7925-dkms`) requires paru; if paru is absent the script emits `[ERR]`, sets `INSTALL_HAD_ERRORS`, and the AUR phase is marked failed. The rest of the install pipeline continues to run (boot rebuild, verify, finalize) but the overall exit code reflects the failure.
+Package operations run during the Packages phase with `--needed` for idempotency — already-installed packages are skipped on subsequent runs. The single AUR package (`mt76-mt7925-dkms`) requires paru; if paru is absent the script emits `[ERR]`, sets `INSTALL_HAD_ERRORS`, and the AUR phase is marked failed. The rest of the install pipeline continues to run *except* the boot rebuild (gated since v4.5.2) — set `RY_INSTALL_FORCE_BOOT_REBUILD=1` to bypass that gate.
 
 | Action | Count | Packages |
 |---|---|---|
@@ -327,7 +336,7 @@ Package operations run during the Packages phase with `--needed` for idempotency
 
 ## Managed Files
 
-15 files deployed via atomic writes (tmp → chmod → mv):
+15 files deployed via atomic writes (tmp → symlink-check → chmod → mv):
 
 <details>
 <summary><b>Show all 15 managed destinations</b></summary>
@@ -360,12 +369,18 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → chmod → mv (same FS); parent dir must be root-owned or uid=$UID, not a symlink, not group/world-writable |
+| Atomic writes | tmp → post-mktemp symlink check → chmod → mv (same FS); parent dir must be root-owned or uid=$UID, not a symlink, not group/world-writable |
 | Permission model | System 0644 · user 0600 · `~/ry-install/` and per-day log dirs 0700 · log/marker files 0600 |
-| fstab edits | Idempotent; `findmnt --verify` before write; symlinked `/etc/fstab` rejected; **no backup** — snapshot first |
+| fstab edits | Idempotent; symlink check before chmod; `findmnt --verify` before write; symlinked `/etc/fstab` rejected; **no backup** — snapshot first |
+| Boot rebuild gate | v4.5.2: `mkinitcpio -P` refuses to run when earlier phases set `INSTALL_HAD_ERRORS=true`. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1` |
+| Subprocess control | `_run` uses `timeout --foreground` so external `kill -TERM <pid>` propagates to the child process group |
+| Child reaping | `_do_cleanup` runs `pkill -P $fish_pid` before keepalive teardown — closes the RY_RUN_TIMEOUT=0 untimed-branch hang |
+| Stderr surfacing | First 5 lines of subprocess stderr mirror to fd 2 on rc≠0 even when `QUIET=true` (no `--verbose` needed for failure diagnosis) |
+| Sudoers diagnostics | `sudo -n -l` stderr captured to JSONL; parse errors no longer mask as "requires full sudo" |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + `flock(1)` stale reclaim; sudo keepalive aborts on concurrent-instance directory recreation |
-| Credentials | 9 sensitive flag patterns redacted in logs |
+| Re-source guard | `_RY_INSTALL_LOADED` blocks double-source within a live run; cleared on clean exit (v4.5.2) so re-source after exit just works |
+| Credentials | 15 sensitive flag patterns redacted in logs (passphrase, password, token, key, secret, api-key/apikey, psk, wpa-psk, private-key, auth, bearer, cookie, client-secret, credential) — applied to `_run` command lines and the dispatcher header argv |
 | Signal handling | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
 | Cleanup invariant | Lock, tmpfiles, and sudo keepalive released on every exit path; cleanup is idempotent and re-entry-guarded |
 | Boot safety | Aborts on initramfs/bootloader failure; loader-entry kernel paths canonicalized and ESP-boundary-checked |
@@ -382,7 +397,7 @@ Codes are designed for scripting — non-zero always means something actionable.
 | `1` | Non-critical failure / verification drift (`--verify-static`, `--verify-runtime`) |
 | `2` | Usage error |
 | `3` | Preflight failed (also `--check` prereq failure) |
-| `4` | Boot-critical failure |
+| `4` | Boot-critical failure (includes torn-package gate refusal in v4.5.2) |
 | `5` | Lock failed |
 | `10` | Drift (`--check`) |
 | `129/130/131/143` | Signal (HUP / INT / QUIT / TERM) |
@@ -398,8 +413,9 @@ Shell variables that modify script behavior at runtime — distinct from the gam
 | Variable | Default | Purpose |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). `0` = disable (not recommended). |
-| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Set `1` to ack first boot-entry wipe (`SDBOOT_REMOVE_EXISTING=yes`). Re-prompts if entry count grows. |
+| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Set `1` to ack first boot-entry wipe (`SDBOOT_REMOVE_EXISTING=yes`). Re-prompts whenever the entry-set hash changes (entries added, removed, or renamed). |
 | `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` | unset | Set `1` to ack unattended `pacman -Syu`. Without ack, prints arch/cachyos news headlines and skips `-Syu`. |
+| `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | **v4.5.2:** Set `1` to bypass the torn-package gate (allows `mkinitcpio -P` even when earlier phases reported errors). Use only after manual remediation. |
 | `NO_COLOR` | unset | Suppress ANSI color (also auto on `TERM=dumb` / non-TTY stderr). |
 
 </details>
@@ -424,7 +440,7 @@ Every mode writes structured NDJSON. Each line is a self-contained JSON object w
 
 | Event | Key Fields | Emitted |
 |---|---|---|
-| `header` / `footer` | version, mode, argv (header); exit_code, pass/fail/warn counts (footer) | Run start / end |
+| `header` / `footer` | version, mode, argv (header, redacted); exit_code, pass/fail/warn counts (footer) | Run start / end |
 | `ok` / `fail` / `warn` / `err` / `info` | data | Verification results and status |
 | `prog_step_start` / `prog_step_end` / `prog_done` | data (`[N/M] label`, `name=X secs=N`, `elapsed_secs=N`) | Phase progression |
 | `run` / `stderr` | data | Subprocess execution and captured stderr |
@@ -438,12 +454,12 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-05-01T14:23:01-0700","event":"header","version":"4.5.1","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
-{"ts":"2026-04-27T14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
-{"ts":"2026-04-27T14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
-{"ts":"2026-04-27T14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}
-{"ts":"2026-04-27T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-04-27T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0,"gen_fail":0}
+{"ts":"2026-05-01T14:23:01-0700","event":"header","version":"4.5.2","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"2026-05-01T14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
+{"ts":"2026-05-01T14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
+{"ts":"2026-05-01T14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}
+{"ts":"2026-05-01T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
+{"ts":"2026-05-01T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0,"gen_fail":0}
 ```
 
 </details>
@@ -523,6 +539,8 @@ Start with `--verify-static` and `--verify-runtime` to confirm whether the issue
 | Sudo cache expiry mid-run | `sudo -v; and ./ry-install.fish` |
 | `drirc` XML rejected | `xmllint --noout /etc/drirc` |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
+| Initramfs rebuild refused | Phase errored earlier — fix root cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
+| Re-source error | Should auto-clear in v4.5.2; if stuck: `set -e _RY_INSTALL_LOADED` |
 
 ## References
 

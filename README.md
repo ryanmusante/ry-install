@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.1-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.6%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -76,7 +76,7 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | Sudo | Unrestricted — no `requiretty`, `tty_tickets`, or `timestamp_timeout=0` |
 | `$TMPDIR` (or `/tmp`) | Writable |
-| Coreutils | GNU `sort` and `stat` (BSD/busybox incompatible) |
+| Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `timeout` (BSD/busybox incompatible) |
 | Free space | 2 GB on `/`, 200 MB on `/boot` |
 | Network + `curl` | Required |
 | BIOS | Current — [Beelink downloads](https://dr.bee-link.cn/) |
@@ -134,7 +134,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 | Phase | Description |
 |---|---|
-| **Preflight** | Validate prerequisites (Fish ≥ 3.6, writable `$TMPDIR`, GNU `sort -z`, GNU `stat -c`, sudo without `requiretty` / `tty_tickets` / `timestamp_timeout=0`), acquire lock, validate runtime (root UUID, CPU model, timing globals) |
+| **Preflight** | Validate prerequisites (Fish ≥ 3.6, writable `$TMPDIR`, GNU `sort -z` / `stat -c` / `find -printf` / `df --output` / `timeout`, sudo without `requiretty` / `tty_tickets` / `timestamp_timeout=0`), acquire lock, validate runtime (root UUID, CPU model, timing globals) |
 | **Packages** | Sync repos, install/remove packages, AUR via paru |
 | **Configuration** | Deploy 15 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
@@ -438,7 +438,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-04-29T14:23:01-0700","event":"header","version":"4.5.0","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"2026-05-01T14:23:01-0700","event":"header","version":"4.5.1","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
 {"ts":"2026-04-27T14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
 {"ts":"2026-04-27T14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
 {"ts":"2026-04-27T14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}

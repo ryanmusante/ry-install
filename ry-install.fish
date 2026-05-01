@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.0 (2026-04-30) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.1 (2026-05-01) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>
 #
 # Module-state convention: fish has no module scope, so cross-function state
@@ -25,7 +25,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.0"
+set -g VERSION "4.5.1"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -79,7 +79,7 @@ set -g NO_COLOR false
 test -n "$_no_color_env"; and set -g NO_COLOR true
 test "$TERM" = dumb; and set -g NO_COLOR true
 
-# Fish version gate; 3.4+ required
+# Fish version gate; 3.6+ required (raised v4.4.36 — needs slice [N..], string match -rg, post-pipeline $pipestatus capture)
 set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n1)
 set -l parts (string split '.' -- "$fish_ver")
 if not string match -qr '^\d+$' -- "$parts[1]"
@@ -126,6 +126,15 @@ test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 # F21: GNU df --output probe (BSD df lacks --output)
 if not command df --output=avail / >/dev/null 2>&1
     echo "[ERR] GNU df with --output required (BSD df detected)" >&2
+    _ry_exit $EXIT_PREFLIGHT
+end
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+
+# @@AUDIT@@ v4.5.1: GNU coreutils timeout(1) probe — without it, _run silently
+# falls through to an untimed exec branch (see no-timeout fallback in _run). Fail loud at preflight
+# rather than letting a hung child block install indefinitely.
+if not command -q timeout
+    echo "[ERR] GNU coreutils timeout(1) required (used by _run for hang-protection)" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
@@ -202,7 +211,7 @@ set -g KVER_PARTS (string split '.' -- "$KVER")
 set -g KVER_MAJOR $KVER_PARTS[1]
 if not string match -qr '^\d+$' -- "$KVER_MAJOR"
     echo "[ERR] Cannot parse kernel major version from uname -r: $KVER" >&2
-    # @@AUDIT@@ v4.4.29: was _pre_dispatch_exit; forward-ref bug, function defined L4961.
+    # @@AUDIT@@ v4.4.29: was _pre_dispatch_exit; forward-ref bug at top-level (parser hadn't reached _pre_dispatch_exit definition).
     _ry_exit $EXIT_PREFLIGHT
 end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
@@ -852,9 +861,12 @@ function _content__boot_loader_loader.conf --description "Embedded content for /
 end
 
 function _content__etc_kernel_cmdline --description "Embedded content for /etc/kernel/cmdline"
+    # @@AUDIT@@ v4.5.1: stdout-purity invariant. _content_* dispatchers must NOT
+    # touch fd 2 either — the dispatcher (_ry_get_file_content) is sometimes
+    # called with `2>/dev/null` (see _content_bytes), which would silence a
+    # legitimate _err. Caller is responsible for emitting _fail on rc != 0.
+    # @@AUDIT@@ v4.4.26: function name had single underscore.
     if test -z "$_ROOT_UUID"
-        # @@AUDIT@@ v4.4.26: function name had single underscore.
-        _err "_content__etc_kernel_cmdline: root UUID not cached (_init_runtime may not have run)"
         return 12
     end
     printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
@@ -1419,6 +1431,8 @@ function _run --description "Execute a command with logging, stdout/stderr captu
         # No --keep-status: a child that catches SIGTERM &
         command timeout --kill-after=10 "$_run_timeout" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     else
+        # @@AUDIT@@ v4.5.1: defensive only — top-level preflight (timeout probe) requires timeout(1),
+        # so this branch is reachable only when RY_RUN_TIMEOUT=0 explicitly disables.
         # command prefix forces external binary
         command $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     end
@@ -4787,6 +4801,13 @@ end
 if set -q _flag_install_file
     set MODE install-file
     set -l _if_val "$_flag_install_file"
+    # @@AUDIT@@ v4.5.1: explicit empty-check. argparse with `=` accepts empty
+    # strings; without this the user sees the awkward "got: " (trailing empty)
+    # from the absolute-path branch below.
+    if test -z "$_if_val"
+        _early_usage_exit "--install-file requires a non-empty absolute path"
+    end
+    test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
     if not string match -q -- '/*' "$_if_val"
         if string match -q -- '-*' "$_if_val"
             _early_usage_exit "--install-file requires an absolute path argument (got flag: $_if_val)"
@@ -4799,7 +4820,8 @@ if set -q _flag_install_file
     if test -n "$_canon"
         set INSTALL_FILE_TARGET "$_canon"
     else
-        echo "[WARN] realpath -m failed on '$_if_val' — using literal path; managed-file validation may not match" >&2
+        # @@AUDIT@@ v4.5.1: route through _warn so the WARN reaches JSONL log.
+        _warn "realpath -m failed on '$_if_val' — using literal path; managed-file validation may not match"
         set INSTALL_FILE_TARGET "$_if_val"
     end
 end
@@ -4828,7 +4850,10 @@ set -l _log_rename_ok true
 if test -f "$old_log"; and test "$old_log" != "$new_log"
     if not command mv -- "$old_log" "$new_log" 2>/dev/null
         set _log_rename_ok false
-        echo "[WARN] Log rename failed: $old_log -> $new_log (keeping old path)" >&2
+        # @@AUDIT@@ v4.5.1: route through _warn. LOG_FILE still points at
+        # $old_log on failure (assignment to $new_log is gated below), so
+        # _warn → _msg → _log writes to the still-valid open old log file.
+        _warn "Log rename failed: $old_log -> $new_log (keeping old path)"
     end
 end
 if test "$_log_rename_ok" = true

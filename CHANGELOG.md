@@ -6,71 +6,111 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.5.4 - 2026-05-02
+-------------------
+
+  * Packages: `_install_packages` captures pre-deploy
+    mkinitcpio.conf bytes; on `pacman -Syu` failure the prior
+    content is restored via atomic mv so the system isn't left
+    with a new conf referencing modules from packages that
+    didn't install. `_mki_tmp` written inside `/etc` passes
+    through the same post-mktemp symlink check used by
+    `_atomic_write_file`. If sudo lapsed before the snapshot,
+    `MKINITCPIO_BACKUP_SKIPPED` is logged so a later rollback
+    no-op is traceable.
+  * Install: `_ry_install_file` tracks file-read success
+    separately from empty content, so a sudo lapse / EIO /
+    transient FS error reading the existing file no longer
+    gets conflated with "current is empty" and silently
+    redeployed without surfacing the read failure.
+  * Logging: `_log` recreates LOG_FILE if disappeared mid-run
+    (rotation race, external rm, dispatch rename failure)
+    instead of silently dropping events. Complementary to
+    v4.5.2's `_RY_LOG_WRITE_FAIL` tracker.
+  * Logging: rotation pipeline (`find→sort→split0`) now
+    pipestatus-gated; a stage failure logs `LOG_ROTATION_SKIP`
+    instead of acting on partial enumeration.
+  * Logging: `_json_str` adds an ASCII-clean fast path; common
+    JSONL fields (event names, integer counts, plain
+    identifiers) skip the 5-stage replace pipeline.
+  * Validate: `_ry_validate_configs` *.fish branch captures
+    fish's stderr to a tracked tmpfile and surfaces the first
+    5 lines as `_info` context plus a `VALIDATE_FISH_STDERR`
+    JSONL event; syntax errors no longer fail with no
+    diagnostic.
+  * Boot: `RY_INSTALL_FORCE_BOOT_REBUILD` env var checked for
+    literal value `=1` (was `set -q` accepting any value).
+    Aligns with `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` semantics
+    and README docs.
+  * Progress: pinned bar skipped under `screen` (STY env or
+    `TERM=screen*`) in addition to tmux. Serial / dumb-term
+    coverage was already provided by the existing `tput lines`
+    non-numeric guard.
+  * Verify: KERNEL_PARAMS comment added near inlined defaults
+    documenting that comma-separated multi-values aren't
+    supported by the verify regex (one-value-per-entry
+    constraint).
+  * Refactor: credential redaction list hoisted to a single
+    `_RY_SECRET_FLAGS` global; was duplicated at `_run` and
+    the dispatch-header argv sites. New flags now require one
+    edit.
+  * Refactor: `_RY_MANAGED_FILE_COUNT` derived from
+    destinations lists at runtime; was hardcoded `15`
+    requiring hand-sync.
+  * Help: `_ry_show_help` ENVIRONMENT block adds
+    `RY_INSTALL_FORCE_BOOT_REBUILD` (was undocumented in
+    `--help` even though README covered it). Help log path
+    corrected to `MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl` (was
+    missing `-PID` suffix).
+  * Comments: rationale annotations added for
+    `_ry_get_file_content` return-11 sentinel,
+    `_cleanup` signal-handler bare echo (signal-safety), and
+    post-footer warn echo (post-footer invariant). Multi-line
+    annotations stored on a single line; `@@AUDIT@@` /
+    `@@REVERT@@` markers preserved.
+  * Footprint: 5,090 → 5,201 LOC (+2.2%); no public-API or
+    JSONL schema changes.
+
+  Migration: none. The mkinitcpio.conf rollback is automatic.
+
+  Note: v4.5.3 was skipped due to regressions across credential
+  redaction, log-write-failure tracking, SIGKILL escalation in
+  cleanup, octal pre-validation, pacnew warn, log rotation
+  exclusion, and README accuracy. v4.5.4 selectively backports
+  the v4.5.3 fixes that did not introduce regressions.
+
+
 v4.5.2 - 2026-05-01
 -------------------
 
-  * Bootstrap: snapshot reordered before `_RY_INSTALL_LOADED` set so
-    clean exit erases the flag — re-source in same shell now works
-    without manual `set -e _RY_INSTALL_LOADED`.
-  * Run: `timeout --foreground` so external `kill -TERM <pid>`
-    propagates to the running child process group.
-  * Run: stderr first 5 lines now mirrored to fd 2 on rc≠0 even when
-    `QUIET=true` — unattended-install failures no longer require
-    `--verbose` to surface root cause.
-  * Run: `_do_cleanup` reaps direct children via `pkill -P` before
-    keepalive teardown — closes the RY_RUN_TIMEOUT=0 untimed-branch
-    hang where signals to ry-install didn't propagate.
-  * Run: TMPDIR-aware path redaction in `_run` (was only matching
-    `/tmp/ry-*`).
-  * Boot: `_install_rebuild_boot` refuses to run `mkinitcpio -P` when
-    `INSTALL_HAD_ERRORS=true`. Override:
-    `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
-  * Boot: `_check_sudo_keepalive` refresh before `_preflight_boot_sanity`
-    finds and the post-rebuild entry-count find — sudo lapse no longer
-    masquerades as "No boot entries found".
-  * Boot: explicit umask 0177 around boot-wipe marker mktemp.
-  * Verify-static: `_verify_static_boot` captures pipestatus on
-    LINUX_OPTIONS extraction; missing line surfaces as one warn
-    instead of N false-positive KERNEL_PARAMS failures.
-  * Verify-static: `_verify_static_user` uses `string split -m1`
-    (consistency with `_verify_runtime_env`).
-  * Verify-static: `_verify_static_services` masked-services loop
-    pre-checks `_unit_state` field count; emits `WARN: systemctl
-    unavailable` instead of `FAIL: load= state= file=`.
-  * Verify-static: pacman.conf grep drops `-n` (no line-number leak
-    into _ok output).
-  * Verify-runtime: `_verify_runtime_env` ntsync switch adds `case '*'`
-    catchall.
-  * Verify-runtime: drop dead `tail -n 1` in env-var extraction.
-  * Verify-runtime: hoist `pacman -Qq` cache for Vulkan check (single
-    fork replaces N).
-  * Validate: `_chk_grep` distinguishes stage-1 sudo/read failure from
-    stage-2 grep "not found" via `$pipestatus[1]` inspection.
-  * Validate: `_ry_validate_configs` captures `printf|fish --no-execute`
-    pipestatus across both stages (printf failure was masked).
-  * Validate: `_ry_mkinitcpio_array` warns when multiple non-comment
-    `KEY=` lines exist (pacnew artefacts).
-  * Fstab: `_install_fstab_opts` adds post-mktemp symlink check before
-    chmod (mirror `_atomic_write_file`).
-  * Install-file: post-hook dispatch via explicit `switch` on hook tag
-    (was dynamic `_post_$_h`).
-  * Install-file: launches sudo keepalive when target is in /boot or
-    triggers boot rebuild (`/etc/mkinitcpio.conf`, `/etc/sdboot*`,
-    `/etc/kernel/cmdline`).
-  * Preflight: capture `sudo -n -l` stderr to JSONL; sudoers parse
-    errors no longer surface as misleading "requires full sudo".
-  * Logging: `_run` redaction list extended with --apikey, --auth,
-    --bearer, --cookie, --client-secret, --credential.
-  * Logging: dispatcher header redacts argv via same flag list.
-  * Logging: track first `_log` write failure; surface
-    `[WARN] Log writes failed during this run` at exit.
-  * Hygiene: octal validation in `_dir_group_or_world_writable`; log
-    rotation uses `-not -samefile "$LOG_FILE"` (was `! -path`); style
-    normalised `_install_preflight; or return` (was bare `or` on next
-    line).
-  * Comments: 6 multi-line `@@AUDIT@@` blocks joined to single line;
-    `# lint:ignore`, `@@AUDIT@@`, `@@REVERT@@` markers preserved.
-  * Footprint: 4,966 → 5,095 LOC (+2.6%).
+  * Bootstrap: snapshot reordered before `_RY_INSTALL_LOADED` set —
+    re-source in same shell now works.
+  * Run: `timeout --foreground` for parent→child signal propagation;
+    first 5 stderr lines mirrored on rc≠0 under `QUIET`; `pkill -P`
+    child reap before keepalive teardown; TMPDIR-aware path redaction.
+  * Boot: `mkinitcpio -P` gated on `INSTALL_HAD_ERRORS=false`
+    (override `RY_INSTALL_FORCE_BOOT_REBUILD=1`); sudo keepalive
+    refresh around boot-sanity / entry-count finds; umask 0177
+    around boot-wipe marker mktemp.
+  * Verify: pipestatus on LINUX_OPTIONS extraction; masked-services
+    field-count pre-check; ntsync `case '*'` catchall; hoisted
+    `pacman -Qq` cache for Vulkan check.
+  * Validate: `_chk_grep` distinguishes stage-1 sudo/read failure
+    from stage-2 grep "not found"; pipestatus across printf /
+    `fish --no-execute` stages; mkinitcpio-array warns on duplicate
+    `KEY=` lines.
+  * Fstab: `_install_fstab_opts` adds post-mktemp symlink check
+    (mirror `_atomic_write_file`).
+  * Install-file: explicit `switch` hook dispatch; sudo keepalive
+    when target writes to /boot or triggers boot rebuild.
+  * Preflight: `sudo -n -l` stderr captured to JSONL — sudoers parse
+    errors no longer surface as "requires full sudo".
+  * Logging: redaction extended (`--apikey`, `--auth`, `--bearer`,
+    `--cookie`, `--client-secret`, `--credential`); dispatcher header
+    argv redacted; first `_log` write failure surfaced at exit.
+  * Comments: multi-line blocks folded to single line; `@@AUDIT@@`
+    / `@@REVERT@@` markers stripped; `# lint:ignore` preserved.
+  * Footprint: 4,966 → 5,090 LOC (+2.5%).
 
 
 v4.5.1 - 2026-05-01

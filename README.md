@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.2-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.4-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.6%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -62,7 +62,7 @@ Typical first-run duration: **3–8 minutes** (depends on package mirror speed a
 > **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until your next reboot. On ethernet, run `sudo systemctl restart NetworkManager` once to apply immediately.
 
 > [!IMPORTANT]
-> **v4.5.2 behavior change:** initramfs rebuild now refuses to run when an earlier phase reported errors (torn-package guard). Set `RY_INSTALL_FORCE_BOOT_REBUILD=1` to override after manual remediation.
+> **Since v4.5.2:** initramfs rebuild refuses to run when an earlier phase reported errors (torn-package guard). Set `RY_INSTALL_FORCE_BOOT_REBUILD=1` to override after manual remediation. Since v4.5.4, only the literal value `1` is accepted; any other value (including empty / `0` / typos) is treated as unset.
 
 ## Scope
 
@@ -385,6 +385,10 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Cleanup invariant | Lock, tmpfiles, and sudo keepalive released on every exit path; cleanup is idempotent and re-entry-guarded |
 | Boot safety | Aborts on initramfs/bootloader failure; loader-entry kernel paths canonicalized and ESP-boundary-checked |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard prevents subshell races; embedded newlines correctly escaped in JSONL payloads |
+| mkinitcpio.conf rollback | v4.5.4: pre-deploy bytes captured; on `pacman -Syu` failure the prior content is restored via atomic mv to avoid a torn-package conf referencing modules from uninstalled packages |
+| Read-fail diagnostic | v4.5.4: file-read failures during the idempotency probe no longer masquerade as "current state is empty" — surfaced as redeploy + JSONL `SKIP_PROBE_*` event |
+| Log self-heal | v4.5.4: `_log` recreates LOG_FILE if removed mid-run (rotation race, external rm, dispatch rename failure) — events not silently dropped |
+| Log rotation safety | v4.5.4: `find→sort→split0` pipeline pipestatus-gated; partial enumeration no longer triggers rotation |
 
 <details>
 <summary><b>Exit Codes</b></summary>
@@ -415,7 +419,7 @@ Shell variables that modify script behavior at runtime — distinct from the gam
 | `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). `0` = disable (not recommended). |
 | `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Set `1` to ack first boot-entry wipe (`SDBOOT_REMOVE_EXISTING=yes`). Re-prompts whenever the entry-set hash changes (entries added, removed, or renamed). |
 | `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` | unset | Set `1` to ack unattended `pacman -Syu`. Without ack, prints arch/cachyos news headlines and skips `-Syu`. |
-| `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | **v4.5.2:** Set `1` to bypass the torn-package gate (allows `mkinitcpio -P` even when earlier phases reported errors). Use only after manual remediation. |
+| `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | **Since v4.5.4:** literal value `=1` required to bypass the torn-package gate (allows `mkinitcpio -P` even when earlier phases reported errors). Any other value, including empty / `0` / typos, is treated as unset. Recovery scenarios only. |
 | `NO_COLOR` | unset | Suppress ANSI color (also auto on `TERM=dumb` / non-TTY stderr). |
 
 </details>
@@ -454,12 +458,12 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"2026-05-01T14:23:01-0700","event":"header","version":"4.5.2","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
-{"ts":"2026-05-01T14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
-{"ts":"2026-05-01T14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
-{"ts":"2026-05-01T14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}
-{"ts":"2026-05-01T14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
-{"ts":"2026-05-01T14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0,"gen_fail":0}
+{"ts":"YYYY-MM-DDT14:23:01-0700","event":"header","version":"4.5.4","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"YYYY-MM-DDT14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
+{"ts":"YYYY-MM-DDT14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
+{"ts":"YYYY-MM-DDT14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}
+{"ts":"YYYY-MM-DDT14:25:19-0700","event":"err","data":"paru not found — cannot install AUR packages: mt76-mt7925-dkms"}
+{"ts":"YYYY-MM-DDT14:26:42-0700","event":"footer","mode":"install","exit_code":1,"pass":46,"fail":1,"warn":0,"gen_fail":0}
 ```
 
 </details>

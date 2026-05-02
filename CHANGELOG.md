@@ -6,6 +6,23 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.5.5 - 2026-05-02
+-------------------
+
+  * Comments: `@@AUDIT@@` / `@@REVERT@@` markers stripped
+    (mirrors v4.5.2 release-cleanup pass). Single-line
+    annotation invariant retained; `# lint:ignore` and the
+    script header preserved.
+  * Defaults: dead `# inlined from _ry_profile_gtr9_pro_*`
+    provenance line dropped — `_ry_profile_*` was removed in
+    v4.5.0; the GTR9_PRO banner remains intact for the README
+    customization reference.
+  * Footprint: 5,201 → 5,175 LOC (-0.5%); no public-API,
+    behavioural, or JSONL schema changes.
+
+  Migration: none.
+
+
 v4.5.4 - 2026-05-02
 -------------------
 

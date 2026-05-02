@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.4 (2026-05-02) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.5 (2026-05-02) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -20,7 +20,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.4"
+set -g VERSION "4.5.5"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -28,8 +28,6 @@ set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4
 set -g EXIT_LOCK 5
 set -g EXIT_DRIFT 10
-# @@AUDIT@@ v4.5.4: single source of truth for credential redaction; was duplicated at _run (L1387) and dispatch-header argv redaction (L4989). Append-only — never remove; add new flag patterns at end.
-# @@REVERT@@ v4.5.4: erase _RY_SECRET_FLAGS; restore the literal `for _secret_flag in --passphrase ... --credential` list at both _run and dispatch-header sites.
 set -g _RY_SECRET_FLAGS --passphrase --password --token --key --secret --api-key --apikey --psk --wpa-psk --private-key --auth --bearer --cookie --client-secret --credential
 
 function _ry_exit --argument-names code --description "Source-safe exit: set bail sentinel and return when sourced, exit otherwise"
@@ -552,7 +550,6 @@ end
 
 function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal QUIT --description "Signal handler: clean up on INT/TERM/HUP/QUIT"
     test "$_CLEANUP_DONE" = true; and return 0
-    # @@AUDIT@@ v4.5.4: bare echo rather than _warn — signal-safety. _warn → _msg → _log can re-enter the handler if SIGINT arrives during JSONL append; bare echo to fd 2 has no recursion risk.
     echo "" >&2
     echo "[WARN] Interrupted - cleaning up..." >&2
     set -g _CLEANUP_DONE true
@@ -607,7 +604,6 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
 end
 
 # === GTR9_PRO BUILT-IN DEFAULTS ===
-# inlined from _ry_profile_gtr9_pro_*
 set -g PROFILE_NAME gtr9_pro
 set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
 
@@ -633,8 +629,6 @@ set -g USER_DESTINATIONS \
 set -g SERVICE_DESTINATIONS \
     "/etc/systemd/system/cpupower-epp.service"
 
-# @@AUDIT@@ v4.5.4: derive at runtime from the destinations lists; was hardcoded `15` at L197, requiring hand-sync on every destinations edit. Sole reader is `_ry_show_help` (called only after dispatch).
-# @@REVERT@@ v4.5.4: remove this line; restore `set -g _RY_MANAGED_FILE_COUNT 15` to its prior position before SUDO_KEEPALIVE_INTERVAL.
 set -g _RY_MANAGED_FILE_COUNT (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
 
 set -g LOADER_DEFAULT "@saved"
@@ -648,7 +642,6 @@ set -g SDBOOT_REMOVE_EXISTING yes
 set -g SDBOOT_REMOVE_OBSOLETE yes
 
 # Zen 5 + gfx1151 defaults: amd_pstate=active
-# @@AUDIT@@ v4.5.4: KERNEL_PARAMS verifier `_grep_kparam` and the regex-match loops in `_verify_static_boot` and `_verify_runtime_kparams` bound each entry as `(^|\s)PARAM(\s|$)`. Comma-separated multi-value params (e.g. `module_blacklist=foo,bar`) would NOT verify correctly because `,` is neither whitespace nor end-of-string. If you need a multi-value param, list each value as a separate entry that still produces the same final cmdline token (or extend the verifier regex).
 set -g KERNEL_PARAMS \
     iommu=pt \
     amd_pstate=active \
@@ -1005,7 +998,6 @@ function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Embedded c
 end
 
 function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"
-    # @@AUDIT@@ v4.5.4: returns 11 on unknown destination key — sentinel consumed by `_atomic_write_file` `case 11` to emit "Not a managed destination". Keep the value in sync with that switch arm.
     set -l fn "_content_"(_tmpfile_key "$dst")
     functions -q $fn; or return 11
     $fn
@@ -1143,8 +1135,6 @@ end
 function _json_str --description "Escape a string for safe JSON embedding"
     # argument-mode `string replace` (was pipe-mode, \n→\\n was no-op since fish splits stdin on \n before replace); per-step `string collect` rejoins cmdsub list, terminal `string collect --allow-empty` preserves count=1 for empty input.
     set -l s "$argv[1]"
-    # @@AUDIT@@ v4.5.4: fast path for strings free of any JSON-significant chars (most JSONL field values: lowercase event names, integer counts, simple identifiers). Avoids 5 sequential string-replace forks per log line on the hot path.
-    # @@REVERT@@ v4.5.4: drop the fast-path block.
     if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' -- "$s"
         printf '%s' "$s" | string collect --allow-empty
         return
@@ -1169,8 +1159,6 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
     if set -q _RY_LOG_OWNER_PID; and test "$_RY_LOG_OWNER_PID" != "$fish_pid"
         return 0
     end
-    # @@AUDIT@@ v4.5.4: recreate LOG_FILE if disappeared mid-run (rotation race, external rm, dispatch rename failure). Was: bare `test -f; or return 0` silently dropped every event after disappearance. Complementary to v4.5.2's _RY_LOG_WRITE_FAIL tracker (set further down on printf failure) — this gate catches the pre-write disappearance case. Closes F12.
-    # @@REVERT@@ v4.5.4: replace the if/end block with `test -f "$LOG_FILE"; or return 0`.
     if not test -f "$LOG_FILE"
         set -l _prev_umask (umask)
         umask 0177
@@ -1318,8 +1306,6 @@ function _progress_init --description "Open scroll region; draw initial bar"
     isatty 2; or return 0
     # F45: ncurses-tinfo may be absent on minimal installs; skip pinned bar
     command -q tput; or return 0
-    # @@AUDIT@@ v4.5.4: tmux + screen + serial console all strip / mishandle DECSTBM scroll-region sequences. TMUX detection was already present; STY (screen's session var) and screen-* TERM patterns added so screen, tmux, and dumb terminals all skip the pinned bar gracefully and fall back to JSONL `progress` events.
-    # @@REVERT@@ v4.5.4: drop STY and TERM=screen* lines.
     set -q TMUX; and return 0
     set -q STY; and return 0
     string match -q 'screen*' -- "$TERM"; and return 0
@@ -2070,8 +2056,6 @@ function _ry_validate_configs --description "Run all embedded config validators"
                 _verify_unit_content "$dst" $content; or set errors (math $errors + 1)
             case '*.fish'
                 # capture both pipestatus stages — printf failure was previously masked by the `or` modifier checking only the last stage (fish --no-execute).
-                # @@AUDIT@@ v4.5.4: capture stderr to tmpfile and surface first 5 lines as _info context. Was: stderr unredirected, leaving the operator with `_fail` and no captured diagnostic in the JSONL log. RY-016 + RY-027.
-                # @@REVERT@@ v4.5.4: drop _fish_err_tmp; restore unredirected stderr.
                 set -l _fish_err_tmp (mktemp -t ry-fish-syntax.XXXXXX 2>/dev/null; or echo /dev/null)
                 test "$_fish_err_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$_fish_err_tmp"
                 printf '%s\n' $content | fish --no-execute 2>"$_fish_err_tmp"
@@ -2293,8 +2277,6 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     set -l _new_bytes (_content_bytes "$dst")
     if test -n "$_new_bytes"
         set -l _cur_bytes ""
-        # @@AUDIT@@ v4.5.4: RY-005 — track read-success separately from empty content. Was: empty + empty looked identical, so a sudo lapse / EIO / transient FS error reading the existing file got conflated with "file legitimately empty/absent" and silently redeployed without surfacing the read failure. No managed dst is currently empty, but the read-fail path is the real concern — diagnostic signal should not be masked.
-        # @@REVERT@@ v4.5.4: replace `_cur_read_ok` checks with `test -n $_cur_bytes`.
         set -l _cur_read_ok false
         if test "$use_sudo" = true
             if sudo -n true 2>/dev/null
@@ -3783,8 +3765,6 @@ function _install_packages --description "Install managed packages via pacman -S
     set -l pkgs_to_install $PKGS_ADD
 
     set -g SYSTEM_UPGRADED false
-    # @@AUDIT@@ v4.5.4: RY-001 — capture old mkinitcpio.conf bytes BEFORE pre-deploy. If pacman -Syu fails later we restore via atomic mv so the system isn't left with a new conf referencing modules from packages that didn't install. Boot-rebuild gate prevents same-run brick, but without this restore the next manual `sudo mkinitcpio -P` regenerates initramfs against the broken conf. Rollback is intentionally only on the retry-fail branch — the db.lck branch never invokes pacman, and first-attempt failure cascades into retry, so the retry-fail edge is the single boundary where torn-conf state can occur.
-    # @@REVERT@@ v4.5.4: drop the _mki_backup capture and the restore branch in -Syu fail path.
     set -l _mki_backup ""
     set -l _mki_had_orig false
     if sudo -n true 2>/dev/null
@@ -3812,7 +3792,6 @@ function _install_packages --description "Install managed packages via pacman -S
             _warn "Package installation failed, retrying with fresh sync (first-pass stderr in JSONL log)..."
             if not _run sudo -n pacman -Syyu --needed --noconfirm -- $pkgs_to_install
                 _err "Package installation failed after retry"
-                # @@AUDIT@@ v4.5.4: RY-001 — restore prior mkinitcpio.conf so the system isn't left with a new conf referencing modules from packages that didn't install. Best-effort: silent on failure (operator can manually rollback via /etc/mkinitcpio.conf.pacsave if pacman wrote one).
                 if test "$_mki_had_orig" = true; and test -n "$_mki_backup"
                     set -l _mki_tmp (sudo -n mktemp -p /etc .ry-install.mki.XXXXXX 2>/dev/null)
                     if test -n "$_mki_tmp"
@@ -4362,8 +4341,6 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     end
 
     # refuse initramfs rebuild when an earlier phase reported errors so we don't write a new initramfs against torn package state. RY_INSTALL_FORCE_BOOT_REBUILD=1 is an explicit override for recovery scenarios.
-    # @@AUDIT@@ v4.5.4: tighten env-var check to `= 1` (was `set -q`, accepted any value including empty / "0" / typos). Aligns with the RY_INSTALL_CONFIRM_SYSTEM_UPGRADE check at L4243 and with the README which documents `=1`. Fail-closed: unset / empty / non-1 all trigger the gate. Closes F15.
-    # @@REVERT@@ v4.5.4: replace with `not set -q RY_INSTALL_FORCE_BOOT_REBUILD`.
     if test "$INSTALL_HAD_ERRORS" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
         _err "Refusing initramfs rebuild — earlier phases reported errors (package state may be torn)"
         _err "  Resolve manually then re-run, OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
@@ -5131,8 +5108,6 @@ if not string match -qr '^[1-9][0-9]*$' -- "$MAX_LOGS"
     set MAX_LOGS 50
 end
 # -not -samefile for literal LOG_FILE exclusion (was -path which is glob-aware; current TIMESTAMP format has no glob chars but defense-in-depth).
-# @@AUDIT@@ v4.5.4: capture pipestatus across find→sort→split0; if any stage failed, skip rotation rather than acting on partial enumeration. find errors mid-traversal could otherwise rotate the wrong files. Logs LOG_ROTATION_SKIP for forensics.
-# @@REVERT@@ v4.5.4: drop the _rot_ps capture, _rot_pipe_ok loop, and SKIP branch.
 set -l _rot_rows (command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f -not -samefile "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -zn | string split0)
 set -l _rot_ps $pipestatus
 set -l _rot_pipe_ok true
@@ -5181,7 +5156,6 @@ set -g _INTENDED_EXIT_CODE $_RY_EXIT_CODE
 _write_footer "$_RY_EXIT_CODE" ""
 
 # surface incomplete-log condition. Set by _log on first failed append (disk full, log file deleted mid-run).
-# @@AUDIT@@ v4.5.4: bare echo rather than _warn — post-footer invariant. The JSONL `footer` event is the last record per run; routing this warn through _warn → _log would append another event after the footer.
 if set -q _RY_LOG_WRITE_FAIL; and test "$_RY_LOG_WRITE_FAIL" = true
     echo "[WARN] Log writes failed during this run — JSONL may be incomplete (check disk space / file permissions on $LOG_FILE)" >&2
 end

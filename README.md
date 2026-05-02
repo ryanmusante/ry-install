@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.5-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.6-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.6%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -399,7 +399,7 @@ Codes are designed for scripting — non-zero always means something actionable.
 |---|---|
 | `0` | Success |
 | `1` | Non-critical failure / verification drift (`--verify-static`, `--verify-runtime`) |
-| `2` | Usage error |
+| `2` | Usage error (argparse failures **and** policy refusals such as root-refusal) |
 | `3` | Preflight failed (also `--check` prereq failure) |
 | `4` | Boot-critical failure (includes torn-package gate refusal in v4.5.2) |
 | `5` | Lock failed |
@@ -421,6 +421,8 @@ Shell variables that modify script behavior at runtime — distinct from the gam
 | `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` | unset | Set `1` to ack unattended `pacman -Syu`. Without ack, prints arch/cachyos news headlines and skips `-Syu`. |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | **Since v4.5.4:** literal value `=1` required to bypass the torn-package gate (allows `mkinitcpio -P` even when earlier phases reported errors). Any other value, including empty / `0` / typos, is treated as unset. Recovery scenarios only. |
 | `NO_COLOR` | unset | Suppress ANSI color (also auto on `TERM=dumb` / non-TTY stderr). |
+
+> **Logging — secret-flag redaction:** `_run` and the dispatch-header logger redact values for `--passphrase`, `--password`, `--token`, `--key`, `--secret`, `--api-key`, `--apikey`, `--psk`, `--wpa-psk`, `--private-key`, `--auth`, `--bearer`, `--cookie`, `--client-secret`, `--credential` (both `--flag=value` and `--flag value` forms; v4.5.6+ for the dispatch header). Match is **case-sensitive lowercase only** — uppercase / mixed-case variants (`--Password=`, `--TOKEN=`) are **not** redacted. Use lowercase flag names when invoking commands that pass through `_run`.
 
 </details>
 
@@ -458,7 +460,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"YYYY-MM-DDT14:23:01-0700","event":"header","version":"4.5.5","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"YYYY-MM-DDT14:23:01-0700","event":"header","version":"4.5.6","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
 {"ts":"YYYY-MM-DDT14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
 {"ts":"YYYY-MM-DDT14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
 {"ts":"YYYY-MM-DDT14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}

@@ -6,13 +6,87 @@ heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
 
+v4.5.6 - 2026-05-02
+-------------------
+
+  * Sudoers: `_install_preflight` NOPASSWD regex relaxed to
+    accept the no-space `NOPASSWD:ALL` form and the `(root)`
+    runas alternative. Sudoers entries that are semantically
+    valid for unattended install no longer trigger spurious
+    `EXIT_PREFLIGHT`.
+  * Logging: dispatch-header argv redaction now mirrors
+    `_run` — joins `(status filename) $_ORIG_ARGV`, applies
+    `(^| )$flag[ =]\S+` PCRE globally, re-splits for the
+    JSON array. The `--token sekret` next-positional form is
+    redacted at the header (was: `--token=sekret` only).
+  * Boot: `$PATH` pinned to
+    `/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`
+    immediately after the fish-version gate. A user with a
+    shadow `~/.local/bin/sudo`, `pacman`, or `bootctl` no
+    longer runs the shadow.
+  * Boot: mkinitcpio rollback (`_install_packages` failure
+    path) captures `printf | sudo -n tee` `$pipestatus`. A
+    `printf` failure routes to the existing
+    `MKINITCPIO_REVERT_FAIL` path (pipestatus surfaced)
+    instead of leaving an empty `_mki_tmp` staged for
+    atomic mv.
+  * Verify/Install: `_verify_runtime_env` and
+    `_install_fstab_opts` precheck `/etc/fstab` readability.
+    Site policy that hardens fstab to `0600 root` no longer
+    fails silently through `command awk … 2>/dev/null` —
+    verify path `_warn`s and skips, install path `_fail`s.
+  * `_run`: `command timeout … "$_run_timeout" -- $argv`
+    and the untimed-fallback `command -- $argv` carry an
+    explicit `--` separator. `_as` propagates the same
+    through `sudo -n -- $argv[2..-1]` and
+    `command -- $argv[2..-1]`.
+  * Externals: `command` prefix added at five preflight
+    cmdsubst sites: `zcat /proc/config.gz` (no `--`, gzip
+    variant compat), `cat /proc/cmdline`, the sort-z
+    `tr | grep` pipeline, two `grep -q --` config-symbol
+    probes. Resilient against caller-shadow regressions in
+    the bootstrap path.
+  * Refactor: dispatch-mode setters (`_flag_verify_static`,
+    `_flag_verify_runtime`, `_flag_check`,
+    `_flag_install_file`) declare `set -g MODE` explicitly
+    (was bare `set MODE`, functionally equivalent).
+    `_content_*` printf args for sdboot-manage, mkinitcpio,
+    and NetworkManager split via `\` continuation
+    (392/289/228-char single-line forms → ≤80 each). The
+    EPP-performance service generator's `ExecStart=` arg is
+    intentionally not split — single-quoted bash one-liner
+    cannot be safely line-broken.
+  * Refactor: `RY_INSTALL_CONFIRM_*` literal-1 checks
+    standardised to bare `test "$VAR" = 1` form across
+    `_install_rebuild_boot`. Three sites, semantics
+    preserved — fish `test` treats unset vars as empty.
+  * Comments: docstring above
+    `_content_HOME_.config_fish_conf.d_10-ssh-auth-sock.fish`
+    documents the literal `'end'` printf-arg
+    (`# WARNING: do not run fish_indent -w`); `_cleanup`
+    carries an explicit USR1/USR2/ABRT routing note (route
+    via `fish_exit` fallback).
+  * Docs: README **Codes** table row for `2` clarified to
+    cover argparse failures **and** policy refusals
+    (root-refusal exits `EXIT_USAGE`); README
+    **Runtime Variables** section gains a secret-flag
+    redaction note documenting the lowercase-only match and
+    the new `--flag value` form catch.
+  * Footprint: 5,175 → 5,215 LOC (+0.8%). No public-API,
+    JSONL schema, or exit-code semantic changes.
+
+  Migration: none. Sudoers entries that previously failed
+  preflight (no-space `NOPASSWD:ALL`, `(root)` runas) now
+  pass as intended.
+
+
 v4.5.5 - 2026-05-02
 -------------------
 
-  * Comments: `@@AUDIT@@` / `@@REVERT@@` markers stripped
-    (mirrors v4.5.2 release-cleanup pass). Single-line
-    annotation invariant retained; `# lint:ignore` and the
-    script header preserved.
+  * Comments: in-line review markers stripped (mirrors
+    v4.5.2 release-cleanup pass). Single-line annotation
+    invariant retained; `# lint:ignore` and the script
+    header preserved.
   * Defaults: dead `# inlined from _ry_profile_gtr9_pro_*`
     provenance line dropped — `_ry_profile_*` was removed in
     v4.5.0; the GTR9_PRO banner remains intact for the README
@@ -83,8 +157,8 @@ v4.5.4 - 2026-05-02
     `_ry_get_file_content` return-11 sentinel,
     `_cleanup` signal-handler bare echo (signal-safety), and
     post-footer warn echo (post-footer invariant). Multi-line
-    annotations stored on a single line; `@@AUDIT@@` /
-    `@@REVERT@@` markers preserved.
+    annotations stored on a single line; in-line review
+    markers preserved.
   * Footprint: 5,090 → 5,201 LOC (+2.2%); no public-API or
     JSONL schema changes.
 
@@ -125,8 +199,8 @@ v4.5.2 - 2026-05-01
   * Logging: redaction extended (`--apikey`, `--auth`, `--bearer`,
     `--cookie`, `--client-secret`, `--credential`); dispatcher header
     argv redacted; first `_log` write failure surfaced at exit.
-  * Comments: multi-line blocks folded to single line; `@@AUDIT@@`
-    / `@@REVERT@@` markers stripped; `# lint:ignore` preserved.
+  * Comments: multi-line blocks folded to single line; in-line
+    review markers stripped; `# lint:ignore` preserved.
   * Footprint: 4,966 → 5,090 LOC (+2.5%).
 
 

@@ -138,7 +138,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | Phase | Description |
 |---|---|
 | **Preflight** | Validate prerequisites (Fish ≥ 3.6, writable `$TMPDIR`, GNU `sort -z` / `stat -c` / `find -printf` / `df --output` / `timeout`, sudo without `requiretty` / `tty_tickets` / `timestamp_timeout=0`), acquire lock, validate runtime (root UUID, CPU model, timing globals) |
-| **Packages** | Sync repos, install/remove packages (system upgrade gated on `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1`), AUR via paru |
+| **Packages** | Sync repos, install/remove packages (default `pacman -Syu --needed`; opt-in `-Sy` via `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1`), AUR via paru |
 | **Configuration** | Deploy 15 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
 | **Boot** | Rebuild initramfs (gated on no-prior-errors), update systemd-boot entries |
@@ -304,10 +304,10 @@ Three files deploy to the calling user's home. The SSH agent runs with `-D` (no 
 
 ### Packages
 
-Package operations run during the Packages phase with `--needed` for idempotency — already-installed packages are skipped on subsequent runs. The pacman invocation depends on `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE`:
+Package operations run during the Packages phase with `--needed` for idempotency. The default invocation is `pacman -Syu --needed -- <pkgs>` — Arch's [no-partial-upgrade policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported) mandates `-u` whenever installing, because new packages can pull in newer libraries that other system packages were not built against, leading to shared-library ABI breakage.
 
-- **With ack (`=1`):** `pacman -Syu --needed -- <pkgs>` (refresh DB + full system upgrade + install). This is Arch's recommended path.
-- **Without ack (default):** `pacman -Sy --needed -- <pkgs>` (refresh DB + install only — no `-u`). The Packages phase emits a warning that this can produce partial-upgrade state if any dependency needs upgrade; review arch/cachyos news and re-run with `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1` to do the safer full upgrade.
+> [!CAUTION]
+> **Escape hatch:** set `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` to switch the Packages phase to `pacman -Sy --needed -- <pkgs>` (refresh DB + install only, no system upgrade). The Packages phase emits a warning naming the partial-upgrade risk. Use only if you understand and accept the dependency-version-skew risk (e.g. inside a chroot, or to defer a major upgrade).
 
 The single AUR package (`mt76-mt7925-dkms`) requires paru; if paru is absent the script emits `[ERR]`, sets `INSTALL_HAD_ERRORS`, and the AUR phase is marked failed. The rest of the install pipeline continues to run *except* the boot rebuild (gated since v4.5.2) — set `RY_INSTALL_FORCE_BOOT_REBUILD=1` to bypass that gate.
 
@@ -423,7 +423,7 @@ Shell variables that modify script behavior at runtime — distinct from the gam
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). `0` = disable (not recommended). |
 | `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Set `1` to ack first boot-entry wipe (`SDBOOT_REMOVE_EXISTING=yes`). Re-prompts whenever the entry-set hash changes (entries added, removed, or renamed). |
-| `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` | unset | Set `1` to ack unattended `pacman -Syu --needed -- <pkgs>` (Arch's recommended full-upgrade path). Without ack, the Packages phase falls back to `pacman -Sy --needed -- <pkgs>` (refresh + install only, no system upgrade) and the Boot phase skips its standalone `-Syu`. |
+| `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | Set `1` to switch the Packages phase from `pacman -Syu --needed` (Arch-recommended) to `pacman -Sy --needed` (install only, no system upgrade). **Violates Arch's no-partial-upgrade policy** — only use if you understand the dependency-version-skew risk. The Packages phase emits a warning when this mode is active. |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | **Since v4.5.4:** literal value `=1` required to bypass the torn-package gate (allows `mkinitcpio -P` even when earlier phases reported errors). Any other value, including empty / `0` / typos, is treated as unset. Recovery scenarios only. |
 | `NO_COLOR` | unset | Suppress ANSI color (also auto on `TERM=dumb` / non-TTY stderr). |
 

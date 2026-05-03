@@ -1561,7 +1561,7 @@ EXIT CODES:
 ENVIRONMENT:
   RY_RUN_TIMEOUT=<seconds>    Wall-clock limit for each _run. Default 3600. 0=disable.
   RY_INSTALL_CONFIRM_BOOT_WIPE=1    One-time ack for SDBOOT_REMOVE_EXISTING=yes.
-  RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1    Ack for unattended pacman -Syu (review arch/cachy news first).
+  RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1    Switch Packages phase from `pacman -Syu --needed` (Arch-recommended) to `pacman -Sy --needed` (install-only; partial-upgrade risk).
   RY_INSTALL_FORCE_BOOT_REBUILD=1    Bypass torn-package gate (recovery only; literal '1' required since v4.5.4).
   NO_COLOR=1    Suppress ANSI color (also auto on TERM=dumb / non-TTY stderr).
 
@@ -2191,8 +2191,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     end
 
     set -l dst_dir (dirname -- "$dst")
-    # Parent-dir trust: exists. Use `|` as delimiter — `%F` can be a two-word value
-    # ("regular file", "symbolic link"); space-splitting would shift uid/mode parts.
+    # Parent-dir trust: exists. `|`-delimited stat — `%F` is two-word for non-directories ("regular file", "symbolic link").
     set -l _dir_stat (_as $use_sudo env LC_ALL=C stat -c '%F|%u|%a' -- "$dst_dir" 2>/dev/null)
     if test -z "$_dir_stat"
         _fail "→ $dst (parent dir missing or unreadable: $dst_dir)"
@@ -2539,7 +2538,7 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     else if _chk_file /etc/iwd/main.conf
         _chk_grep /etc/iwd/main.conf "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG"
         for quirk in $IWD_DRIVER_QUIRKS
-            # Compare full key=value (was: key only — value drift went unnoticed).
+            # full key=value match.
             _chk_grep /etc/iwd/main.conf "$quirk" "DriverQuirks $quirk"
         end
         _chk_grep /etc/iwd/main.conf "NameResolvingService=$IWD_DNS_SERVICE" "DNS via $IWD_DNS_SERVICE"
@@ -2587,8 +2586,7 @@ function _verify_static_user --description "Verify SSH agent fish script, enviro
     if _chk_file "$HOME/.config/environment.d/10-environment.conf"
         _chk_grep "$HOME/.config/environment.d/10-environment.conf" "SSH_AUTH_SOCK=" "SSH_AUTH_SOCK for systemd"
         for exp in $ENV_VARS
-            # Compare full name=value (was: name only — value drift went unnoticed,
-            # despite runtime check at _verify_runtime_env catching the same drift).
+            # full name=value match (mirrors _verify_runtime_env coverage).
             _chk_grep "$HOME/.config/environment.d/10-environment.conf" "$exp" "$exp"
         end
     end
@@ -3866,29 +3864,21 @@ function _install_packages --description "Install managed packages via pacman -S
     end
 
     if test (count $pkgs_to_install) -gt 0
-        # Pacman flag selection: when CONFIRM=1 → -Syu (full upgrade, Arch's recommended path);
-        # otherwise → -Sy --needed (refresh DB + install listed pkgs only). The non-upgrade
-        # path violates Arch's no-partial-upgrade policy if any dep needs upgrade — gated on
-        # explicit user ack so the README "skips -Syu without ack" contract holds.
+        # Default: -Syu --needed (Arch's no-partial-upgrade policy). Opt-in: -Sy --needed via RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1 (install-only; partial-upgrade risk).
         set -l _pacman_first
         set -l _pacman_retry
-        set -l _do_upgrade false
-        if test "$RY_INSTALL_CONFIRM_SYSTEM_UPGRADE" = 1
-            set _pacman_first -Syu --needed --noconfirm
-            set _pacman_retry -Syyu --needed --noconfirm
-            set _do_upgrade true
-            _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
-        else
+        set -l _do_upgrade true
+        if test "$RY_INSTALL_ALLOW_PARTIAL_UPGRADE" = 1
             set _pacman_first -Sy --needed --noconfirm
             set _pacman_retry -Syy --needed --noconfirm
-            _warn "Skipping unattended system upgrade (RY_INSTALL_CONFIRM_SYSTEM_UPGRADE not set)"
-            _info "  Review news before -Syu:"
-            _info "    https://archlinux.org/news/"
-            _info "    https://cachyos.org/news/"
-            _info "  Run manually: sudo pacman -Syu"
-            _info "  Or re-run with RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1 for full upgrade"
-            _info "  Note: -Sy without -u may produce partial-upgrade state if a dep needs upgrade"
-            _log "SYSTEM_UPGRADE_SKIPPED: RY_INSTALL_CONFIRM_SYSTEM_UPGRADE not set"
+            set _do_upgrade false
+            _warn "Partial-upgrade mode (RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1) — violates Arch's no-partial-upgrade policy"
+            _info "  Refresh DB + install listed pkgs only; dependency-version skew may break shared-library ABI"
+            _log "PARTIAL_UPGRADE_MODE: RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1"
+        else
+            set _pacman_first -Syu --needed --noconfirm
+            set _pacman_retry -Syyu --needed --noconfirm
+            _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
         end
         if test -f /var/lib/pacman/db.lck
             _err "Pacman database is locked (/var/lib/pacman/db.lck exists) — skipping package install"
@@ -4239,8 +4229,7 @@ function _configure_services_enable --description "Install cpupower-epp, batch-e
     if test "$nm_disp_state" = enabled
         _ok "NetworkManager-dispatcher.service: already enabled"
     else if test -z "$nm_disp_state"
-        # Empty stdout = unit not found (NM not installed yet, or not on system).
-        # Don't enqueue — batch enable would emit a noisy "unit not found" error.
+        # Empty stdout = unit not found (NM not installed); skip enqueue to avoid noisy batch-enable error.
         _info "NetworkManager-dispatcher.service: not installed — skipping enable"
     else
         set -a sys_enable NetworkManager-dispatcher.service
@@ -4446,23 +4435,9 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     _check_sudo_keepalive
 
     _progress Boot
-    # Packages phase is the primary -Syu site; Boot phase only acts when CONFIRM=1
-    # AND the Packages phase did not already upgrade (i.e. PKGS_ADD was empty).
+    # Packages phase is the sole -Syu site; SYSTEM_UPGRADED reflects whether it ran.
     if test "$SYSTEM_UPGRADED" = true
-        _ok "System already upgraded during package installation"
-    else if test "$RY_INSTALL_CONFIRM_SYSTEM_UPGRADE" = 1
-        _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
-        if not _run sudo -n pacman -Syu --noconfirm
-            _err "System upgrade failed or was interrupted — package state may be torn"
-            _err "CRITICAL: refusing to regenerate initramfs against partial -Syu state"
-            _info "  Resolve manually: sudo pacman -Syu (review pacman.log for the failed package)"
-            _info "  Then re-run ry-install"
-            set -g INSTALL_HAD_ERRORS true
-            return $EXIT_BOOT_CRIT
-        else
-            _ok "System upgrade complete"
-            set -g SYSTEM_UPGRADED true
-        end
+        _ok "System upgraded during package installation"
     end
 
     # refuse initramfs rebuild when an earlier phase reported errors so we don't write a new initramfs against torn package state. RY_INSTALL_FORCE_BOOT_REBUILD=1 is an explicit override for recovery scenarios.
@@ -4484,9 +4459,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         set -l _wipe_marker $BOOT_WIPE_MARKER
         set -l _acknowledged false
         _enum_boot_entries "$_esp"
-        # Pipe failure (sudo lapse / fs error during find|sort|split0) means we cannot
-        # determine the entry set — refuse to gate against phantom 0-count + empty
-        # hash, which would surface as a misleading "entries changed" error.
+        # Pipe failure (sudo lapse / fs error) means we can't determine entry set — refuse rather than gate against phantom 0-count + empty hash.
         if test "$_RY_BOOT_PIPE_OK" = false
             _err "Cannot enumerate $_esp/loader/entries — refusing wipe gate"
             _log "BOOT_WIPE_PRECHECK_PIPE_FAIL: enumerate failed"

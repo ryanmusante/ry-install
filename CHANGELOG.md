@@ -5,80 +5,106 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.21 - 2026-05-03
+--------------------
+
+  * Atomic-write: `_atomic_write_file` initialises `_sp` to empty
+    instead of literal `command`. The variable was passed to `_run`
+    as argv[1]; under variable expansion it survived as a plain string
+    and reached timeout(1) as the command name, producing
+    `timeout: failed to run command 'command'` (rc 127) on every
+    user-side write (`~/.config/fish/conf.d/*`,
+    `~/.config/environment.d/*`, `~/.config/systemd/user/*`).
+    Sudo path keeps `sudo -n`; non-sudo path now invokes chmod / mv
+    directly through `_run`.
+  * Style: comment at the patch site trimmed to single-line
+    annotation.
+
+v4.5.20 - 2026-05-03
+--------------------
+
+  * Run: drop literal `--` between timeout(1)'s DURATION and COMMAND.
+    GNU coreutils `timeout(1)` does not accept `--` as end-of-options;
+    `--` was consumed as the command name (rc 127), so every `_run`
+    invocation failed. Pass argv directly.
+  * Run: drop literal `--` between fish's `command` keyword and `$argv`
+    in the `RY_RUN_TIMEOUT=0` fallback branch. `command --` triggers
+    the `command` builtin's option-parser (requires -a/-q/-s/-v and
+    prints help otherwise); bare `command CMD ARGS` is the parser's
+    force-external-lookup keyword.
+  * As: same `command --` fix in `_as` user-side branch — was rendering
+    every `_as false ...` call as a help-print no-op (rc 2).
+  * Style: comments at the three patched sites trimmed to single-line
+    annotation (mirrors v4.5.14 / v4.5.19 cleanup pass).
+
+v4.5.19 - 2026-05-03
+--------------------
+
+  * Bootstrap: fish-version probe uses `$FISH_VERSION` builtin
+    instead of `(fish --version)` cmdsubst. PATH not yet pinned
+    at that line; subprocess could have resolved a shadow `fish`.
+  * Run: secret-flag redaction regex boundary widened from `(^| )`
+    to `(^|\s)` and separator from `[ =]` to `[\s=]` — tab-separated
+    `--token<TAB>foo` argv now matches.
+  * Preflight: bare `grep -v` in `sudo -n -l` filter normalized to
+    `command grep -v` (mirrors v4.5.12 normalization for the one
+    site missed in that pass).
+  * Style: two two-line narrative comments compressed to single-line
+    annotations (mirrors v4.5.14 cleanup pass).
+
 v4.5.18 - 2026-05-03
 --------------------
 
-  * Dispatch: early `-h` / `--help` / `-v` / `--version` short-circuit
-    inserted at L33 (after `VERSION` is defined, before the L77+
-    GNU-coreutils preflight gates). Usage info and version now reachable
-    on systems missing GNU coreutils, fish 3.6+, writable `HOME`, etc.
-    Inline help duplicates `_ry_show_help` synopsis (`_ry_show_help`
-    isn't yet defined at that point in the script).
+  * Dispatch: early `-h` / `--help` / `-v` / `--version`
+    short-circuit inserted before the GNU-coreutils preflight gates;
+    usage and version reachable on systems missing GNU coreutils,
+    fish 3.6+, or writable `HOME`.
   * Run: `_run` no longer caps subprocess stderr at 5 lines under
-    `--verbose` (`QUIET=false`); full stderr is now `cat`'d to fd 2.
-    The 5-line cap is retained for the unattended (`QUIET=true`,
-    `rc≠0`) path so install logs don't flood with sub-process noise.
-  * Verify-runtime: `nftables.service` added to
-    `_verify_runtime_services`'s `sys_units` list (was previously only
-    asserted by `--check`'s silent probe). `parsed[]` count raised
-    5→6; new `parsed[6]` block emits ok / warn / fail per state.
+    `--verbose`; full stderr cat'd to fd 2. 5-line cap retained for
+    unattended (`QUIET=true`, `rc≠0`) so logs don't flood.
+  * Verify-runtime: `nftables.service` added to `sys_units`;
+    `parsed[]` count raised 5→6 with matching ok/warn/fail block.
   * Progress: `_progress_init` short-circuits under mosh
-    (`$MOSH_CONNECTION` set, or `$TERM_PROGRAM` matches `mosh*`) so the
-    DECSTBM-pinned bar is suppressed where mosh wouldn't honor the
-    scroll region. JSONL `prog_step_*` events still emit.
-  * Exit: `_ry_exit` now removes orphan `LOG_FILE` and `LOG_DIR` (and
-    chains `rmdir` up through `~/ry-install/`) when neither
-    `_RY_HEADER_WRITTEN` nor `_RY_LOG_WRITTEN` is set — covers the
-    L77+ preflight-gate window where `_do_cleanup` /
-    `_pre_dispatch_log_cleanup` aren't yet defined.
+    (`$MOSH_CONNECTION` or `$TERM_PROGRAM` matching `mosh*`); JSONL
+    `prog_step_*` events still emit.
+  * Exit: `_ry_exit` removes orphan `LOG_FILE` / `LOG_DIR` (rmdir
+    chain through `~/ry-install/`) when neither `_RY_HEADER_WRITTEN`
+    nor `_RY_LOG_WRITTEN` is set.
 
 v4.5.17 - 2026-05-03
 --------------------
 
-  * Install-file: `_post_service` user branch probes for active
-    user-bus (`$XDG_RUNTIME_DIR/bus`) before invoking
-    `systemctl --user enable --now`; falls back to `enable` (no
-    `--now`) plus an info line when the bus is absent. Mirrors
-    the probe in `_configure_services_enable`.
-  * Install-file: `_ry_do_install_file` calls
-    `_kill_sudo_keepalive` on both return paths so the keepalive
-    process is reaped explicitly rather than via `_do_cleanup` /
-    `fish_exit` only.
-  * Install-file: keepalive-launch glob match canonicalizes
-    `$target` via local `realpath -m` before pattern testing.
+  * Install-file: `_post_service` user branch probes `$XDG_RUNTIME_DIR/bus`
+    before `systemctl --user enable --now`; falls back to `enable`
+    (no `--now`) plus an info line when the bus is absent.
+  * Install-file: `_ry_do_install_file` calls `_kill_sudo_keepalive`
+    on both return paths.
+  * Install-file: keepalive-launch glob match canonicalizes `$target`
+    via local `realpath -m` before pattern testing.
   * Logging: `_log` sets `_RY_LOG_WRITTEN` on first successful
-    append. `_pre_dispatch_log_cleanup` preserves `LOG_FILE` when
-    either `_RY_HEADER_WRITTEN` or `_RY_LOG_WRITTEN` is set, so
-    early-exit `_err` lines from `_init_runtime` are retained.
-  * Logging: log-rotation `find` capped at `-maxdepth 2`
-    (`logs/YYYY-MM-DD/file.jsonl`).
+    append; `_pre_dispatch_log_cleanup` preserves `LOG_FILE` when
+    either `_RY_HEADER_WRITTEN` or `_RY_LOG_WRITTEN` is set.
+  * Logging: log-rotation `find` capped at `-maxdepth 2`.
   * Cleanup: `_cleanup_tmpfiles` no longer walks
-    `/etc/NetworkManager/system-connections` — no embedded content
-    writes there. Drops the `_RY_CLEANUP_SUDO_LAPSED_WARNED` global.
+    `/etc/NetworkManager/system-connections`. Drops the
+    `_RY_CLEANUP_SUDO_LAPSED_WARNED` global.
   * Preflight: `_validate_kernel_params` `param_config_map` drops
-    stale `nvme_core.=CONFIG_NVME_CORE` entry — no `nvme_core.*`
-    member exists in `KERNEL_PARAMS`.
+    stale `nvme_core.=CONFIG_NVME_CORE` entry.
   * Docs: README log-rotation note matches dispatcher behaviour
     (`MAX_LOGS=50`, oldest first).
 
-  Migration: none. Behaviour-preserving on all install paths;
-  `_post_service` user-bus probe converts a prior rc=1 warning to
-  a graceful enable when the user bus is unavailable.
+  Migration: none. Behaviour-preserving on all install paths.
 
 
 v4.5.16 - 2026-05-03
 --------------------
 
-  * Services: drop dead `_RY_IMPLICIT_SERVICES` global. The variable
-    had no remaining consumers — `_verify_runtime_services` and
-    `_implicit_svcs` in `_ry_do_check` both list the unit names
-    inline. Stale "L3025 sys_units" SSOT comment near the
-    `EXPECTED_SERVICES` declaration replaced with a note that
-    implicit units are listed inline.
-  * Comments: `_verify_runtime_services` `sys_units` annotation now
-    accurately documents the literal-list semantics (positional
-    coupling to `parsed[N]` and the hardcoded `_ok`/`_warn`/`_fail`
-    labels below) instead of claiming derivation that didn't exist.
+  * Services: drop dead `_RY_IMPLICIT_SERVICES` global. The
+    `_verify_runtime_services` and `_implicit_svcs` in `_ry_do_check`
+    list unit names inline.
+  * Comments: `_verify_runtime_services` `sys_units` annotation
+    documents literal-list semantics (positional coupling to
+    `parsed[N]`).
 
   Migration: none. Behaviour-preserving cleanup.
 
@@ -91,16 +117,14 @@ v4.5.15 - 2026-05-03
   * Preflight: fractional-sleep probe sets `_RY_SLEEP_FRAC` for
     cleanup TERM→KILL gaps.
   * Sysctl: content generator returns rc 12 when printed line count
-    ≠ `count $SYSCTL_VALUES`; partial files no longer deploy
-    silently.
+    ≠ `count $SYSCTL_VALUES`.
   * Install-file: post-hook dispatch table gains
     `*/fish/conf.d/*.fish|fish` mapped to a new `_post_fish` handler.
   * Verify-runtime: `systemctl --user show-environment` capture
-    strips surrounding double-quotes — eliminates spurious mismatch
-    warnings on values containing shell metachars.
-  * Install: `_configure_services_enable` probes for an active
-    user bus before `systemctl --user enable --now`; without one,
-    enables without `--now` and emits a clearer message.
+    strips surrounding double-quotes.
+  * Install: `_configure_services_enable` probes for an active user
+    bus before `systemctl --user enable --now`; without one,
+    enables without `--now`.
   * Logging: section-event class captures content via anchored
     `^=== (.*) ===$` regex.
   * Logging: `_log` records `MKTEMP_FAIL: ry-fish-syntax` when the
@@ -122,7 +146,6 @@ v4.5.14 - 2026-05-03
     patterns was reaching the regex engine as a literal dollar
     character. Affected `_grep_kparam`, `_verify_static_boot`,
     `_ry_do_check`, `_verify_runtime_kparams` `rw` token checks.
-    Latent — generator always emits `rw` followed by `root=UUID=…`.
   * Style: in-script narrative comments compressed to single-line
     annotations; blank lines stripped from function bodies (5262
     → 4975 LOC).

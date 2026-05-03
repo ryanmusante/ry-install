@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.18 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.21 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -20,7 +20,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.18"
+set -g VERSION "4.5.21"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -106,8 +106,8 @@ set -l _no_color_env (set -q NO_COLOR; and printf '%s' "$NO_COLOR")
 set -g NO_COLOR false
 test -n "$_no_color_env"; and set -g NO_COLOR true
 test "$TERM" = dumb; and set -g NO_COLOR true
-# Fish version gate; 3.6+ required (raised v4.4.36 — needs slice [N..], string match -rg, post-pipeline $pipestatus capture)
-set -l fish_ver (string match -r -- '\d+\.\d+(\.\d+)?' (fish --version 2>&1) | head -n1)
+# Fish version gate; 3.6+ required (raised v4.4.36 — needs slice [N..], string match -rg, post-pipeline $pipestatus capture). Use $FISH_VERSION builtin (PATH not yet pinned).
+set -l fish_ver $FISH_VERSION
 set -l parts (string split '.' -- "$fish_ver")
 if not string match -qr '^\d+$' -- "$parts[1]"
     or not string match -qr '^\d+$' -- "$parts[2]"
@@ -1093,7 +1093,8 @@ function _as --argument-names use_sudo --description "Prefix command with sudo o
     if test "$use_sudo" = true
         sudo -n -- $argv[2..-1]
     else
-        command -- $argv[2..-1]
+        # bare `command` is the parser's force-external-lookup keyword; `command --` triggers the builtin option-parser (needs -a/-q/-s/-v) and prints help.
+        command $argv[2..-1]
     end
 end
 
@@ -1453,11 +1454,11 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     end
     # INVARIANT: callers pass pre-expanded argv w/ no
     set -l log_cmd (string join -- " " $argv)
-    # extended cred flag list — added auth, bearer, cookie, apikey, client-secret, credential.
+    # extended cred flag list — added auth, bearer, cookie, apikey, client-secret, credential. Boundary regex uses \s to catch tab-separated argv elements.
     for _secret_flag in $_RY_SECRET_FLAGS
         set -l _escaped_flag (string escape --style=regex -- "$_secret_flag")
         # lint:ignore (PCRE backref)
-        set log_cmd (string replace -ar -- "(^| )"$_escaped_flag"[ =]\S+" '$1'"$_secret_flag=[REDACTED]" "$log_cmd")
+        set log_cmd (string replace -ar -- "(^|\s)"$_escaped_flag"[\s=]\S+" '$1'"$_secret_flag=[REDACTED]" "$log_cmd")
     end
     # Redact ry-* tmp paths; TMPDIR-aware with /tmp/ry-* fallback.
     if set -q TMPDIR; and test -n "$TMPDIR"; and test "$TMPDIR" != /tmp
@@ -1498,11 +1499,11 @@ function _run --description "Execute a command with logging, stdout/stderr captu
         set _run_timeout 3600
     end
     if test -n "$_run_timeout"; and command -q timeout
-        # --foreground propagates parent signals to child process group (else kill -TERM doesn't reach pacman/mkinitcpio).
-        command timeout --foreground --kill-after=10 "$_run_timeout" -- $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
+        # --foreground forwards parent signals to child group (else kill -TERM doesn't reach pacman/mkinitcpio); timeout(1) reads `--` between DURATION and COMMAND as the command name (rc 127), so pass argv bare.
+        command timeout --foreground --kill-after=10 "$_run_timeout" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     else
-        # defensive — only reachable when RY_RUN_TIMEOUT=0 explicitly disables timeout.
-        command -- $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
+        # defensive — only reachable when RY_RUN_TIMEOUT=0 explicitly disables timeout; bare `command` per `_as` rationale.
+        command $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     end
     set -l ret $status
     # on non-zero exit, mirror first 5 lines of stderr to fd 2 even when QUIET=true so unattended installs surface failure cause without --verbose.
@@ -2160,7 +2161,8 @@ end
 
 # Atomic write: dir-trust→mktemp→symlink-check→write→
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write with symlink and integrity checks"
-    set -l _sp command
+    # `_sp` prefixes `_run`; empty on non-sudo path. A literal `command` here would survive as plain argv to timeout(1) and fail as `failed to run command 'command'`.
+    set -l _sp
     set -l _expected_uid $_MY_UID
     if test "$use_sudo" = true
         set _sp sudo -n
@@ -3647,7 +3649,7 @@ function _install_preflight --description "Run all preflight checks before insta
     # capture sudo -l stderr so sudoers parse errors / NIS lookup failures don't surface as a misleading "Unattended install requires full sudo".
     set -l _sudo_l_err (mktemp -t ry-sudo-l-err.XXXXXX 2>/dev/null; or echo /dev/null)
     test "$_sudo_l_err" != /dev/null; and set -ga _TRACKED_TMPFILES "$_sudo_l_err"
-    set -l _sudo_lines (sudo -n -l 2>"$_sudo_l_err" | grep -v '^[[:space:]]*#')
+    set -l _sudo_lines (sudo -n -l 2>"$_sudo_l_err" | command grep -v '^[[:space:]]*#')
     set -l sudo_all 0
     for _sl in $_sudo_lines
         if string match -qr -- '\bDefaults\b.*\b(requiretty|tty_tickets|timestamp_timeout=0)\b' "$_sl"
@@ -4604,8 +4606,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     _echo "── ry-install v$VERSION - Install Single File ──"
     if test "$use_sudo" = true
         _ensure_sudo_cached; or return $EXIT_PREFLIGHT
-        # launch keepalive for boot-touching install-file (slow mkinitcpio -P can exceed sudo TTL).
-        # canonicalize target locally for the match: dispatcher's realpath -m may have failed and left a literal path.
+        # boot-touching install-file launches keepalive (slow mkinitcpio -P can exceed sudo TTL); local realpath -m re-canonicalizes since dispatcher's may have left a literal path.
         set -l _ka_target (command realpath -m -- "$target" 2>/dev/null; or echo "$target")
         if string match -q '/boot/*' -- "$_ka_target"; or string match -q '/etc/mkinitcpio*' -- "$_ka_target"; or string match -q '/etc/sdboot-manage*' -- "$_ka_target"; or test "$_ka_target" = /etc/kernel/cmdline
             _start_sudo_keepalive
@@ -5010,8 +5011,7 @@ set -l _log_base_rot (dirname -- "$LOG_DIR")
 if not string match -qr '^[1-9][0-9]*$' -- "$MAX_LOGS"
     set MAX_LOGS 50
 end
-# -not -samefile for literal LOG_FILE exclusion (was -path which is glob-aware; current TIMESTAMP format has no glob chars but defense-in-depth).
-# -maxdepth 2: logs land at logs/YYYY-MM-DD/file.jsonl exactly; avoids drift if user manually adds nested subdirs.
+# -not -samefile excludes LOG_FILE literally (defence-in-depth vs glob-aware -path); -maxdepth 2 anchors to logs/YYYY-MM-DD/file.jsonl exactly.
 set -l _rot_rows (command find "$_log_base_rot" -maxdepth 2 \( -name '*.jsonl' -o -name '*.log' \) -type f -not -samefile "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -zn | string split0)
 set -l _rot_ps $pipestatus
 set -l _rot_pipe_ok true

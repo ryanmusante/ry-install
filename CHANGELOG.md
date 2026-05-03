@@ -5,6 +5,38 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.14 - 2026-05-03
+--------------------
+
+  * Verify: end-of-string anchor `$` in four single-quoted
+    PCRE patterns was reaching the regex engine as a literal
+    dollar character (single quotes pass `\$` through verbatim;
+    PCRE then treats the escaped form as a literal). Affected
+    `_grep_kparam`, `_verify_static_boot`, `_ry_do_check`, and
+    `_verify_runtime_kparams` — all four `rw` token checks.
+    Replaced `(\s|\$)` with `(\s|$)` in single-quoted contexts.
+    Symptom would have been a false-fail on cmdline orderings
+    that place `rw` at end-of-line; current generator output
+    always emits `rw` followed by `root=UUID=...` so the bug
+    was latent.
+  * Docs: README fish badge corrected to `fish ≥ 3.6` (was
+    `fish ≥ 4.0 (3.6+)`). The script gates 3.6 minimum with no
+    4.x-specific code paths.
+  * Docs: CHANGELOG sentinel heading inserted between v4.5.4
+    and v4.5.2 so the v4.5.3 skip is visible at scan-level.
+    Skip rationale remains inside the v4.5.4 entry.
+  * Style: in-script narrative comments compressed to single-
+    line annotations. `lint:ignore` markers and script header
+    preserved verbatim.
+  * Style: blank lines stripped from inside function bodies and
+    from between coupled top-level dispatch statements (287
+    lines total, 5262 → 4975). Function-boundary blanks
+    preserved. Runtime behavior unchanged — `_echo` calls still
+    provide visual separation in output; only source spacing
+    was tightened.
+
+  Migration: none.
+
 v4.5.13 - 2026-05-03
 --------------------
 
@@ -454,6 +486,15 @@ v4.5.4 - 2026-05-02
   cleanup, octal pre-validation, pacnew warn, log rotation
   exclusion, and README accuracy. v4.5.4 selectively backports
   the v4.5.3 fixes that did not introduce regressions.
+
+
+v4.5.3 - SKIPPED
+----------------
+
+  See note inside the v4.5.4 entry above. Tag never released;
+  selected fixes were folded into v4.5.4. This sentinel exists
+  only so the heading sequence reads v4.5.4 → v4.5.3 → v4.5.2
+  on quick scans.
 
 
 v4.5.2 - 2026-05-01

@@ -1,7 +1,7 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.13-blue.svg)](CHANGELOG.md)
-[![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.6%2B%29-4aae46.svg)](https://fishshell.com/)
+[![version](https://img.shields.io/badge/version-4.5.14-blue.svg)](CHANGELOG.md)
+[![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)

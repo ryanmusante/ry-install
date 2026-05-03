@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.17-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.18-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -21,11 +21,28 @@
 - [Usage](#usage)
 - [Install Flow](#install-flow)
 - [Configuration Reference](#configuration-reference)
+    - [Kernel Parameters](#kernel-parameters)
+    - [Boot Loader](#boot-loader)
+    - [Initramfs](#initramfs)
+    - [System Services](#system-services)
+    - [Network Stack](#network-stack)
+    - [System Tuning](#system-tuning)
+    - [Environment Variables](#environment-variables)
+    - [User Configuration](#user-configuration)
+    - [Packages](#packages)
+    - [Masked Services](#masked-services)
 - [Managed Files](#managed-files)
 - [Customization](#customization)
 - [Safety & Reliability](#safety--reliability)
+    - [Exit Codes](#exit-codes)
+    - [Runtime Variables](#runtime-variables)
+    - [Data Directory & Logs](#data-directory-logs)
 - [Uninstall](#uninstall)
 - [Known Issues](#known-issues)
+    - [Strix Halo GPU](#known-issues-gfx1151)
+    - [MediaTek MT7925](#known-issues-mt7925)
+    - [NetworkManager + iwd](#known-issues-nm-iwd)
+    - [Progress bar under mosh](#known-issues-mosh)
 - [Troubleshooting](#troubleshooting)
 - [References](#references)
 - [License](#license)
@@ -135,6 +152,7 @@ All values are embedded in the script and deployed via the paths in [Managed Fil
 
 15 params written to `/etc/kernel/cmdline`, plus implicit `rw` and `root=UUID=…`.
 
+<a id="kernel-parameters-list"></a>
 <details>
 <summary><b>Show parameter table (15)</b></summary>
 
@@ -215,6 +233,7 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 
 13 vars in `~/.config/environment.d/10-environment.conf`. Debug logging silenced by default.
 
+<a id="environment-variables-list"></a>
 <details>
 <summary><b>Show 13 environment variables</b></summary>
 
@@ -234,6 +253,7 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 
 </details>
 
+<a id="per-game-overrides"></a>
 <details>
 <summary><b>Per-game overrides (Steam launch options)</b></summary>
 
@@ -273,6 +293,7 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 
 10 units masked — **review before laptop use:**
 
+<a id="masked-services-list"></a>
 <details>
 <summary><b>Show masked services (10)</b></summary>
 
@@ -291,6 +312,7 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 
 15 files deployed via atomic writes (tmp → symlink-check → chmod → mv).
 
+<a id="managed-files-list"></a>
 <details>
 <summary><b>Show all 15 destinations</b></summary>
 
@@ -329,7 +351,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | KERNEL_PARAMS hygiene | Preflight rejects whitespace or `"` in any param |
 | Sysctl invariant | Generator returns rc 12 if printed line count ≠ `count $SYSCTL_VALUES` |
 | Subprocess control | `_run` uses `timeout --foreground`; `_do_cleanup` reaps via `pkill -P` before keepalive teardown |
-| Stderr surfacing | First 5 lines of subprocess stderr mirror to fd 2 on rc≠0, even under `QUIET=true` |
+| Stderr surfacing | First 5 lines of subprocess stderr mirror to fd 2 on rc≠0, even under `QUIET=true`. Under `--verbose`, full stderr is mirrored without truncation. |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + `flock(1)` stale reclaim |
 | Re-source guard | `_RY_INSTALL_LOADED` blocks double-source; cleared on clean exit |
@@ -338,6 +360,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | mkinitcpio rollback | Pre-deploy bytes captured; restored via atomic mv on `pacman -Syu` failure |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard; self-heal on rotation race |
 
+<a id="exit-codes"></a>
 <details>
 <summary><b>Exit Codes</b></summary>
 
@@ -355,6 +378,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 
 </details>
 
+<a id="runtime-variables"></a>
 <details>
 <summary><b>Runtime Variables</b></summary>
 
@@ -370,6 +394,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 
 </details>
 
+<a id="data-directory-logs"></a>
 <details>
 <summary><b>Data Directory & Logs</b></summary>
 
@@ -395,6 +420,7 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 
 ## Known Issues
 
+<a id="known-issues-gfx1151"></a>
 <details>
 <summary><b>Strix Halo GPU (gfx1151)</b></summary>
 
@@ -408,6 +434,7 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 
 </details>
 
+<a id="known-issues-mt7925"></a>
 <details>
 <summary><b>MediaTek MT7925 WiFi</b></summary>
 
@@ -419,6 +446,7 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 
 </details>
 
+<a id="known-issues-nm-iwd"></a>
 <details>
 <summary><b>NetworkManager + iwd</b></summary>
 
@@ -429,6 +457,7 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 
 </details>
 
+<a id="known-issues-mosh"></a>
 <details>
 <summary><b>Progress bar disabled under mosh</b></summary>
 

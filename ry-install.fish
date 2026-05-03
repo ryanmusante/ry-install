@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.17 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.18 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -20,7 +20,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.17"
+set -g VERSION "4.5.18"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -29,6 +29,31 @@ set -g EXIT_BOOT_CRIT 4
 set -g EXIT_LOCK 5
 set -g EXIT_DRIFT 10
 set -g _RY_SECRET_FLAGS --passphrase --password --token --key --secret --api-key --apikey --psk --wpa-psk --private-key --auth --bearer --cookie --client-secret --credential
+
+# Pre-preflight -h/--help/-v/--version peek; usage info reachable before L77+ GNU-coreutils gates.
+for _early_arg in $argv
+    switch "$_early_arg"
+        case -h --help
+            echo "Usage: ry-install.fish [OPTIONS]"
+            echo ""
+            echo "  -h, --help              Show this help"
+            echo "  -v, --version           Print version (v$VERSION)"
+            echo "  -V, --verbose           Show output for install/check (silent by default)"
+            echo "  --verify-static         Check config files match embedded content"
+            echo "  --verify-runtime        Check live system state (post-reboot)"
+            echo "  --check                 Silent idempotency probe"
+            echo "                          exit 0=clean / 3=preflight / 10=drift"
+            echo "  --install-file <path>   Re-deploy a single managed file"
+            echo ""
+            echo "Modes are mutually exclusive (argparse --exclusive)."
+            echo "Run as your normal user (sudo invoked internally)."
+            echo "Documentation: https://github.com/ryanmusante/ry-install"
+            exit 0
+        case -v --version
+            echo "v$VERSION"
+            exit 0
+    end
+end
 
 function _ry_exit --argument-names code --description "Source-safe exit: set bail sentinel and return when sourced, exit otherwise"
     test -z "$code"; and set code 0
@@ -45,6 +70,13 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
     set -g _RY_INSTALL_LAST_EXIT $code
     set -g _RY_INSTALL_BAILING true
     set -l _was_sourced "$_RY_INSTALL_SOURCED"
+    # Orphan-log cleanup: remove empty LOG_FILE/LOG_DIR when neither HEADER nor _log line was written (covers L77+ early-gate exits before _do_cleanup is defined).
+    if not set -q _RY_HEADER_WRITTEN; and not set -q _RY_LOG_WRITTEN
+        set -q LOG_FILE; and command rm -f -- "$LOG_FILE" 2>/dev/null
+        set -q LOG_DIR; and command rmdir -- "$LOG_DIR" 2>/dev/null
+        set -q LOG_DIR; and command rmdir -- (dirname -- "$LOG_DIR") 2>/dev/null
+        set -q HOME; and command rmdir -- "$HOME/ry-install" 2>/dev/null
+    end
     functions -q _do_cleanup; and _do_cleanup
     # erase handlers before namespace cleanup.
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null
@@ -1332,6 +1364,9 @@ function _progress_init --description "Open scroll region; draw initial bar"
     set -q TMUX; and return 0
     set -q STY; and return 0
     string match -q 'screen*' -- "$TERM"; and return 0
+    # mosh ignores DECSTBM scroll-region; suppress pinned bar (JSONL events still emit).
+    set -q MOSH_CONNECTION; and return 0
+    string match -q 'mosh*' -- "$TERM_PROGRAM"; and return 0
     set -l rows (tput lines 2>/dev/null)
     string match -qr '^\d+$' -- "$rows"; or return 0
     test $rows -ge 10; or return 0
@@ -1473,8 +1508,9 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     # on non-zero exit, mirror first 5 lines of stderr to fd 2 even when QUIET=true so unattended installs surface failure cause without --verbose.
     if test -s "$stderr_tmp"
         _log "STDERR: "(string join -- " | " (command head -n 50 -- "$stderr_tmp"))
+        # Under --verbose: full stderr to fd 2; under QUIET=true rc≠0: cap at 5 lines.
         if test "$QUIET" = false
-            command head -n 5 -- "$stderr_tmp" >&2
+            command cat -- "$stderr_tmp" >&2
         else if test $ret -ne 0
             command head -n 5 -- "$stderr_tmp" >&2
         end
@@ -3042,10 +3078,10 @@ end
 function _verify_runtime_services --description "Verify systemd unit states (sys batch + ssh-agent user) and WiFi runtime"
     _echo "SERVICE STATE"
     _echo
-    # Explicit list (nftables.service excluded — checked separately at _ry_do_check phase 4). Order is positionally coupled to parsed[N] indices and the hardcoded labels in the _ok/_warn/_fail strings below; reorder both together.
-    set -l sys_units cpupower-epp.service fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service NetworkManager.service
-    if test (count $sys_units) -ne 5
-        _fail "  sys_units count drift: actual="(count $sys_units)" expected=5 — update parsed[N] indices below"
+    # nftables.service runtime state asserted here too (was --check-only); parsed[] count 6, [6] block below.
+    set -l sys_units cpupower-epp.service fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service NetworkManager.service nftables.service
+    if test (count $sys_units) -ne 6
+        _fail "  sys_units count drift: actual="(count $sys_units)" expected=6 — update parsed[N] indices below"
         return 1
     end
     set -l parsed
@@ -3053,7 +3089,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
         set -l _v (_unit_state_padded $_u)
         set -a parsed "$_v[1]:$_v[2]:$_v[3]"
     end
-    # MAINTENANCE: parsed[] is positionally coupled to $sys_units; indices [1..5] map 1:1. Update both together.
+    # MAINTENANCE: parsed[] is positionally coupled to $sys_units; indices [1..6] map 1:1. Update both together.
     set -l rec (string split ':' -- "$parsed[1]")
     if test "$rec[1]" = not-found
         _warn "  cpupower-epp.service: not installed"
@@ -3105,6 +3141,19 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
         end
     else
         _fail "  NetworkManager.service: $rec[2] (expected: active)"
+    end
+    # nftables.service: not-found → warn; active+enabled → ok; active but not-enabled → warn; else fail.
+    set -l rec (string split ':' -- "$parsed[6]")
+    if test "$rec[1]" = not-found
+        _warn "  nftables.service: not installed (firewall absent)"
+    else if test "$rec[2]" = active
+        if test "$rec[3]" = enabled
+            _ok "  nftables.service: active (enabled)"
+        else
+            _warn "  nftables.service: active but $rec[3] (will not persist)"
+        end
+    else
+        _fail "  nftables.service: $rec[2] (expected: active)"
     end
     set -l _u (systemctl --user show --value --property=LoadState,ActiveState,UnitFileState -- ssh-agent.service 2>/dev/null | string split \n)
     # count<3 branch is reachable when no user-bus session.

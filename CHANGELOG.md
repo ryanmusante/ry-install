@@ -5,6 +5,33 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.18 - 2026-05-03
+--------------------
+
+  * Dispatch: early `-h` / `--help` / `-v` / `--version` short-circuit
+    inserted at L33 (after `VERSION` is defined, before the L77+
+    GNU-coreutils preflight gates). Usage info and version now reachable
+    on systems missing GNU coreutils, fish 3.6+, writable `HOME`, etc.
+    Inline help duplicates `_ry_show_help` synopsis (`_ry_show_help`
+    isn't yet defined at that point in the script).
+  * Run: `_run` no longer caps subprocess stderr at 5 lines under
+    `--verbose` (`QUIET=false`); full stderr is now `cat`'d to fd 2.
+    The 5-line cap is retained for the unattended (`QUIET=true`,
+    `rc≠0`) path so install logs don't flood with sub-process noise.
+  * Verify-runtime: `nftables.service` added to
+    `_verify_runtime_services`'s `sys_units` list (was previously only
+    asserted by `--check`'s silent probe). `parsed[]` count raised
+    5→6; new `parsed[6]` block emits ok / warn / fail per state.
+  * Progress: `_progress_init` short-circuits under mosh
+    (`$MOSH_CONNECTION` set, or `$TERM_PROGRAM` matches `mosh*`) so the
+    DECSTBM-pinned bar is suppressed where mosh wouldn't honor the
+    scroll region. JSONL `prog_step_*` events still emit.
+  * Exit: `_ry_exit` now removes orphan `LOG_FILE` and `LOG_DIR` (and
+    chains `rmdir` up through `~/ry-install/`) when neither
+    `_RY_HEADER_WRITTEN` nor `_RY_LOG_WRITTEN` is set — covers the
+    L77+ preflight-gate window where `_do_cleanup` /
+    `_pre_dispatch_log_cleanup` aren't yet defined.
+
 v4.5.17 - 2026-05-03
 --------------------
 

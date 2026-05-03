@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.9 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.11 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -20,7 +20,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.9"
+set -g VERSION "4.5.11"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -194,6 +194,10 @@ end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g INSTALL_HAD_ERRORS false
 set -g _TRACKED_TMPFILES
+# Pre-_init_runtime defaults so signal handlers (`_cleanup_tmpfiles`) firing pre-init don't expand uninit globals.
+set -g _SYS_TMP_DIRS
+set -g _USR_TMP_DIRS
+set -g _PROFILE_USES_NM false
 
 set -g MAX_LOGS 50
 
@@ -417,8 +421,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         _log "LOCK_ACQUIRED: pid=$fish_pid dir=$LOCK_DIR"
         return 0
     end
-    # LOCK_DIR exists — check if PID inside is still alive AND is fish
-    # /proc/<pid>/comm guard reduces false-positive "Another instance running" from PID reuse.
+    # LOCK_DIR exists — check if PID inside is still alive AND is fish; /proc/<pid>/comm guard reduces PID-reuse false-positives.
     set -l old_pid (command cat -- "$LOCK_FILE" 2>/dev/null)
     if test -n "$old_pid"; and string match -qr '^\d+$' -- "$old_pid"; and kill -0 -- "$old_pid" 2>/dev/null
         set -l _old_comm (command cat -- /proc/$old_pid/comm 2>/dev/null | string trim --)
@@ -744,12 +747,7 @@ set -g SYSCTL_VALUES \
     "vm.watermark_boost_factor=0" \
     "fs.protected_fifos=2" \
     "fs.protected_regular=2" \
-    "vm.compaction_proactiveness=0" \
-    "net.core.busy_read=50" \
-    "net.core.busy_poll=50" \
-    "net.core.netdev_budget=600" \
-    "kernel.split_lock_mitigate=0" \
-    "vm.swappiness=100"
+    "vm.compaction_proactiveness=0"
 
 # PKGS_ADD=14 PKGS_DEL=8 AUR=1 must equal README counts
 set -g PKGS_ADD \
@@ -1750,9 +1748,9 @@ function _ry_check_deps --description "Verify required packages are installed"
         command -q $cmd; or _warn "Expected tool not found: $cmd (from base packages)"
     end
     if set -q AUR_PKGS; and test (count $AUR_PKGS) -gt 0; and not command -q paru
-        _err "missing: paru (AUR_PKGS=$AUR_PKGS)"
-        set -g INSTALL_HAD_ERRORS true
-        return 1
+        _warn "paru not found — AUR phase will fail (AUR_PKGS=$AUR_PKGS)"
+        _info "  Install paru: sudo pacman -S --needed paru"
+        # Soft-fail: _install_aur_packages handles the failure and sets INSTALL_HAD_ERRORS, gating the boot rebuild.
     end
     _log "DEPS_CHECK_OK"
     return 0
@@ -2176,7 +2174,7 @@ function _content_bytes --argument-names dst --description "Raw bytes of embedde
     set -l _ps $pipestatus
     test $_ps[1] -ne 0; and return 1
     # _ps[2] (string collect) returns 1 on empty input.
-    printf '%s' "$_content" | string collect --no-trim-newlines
+    printf '%s' "$_content" | string collect --no-trim-newlines --allow-empty
 end
 
 # Atomic write: dir-trust→mktemp→symlink-check→write→
@@ -2808,6 +2806,10 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         _log "CHECK_PREFLIGHT: sudo not cached"
         return $EXIT_PREFLIGHT
     end
+    if not command -q systemctl
+        _log "CHECK_PREFLIGHT: systemctl not available"
+        return $EXIT_PREFLIGHT
+    end
 
     # Phase 2: file content hash compare
     set -l checked 0
@@ -2815,6 +2817,11 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         _should_skip_iwd "$dst"; and continue
         set -l expected (_content_bytes "$dst")
         set -l actual (_installed_bytes "$dst")
+        if test -z "$expected"
+            # Generator returned 11/12 (not-managed / missing prereq); gen_fail ≠ drift.
+            _log "CHECK_PREFLIGHT: generator failed for $dst (rc=11/12)"
+            return $EXIT_PREFLIGHT
+        end
         if test -z "$actual"
             if _is_system_dst "$dst"
                 _log "CHECK_PREFLIGHT: cannot read $dst (sudo unavailable?)"
@@ -2856,7 +2863,8 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         set -l active $_v[2]
         set -l ufs $_v[3]
         if test "$load" = ERR_NO_DATA
-            set drift 1
+            _log "CHECK_PREFLIGHT: cannot determine state for $unit (systemctl error)"
+            return $EXIT_PREFLIGHT
         else if test "$load" = not-found
             set drift 1
         else if string match -q '*.timer' -- "$unit"
@@ -2869,7 +2877,11 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     end
     # Masked services
     for unit in (_mask_list_effective)
-        set -l _v (_unit_state $unit)
+        set -l _v (_unit_state_padded $unit)
+        if test "$_v[1]" = ERR_NO_DATA
+            _log "CHECK_PREFLIGHT: cannot determine state for $unit (systemctl error)"
+            return $EXIT_PREFLIGHT
+        end
         if test "$_v[1]" = not-found
             continue
         end
@@ -2877,7 +2889,11 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     end
     # Implicit services
     for unit in $_implicit_svcs
-        set -l _v (_unit_state $unit)
+        set -l _v (_unit_state_padded $unit)
+        if test "$_v[1]" = ERR_NO_DATA
+            _log "CHECK_PREFLIGHT: cannot determine state for $unit (systemctl error)"
+            return $EXIT_PREFLIGHT
+        end
         if test "$_v[1]" = not-found
             continue
         end
@@ -2887,7 +2903,12 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
     # Phase 5: user-scope ssh-agent
     set -l _ssh_unit_file "$HOME/.config/systemd/user/ssh-agent.service"
     if test -f "$_ssh_unit_file"
-        set -l _ssh_state (systemctl --user is-enabled ssh-agent.service 2>/dev/null)
+        set -l _ssh_state (systemctl --user is-enabled ssh-agent.service 2>/dev/null | string trim --)
+        if test -z "$_ssh_state"
+            # Empty stdout = no user-bus session (cron/sudo-shell/headless), distinct from "disabled" (rc=1, non-empty).
+            _log "CHECK_PREFLIGHT: cannot determine ssh-agent state (no user-bus session?)"
+            return $EXIT_PREFLIGHT
+        end
         test "$_ssh_state" = enabled; or set drift 1
     end
 
@@ -3788,7 +3809,7 @@ function _install_preflight --description "Run all preflight checks before insta
     end
 
     if not _ry_check_kernel_version
-        _warn "Kernel version below 6.14 — some features will not work"
+        # _ry_check_kernel_version emitted _fail+_info; INSTALL_HAD_ERRORS gates the initramfs rebuild on this path.
         set -g INSTALL_HAD_ERRORS true
     end
 

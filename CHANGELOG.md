@@ -5,6 +5,62 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.11 - 2026-05-03
+--------------------
+
+  * Tuning: drop 5 sysctl entries from SYSCTL_VALUES —
+    `vm.swappiness=100`, `kernel.split_lock_mitigate=0`,
+    `net.core.busy_read=50`, `net.core.busy_poll=50`,
+    `net.core.netdev_budget=600`. Vendor defaults
+    (CachyOS 70-cachyos-settings.conf or kernel) now
+    apply for those keys. SYSCTL_VALUES count: 21 → 16.
+  * Doc: README §System Tuning row updated (drop
+    split-lock-suppression mention, 21 → 16 tunables).
+
+
+v4.5.10 - 2026-05-03
+--------------------
+
+  * Bug: `_ry_check_deps` aborted preflight on missing
+    paru, contradicting the README §Packages soft-fail
+    contract. Now `_warn` + `_info`; `_install_aur_packages`
+    handles the actual rc=1 + INSTALL_HAD_ERRORS.
+  * Bug: `_ry_do_check` masked + implicit service loops
+    used raw `_unit_state` (v4.5.9 retrofitted padded
+    helper at 2 of 4 sites only). ERR_NO_DATA now
+    returns EXIT_PREFLIGHT, not silent drift.
+  * Bug: `_ry_do_check` Phase 4 expected-services still
+    mapped ERR_NO_DATA to drift after the v4.5.9 sentinel
+    fix. Now EXIT_PREFLIGHT, consistent with masked +
+    implicit.
+  * Bug: `_ry_do_check` Phase 5 ssh-agent treated empty
+    `systemctl --user is-enabled` output as drift. Empty
+    = no user-bus session (cron/sudo-shell/headless);
+    now EXIT_PREFLIGHT.
+  * Bug: `_ry_do_check` Phase 2 conflated generator
+    failure (empty `expected`, rc=11/12) with drift.
+    Now EXIT_PREFLIGHT, mirrors `_verify_static_checksum`.
+  * Reliability: `_ry_do_check` Phase 1 probes `command -q
+    systemctl`. Closes the trigger surface for unit-state
+    drift coercion.
+  * Reliability: `_SYS_TMP_DIRS`, `_USR_TMP_DIRS`,
+    `_PROFILE_USES_NM` initialized at top-of-file so
+    signal handlers firing pre-`_init_runtime` are
+    well-defined.
+  * UX: `_install_preflight` no longer emits a redundant
+    `_warn` after `_ry_check_kernel_version` already
+    emitted `_fail` + `_info`. INSTALL_HAD_ERRORS still
+    set, gate behaviour unchanged.
+  * Refactor: `_content_bytes` terminal `string collect`
+    carries `--allow-empty`, matching `_installed_bytes`
+    + `_json_str`.
+  * Footprint: 5,221 → 5,247 LOC (+26). No public-API,
+    JSONL schema, or exit-code semantic changes;
+    EXIT_DRIFT (10) → EXIT_PREFLIGHT (3) on
+    previously-misclassified `--check` paths is a
+    semantic correction.
+
+
 v4.5.9 - 2026-05-03
 -------------------
 

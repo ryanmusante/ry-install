@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.11 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.12 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -20,7 +20,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.11"
+set -g VERSION "4.5.12"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -147,7 +147,7 @@ set -gx _RY_LOG_OWNER_PID $fish_pid
 if test -z "$HOME"
     set -g HOME (getent passwd $_MY_UID 2>/dev/null | cut -d: -f6)
     if test -z "$HOME"; or not test -d "$HOME"
-        echo "Error: Cannot determine HOME directory" >&2
+        echo "[ERR] Cannot determine HOME directory" >&2
         _ry_exit $EXIT_PREFLIGHT
     end
 end
@@ -168,11 +168,11 @@ test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 umask $_prev_mkdir_umask
 command chmod -- 700 "$HOME/ry-install/logs" 2>/dev/null
 command chmod -- 700 "$LOG_DIR" 2>/dev/null
-set -l _ld_cur_mode (stat -c '%a' -- "$HOME/ry-install" 2>/dev/null)
+set -l _ld_cur_mode (command stat -c '%a' -- "$HOME/ry-install" 2>/dev/null)
 if test "$_ld_cur_mode" != 700
     command chmod -- 700 "$HOME/ry-install" 2>/dev/null
 end
-set -l _ld_mode (stat -c '%a' -- "$HOME/ry-install" 2>/dev/null)
+set -l _ld_mode (command stat -c '%a' -- "$HOME/ry-install" 2>/dev/null)
 if test "$_ld_mode" != 700
     echo "[ERR] Log dir mode is $_ld_mode (expected 700): $HOME/ry-install" >&2
     _ry_exit $EXIT_PREFLIGHT
@@ -243,7 +243,7 @@ function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_
         printf '%s\n' builtin
     else if test -c /dev/ntsync
         printf '%s\n' loaded
-    else if grep -q -- '^ntsync ' /proc/modules 2>/dev/null
+    else if command grep -q -- '^ntsync ' /proc/modules 2>/dev/null
         printf '%s\n' loaded_nodev
     else
         printf '%s\n' missing
@@ -827,7 +827,7 @@ function _init_runtime --description "Cache root UUID, validate hardware sanity,
 
     # 2. Hardware sanity (wrong-machine warning)
     if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
-        set -l _cpu_model (grep -m1 -- 'model name' /proc/cpuinfo 2>/dev/null | sed 's/.*: //')
+        set -l _cpu_model (command grep -m1 -- 'model name' /proc/cpuinfo 2>/dev/null | command sed 's/.*: //')
         if test -n "$_cpu_model"; and not string match -q -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"
             _warn "Built-in defaults expect $EXPECTED_CPU_MATCH but detected: $_cpu_model"
         end
@@ -1599,7 +1599,7 @@ function _chk_perms --argument-names path expected_perms expected_owner use_sudo
     if test "$use_sudo" = true
         set _po (sudo -n stat -c '%a %U:%G' -- "$path" 2>/dev/null)
     else
-        set _po (stat -c '%a %U:%G' -- "$path" 2>/dev/null)
+        set _po (command stat -c '%a %U:%G' -- "$path" 2>/dev/null)
     end
     # stat-fail guard
     if test -z "$_po"
@@ -1617,7 +1617,7 @@ end
 
 function _chk_path_mode_in --argument-names path label --description "Verify file mode is in the accepted-modes list (passed via argv[3..])"
     test -e "$path"; or return 0
-    set -l _m (stat -c '%a' -- "$path" 2>/dev/null)
+    set -l _m (command stat -c '%a' -- "$path" 2>/dev/null)
     if contains -- "$_m" $argv[3..]
         _ok "  $label: $_m"
     else
@@ -2358,7 +2358,7 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
     _echo "── sdboot-manage.conf ──"
     if _chk_file /etc/sdboot-manage.conf
         # capture pipestatus so a missing LINUX_OPTIONS line surfaces as one warning instead of N false-positive KERNEL_PARAMS failures.
-        set -l _opts_raw (grep -- '^LINUX_OPTIONS=' /etc/sdboot-manage.conf 2>/dev/null)
+        set -l _opts_raw (command grep -- '^LINUX_OPTIONS=' /etc/sdboot-manage.conf 2>/dev/null)
         set -l _grep_rc $status
         if test $_grep_rc -ne 0; or test -z "$_opts_raw"
             _fail "  /etc/sdboot-manage.conf: LINUX_OPTIONS= line missing"
@@ -2636,7 +2636,7 @@ function _verify_static_packages --description "Verify PKGS_ADD, AUR_PKGS, PKGS_
     _echo "── pacman.conf ──"
     if test -f /etc/pacman.conf
         # drop -n flag — line numbers leak into _ok output and are inconsistent with rest of file's grep usage.
-        set -l ignore_lines (grep -E -- '^[[:space:]]*IgnorePkg' /etc/pacman.conf 2>/dev/null)
+        set -l ignore_lines (command grep -E -- '^[[:space:]]*IgnorePkg' /etc/pacman.conf 2>/dev/null)
         if test -n "$ignore_lines"
             for line in $ignore_lines
                 _ok "  $line"
@@ -2644,7 +2644,7 @@ function _verify_static_packages --description "Verify PKGS_ADD, AUR_PKGS, PKGS_
         else
             _info "  No IgnorePkg set"
         end
-        set -l parallel (grep -E -- '^[[:space:]]*ParallelDownloads[[:space:]]*=' /etc/pacman.conf 2>/dev/null)
+        set -l parallel (command grep -E -- '^[[:space:]]*ParallelDownloads[[:space:]]*=' /etc/pacman.conf 2>/dev/null)
         if test -n "$parallel"
             _ok "  $parallel"
         else
@@ -2667,7 +2667,7 @@ function _verify_static_services --description "Verify SERVICE_DESTINATIONS file
     if test -f /etc/systemd/system/cpupower-epp.service
         # scaling_governor ExecStart absent:
         _chk_grep /etc/systemd/system/cpupower-epp.service energy_performance_preference "cpupower-epp EPP ExecStart"
-        if grep -q -- scaling_governor /etc/systemd/system/cpupower-epp.service 2>/dev/null
+        if command grep -q -- scaling_governor /etc/systemd/system/cpupower-epp.service 2>/dev/null
             _warn "  cpupower-epp: scaling_governor ExecStart present — remove it (amd_pstate=active uses powersave+EPP)"
         end
         _chk_grep /etc/systemd/system/cpupower-epp.service "WantedBy=multi-user.target" "cpupower-epp WantedBy"
@@ -2707,7 +2707,7 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
     _echo
 
     _echo "── mkinitcpio hooks ──"
-    set -l hooks_syntax_line (grep -E '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | grep -v '^#' | head -n 1)
+    set -l hooks_syntax_line (command grep -E '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | command grep -v '^#' | head -n 1)
     if test -n "$hooks_syntax_line"
         # lint:ignore (PCRE backref)
         set -l hooks_str (string replace -r '.*HOOKS=\(([^)]*)\).*' '$1' -- "$hooks_syntax_line")
@@ -2963,7 +2963,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     _validate_kernel_params
 
     _echo "── Preemption model ──"
-    set -l _preempt (printf '%s\n' $_dmesg | grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
+    set -l _preempt (printf '%s\n' $_dmesg | command grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
     if test -n "$_preempt"
         if string match -q '*full*' -- "$_preempt"
             _ok "  $_preempt"
@@ -3002,7 +3002,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     _echo
 
     _echo "── ReBAR/SAM status ──"
-    set -l rebar_status (printf '%s\n' $_dmesg | grep -i 'BAR' | grep -i -E 'resize|rebar|large|above.4g' | head -n 1)
+    set -l rebar_status (printf '%s\n' $_dmesg | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large|above.4g' | head -n 1)
     if test -n "$rebar_status"
         if string match -qi '*enabled*' -- "$rebar_status"; or string match -qi '*resiz*' -- "$rebar_status"
             _ok "  ReBAR/SAM: enabled"
@@ -3013,7 +3013,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
         end
     else
         if command -q lspci
-            set -l bar_size (lspci -vvv 2>/dev/null | grep -i 'Region.*Memory.*256M\|Region.*Memory.*512M\|Region.*Memory.*[0-9]G' | head -n 1)
+            set -l bar_size (lspci -vvv 2>/dev/null | command grep -i 'Region.*Memory.*256M\|Region.*Memory.*512M\|Region.*Memory.*[0-9]G' | head -n 1)
             if test -n "$bar_size"
                 _ok "  ReBAR/SAM: large BAR detected"
                 _info "  $bar_size"
@@ -3119,7 +3119,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
 
     _echo "── Blacklisted modules ──"
     for mod in pcspkr
-        if lsmod 2>/dev/null | grep -q -- "^$mod "
+        if lsmod 2>/dev/null | command grep -q -- "^$mod "
             _fail "  $mod: LOADED (should be blacklisted)"
         else
             _ok "  $mod: not loaded"
@@ -3134,7 +3134,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
             _ok "  clocksource: $_cs"
         else if test "$_cs" = hpet
             _fail "  clocksource: $_cs (expected: tsc — HPET has 10–100× higher read latency)"
-            set -l _tsc_demote (printf '%s\n' $_dmesg | grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | head -n 3)
+            set -l _tsc_demote (printf '%s\n' $_dmesg | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | head -n 3)
             if test -n "$_tsc_demote"
                 for _l in $_tsc_demote
                     _info "  dmesg: $_l"
@@ -3150,7 +3150,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
 
     _echo "── Coredump config ──"
     if test -f /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf
-        if grep -q -- 'Storage=none' /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf 2>/dev/null
+        if command grep -q -- 'Storage=none' /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf 2>/dev/null
             _ok "  coredump: Storage=none"
         else
             _fail "  coredump: Storage!=none in /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf"
@@ -3306,7 +3306,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
             if test -n "$nm_wifi_enabled"
                 _info "  NM wifi radio: $nm_wifi_enabled"
             end
-            set -l wifi_state (nmcli -t -f TYPE,STATE device 2>/dev/null | grep '^wifi:' | head -n 1 | cut -d: -f2)
+            set -l wifi_state (nmcli -t -f TYPE,STATE device 2>/dev/null | command grep '^wifi:' | head -n 1 | cut -d: -f2)
             if test "$wifi_state" = connected
                 _ok "  WiFi device: connected"
             else if test -n "$wifi_state"
@@ -3366,7 +3366,7 @@ function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KS
 
     _echo "── TCP congestion control ──"
     if command -q modinfo
-        set -l _bbr_ver (modinfo tcp_bbr 2>/dev/null | grep -i '^version:' | string replace -r -- '^version:\s*' '')
+        set -l _bbr_ver (modinfo tcp_bbr 2>/dev/null | command grep -i '^version:' | string replace -r -- '^version:\s*' '')
         if test -n "$_bbr_ver"
             _ok "  tcp_bbr module version: $_bbr_ver"
         else
@@ -3428,7 +3428,7 @@ function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KS
     end
 
     _echo "── ZRAM device ──"
-    set -l _zram_swap (swapon --show=NAME,TYPE 2>/dev/null | grep zram)
+    set -l _zram_swap (swapon --show=NAME,TYPE 2>/dev/null | command grep zram)
     if test -n "$_zram_swap"
         set -l _zram_info (zramctl --output NAME,ALGORITHM,DISKSIZE,TOTAL,COMP-RATIO --noheadings 2>/dev/null | head -n 1 | string trim --)
         _ok "  ZRAM swap active: $_zram_info"
@@ -3517,7 +3517,7 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
                 _ok "  NetworkManager connections: $conn_count files with correct permissions"
             end
         else
-            if grep -q -- 'wifi.backend=iwd' /etc/NetworkManager/conf.d/99-cachyos-nm.conf 2>/dev/null
+            if command grep -q -- 'wifi.backend=iwd' /etc/NetworkManager/conf.d/99-cachyos-nm.conf 2>/dev/null
                 _warn "  NetworkManager connections: no .nmconnection files (WiFi may not auto-connect)"
             else
                 _info "  NetworkManager connections: no .nmconnection files found"
@@ -4750,7 +4750,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     set -l valid false
     set -l use_sudo true
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
-        set -l _canon_dst (realpath -m -- "$dst" 2>/dev/null)
+        set -l _canon_dst (command realpath -m -- "$dst" 2>/dev/null)
         if test "$target" = "$dst"; or test "$target" = "$_canon_dst"
             set valid true
             break
@@ -4758,7 +4758,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     end
     if test "$valid" = false
         for dst in $USER_DESTINATIONS
-            set -l _canon_dst (realpath -m -- "$dst" 2>/dev/null)
+            set -l _canon_dst (command realpath -m -- "$dst" 2>/dev/null)
             if test "$target" = "$dst"; or test "$target" = "$_canon_dst"
                 set valid true
                 set use_sudo false
@@ -5058,7 +5058,7 @@ if set -q _flag_install_file
         end
     end
     test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-    set -l _canon (realpath -m -- "$_if_val" 2>/dev/null)
+    set -l _canon (command realpath -m -- "$_if_val" 2>/dev/null)
     if test -n "$_canon"
         set INSTALL_FILE_TARGET "$_canon"
     else

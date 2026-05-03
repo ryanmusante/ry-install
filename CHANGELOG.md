@@ -5,6 +5,23 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.12 - 2026-05-03
+--------------------
+
+  * Style: normalize bare → `command` for `grep`,
+    `stat`, `sed`, `realpath` at all coreutils call
+    sites. Codebase convention is `command X` (per
+    find/cat/head/awk: 9/25/8/7 × command, 0 bare each);
+    19 grep + 4 stat + 3 realpath + 1 sed sites brought
+    in line. PATH is pinned at L94 so no functional
+    change.
+  * Style: bootstrap stderr at L150 now uses `[ERR]`
+    prefix matching the other 14 bootstrap stderr emits
+    (was `Error:`).
+  * Footprint: 5,242 LOC unchanged. No public-API,
+    JSONL schema, or exit-code semantic changes.
+
+
 v4.5.11 - 2026-05-03
 --------------------
 

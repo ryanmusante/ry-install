@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.6-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.9-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.6%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -460,7 +460,7 @@ Query with jq: `jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl`
 **Sample log output:**
 
 ```json
-{"ts":"YYYY-MM-DDT14:23:01-0700","event":"header","version":"4.5.6","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
+{"ts":"YYYY-MM-DDT14:23:01-0700","event":"header","version":"4.5.9","profile":"gtr9_pro","mode":"install","verbose":false,"argv":["./ry-install.fish"]}
 {"ts":"YYYY-MM-DDT14:23:04-0700","event":"prog_step_start","data":"[1/6] Preflight"}
 {"ts":"YYYY-MM-DDT14:23:12-0700","event":"prog_step_end","data":"name=Preflight secs=8"}
 {"ts":"YYYY-MM-DDT14:23:12-0700","event":"prog_step_start","data":"[2/6] Packages"}

@@ -5,6 +5,167 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.9 - 2026-05-03
+-------------------
+
+  * Bug: secret-flag redaction in `_run` and the dispatch
+    header logger emitted fish "Invalid index value"
+    runtime errors on every invocation. The pattern
+    `"$flag[ =]\S+"` was parsed by fish as a variable
+    index expression on `$flag`, causing the regex
+    expansion to abort and the redaction to silently
+    fail. Close-quote the variable expansion before the
+    bracket: `"$flag""[ =]\S+"`. Each affected site was
+    emitting 15 stderr errors per call (one per
+    `_RY_SECRET_FLAGS` entry).
+  * Bug: dispatch-header `argv` field corrupted any
+    argv element containing a space (e.g.
+    `--install-file '/path with space'`) — the
+    join-then-space-split round-trip turned a 2-element
+    sequence into 5 tokens. Replaced with a per-element
+    redact loop that preserves spaces and handles both
+    `--flag=value` and `--flag value` forms without
+    regex.
+  * Reliability: `_unit_state_padded` helper returns
+    `ERR_NO_DATA` sentinels when systemctl produces
+    fewer than 3 fields, so `_ry_do_check` Phase 4 and
+    `_verify_runtime_services` no longer silently
+    coerce missing output to empty drift markers.
+    Retro-fitted at the two previously unguarded call
+    sites; `_verify_static_services` already had its
+    own inline sentinel.
+  * Reliability: stale-lock detection cross-checks
+    `/proc/<old_pid>/comm` against `fish` before
+    refusing to start. Reduces false-positive "Another
+    instance running" when the OS has reused the PID.
+    PID alive but not fish → falls through to the
+    flock-protected reclaim path.
+  * Refactor: extract `_start_sudo_keepalive` helper.
+    Replaces two 16-line copies in `_install_preflight`
+    and `_ry_do_install_file`. Helper centralizes the
+    `kill -0` + `disown` post-launch handshake.
+  * Refactor: `_pre_dispatch_exit` now delegates to
+    `_pre_dispatch_log_cleanup` + `_ry_exit` instead of
+    re-implementing the cleanup body. Cuts a 9-line
+    duplicate of the rmdir chain.
+  * Comments: collapse the two-line KERNEL_PARAMS
+    verify-regex note above `set -g KERNEL_PARAMS` into
+    a single line. Same content, one line less.
+  * Doc: README sample-log header bumped to current
+    version.
+  * Footprint: 5,205 → 5,221 LOC (+16, +0.3%). No
+    public-API, JSONL schema, or exit-code semantic
+    changes.
+
+
+v4.5.8 - 2026-05-02
+-------------------
+
+  * Refactor: extract `_rm_tmp` helper (sudo-aware tmpfile
+    delete + `_TRACKED_TMPFILES` untrack) and `_is_symlink`
+    helper (sudo-aware `test -L`). Replaces 27 instances of
+    the 2-line `(sudo -n|command) rm -f -- "$X" 2>/dev/null
+    / _untrack_tmpfile "$X"` pattern across
+    `_atomic_write_file`, `_ensure_sudo_cached`,
+    `_verify_unit_content`, `_ry_validate_configs`,
+    `_install_preflight`, `_install_packages` (mkinitcpio
+    rollback), `_install_fstab_opts`, `_install_finalize`
+    (boot-wipe marker), and `_early_usage_exit` /
+    post-argparse cleanup. `_atomic_write_file`
+    additionally drops 2 sudo-vs-no-sudo `if test -L`
+    branch pairs into single `_is_symlink` calls.
+    Behaviour-preserving — every failure path still
+    rm + untracks via the helper.
+  * Refactor: extract `_enum_boot_entries` helper that
+    enumerates `$esp/loader/entries/*.conf` and exports
+    `_RY_BOOT_COUNT` / `_RY_BOOT_HASH` / `_RY_BOOT_PIPE_OK`.
+    Replaces the 14-line `find | sort -z | split0 +
+    pipestatus + count + hash` block duplicated between
+    `_install_rebuild_boot` precheck and `_install_finalize`
+    marker write. Helper globals are auto-cleared by
+    `_ry_namespace_cleanup` (set after `_RY_PRE_GLOBALS`
+    snapshot).
+  * Comments: drop the two redundant
+    `# was _pre_dispatch_exit; forward-ref bug` notes
+    above the kernel-version-parse `_ry_exit` calls. The
+    code itself is final; the historical note no longer
+    aids maintenance.
+  * Comments: restore the v4.5.4 KERNEL_PARAMS verify-regex
+    constraint note (`# One-value-per-entry — verify regex
+    requires whole-token match`) above `set -g
+    KERNEL_PARAMS`. The note was promised by the v4.5.4
+    changelog but appears to have been collateral in
+    v4.5.5's review-marker cleanup. The constraint itself
+    was always real (verify regex is `(^|\s)$param(\s|\$)`)
+    — only the doc was missing.
+  * Footprint: 5,240 → 5,205 LOC (-35, -0.7%). No
+    public-API, JSONL schema, or exit-code semantic changes.
+
+
+v4.5.7 - 2026-05-02
+-------------------
+
+  * Boot: mkinitcpio rollback (`_install_packages` failure
+    path) now gates `chmod 644` and `chown root:root` on
+    explicit success checks. Prior code dropped both errors
+    via `2>/dev/null` with no rc check; on a sudo-cred lapse
+    between the `tee` and `chmod`, `mv` would proceed with
+    mktemp's default `0600` perms or wrong owner, surfacing
+    later as a spurious `verify-static` mismatch. New path
+    routes both failures to `MKINITCPIO_REVERT_FAIL` with
+    distinct log markers (`chmod failed`, `chown failed`).
+  * Logging: `_pre_dispatch_log_cleanup` and
+    `_pre_dispatch_exit` now preserve `LOG_FILE` when the
+    dispatch JSONL header was already written. New global
+    `_RY_HEADER_WRITTEN=true` is set immediately after the
+    header `printf` succeeds. Lock-conflict diagnostics
+    (`_acquire_lock` failure after header write) no longer
+    silently delete the log artifact.
+  * Verify: `_verify_unit_content` drops GNU-only
+    `mktemp --suffix=.service`. Replaced with
+    `mktemp -t ry-val-unit.XXXXXX` plus an explicit
+    `mv -- "$tmp_raw" "$tmp_raw.service"`, restoring
+    portability to `mktemp` builds without coreutils
+    extensions. systemd-analyze still receives a path with
+    the `.service` suffix it requires for unit-type
+    detection.
+  * Verify: dispatch-fall-through case bodies in
+    `_ry_validate_configs` (`*/mkinitcpio.conf`,
+    `*/environment.d/*`) now carry inline comments naming
+    the alternate validators (Phase 1
+    `_ry_validate_mkinitcpio_*`, Phase 3
+    `_check_env_ssh_auth_sock`). No behavior change —
+    visual signal that the empty body is intentional.
+  * Refactor: 7 `string match -qr -- "$pattern" -- "$value"`
+    sites trimmed to `string match -qr -- "$pattern"
+    "$value"`. The redundant second `--` was consumed as an
+    additional STRING argument (multi-string match
+    semantics); always-non-matching against the patterns in
+    use. Single source of truth for the option terminator
+    eliminates a future-bug surface if any pattern were
+    ever revised to accept `--` as input.
+  * Preflight: `_install_preflight` `sudo -n -l` parser
+    standardised to `^[[:space:]]*#` POSIX class. Prior
+    `^\s*#` relied on GNU grep's PCRE-style extension; on
+    busybox/BSD grep this matched a literal `s`, allowing
+    sudoers comment lines to leak into the NOPASSWD scan.
+    CachyOS ships GNU grep so behaviour was correct on
+    target; the change closes a portability landmine.
+  * Dispatch: `case install-file` now carries the standard
+    `test "$_RY_INSTALL_BAILING" = true; and return
+    $_RY_INSTALL_LAST_EXIT` guard between
+    `_pre_dispatch_exit $EXIT_USAGE` (empty-target branch)
+    and `_acquire_lock`. Branch is unreachable in normal
+    flow (argparse `install-file=` rejects empty values);
+    consistency with the 14 other top-level exit sites
+    avoids future-edit drift.
+  * Footprint: 5,215 → 5,240 LOC (+0.5%). No public-API,
+    JSONL schema, or exit-code semantic changes.
+
+  Migration: none. Behaviour-preserving fixes; users who
+  hit the lock-conflict path will newly retain a log
+  artifact with the dispatch header.
+
 
 v4.5.6 - 2026-05-02
 -------------------

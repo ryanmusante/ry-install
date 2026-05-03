@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.14-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.15-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -378,6 +378,10 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Permission model | System 0644 · user 0600 · `~/ry-install/` and per-day log dirs 0700 · log/marker files 0600 |
 | fstab edits | Idempotent; symlink check before chmod; `findmnt --verify` before write; symlinked `/etc/fstab` rejected; **no backup** — snapshot first |
 | Boot rebuild gate | v4.5.2: `mkinitcpio -P` refuses to run when earlier phases set `INSTALL_HAD_ERRORS=true`. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1` |
+| KERNEL_PARAMS hygiene | v4.5.15: preflight rejects any `KERNEL_PARAMS` member containing whitespace or `"` — both would corrupt `/etc/kernel/cmdline` or `LINUX_OPTIONS="…"` in `sdboot-manage.conf` |
+| Sysctl count assertion | v4.5.15: sysctl content generator returns rc 12 when printed line count ≠ `count $SYSCTL_VALUES`, surfacing typos that previously deployed silently as a partial file |
+| Service list source-of-truth | v4.5.15: `_RY_IMPLICIT_SERVICES` declared alongside `EXPECTED_SERVICES`; the verify-runtime `sys_units` array references the same canonical list (was three independent hard-coded lists prior) |
+| User-bus probe | v4.5.15: `systemctl --user enable --now ssh-agent` gates `--now` on `XDG_RUNTIME_DIR`/bus presence; without one, enables without `--now` and emits a clear "no user-bus session" message rather than a generic "failed to enable" |
 | Subprocess control | `_run` uses `timeout --foreground` so external `kill -TERM <pid>` propagates to the child process group |
 | Child reaping | `_do_cleanup` runs `pkill -P $fish_pid` before keepalive teardown — closes the RY_RUN_TIMEOUT=0 untimed-branch hang |
 | Stderr surfacing | First 5 lines of subprocess stderr mirror to fd 2 on rc≠0 even when `QUIET=true` (no `--verbose` needed for failure diagnosis) |

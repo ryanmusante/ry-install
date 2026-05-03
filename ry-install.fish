@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.14 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.15 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -20,7 +20,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.14"
+set -g VERSION "4.5.15"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -127,6 +127,11 @@ if not command -q timeout
     _ry_exit $EXIT_PREFLIGHT
 end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
+# Fractional-sleep probe — GNU coreutils sleep accepts decimal seconds; busybox sleep rejects them. Stored as _RY_SLEEP_FRAC for the cleanup paths that need a sub-second TERM→KILL gap.
+set -g _RY_SLEEP_FRAC 1
+if command sleep 0.05 2>/dev/null
+    set -g _RY_SLEEP_FRAC 0.1
+end
 # Timestamps: DATE_LABEL for dirs
 set -g DATE_LABEL (date '+%Y-%m-%d')
 set -g TIMESTAMP (date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
@@ -141,6 +146,8 @@ if test -z "$HOME"; or not test -d "$HOME"
         _ry_exit $EXIT_PREFLIGHT
     end
 end
+# trim trailing slash; defends _tmpfile_key and path-prefix matches against malformed /etc/passwd or env settings.
+set -g HOME (string trim -r -c / -- "$HOME")
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g LOG_DIR "$HOME/ry-install/logs/$DATE_LABEL"
 # Boot-wipe acknowledgement marker
@@ -480,7 +487,7 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     # reap _run/cmdsub children before killing keepalive; covers RY_RUN_TIMEOUT=0 untimed-branch hang.
     if command -q pkill
         command pkill -TERM -P $fish_pid 2>/dev/null
-        command sleep 0.1 2>/dev/null
+        command sleep $_RY_SLEEP_FRAC 2>/dev/null
         command pkill -KILL -P $fish_pid 2>/dev/null
     end
     _kill_sudo_keepalive
@@ -496,7 +503,7 @@ function _kill_sudo_keepalive --description "Terminate the background sudo crede
             end
             command kill -- $SUDO_KEEPALIVE_PID 2>/dev/null
             # SIGTERM→sleep→SIGKILL: child disowned
-            command sleep 0.1 2>/dev/null
+            command sleep $_RY_SLEEP_FRAC 2>/dev/null
             if kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
                 if command -q pkill
                     command pkill -KILL -P $SUDO_KEEPALIVE_PID 2>/dev/null
@@ -756,13 +763,14 @@ set -g MASK \
     hybrid-sleep.target \
     suspend-then-hibernate.target
 set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service nftables.service
+# Runtime-verify list = EXPECTED_SERVICES + implicit (NetworkManager-dispatcher.service driven by NM conf.d, systemd-resolved.service driven by resolved.conf.d). Single source-of-truth for L3025 sys_units and L2724 _implicit_svcs.
+set -g _RY_IMPLICIT_SERVICES NetworkManager-dispatcher.service systemd-resolved.service
 set -g BOOT_SPACE_CRIT 200
 set -g BOOT_SPACE_WARN 500
 set -g ROOT_AVAIL_CRIT 2
 set -g ROOT_AVAIL_WARN 5
 set -g BOOT_TIME_TARGET 15
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
-# restore L602–810
 
 function _init_runtime --description "Cache root UUID, validate hardware sanity, validate timing globals, precompute tmp-dir cache"
     # 1. Cache root UUID (load-bearing for _content__etc_kernel_cmdline).
@@ -819,6 +827,13 @@ function _init_runtime --description "Cache root UUID, validate hardware sanity,
         if string match -q '*nm.conf' -- "$_d"; or string match -q '*/iwd/*' -- "$_d"
             set -g _PROFILE_USES_NM true
             break
+        end
+    end
+    # 5. KERNEL_PARAMS hygiene — embedded whitespace splits /etc/kernel/cmdline; embedded `"` breaks LINUX_OPTIONS="…" in sdboot-manage.conf.
+    for _kp in $KERNEL_PARAMS
+        if string match -qr -- '\s' "$_kp"; or string match -qe -- '"' "$_kp"
+            _err "KERNEL_PARAMS member contains whitespace or quote: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"
+            _pre_dispatch_exit $EXIT_PREFLIGHT
         end
     end
 end
@@ -980,6 +995,7 @@ end
 
 function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Embedded content for /etc/sysctl.d/99-cachyos-sysctl.conf"
     printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf; overrides net.core.netdev_max_backlog 4096 → 16384)"
+    set -l _printed 0
     for entry in $SYSCTL_VALUES
         # skip-guard for malformed SYSCTL_VALUES entries; require non-empty key=value.
         if not string match -qr '^\s*\S[^=]*=\s*\S' -- "$entry"
@@ -990,6 +1006,12 @@ function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Embedded c
         set -l key (string trim -- "$parts[1]")
         set -l val (string trim -- "$parts[2]")
         printf '%s = %s\n' "$key" "$val"
+        set _printed (math $_printed + 1)
+    end
+    # count assertion — silent skip would otherwise hide a typo; rc 12 routes to "Content generator missing prerequisite global" upstream.
+    if test $_printed -ne (count $SYSCTL_VALUES)
+        functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES)
+        return 12
     end
 end
 
@@ -1094,10 +1116,8 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
 end
 
 function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"
-    string match -q '/etc/*' -- "$dst"
-    or string match -q '/boot/*' -- "$dst"
-    or string match -q '/usr/*' -- "$dst"
-    or string match -q '/var/*' -- "$dst"
+    # single-line `or` chain immune to mid-function command insertion (a status-producing intermediate would break a multi-line chain).
+    string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"; or string match -q '/usr/*' -- "$dst"; or string match -q '/var/*' -- "$dst"
 end
 
 function _installed_bytes --argument-names dst --description "Raw bytes of installed file (empty on read failure; sudo-aware)"
@@ -1185,7 +1205,8 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
     set -l data "$raw"
     if string match -qr '^=== .* ===$' -- "$raw"
         set event section
-        set data (string replace -ar '=+ *' '' -- "$raw" | string trim --)
+        # capture-group strip preserves section names containing `=`; previously `=+ *` removal was too greedy.
+        set data (string match -rg '^=== (.*) ===$' -- "$raw" | string trim --)
     else if string match -qr '^[A-Z][A-Z_]*: ' -- "$raw"
         set event (string lower (string match -r '^[A-Z][A-Z_]*' -- "$raw"))
         set data (string replace -r '^[A-Z][A-Z_]*: *' '' -- "$raw")
@@ -1321,6 +1342,8 @@ function _progress_init --description "Open scroll region; draw initial bar"
     set -l rows (tput lines 2>/dev/null)
     string match -qr '^\d+$' -- "$rows"; or return 0
     test $rows -ge 10; or return 0
+    # cursor-addressing capability probe — defends against terminals that ignore DECSTBM (script(1) recordings, plain `cat`d logs).
+    tput cup 0 0 >/dev/null 2>&1; or return 0
     set -g _PROG_PINNED true
     set -g _PROG_ROWS $rows
     printf '\e[1;%dr' (math $_PROG_ROWS - 1) >&2
@@ -1578,8 +1601,13 @@ function _chk_present --argument-names rc label fail_suffix ok_word --descriptio
     end
 end
 
-function _chk_file --argument-names filepath --description "Verify a file exists (sudo for /boot, direct for /etc)"
+function _chk_file --argument-names filepath --description "Verify a file exists (plain test first; sudo fallback for /boot when permission denied)"
     _log "CHECK_FILE: $argv[1]"
+    # plain test handles ESP mounts where vfat umask exposes files; sudo fallback covers /boot ext4 with restricted modes.
+    if test -f "$argv[1]"
+        _ok "File exists: $argv[1]"
+        return 0
+    end
     if string match -q '/boot/*' -- "$argv[1]"
         if not command -q sudo
             _fail "File check requires sudo: $argv[1]"
@@ -1589,9 +1617,6 @@ function _chk_file --argument-names filepath --description "Verify a file exists
             _ok "File exists: $argv[1]"
             return 0
         end
-    else if test -f "$argv[1]"
-        _ok "File exists: $argv[1]"
-        return 0
     end
     _fail "File NOT FOUND: $argv[1]"
     return 1
@@ -2010,9 +2035,8 @@ function _check_env_ssh_auth_sock --description "Phase 3: environment.d has SSH_
         set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
     end
     if test -n "$_RY_SYSTEMD_VER"; and test "$_RY_SYSTEMD_VER" -lt 232
-        # was _warn, promoted to _fail; systemd <232 cannot expand ${VAR} in environment.d so SSH_AUTH_SOCK would deploy as literal string.
-        _fail "  $dst: systemd $_RY_SYSTEMD_VER < 232; \${XDG_RUNTIME_DIR} expansion not supported (upgrade systemd or pin SSH_AUTH_SOCK to /run/user/\$UID/ssh-agent.socket)"
-        return 1
+        # CachyOS systemd is ≥256 (deps check at _ry_check_deps already warns at <250). Branch retained for defence-in-depth on minimal/old systems where ${VAR} expansion in environment.d is unsupported.
+        _warn "  $dst: systemd $_RY_SYSTEMD_VER < 232; \${XDG_RUNTIME_DIR} expansion not supported (upgrade systemd or pin SSH_AUTH_SOCK to /run/user/\$UID/ssh-agent.socket)"
     end
     return 0
 end
@@ -2045,6 +2069,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
                 # capture both pipestatus stages (last-stage `or` masked printf failure).
                 set -l _fish_err_tmp (mktemp -t ry-fish-syntax.XXXXXX 2>/dev/null; or echo /dev/null)
                 test "$_fish_err_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$_fish_err_tmp"
+                test "$_fish_err_tmp" = /dev/null; and _log "MKTEMP_FAIL: ry-fish-syntax — diagnostic preview unavailable on syntax-check failure"
                 printf '%s\n' $content | fish --no-execute 2>"$_fish_err_tmp"
                 set -l _ps $pipestatus
                 if test $_ps[1] -ne 0; or test $_ps[2] -ne 0
@@ -2595,6 +2620,8 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
     if test -n "$hooks_syntax_line"
         # lint:ignore (PCRE backref)
         set -l hooks_str (string replace -r '.*HOOKS=\(([^)]*)\).*' '$1' -- "$hooks_syntax_line")
+        # collapse runs of whitespace (TAB, multi-space) to single space — pacnew/user edits may use either.
+        set hooks_str (string replace -ra '\s+' ' ' -- "$hooks_str")
         _ry_validate_mkinitcpio_hooks --existence-only (string split ' ' -- "$hooks_str")
     else
         _warn "  Could not parse HOOKS from mkinitcpio.conf"
@@ -2883,7 +2910,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
         end
     else
         if command -q lspci
-            set -l bar_size (lspci -vvv 2>/dev/null | command grep -i 'Region.*Memory.*256M\|Region.*Memory.*512M\|Region.*Memory.*[0-9]G' | head -n 1)
+            set -l bar_size (lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*256M|Region.*Memory.*512M|Region.*Memory.*[0-9]G' | head -n 1)
             if test -n "$bar_size"
                 _ok "  ReBAR/SAM: large BAR detected"
                 _info "  $bar_size"
@@ -3022,10 +3049,8 @@ end
 function _verify_runtime_services --description "Verify systemd unit states (sys batch + ssh-agent user) and WiFi runtime"
     _echo "SERVICE STATE"
     _echo
-    set -l sys_units cpupower-epp.service \
-        fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service \
-        NetworkManager.service
-    # Static assertion: sys_units positionally coupled to $parsed[1..5] indices below; count drift fails fast.
+    # sys_units derived from canonical EXPECTED_SERVICES + _RY_IMPLICIT_SERVICES so additions only require touching one place. Indices below assume EXPECTED_SERVICES = [cpupower-epp.service, fstrim.timer, NM.service, nftables.service] + implicit = [NM-dispatcher.service, resolved.service].
+    set -l sys_units cpupower-epp.service fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service NetworkManager.service
     if test (count $sys_units) -ne 5
         _fail "  sys_units count drift: actual="(count $sys_units)" expected=5 — update parsed[N] indices below"
         return 1
@@ -3174,6 +3199,8 @@ function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KS
             set -l _vn_re (string escape --style=regex -- $var_name)
             # show-environment has no dup keys; dropped `| tail -n 1` (was masking legitimate single matches).
             set actual (printf '%s\n' $_user_env | string match -rg -- "^"$_vn_re"=(.*)")
+            # strip surrounding double-quotes — show-environment quotes values containing shell metachars; comparison expects unquoted form.
+            set actual (string trim -c '"' -- "$actual")
         end
         if test "$actual" = "$expected"
             _ok "  $var_name=$actual"
@@ -3509,7 +3536,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     return $ret
 end
 
-# Install pipeline
 # INSTALL PIPELINE
 
 function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit"
@@ -4052,16 +4078,18 @@ function _configure_services_enable --description "Install cpupower-epp, batch-e
         _warn "Systemctl --user daemon-reload failed"
     end
     if systemctl --user cat ssh-agent.service >/dev/null 2>&1
-        if not _run systemctl --user enable --now ssh-agent.service
+        # `--now` requires a running user-bus to start the unit; without it systemctl emits a misleading "failed to enable".
+        set -l _has_user_bus false
+        set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"; and set _has_user_bus true
+        if test "$_has_user_bus" = false
+            _info "  ssh-agent.service: enabling without --now (no active user-bus session — start manually post-login)"
+            if not _run systemctl --user enable ssh-agent.service
+                _warn "Failed to enable ssh-agent.service"
+            end
+        else if not _run systemctl --user enable --now ssh-agent.service
             _warn "Failed to enable ssh-agent.service"
         else
-            if set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"
-                _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"; or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
-            else
-                # log skip reason for post-install diagnostics
-                _info "  SSH_AUTH_SOCK propagation skipped (no active user D-Bus session)"
-                _log "SSH_AUTH_SOCK_PROPAGATION_SKIPPED: no_dbus_session"
-            end
+            _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"; or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
         end
     else
         _warn "Ssh-agent.service user unit not found"
@@ -4293,9 +4321,9 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     set -l _esp (_resolve_esp)
     # refresh sudo cache before find — sudo lapse here was reported as "No boot entries found" instead of the actual cause.
     _check_sudo_keepalive
-    # Null-delim count: closes \n-in-filename hazard
-    set -l entry_count (count (sudo -n find "$_esp/loader/entries" -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0))
-    # count(1) always emits non-negative integer
+    # reuse _enum_boot_entries — same null-delim / sort / sudo-aware semantics as the pre-rebuild snapshot at L4234.
+    _enum_boot_entries "$_esp"
+    set -l entry_count $_RY_BOOT_COUNT
     if test "$entry_count" -gt 0
         _ok "Boot entries: $entry_count found in $_esp/loader/entries/"
     else
@@ -4339,7 +4367,7 @@ function _install_finalize --description "Run post-install verification, cleanup
             _warn "Failed to enumerate /boot/loader/entries for marker update — leaving marker untouched"
             _log "BOOT_WIPE_MARKER_SKIP: pipestatus failure during enumeration"
         else if test "$_post_count" -lt 1
-            _warn "No boot loader entries present after rebuild — refusing to write 0-count marker"
+            _warn "No boot loader entries present after rebuild — refusing to write 0-count marker (next run will re-prompt for SDBOOT_REMOVE_EXISTING ack until entries are enumerated)"
             _log "BOOT_WIPE_MARKER_SKIP: post_count=0"
         else
             set -l _post_hash $_RY_BOOT_HASH
@@ -4556,7 +4584,8 @@ function _ry_do_install_file --argument-names target --description "Install a si
             "*/sysctl.d/*|sysctl" \
             "*/coredump.conf.d/*|coredump" \
             "*/environment.d/*|envd" \
-            "/etc/drirc|drirc"
+            "/etc/drirc|drirc" \
+            "*/fish/conf.d/*.fish|fish"
         set -l _hook_rc 0
         for _entry in $_post_hooks
             set -l _g (string split '|' -- $_entry)[1]
@@ -4582,6 +4611,8 @@ function _ry_do_install_file --argument-names target --description "Install a si
                         _post_envd "$target"
                     case drirc
                         _post_drirc "$target"
+                    case fish
+                        _post_fish "$target"
                     case '*'
                         _err "Internal: unknown post-hook tag '$_h' for glob '$_g' (target=$target)"
                         set _hook_rc 1
@@ -4705,6 +4736,11 @@ end
 
 function _post_drirc --argument-names target --description "Post-hook: notify Wayland/X restart needed for drirc"
     _info "drirc $target changed — restart Wayland/X session or relaunch affected applications to apply"
+    return 0
+end
+
+function _post_fish --argument-names target --description "Post-hook: notify shell-restart needed for fish/conf.d/*.fish"
+    _info "fish config $target changed — open a new fish shell or run 'source $target' to apply"
     return 0
 end
 

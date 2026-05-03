@@ -5,35 +5,90 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.15 - 2026-05-03
+--------------------
+
+  * Preflight: KERNEL_PARAMS hygiene gate refuses members containing
+    whitespace or `"` — both would corrupt `/etc/kernel/cmdline` or
+    `LINUX_OPTIONS="…"` in `sdboot-manage.conf`.
+  * Preflight: fractional-sleep probe sets `_RY_SLEEP_FRAC` (0.1 on
+    GNU coreutils, 1 on busybox) for cleanup TERM→KILL gaps.
+  * Sysctl: `_content__etc_sysctl.d_…` now asserts printed line count
+    matches `count $SYSCTL_VALUES`; silent-skip of a malformed entry
+    returns rc 12 instead of deploying a partial file.
+  * Install-file: post-hook dispatch table gains
+    `*/fish/conf.d/*.fish|fish` mapped to a new `_post_fish` handler
+    (advises shell-restart). Previously the fish dst matched no glob
+    and `_hook_rc` stayed at 0 with no user feedback.
+  * Services: canonical `_RY_IMPLICIT_SERVICES` global declared
+    alongside `EXPECTED_SERVICES`; the `sys_units` array in
+    `_verify_runtime_services` now references the same source-of-
+    truth (was three independent hard-coded lists).
+  * Verify-runtime: `systemctl --user show-environment` capture
+    strips surrounding double-quotes — values containing shell
+    metachars are emitted quoted, which previously triggered
+    spurious mismatch warnings.
+  * Install: `_configure_services_enable` probes for an active user
+    bus before `systemctl --user enable --now`; without one,
+    enables without `--now` and emits a clearer "no user-bus"
+    message.
+  * Style: `_is_system_dst` 4-way `or` chain folded onto a single
+    line; multi-line `or` chains in fish break silently if any
+    intermediate command produces its own status.
+  * Logging: section-event class now captures content via anchored
+    `^=== (.*) ===$` regex; previous `=+ *` strip was greedy and
+    would collapse `=` runs inside the captured name.
+  * Logging: `_log` records `MKTEMP_FAIL: ry-fish-syntax` when the
+    fish syntax-check stderr tmpfile falls back to `/dev/null`.
+  * Boot: post-rebuild entry count at the tail of
+    `_install_rebuild_boot` reuses `_enum_boot_entries` (was an
+    independent find pipeline).
+  * Boot: marker-skip diagnostic at zero-entry post-count names the
+    next-run consequence ("will re-prompt for SDBOOT_REMOVE_EXISTING
+    ack").
+  * Verify: `_chk_file` tries plain `test -f` before sudo for
+    `/boot` paths; sudo-required gate now triggers only when
+    permission is actually missing.
+  * Verify: `_check_env_ssh_auth_sock` demoted systemd <232 branch
+    from `_fail` to `_warn`; `_ry_check_deps` already gates the
+    250+ floor and CachyOS ships ≥256.
+  * Verify: `_verify_static_syntax` whitespace-normalises
+    `HOOKS=(...)` content before splitting (handles TAB / multi-
+    space in user-edited mkinitcpio.conf).
+  * Verify: `_progress_init` adds `tput cup 0 0` capability probe
+    before pinning the bar; defends against terminals that ignore
+    DECSTBM (`script(1)` recordings, plain log replays).
+  * Style: `lspci` BAR-size grep switched from BRE alternation
+    (`\|`) to ERE (`grep -iE`); behaviour unchanged.
+  * Style: `$HOME` trimmed of trailing `/` after resolution;
+    `_tmpfile_key` and path-prefix matches are now stable against
+    malformed `/etc/passwd` sixth-field values.
+  * Style: stale `# restore L602–810` marker comment removed.
+  * Style: duplicate "Install pipeline / INSTALL PIPELINE" banner
+    pair collapsed.
+
+  Migration: none. All preflight checks fail closed; existing
+  installations re-running `ry-install` will see the new
+  KERNEL_PARAMS gate and sysctl count assertion as preflight rc 3
+  if either invariant is violated.
+
 v4.5.14 - 2026-05-03
 --------------------
 
-  * Verify: end-of-string anchor `$` in four single-quoted
-    PCRE patterns was reaching the regex engine as a literal
-    dollar character (single quotes pass `\$` through verbatim;
-    PCRE then treats the escaped form as a literal). Affected
-    `_grep_kparam`, `_verify_static_boot`, `_ry_do_check`, and
-    `_verify_runtime_kparams` — all four `rw` token checks.
-    Replaced `(\s|\$)` with `(\s|$)` in single-quoted contexts.
-    Symptom would have been a false-fail on cmdline orderings
-    that place `rw` at end-of-line; current generator output
-    always emits `rw` followed by `root=UUID=...` so the bug
-    was latent.
-  * Docs: README fish badge corrected to `fish ≥ 3.6` (was
-    `fish ≥ 4.0 (3.6+)`). The script gates 3.6 minimum with no
-    4.x-specific code paths.
-  * Docs: CHANGELOG sentinel heading inserted between v4.5.4
-    and v4.5.2 so the v4.5.3 skip is visible at scan-level.
-    Skip rationale remains inside the v4.5.4 entry.
-  * Style: in-script narrative comments compressed to single-
-    line annotations. `lint:ignore` markers and script header
-    preserved verbatim.
-  * Style: blank lines stripped from inside function bodies and
-    from between coupled top-level dispatch statements (287
-    lines total, 5262 → 4975). Function-boundary blanks
-    preserved. Runtime behavior unchanged — `_echo` calls still
-    provide visual separation in output; only source spacing
-    was tightened.
+  * Verify: end-of-string anchor `$` in four single-quoted PCRE
+    patterns was reaching the regex engine as a literal dollar
+    character. Affected `_grep_kparam`, `_verify_static_boot`,
+    `_ry_do_check`, `_verify_runtime_kparams` — all four `rw`
+    token checks. Replaced `(\s|\$)` with `(\s|$)` in single-
+    quoted contexts. Latent: generator always emits `rw` followed
+    by `root=UUID=…`.
+  * Docs: README fish badge corrected to `fish ≥ 3.6`.
+  * Docs: CHANGELOG sentinel heading inserted between v4.5.4 and
+    v4.5.2 so the v4.5.3 skip is visible at scan-level.
+  * Style: in-script narrative comments compressed to single-line
+    annotations.
+  * Style: blank lines stripped from function bodies and coupled
+    top-level dispatch statements (287 lines, 5262 → 4975).
 
   Migration: none.
 

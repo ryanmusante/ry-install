@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.15 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.16 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -20,7 +20,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.15"
+set -g VERSION "4.5.16"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -763,8 +763,7 @@ set -g MASK \
     hybrid-sleep.target \
     suspend-then-hibernate.target
 set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service nftables.service
-# Runtime-verify list = EXPECTED_SERVICES + implicit (NetworkManager-dispatcher.service driven by NM conf.d, systemd-resolved.service driven by resolved.conf.d). Single source-of-truth for L3025 sys_units and L2724 _implicit_svcs.
-set -g _RY_IMPLICIT_SERVICES NetworkManager-dispatcher.service systemd-resolved.service
+# Implicit units (NM-dispatcher driven by NM conf.d, systemd-resolved driven by resolved.conf.d) are listed inline in `_verify_runtime_services` and `_ry_do_check`; they are not iterated programmatically here.
 set -g BOOT_SPACE_CRIT 200
 set -g BOOT_SPACE_WARN 500
 set -g ROOT_AVAIL_CRIT 2
@@ -3049,7 +3048,7 @@ end
 function _verify_runtime_services --description "Verify systemd unit states (sys batch + ssh-agent user) and WiFi runtime"
     _echo "SERVICE STATE"
     _echo
-    # sys_units derived from canonical EXPECTED_SERVICES + _RY_IMPLICIT_SERVICES so additions only require touching one place. Indices below assume EXPECTED_SERVICES = [cpupower-epp.service, fstrim.timer, NM.service, nftables.service] + implicit = [NM-dispatcher.service, resolved.service].
+    # Explicit list (nftables.service excluded — checked separately at _ry_do_check phase 4). Order is positionally coupled to parsed[N] indices and the hardcoded labels in the _ok/_warn/_fail strings below; reorder both together.
     set -l sys_units cpupower-epp.service fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service NetworkManager.service
     if test (count $sys_units) -ne 5
         _fail "  sys_units count drift: actual="(count $sys_units)" expected=5 — update parsed[N] indices below"

@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.12 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.13 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -20,7 +20,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.12"
+set -g VERSION "4.5.13"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -76,7 +76,7 @@ test -n "$_no_color_env"; and set -g NO_COLOR true
 test "$TERM" = dumb; and set -g NO_COLOR true
 
 # Fish version gate; 3.6+ required (raised v4.4.36 — needs slice [N..], string match -rg, post-pipeline $pipestatus capture)
-set -l fish_ver (string match -r -- '\d+\.\d+' (fish --version 2>&1) | head -n1)
+set -l fish_ver (string match -r -- '\d+\.\d+(\.\d+)?' (fish --version 2>&1) | head -n1)
 set -l parts (string split '.' -- "$fish_ver")
 if not string match -qr '^\d+$' -- "$parts[1]"
     or not string match -qr '^\d+$' -- "$parts[2]"
@@ -144,7 +144,7 @@ set -g TIMESTAMP (date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
 set -g _MY_UID (id -u)
 # parallel-child log guard.
 set -gx _RY_LOG_OWNER_PID $fish_pid
-if test -z "$HOME"
+if test -z "$HOME"; or not test -d "$HOME"
     set -g HOME (getent passwd $_MY_UID 2>/dev/null | cut -d: -f6)
     if test -z "$HOME"; or not test -d "$HOME"
         echo "[ERR] Cannot determine HOME directory" >&2
@@ -310,7 +310,7 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
     return 0
 end
 
-function _unit_state --argument-names unit --description "Return LoadState/ActiveState/UnitFileState as 3 newline-joined values (empty on failure)"
+function _unit_state --argument-names unit --description "Return LoadState/ActiveState/UnitFileState as a 3-element list (one field per element); empty on failure"
     systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null | string split \n
 end
 
@@ -1536,7 +1536,7 @@ Usage: "(status filename)" [OPTIONS]
 
 INSTALLATION:
   (no args)         Unattended install (the only mode)
-  -V, --verbose     Show output on terminal (default: silent, log only)
+  -V, --verbose     Show output for install/check (silent by default; verify modes are always verbose)
 
 VERIFICATION:
   --verify-static   Check config files exist with correct content
@@ -2006,13 +2006,17 @@ function _grep_kv --argument-names dst --description "Validate kv pairs (loader.
     return 0
 end
 
-function _grep_kparam --argument-names dst --description "Validate kernel cmdline has required tokens"
+function _grep_kparam --argument-names dst --description "Validate kernel cmdline has required tokens (root=UUID=, rw)"
     if test (count $argv) -lt 2
         _log "BUG: _grep_kparam called without content (dst=$dst)"
         return 2
     end
     string match -qr -- '(^|\s)root=UUID=' $argv[2..-1]; or begin
         _fail "  $dst: missing required token 'root=UUID='"
+        return 1
+    end
+    string match -qr -- '(^|\s)rw(\s|\$)' $argv[2..-1]; or begin
+        _fail "  $dst: missing required token 'rw'"
         return 1
     end
     return 0
@@ -2187,15 +2191,16 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     end
 
     set -l dst_dir (dirname -- "$dst")
-    # Parent-dir trust: exists
-    set -l _dir_stat (_as $use_sudo env LC_ALL=C stat -c '%F %u %a' -- "$dst_dir" 2>/dev/null)
+    # Parent-dir trust: exists. Use `|` as delimiter — `%F` can be a two-word value
+    # ("regular file", "symbolic link"); space-splitting would shift uid/mode parts.
+    set -l _dir_stat (_as $use_sudo env LC_ALL=C stat -c '%F|%u|%a' -- "$dst_dir" 2>/dev/null)
     if test -z "$_dir_stat"
         _fail "→ $dst (parent dir missing or unreadable: $dst_dir)"
         return 1
     end
-    set -l _df (string split ' ' -- "$_dir_stat")
+    set -l _df (string split '|' -- "$_dir_stat")
     test "$_df[1]" != directory; and begin
-        _fail "→ $dst (parent dir not a regular directory: type=$_df[1] $dst_dir)"
+        _fail "→ $dst (parent dir not a directory: type='$_df[1]' $dst_dir)"
         return 1
     end
     if test "$use_sudo" = true
@@ -2396,6 +2401,9 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
             end
             string match -q '*root=UUID=*' -- "$cmdline_content"
             _chk_present $status root=UUID "MISSING from /etc/kernel/cmdline"
+            # `rw` is the implicit prefix written by _content__etc_kernel_cmdline; verify it too.
+            string match -qr -- '(^|\s)rw(\s|\$)' "$cmdline_content"
+            _chk_present $status rw "MISSING from /etc/kernel/cmdline"
         else
             _fail "  /etc/kernel/cmdline: empty or unreadable"
         end
@@ -2531,8 +2539,8 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     else if _chk_file /etc/iwd/main.conf
         _chk_grep /etc/iwd/main.conf "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG"
         for quirk in $IWD_DRIVER_QUIRKS
-            set -l key (string split '=' -- $quirk)[1]
-            _chk_grep /etc/iwd/main.conf "$key" "DriverQuirks $key"
+            # Compare full key=value (was: key only — value drift went unnoticed).
+            _chk_grep /etc/iwd/main.conf "$quirk" "DriverQuirks $quirk"
         end
         _chk_grep /etc/iwd/main.conf "NameResolvingService=$IWD_DNS_SERVICE" "DNS via $IWD_DNS_SERVICE"
     end
@@ -2579,9 +2587,9 @@ function _verify_static_user --description "Verify SSH agent fish script, enviro
     if _chk_file "$HOME/.config/environment.d/10-environment.conf"
         _chk_grep "$HOME/.config/environment.d/10-environment.conf" "SSH_AUTH_SOCK=" "SSH_AUTH_SOCK for systemd"
         for exp in $ENV_VARS
-            # -m1 so values containing '=' don't break extraction (consistent with _verify_runtime_env L3198).
-            set -l var_name (string split -m1 '=' -- "$exp")[1]
-            _chk_grep "$HOME/.config/environment.d/10-environment.conf" "$var_name=" "$var_name"
+            # Compare full name=value (was: name only — value drift went unnoticed,
+            # despite runtime check at _verify_runtime_env catching the same drift).
+            _chk_grep "$HOME/.config/environment.d/10-environment.conf" "$exp" "$exp"
         end
     end
     set -l _ssh_unit "$HOME/.config/systemd/user/ssh-agent.service"
@@ -2844,6 +2852,8 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
             set -l _p_re (string escape --style=regex -- "$_p")
             string match -qr -- "(^|\s)$_p_re(\s|\$)" "$_cmdline"; or set drift 1
         end
+        # `rw` is the implicit prefix written by _content__etc_kernel_cmdline.
+        string match -qr -- '(^|\s)rw(\s|\$)' "$_cmdline"; or set drift 1
     end
 
     # Phase 4: per-unit systemctl show; compare to expected.
@@ -2957,6 +2967,12 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
         else
             _fail "  $param: NOT in cmdline"
         end
+    end
+    # `rw` is the implicit prefix written by _content__etc_kernel_cmdline; verify it too.
+    if string match -qr -- '(^|\s)rw(\s|\$)' "$cmdline"
+        _ok "  rw: active"
+    else
+        _fail "  rw: NOT in cmdline"
     end
     _echo
 
@@ -3850,13 +3866,37 @@ function _install_packages --description "Install managed packages via pacman -S
     end
 
     if test (count $pkgs_to_install) -gt 0
+        # Pacman flag selection: when CONFIRM=1 → -Syu (full upgrade, Arch's recommended path);
+        # otherwise → -Sy --needed (refresh DB + install listed pkgs only). The non-upgrade
+        # path violates Arch's no-partial-upgrade policy if any dep needs upgrade — gated on
+        # explicit user ack so the README "skips -Syu without ack" contract holds.
+        set -l _pacman_first
+        set -l _pacman_retry
+        set -l _do_upgrade false
+        if test "$RY_INSTALL_CONFIRM_SYSTEM_UPGRADE" = 1
+            set _pacman_first -Syu --needed --noconfirm
+            set _pacman_retry -Syyu --needed --noconfirm
+            set _do_upgrade true
+            _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
+        else
+            set _pacman_first -Sy --needed --noconfirm
+            set _pacman_retry -Syy --needed --noconfirm
+            _warn "Skipping unattended system upgrade (RY_INSTALL_CONFIRM_SYSTEM_UPGRADE not set)"
+            _info "  Review news before -Syu:"
+            _info "    https://archlinux.org/news/"
+            _info "    https://cachyos.org/news/"
+            _info "  Run manually: sudo pacman -Syu"
+            _info "  Or re-run with RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1 for full upgrade"
+            _info "  Note: -Sy without -u may produce partial-upgrade state if a dep needs upgrade"
+            _log "SYSTEM_UPGRADE_SKIPPED: RY_INSTALL_CONFIRM_SYSTEM_UPGRADE not set"
+        end
         if test -f /var/lib/pacman/db.lck
             _err "Pacman database is locked (/var/lib/pacman/db.lck exists) — skipping package install"
             set -g INSTALL_HAD_ERRORS true
             set _fn_err true
-        else if not _run sudo -n pacman -Syu --needed --noconfirm -- $pkgs_to_install
+        else if not _run sudo -n pacman $_pacman_first -- $pkgs_to_install
             _warn "Package installation failed, retrying with fresh sync (first-pass stderr in JSONL log)..."
-            if not _run sudo -n pacman -Syyu --needed --noconfirm -- $pkgs_to_install
+            if not _run sudo -n pacman $_pacman_retry -- $pkgs_to_install
                 _err "Package installation failed after retry"
                 if test "$_mki_had_orig" = true; and test -n "$_mki_backup"
                     set -l _mki_tmp (sudo -n mktemp -p /etc .ry-install.mki.XXXXXX 2>/dev/null)
@@ -3902,10 +3942,10 @@ function _install_packages --description "Install managed packages via pacman -S
                 set -g INSTALL_HAD_ERRORS true
                 set _fn_err true
             else
-                set -g SYSTEM_UPGRADED true
+                test "$_do_upgrade" = true; and set -g SYSTEM_UPGRADED true
             end
         else
-            set -g SYSTEM_UPGRADED true
+            test "$_do_upgrade" = true; and set -g SYSTEM_UPGRADED true
         end
 
         _info "Verifying package installation..."
@@ -4195,9 +4235,13 @@ function _configure_services_enable --description "Install cpupower-epp, batch-e
     set -l _ret 0
     set -l sys_enable
 
-    set -l nm_disp_state (systemctl is-enabled NetworkManager-dispatcher.service 2>/dev/null)
+    set -l nm_disp_state (systemctl is-enabled NetworkManager-dispatcher.service 2>/dev/null | string trim --)
     if test "$nm_disp_state" = enabled
         _ok "NetworkManager-dispatcher.service: already enabled"
+    else if test -z "$nm_disp_state"
+        # Empty stdout = unit not found (NM not installed yet, or not on system).
+        # Don't enqueue — batch enable would emit a noisy "unit not found" error.
+        _info "NetworkManager-dispatcher.service: not installed — skipping enable"
     else
         set -a sys_enable NetworkManager-dispatcher.service
     end
@@ -4402,17 +4446,11 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     _check_sudo_keepalive
 
     _progress Boot
+    # Packages phase is the primary -Syu site; Boot phase only acts when CONFIRM=1
+    # AND the Packages phase did not already upgrade (i.e. PKGS_ADD was empty).
     if test "$SYSTEM_UPGRADED" = true
         _ok "System already upgraded during package installation"
-    else if not test "$RY_INSTALL_CONFIRM_SYSTEM_UPGRADE" = 1
-        _warn "Skipping unattended system upgrade (RY_INSTALL_CONFIRM_SYSTEM_UPGRADE not set)"
-        _info "  Review news before -Syu:"
-        _info "    https://archlinux.org/news/"
-        _info "    https://cachyos.org/news/"
-        _info "  Run manually: sudo pacman -Syu"
-        _info "  Or re-run ry-install with RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1"
-        _log "SYSTEM_UPGRADE_SKIPPED: RY_INSTALL_CONFIRM_SYSTEM_UPGRADE not set"
-    else
+    else if test "$RY_INSTALL_CONFIRM_SYSTEM_UPGRADE" = 1
         _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
         if not _run sudo -n pacman -Syu --noconfirm
             _err "System upgrade failed or was interrupted — package state may be torn"
@@ -4423,6 +4461,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
             return $EXIT_BOOT_CRIT
         else
             _ok "System upgrade complete"
+            set -g SYSTEM_UPGRADED true
         end
     end
 
@@ -4445,7 +4484,15 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         set -l _wipe_marker $BOOT_WIPE_MARKER
         set -l _acknowledged false
         _enum_boot_entries "$_esp"
-        test "$_RY_BOOT_PIPE_OK" = false; and _log "BOOT_WIPE_PRECHECK_PIPE_FAIL: enumerate failed"
+        # Pipe failure (sudo lapse / fs error during find|sort|split0) means we cannot
+        # determine the entry set — refuse to gate against phantom 0-count + empty
+        # hash, which would surface as a misleading "entries changed" error.
+        if test "$_RY_BOOT_PIPE_OK" = false
+            _err "Cannot enumerate $_esp/loader/entries — refusing wipe gate"
+            _log "BOOT_WIPE_PRECHECK_PIPE_FAIL: enumerate failed"
+            set -g INSTALL_HAD_ERRORS true
+            return $EXIT_PREFLIGHT
+        end
         set -l _existing_entries $_RY_BOOT_COUNT
         set -l _existing_hash $_RY_BOOT_HASH
         if test "$RY_INSTALL_CONFIRM_BOOT_WIPE" = 1
@@ -4488,7 +4535,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         _warn "Manual entries (rescue, Windows, custom kernels) will be LOST."
     end
     if not _run sudo -n sdboot-manage gen
-        _warn "Sdboot-manage gen failed"
+        _err "Sdboot-manage gen failed"
         set -g INSTALL_HAD_ERRORS true
         _err "CRITICAL: Bootloader update failed — aborting remaining steps"
         return $EXIT_BOOT_CRIT
@@ -4778,7 +4825,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     if test "$use_sudo" = true
         _ensure_sudo_cached; or return $EXIT_PREFLIGHT
         # launch keepalive for boot-touching install-file paths. Without this, a slow `mkinitcpio -P` triggered by --install-file /etc/mkinitcpio.conf can exceed sudo TTL on systems with low timestamp_timeout.
-        if string match -q '/boot/*' -- "$target"; or string match -q '/etc/mkinitcpio*' -- "$target"; or string match -q '/etc/sdboot*' -- "$target"; or test "$target" = /etc/kernel/cmdline
+        if string match -q '/boot/*' -- "$target"; or string match -q '/etc/mkinitcpio*' -- "$target"; or string match -q '/etc/sdboot-manage*' -- "$target"; or test "$target" = /etc/kernel/cmdline
             _start_sudo_keepalive
         end
     end
@@ -4791,7 +4838,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
         set -l _post_hooks \
             "/boot/*|boot" \
             "/etc/mkinitcpio*|boot" \
-            "/etc/sdboot*|boot" \
+            "/etc/sdboot-manage*|boot" \
             "/etc/kernel/cmdline|boot" \
             "*.service|service" \
             "*/resolved.conf.d/*|resolved" \

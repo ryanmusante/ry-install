@@ -5,6 +5,108 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.13 - 2026-05-03
+--------------------
+
+  * Bug: `_install_packages` ran `pacman -Syu --needed`
+    unconditionally whenever PKGS_ADD was non-empty,
+    bypassing the `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE`
+    gate documented in the README and `--help` env-var
+    block. With the shipped 14-package PKGS_ADD the
+    Boot-phase gate at `_install_rebuild_boot` was
+    unreachable. Pacman flag selection is now driven
+    by the env var: `=1` → `-Syu --needed` (full
+    upgrade, Arch-recommended); unset → `-Sy --needed`
+    (refresh DB + install listed pkgs only). The
+    Packages phase emits a warning when running without
+    ack that the non-`-u` path can produce partial-upgrade
+    state per Arch policy. SYSTEM_UPGRADED is set only
+    when the upgrade actually ran; the Boot-phase `-Syu`
+    branch is now reachable when CONFIRM=1 and PKGS_ADD
+    is empty (custom forks).
+  * Bug: `_install_rebuild_boot` boot-wipe gate consumed
+    `_RY_BOOT_PIPE_OK=false` (find / sort / split0 stage
+    failure on sudo lapse or fs error) by proceeding with
+    `_existing_entries=0` and empty `_existing_hash`,
+    surfacing a misleading "Boot loader entries changed"
+    error against any non-empty marker. Now returns
+    EXIT_PREFLIGHT, mirroring the `_ry_do_check` Phase-4
+    ERR_NO_DATA pattern from v4.5.10.
+  * Bug: `_atomic_write_file` parsed `stat -c '%F %u %a'`
+    by space-splitting; `%F` is a two-word string for
+    non-directories ("regular file", "symbolic link"),
+    shifting uid and mode parts in `_df[2]` and `_df[3]`.
+    Switched to `|`-delimited format string. The
+    not-a-directory error message now reports the full
+    type string (e.g. `type='regular file'`).
+  * Verify: `_verify_static_system` IWD DriverQuirks
+    check now compares the full `key=value` string
+    (was: key only). Drift like `PowerSaveDisable=foo`
+    is now caught by `--verify-static`.
+  * Verify: `_verify_static_user` ENV_VARS check now
+    compares the full `name=value` string (was: name+`=`
+    only). Drift in environment.d values is now caught
+    by the static check, matching `_verify_runtime_env`
+    behaviour.
+  * Verify: `_grep_kparam`, `_verify_static_boot`,
+    `_verify_runtime_kparams`, and `_ry_do_check` Phase 3
+    now require the implicit `rw` token in the cmdline
+    alongside `root=UUID=`. The cmdline byte-content is
+    unchanged (`rw root=UUID=… <KERNEL_PARAMS>`); only
+    verifier coverage is broader. KERNEL_PARAMS list
+    count: 15 (unchanged).
+  * Bootstrap: HOME validity check now also re-resolves
+    when HOME is set-but-invalid (non-empty garbage path,
+    not a directory). Was only re-resolving on empty
+    HOME; mkdir would later fail with a less-specific
+    error.
+  * Bootstrap: fish version regex captures patch when
+    present (`\d+\.\d+(\.\d+)?`). Error messages now
+    show full version like "3.7.0" instead of "3.7".
+  * UX: `_install_rebuild_boot` sdboot-manage-gen failure
+    path no longer emits a `_warn` followed by an `_err`
+    for the same root cause; single `_err` event in the
+    JSONL log, matching the sdboot-manage-update branch.
+  * UX: `_configure_services_enable` distinguishes
+    NetworkManager-dispatcher `is-enabled` empty output
+    (unit not installed) from "disabled"; missing units
+    are no longer enqueued for batch enable.
+  * Comments: `_unit_state` docstring corrected from
+    "newline-joined values" — returns a list with one
+    field per element via `string split \n`.
+  * Glob: `_ry_do_install_file` post-hook map and
+    keepalive trigger tightened `/etc/sdboot*` →
+    `/etc/sdboot-manage*` for precision.
+  * Help: `-V, --verbose` description clarified — only
+    install/check default silent; verify-static /
+    verify-runtime / install-file are verbose by design.
+  * Doc: README §Kernel Parameters notes the implicit
+    `rw` and `root=UUID=` prefix and that both are
+    verified alongside the 15 KERNEL_PARAMS entries.
+  * Doc: README §Packages and §Runtime Variables row
+    rewritten to describe the now-honored
+    `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` semantics,
+    including the partial-upgrade caveat for the
+    unset path. README §Install Flow Packages row
+    notes the gate.
+  * Repo: ship LICENSE alongside ry-install.fish. The
+    file was referenced from README §License but absent
+    from the archive.
+  * Footprint: 5,242 → 5,289 LOC (+47, +0.9%). No
+    public-API or JSONL schema changes; the
+    EXIT_PREFLIGHT (3) on `_RY_BOOT_PIPE_OK=false`
+    path is a semantic correction (was silent
+    proceed-then-misleading-error).
+
+  Migration: users who previously relied on the
+  unattended invocation (`./ry-install.fish` with no
+  env vars) and expected `pacman -Syu` to run
+  regardless: set `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1`
+  to restore that behaviour. Users who followed the
+  README contract (no env var → no -Syu) will see the
+  gate work as documented for the first time.
+
+
 v4.5.12 - 2026-05-03
 --------------------
 

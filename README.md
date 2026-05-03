@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.12-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.13-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%204.0%20%283.6%2B%29-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -118,7 +118,7 @@ All modes are non-interactive. The bare invocation is the primary path; verifica
 | Flag | Description |
 |---|---|
 | (no args) | Full unattended install (the only install path) |
-| `-V, --verbose` | Show output on terminal (errors are surfaced on rc≠0 regardless) |
+| `-V, --verbose` | Show output for install/check (silent by default; verify modes are always verbose) |
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |
 | `--check` | Silent idempotency probe (exit 0 = clean, 3 = prereq fail, 10 = drift) |
@@ -138,7 +138,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | Phase | Description |
 |---|---|
 | **Preflight** | Validate prerequisites (Fish ≥ 3.6, writable `$TMPDIR`, GNU `sort -z` / `stat -c` / `find -printf` / `df --output` / `timeout`, sudo without `requiretty` / `tty_tickets` / `timestamp_timeout=0`), acquire lock, validate runtime (root UUID, CPU model, timing globals) |
-| **Packages** | Sync repos, install/remove packages, AUR via paru |
+| **Packages** | Sync repos, install/remove packages (system upgrade gated on `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1`), AUR via paru |
 | **Configuration** | Deploy 15 embedded config files (atomic writes) |
 | **Services** | Enable, mask, or create systemd units |
 | **Boot** | Rebuild initramfs (gated on no-prior-errors), update systemd-boot entries |
@@ -150,7 +150,7 @@ Each subsection corresponds to a discrete layer of the system. All values are em
 
 ### Kernel Parameters
 
-15 parameters written to `/etc/kernel/cmdline`.
+15 parameters in `KERNEL_PARAMS`, written to `/etc/kernel/cmdline` along with the implicit `rw` and `root=UUID=<root_partition>` prefix derived at runtime. Both `rw` and `root=UUID=` are verified by `--verify-static` / `--verify-runtime` / `--check` alongside the 15 entries below.
 
 <details>
 <summary><b>Show parameter table (15)</b></summary>
@@ -304,7 +304,12 @@ Three files deploy to the calling user's home. The SSH agent runs with `-D` (no 
 
 ### Packages
 
-Package operations run during the Packages phase with `--needed` for idempotency — already-installed packages are skipped on subsequent runs. The single AUR package (`mt76-mt7925-dkms`) requires paru; if paru is absent the script emits `[ERR]`, sets `INSTALL_HAD_ERRORS`, and the AUR phase is marked failed. The rest of the install pipeline continues to run *except* the boot rebuild (gated since v4.5.2) — set `RY_INSTALL_FORCE_BOOT_REBUILD=1` to bypass that gate.
+Package operations run during the Packages phase with `--needed` for idempotency — already-installed packages are skipped on subsequent runs. The pacman invocation depends on `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE`:
+
+- **With ack (`=1`):** `pacman -Syu --needed -- <pkgs>` (refresh DB + full system upgrade + install). This is Arch's recommended path.
+- **Without ack (default):** `pacman -Sy --needed -- <pkgs>` (refresh DB + install only — no `-u`). The Packages phase emits a warning that this can produce partial-upgrade state if any dependency needs upgrade; review arch/cachyos news and re-run with `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE=1` to do the safer full upgrade.
+
+The single AUR package (`mt76-mt7925-dkms`) requires paru; if paru is absent the script emits `[ERR]`, sets `INSTALL_HAD_ERRORS`, and the AUR phase is marked failed. The rest of the install pipeline continues to run *except* the boot rebuild (gated since v4.5.2) — set `RY_INSTALL_FORCE_BOOT_REBUILD=1` to bypass that gate.
 
 | Action | Count | Packages |
 |---|---|---|
@@ -418,7 +423,7 @@ Shell variables that modify script behavior at runtime — distinct from the gam
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). `0` = disable (not recommended). |
 | `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Set `1` to ack first boot-entry wipe (`SDBOOT_REMOVE_EXISTING=yes`). Re-prompts whenever the entry-set hash changes (entries added, removed, or renamed). |
-| `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` | unset | Set `1` to ack unattended `pacman -Syu`. Without ack, prints arch/cachyos news headlines and skips `-Syu`. |
+| `RY_INSTALL_CONFIRM_SYSTEM_UPGRADE` | unset | Set `1` to ack unattended `pacman -Syu --needed -- <pkgs>` (Arch's recommended full-upgrade path). Without ack, the Packages phase falls back to `pacman -Sy --needed -- <pkgs>` (refresh + install only, no system upgrade) and the Boot phase skips its standalone `-Syu`. |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | **Since v4.5.4:** literal value `=1` required to bypass the torn-package gate (allows `mkinitcpio -P` even when earlier phases reported errors). Any other value, including empty / `0` / typos, is treated as unset. Recovery scenarios only. |
 | `NO_COLOR` | unset | Suppress ANSI color (also auto on `TERM=dumb` / non-TTY stderr). |
 

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.16-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.17-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -333,7 +333,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + `flock(1)` stale reclaim |
 | Re-source guard | `_RY_INSTALL_LOADED` blocks double-source; cleared on clean exit |
-| Credentials | 15 lowercase secret-flag patterns redacted in logs (passphrase, password, token, key, secret, api-key, psk, wpa-psk, private-key, auth, bearer, cookie, client-secret, credential) |
+| Credentials | 15 lowercase secret-flag patterns redacted in logs (passphrase, password, token, key, secret, api-key, apikey, psk, wpa-psk, private-key, auth, bearer, cookie, client-secret, credential) |
 | Signals | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
 | mkinitcpio rollback | Pre-deploy bytes captured; restored via atomic mv on `pacman -Syu` failure |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard; self-heal on rotation race |
@@ -373,7 +373,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 <details>
 <summary><b>Data Directory & Logs</b></summary>
 
-All runtime state under `~/ry-install/`. Logs are not auto-pruned.
+All runtime state under `~/ry-install/`. Logs auto-prune at `MAX_LOGS=50` (oldest first; `*.jsonl` and `*.log` under `~/ry-install/logs/`).
 
 | Path | Contents |
 |---|---|

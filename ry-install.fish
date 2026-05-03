@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.16 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.17 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -20,7 +20,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.16"
+set -g VERSION "4.5.17"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -266,7 +266,6 @@ function _validate_kernel_params --description "Warn if KERNEL_PARAMS reference 
     set -l param_config_map \
         "zswap.=CONFIG_ZSWAP" \
         "amdgpu.=CONFIG_DRM_AMDGPU" \
-        "nvme_core.=CONFIG_NVME_CORE" \
         "pcie_aspm.=CONFIG_PCIEASPM" \
         "split_lock_detect=CONFIG_X86_BUS_LOCK_DETECT" \
         "usbcore.=CONFIG_USB_SUPPORT"
@@ -352,18 +351,8 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
     if not set -q _FOOTER_WRITTEN
         _log "CLEANUP_TMPFILES: sweep starting"
     end
-    set -l sys_dirs $_SYS_TMP_DIRS
-    if test "$_PROFILE_USES_NM" = true; and not contains -- /etc/NetworkManager/system-connections $sys_dirs
-        set -a sys_dirs /etc/NetworkManager/system-connections
-    end
-    for dir in $sys_dirs
+    for dir in $_SYS_TMP_DIRS
         if command -q sudo
-            if string match -q '*NetworkManager/system-connections' -- "$dir"
-                if not sudo -n true 2>/dev/null; and not set -q _RY_CLEANUP_SUDO_LAPSED_WARNED
-                    _warn "Sudo lapsed — tmpfile sweep in $dir skipped; stale files may accumulate"
-                    set -g _RY_CLEANUP_SUDO_LAPSED_WARNED true
-                end
-            end
             sudo -n find "$dir" -maxdepth 1 -name '.ry-install.*' -type f -delete 2>/dev/null
         else
             command find "$dir" -maxdepth 1 -name '.ry-install.*' -type f -delete 2>/dev/null
@@ -1226,8 +1215,13 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
         set data (string sub -l $cut -- "$data")"..."
     end
     printf '{"ts":"%s","event":"%s","data":"%s"}\n' "$_ts" "$event" "$data" >>"$LOG_FILE" 2>/dev/null
+    set -l _write_rc $status
+    # track first successful write so dispatcher early-exit preserves a log that has diagnostic content.
+    if test $_write_rc -eq 0; and not set -q _RY_LOG_WRITTEN
+        set -g _RY_LOG_WRITTEN true
+    end
     # track first write failure so dispatcher can surface a "log was incomplete" warning at exit (disk full, log file deleted mid-run).
-    if test $status -ne 0; and not set -q _RY_LOG_WRITE_FAIL
+    if test $_write_rc -ne 0; and not set -q _RY_LOG_WRITE_FAIL
         set -g _RY_LOG_WRITE_FAIL true
     end
 end
@@ -4562,7 +4556,9 @@ function _ry_do_install_file --argument-names target --description "Install a si
     if test "$use_sudo" = true
         _ensure_sudo_cached; or return $EXIT_PREFLIGHT
         # launch keepalive for boot-touching install-file (slow mkinitcpio -P can exceed sudo TTL).
-        if string match -q '/boot/*' -- "$target"; or string match -q '/etc/mkinitcpio*' -- "$target"; or string match -q '/etc/sdboot-manage*' -- "$target"; or test "$target" = /etc/kernel/cmdline
+        # canonicalize target locally for the match: dispatcher's realpath -m may have failed and left a literal path.
+        set -l _ka_target (command realpath -m -- "$target" 2>/dev/null; or echo "$target")
+        if string match -q '/boot/*' -- "$_ka_target"; or string match -q '/etc/mkinitcpio*' -- "$_ka_target"; or string match -q '/etc/sdboot-manage*' -- "$_ka_target"; or test "$_ka_target" = /etc/kernel/cmdline
             _start_sudo_keepalive
         end
     end
@@ -4621,10 +4617,12 @@ function _ry_do_install_file --argument-names target --description "Install a si
                 break
             end
         end
+        _kill_sudo_keepalive
         _log_section "INSTALL-FILE END"
         return $_hook_rc
     else
         _err "Failed to install: $target"
+        _kill_sudo_keepalive
         _log_section "INSTALL-FILE END"
         return 1
     end
@@ -4666,8 +4664,20 @@ function _post_service --argument-names target --description "Post-hook: daemon-
     set -l _rc 0
     if string match -q "$HOME/*" -- "$target"
         _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
-        if _run systemctl --user enable --now -- (basename -- "$target")
-            if string match -q '*ssh-agent*' -- "$target"; and set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"
+        # `--now` requires a running user-bus to start the unit; without it systemctl emits a misleading "failed to enable".
+        set -l _has_user_bus false
+        set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"; and set _has_user_bus true
+        set -l _enable_ok false
+        if test "$_has_user_bus" = false
+            _info "  "(basename -- "$target")": enabling without --now (no active user-bus session — start manually post-login)"
+            if _run systemctl --user enable -- (basename -- "$target")
+                set _enable_ok true
+            end
+        else if _run systemctl --user enable --now -- (basename -- "$target")
+            set _enable_ok true
+        end
+        if test "$_enable_ok" = true
+            if string match -q '*ssh-agent*' -- "$target"; and test "$_has_user_bus" = true
                 _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"; or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
             end
         else
@@ -4744,8 +4754,11 @@ function _post_fish --argument-names target --description "Post-hook: notify she
 end
 
 function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/dir (no exit; for caller-managed return paths)"
-    # preserve LOG_FILE if dispatch header was already written; otherwise removing the log loses meaningful provenance for lock-conflict diagnosis.
-    if not set -q _RY_HEADER_WRITTEN; or test "$_RY_HEADER_WRITTEN" != true
+    # preserve LOG_FILE if dispatch header was already written, OR if any _log write succeeded (e.g. _err during _init_runtime); otherwise removing the log loses meaningful provenance for lock-conflict / preflight diagnosis.
+    set -l _preserve false
+    set -q _RY_HEADER_WRITTEN; and test "$_RY_HEADER_WRITTEN" = true; and set _preserve true
+    set -q _RY_LOG_WRITTEN; and test "$_RY_LOG_WRITTEN" = true; and set _preserve true
+    if test "$_preserve" = false
         command rm -f -- "$LOG_FILE" 2>/dev/null
     end
     # bounded rmdir chain: $LOG_DIR → logs/ → ry-install/ (rmdir refuses non-empty; HOME untouched).
@@ -4949,7 +4962,8 @@ if not string match -qr '^[1-9][0-9]*$' -- "$MAX_LOGS"
     set MAX_LOGS 50
 end
 # -not -samefile for literal LOG_FILE exclusion (was -path which is glob-aware; current TIMESTAMP format has no glob chars but defense-in-depth).
-set -l _rot_rows (command find "$_log_base_rot" \( -name '*.jsonl' -o -name '*.log' \) -type f -not -samefile "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -zn | string split0)
+# -maxdepth 2: logs land at logs/YYYY-MM-DD/file.jsonl exactly; avoids drift if user manually adds nested subdirs.
+set -l _rot_rows (command find "$_log_base_rot" -maxdepth 2 \( -name '*.jsonl' -o -name '*.log' \) -type f -not -samefile "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -zn | string split0)
 set -l _rot_ps $pipestatus
 set -l _rot_pipe_ok true
 for _rps in $_rot_ps

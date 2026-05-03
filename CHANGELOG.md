@@ -5,6 +5,40 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.17 - 2026-05-03
+--------------------
+
+  * Install-file: `_post_service` user branch probes for active
+    user-bus (`$XDG_RUNTIME_DIR/bus`) before invoking
+    `systemctl --user enable --now`; falls back to `enable` (no
+    `--now`) plus an info line when the bus is absent. Mirrors
+    the probe in `_configure_services_enable`.
+  * Install-file: `_ry_do_install_file` calls
+    `_kill_sudo_keepalive` on both return paths so the keepalive
+    process is reaped explicitly rather than via `_do_cleanup` /
+    `fish_exit` only.
+  * Install-file: keepalive-launch glob match canonicalizes
+    `$target` via local `realpath -m` before pattern testing.
+  * Logging: `_log` sets `_RY_LOG_WRITTEN` on first successful
+    append. `_pre_dispatch_log_cleanup` preserves `LOG_FILE` when
+    either `_RY_HEADER_WRITTEN` or `_RY_LOG_WRITTEN` is set, so
+    early-exit `_err` lines from `_init_runtime` are retained.
+  * Logging: log-rotation `find` capped at `-maxdepth 2`
+    (`logs/YYYY-MM-DD/file.jsonl`).
+  * Cleanup: `_cleanup_tmpfiles` no longer walks
+    `/etc/NetworkManager/system-connections` — no embedded content
+    writes there. Drops the `_RY_CLEANUP_SUDO_LAPSED_WARNED` global.
+  * Preflight: `_validate_kernel_params` `param_config_map` drops
+    stale `nvme_core.=CONFIG_NVME_CORE` entry — no `nvme_core.*`
+    member exists in `KERNEL_PARAMS`.
+  * Docs: README log-rotation note matches dispatcher behaviour
+    (`MAX_LOGS=50`, oldest first).
+
+  Migration: none. Behaviour-preserving on all install paths;
+  `_post_service` user-bus probe converts a prior rc=1 warning to
+  a graceful enable when the user bus is unavailable.
+
+
 v4.5.16 - 2026-05-03
 --------------------
 

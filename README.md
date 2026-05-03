@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.21-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.22-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -204,6 +204,11 @@ systemd-boot + sdboot-manage. `editor no` blocks live cmdline tampering; `timeou
 | Unit | Purpose |
 |---|---|
 | `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` |
+| `fstrim.timer` | Weekly TRIM (system-pre-existing; enabled here) |
+| `nftables.service` | Firewall (system-pre-existing; enabled here) |
+| `NetworkManager.service` | Pre-enabled by CachyOS base install (verified active+enabled post-install; verify-runtime warns "not installed" if absent) |
+
+Implicit units enabled by deployed conf.d files: `systemd-resolved.service` (via `resolved.conf.d`), `NetworkManager-dispatcher.service` (via `NetworkManager/conf.d`).
 
 `power-profiles-daemon` is masked separately ([Masked Services](#masked-services)) to prevent EPP conflicts.
 
@@ -351,7 +356,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | KERNEL_PARAMS hygiene | Preflight rejects whitespace or `"` in any param |
 | Sysctl invariant | Generator returns rc 12 if printed line count ≠ `count $SYSCTL_VALUES` |
 | Subprocess control | `_run` uses `timeout --foreground`; `_do_cleanup` reaps via `pkill -P` before keepalive teardown |
-| Stderr surfacing | First 5 lines of subprocess stderr mirror to fd 2 on rc≠0, even under `QUIET=true`. Under `--verbose`, full stderr is mirrored without truncation. |
+| Stderr surfacing | First 5 lines of subprocess stderr mirror to fd 2 on rc≠0, even under `QUIET=true`. Under `--verbose`, full stderr **and stdout** are mirrored to fd 2 to maintain ordering with surrounding script narration. |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + `flock(1)` stale reclaim |
 | Re-source guard | `_RY_INSTALL_LOADED` blocks double-source; cleared on clean exit |
@@ -406,7 +411,7 @@ All runtime state under `~/ry-install/`. Logs auto-prune at `MAX_LOGS=50` (oldes
 | `~/ry-install/.lock/` | Instance guard |
 | `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker (delete to re-prompt) |
 
-NDJSON schema: every line is `{"ts":ISO8601,"event":NAME,"data":STR,...}`. Common events: `header`, `footer`, `ok`/`fail`/`warn`/`err`/`info`, `prog_step_start`/`prog_step_end`, `run`, `stderr`, `section`, `bug`. ~70 prefix-routed event types follow the same schema.
+NDJSON schema: every line is `{"ts":ISO8601,"event":NAME,"data":STR,...}`. Common events: `header`, `footer`, `ok`/`fail`/`warn`/`err`/`info`, `prog_step_start`/`prog_step_end`, `run`, `stderr`, `section`, `bug`. ~65 prefix-routed event types follow the same schema.
 
 ```fish
 jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl

@@ -5,6 +5,32 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.22 - 2026-05-03
+--------------------
+
+  * Verify-static: `_verify_static_checksum` no longer double-counts
+    generator failures. Gen-fail branch decrements `VERIFY_FAIL` after
+    `_fail` to keep `gen_fail` mutually exclusive of `fail` in the
+    JSONL footer.
+  * Verify-runtime: `NetworkManager.service` not-found now warns
+    ("not installed (skipping)") instead of failing. Mirrors
+    `nftables.service` handling.
+  * Install-file: `case '*'` post-hook catchall annotated with
+    break-before-overwrite intent (skips post-switch
+    `set _hook_rc $status` zeroing).
+  * Msg: `[$level]` prefix uses `printf '[%s]'` (was `echo -n`).
+  * Comments: implicit-units note names units inline
+    (`systemd-resolved.service`, `NetworkManager-dispatcher.service`)
+    for grep discoverability.
+  * Docs: README "System Services" table lists all 4 verified units
+    plus implicit-conf-d-driven pair. "Stderr surfacing" row clarifies
+    `--verbose` routes both streams to fd 2. Event-type ceiling
+    softened from "~70" to "~65".
+
+  Migration: none. Behaviour-preserving everywhere except verify-runtime
+  on NM-not-installed systems (fail → warn).
+
+
 v4.5.21 - 2026-05-03
 --------------------
 

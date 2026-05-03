@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.21 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
+# ry-install v4.5.22 (2026-05-03) — CachyOS config manager | Ryan Musante | MIT
 # Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
@@ -20,7 +20,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.21"
+set -g VERSION "4.5.22"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -784,7 +784,7 @@ set -g MASK \
     hybrid-sleep.target \
     suspend-then-hibernate.target
 set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service nftables.service
-# Implicit units (NM-dispatcher driven by NM conf.d, systemd-resolved driven by resolved.conf.d) are listed inline in `_verify_runtime_services` and `_ry_do_check`; they are not iterated programmatically here.
+# Implicit units (systemd-resolved.service driven by resolved.conf.d; NetworkManager-dispatcher.service driven by NM conf.d) are listed inline in `_verify_runtime_services` and `_ry_do_check`; not iterated programmatically here.
 set -g BOOT_SPACE_CRIT 200
 set -g BOOT_SPACE_WARN 500
 set -g ROOT_AVAIL_CRIT 2
@@ -1287,7 +1287,7 @@ function _msg --argument-names level --description "Format and print a leveled s
                     case INFO
                         set_color blue
                 end
-                echo -n "[$level]"
+                printf '[%s]' "$level"
                 set_color normal
                 echo " $msg"
             end >&2
@@ -2688,6 +2688,8 @@ function _verify_static_checksum --description "Verify embedded content hash mat
         # replaced switch "$expected::$actual" with explicit checks.
         if test -z "$expected"
             _fail "  $dst: generator failed"
+            # _fail bumped VERIFY_FAIL via _msg; gen_fail is mutually exclusive — back out the fail bump.
+            set -g VERIFY_FAIL (math $VERIFY_FAIL - 1)
             set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
             _log "VERIFY_STATIC_GEN_FAIL: dst=$dst"
         else if test -z "$actual"
@@ -3135,7 +3137,9 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
         _fail "  NetworkManager-dispatcher: $rec[3] (expected: enabled)"
     end
     set -l rec (string split ':' -- "$parsed[5]")
-    if test "$rec[2]" = active
+    if test "$rec[1]" = not-found
+        _warn "  NetworkManager.service: not installed (skipping)"
+    else if test "$rec[2]" = active
         if test "$rec[3]" = enabled
             _ok "  NetworkManager.service: active (enabled)"
         else
@@ -4661,6 +4665,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
                     case '*'
                         _err "Internal: unknown post-hook tag '$_h' for glob '$_g' (target=$target)"
                         set _hook_rc 1
+                        # break-before-overwrite: skips post-switch `set _hook_rc $status` which would zero this 1.
                         break
                 end
                 set _hook_rc $status

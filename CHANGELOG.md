@@ -5,6 +5,65 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.28 - 2026-05-04
+--------------------
+
+  * dispatch: `_ry_do_install_file` captures switch `$status` into `_switch_status` before the gate `test`; previously `test` clobbered `$status` so post-hook rc was always read as 0 and a failed `_post_boot` / `_post_service` under `--install-file` returned 0 to the dispatcher.
+  * dispatch: top-level early-peek erases `_early_arg` on the no-flag fallthrough path (already erased on `-h` / `-v`).
+  * structure: `_run` split into `_run_redact_argv` (per-element secret-flag eat, NUL-delimited stdout) + `_run_resolve_timeout` (RY_RUN_TIMEOUT validation, single-shot warn).
+  * structure: `_verify_static_boot` split into `_vsb_loader` / `_vsb_sdboot` / `_vsb_cmdline` / `_vsb_mkinitcpio` / `_vsb_entries`.
+  * structure: `_install_fstab_opts` split into `_fstab_needs_change` (scan; sets `_RY_FSTAB_NEEDS_CHANGE` / `_RY_FSTAB_COMMIT_OVERRIDES`) + `_fstab_atomic_replace` (mktemp /etc → awk → chmod/chown ref → findmnt verify → mv).
+  * structure: `_preflight_boot_sanity` split into `_pbs_check_kernels` / `_pbs_check_initrds` / `_pbs_check_entries`; each takes ESP via `--argument-names esp`, emits integer error count on stdout, summed by orchestrator via `math`.
+  * style: version-parse `if not CMD\n    or not CMD` collapsed to single-line `if not CMD; or not CMD` form.
+  * style: `_ry_erase_handlers` comment corrected from "Adding a 7th handler?" to "Adding a 6th handler?" (5 handlers tracked).
+  * style: `_msg` adds empty-body guard — log line still written, bare `[LEVEL] ` stderr print suppressed.
+  * style: log-rotation `MAX_LOGS` reset uses explicit `set -g` for refactor-safety.
+  * style: trim verbose comments throughout to single-line form.
+
+v4.5.27 - 2026-05-04
+--------------------
+
+  * verify: `_verify_summary` now surfaces `VERIFY_GEN_FAIL` to stderr and treats it as a hard failure for the verdict; previously generator failures were logged only to JSONL footer and the user-facing summary reported "OK" despite N gen-failures.
+  * verify: `_chk_grep` always uses `grep -wF` (whole-word) for both plain tokens and `k=v` patterns; eliminates substring false-positives where e.g. `wifi.backend=iwd` would match a drifted `wifi.backend=iwdfoo`. The `=`/`"`/`.` chars are non-word delimiters so k=v boundaries are still respected.
+  * cleanup: `_do_cleanup` two-pass tmpfile sweep — plain `rm` first, then sudo-aware fallback for root-owned orphans in /etc, /boot, /var (only when sudo is non-interactive available). Closes the orphan-tmpfile gap when sudo lapses during `_atomic_write_file` mid-mv.
+  * dispatch: `_run` rejects dash-prefixed `argv[1]` with rc 2 + `BUG: _run called with dash-prefixed argv[1]` log marker; previously `timeout(1)` would mis-parse the leading flag and return the misleading rc 125/127.
+  * docs: `_ry_show_help` and the early `-h`/`-v` peek both note `NO_COLOR` accepts any non-empty value (matches the implementation in `_no_color_env` capture); previously help showed `NO_COLOR=1` only.
+  * docs: README `Safety & Reliability` table — sysctl invariant rc corrected (12 → 13) to match `_content__etc_sysctl.d_99-cachyos-sysctl.conf` and the v4.5.26 dispatcher branch.
+  * style: lowercased "Ssh-agent.service" → "ssh-agent.service" in user-facing `_warn` (matches systemd convention and README casing).
+  * refactor: largest verify/install orchestrators split into focused helpers (each ≤90 lines):
+      - `_verify_runtime_kparams` (209→25 + `_vrk_cmdline`/`_vrk_gpu_state`/`_vrk_cpu_state`/`_vrk_module_state`/`_vrk_clocksource_coredump` with shared `_RY_DMESG_CACHE`).
+      - `_verify_runtime_env` (172→9 + `_vre_envvars`/`_vre_sysctl_runtime`/`_vre_tcp`/`_vre_thp_ksm`/`_vre_zram`/`_vre_fstab`/`_vre_ntsync`).
+      - `_verify_runtime_session` (154→14 + `_vrs_nm_perms`/`_vrs_installed_file_perms`/`_vrs_parent_dirs`/`_vrs_vulkan`/`_vrs_boot_perf`).
+      - `_verify_runtime_services` (153→7 + `_vrsv_chk_active_enabled`/`_vrsv_sys_units`/`_vrsv_ssh_agent`/`_vrsv_wifi`).
+      - `_ry_do_check` (118→33 + `_check_phase_files`/`_check_phase_cmdline`/`_check_phase_units`/`_check_phase_user_ssh` with shared `_RY_CHECK_DRIFT`/`_RY_CHECK_FILES_CHECKED`).
+      - `_install_packages` (128→90 + `_mkinitcpio_revert`).
+      - `_install_rebuild_boot` (125→75 + `_boot_wipe_gate`/`_boot_initrd_size_scan`).
+
+  Migration: `--verify-static` and `--verify-runtime` exit codes change when the *only* failure is generator failure: previously rc=0 ("OK" reported despite gen_fail in JSONL), now rc=1 ("FAIL" reported with `gen_fail=N` summary segment). All other behaviour preserved. JSONL `event=footer` schema unchanged.
+
+
+
+  * boot: `_resolve_esp` final fallback to /boot emits `_warn` (was `_log`-only); ESP autodetect failure now surfaces at user-facing fd 2 with verification hint.
+  * deps: `ping` added to `_ry_check_deps` soft-deps probe (used by `_ry_check_network` raw-IP fallback).
+  * post-hooks: `_post_sysctl` probes `command -q sysctl` before invoking; clean degradation with install hint when procps-ng absent.
+  * generators: sysctl content generator returns rc 13 (assertion failure) instead of rc 12 (missing prerequisite global) on count mismatch; `_atomic_write_file` dispatcher gains a distinct rc-13 branch.
+
+  Migration: none. Behaviour-preserving on the happy path; only diagnostic and edge-case messaging changes.
+
+
+v4.5.25 - 2026-05-03
+--------------------
+
+  * signals: `_cleanup` and `_cleanup_pipe` invoke `_ry_namespace_cleanup bail` before sourced return; fixes globals leak on signal-driven sourced exit. Same call added at the two dispatcher bail-out paths.
+  * configuration: `_install_system_files` iterates `$SERVICE_DESTINATIONS` and exposes `_RY_DEPLOYED_SERVICES`; all 15 managed files deploy in Configuration phase, Services reduced to daemon-reload + enable.
+  * verify: `_verify_unit_syntax` accepts optional `intended_scope`; `_verify_unit_content` derives scope from `$dst` so user-scope units verify with `--user`.
+  * help: early-peek mirrors the full `_ry_show_help` body (EXIT CODES, ENVIRONMENT, `--` end-of-options).
+  * string-match: replaced 3 `string match -qe` sites with `string match -q '*X*'` glob form.
+  * keepalive: `fish --no-config -c` for the keepalive child (hermetic; skips user conf.d).
+  * post-hooks: extracted `$_RY_POST_HOOKS` + `_post_hook_for_target` helper; two iteration sites in `_ry_do_install_file` now share one helper.
+  * comments: dropped six stale source-line references and the hardcoded version pin in `RY_INSTALL_FORCE_BOOT_REBUILD` blurb.
+  * README: Quick Start documents `chmod +x`; install-flow table reflects Configuration-phase consolidation.
+
 v4.5.24 - 2026-05-04
 --------------------
 

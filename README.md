@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.24-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.28-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -52,9 +52,14 @@
 ## Quick Start
 
 ```fish
-git clone https://github.com/ryanmusante/ry-install.git && cd ry-install
+git clone https://github.com/ryanmusante/ry-install.git
+cd ry-install
+chmod +x ry-install.fish
 ./ry-install.fish              # Deploy everything (unattended)
 ```
+
+> [!TIP]
+> If you cannot set the executable bit, invoke the interpreter directly: `fish ry-install.fish`.
 
 **Post-install verification:**
 
@@ -139,10 +144,10 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | **Preflight** | Validate prerequisites, acquire lock, validate runtime |
 | **Packages** | `pacman -Syu --needed`; opt-in `-Sy` via `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1`; AUR via paru |
-| **Configuration** | Deploy 15 embedded config files (atomic writes) |
-| **Services** | Enable, mask, or create systemd units |
+| **Configuration** | Deploy all 15 embedded config files (atomic writes; system + service units + user) |
+| **Services** | `daemon-reload`, enable system units (cpupower-epp.service, fstrim.timer, nftables.service, NM-dispatcher), mask 10 power-management units, enable user ssh-agent.service |
 | **Boot** | Rebuild initramfs (gated on no-prior-errors), update systemd-boot entries |
-| **Finalize** | Daemon-reload, cache cleanup, NM restart (deferred on active WiFi) |
+| **Finalize** | Cache cleanup, NM restart (deferred on active WiFi) |
 
 ## Configuration Reference
 
@@ -354,7 +359,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | fstab | Idempotent; `findmnt --verify` before write; symlinked fstab rejected; **no backup — snapshot first** |
 | Boot rebuild gate | `mkinitcpio -P` refuses to run when earlier phases erred (override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`) |
 | KERNEL_PARAMS hygiene | Preflight rejects whitespace or `"` in any param |
-| Sysctl invariant | Generator returns rc 12 if printed line count ≠ `count $SYSCTL_VALUES` |
+| Sysctl invariant | Generator returns rc 13 if printed line count ≠ `count $SYSCTL_VALUES` |
 | Subprocess control | `_run` uses `timeout --foreground`; `_do_cleanup` reaps via `pkill -P` before keepalive teardown |
 | Stderr surfacing | First 5 lines of subprocess stderr mirror to fd 2 on rc≠0, even under `QUIET=true`. Under `--verbose`, full stderr **then** full stdout are mirrored to fd 2 (block-ordered, not interleaved with the child's own stream-mixing). |
 | Root detection | Refuses to run as root; sudo invoked internally |

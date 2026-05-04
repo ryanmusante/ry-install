@@ -5,6 +5,138 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.24 - 2026-05-04
+--------------------
+
+  * Re-source guard: `--help` / `--version` early-peek (L37-58) now
+    erases `_RY_INSTALL_LOADED` and the 12 sibling globals it set
+    (`_RY_PRE_GLOBALS`, `VERSION`, `EXIT_*`, `_RY_SECRET_FLAGS`,
+    `_MY_UID`, `_RY_INSTALL_SOURCED`, `_RY_INSTALL_BAILING`,
+    `_RY_INSTALL_LAST_EXIT`) before `exit 0`. Fish treats `exit` in
+    a sourced script as `return` from the source, so the prior bare
+    `exit 0` left those globals on the caller's shell and blocked
+    re-source via the L4 guard. Exec-mode behaviour unchanged.
+  * Logs: pre-mode-resolution log filename is now
+    `preflight-$TIMESTAMP.jsonl` (was hardcoded `install-…jsonl`).
+    Dispatch-time `mv` still promotes to `<mode>-$TIMESTAMP.jsonl`
+    once `$MODE` is finalized; preflight-bail leaves an honest
+    `preflight-…` artefact rather than a misleading `install-…`.
+  * Logs: `_log` auto-create failure (mktemp/install/touch) now
+    sets `_RY_LOG_WRITE_FAIL` so the dispatcher's "log incomplete"
+    warning fires; previously silently dropped.
+  * Cleanup: `_do_cleanup` now invokes `_kill_sudo_keepalive`
+    by-PID BEFORE the `pkill -P $fish_pid` broadcast. Prior order
+    had pkill -P kill the disowned-but-still-parented keepalive,
+    rendering the per-PID TERM→sleep→KILL ladder a no-op.
+  * `_run`: secret-flag redaction switched from joined-string regex
+    to per-argv-element walk. Now redacts both `--flag=value` and
+    `--flag value` (space-separated next argv element); space-
+    separated values were previously leaked.
+  * `_as`: bool guard rejects non-`true`/`false` `use_sudo` with
+    `BUG: _as called with non-bool` log and rc=2; previously fell
+    through silently to the `command` branch.
+  * Verify-static: pipestatus capture on the boot-entries
+    `sudo -n find … -print0 | string split0` pipe distinguishes
+    "no entries found" from "sudo lapsed mid-traversal" — emits
+    `_warn` rather than a misleading `_fail "Boot entries: NONE"`.
+  * Preflight-boot-sanity: same pipestatus-capture pattern applied
+    to the three internal `sudo find` pipes (vmlinuz, initramfs,
+    loader entries).
+  * Install-rebuild-boot: pipestatus capture on the post-rebuild
+    initramfs size-check loop.
+  * Verify-static-syntax: `fish --no-execute` on the embedded
+    fish-script destination now captures stderr; first 5 lines
+    surface via `_info` so syntax errors include line numbers.
+  * Refactor: handler-erase line `functions -e _cleanup
+    _cleanup_pipe _cleanup_on_exit _cleanup_other
+    _progress_on_winch` extracted to `_ry_erase_handlers` helper;
+    single source of truth for the 5-handler list.
+  * Namespace: `_content_bytes` renamed to `_ry_content_bytes` to
+    eliminate the collision class where a managed-destination key
+    resolving to literal "bytes" would hit the helper instead of
+    erroring via `functions -q` in `_ry_get_file_content`.
+  * Comments: trim multi-line annotation blocks at the top-of-file
+    header, the early-peek preamble, and the HOME-resolution gate
+    into single-line form. Lint directives (`# lint:ignore (...)`,
+    `# FISH-LINT-DIRECTIVE: do-not-format`) preserved.
+  * Docs: README "Stderr surfacing" row clarifies that under
+    `--verbose` the mirrored output is "stderr block then stdout
+    block", not interleaved with the child's own stream-mixing.
+    "Runtime Variables" rows for `CONFIRM_BOOT_WIPE` and
+    `ALLOW_PARTIAL_UPGRADE` document the literal-`1` requirement
+    (matches `FORCE_BOOT_REBUILD`). "Re-source guard" row updated
+    to reflect early-peek cleanup.
+
+  Migration: none. Behaviour-preserving everywhere except: source-
+  mode `--help` / `--version` (was: leak globals and block re-
+  source; now: clean re-sourceable); log filename for early-bail
+  paths (was: misleading `install-…`; now: honest `preflight-…`);
+  secret-flag redaction (was: missed space-separated values; now:
+  redacts both `--flag=v` and `--flag v`); `_log` auto-create
+  failure (was: silent drop; now: surfaces via
+  `_RY_LOG_WRITE_FAIL`); boot-artefact enumeration (was:
+  misleading "NONE" on sudo lapse; now: explicit "cannot
+  enumerate" warning).
+
+
+v4.5.23 - 2026-05-03
+--------------------
+
+  * Cleanup: `_MY_UID` now initialised before any `_ry_exit` gate fires
+    (early bails at L115+ previously left `find -user $_MY_UID -delete`
+    consuming the next arg as a user-name and silently no-op'ing the
+    tmpfile sweep).
+  * Signals: `USR1`, `USR2`, `ABRT` now bound via `_cleanup_other`
+    (delegates to `_cleanup`); `_cleanup` switch gains 138/140/134
+    exit-code mappings. `functions -e` cleanup paths erase
+    `_cleanup_other` alongside the existing handler set.
+  * Verify-static: `_chk_grep` distinguishes stage-1 `rc=1`
+    (no non-comment lines) from `rc>=2` (read/IO error). Comment-only
+    config files now report MISSING instead of misleading
+    "sudo lapse or read error".
+  * Verify-static: `_verify_unit_content` uses
+    `mktemp --suffix=.service` (single call) and chmod's tmpfile to
+    0600. Removes the post-mktemp rename window.
+  * Verify-static: `_verify_static_syntax` rejects 0-byte
+    `ssh-auth-sock.fish` before invoking `fish --no-execute`
+    (truncated writes were reporting "syntax OK").
+  * Verify-runtime: `_verify_runtime_session` captures `$pipestatus`
+    on the `sudo find` of NM `*.nmconnection` files; sudo lapse now
+    warns explicitly instead of falsely reporting "no .nmconnection
+    files".
+  * Verify-runtime: ssh-agent user-state probe routed through new
+    `_unit_state_user` helper (parallels `_unit_state`).
+  * Verify-runtime: `systemd-analyze` first-line parser gated on
+    expected `= Ns` tail; future format changes degrade to
+    "format unrecognized" instead of silent skip.
+  * Install-file: `_post_hooks` list hoisted to top of
+    `_ry_do_install_file`; keepalive-trigger globs derived from the
+    same list (single source of truth, was duplicated).
+  * Install-file: post-hook for-loop caches `string split` once per
+    iteration instead of twice.
+  * Detect: `_detect_lvm` logs `LVM_DETECT: method=<pvs|lsblk|none>
+    result=<present|absent>` for diagnostic visibility.
+  * Style: three multi-line `or set` continuations in
+    `_verify_runtime_session` collapsed to single-line
+    `cmd; or set X` form (matches the rest of the file).
+  * Docs: function header for `_run` documents the
+    "argv[1] PATH-resolvable external; no shell metachars" invariant
+    inline. `_ORIG_ARGV` capture site annotated. Inline note at
+    `LINUX_OPTIONS` extraction site flags the dependency on
+    `KERNEL_PARAMS` hygiene.
+  * Docs: pre-LOAD `--help` peek annotated with
+    `MAINTENANCE: keep brief help below in sync with the full
+    _ry_show_help body — fish does not hoist function defs.`
+  * Docs: ssh-auth-sock content generator gains
+    `# FISH-LINT-DIRECTIVE: do-not-format` for machine-readable
+    lint suppression.
+
+  Migration: none. Behaviour-preserving everywhere except early-bail
+  paths (which now sweep tmpfiles correctly), `_chk_grep` on
+  comment-only configs (warn → fail), and 0-byte fish-script
+  verification (false-pass → fail).
+
+
 v4.5.22 - 2026-05-03
 --------------------
 

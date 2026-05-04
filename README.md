@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.22-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.24-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -356,12 +356,12 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | KERNEL_PARAMS hygiene | Preflight rejects whitespace or `"` in any param |
 | Sysctl invariant | Generator returns rc 12 if printed line count ≠ `count $SYSCTL_VALUES` |
 | Subprocess control | `_run` uses `timeout --foreground`; `_do_cleanup` reaps via `pkill -P` before keepalive teardown |
-| Stderr surfacing | First 5 lines of subprocess stderr mirror to fd 2 on rc≠0, even under `QUIET=true`. Under `--verbose`, full stderr **and stdout** are mirrored to fd 2 to maintain ordering with surrounding script narration. |
+| Stderr surfacing | First 5 lines of subprocess stderr mirror to fd 2 on rc≠0, even under `QUIET=true`. Under `--verbose`, full stderr **then** full stdout are mirrored to fd 2 (block-ordered, not interleaved with the child's own stream-mixing). |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + `flock(1)` stale reclaim |
-| Re-source guard | `_RY_INSTALL_LOADED` blocks double-source; cleared on clean exit |
+| Re-source guard | `_RY_INSTALL_LOADED` blocks double-source within the same shell session; cleared on every clean exit path including the `--help` / `--version` early-peek |
 | Credentials | 15 lowercase secret-flag patterns redacted in logs (passphrase, password, token, key, secret, api-key, apikey, psk, wpa-psk, private-key, auth, bearer, cookie, client-secret, credential) |
-| Signals | HUP/INT/QUIT/TERM → 128+signum; SIGPIPE → 141 |
+| Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE → 141 |
 | mkinitcpio rollback | Pre-deploy bytes captured; restored via atomic mv on `pacman -Syu` failure |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard; self-heal on rotation race |
 
@@ -379,6 +379,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | `5` | Lock failed |
 | `10` | Drift (`--check` only) |
 | `129/130/131/143` | Signal (HUP / INT / QUIT / TERM) |
+| `134/138/140` | Signal (ABRT / USR1 / USR2) |
 | `141` | SIGPIPE |
 
 </details>
@@ -390,9 +391,9 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Variable | Default | Purpose |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). `0` disables. |
-| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | `=1` to ack first boot-entry wipe. Re-prompts on entry-set hash change. |
-| `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | `=1` switches Packages phase to `pacman -Sy --needed` (no system upgrade). Violates Arch policy. |
-| `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` literal required to bypass torn-package gate. Recovery only. |
+| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Literal `=1` to ack first boot-entry wipe (rejects `01`, `true`, `yes`, etc.). Re-prompts on entry-set hash change. |
+| `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | Literal `=1` switches Packages phase to `pacman -Sy --needed` (no system upgrade). Violates Arch policy. |
+| `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | Literal `=1` required to bypass torn-package gate. Recovery only. |
 | `NO_COLOR` | unset | Suppress ANSI color (also auto on `TERM=dumb` / non-TTY). |
 
 > Secret-flag redaction is **case-sensitive lowercase**. Use lowercase flag names with `_run`-piped commands.

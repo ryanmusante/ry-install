@@ -5,29 +5,49 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.32 - 2026-05-06
+--------------------
+
+  * UX: fatal preflight errors in `_init_runtime` (root UUID detection, KERNEL_PARAMS whitespace/quote hygiene) now surface to stderr regardless of `QUIET=true` via new `_err_loud` helper. Previously silent under default unattended mode; only the JSONL log captured the cause.
+
+v4.5.31 - 2026-05-06
+--------------------
+
+  * structure: split `_verify_static_system` (91 LOC) into 5 `_vss_*` sub-helpers + orchestrator; mirrors existing `_vsb_*` pattern.
+  * structure: split `_acquire_lock` (71 LOC) into `_acquire_lock_fresh` + `_reclaim_stale_lock` + orchestrator.
+  * structure: split `_vrk_gpu_state` (66 LOC) into 3 `_vrkg_*` sub-helpers + orchestrator.
+  * helpers: extracted `_msg_print` (color stderr emit, no log/counter); added `_msg_nocount` and `_fail_silent`. `_verify_static_checksum` gen_fail branch uses `_fail_silent` + direct `VERIFY_GEN_FAIL` bump in place of the prior `_fail` + `VERIFY_FAIL` decrement.
+  * UX: boot-wipe gate first-run err message now reads `until the entry set changes (any add, remove, or rename)` to match the hash-compare gate.
+  * docs: CHANGELOG v4.5.27 — corrected cross-reference.
+  * docs: CHANGELOG v4.5.24 — date corrected `2026-05-04` → `2026-05-03`.
+
+v4.5.30 - 2026-05-06
+--------------------
+
+  * style: comment-pass review — multiline blocks confirmed limited to the 2-line script header (kept); inline `# lint:ignore` directives confirmed required to remain inline.
+  * verify: `fish --no-execute` parse clean; 15 embedded content-generator outputs sha256-identical to v4.5.29.
+  * docs: README version badge bump 4.5.29 → 4.5.30; CHANGELOG entries trimmed to terse bullet form.
+
 v4.5.29 - 2026-05-06
 --------------------
 
-  * style: collapse `if X / Y / end` and `if X / Y1 / Y2 / end` blocks to inline `X; and Y` / `X; and Y1; and Y2` form across the script (137 sites, all chain-safe and `$status`-clean at the follow-line).
+  * style: collapse `if X / Y / end` and `if X / Y1 / Y2 / end` blocks to inline `X; and Y` / `X; and Y1; and Y2` form across the script (137 sites).
   * style: collapse `if X / return | continue | break / end` blocks to inline `X; and <ctrl>` form (19 sites).
-  * style: fold `printf` and `set` backslash-continuation arg-lists onto single lines for the 7 embedded content generators and the 6 module-scoped multi-arg `set` blocks (14 sites). `printf` arg vectors and `string join \n` outputs byte-identical pre/post.
-  * style: the 3 sites where the surrounding function ends on the if-block AND a current caller reads `$status` are preserved unchanged: `_content__etc_mkinitcpio.conf` (caller path: `_atomic_write_file` → `_ry_install_file` → `_ry_do_install_file`), and the foundational utilities `_log` / `_echo` (broad invocation surface; future status-reading callers would silently break under collapse).
-  * style: Phase-5 collapse introduces a Y1-success gate on Y2 in the inline form. Y1 verbs in scope are exclusively the `_msg` family (`_err`/`_warn`/`_fail`/`_info`/`_ok`), `_log`, `set` of valid local/global names, `echo` to fd 2, and one `command rm -rf -- "$_run_dir" 2>/dev/null` inside a `test -d` guard — all return 0 in this script's invocation contexts. The shift is theoretical, not behavioural.
+  * style: fold `printf` and `set` backslash-continuation arg-lists onto single lines for the 7 embedded content generators and the 6 module-scoped multi-arg `set` blocks (14 sites).
+  * style: the 3 sites where the surrounding function ends on the if-block AND a current caller reads `$status` are preserved unchanged: `_content__etc_mkinitcpio.conf`, and the foundational utilities `_log` / `_echo`.
+  * style: Phase-5 collapse introduces a Y1-success gate on Y2 in the inline form. Y1 verbs in scope are exclusively the `_msg` family (`_err`/`_warn`/`_fail`/`_info`/`_ok`), `_log`, `set` of valid local/global names, `echo` to fd 2, and one `command rm -rf -- "$_run_dir" 2>/dev/null` inside a `test -d` guard — all return 0 in this script's invocation contexts.
   * header: source line count 5495 → 5005. No flag, exit code, JSONL schema, or managed-file content changes.
-
-  Migration: none. Behaviour-preserving.
-
 
 v4.5.28 - 2026-05-04
 --------------------
 
-  * dispatch: `_ry_do_install_file` captures switch `$status` into `_switch_status` before the gate `test`; previously `test` clobbered `$status` so post-hook rc was always read as 0 and a failed `_post_boot` / `_post_service` under `--install-file` returned 0 to the dispatcher.
+  * dispatch: `_ry_do_install_file` captures switch `$status` into `_switch_status` before the gate `test`.
   * dispatch: top-level early-peek erases `_early_arg` on the no-flag fallthrough path (already erased on `-h` / `-v`).
   * structure: `_run` split into `_run_redact_argv` (per-element secret-flag eat, NUL-delimited stdout) + `_run_resolve_timeout` (RY_RUN_TIMEOUT validation, single-shot warn).
   * structure: `_verify_static_boot` split into `_vsb_loader` / `_vsb_sdboot` / `_vsb_cmdline` / `_vsb_mkinitcpio` / `_vsb_entries`.
   * structure: `_install_fstab_opts` split into `_fstab_needs_change` (scan; sets `_RY_FSTAB_NEEDS_CHANGE` / `_RY_FSTAB_COMMIT_OVERRIDES`) + `_fstab_atomic_replace` (mktemp /etc → awk → chmod/chown ref → findmnt verify → mv).
   * structure: `_preflight_boot_sanity` split into `_pbs_check_kernels` / `_pbs_check_initrds` / `_pbs_check_entries`; each takes ESP via `--argument-names esp`, emits integer error count on stdout, summed by orchestrator via `math`.
-  * style: version-parse `if not CMD\n    or not CMD` collapsed to single-line `if not CMD; or not CMD` form.
+  * style: version-parse `if not CMD\n or not CMD` collapsed to single-line `if not CMD; or not CMD` form.
   * style: `_ry_erase_handlers` comment corrected from "Adding a 7th handler?" to "Adding a 6th handler?" (5 handlers tracked).
   * style: `_msg` adds empty-body guard — log line still written, bare `[LEVEL] ` stderr print suppressed.
   * style: log-rotation `MAX_LOGS` reset uses explicit `set -g` for refactor-safety.
@@ -36,14 +56,14 @@ v4.5.28 - 2026-05-04
 v4.5.27 - 2026-05-04
 --------------------
 
-  * verify: `_verify_summary` now surfaces `VERIFY_GEN_FAIL` to stderr and treats it as a hard failure for the verdict; previously generator failures were logged only to JSONL footer and the user-facing summary reported "OK" despite N gen-failures.
-  * verify: `_chk_grep` always uses `grep -wF` (whole-word) for both plain tokens and `k=v` patterns; eliminates substring false-positives where e.g. `wifi.backend=iwd` would match a drifted `wifi.backend=iwdfoo`. The `=`/`"`/`.` chars are non-word delimiters so k=v boundaries are still respected.
+  * verify: `_verify_summary` now surfaces `VERIFY_GEN_FAIL` to stderr and treats it as a hard failure for the verdict.
+  * verify: `_chk_grep` always uses `grep -wF` (whole-word) for both plain tokens and `k=v` patternsg. `wifi.backend=iwd` would match a drifted `wifi.backend=iwdfoo`.
   * cleanup: `_do_cleanup` two-pass tmpfile sweep — plain `rm` first, then sudo-aware fallback for root-owned orphans in /etc, /boot, /var (only when sudo is non-interactive available). Closes the orphan-tmpfile gap when sudo lapses during `_atomic_write_file` mid-mv.
-  * dispatch: `_run` rejects dash-prefixed `argv[1]` with rc 2 + `BUG: _run called with dash-prefixed argv[1]` log marker; previously `timeout(1)` would mis-parse the leading flag and return the misleading rc 125/127.
-  * docs: `_ry_show_help` and the early `-h`/`-v` peek both note `NO_COLOR` accepts any non-empty value (matches the implementation in `_no_color_env` capture); previously help showed `NO_COLOR=1` only.
-  * docs: README `Safety & Reliability` table — sysctl invariant rc corrected (12 → 13) to match `_content__etc_sysctl.d_99-cachyos-sysctl.conf` and the v4.5.26 dispatcher branch.
+  * dispatch: `_run` rejects dash-prefixed `argv[1]` with rc 2 + `BUG: _run called with dash-prefixed argv[1]` log marker.
+  * docs: `_ry_show_help` and the early `-h`/`-v` peek both note `NO_COLOR` accepts any non-empty value (matches the implementation in `_no_color_env` capture).
+  * docs: README `Safety & Reliability` table — sysctl invariant rc corrected (12 → 13) to match `_content__etc_sysctl.d_99-cachyos-sysctl.conf` and the rc-13 dispatcher branch added below.
   * style: lowercased "Ssh-agent.service" → "ssh-agent.service" in user-facing `_warn` (matches systemd convention and README casing).
-  * refactor: largest verify/install orchestrators split into focused helpers (each ≤90 lines):
+  * refactor: largest verify/install orchestrators split into focused helpers (each ≤90 lines).
       - `_verify_runtime_kparams` (209→25 + `_vrk_cmdline`/`_vrk_gpu_state`/`_vrk_cpu_state`/`_vrk_module_state`/`_vrk_clocksource_coredump` with shared `_RY_DMESG_CACHE`).
       - `_verify_runtime_env` (172→9 + `_vre_envvars`/`_vre_sysctl_runtime`/`_vre_tcp`/`_vre_thp_ksm`/`_vre_zram`/`_vre_fstab`/`_vre_ntsync`).
       - `_verify_runtime_session` (154→14 + `_vrs_nm_perms`/`_vrs_installed_file_perms`/`_vrs_parent_dirs`/`_vrs_vulkan`/`_vrs_boot_perf`).
@@ -54,15 +74,10 @@ v4.5.27 - 2026-05-04
 
   Migration: `--verify-static` and `--verify-runtime` exit codes change when the *only* failure is generator failure: previously rc=0 ("OK" reported despite gen_fail in JSONL), now rc=1 ("FAIL" reported with `gen_fail=N` summary segment). All other behaviour preserved. JSONL `event=footer` schema unchanged.
 
-
-
-  * boot: `_resolve_esp` final fallback to /boot emits `_warn` (was `_log`-only); ESP autodetect failure now surfaces at user-facing fd 2 with verification hint.
+  * boot: `_resolve_esp` final fallback to /boot emits `_warn`; ESP autodetect failure now surfaces at user-facing fd 2 with verification hint.
   * deps: `ping` added to `_ry_check_deps` soft-deps probe (used by `_ry_check_network` raw-IP fallback).
   * post-hooks: `_post_sysctl` probes `command -q sysctl` before invoking; clean degradation with install hint when procps-ng absent.
   * generators: sysctl content generator returns rc 13 (assertion failure) instead of rc 12 (missing prerequisite global) on count mismatch; `_atomic_write_file` dispatcher gains a distinct rc-13 branch.
-
-  Migration: none. Behaviour-preserving on the happy path; only diagnostic and edge-case messaging changes.
-
 
 v4.5.25 - 2026-05-03
 --------------------
@@ -77,7 +92,7 @@ v4.5.25 - 2026-05-03
   * comments: dropped six stale source-line references and the hardcoded version pin in `RY_INSTALL_FORCE_BOOT_REBUILD` blurb.
   * README: Quick Start documents `chmod +x`; install-flow table reflects Configuration-phase consolidation.
 
-v4.5.24 - 2026-05-04
+v4.5.24 - 2026-05-03
 --------------------
 
   * Re-source guard: `--help` / `--version` early-peek (L37-58) now
@@ -139,18 +154,6 @@ v4.5.24 - 2026-05-04
     (matches `FORCE_BOOT_REBUILD`). "Re-source guard" row updated
     to reflect early-peek cleanup.
 
-  Migration: none. Behaviour-preserving everywhere except: source-
-  mode `--help` / `--version` (was: leak globals and block re-
-  source; now: clean re-sourceable); log filename for early-bail
-  paths (was: misleading `install-…`; now: honest `preflight-…`);
-  secret-flag redaction (was: missed space-separated values; now:
-  redacts both `--flag=v` and `--flag v`); `_log` auto-create
-  failure (was: silent drop; now: surfaces via
-  `_RY_LOG_WRITE_FAIL`); boot-artefact enumeration (was:
-  misleading "NONE" on sudo lapse; now: explicit "cannot
-  enumerate" warning).
-
-
 v4.5.23 - 2026-05-03
 --------------------
 
@@ -203,12 +206,6 @@ v4.5.23 - 2026-05-03
     `# FISH-LINT-DIRECTIVE: do-not-format` for machine-readable
     lint suppression.
 
-  Migration: none. Behaviour-preserving everywhere except early-bail
-  paths (which now sweep tmpfiles correctly), `_chk_grep` on
-  comment-only configs (warn → fail), and 0-byte fish-script
-  verification (false-pass → fail).
-
-
 v4.5.22 - 2026-05-03
 --------------------
 
@@ -230,10 +227,6 @@ v4.5.22 - 2026-05-03
     plus implicit-conf-d-driven pair. "Stderr surfacing" row clarifies
     `--verbose` routes both streams to fd 2. Event-type ceiling
     softened from "~70" to "~65".
-
-  Migration: none. Behaviour-preserving everywhere except verify-runtime
-  on NM-not-installed systems (fail → warn).
-
 
 v4.5.21 - 2026-05-03
 --------------------
@@ -323,9 +316,6 @@ v4.5.17 - 2026-05-03
   * Docs: README log-rotation note matches dispatcher behaviour
     (`MAX_LOGS=50`, oldest first).
 
-  Migration: none. Behaviour-preserving on all install paths.
-
-
 v4.5.16 - 2026-05-03
 --------------------
 
@@ -335,9 +325,6 @@ v4.5.16 - 2026-05-03
   * Comments: `_verify_runtime_services` `sys_units` annotation
     documents literal-list semantics (positional coupling to
     `parsed[N]`).
-
-  Migration: none. Behaviour-preserving cleanup.
-
 
 v4.5.15 - 2026-05-03
 --------------------
@@ -365,10 +352,6 @@ v4.5.15 - 2026-05-03
   * Verify: `_progress_init` adds `tput cup 0 0` capability probe
     before pinning the bar.
 
-  Migration: none. KERNEL_PARAMS gate and sysctl count assertion
-  fail closed at preflight rc 3 if violated.
-
-
 v4.5.14 - 2026-05-03
 --------------------
 
@@ -379,7 +362,6 @@ v4.5.14 - 2026-05-03
   * Style: in-script narrative comments compressed to single-line
     annotations; blank lines stripped from function bodies (5262
     → 4975 LOC).
-
 
 v4.5.13 - 2026-05-03
 --------------------
@@ -400,7 +382,6 @@ v4.5.13 - 2026-05-03
 
   Migration: default invocation now runs `pacman -Syu --needed`.
 
-
 v4.5.12 - 2026-05-03
 --------------------
 
@@ -409,7 +390,6 @@ v4.5.12 - 2026-05-03
   * Style: bootstrap stderr at L150 uses `[ERR]` prefix to match
     other 14 bootstrap stderr emits.
 
-
 v4.5.11 - 2026-05-03
 --------------------
 
@@ -417,7 +397,6 @@ v4.5.11 - 2026-05-03
     `kernel.split_lock_mitigate=0`, `net.core.busy_read=50`,
     `net.core.busy_poll=50`, `net.core.netdev_budget=600`.
     Vendor defaults now apply. SYSCTL_VALUES count: 21 → 16.
-
 
 v4.5.10 - 2026-05-03
 --------------------
@@ -434,7 +413,6 @@ v4.5.10 - 2026-05-03
     handlers firing pre-`_init_runtime` are well-defined.
   * Refactor: `_content_bytes` terminal `string collect` carries
     `--allow-empty`.
-
 
 v4.5.9 - 2026-05-03
 -------------------
@@ -454,7 +432,6 @@ v4.5.9 - 2026-05-03
     16-line copies); `_pre_dispatch_exit` delegates to
     `_pre_dispatch_log_cleanup` + `_ry_exit`.
 
-
 v4.5.8 - 2026-05-02
 -------------------
 
@@ -466,7 +443,6 @@ v4.5.8 - 2026-05-02
     14-line find/sort/split0 block duplicated between rebuild
     precheck and finalize marker write.
   * Footprint: 5,240 → 5,205 LOC.
-
 
 v4.5.7 - 2026-05-02
 -------------------
@@ -486,7 +462,6 @@ v4.5.7 - 2026-05-02
   * Preflight: sudoers parser comment-strip uses `^[[:space:]]*#`
     POSIX class (was GNU `^\s*#` PCRE extension).
 
-
 v4.5.6 - 2026-05-02
 -------------------
 
@@ -505,7 +480,6 @@ v4.5.6 - 2026-05-02
     mkinitcpio, NetworkManager split via `\` continuation
     (392/289/228-char single-line forms → ≤80 each).
 
-
 v4.5.5 - 2026-05-02
 -------------------
 
@@ -513,7 +487,6 @@ v4.5.5 - 2026-05-02
     cleanup pass). Single-line annotation invariant retained;
     `# lint:ignore` and the script header preserved.
   * Footprint: 5,201 → 5,175 LOC.
-
 
 v4.5.4 - 2026-05-02
 -------------------
@@ -539,12 +512,10 @@ v4.5.4 - 2026-05-02
   selectively backports the v4.5.3 fixes that did not introduce
   regressions.
 
-
 v4.5.3 - SKIPPED
 ----------------
 
   Tag never released. See note inside the v4.5.4 entry above.
-
 
 v4.5.2 - 2026-05-01
 -------------------
@@ -568,7 +539,6 @@ v4.5.2 - 2026-05-01
     `--cookie`, `--client-secret`, `--credential`); first `_log`
     write failure surfaced at exit.
 
-
 v4.5.1 - 2026-05-01
 -------------------
 
@@ -577,7 +547,6 @@ v4.5.1 - 2026-05-01
   * Logging: pre-dispatch `[WARN]` echoes routed through `_warn`.
   * Content fns: `_content__etc_kernel_cmdline` no longer calls
     `_err`; stdout-purity invariant strengthened.
-
 
 v4.5.0 - 2026-04-30
 -------------------
@@ -595,7 +564,6 @@ v4.5.0 - 2026-04-30
     rm -f  ~/.config/ry-install/default-profile
     rm -f  ~/ry-install/.manifest
 
-
 v4.4.36 - 2026-04-29
 --------------------
 
@@ -604,7 +572,6 @@ v4.4.36 - 2026-04-29
     return.
   * UX: progress bar `Aborted at N%` on boot-critical skip;
     SIGWINCH re-anchor.
-
 
 v4.4.x - 2026-04-25..04-29
 --------------------------
@@ -617,19 +584,16 @@ v4.4.x - 2026-04-25..04-29
     extracted; redaction loop unified.
   * Bootstrap: `_RY_INSTALL_LOADED` ordering (reverted in v4.5.2).
 
-
 v4.3.x - 2026-04-25
 -------------------
 
   * Embedded content generators per managed file; SHA256
     verification.
 
-
 v4.2.x..v4.0.x - 2026-04-18..04-25
 ----------------------------------
 
   * Initial fish rewrite from v3.x bash.
-
 
 v3.x and earlier - through 2026-04-13
 -------------------------------------

@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.29 (2026-05-06) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.5.32 (2026-05-06) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -19,7 +19,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.29"
+set -g VERSION "4.5.32"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -383,32 +383,32 @@ end
 
 set -g _CLEANUP_DONE false
 
-function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
-    # Atomic mkdir as mutex
-    set -g LOCK_DIR "$HOME/ry-install/.lock"
-    set -g LOCK_FILE "$LOCK_DIR/pid"
-    command mkdir -p -- (dirname -- "$LOCK_DIR") 2>/dev/null; or true
-    if command mkdir -- "$LOCK_DIR" 2>/dev/null
-        # Atomic pid write: mktemp inside just-created
-        set -l _pid_tmp (mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
-        if test -z "$_pid_tmp"; or not printf '%s\n' $fish_pid >"$_pid_tmp" 2>/dev/null
-            test -n "$_pid_tmp"; and command rm -f -- "$_pid_tmp" 2>/dev/null
-            command rmdir -- "$LOCK_DIR" 2>/dev/null
-            echo "[ERR] Failed to write lock pid file: $LOCK_FILE" >&2
-            _pre_dispatch_log_cleanup
-            return 1
-        end
-        if not command mv -f -- "$_pid_tmp" "$LOCK_FILE" 2>/dev/null
-            command rm -f -- "$_pid_tmp" 2>/dev/null
-            command rmdir -- "$LOCK_DIR" 2>/dev/null
-            echo "[ERR] Failed to install lock pid file: $LOCK_FILE" >&2
-            _pre_dispatch_log_cleanup
-            return 1
-        end
-        set -g _RY_HOLDS_LOCK true
-        _log "LOCK_ACQUIRED: pid=$fish_pid dir=$LOCK_DIR"
-        return 0
+function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock; rc=0 acquired, rc=1 hard error, rc=2 LOCK_DIR already exists (caller falls through to reclaim)"
+    if not command mkdir -- "$LOCK_DIR" 2>/dev/null
+        return 2
     end
+    # Atomic pid write: mktemp inside just-created LOCK_DIR
+    set -l _pid_tmp (mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
+    if test -z "$_pid_tmp"; or not printf '%s\n' $fish_pid >"$_pid_tmp" 2>/dev/null
+        test -n "$_pid_tmp"; and command rm -f -- "$_pid_tmp" 2>/dev/null
+        command rmdir -- "$LOCK_DIR" 2>/dev/null
+        echo "[ERR] Failed to write lock pid file: $LOCK_FILE" >&2
+        _pre_dispatch_log_cleanup
+        return 1
+    end
+    if not command mv -f -- "$_pid_tmp" "$LOCK_FILE" 2>/dev/null
+        command rm -f -- "$_pid_tmp" 2>/dev/null
+        command rmdir -- "$LOCK_DIR" 2>/dev/null
+        echo "[ERR] Failed to install lock pid file: $LOCK_FILE" >&2
+        _pre_dispatch_log_cleanup
+        return 1
+    end
+    set -g _RY_HOLDS_LOCK true
+    _log "LOCK_ACQUIRED: pid=$fish_pid dir=$LOCK_DIR"
+    return 0
+end
+
+function _reclaim_stale_lock --description "Stale-lock reclaim: /proc/<pid>/comm liveness probe + flock(1) atomic reclaim. rc=0 reclaimed, rc=1 contention/hard error"
     # LOCK_DIR exists — check if PID inside is still alive AND is fish; /proc/<pid>/comm guard reduces PID-reuse false-positives.
     set -l old_pid (command cat -- "$LOCK_FILE" 2>/dev/null)
     if test -n "$old_pid"; and string match -qr '^\d+$' -- "$old_pid"; and kill -0 -- "$old_pid" 2>/dev/null
@@ -420,33 +420,30 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
         end
         # PID alive but not fish → reused. Fall through to flock-reclaim.
     end
-    # Stale lock reclaim: flock(1) atomic advisory lock
-    set -l _reclaim_parent (dirname -- "$LOCK_DIR")
-    # require both flock(1) AND /bin/sh
-    if command -q flock; and command -q sh
-        # flock -n/-E 5: non-blocking, exit 5 on contention
-        set -l _sh_script (string join \n 'find "$1" -maxdepth 1 -type f -delete 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)' 'rmdir -- "$1" 2>/dev/null || true  # lint:ignore (sh, not fish — embedded /bin/sh -c block)' 'mkdir -- "$1" 2>/dev/null || exit 1  # lint:ignore (sh, not fish — embedded /bin/sh -c block)' 'printf "%s\n" "$2" > "$1/pid" 2>/dev/null || exit 2  # lint:ignore (sh, not fish — embedded /bin/sh -c block)' | string collect)
-        flock -n -E 5 "$_reclaim_parent" /bin/sh -c "$_sh_script" _ "$LOCK_DIR" "$fish_pid" 2>/dev/null
-        set -l _flock_rc $status
-        if test $_flock_rc -eq 5
-            echo "[ERR] Failed to reclaim stale lock — another instance is reclaiming" >&2
-            _pre_dispatch_log_cleanup
-            return 1
-        else if test $_flock_rc -ne 0
-            echo "[ERR] Failed to reclaim stale lock via flock (rc=$_flock_rc)" >&2
-            _pre_dispatch_log_cleanup
-            return 1
-        end
-    else
+    # Stale lock reclaim: flock(1) atomic advisory lock — require both flock(1) AND /bin/sh.
+    if not command -q flock; or not command -q sh
         # flock(1) is base util-linux on CachyOS
         echo "[ERR] flock(1) and/or /bin/sh not available — cannot safely reclaim stale lock" >&2
         echo "[ERR]   Install util-linux: sudo pacman -S --needed util-linux" >&2
         _pre_dispatch_log_cleanup
         return 1
     end
+    set -l _reclaim_parent (dirname -- "$LOCK_DIR")
+    # flock -n/-E 5: non-blocking, exit 5 on contention
+    set -l _sh_script (string join \n 'find "$1" -maxdepth 1 -type f -delete 2>/dev/null  # lint:ignore (embedded /bin/sh -c block)' 'rmdir -- "$1" 2>/dev/null || true  # lint:ignore (sh, not fish — embedded /bin/sh -c block)' 'mkdir -- "$1" 2>/dev/null || exit 1  # lint:ignore (sh, not fish — embedded /bin/sh -c block)' 'printf "%s\n" "$2" > "$1/pid" 2>/dev/null || exit 2  # lint:ignore (sh, not fish — embedded /bin/sh -c block)' | string collect)
+    flock -n -E 5 "$_reclaim_parent" /bin/sh -c "$_sh_script" _ "$LOCK_DIR" "$fish_pid" 2>/dev/null
+    set -l _flock_rc $status
+    if test $_flock_rc -eq 5
+        echo "[ERR] Failed to reclaim stale lock — another instance is reclaiming" >&2
+        _pre_dispatch_log_cleanup
+        return 1
+    else if test $_flock_rc -ne 0
+        echo "[ERR] Failed to reclaim stale lock via flock (rc=$_flock_rc)" >&2
+        _pre_dispatch_log_cleanup
+        return 1
+    end
     set -l verify_pid (command cat -- "$LOCK_FILE" 2>/dev/null)
-    set -l my_pid $fish_pid
-    if test "$verify_pid" != "$my_pid"
+    if test "$verify_pid" != "$fish_pid"
         echo "[ERR] Lock reclaim lost to concurrent instance (PID $verify_pid)" >&2
         _pre_dispatch_log_cleanup
         return 1
@@ -454,6 +451,19 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir)"
     set -g _RY_HOLDS_LOCK true
     _log "LOCK_RECLAIMED: stale pid=$old_pid, new pid=$fish_pid"
     return 0
+end
+
+function _acquire_lock --description "Acquire instance lock (atomic mkdir; flock(1) reclaim if stale)"
+    set -g LOCK_DIR "$HOME/ry-install/.lock"
+    set -g LOCK_FILE "$LOCK_DIR/pid"
+    command mkdir -p -- (dirname -- "$LOCK_DIR") 2>/dev/null; or true
+    _acquire_lock_fresh
+    set -l _fresh_rc $status
+    test $_fresh_rc -eq 0; and return 0
+    test $_fresh_rc -eq 1; and return 1
+    # rc=2: LOCK_DIR exists, fall through to stale-lock reclaim
+    _reclaim_stale_lock
+    return $status
 end
 
 # Signal handling: tmpfiles → lock release → keepalive
@@ -794,7 +804,7 @@ set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 function _init_runtime --description "Cache root UUID, validate hardware sanity, validate timing globals, precompute tmp-dir cache"
     # 1. Cache root UUID (load-bearing for _content__etc_kernel_cmdline).
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
-    test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -- "$_ROOT_UUID"; and _err "Root UUID has invalid shape (got: $_ROOT_UUID) — refusing to cache"; and set --erase _ROOT_UUID
+    test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -- "$_ROOT_UUID"; and _err_loud "Root UUID has invalid shape (got: $_ROOT_UUID) — refusing to cache"; and set --erase _ROOT_UUID
     if test -z "$_ROOT_UUID"
         switch "$MODE"
             case check
@@ -802,7 +812,7 @@ function _init_runtime --description "Cache root UUID, validate hardware sanity,
                 _pre_dispatch_exit $EXIT_PREFLIGHT
                 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
             case install install-file verify-static verify-runtime
-                _err "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline cannot be generated"
+                _err_loud "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline cannot be generated"
                 _pre_dispatch_exit $EXIT_PREFLIGHT
                 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
             case '*'
@@ -842,7 +852,7 @@ function _init_runtime --description "Cache root UUID, validate hardware sanity,
     end
     # 5. KERNEL_PARAMS hygiene — embedded whitespace splits /etc/kernel/cmdline; embedded `"` breaks LINUX_OPTIONS="…" in sdboot-manage.conf.
     for _kp in $KERNEL_PARAMS
-        string match -qr -- '\s' "$_kp"; or string match -q -- '*"*' "$_kp"; and _err "KERNEL_PARAMS member contains whitespace or quote: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"; and _pre_dispatch_exit $EXIT_PREFLIGHT
+        string match -qr -- '\s' "$_kp"; or string match -q -- '*"*' "$_kp"; and _err_loud "KERNEL_PARAMS member contains whitespace or quote: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"; and _pre_dispatch_exit $EXIT_PREFLIGHT
     end
 end
 
@@ -1161,6 +1171,32 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
     end
 end
 
+function _msg_print --argument-names level --description "Internal: print leveled message to stderr (color-aware, no log, no counter)"
+    set -l msg (string join -- " " $argv[2..])
+    # empty-body guard — log/counter handled by callers (_msg / _msg_nocount); skipping the stderr print avoids a bare `[LEVEL] ` line.
+    test -z "$msg"; and return 0
+    test "$QUIET" = false; or return 0
+    if test "$NO_COLOR" = true; or not isatty 2
+        echo "[$level] $msg" >&2
+        return 0
+    end
+    begin
+        switch $level
+            case FAIL ERR
+                set_color red
+            case WARN
+                set_color yellow
+            case OK
+                set_color green
+            case INFO
+                set_color blue
+        end
+        printf '[%s]' "$level"
+        set_color normal
+        echo " $msg"
+    end >&2
+end
+
 function _msg --argument-names level --description "Format and print a leveled status message"
     set -l msg (string join -- " " $argv[2..])
     _log "$level: $msg"
@@ -1174,29 +1210,13 @@ function _msg --argument-names level --description "Format and print a leveled s
                 set -g VERIFY_WARN (math $VERIFY_WARN + 1)
         end
     end
-    # empty-body guard — no caller passes only the level today, but the log line above is sufficient on its own; skipping the stderr print avoids a bare `[LEVEL] ` line.
-    test -z "$msg"; and return 0
-    if test "$QUIET" = false
-        if test "$NO_COLOR" = true; or not isatty 2
-            echo "[$level] $msg" >&2
-        else
-            begin
-                switch $level
-                    case FAIL ERR
-                        set_color red
-                    case WARN
-                        set_color yellow
-                    case OK
-                        set_color green
-                    case INFO
-                        set_color blue
-                end
-                printf '[%s]' "$level"
-                set_color normal
-                echo " $msg"
-            end >&2
-        end
-    end
+    _msg_print $argv
+end
+
+function _msg_nocount --argument-names level --description "Like _msg but skips VERIFY_* counter bump (caller increments a different counter)"
+    set -l msg (string join -- " " $argv[2..])
+    _log "$level: $msg"
+    _msg_print $argv
 end
 
 function _ok --description "Print an OK-level status message"
@@ -1204,6 +1224,9 @@ function _ok --description "Print an OK-level status message"
 end
 function _fail --description "Print a FAIL-level status message"
     _msg FAIL $argv
+end
+function _fail_silent --description "Print a FAIL-level message without bumping VERIFY_FAIL (caller increments a different counter, e.g. VERIFY_GEN_FAIL)"
+    _msg_nocount FAIL $argv
 end
 function _info --description "Print an INFO-level status message"
     _msg INFO $argv
@@ -1213,6 +1236,20 @@ function _warn --description "Print a WARN-level status message"
 end
 function _err --description "Print an ERR-level status message"
     _msg ERR $argv
+end
+function _err_loud --description "Fatal-preflight err: always emits [ERR] to stderr regardless of QUIET; logs to JSONL. Use only at sites where the user MUST see the cause of an imminent bail."
+    set -l msg (string join -- " " $argv)
+    _log "ERR: $msg"
+    if test "$NO_COLOR" = true; or not isatty 2
+        echo "[ERR] $msg" >&2
+    else
+        begin
+            set_color red
+            printf '[ERR]'
+            set_color normal
+            echo " $msg"
+        end >&2
+    end
 end
 
 function _echo --description "Print a plain message without level prefix"
@@ -2265,12 +2302,7 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
     _echo
 end
 
-function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, coredump, iwd, NM, drirc, sysctl"
-    # Pre-compute iwd state once
-    set -l _skip_iwd false
-    not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1; and set _skip_iwd true
-    _echo "SYSTEM CONFIGURATION"
-    _echo
+function _vss_ntsync_modules --description "_verify_static_system sub: ntsync state + modules-load.d autoload check"
     _echo "── ntsync state ──"
     set -l _ns (_ntsync_state)
     switch $_ns
@@ -2292,56 +2324,47 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     else
         _warn "  ntsync autoload: /usr/lib/modules-load.d/10-ntsync.conf missing — module may not load on boot"
     end
-    _echo
-    _echo "── resolved ──"
-    if _chk_file /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
-        for kv in "MulticastDNS=$RESOLVED_MDNS" "DNSOverTLS=opportunistic" \
-                  "DNSSEC=allow-downgrade" "LLMNR=no"
-            _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "$kv"
+end
+
+function _vss_logind --description "_verify_static_system sub: logind.conf.d keys (with systemd<256 HandleSecureAttentionKey skip)"
+    _chk_file /etc/systemd/logind.conf.d/99-cachyos-logind.conf; or return 0
+    # mirror generator's systemd<256 skip for HandleSecureAttentionKey.
+    not set -q _RY_SYSTEMD_VER; and set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
+    for key in $LOGIND_IGNORE_KEYS
+        if test "$key" = HandleSecureAttentionKey
+            test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 256; and continue
         end
+        _chk_grep /etc/systemd/logind.conf.d/99-cachyos-logind.conf "$key=ignore" "$key"
     end
-    _echo
-    _echo "── logind.conf ──"
-    if _chk_file /etc/systemd/logind.conf.d/99-cachyos-logind.conf
-        # mirror generator's systemd<256 skip for HandleSecureAttentionKey.
-        not set -q _RY_SYSTEMD_VER; and set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
-        for key in $LOGIND_IGNORE_KEYS
-            if test "$key" = HandleSecureAttentionKey
-                test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 256; and continue
-            end
-            _chk_grep /etc/systemd/logind.conf.d/99-cachyos-logind.conf "$key=ignore" "$key"
-        end
-    end
-    _echo
-    _echo "── coredump.conf ──"
-    if _chk_file /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf
-        for kv in Storage=none ProcessSizeMax=0
-            _chk_grep /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf "$kv"
-        end
-    end
-    _echo
-    _echo "── iwd ──"
-    if test "$_skip_iwd" = true
+end
+
+function _vss_iwd --argument-names skip_iwd --description "_verify_static_system sub: iwd config (skip-iwd-aware)"
+    if test "$skip_iwd" = true
         _info "  Skipping (iwd not installed)"
-    else if _chk_file /etc/iwd/main.conf
-        _chk_grep /etc/iwd/main.conf "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG"
-        for quirk in $IWD_DRIVER_QUIRKS
-            # full key=value match.
-            _chk_grep /etc/iwd/main.conf "$quirk" "DriverQuirks $quirk"
-        end
-        _chk_grep /etc/iwd/main.conf "NameResolvingService=$IWD_DNS_SERVICE" "DNS via $IWD_DNS_SERVICE"
+        return 0
     end
-    _echo
-    _echo "── NetworkManager ──"
-    if test "$_skip_iwd" = true
+    _chk_file /etc/iwd/main.conf; or return 0
+    _chk_grep /etc/iwd/main.conf "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG"
+    for quirk in $IWD_DRIVER_QUIRKS
+        # full key=value match.
+        _chk_grep /etc/iwd/main.conf "$quirk" "DriverQuirks $quirk"
+    end
+    _chk_grep /etc/iwd/main.conf "NameResolvingService=$IWD_DNS_SERVICE" "DNS via $IWD_DNS_SERVICE"
+end
+
+function _vss_nm --argument-names skip_iwd --description "_verify_static_system sub: NetworkManager config (skip-iwd-aware)"
+    if test "$skip_iwd" = true
         _info "  Skipping iwd-backend config (iwd not installed)"
-    else if _chk_file /etc/NetworkManager/conf.d/99-cachyos-nm.conf
-        _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.backend=$NM_WIFI_BACKEND" "wifi backend $NM_WIFI_BACKEND"
-        _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.powersave=$NM_WIFI_POWERSAVE" "WiFi powersave $NM_WIFI_POWERSAVE"
-        _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.iwd.autoconnect=false" "iwd autoconnect disabled"
-        _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "level=$NM_LOG_LEVEL" "logging level $NM_LOG_LEVEL"
+        return 0
     end
-    _echo
+    _chk_file /etc/NetworkManager/conf.d/99-cachyos-nm.conf; or return 0
+    _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.backend=$NM_WIFI_BACKEND" "wifi backend $NM_WIFI_BACKEND"
+    _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.powersave=$NM_WIFI_POWERSAVE" "WiFi powersave $NM_WIFI_POWERSAVE"
+    _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.iwd.autoconnect=false" "iwd autoconnect disabled"
+    _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "level=$NM_LOG_LEVEL" "logging level $NM_LOG_LEVEL"
+end
+
+function _vss_drirc_sysctl --description "_verify_static_system sub: drirc XML tag + sysctl drop-in key=value check"
     _echo "── RADV driconf ──"
     _chk_file /etc/drirc; and _chk_grep /etc/drirc radv_enable_unified_heap_on_apu unified_heap_on_apu
     _echo
@@ -2355,6 +2378,41 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
             _chk_grep /etc/sysctl.d/99-cachyos-sysctl.conf "$key = $val" "$key=$val"
         end
     end
+end
+
+function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, coredump, iwd, NM, drirc, sysctl"
+    # Pre-compute iwd state once
+    set -l _skip_iwd false
+    not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1; and set _skip_iwd true
+    _echo "SYSTEM CONFIGURATION"
+    _echo
+    _vss_ntsync_modules
+    _echo
+    _echo "── resolved ──"
+    if _chk_file /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
+        for kv in "MulticastDNS=$RESOLVED_MDNS" "DNSOverTLS=opportunistic" \
+                  "DNSSEC=allow-downgrade" "LLMNR=no"
+            _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "$kv"
+        end
+    end
+    _echo
+    _echo "── logind.conf ──"
+    _vss_logind
+    _echo
+    _echo "── coredump.conf ──"
+    if _chk_file /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf
+        for kv in Storage=none ProcessSizeMax=0
+            _chk_grep /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf "$kv"
+        end
+    end
+    _echo
+    _echo "── iwd ──"
+    _vss_iwd $_skip_iwd
+    _echo
+    _echo "── NetworkManager ──"
+    _vss_nm $_skip_iwd
+    _echo
+    _vss_drirc_sysctl
     _echo
 end
 
@@ -2536,9 +2594,7 @@ function _verify_static_checksum --description "Verify embedded content hash mat
         set -l actual (_installed_bytes "$dst")
         # replaced switch "$expected::$actual" with explicit checks.
         if test -z "$expected"
-            _fail "  $dst: generator failed"
-            # _fail bumped VERIFY_FAIL via _msg; gen_fail is mutually exclusive — back out the fail bump.
-            set -g VERIFY_FAIL (math $VERIFY_FAIL - 1)
+            _fail_silent "  $dst: generator failed"
             set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
             _log "VERIFY_STATIC_GEN_FAIL: dst=$dst"
         else if test -z "$actual"
@@ -2778,9 +2834,7 @@ function _vrk_cmdline --description "Runtime kparam check: /proc/cmdline + preem
     _echo
 end
 
-function _vrk_gpu_state --description "Runtime kparam check: GPU performance level + ReBAR/SAM + VRAM carveout"
-    _echo "HARDWARE STATE"
-    _echo
+function _vrkg_perf_level --description "_vrk_gpu_state sub: power_dpm_force_performance_level sysfs scan"
     _echo "── GPU performance level ──"
     set -l gpu_ok false
     set -l found_gpu false
@@ -2801,7 +2855,9 @@ function _vrk_gpu_state --description "Runtime kparam check: GPU performance lev
     else if test "$gpu_ok" = false
         _warn "  GPU not at 'auto' — check dmesg for amdgpu errors"
     end
-    _echo
+end
+
+function _vrkg_rebar_sam --description "_vrk_gpu_state sub: ReBAR/SAM status via dmesg cache + lspci fallback"
     _echo "── ReBAR/SAM status ──"
     set -l rebar_status (printf '%s\n' $_RY_DMESG_CACHE | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large|above.4g' | head -n 1)
     if test -n "$rebar_status"
@@ -2812,19 +2868,23 @@ function _vrk_gpu_state --description "Runtime kparam check: GPU performance lev
             _info "  ReBAR/SAM: check manually"
             _info "  $rebar_status"
         end
-    else if command -q lspci
-        set -l bar_size (lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*256M|Region.*Memory.*512M|Region.*Memory.*[0-9]G' | head -n 1)
-        if test -n "$bar_size"
-            _ok "  ReBAR/SAM: large BAR detected"
-            _info "  $bar_size"
-        else
-            _warn "  ReBAR/SAM: not detected (check BIOS settings)"
-            _info "  Verify with: dmesg | grep -i bar"
-        end
-    else
-        _info "  lspci not available for ReBAR check"
+        return 0
     end
-    _echo
+    if not command -q lspci
+        _info "  lspci not available for ReBAR check"
+        return 0
+    end
+    set -l bar_size (lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*256M|Region.*Memory.*512M|Region.*Memory.*[0-9]G' | head -n 1)
+    if test -n "$bar_size"
+        _ok "  ReBAR/SAM: large BAR detected"
+        _info "  $bar_size"
+    else
+        _warn "  ReBAR/SAM: not detected (check BIOS settings)"
+        _info "  Verify with: dmesg | grep -i bar"
+    end
+end
+
+function _vrkg_vram --description "_vrk_gpu_state sub: BIOS VRAM carveout via mem_info_vram_total"
     _echo "── BIOS VRAM carveout ──"
     set -l _vram_bytes 0
     for f in /sys/class/drm/card*/device/mem_info_vram_total
@@ -2833,16 +2893,26 @@ function _vrk_gpu_state --description "Runtime kparam check: GPU performance lev
             break
         end
     end
-    if test "$_vram_bytes" -gt 0 2>/dev/null
-        set -l _vram_mb (math "$_vram_bytes / 1048576")
-        if test "$_vram_mb" -le 512
-            _ok "  VRAM carveout: $_vram_mb MB"
-        else
-            _warn "  VRAM carveout: $_vram_mb MB (recommended: ≤512 MB for UMA — check BIOS)"
-        end
-    else
+    if not test "$_vram_bytes" -gt 0 2>/dev/null
         _info "  VRAM carveout: cannot read mem_info_vram_total"
+        return 0
     end
+    set -l _vram_mb (math "$_vram_bytes / 1048576")
+    if test "$_vram_mb" -le 512
+        _ok "  VRAM carveout: $_vram_mb MB"
+    else
+        _warn "  VRAM carveout: $_vram_mb MB (recommended: ≤512 MB for UMA — check BIOS)"
+    end
+end
+
+function _vrk_gpu_state --description "Runtime kparam check: GPU performance level + ReBAR/SAM + VRAM carveout"
+    _echo "HARDWARE STATE"
+    _echo
+    _vrkg_perf_level
+    _echo
+    _vrkg_rebar_sam
+    _echo
+    _vrkg_vram
     _echo
 end
 
@@ -4283,7 +4353,7 @@ function _boot_wipe_gate --argument-names esp wipe_marker --description "Gate fo
         _err "SDBOOT_REMOVE_EXISTING=yes will delete $_existing_entries existing $esp/loader/entries/*.conf file(s)"
         _err "  Manual entries (rescue, Windows, custom kernels) will be LOST."
         _err "  To proceed (one-time): RY_INSTALL_CONFIRM_BOOT_WIPE=1 ./ry-install.fish"
-        _err "  After the first successful run, marker file $wipe_marker will record the entry count and suppress this gate until entries grow."
+        _err "  After the first successful run, marker file $wipe_marker will record the entry-set hash and suppress this gate until the entry set changes (any add, remove, or rename)."
         set -g INSTALL_HAD_ERRORS true
         return $EXIT_BOOT_CRIT
     end

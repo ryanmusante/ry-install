@@ -5,6 +5,19 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.29 - 2026-05-06
+--------------------
+
+  * style: collapse `if X / Y / end` and `if X / Y1 / Y2 / end` blocks to inline `X; and Y` / `X; and Y1; and Y2` form across the script (137 sites, all chain-safe and `$status`-clean at the follow-line).
+  * style: collapse `if X / return | continue | break / end` blocks to inline `X; and <ctrl>` form (19 sites).
+  * style: fold `printf` and `set` backslash-continuation arg-lists onto single lines for the 7 embedded content generators and the 6 module-scoped multi-arg `set` blocks (14 sites). `printf` arg vectors and `string join \n` outputs byte-identical pre/post.
+  * style: the 3 sites where the surrounding function ends on the if-block AND a current caller reads `$status` are preserved unchanged: `_content__etc_mkinitcpio.conf` (caller path: `_atomic_write_file` → `_ry_install_file` → `_ry_do_install_file`), and the foundational utilities `_log` / `_echo` (broad invocation surface; future status-reading callers would silently break under collapse).
+  * style: Phase-5 collapse introduces a Y1-success gate on Y2 in the inline form. Y1 verbs in scope are exclusively the `_msg` family (`_err`/`_warn`/`_fail`/`_info`/`_ok`), `_log`, `set` of valid local/global names, `echo` to fd 2, and one `command rm -rf -- "$_run_dir" 2>/dev/null` inside a `test -d` guard — all return 0 in this script's invocation contexts. The shift is theoretical, not behavioural.
+  * header: source line count 5495 → 5005. No flag, exit code, JSONL schema, or managed-file content changes.
+
+  Migration: none. Behaviour-preserving.
+
+
 v4.5.28 - 2026-05-04
 --------------------
 

@@ -5,6 +5,13 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.35 - 2026-05-07
+--------------------
+
+  * correctness: `_untrack_tmpfile` erases `_TRACKED_TMPFILES` when the working list empties; previously `set -g _TRACKED_TMPFILES $_new` recreated the global as an empty list, leaving the name in a sourcing caller's scope when the post-bail sweep ran (argparse-error path only).
+  * style: single inline comment relocated to its own line above the annotated code (`case 0` switch arm). `# lint:ignore` and `# FISH-LINT-DIRECTIVE` markers and the script-header line preserved in place.
+  * docs: README version badge bump 4.5.34 → 4.5.35.
+
 v4.5.34 - 2026-05-07
 --------------------
 

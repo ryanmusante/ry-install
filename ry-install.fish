@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.34 (2026-05-07) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.5.35 (2026-05-07) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.34"
+set -g VERSION "4.5.35"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -997,13 +997,13 @@ function _tmpfile_key --argument-names path --description "Generate filename key
     string replace -a / _ -- "$p"
 end
 
-function _untrack_tmpfile --argument-names path --description "Remove a single literal path from _TRACKED_TMPFILES (no glob)"
+function _untrack_tmpfile --argument-names path --description "Remove a single literal path from _TRACKED_TMPFILES (no glob); erase global when list empties so source-mode bail paths do not leak the name"
     set -l _new
     for _tf in $_TRACKED_TMPFILES
         test "$_tf" = "$path"; and continue
         set -a _new "$_tf"
     end
-    set -g _TRACKED_TMPFILES $_new
+    test (count $_new) -gt 0; and set -g _TRACKED_TMPFILES $_new; or set --erase _TRACKED_TMPFILES
 end
 
 function _rm_tmp --argument-names path use_sudo --description "Sudo-aware tmpfile delete + untrack (paired with _atomic_write_file family)"
@@ -1559,7 +1559,8 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     end
     set _stage1_rc $pipestatus[1]; set _grep_rc $pipestatus[2]
     switch $_stage1_rc
-        case 0   # proceed
+        # proceed
+        case 0
         case 1;  _fail "  $label: MISSING (file has no non-comment lines)"; return 1
         case '*'; _warn "  $label: cannot read file (stage-1 rc=$_stage1_rc — sudo lapse or read error)"; return 1
     end

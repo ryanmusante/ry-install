@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.32-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.33-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -128,7 +128,7 @@ All modes are non-interactive. Verification flags are read-only.
 | `-V, --verbose` | Show output for install/check (silent by default) |
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |
-| `--check` | Silent idempotency probe (exit 0=clean, 3=prereq, 10=drift) |
+| `--check` | Silent idempotency probe (exit 0=clean, 3=preflight, 10=drift) |
 | `--install-file <path>` | Re-deploy a single managed file |
 | `-h, --help` / `-v, --version` | Help / version |
 
@@ -339,7 +339,7 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
 | System | `/etc/drirc` |
 | System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
-| System | `/etc/systemd/system/cpupower-epp.service` |
+| Service | `/etc/systemd/system/cpupower-epp.service` |
 | User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
 | User | `~/.config/environment.d/10-environment.conf` |
 | User | `~/.config/systemd/user/ssh-agent.service` |
@@ -367,7 +367,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Re-source guard | `_RY_INSTALL_LOADED` blocks double-source within the same shell session; cleared on every clean exit path including the `--help` / `--version` early-peek |
 | Credentials | 15 lowercase secret-flag patterns redacted in logs (passphrase, password, token, key, secret, api-key, apikey, psk, wpa-psk, private-key, auth, bearer, cookie, client-secret, credential) |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE → 141 |
-| mkinitcpio rollback | Pre-deploy bytes captured; restored via atomic mv on `pacman -Syu` failure |
+| mkinitcpio rollback | Pre-deploy bytes captured; restored via atomic mv on `pacman -Syu` failure (rollback only when pre-deploy backup succeeded; skipped on sudo lapse — `MKINITCPIO_BACKUP_SKIPPED` logged) |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard; self-heal on rotation race |
 
 <a id="exit-codes"></a>

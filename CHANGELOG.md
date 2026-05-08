@@ -5,6 +5,30 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.6.0 - 2026-05-07
+-------------------
+
+  * release: minor version bump consolidating the 4.5.x point series. No functional changes vs `v4.5.38`; tag opens a stable line for the post-anti-lag-removal env-var set.
+  * docs: README version badge bump 4.5.38 → 4.6.0.
+
+v4.5.38 - 2026-05-07
+--------------------
+
+  * env-vars: drop `ENABLE_LAYER_MESA_ANTI_LAG=1` from `~/.config/environment.d/10-environment.conf`. Anti-lag opt-in moved to per-game Steam launch options; system-wide enablement removed.
+  * preflight: `_ir_validate_counts` `ENV_VARS` invariant `12` → `11`.
+  * docs: README `Environment Variables` header `13 vars (12 gaming/debug + 1 systemd-user)` → `12 vars (11 gaming/debug + 1 systemd-user)`; `<summary>` `Show 13` → `Show 12`; `ENABLE_LAYER_MESA_ANTI_LAG` row removed from the deployed table.
+  * docs: README `Per-game overrides` `Deprecated` list extended with `ENABLE_LAYER_MESA_ANTI_LAG`.
+  * docs: README version badge bump 4.5.37 → 4.5.38.
+
+v4.5.37 - 2026-05-07
+--------------------
+
+  * env-vars: drop `PROTON_NO_WM_DECORATION=1` from `~/.config/environment.d/10-environment.conf`. Borderless behaviour now governed per-game via Steam launch options or per-WM by COSMIC's own decoration policy; system-wide enforcement removed.
+  * preflight: `_ir_validate_counts` `ENV_VARS` invariant `13` → `12` to match the trimmed list.
+  * docs: README `Environment Variables` section: header `14 vars (13 gaming/debug + 1 systemd-user)` → `13 vars (12 gaming/debug + 1 systemd-user)`; `<summary>` `Show 14` → `Show 13`; `PROTON_NO_WM_DECORATION` row removed from the deployed table.
+  * docs: README `Per-game overrides` section: `DISABLE_LAYER_MESA_ANTI_LAG=1` and `PROTON_NO_WM_DECORATION=0` rows removed; both names appended to the `Deprecated — do not re-introduce` list (alongside `DXVK_ASYNC`, `DXVK_FRAME_RATE`, `WINE_FULLSCREEN_FSR`) so future bumps do not silently reintroduce them.
+  * docs: README version badge bump 4.5.36 → 4.5.37.
+
 v4.5.36 - 2026-05-07
 --------------------
 

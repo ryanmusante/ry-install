@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.36-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.6.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -244,21 +244,19 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 
 ### Environment Variables
 
-14 vars in `~/.config/environment.d/10-environment.conf` (13 gaming/debug + 1 systemd-user `SSH_AUTH_SOCK` binding). Debug logging silenced by default.
+12 vars in `~/.config/environment.d/10-environment.conf` (11 gaming/debug + 1 systemd-user `SSH_AUTH_SOCK` binding). Debug logging silenced by default.
 
 <a id="environment-variables-list"></a>
 <details>
-<summary><b>Show 14 environment variables</b></summary>
+<summary><b>Show 12 environment variables</b></summary>
 
 | Variable | Value |
 |---|---|
 | `SSH_AUTH_SOCK` | `${XDG_RUNTIME_DIR}/ssh-agent.socket` (binds systemd-user services to the local agent socket; fish/conf.d resolves forwarded > gcr > systemd for interactive sessions) |
 | `DXVK_LOG_LEVEL` / `DXVK_LOG_PATH` | `none` |
-| `ENABLE_LAYER_MESA_ANTI_LAG` | `1` (AMD-only) |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
 | `PROTON_ENABLE_WAYLAND` | `1` (experimental; breaks Steam Overlay) |
 | `PROTON_LOCAL_SHADER_CACHE` | `1` |
-| `PROTON_NO_WM_DECORATION` | `1` (borderless under COSMIC) |
 | `PROTON_USE_NTSYNC` | `1` |
 | `RADV_EXPERIMENTAL` | `transfer_queue` |
 | `RADV_PERFTEST` | `sam,nircache` |
@@ -274,11 +272,9 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 | Variable | Use case |
 |---|---|
 | `MESA_VK_WSI_PRESENT_MODE=mailbox` | Latency-sensitive titles under Wayland (breaks vsync) |
-| `DISABLE_LAYER_MESA_ANTI_LAG=1` | Crashes under anti-lag layer |
-| `PROTON_NO_WM_DECORATION=0` | Game needs WM decorations |
 | `PROTON_FSR4_RDNA3_UPGRADE=1` | Force FSR4 on gfx1151 |
 
-Deprecated — do not re-introduce: `DXVK_ASYNC`, `DXVK_FRAME_RATE`, `WINE_FULLSCREEN_FSR`. (`VKD3D_FRAME_RATE` is **retained** — still valid.)
+Deprecated — do not re-introduce: `DXVK_ASYNC`, `DXVK_FRAME_RATE`, `WINE_FULLSCREEN_FSR`, `DISABLE_LAYER_MESA_ANTI_LAG`, `ENABLE_LAYER_MESA_ANTI_LAG`, `PROTON_NO_WM_DECORATION`. (`VKD3D_FRAME_RATE` is **retained** — still valid.)
 
 </details>
 

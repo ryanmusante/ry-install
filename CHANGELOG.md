@@ -5,6 +5,16 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.6.1 - 2026-05-08
+-------------------
+
+  * docs: `_ry_show_help` hoisted above the early-arg loop; the early `case -h --help` printf body collapses to a single `_ry_show_help` call (was a 38-line parallel HELP-TEXT-SYNC printf with column-width and exit-code-wording drift across `-h`/`--help` vs argparse-routed paths). Both early and post-argparse routes now emit byte-identical output via the same source.
+  * naming: internal generator sentinels promoted to named constants — `EXIT_GEN_NOFN=11` (replaces literal `return 11` in `_ry_get_file_content`), `EXIT_GEN_NOUUID=12` (replaces literal `return 12` in `_content__etc_kernel_cmdline`). Both registered in `_early_cleanup`. `_check_phase_files` log marker updated `rc=11/12` → `rc=EXIT_GEN_NOFN/NOUUID`. No exposed exit codes change — both squashed to `EXIT_PREFLIGHT` at the consumer.
+  * dead-code: `string match -r '...' -- "$tail3" | head -n 1` in the `_log` 4096-byte truncation collapsed to bare `string match -r` — the `$`-anchored pattern returns at most one match per input string, so the `head -n 1` filter was unreachable.
+  * docs: `_ry_show_help` `_file_count 15` literal fallback annotated with inline cross-reference comment to `_RY_MANAGED_FILE_COUNT` and the three destination-list globals (`SYSTEM_DESTINATIONS` / `USER_DESTINATIONS` / `SERVICE_DESTINATIONS`); future destination additions have a paper trail to the fallback site.
+  * style: comment-pass — sole inline non-lint comment moved above its line (`_ry_show_help` `_file_count` fallback); 6 standalone comments reworded to drop fish-syntax-like tokens (`NAME set`, `$status`, `()` call-form, leading `switch` keyword) that could trip naive static analyzers reading comment bodies; one 100-char comment trimmed to fit the ≤ 80-char convention. Safe-lint markers (`# FISH-LINT-DIRECTIVE`, in-string `# lint:ignore` annotations, trailing `# lint:ignore` on the printf-arg `'end'` literal) preserved verbatim.
+  * release: patch version bump `4.6.0` → `4.6.1` (script header line 2 + `set -g VERSION` + README badge).
+
 v4.6.0 - 2026-05-07
 -------------------
 

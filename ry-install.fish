@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.0 (2026-05-07) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.1 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.0"
+set -g VERSION "4.6.1"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -26,50 +26,59 @@ set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4
 set -g EXIT_LOCK 5
 set -g EXIT_DRIFT 10
+# internal-only sentinels — squashed to EXIT_PREFLIGHT at consumer site
+set -g EXIT_GEN_NOFN 11
+set -g EXIT_GEN_NOUUID 12
 set -g _RY_SECRET_FLAGS --passphrase --password --token --key --secret --api-key --apikey --psk --wpa-psk --private-key --auth --bearer --cookie --client-secret --credential
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g _MY_UID (id -u)
 
-set -l _early_cleanup _RY_INSTALL_LOADED _RY_INSTALL_SOURCED _RY_PRE_GLOBALS _RY_INSTALL_BAILING _RY_INSTALL_LAST_EXIT VERSION EXIT_OK EXIT_FAIL EXIT_USAGE EXIT_PREFLIGHT EXIT_BOOT_CRIT EXIT_LOCK EXIT_DRIFT _RY_SECRET_FLAGS _RY_RUN_TIMEOUT_DEFAULT _MY_UID
-for _early_arg in $argv
-    switch "$_early_arg"
-        case -h --help
-            printf 'ry-install v%s
-Usage: ry-install.fish [OPTIONS]
-
+function _ry_show_help --description "Display usage information and available subcommands"
+    # fallback for unset _RY_MANAGED_FILE_COUNT
+    set -l _file_count 15
+    set -q _RY_MANAGED_FILE_COUNT; and test -n "$_RY_MANAGED_FILE_COUNT"; and set _file_count $_RY_MANAGED_FILE_COUNT
+    set -l _profile_desc "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
+    set -q PROFILE_DESC; and test -n "$PROFILE_DESC"; and set _profile_desc "$PROFILE_DESC"
+    echo "
+ry-install v$VERSION
+Self-contained CachyOS configuration for $_profile_desc
+Single fish script, $_file_count embedded configs, no external dependencies.
+Usage: "(status filename)" [OPTIONS]
 INSTALLATION:
-  (no args)               Unattended install (the only mode)
-  -V, --verbose           Show output for install/check (silent by default; verify modes are always verbose)
-
+  (no args)         Unattended install (the only mode)
+  -V, --verbose     Show output for install/check (silent by default; verify modes are always verbose)
 VERIFICATION:
-  --verify-static         Check config files exist with correct content
-  --verify-runtime        Check live system state (run after reboot)
-  --check                 Silent idempotency probe (exit 0=clean, 3=preflight, 10=drift)
-
+  --verify-static   Check config files exist with correct content
+  --verify-runtime  Check live system state (run after reboot)
+  --check           Silent idempotency probe (exit 0 = clean, exit 3 = preflight, exit 10 = drift)
 UTILITIES:
-  --install-file <path>   Re-deploy a single managed file
-
+  --install-file <path>  Re-deploy a single managed file
 OPTIONS:
-  --                      End of options (positional args after "--" are rejected with exit 2)
-  -h, --help              Show this help
-  -v, --version           Show version (v%s)
-
+  --                End of options (positional args after `--` are rejected with exit 2)
+  -h, --help        Show this help
+  -v, --version     Show version
+Modes are mutually exclusive (argparse --exclusive).
+Unattended install is the only mode. There is no preview, diff, or repair mode.
+For drift detection, use --verify-static / --verify-runtime.
 EXIT CODES:
   0 ok · 1 non-critical · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 drift
   129/130/131/143 signal (HUP/INT/QUIT/TERM) · 134/138/140 signal (ABRT/USR1/USR2) · 141 SIGPIPE
-
 ENVIRONMENT:
-  RY_RUN_TIMEOUT=<seconds>             Wall-clock cap per _run (default %s; 0 disables)
-  RY_INSTALL_CONFIRM_BOOT_WIPE=1       Ack first boot-entry wipe (literal \'1\' only)
-  RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1   Switch Packages phase from -Syu to -Sy (violates Arch policy)
-  RY_INSTALL_FORCE_BOOT_REBUILD=1      Bypass torn-package gate (recovery only; literal \'1\' required)
-  NO_COLOR                             Suppress ANSI color (any non-empty value enables; auto on TERM=dumb / non-TTY stderr)
-
-Modes are mutually exclusive (argparse --exclusive).
-Run as your normal user (sudo invoked internally).
+  RY_RUN_TIMEOUT=<seconds>    Wall-clock limit for each _run. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable.
+  RY_INSTALL_CONFIRM_BOOT_WIPE=1    One-time ack for SDBOOT_REMOVE_EXISTING=yes.
+  RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1    Switch Packages phase from `pacman -Syu --needed` (Arch-recommended) to `pacman -Sy --needed` (install-only; partial-upgrade risk).
+  RY_INSTALL_FORCE_BOOT_REBUILD=1    Bypass torn-package gate (recovery only; literal '1' required).
+  NO_COLOR    Suppress ANSI color when set to any non-empty value (also auto on TERM=dumb / non-TTY stderr).
 Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl
 See README.md for full reference.
-' $VERSION $VERSION $_RY_RUN_TIMEOUT_DEFAULT
+"
+end
+
+set -l _early_cleanup _RY_INSTALL_LOADED _RY_INSTALL_SOURCED _RY_PRE_GLOBALS _RY_INSTALL_BAILING _RY_INSTALL_LAST_EXIT VERSION EXIT_OK EXIT_FAIL EXIT_USAGE EXIT_PREFLIGHT EXIT_BOOT_CRIT EXIT_LOCK EXIT_DRIFT EXIT_GEN_NOFN EXIT_GEN_NOUUID _RY_SECRET_FLAGS _RY_RUN_TIMEOUT_DEFAULT _MY_UID
+for _early_arg in $argv
+    switch "$_early_arg"
+        case -h --help
+            _ry_show_help
             set -e $_early_cleanup _early_cleanup _early_arg 2>/dev/null
             exit 0
         case -v --version
@@ -91,7 +100,7 @@ function _ry_exit --argument-names code --description "Source-safe exit: set bai
         test "$_RY_INSTALL_SOURCED" = true; and return $code
         exit $code
     end
-    # Order matters: _CLEANUP_DONE set first to gate signal-handler re-entry
+    # Order matters: assign _CLEANUP_DONE first to gate signal-handler re-entry
     set -g _CLEANUP_DONE true
     set -g _RY_INSTALL_LAST_EXIT $code
     set -g _RY_INSTALL_BAILING true
@@ -604,7 +613,7 @@ end
 
 function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensure cleanup runs on fish_exit"
     set -l _exit_status $status
-    # prefer _RY_INSTALL_LAST_EXIT over $status
+    # prefer _RY_INSTALL_LAST_EXIT over the fish status var
     if set -q _INTENDED_EXIT_CODE
         set _exit_status $_INTENDED_EXIT_CODE
     else if set -q _RY_INSTALL_LAST_EXIT
@@ -617,7 +626,7 @@ end
 # === GTR9_PRO BUILT-IN DEFAULTS ===
 set -g PROFILE_NAME gtr9_pro
 set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
-# 1:1 to _ry_get_file_content()
+# 1:1 mapping to _ry_get_file_content
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" \
     "/etc/kernel/cmdline" \
@@ -858,7 +867,7 @@ function _content__boot_loader_loader.conf --description "Embedded content for /
 end
 
 function _content__etc_kernel_cmdline --description "Embedded content for /etc/kernel/cmdline"
-    test -z "$_ROOT_UUID"; and return 12
+    test -z "$_ROOT_UUID"; and return $EXIT_GEN_NOUUID
     printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
 end
 
@@ -954,7 +963,7 @@ end
 
 function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"
     set -l fn "_content_"(_tmpfile_key "$dst")
-    functions -q $fn; or return 11
+    functions -q $fn; or return $EXIT_GEN_NOFN
     $fn
 end
 
@@ -1136,7 +1145,7 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
     if test (string length -- "$data") -gt 4096
         set -l cut 4093
         set -l tail3 (string sub -s (math $cut - 7) -l 8 -- "$data")
-        set -l _esc_match (string match -r '\\\\([tnrbf]|u[0-9a-fA-F]{0,4}|\\\\?)$' -- "$tail3" | head -n 1)
+        set -l _esc_match (string match -r '\\\\([tnrbf]|u[0-9a-fA-F]{0,4}|\\\\?)$' -- "$tail3")
         if test -n "$_esc_match"
             set -l _esc_len (string length -- "$_esc_match")
             test "$_esc_len" -gt 0; and set cut (math $cut - $_esc_len)
@@ -1442,45 +1451,6 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     return $ret
 end
 
-function _ry_show_help --description "Display usage information and available subcommands"
-    set -l _file_count 15
-    set -q _RY_MANAGED_FILE_COUNT; and test -n "$_RY_MANAGED_FILE_COUNT"; and set _file_count $_RY_MANAGED_FILE_COUNT
-    set -l _profile_desc "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
-    set -q PROFILE_DESC; and test -n "$PROFILE_DESC"; and set _profile_desc "$PROFILE_DESC"
-    echo "
-ry-install v$VERSION
-Self-contained CachyOS configuration for $_profile_desc
-Single fish script, $_file_count embedded configs, no external dependencies.
-Usage: "(status filename)" [OPTIONS]
-INSTALLATION:
-  (no args)         Unattended install (the only mode)
-  -V, --verbose     Show output for install/check (silent by default; verify modes are always verbose)
-VERIFICATION:
-  --verify-static   Check config files exist with correct content
-  --verify-runtime  Check live system state (run after reboot)
-  --check           Silent idempotency probe (exit 0 = clean, exit 3 = preflight, exit 10 = drift)
-UTILITIES:
-  --install-file <path>  Re-deploy a single managed file
-OPTIONS:
-  --                End of options (positional args after `--` are rejected with exit 2)
-  -h, --help        Show this help
-  -v, --version     Show version
-Modes are mutually exclusive (argparse --exclusive).
-Unattended install is the only mode. There is no preview, diff, or repair mode.
-For drift detection, use --verify-static / --verify-runtime.
-EXIT CODES:
-  0 ok · 1 non-critical · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 drift
-  129/130/131/143 signal (HUP/INT/QUIT/TERM) · 134/138/140 signal (ABRT/USR1/USR2) · 141 SIGPIPE
-ENVIRONMENT:
-  RY_RUN_TIMEOUT=<seconds>    Wall-clock limit for each _run. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable.
-  RY_INSTALL_CONFIRM_BOOT_WIPE=1    One-time ack for SDBOOT_REMOVE_EXISTING=yes.
-  RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1    Switch Packages phase from `pacman -Syu --needed` (Arch-recommended) to `pacman -Sy --needed` (install-only; partial-upgrade risk).
-  RY_INSTALL_FORCE_BOOT_REBUILD=1    Bypass torn-package gate (recovery only; literal '1' required).
-  NO_COLOR    Suppress ANSI color when set to any non-empty value (also auto on TERM=dumb / non-TTY stderr).
-Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl
-See README.md for full reference.
-"
-end
 
 function _chk_eq --argument-names label actual expected --description "Compare actual vs expected; emit _ok or _fail"
     if test "$actual" = "$expected"
@@ -1689,7 +1659,7 @@ function _ry_check_kernel_version --description "Verify running kernel version m
         _info "  Recommend upgrading: sudo pacman -Syu linux-cachyos"
     end
     set -l _ns (_ntsync_state)
-    # switch all 5 ntsync states (was if/else handling only `unavailable`).
+    # handle all 5 ntsync states (was if/else handling only `unavailable`).
     switch $_ns
         case unavailable
             _warn "Kernel $kver: ntsync not available (expected builtin or module)"
@@ -2525,7 +2495,7 @@ function _check_phase_files --description "--check phase: file content hash comp
         set -l expected (_ry_content_bytes "$dst")
         set -l actual (_installed_bytes "$dst")
         if test -z "$expected"
-            _log "CHECK_PREFLIGHT: generator failed for $dst (rc=11/12)"
+            _log "CHECK_PREFLIGHT: generator failed for $dst (rc=EXIT_GEN_NOFN/NOUUID)"
             return $EXIT_PREFLIGHT
         end
         if test -z "$actual"

@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.3 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.5 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.3"
+set -g VERSION "4.6.5"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -211,7 +211,7 @@ set -g INSTALL_HAD_ERRORS false
 # _RY_BOOT_TAINTED: separate from INSTALL_HAD_ERRORS — only set true by failures that mean
 # the on-disk package state or boot-critical configs may be inconsistent with the embedded
 # /etc/mkinitcpio.conf / /etc/kernel/cmdline / /etc/sdboot-manage.conf. Service-runtime
-# failures (e.g. nftables.service start fails because /etc/nftables.conf is missing/invalid)
+# failures (e.g. systemctl --now start fails because a unit's runtime config is invalid)
 # do NOT taint boot — they're orthogonal to initramfs rebuild safety.
 set -g _RY_BOOT_TAINTED false
 set -g _RY_BOOT_CRITICAL_DSTS \
@@ -262,6 +262,42 @@ function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_
         printf '%s\n' loaded_nodev
     else
         printf '%s\n' missing
+    end
+    return 0
+end
+
+function _ntsync_per_kernel_state --argument-names kver --description "Per-installed-kernel ntsync state from on-disk modules metadata: builtin|module|missing. Empty if /lib/modules/\$kver absent. Static check — does not require running kernel == \$kver."
+    test -d "/lib/modules/$kver"; or return 0
+    set -l _builtin "/lib/modules/$kver/modules.builtin"
+    set -l _dep "/lib/modules/$kver/modules.dep"
+    if test -r "$_builtin"; and command grep -qE '/ntsync(\.ko)?[^/]*$' -- "$_builtin" 2>/dev/null
+        printf '%s\n' builtin
+    else if test -r "$_dep"; and command grep -qE '^[^:]*ntsync\.ko[^:]*:' -- "$_dep" 2>/dev/null
+        printf '%s\n' module
+    else
+        printf '%s\n' missing
+    end
+end
+
+function _ntsync_check_installed_kernels --description "Walk /lib/modules/*/ and emit per-kernel ntsync state (advisory). Complements running-kernel check by validating other installed kernels (e.g. linux-cachyos-lts) before reboot. Warns only when a kernel ≥6.14 lacks ntsync."
+    for _kdir in /lib/modules/*/
+        set -l _kver (string trim --right --chars=/ -- (basename -- "$_kdir"))
+        set -l _km (string match -rg '^(\d+)\.(\d+)' -- "$_kver")
+        test (count $_km) -eq 2; or continue
+        set -l _state (_ntsync_per_kernel_state "$_kver")
+        test -z "$_state"; and continue
+        if test "$_km[1]" -lt 6; or begin
+                test "$_km[1]" -eq 6; and test "$_km[2]" -lt 14
+            end
+            _info "  Kernel $_kver: ntsync $_state (kernel <6.14, ntsync unsupported)"
+            continue
+        end
+        switch $_state
+            case builtin module
+                _info "  Kernel $_kver: ntsync $_state"
+            case missing
+                _warn "  Kernel $_kver: ntsync missing (kernel ≥6.14 expected to ship it)"
+        end
     end
     return 0
 end
@@ -760,12 +796,11 @@ set -g SYSCTL_VALUES \
     "vm.compaction_proactiveness=0"
 set -g PKGS_ADD \
     mkinitcpio-firmware \
-    nftables \
     nvme-cli \
     cachyos-gaming-meta \
     cachyos-gaming-applications \
-    libva-mesa-driver \
-    lib32-libva-mesa-driver \
+    mesa \
+    lib32-mesa \
     fd \
     sd \
     dust \
@@ -796,7 +831,7 @@ set -g MASK \
     hibernate.target \
     hybrid-sleep.target \
     suspend-then-hibernate.target
-set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service nftables.service
+set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200
 set -g BOOT_SPACE_WARN 500
@@ -854,7 +889,7 @@ function _ir_precompute_caches --description "Precompute _SYS_TMP_DIRS, _USR_TMP
 end
 
 function _ir_validate_counts --description "Refuse to deploy when KERNEL_PARAMS / LOGIND_IGNORE_KEYS / ENV_VARS / SYSCTL_VALUES / PKGS_ADD / PKGS_DEL / MASK count drift from documented invariants"
-    set -l _expect KERNEL_PARAMS:15 LOGIND_IGNORE_KEYS:9 ENV_VARS:11 SYSCTL_VALUES:16 PKGS_ADD:14 PKGS_DEL:8 AUR_PKGS:1 MASK:10
+    set -l _expect KERNEL_PARAMS:15 LOGIND_IGNORE_KEYS:9 ENV_VARS:11 SYSCTL_VALUES:16 PKGS_ADD:13 PKGS_DEL:8 AUR_PKGS:1 MASK:10
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv")
         set -l _name $_parts[1]
@@ -1209,18 +1244,16 @@ function _msg_print --argument-names level --description "Internal: leveled mess
     end >&2
 end
 
-function _msg --argument-names level --description "Format and print a leveled status message"
+function _msg --argument-names level --description "Format and print a leveled status message; bump pass/fail/warn counters in both install and verify modes (verify mode resets counters at entry, so its summary stays clean)"
     set -l msg (string join -- " " $argv[2..])
     _log "$level: $msg"
-    if set -q VERIFY_MODE; and test "$VERIFY_MODE" = true
-        switch $level
-            case OK
-                set -g VERIFY_OK (math $VERIFY_OK + 1)
-            case FAIL
-                set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
-            case WARN
-                set -g VERIFY_WARN (math $VERIFY_WARN + 1)
-        end
+    switch $level
+        case OK
+            set -g VERIFY_OK (math $VERIFY_OK + 1)
+        case FAIL ERR
+            set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
+        case WARN
+            set -g VERIFY_WARN (math $VERIFY_WARN + 1)
     end
     _msg_print $argv
 end
@@ -1701,6 +1734,9 @@ function _ry_check_kernel_version --description "Verify running kernel version m
         case '*'
             _warn "Kernel $kver: ntsync unknown state '$_ns'"
     end
+    # Per-installed-kernel ntsync state (advisory) — warns if any non-running
+    # kernel ≥6.14 (e.g. linux-cachyos-lts alongside linux-cachyos) lacks ntsync.
+    _ntsync_check_installed_kernels
     if test "$major" -eq 6; and test "$minor" -eq 19
         test "$kver_patch" = 0; and _warn "Kernel 6.19.0: black screen regression on Strix Halo (CachyOS #23042)"; and _warn "  Recommend: downgrade to 6.18.x or upgrade to 6.19.1+"
     end
@@ -2189,7 +2225,7 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
     _echo
 end
 
-function _vss_ntsync_modules --description "_verify_static_system sub: ntsync state + modules-load.d autoload check"
+function _vss_ntsync_modules --description "_verify_static_system sub: ntsync state + per-installed-kernel ntsync metadata + modules-load.d autoload check"
     _echo "── ntsync state ──"
     set -l _ns (_ntsync_state)
     switch $_ns
@@ -2204,6 +2240,9 @@ function _vss_ntsync_modules --description "_verify_static_system sub: ntsync st
         case missing
             _info "  ntsync: module not loaded"
     end
+    _echo
+    _echo "── Per-installed-kernel ntsync metadata ──"
+    _ntsync_check_installed_kernels
     _echo
     _echo "── Modules autoload ──"
     if test -f /usr/lib/modules-load.d/10-ntsync.conf
@@ -2959,8 +2998,8 @@ function _vrsv_chk_fstrim --argument-names rec_str --description "Check fstrim.t
     test "$rec[3]" = enabled; and _ok "  fstrim.timer: active (enabled)"; or _warn "  fstrim.timer: active but $rec[3] (will not persist)"
 end
 
-function _vrsv_sys_units --description "Runtime services check: 6-unit batch (cpupower-epp/fstrim/resolved/NM-dispatcher/NM/nftables)"
-    set -l sys_units cpupower-epp.service fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service NetworkManager.service nftables.service
+function _vrsv_sys_units --description "Runtime services check: 5-unit batch (cpupower-epp/fstrim/resolved/NM-dispatcher/NM)"
+    set -l sys_units cpupower-epp.service fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service NetworkManager.service
     set -l parsed
     for _u in $sys_units
         set -l _v (_unit_state_padded $_u)
@@ -2971,7 +3010,6 @@ function _vrsv_sys_units --description "Runtime services check: 6-unit batch (cp
     _vrsv_chk_resolved      "$parsed[3]"
     _vrsv_chk_nm_dispatcher "$parsed[4]"
     _vrsv_chk_active_enabled NetworkManager.service "$parsed[5]"
-    _vrsv_chk_active_enabled nftables.service "$parsed[6]"
 end
 
 function _vrsv_ssh_agent --description "Runtime services check: ssh-agent.service (user) + SSH_AUTH_SOCK runtime"
@@ -4824,10 +4862,11 @@ end
 set -l _log_base_rot (dirname -- "$LOG_DIR")
 set -l _rot_rows (command find "$_log_base_rot" -maxdepth 2 \( -name '*.jsonl' -o -name '*.log' \) -type f -not -samefile "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -zn | string split0)
 set -l _rot_ps $pipestatus
+# Only `find` failure is a real error: `sort -zn` and `string split0` both return rc=1 on
+# empty input (no logs to rotate) which is the steady-state benign case. Treating those
+# as failures was the v4.6.4 false-positive in LOG_ROTATION_SKIP (pipestatus=0,0,1).
 set -l _rot_pipe_ok true
-for _rps in $_rot_ps
-    test "$_rps" = 0; or set _rot_pipe_ok false
-end
+test "$_rot_ps[1]" = 0; or set _rot_pipe_ok false
 set -l _rot_count (count $_rot_rows)
 if test "$_rot_pipe_ok" = false
     _log "LOG_ROTATION_SKIP: pipestatus="(string join ',' -- $_rot_ps)

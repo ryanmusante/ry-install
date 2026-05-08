@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.6.3-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.6.5-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -74,7 +74,7 @@ Typical first-run duration: **3–8 minutes**.
 > **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until next reboot. On ethernet, `sudo systemctl restart NetworkManager` applies immediately.
 
 > [!IMPORTANT]
-> Initramfs rebuild refuses to run when on-disk package state or boot-critical configs (`/etc/mkinitcpio.conf`, `/etc/kernel/cmdline`, `/boot/loader/loader.conf`, `/etc/sdboot-manage.conf`) may be inconsistent with the embedded content. Service-runtime failures (e.g. `nftables.service` failing `--now` because `/etc/nftables.conf` is missing/invalid) do **not** block boot rebuild — they're surfaced as warnings. Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1`. Only the literal value `1` is accepted.
+> Initramfs rebuild refuses to run when on-disk package state or boot-critical configs (`/etc/mkinitcpio.conf`, `/etc/kernel/cmdline`, `/boot/loader/loader.conf`, `/etc/sdboot-manage.conf`) may be inconsistent with the embedded content. Service-runtime failures (e.g. a `systemctl enable --now` start failing because the unit's runtime config is invalid) do **not** block boot rebuild — they're surfaced as warnings. Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1`. Only the literal value `1` is accepted.
 
 ## Scope
 
@@ -145,7 +145,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | **Preflight** | Validate prerequisites, acquire lock, validate runtime |
 | **Packages** | `pacman -Syu --needed`; opt-in `-Sy` via `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1`; AUR via paru |
 | **Configuration** | Deploy all 15 embedded config files (atomic writes; system + service units + user) |
-| **Services** | `daemon-reload`, enable system units (cpupower-epp.service, fstrim.timer, nftables.service, NM-dispatcher), mask 10 power-management units, enable user ssh-agent.service |
+| **Services** | `daemon-reload`, enable system units (cpupower-epp.service, fstrim.timer, NM-dispatcher), mask 10 power-management units, enable user ssh-agent.service |
 | **Boot** | Rebuild initramfs (gated on no-prior-errors), update systemd-boot entries |
 | **Finalize** | Cache cleanup, NM restart (deferred on active WiFi) |
 
@@ -202,7 +202,7 @@ systemd-boot + sdboot-manage. `editor no` blocks live cmdline tampering; `timeou
 | Compression | `zstd -1 -T0` |
 
 > [!IMPORTANT]
-> `mkinitcpio -P` is **not** invoked when package install or a boot-critical config deploy (`mkinitcpio.conf`/`kernel/cmdline`/`loader.conf`/`sdboot-manage.conf`) failed. Service-runtime failures (e.g. `nftables.service` start) are reported as warnings and do not gate the rebuild. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
+> `mkinitcpio -P` is **not** invoked when package install or a boot-critical config deploy (`mkinitcpio.conf`/`kernel/cmdline`/`loader.conf`/`sdboot-manage.conf`) failed. Service-runtime `--now` start failures are reported as warnings and do not gate the rebuild. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ### System Services
 
@@ -210,7 +210,6 @@ systemd-boot + sdboot-manage. `editor no` blocks live cmdline tampering; `timeou
 |---|---|
 | `cpupower-epp.service` | Write `performance` to CPU `energy_performance_preference` |
 | `fstrim.timer` | Weekly TRIM (system-pre-existing; enabled here) |
-| `nftables.service` | Firewall (system-pre-existing; enabled here) |
 | `NetworkManager.service` | Pre-enabled by CachyOS base install (verified active+enabled post-install; verify-runtime warns "not installed" if absent) |
 
 Implicit units enabled by deployed conf.d files: `systemd-resolved.service` (via `resolved.conf.d`), `NetworkManager-dispatcher.service` (via `NetworkManager/conf.d`).
@@ -295,7 +294,7 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 
 | Action | Count | Packages |
 |---|---|---|
-| **Install** | 14 | mkinitcpio-firmware, nftables, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, libva-mesa-driver, lib32-libva-mesa-driver, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
+| **Install** | 13 | mkinitcpio-firmware, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, mesa, lib32-mesa, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove** | 8 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
 | **AUR** | 1 | mt76-mt7925-dkms (paru required; soft-fail if absent) |
 
@@ -489,7 +488,7 @@ The pinned bottom-row bar uses DECSTBM scroll-region sequences which mosh does n
 | Sudo cache expired | `sudo -v; and ./ry-install.fish` |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
 | Initramfs rebuild refused | Fix root cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
-| `Enabled but failed to start: <unit>` | Unit is enabled (next-boot OK); start blocked by missing/invalid config. Diagnose: `systemctl status <unit>; journalctl -u <unit> -b`. Common: `nftables.service` needs valid `/etc/nftables.conf`. |
+| `Enabled but failed to start: <unit>` | Unit is enabled (next-boot OK); start blocked by missing/invalid runtime config. Diagnose: `systemctl status <unit>; journalctl -u <unit> -b`. |
 
 ## References
 

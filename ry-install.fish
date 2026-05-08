@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.2 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.3 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.2"
+set -g VERSION "4.6.3"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -208,6 +208,17 @@ umask $_prev_umask
 not test -f "$LOG_FILE"; and echo "[ERR] Failed to create log file: $LOG_FILE" >&2; and _ry_exit $EXIT_PREFLIGHT
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g INSTALL_HAD_ERRORS false
+# _RY_BOOT_TAINTED: separate from INSTALL_HAD_ERRORS — only set true by failures that mean
+# the on-disk package state or boot-critical configs may be inconsistent with the embedded
+# /etc/mkinitcpio.conf / /etc/kernel/cmdline / /etc/sdboot-manage.conf. Service-runtime
+# failures (e.g. nftables.service start fails because /etc/nftables.conf is missing/invalid)
+# do NOT taint boot — they're orthogonal to initramfs rebuild safety.
+set -g _RY_BOOT_TAINTED false
+set -g _RY_BOOT_CRITICAL_DSTS \
+    "/boot/loader/loader.conf" \
+    "/etc/kernel/cmdline" \
+    "/etc/sdboot-manage.conf" \
+    "/etc/mkinitcpio.conf"
 set -g _TRACKED_TMPFILES
 set -g _SYS_TMP_DIRS
 set -g _USR_TMP_DIRS
@@ -524,13 +535,25 @@ function _kill_sudo_keepalive --description "Terminate the background sudo crede
         end
         set --erase SUDO_KEEPALIVE_PID
     end
+    if set -q SUDO_KEEPALIVE_ERR; and test "$SUDO_KEEPALIVE_ERR" != /dev/null
+        _rm_tmp "$SUDO_KEEPALIVE_ERR" false
+    end
+    set --erase SUDO_KEEPALIVE_ERR
 end
 
-function _check_sudo_keepalive --description "Warn if sudo keepalive has expired"
+function _check_sudo_keepalive --description "Warn if sudo keepalive has expired; surface child stderr if available"
     if set -q SUDO_KEEPALIVE_PID; and test -n "$SUDO_KEEPALIVE_PID"
         if not kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
-            _warn "Sudo keepalive expired — operations may require re-authentication"
-            _log "SUDO_KEEPALIVE_EXPIRED: pid=$SUDO_KEEPALIVE_PID"
+            set -l _reason ""
+            if set -q SUDO_KEEPALIVE_ERR; and test "$SUDO_KEEPALIVE_ERR" != /dev/null; and test -s "$SUDO_KEEPALIVE_ERR"
+                set _reason (command head -n 1 -- "$SUDO_KEEPALIVE_ERR" 2>/dev/null | string trim)
+            end
+            if test -n "$_reason"
+                _warn "Sudo keepalive expired — operations may require re-authentication ($_reason)"
+            else
+                _warn "Sudo keepalive expired — operations may require re-authentication"
+            end
+            _log "SUDO_KEEPALIVE_EXPIRED: pid=$SUDO_KEEPALIVE_PID reason='$_reason'"
             set --erase SUDO_KEEPALIVE_PID
         end
     end
@@ -849,7 +872,7 @@ function _init_runtime --description "Cache root UUID, validate hardware sanity,
     test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
     if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
         set -l _cpu_model (command grep -m1 -- 'model name' /proc/cpuinfo 2>/dev/null | command sed 's/.*: //')
-        test -n "$_cpu_model"; and not string match -q -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"; and _warn "Built-in defaults expect $EXPECTED_CPU_MATCH but detected: $_cpu_model"
+        test -n "$_cpu_model"; and not string match -q -i -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"; and _warn "Built-in defaults expect $EXPECTED_CPU_MATCH but detected: $_cpu_model"
     end
     _ir_validate_timing
     _ir_validate_counts
@@ -1301,7 +1324,10 @@ function _progress_init --description "Open scroll region; draw initial bar"
     tput cup 0 0 >/dev/null 2>&1; or return 0
     set -g _PROG_PINNED true
     set -g _PROG_ROWS $rows
-    printf '\e[1;%dr' (math $_PROG_ROWS - 1) >&2
+    # DECSTBM (CSI Ps;Ps r) homes the cursor to (1,1) as a side effect; explicitly position
+    # cursor at the bottom of the scroll region so subsequent output (e.g. the sudo password
+    # prompt in _install_preflight) appears just above the pinned bar instead of at the top.
+    printf '\e[1;%dr\e[%d;1H' (math $_PROG_ROWS - 1) (math $_PROG_ROWS - 1) >&2
     _progress_redraw "" 0
 end
 
@@ -1361,7 +1387,9 @@ function _progress_on_winch --on-signal WINCH --description "Re-anchor progress 
     string match -qr '^\d+$' -- "$_new_rows"; or return 0
     test "$_new_rows" -lt 10; and return 0
     set -g _PROG_ROWS $_new_rows
-    printf '\e[1;%dr' (math $_PROG_ROWS - 1) >&2
+    # DECSTBM homes the cursor; bracket with DECSC (\e7) / DECRC (\e8) so output streaming
+    # mid-install isn't interrupted by a cursor jump to (1,1) on terminal resize.
+    printf '\e7\e[1;%dr\e8' (math $_PROG_ROWS - 1) >&2
     _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
 end
 
@@ -3455,10 +3483,12 @@ function _is_wifi_active_route --description "True if the default route exits vi
     return 1
 end
 
-function _start_sudo_keepalive --description "Launch background sudo credential refresh loop tied to LOCK_DIR inode"
+function _start_sudo_keepalive --description "Launch background sudo credential refresh loop tied to LOCK_DIR inode. Child stderr captured to a tracked tmpfile so _check_sudo_keepalive can surface premature-exit reasons."
     set -l my_pid $fish_pid
-    set -l _ka_script (string join \n 'set -l _start_inode (command stat -c %i -- "$argv[2]" 2>/dev/null); or exit 0' 'while command kill -0 -- $argv[1] 2>/dev/null; and test -d -- "$argv[2]"' '    test "$_start_inode" = (command stat -c %i -- "$argv[2]" 2>/dev/null); or break' '    command sudo -n -v 2>/dev/null; or break' '    command sleep $argv[3] 2>/dev/null' 'end' | string collect)
-    env _RY_NO_LOG=1 fish --no-config -c "$_ka_script" -- "$my_pid" "$LOCK_DIR" "$SUDO_KEEPALIVE_INTERVAL" </dev/null >/dev/null 2>&1 &
+    set -l _ka_script (string join \n 'set -l _start_inode (command stat -c %i -- "$argv[2]" 2>/dev/null); or exit 0' 'while command kill -0 -- $argv[1] 2>/dev/null; and test -d "$argv[2]"' '    test "$_start_inode" = (command stat -c %i -- "$argv[2]" 2>/dev/null); or break' '    command sudo -n -v 2>/dev/null; or break' '    command sleep $argv[3] 2>/dev/null' 'end' | string collect)
+    set -g SUDO_KEEPALIVE_ERR (mktemp -t ry-ka-err.XXXXXX 2>/dev/null; or echo /dev/null)
+    test "$SUDO_KEEPALIVE_ERR" != /dev/null; and _track_tmpfile "$SUDO_KEEPALIVE_ERR"
+    env _RY_NO_LOG=1 fish --no-config -c "$_ka_script" -- "$my_pid" "$LOCK_DIR" "$SUDO_KEEPALIVE_INTERVAL" </dev/null >/dev/null 2>"$SUDO_KEEPALIVE_ERR" &
     set -g SUDO_KEEPALIVE_PID $last_pid
     if not kill -0 -- $SUDO_KEEPALIVE_PID 2>/dev/null
         functions -q _warn; and _warn "Sudo keepalive process failed to start — long installs may require re-auth"
@@ -3634,19 +3664,19 @@ function _install_packages --description "Install managed packages via pacman -S
     if not _ry_install_file "/etc/mkinitcpio.conf" true
         _err "Failed to pre-deploy mkinitcpio.conf before package install"
         _err "Aborting package installation — mkinitcpio.conf must be in place before -Syu"
-        set -g INSTALL_HAD_ERRORS true
+        set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
         return 1
     end
     if test (count $pkgs_to_install) -gt 0
         if not _ip_pacman_invoke $pkgs_to_install
-            set -g INSTALL_HAD_ERRORS true; set _fn_err true
+            set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; set _fn_err true
         end
         _info "Verifying package installation..."
         set -l missing_pkgs (pacman -T -- $pkgs_to_install 2>/dev/null)
         if test (count $missing_pkgs) -gt 0
             _err "Missing packages: $missing_pkgs"
             _warn "  Install manually: sudo pacman -S --needed $missing_pkgs"
-            set -g INSTALL_HAD_ERRORS true; set _fn_err true
+            set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; set _fn_err true
         else
             _ok "All packages verified installed"
         end
@@ -3663,7 +3693,7 @@ function _install_aur_packages --description "Install AUR packages via paru"
         _err "paru not found — cannot install AUR packages: $AUR_PKGS"
         _err "  Install paru: sudo pacman -S --needed paru"
         _err "  AUR_PKGS may include critical drivers (e.g. WiFi DKMS)"
-        set -g INSTALL_HAD_ERRORS true
+        set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
         return 1
     end
     set -l _had_fail false
@@ -3672,7 +3702,7 @@ function _install_aur_packages --description "Install AUR packages via paru"
         for pkg in $AUR_PKGS
             if not _run paru -S --needed --noconfirm -- "$pkg"
                 _warn "AUR install failed: $pkg"
-                set -g INSTALL_HAD_ERRORS true
+                set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
                 set _had_fail true
             end
         end
@@ -3681,10 +3711,13 @@ function _install_aur_packages --description "Install AUR packages via paru"
     return 0
 end
 
-function _isf_deploy_set --argument-names use_sudo phase --description "Deploy all destinations from argv[3..]; rc=0 ok, rc=1 any failure"
+function _isf_deploy_set --argument-names use_sudo phase --description "Deploy all destinations from argv[3..]; rc=0 ok, rc=1 any failure. Sets _RY_BOOT_TAINTED when a failed dst is in _RY_BOOT_CRITICAL_DSTS."
     set -l _had_failure false
     for dst in $argv[3..]
-        not _ry_install_file "$dst" $use_sudo; and set _had_failure true
+        if not _ry_install_file "$dst" $use_sudo
+            set _had_failure true
+            contains -- "$dst" $_RY_BOOT_CRITICAL_DSTS; and set -g _RY_BOOT_TAINTED true
+        end
     end
     test "$_had_failure" = true; and _err "$phase file installation failed"; and return 1
     return 0
@@ -3910,7 +3943,7 @@ function _cse_collect_units --description "Collect system units to enable: NM-di
     for _u in $_enable; echo $_u; end
 end
 
-function _cse_batch_enable --description "Batch enable system units; falls back to per-unit enable on batch failure"
+function _cse_batch_enable --description "Batch enable system units; falls back to per-unit enable on batch failure. On --now failure, distinguishes 'enable ok, start failed' (warn, will activate next boot) from 'enable failed' (err, taint INSTALL_HAD_ERRORS)."
     test (count $argv) -eq 0; and return 0
     if _run sudo -n systemctl enable --now -- $argv
         return 0
@@ -3918,10 +3951,19 @@ function _cse_batch_enable --description "Batch enable system units; falls back 
     _warn "Batch enable failed — retrying individually to identify failures"
     set -l _ret 0
     for _unit in $argv
-        if not _run sudo -n systemctl enable --now -- $_unit
-            _err "Failed to enable: $_unit"; set -g INSTALL_HAD_ERRORS true; set _ret 1
-        else
+        if _run sudo -n systemctl enable --now -- $_unit
             _ok "Enabled: $_unit"
+        else
+            # Distinguish "enable succeeded but start (--now) failed" from "enable failed".
+            # systemctl enable --now returns non-zero in both cases; probe is-enabled to split.
+            set -l _enabled_state (systemctl is-enabled -- $_unit 2>/dev/null | string trim)
+            if test "$_enabled_state" = enabled; or test "$_enabled_state" = enabled-runtime; or test "$_enabled_state" = alias; or test "$_enabled_state" = static
+                _warn "Enabled but failed to start: $_unit (will activate on next boot if config is fixed)"
+                _warn "  Diagnose: systemctl status $_unit; journalctl -u $_unit -b"
+                _log "ENABLE_OK_START_FAIL: unit=$_unit is-enabled=$_enabled_state"
+            else
+                _err "Failed to enable: $_unit (is-enabled=$_enabled_state)"; set -g INSTALL_HAD_ERRORS true; set _ret 1
+            end
         end
     end
     return $_ret
@@ -4228,8 +4270,9 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     _check_sudo_keepalive
     _progress Boot
     test "$SYSTEM_UPGRADED" = true; and _ok "System upgraded during package installation"
-    if test "$INSTALL_HAD_ERRORS" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
-        _err "Refusing initramfs rebuild — earlier phases reported errors (package state may be torn)"
+    if test "$_RY_BOOT_TAINTED" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
+        _err "Refusing initramfs rebuild — package or boot-critical config state may be inconsistent"
+        _err "  (mkinitcpio.conf, kernel cmdline, loader, sdboot-manage, or pacman/AUR install failed)"
         _err "  Resolve manually then re-run, OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
         return $EXIT_BOOT_CRIT
     end

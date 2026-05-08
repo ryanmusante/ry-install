@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.6.2-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.6.3-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -74,7 +74,7 @@ Typical first-run duration: **3–8 minutes**.
 > **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until next reboot. On ethernet, `sudo systemctl restart NetworkManager` applies immediately.
 
 > [!IMPORTANT]
-> Initramfs rebuild refuses to run when an earlier phase reported errors. Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1`. Only the literal value `1` is accepted.
+> Initramfs rebuild refuses to run when on-disk package state or boot-critical configs (`/etc/mkinitcpio.conf`, `/etc/kernel/cmdline`, `/boot/loader/loader.conf`, `/etc/sdboot-manage.conf`) may be inconsistent with the embedded content. Service-runtime failures (e.g. `nftables.service` failing `--now` because `/etc/nftables.conf` is missing/invalid) do **not** block boot rebuild — they're surfaced as warnings. Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1`. Only the literal value `1` is accepted.
 
 ## Scope
 
@@ -202,7 +202,7 @@ systemd-boot + sdboot-manage. `editor no` blocks live cmdline tampering; `timeou
 | Compression | `zstd -1 -T0` |
 
 > [!IMPORTANT]
-> `mkinitcpio -P` is **not** invoked when an earlier phase reported errors. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
+> `mkinitcpio -P` is **not** invoked when package install or a boot-critical config deploy (`mkinitcpio.conf`/`kernel/cmdline`/`loader.conf`/`sdboot-manage.conf`) failed. Service-runtime failures (e.g. `nftables.service` start) are reported as warnings and do not gate the rebuild. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ### System Services
 
@@ -357,7 +357,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Atomic writes | tmp → post-mktemp symlink check → chmod → mv (same FS); parent dir must be root- or self-owned, not symlinked, not group/world-writable |
 | Permissions | System 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600 |
 | fstab | Idempotent; `findmnt --verify` before write; symlinked fstab rejected; **no backup — snapshot first** |
-| Boot rebuild gate | `mkinitcpio -P` refuses to run when earlier phases erred (override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`) |
+| Boot rebuild gate | `mkinitcpio -P` refuses to run when package install or boot-critical config deploy failed (`_RY_BOOT_TAINTED`); service-runtime failures do not gate. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1` |
 | KERNEL_PARAMS hygiene | Preflight rejects whitespace or `"` in any param |
 | Sysctl invariant | Generator returns rc 13 if printed line count ≠ `count $SYSCTL_VALUES` |
 | Subprocess control | `_run` uses `timeout --foreground`; `_do_cleanup` reaps via `pkill -P` before keepalive teardown |
@@ -489,6 +489,7 @@ The pinned bottom-row bar uses DECSTBM scroll-region sequences which mosh does n
 | Sudo cache expired | `sudo -v; and ./ry-install.fish` |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
 | Initramfs rebuild refused | Fix root cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
+| `Enabled but failed to start: <unit>` | Unit is enabled (next-boot OK); start blocked by missing/invalid config. Diagnose: `systemctl status <unit>; journalctl -u <unit> -b`. Common: `nftables.service` needs valid `/etc/nftables.conf`. |
 
 ## References
 

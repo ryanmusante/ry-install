@@ -5,6 +5,13 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.6.2 - 2026-05-08
+-------------------
+
+  * naming: third generator-failure sentinel promoted to a named constant — `EXIT_GEN_SYSCTL=13` (replaces literal `return 13` in `_content__etc_sysctl.d_99-cachyos-sysctl.conf`). Registered in `_early_cleanup`. No exposed exit codes change — sysctl-count-mismatch is still squashed to `EXIT_PREFLIGHT` at the consumer (`_awf_render_to_tmp` `case 13` arm), matching the `EXIT_GEN_NOFN/NOUUID` pattern from v4.6.1.
+  * preflight: `_ry_check_deps` hard-deps loop extended with `sudo`, `df`, `mkdir`, `rmdir` (4 entries). All four were previously assumed-present at use sites or guarded one-off (`sudo`: 153 uses, 10 inline `command -q sudo` guards; `df`: 3 uses behind a separate BSD-vs-GNU preflight at script load; `mkdir`/`rmdir`: 8/9 uses, no inline guard). Now centralised in the same coreutils block as `cat`/`cut`/`mv`/`rm`/`tee`. `_ry_check_deps` "missing" failure path is exercised before any `_run` call site.
+  * release: patch version bump `4.6.1` → `4.6.2` (script header line 2 + `set -g VERSION` + README badge).
+
 v4.6.1 - 2026-05-08
 -------------------
 

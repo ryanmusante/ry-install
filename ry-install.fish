@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.1 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.2 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.1"
+set -g VERSION "4.6.2"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -29,6 +29,7 @@ set -g EXIT_DRIFT 10
 # internal-only sentinels — squashed to EXIT_PREFLIGHT at consumer site
 set -g EXIT_GEN_NOFN 11
 set -g EXIT_GEN_NOUUID 12
+set -g EXIT_GEN_SYSCTL 13
 set -g _RY_SECRET_FLAGS --passphrase --password --token --key --secret --api-key --apikey --psk --wpa-psk --private-key --auth --bearer --cookie --client-secret --credential
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g _MY_UID (id -u)
@@ -74,7 +75,7 @@ See README.md for full reference.
 "
 end
 
-set -l _early_cleanup _RY_INSTALL_LOADED _RY_INSTALL_SOURCED _RY_PRE_GLOBALS _RY_INSTALL_BAILING _RY_INSTALL_LAST_EXIT VERSION EXIT_OK EXIT_FAIL EXIT_USAGE EXIT_PREFLIGHT EXIT_BOOT_CRIT EXIT_LOCK EXIT_DRIFT EXIT_GEN_NOFN EXIT_GEN_NOUUID _RY_SECRET_FLAGS _RY_RUN_TIMEOUT_DEFAULT _MY_UID
+set -l _early_cleanup _RY_INSTALL_LOADED _RY_INSTALL_SOURCED _RY_PRE_GLOBALS _RY_INSTALL_BAILING _RY_INSTALL_LAST_EXIT VERSION EXIT_OK EXIT_FAIL EXIT_USAGE EXIT_PREFLIGHT EXIT_BOOT_CRIT EXIT_LOCK EXIT_DRIFT EXIT_GEN_NOFN EXIT_GEN_NOUUID EXIT_GEN_SYSCTL _RY_SECRET_FLAGS _RY_RUN_TIMEOUT_DEFAULT _MY_UID
 for _early_arg in $argv
     switch "$_early_arg"
         case -h --help
@@ -957,7 +958,7 @@ function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Embedded c
     end
     if test $_printed -ne (count $SYSCTL_VALUES)
         functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES)
-        return 13
+        return $EXIT_GEN_SYSCTL
     end
 end
 
@@ -1576,7 +1577,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
                stat date curl timeout mktemp awk head tail cut sed find \
                grep sort cat printf chmod chown mv rm tee ip getent \
-               realpath basename dirname id flock bootctl
+               realpath basename dirname id flock bootctl sudo df mkdir rmdir
         command -q $cmd; or set -a missing $cmd
     end
     test (count $missing) -gt 0; and _err "missing: $missing"; and return 1

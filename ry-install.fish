@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.9 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.10 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.9"
+set -g VERSION "4.6.10"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -2072,7 +2072,13 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
             return 1
         end
     else
-        if not _run mkdir -p -- "$dir"
+        # Tighten umask for user-scope mkdir so newly-created intermediate dirs are 0700; counters umask 002 envs (USERGROUPS_ENAB) where mkdir -p would otherwise yield 0775 and trip _awf_validate_parent.
+        set -l _prev_umask (umask)
+        umask 0077
+        set -l _mkdir_rc 0
+        _run mkdir -p -- "$dir"; or set _mkdir_rc 1
+        umask $_prev_umask
+        if test $_mkdir_rc -ne 0
             _fail "Cannot create directory: $dir"
             return 1
         end

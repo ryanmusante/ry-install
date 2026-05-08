@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.6.9-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.6.10-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -323,7 +323,7 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 
 ## Managed Files
 
-15 files deployed via atomic writes (tmp → symlink-check → chmod → mv).
+15 files deployed via atomic writes (tmp → symlink-check → chmod → `mv -T`).
 
 <a id="managed-files-list"></a>
 <details>
@@ -357,8 +357,8 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → post-mktemp symlink check → chmod → mv (same FS); parent dir must be root- or self-owned, not symlinked, not group/world-writable |
-| Permissions | System 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600 |
+| Atomic writes | tmp → post-mktemp symlink check → chmod → `mv -T` (same FS, refuses target-as-directory); parent dir must be root- or self-owned, not symlinked, not group/world-writable |
+| Permissions | System 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600. User-scope `mkdir -p` runs under `umask 0077` so newly-created intermediate dirs are 0700 (counters umask 002 / `USERGROUPS_ENAB` envs) |
 | fstab | Idempotent; `findmnt --verify` before write; symlinked fstab rejected; **no backup — snapshot first** |
 | Boot rebuild gate | `mkinitcpio -P` refuses to run when package install or boot-critical config deploy failed (`_RY_BOOT_TAINTED`); service-runtime failures do not gate. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1` |
 | Boot-wipe gate | `SDBOOT_REMOVE_EXISTING=yes` auto-acks when every `loader/entries/*.conf` matches a `vmlinuz-*` in the ESP (sdboot-manage will regenerate them). Foreign entries (`windows.conf`, `rescue.conf`, custom kernels) preserve the refusal. Override: `RY_INSTALL_CONFIRM_BOOT_WIPE=1`. Marker file at `~/ry-install/.boot-wipe-acknowledged` records the entry-set hash on first successful run. |

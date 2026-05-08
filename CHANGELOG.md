@@ -5,6 +5,14 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.6.11 - 2026-05-08
+--------------------
+
+  * pkg: 8 read-only `pacman -Q*` / `-T` / `-Qi` invocations (`_should_skip_iwd`, `_verify_static_system`, `_verify_static_packages`, `_vrs_vulkan`, `_install_packages`, `_csp_remove_pkgs`, `_configure_services_pkg_remove`, `_if_nm_restart`) gain `command` prefix — shadow-immunity for users with autoloaded `~/.config/fish/functions/pacman.fish`; rest of script already uses `command pacman` / `sudo -n pacman` consistently.
+  * keepalive: `_start_sudo_keepalive` child loop drops `2>/dev/null` on the breaking `sudo -n -v` so cred-expiry stderr lands in `SUDO_KEEPALIVE_ERR`; `_check_sudo_keepalive` now surfaces the specific reason instead of a generic warn. Successful refreshes remain silent.
+  * style: `_ry_show_help` fallback comment annotates lockstep with `$PROFILE_DESC` (L686) and `$_RY_MANAGED_FILE_COUNT` (L706) — drift between hardcoded fallbacks and runtime globals would silently desync early-peek vs post-argparse `-h` output.
+  * release: 4.6.10 → 4.6.11.
+
 v4.6.10 - 2026-05-08
 --------------------
 

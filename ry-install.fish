@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.10 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.11 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.10"
+set -g VERSION "4.6.11"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -35,7 +35,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g _MY_UID (id -u)
 
 function _ry_show_help --description "Display usage information and available subcommands"
-    # fallback for unset _RY_MANAGED_FILE_COUNT
+    # Fallback constants — KEEP IN SYNC with the runtime globals at L686 (PROFILE_DESC) and L706 ($_RY_MANAGED_FILE_COUNT). Used only when early-peek `-h`/`--help` runs before the GTR9_PRO defaults block has loaded; drift desyncs early-peek vs post-argparse help output.
     set -l _file_count 15
     set -q _RY_MANAGED_FILE_COUNT; and test -n "$_RY_MANAGED_FILE_COUNT"; and set _file_count $_RY_MANAGED_FILE_COUNT
     set -l _profile_desc "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
@@ -1135,7 +1135,7 @@ end
 function _should_skip_iwd --argument-names dst --description "True if dst is iwd/NM-related and iwd is not installed (memoized)"
     string match -q '*/NetworkManager/*nm.conf' -- "$dst"; or string match -q '*/iwd/*' -- "$dst"; or return 1
     if not set -q _RY_SKIP_IWD
-        if command -q pacman; and pacman -Qi iwd >/dev/null 2>&1
+        if command -q pacman; and command pacman -Qi iwd >/dev/null 2>&1
             set -g _RY_SKIP_IWD false
         else
             set -g _RY_SKIP_IWD true
@@ -2309,7 +2309,7 @@ end
 function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, coredump, iwd, NM, drirc, sysctl"
     # Pre-compute iwd state once
     set -l _skip_iwd false
-    not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1; and set _skip_iwd true
+    not command -q pacman; or not command pacman -Qi iwd >/dev/null 2>&1; and set _skip_iwd true
     _echo "SYSTEM CONFIGURATION"
     _echo
     _vss_ntsync_modules
@@ -2401,7 +2401,7 @@ function _verify_static_packages --description "Verify PKGS_ADD, AUR_PKGS, PKGS_
     _echo
     set -l _installed_pkgs
     if command -q pacman
-        set _installed_pkgs (pacman -Qq 2>/dev/null)
+        set _installed_pkgs (command pacman -Qq 2>/dev/null)
     else
         _warn "  pacman not found, skipping package verification"
     end
@@ -3400,7 +3400,7 @@ function _vrs_vulkan --description "Runtime session check: Vulkan driver package
     end
     # single pacman -Qq replaces N forks of pacman -Q (one per pkg).
     set -l _vk_installed
-    command -q pacman; and set _vk_installed (pacman -Qq 2>/dev/null)
+    command -q pacman; and set _vk_installed (command pacman -Qq 2>/dev/null)
     set -l _vk_missing 0
     for _vk_pkg in $EXPECTED_VULKAN_PKGS
         if contains -- "$_vk_pkg" $_vk_installed
@@ -3530,7 +3530,7 @@ end
 
 function _start_sudo_keepalive --description "Launch background sudo credential refresh loop tied to LOCK_DIR inode. Child stderr captured to a tracked tmpfile so _check_sudo_keepalive can surface premature-exit reasons."
     set -l my_pid $fish_pid
-    set -l _ka_script (string join \n 'set -l _start_inode (command stat -c %i -- "$argv[2]" 2>/dev/null); or exit 0' 'while command kill -0 -- $argv[1] 2>/dev/null; and test -d "$argv[2]"' '    test "$_start_inode" = (command stat -c %i -- "$argv[2]" 2>/dev/null); or break' '    command sudo -n -v 2>/dev/null; or break' '    command sleep $argv[3] 2>/dev/null' 'end' | string collect)
+    set -l _ka_script (string join \n 'set -l _start_inode (command stat -c %i -- "$argv[2]" 2>/dev/null); or exit 0' 'while command kill -0 -- $argv[1] 2>/dev/null; and test -d "$argv[2]"' '    test "$_start_inode" = (command stat -c %i -- "$argv[2]" 2>/dev/null); or break' '    command sudo -n -v; or break' '    command sleep $argv[3] 2>/dev/null' 'end' | string collect)
     set -g SUDO_KEEPALIVE_ERR (mktemp -t ry-ka-err.XXXXXX 2>/dev/null; or echo /dev/null)
     test "$SUDO_KEEPALIVE_ERR" != /dev/null; and _track_tmpfile "$SUDO_KEEPALIVE_ERR"
     env _RY_NO_LOG=1 fish --no-config -c "$_ka_script" -- "$my_pid" "$LOCK_DIR" "$SUDO_KEEPALIVE_INTERVAL" </dev/null >/dev/null 2>"$SUDO_KEEPALIVE_ERR" &
@@ -3749,7 +3749,7 @@ function _install_packages --description "Install managed packages via pacman -S
             set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; set _fn_err true
         end
         _info "Verifying package installation..."
-        set -l missing_pkgs (pacman -T -- $pkgs_to_install 2>/dev/null)
+        set -l missing_pkgs (command pacman -T -- $pkgs_to_install 2>/dev/null)
         if test (count $missing_pkgs) -gt 0
             _err "Missing packages: $missing_pkgs"
             _warn "  Install manually: sudo pacman -S --needed $missing_pkgs"
@@ -3975,7 +3975,7 @@ function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on
     end
     _warn "Batch removal failed, trying individually..."
     _log "PKG_REMOVE_BATCH_FAIL: $argv"
-    set -l _retry_installed (pacman -Qq 2>/dev/null)
+    set -l _retry_installed (command pacman -Qq 2>/dev/null)
     for pkg in $argv
         contains -- "$pkg" $_retry_installed; or continue
         if not _run sudo -n pacman -Rns --noconfirm -- "$pkg"
@@ -3991,7 +3991,7 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
         _warn "pacman not found, skipping PKGS_DEL removal"; return 0
     end
     set -l to_del
-    set -l _del_installed (pacman -Qq 2>/dev/null)
+    set -l _del_installed (command pacman -Qq 2>/dev/null)
     for pkg in $PKGS_DEL
         contains -- "$pkg" $_del_installed; or continue
         for _emit in (_csp_filter_rdeps "$pkg")
@@ -4499,7 +4499,7 @@ function _if_nm_restart --description "Restart NetworkManager when iwd backend s
         _info "iwd/NetworkManager not managed — skipping NM restart"
         return 0
     end
-    if not command -q pacman; or not pacman -Qi iwd >/dev/null 2>&1
+    if not command -q pacman; or not command pacman -Qi iwd >/dev/null 2>&1
         _warn "iwd configs deployed but iwd package is not installed"
         set -g INSTALL_HAD_ERRORS true
         return 0

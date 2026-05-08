@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.6.8-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.6.9-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -145,7 +145,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | **Preflight** | Validate prerequisites, acquire lock, validate runtime |
 | **Packages** | `pacman -Syu --needed`; opt-in `-Sy` via `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1`; AUR via paru |
 | **Configuration** | Deploy all 15 embedded config files (atomic writes; system + service units + user) |
-| **Services** | `daemon-reload`, enable system units (cpupower-epp.service, fstrim.timer, NM-dispatcher), mask 10 power-management units, enable user ssh-agent.service |
+| **Services** | `daemon-reload`, enable system units (cpupower-epp.service, fstrim.timer, NM-dispatcher), mask 11 desktop/power units (5 sleep targets + 6 service/socket masks; `lvm2-monitor` auto-skipped when LVM detected), enable user ssh-agent.service |
 | **Boot** | Rebuild initramfs (gated on no-prior-errors), update systemd-boot entries |
 | **Finalize** | Cache cleanup, NM restart (deferred on active WiFi) |
 

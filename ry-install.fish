@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.8 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.9 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.8"
+set -g VERSION "4.6.9"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -209,11 +209,7 @@ umask $_prev_umask
 not test -f "$LOG_FILE"; and echo "[ERR] Failed to create log file: $LOG_FILE" >&2; and _ry_exit $EXIT_PREFLIGHT
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g INSTALL_HAD_ERRORS false
-# _RY_BOOT_TAINTED: separate from INSTALL_HAD_ERRORS — only set true by failures that mean
-# the on-disk package state or boot-critical configs may be inconsistent with the embedded
-# /etc/mkinitcpio.conf / /etc/kernel/cmdline / /etc/sdboot-manage.conf. Service-runtime
-# failures (e.g. systemctl --now start fails because a unit's runtime config is invalid)
-# do NOT taint boot — they're orthogonal to initramfs rebuild safety.
+# _RY_BOOT_TAINTED: only set true by failures that mean on-disk pkg state or boot-critical configs may be inconsistent with embedded mkinitcpio.conf/cmdline/sdboot-manage.conf; service-runtime failures are orthogonal to initramfs rebuild safety.
 set -g _RY_BOOT_TAINTED false
 set -g _RY_BOOT_CRITICAL_DSTS \
     "/boot/loader/loader.conf" \
@@ -445,7 +441,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock; rc=0 ac
         _pre_dispatch_log_cleanup
         return 1
     end
-    if not command mv -f -- "$_pid_tmp" "$LOCK_FILE" 2>/dev/null
+    if not command mv -Tf -- "$_pid_tmp" "$LOCK_FILE" 2>/dev/null
         command rm -f -- "$_pid_tmp" 2>/dev/null
         command rmdir -- "$LOCK_DIR" 2>/dev/null
         echo "[ERR] Failed to install lock pid file: $LOCK_FILE" >&2
@@ -459,7 +455,7 @@ end
 
 function _reclaim_stale_lock --description "Stale-lock reclaim: /proc/<pid>/comm liveness probe + flock(1) atomic reclaim. rc=0 reclaimed, rc=1 contention/hard error"
     set -l old_pid (command cat -- "$LOCK_FILE" 2>/dev/null)
-    if test -n "$old_pid"; and string match -qr '^\d+$' -- "$old_pid"; and kill -0 -- "$old_pid" 2>/dev/null
+    if test -n "$old_pid"; and string match -qr '^\d+$' -- "$old_pid"; and test -d /proc/$old_pid
         set -l _old_comm (command cat -- /proc/$old_pid/comm 2>/dev/null | string trim --)
         if test "$_old_comm" = fish
             echo "[ERR] Another ry-install instance is running (PID $old_pid)" >&2
@@ -1359,9 +1355,7 @@ function _progress_init --description "Open scroll region; draw initial bar"
     tput cup 0 0 >/dev/null 2>&1; or return 0
     set -g _PROG_PINNED true
     set -g _PROG_ROWS $rows
-    # DECSTBM (CSI Ps;Ps r) homes the cursor to (1,1) as a side effect; explicitly position
-    # cursor at the bottom of the scroll region so subsequent output (e.g. the sudo password
-    # prompt in _install_preflight) appears just above the pinned bar instead of at the top.
+    # DECSTBM homes cursor to (1,1); reposition to bottom of scroll region so subsequent output (e.g. sudo prompt) appears just above the pinned bar.
     printf '\e[1;%dr\e[%d;1H' (math $_PROG_ROWS - 1) (math $_PROG_ROWS - 1) >&2
     _progress_redraw "" 0
 end
@@ -1422,8 +1416,7 @@ function _progress_on_winch --on-signal WINCH --description "Re-anchor progress 
     string match -qr '^\d+$' -- "$_new_rows"; or return 0
     test "$_new_rows" -lt 10; and return 0
     set -g _PROG_ROWS $_new_rows
-    # DECSTBM homes the cursor; bracket with DECSC (\e7) / DECRC (\e8) so output streaming
-    # mid-install isn't interrupted by a cursor jump to (1,1) on terminal resize.
+    # DECSTBM homes cursor; bracket with DECSC/DECRC so mid-install streaming isn't interrupted by a jump to (1,1) on resize.
     printf '\e7\e[1;%dr\e8' (math $_PROG_ROWS - 1) >&2
     _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
 end
@@ -1736,8 +1729,7 @@ function _ry_check_kernel_version --description "Verify running kernel version m
         case '*'
             _warn "Kernel $kver: ntsync unknown state '$_ns'"
     end
-    # Per-installed-kernel ntsync state (advisory) — warns if any non-running
-    # kernel ≥6.14 (e.g. linux-cachyos-lts alongside linux-cachyos) lacks ntsync.
+    # Per-installed-kernel ntsync (advisory): warns if any non-running kernel ≥6.14 (e.g. linux-cachyos-lts) lacks ntsync.
     _ntsync_check_installed_kernels
     if test "$major" -eq 6; and test "$minor" -eq 19
         test "$kver_patch" = 0; and _warn "Kernel 6.19.0: black screen regression on Strix Halo (CachyOS #23042)"; and _warn "  Recommend: downgrade to 6.18.x or upgrade to 6.19.1+"
@@ -2060,7 +2052,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
         _err "sudo credential lapsed before atomic mv of $dst"
         _rm_tmp "$tmpfile" $use_sudo; return $EXIT_BOOT_CRIT
     end
-    if not _run $_sp mv -- "$tmpfile" "$dst"
+    if not _run $_sp mv -T -- "$tmpfile" "$dst"
         _rm_tmp "$tmpfile" $use_sudo; _fail "→ $dst (atomic move failed)"; return 1
     end
     _untrack_tmpfile "$tmpfile"
@@ -2563,18 +2555,25 @@ function _check_phase_files --description "--check phase: file content hash comp
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         _should_skip_iwd "$dst"; and continue
         set -l expected (_ry_content_bytes "$dst")
-        set -l actual (_installed_bytes "$dst")
         if test -z "$expected"
             _log "CHECK_PREFLIGHT: generator failed for $dst (rc=EXIT_GEN_NOFN/NOUUID)"
             return $EXIT_PREFLIGHT
         end
-        if test -z "$actual"
-            if _is_system_dst "$dst"
-                _log "CHECK_PREFLIGHT: cannot read $dst (sudo unavailable?)"
+        set -l actual (_installed_bytes "$dst")
+        set -l _ib_rc $status
+        switch $_ib_rc
+            case 0
+                # readable; fall through
+            case 1
+                # missing or unreadable → drift
+                set -g _RY_CHECK_DRIFT 1
+                continue
+            case 2
+                _log "CHECK_PREFLIGHT: sudo lapse reading $dst"
                 return $EXIT_PREFLIGHT
-            end
-            set -g _RY_CHECK_DRIFT 1
-            continue
+            case '*'
+                _log "CHECK_PREFLIGHT: _installed_bytes returned unexpected rc=$_ib_rc for $dst"
+                return $EXIT_PREFLIGHT
         end
         test "$expected" = "$actual"; or set -g _RY_CHECK_DRIFT 1
         set -g _RY_CHECK_FILES_CHECKED (math $_RY_CHECK_FILES_CHECKED + 1)
@@ -3621,7 +3620,7 @@ function _mkinitcpio_revert --argument-names backup_bytes --description "Restore
         _log "MKINITCPIO_REVERT_FAIL: chown failed"
         return 1
     end
-    if not sudo -n mv -- "$_mki_tmp" /etc/mkinitcpio.conf 2>/dev/null
+    if not sudo -n mv -T -- "$_mki_tmp" /etc/mkinitcpio.conf 2>/dev/null
         _rm_tmp "$_mki_tmp" true
         _err "  /etc/mkinitcpio.conf revert failed at atomic mv — current conf may reference uninstalled modules"
         _log "MKINITCPIO_REVERT_FAIL: mv failed"
@@ -3667,7 +3666,11 @@ function _ip_pacman_invoke --description "Run pacman -Syu (or -Sy via RY_INSTALL
     if not _run sudo -n pacman $_pacman_first -- $argv
         _warn "Package installation failed, retrying with fresh sync (first-pass stderr in JSONL log)..."
         if not _run sudo -n pacman $_pacman_retry -- $argv
-            _err "Package installation failed after retry"
+            if test -f /var/lib/pacman/db.lck
+                _err "Pacman database became locked during install — aborting"
+            else
+                _err "Package installation failed after retry"
+            end
             test "$_RY_MKI_HAD_ORIG" = true; and test -n "$_RY_MKI_BACKUP"; and _mkinitcpio_revert "$_RY_MKI_BACKUP"
             return 1
         end
@@ -3766,12 +3769,18 @@ function _install_aur_packages --description "Install AUR packages via paru"
     end
     set -l _had_fail false
     if not _run paru -S --needed --noconfirm -- $AUR_PKGS
-        _warn "AUR batch install failed — retrying per-package to identify failures"
-        for pkg in $AUR_PKGS
-            if not _run paru -S --needed --noconfirm -- "$pkg"
-                _warn "AUR install failed: $pkg"
-                set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
-                set _had_fail true
+        if test (count $AUR_PKGS) -le 1
+            _warn "AUR install failed: $AUR_PKGS"
+            set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
+            set _had_fail true
+        else
+            _warn "AUR batch install failed — retrying per-package to identify failures"
+            for pkg in $AUR_PKGS
+                if not _run paru -S --needed --noconfirm -- "$pkg"
+                    _warn "AUR install failed: $pkg"
+                    set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
+                    set _had_fail true
+                end
             end
         end
     end
@@ -3872,7 +3881,7 @@ function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite: mktemp 
             return 1
         end
     end
-    if not sudo -n mv -- "$tmpfstab" /etc/fstab
+    if not sudo -n mv -T -- "$tmpfstab" /etc/fstab
         _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: atomic move failed"; return 1
     end
     _untrack_tmpfile "$tmpfstab"
@@ -3951,6 +3960,12 @@ function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on
     end
     if _run sudo -n pacman -Rns --noconfirm -- $argv
         _log "PKG_REMOVE_BATCH_OK: $argv"; return 0
+    end
+    if test -f /var/lib/pacman/db.lck
+        _err "Pacman database became locked during removal — aborting"
+        set -g INSTALL_HAD_ERRORS true
+        _log "PKG_REMOVE_BATCH_FAIL_DBLOCK: $argv"
+        return 0
     end
     _warn "Batch removal failed, trying individually..."
     _log "PKG_REMOVE_BATCH_FAIL: $argv"
@@ -4032,8 +4047,7 @@ function _cse_batch_enable --description "Batch enable system units; falls back 
         if _run sudo -n systemctl enable --now -- $_unit
             _ok "Enabled: $_unit"
         else
-            # Distinguish "enable succeeded but start (--now) failed" from "enable failed".
-            # systemctl enable --now returns non-zero in both cases; probe is-enabled to split.
+            # Split "enable ok, --now start failed" from "enable failed" via is-enabled probe (systemctl returns nonzero for both).
             set -l _enabled_state (systemctl is-enabled -- $_unit 2>/dev/null | string trim)
             if test "$_enabled_state" = enabled; or test "$_enabled_state" = enabled-runtime; or test "$_enabled_state" = alias; or test "$_enabled_state" = static
                 _warn "Enabled but failed to start: $_unit (will activate on next boot if config is fixed)"
@@ -4114,14 +4128,14 @@ function _resolve_esp --description "Resolve EFI system partition path (cached);
     echo "$_p"
 end
 
-function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, else ESP) per Boot Loader Specification (cached); falls back to ESP. BLS Type #1 entries' linux=/initrd= paths are anchored here, and \$BOOT/loader/entries/ holds the .conf files."
+function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, else ESP) per BLS (cached); falls back to ESP."
     if set -q _RY_BOOT_PATH; and test -n "$_RY_BOOT_PATH"
         echo "$_RY_BOOT_PATH"
         return 0
     end
     set -l _p ""
     command -q bootctl; and set _p (sudo -n bootctl -x 2>/dev/null | string trim --)
-    # bootctl -x prints \$BOOT (XBOOTLDR if separate, else ESP). Fall back to ESP — they collapse when no XBOOTLDR partition is present, which is the common case (systemd-boot directly on ESP at /boot).
+    # bootctl -x prints $BOOT; falls back to ESP since the two collapse when no XBOOTLDR partition exists.
     if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
         set _p (_resolve_esp)
     end
@@ -4194,7 +4208,7 @@ function _pbs_check_initrds --argument-names boot --description "_preflight_boot
     echo $errors
 end
 
-function _pbs_entry_has_valid_kernel --argument-names boot conf --description "Probe a single loader-entry .conf for a kernel image inside \$BOOT. Per BLS Type #1, linux= is anchored on \$BOOT regardless of leading slash (the slash is partition-relative, not system-absolute). rc=0 valid, rc=1 invalid/missing/escapes."
+function _pbs_entry_has_valid_kernel --argument-names boot conf --description "Probe a single loader-entry .conf for a kernel image inside \$BOOT (BLS Type #1 anchoring); rc=0 valid, rc=1 invalid/missing/escapes"
     set -l linux_line (sudo -n grep -m1 '^linux ' -- "$conf" 2>/dev/null | string replace -r '^linux\s+' '' | string trim --)
     test -z "$linux_line"; and return 1
     # BLS Type #1: linux= is anchored on $BOOT regardless of leading slash. Strip any leading slashes and rejoin under $boot.
@@ -4458,7 +4472,7 @@ function _if_write_wipe_marker --description "Atomically write boot-wipe marker 
         _rm_tmp "$_marker_tmp" false; _warn "Failed to write boot-wipe marker tmpfile"; return 0
     end
     command chmod -- 600 "$_marker_tmp" 2>/dev/null
-    if command mv -f -- "$_marker_tmp" "$_wipe_marker" 2>/dev/null
+    if command mv -Tf -- "$_marker_tmp" "$_wipe_marker" 2>/dev/null
         _untrack_tmpfile "$_marker_tmp"
         _log "BOOT_WIPE_MARKER_UPDATED: $_wipe_marker count=$_post_count hash=$_post_hash"
     else
@@ -4501,7 +4515,7 @@ end
 
 function _install_finalize --description "Run post-install verification, cleanup, and summary"
     _progress Finalize
-    test "$SDBOOT_REMOVE_EXISTING" = yes; and _if_write_wipe_marker
+    test "$SDBOOT_REMOVE_EXISTING" = yes; and test "$INSTALL_HAD_ERRORS" = false; and _if_write_wipe_marker
     not _run sudo -n systemctl daemon-reload; and _warn "Systemctl daemon-reload failed"
     not _run systemctl --user daemon-reload; and _warn "Systemctl --user daemon-reload failed"
     _if_trim_pacman_cache
@@ -4959,9 +4973,7 @@ end
 set -l _log_base_rot (dirname -- "$LOG_DIR")
 set -l _rot_rows (command find "$_log_base_rot" -maxdepth 2 \( -name '*.jsonl' -o -name '*.log' \) -type f -not -samefile "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -zn | string split0)
 set -l _rot_ps $pipestatus
-# Only `find` failure is a real error: `sort -zn` and `string split0` both return rc=1 on
-# empty input (no logs to rotate) which is the steady-state benign case. Treating those
-# as failures was the v4.6.4 false-positive in LOG_ROTATION_SKIP (pipestatus=0,0,1).
+# Only find failure is a real error: sort -zn returns 0 on empty; string split0 returns 1 on empty (benign). Inspect pipestatus[1] only.
 set -l _rot_pipe_ok true
 test "$_rot_ps[1]" = 0; or set _rot_pipe_ok false
 set -l _rot_count (count $_rot_rows)

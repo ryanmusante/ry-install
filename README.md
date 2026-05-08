@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.6.5-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.6.7-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -292,19 +292,22 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 > [!CAUTION]
 > Set `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` to switch to `pacman -Sy --needed` (refresh+install only, no system upgrade). Violates Arch policy — accept the dependency-version-skew risk.
 
+> [!NOTE]
+> Removal of a `PKGS_DEL` member is skipped when an installed package outside `PKGS_DEL` reverse-depends on it. Set `RY_INSTALL_PKG_REMOVE_CASCADE=1` to cascade — both the target and its installed reverse deps are added to the removal set in a single `pacman -Rns` invocation. Inspect the dep chain first: `pactree -ru <pkg>`.
+
 | Action | Count | Packages |
 |---|---|---|
 | **Install** | 13 | mkinitcpio-firmware, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, mesa, lib32-mesa, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
-| **Remove** | 8 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, ufw, octopi, micro, cachyos-micro-settings, btop |
+| **Remove** | 7 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, octopi, micro, cachyos-micro-settings, btop |
 | **AUR** | 1 | mt76-mt7925-dkms (paru required; soft-fail if absent) |
 
 ### Masked Services
 
-10 units masked — **review before laptop use:**
+11 units masked — **review before laptop use:**
 
 <a id="masked-services-list"></a>
 <details>
-<summary><b>Show masked services (10)</b></summary>
+<summary><b>Show masked services (11)</b></summary>
 
 | Service | Reason |
 |---|---|
@@ -313,6 +316,7 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 | `lvm2-monitor.service` | Skipped if LVM detected |
 | `NetworkManager-wait-online.service` | Unnecessary boot delay |
 | `systemd-coredump.socket` | Eliminates spawn-and-discard on Wine crashes |
+| `ufw.service` | Firewall not used on this profile (mask retained even if `ufw` package is installed; mask survives package install/removal) |
 | `sleep.target` / `suspend.target` / `hibernate.target` / `hybrid-sleep.target` / `suspend-then-hibernate.target` | Desktop — no power management |
 
 </details>
@@ -357,6 +361,8 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Permissions | System 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600 |
 | fstab | Idempotent; `findmnt --verify` before write; symlinked fstab rejected; **no backup — snapshot first** |
 | Boot rebuild gate | `mkinitcpio -P` refuses to run when package install or boot-critical config deploy failed (`_RY_BOOT_TAINTED`); service-runtime failures do not gate. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1` |
+| Boot-wipe gate | `SDBOOT_REMOVE_EXISTING=yes` auto-acks when every `loader/entries/*.conf` matches a `vmlinuz-*` in the ESP (sdboot-manage will regenerate them). Foreign entries (`windows.conf`, `rescue.conf`, custom kernels) preserve the refusal. Override: `RY_INSTALL_CONFIRM_BOOT_WIPE=1`. Marker file at `~/ry-install/.boot-wipe-acknowledged` records the entry-set hash on first successful run. |
+| Pacnew handling | `.pacnew` at managed destinations is silently resolved (re-deploy embedded content + `rm`); embedded content is the source of truth for managed paths. `.pacsave` continues to warn (out-of-scope for auto-resolve). |
 | KERNEL_PARAMS hygiene | Preflight rejects whitespace or `"` in any param |
 | Sysctl invariant | Generator returns rc 13 if printed line count ≠ `count $SYSCTL_VALUES` |
 | Subprocess control | `_run` uses `timeout --foreground`; `_do_cleanup` reaps via `pkill -P` before keepalive teardown |
@@ -395,9 +401,10 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Variable | Default | Purpose |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). `0` disables. |
-| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Literal `=1` to ack first boot-entry wipe (rejects `01`, `true`, `yes`, etc.). Re-prompts on entry-set hash change. |
+| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Literal `=1` to ack boot-entry wipe (rejects `01`, `true`, `yes`, etc.). Override only — auto-ack already passes when every existing entry maps to a `vmlinuz-*` in the ESP. Re-prompts on entry-set hash change. |
 | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | Literal `=1` switches Packages phase to `pacman -Sy --needed` (no system upgrade). Violates Arch policy. |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | Literal `=1` required to bypass torn-package gate. Recovery only. |
+| `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | Literal `=1` cascades installed reverse deps into the removal set when a `PKGS_DEL` package is blocked. Default skips with warn. |
 | `NO_COLOR` | unset | Suppress ANSI color (also auto on `TERM=dumb` / non-TTY). |
 
 > Secret-flag redaction is **case-sensitive lowercase**. Use lowercase flag names with `_run`-piped commands.
@@ -414,7 +421,7 @@ All runtime state under `~/ry-install/`. Logs auto-prune at `MAX_LOGS=50` (oldes
 |---|---|
 | `~/ry-install/logs/YYYY-MM-DD/` | NDJSON logs (`*.jsonl`) |
 | `~/ry-install/.lock/` | Instance guard |
-| `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker (delete to re-prompt) |
+| `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker (entry-set hash; written after every successful rebuild whether ack came from auto / env / marker) |
 
 NDJSON schema: every line is `{"ts":ISO8601,"event":NAME,"data":STR,...}`. Common events: `header`, `footer`, `ok`/`fail`/`warn`/`err`/`info`, `prog_step_start`/`prog_step_end`, `run`, `stderr`, `section`, `bug`. Additional prefix-routed event types (e.g. `BOOT_*`, `CHECK_*`, `MKINITCPIO_*`, `PKG_REMOVE_*`, `SUDO_*`, `VERIFY_*`) follow the same schema.
 
@@ -488,6 +495,8 @@ The pinned bottom-row bar uses DECSTBM scroll-region sequences which mosh does n
 | Sudo cache expired | `sudo -v; and ./ry-install.fish` |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
 | Initramfs rebuild refused | Fix root cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
+| `Foreign entries detected` at boot-wipe gate | Inspect `/boot/loader/entries/*.conf`. If foreign entries (Windows, rescue, custom kernels) are disposable: `RY_INSTALL_CONFIRM_BOOT_WIPE=1 ./ry-install.fish`. To preserve them: keep them out of `loader/entries/` (e.g. relocate to a separate `entries-extra/` directory referenced manually). |
+| `PKGS_DEL` member skipped (reverse deps) | `RY_INSTALL_PKG_REMOVE_CASCADE=1 ./ry-install.fish` cascades the rdeps. Inspect the dep chain first: `pactree -ru <pkg>`. |
 | `Enabled but failed to start: <unit>` | Unit is enabled (next-boot OK); start blocked by missing/invalid runtime config. Diagnose: `systemctl status <unit>; journalctl -u <unit> -b`. |
 
 ## References

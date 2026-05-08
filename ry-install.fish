@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.5 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.7 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.5"
+set -g VERSION "4.6.7"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -66,9 +66,10 @@ EXIT CODES:
   129/130/131/143 signal (HUP/INT/QUIT/TERM) · 134/138/140 signal (ABRT/USR1/USR2) · 141 SIGPIPE
 ENVIRONMENT:
   RY_RUN_TIMEOUT=<seconds>    Wall-clock limit for each _run. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable.
-  RY_INSTALL_CONFIRM_BOOT_WIPE=1    One-time ack for SDBOOT_REMOVE_EXISTING=yes.
+  RY_INSTALL_CONFIRM_BOOT_WIPE=1    One-time ack for SDBOOT_REMOVE_EXISTING=yes (override; auto-ack handles managed-only entry sets).
   RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1    Switch Packages phase from `pacman -Syu --needed` (Arch-recommended) to `pacman -Sy --needed` (install-only; partial-upgrade risk).
   RY_INSTALL_FORCE_BOOT_REBUILD=1    Bypass torn-package gate (recovery only; literal '1' required).
+  RY_INSTALL_PKG_REMOVE_CASCADE=1    Cascade-remove installed reverse deps when removing PKGS_DEL packages.
   NO_COLOR    Suppress ANSI color when set to any non-empty value (also auto on TERM=dumb / non-TTY stderr).
 Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl
 See README.md for full reference.
@@ -812,7 +813,6 @@ set -g PKGS_DEL \
     plymouth \
     cachyos-plymouth-bootanimation \
     cachyos-plymouth-theme \
-    ufw \
     octopi \
     micro \
     cachyos-micro-settings \
@@ -826,6 +826,7 @@ set -g MASK \
     lvm2-monitor.service \
     NetworkManager-wait-online.service \
     systemd-coredump.socket \
+    ufw.service \
     sleep.target \
     suspend.target \
     hibernate.target \
@@ -889,7 +890,7 @@ function _ir_precompute_caches --description "Precompute _SYS_TMP_DIRS, _USR_TMP
 end
 
 function _ir_validate_counts --description "Refuse to deploy when KERNEL_PARAMS / LOGIND_IGNORE_KEYS / ENV_VARS / SYSCTL_VALUES / PKGS_ADD / PKGS_DEL / MASK count drift from documented invariants"
-    set -l _expect KERNEL_PARAMS:15 LOGIND_IGNORE_KEYS:9 ENV_VARS:11 SYSCTL_VALUES:16 PKGS_ADD:13 PKGS_DEL:8 AUR_PKGS:1 MASK:10
+    set -l _expect KERNEL_PARAMS:15 LOGIND_IGNORE_KEYS:9 ENV_VARS:11 SYSCTL_VALUES:16 PKGS_ADD:13 PKGS_DEL:7 AUR_PKGS:1 MASK:11
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv")
         set -l _name $_parts[1]
@@ -3674,20 +3675,48 @@ function _ip_pacman_invoke --description "Run pacman -Syu (or -Sy via RY_INSTALL
     return 0
 end
 
-function _ip_scan_pacnew --description "Scan managed destinations for .pacnew/.pacsave remnants; warns and logs"
-    set -l _pacnew_found
+function _ip_scan_pacnew --description "Scan managed destinations for .pacnew/.pacsave remnants. .pacnew at managed paths is silently resolved (re-deploy embedded content via _ry_install_file, then rm .pacnew); .pacsave is warned for review."
+    set -l _pacnew_handled
+    set -l _pacnew_failed
+    set -l _pacsave_found
     for _dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
-        for _suffix in .pacnew .pacsave
-            sudo -n test -f "$_dst$_suffix" 2>/dev/null; and set -a _pacnew_found "$_dst$_suffix"
+        if sudo -n test -f "$_dst.pacnew" 2>/dev/null
+            if _ry_install_file "$_dst" true
+                if _run sudo -n rm -f -- "$_dst.pacnew"
+                    set -a _pacnew_handled "$_dst.pacnew"
+                    _log "PACNEW_AUTO_HANDLED: $_dst.pacnew (managed content re-deployed)"
+                else
+                    set -a _pacnew_failed "$_dst.pacnew"
+                    _log "PACNEW_AUTO_HANDLE_RM_FAIL: $_dst.pacnew"
+                end
+            else
+                set -a _pacnew_failed "$_dst.pacnew"
+                _log "PACNEW_AUTO_HANDLE_DEPLOY_FAIL: $_dst"
+            end
+        end
+        sudo -n test -f "$_dst.pacsave" 2>/dev/null; and set -a _pacsave_found "$_dst.pacsave"
+    end
+    if test (count $_pacnew_handled) -gt 0
+        _info "Resolved pacman config remnants at managed destinations:"
+        for _f in $_pacnew_handled
+            _info "  $_f (re-deployed managed content, removed)"
         end
     end
-    test (count $_pacnew_found) -eq 0; and return 0
-    _warn "Pacman config remnants found at managed destinations:"
-    for _f in $_pacnew_found
-        _warn "  $_f"
+    if test (count $_pacnew_failed) -gt 0
+        _warn "Pacman config remnants could not be auto-resolved:"
+        for _f in $_pacnew_failed
+            _warn "  $_f"
+        end
+        _warn "  Review with: sudo pacdiff   (then re-run install to redeploy managed configs)"
     end
-    _warn "  Review with: sudo pacdiff   (then re-run install to redeploy managed configs)"
-    _log "PACNEW_FOUND: $_pacnew_found"
+    if test (count $_pacsave_found) -gt 0
+        _warn "Pacman .pacsave files at managed destinations (package removed but config preserved):"
+        for _f in $_pacsave_found
+            _warn "  $_f"
+        end
+        _warn "  Review with: sudo pacdiff"
+        _log "PACSAVE_FOUND: $_pacsave_found"
+    end
 end
 
 function _install_packages --description "Install managed packages via pacman -Syu"
@@ -3890,7 +3919,7 @@ function _configure_services_resolved_restart --description "Restart systemd-res
     return 0
 end
 
-function _csp_filter_rdeps --argument-names pkg --description "Echo $pkg if removable (no reverse deps outside PKGS_DEL); else empty"
+function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-line: \$pkg if removable; \$pkg + installed reverse deps if RY_INSTALL_PKG_REMOVE_CASCADE=1; nothing if blocked. Reverse deps already in PKGS_DEL are not emitted (their own iteration handles them)."
     if not command -q pactree
         echo "$pkg"; return 0
     end
@@ -3901,7 +3930,14 @@ function _csp_filter_rdeps --argument-names pkg --description "Echo $pkg if remo
         set -a _rdeps "$_r"
     end
     if test (count $_rdeps) -gt 0
+        if test "$RY_INSTALL_PKG_REMOVE_CASCADE" = 1
+            _warn "  $pkg: cascading removal of reverse dependencies: $_rdeps"
+            _log "PKG_REMOVE_CASCADE: pkg=$pkg rdeps=$_rdeps"
+            printf '%s\n' $pkg $_rdeps
+            return 0
+        end
         _warn "  $pkg has reverse dependencies: $_rdeps — skipping"
+        _warn "  To remove anyway (cascade): RY_INSTALL_PKG_REMOVE_CASCADE=1 ./ry-install.fish"
         return 0
     end
     echo "$pkg"
@@ -3928,7 +3964,7 @@ function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on
     end
 end
 
-function _configure_services_pkg_remove --description "Remove PKGS_DEL packages (rdep-aware via pactree). No-op when pacman absent or db locked."
+function _configure_services_pkg_remove --description "Remove PKGS_DEL packages (rdep-aware via pactree). No-op when pacman absent or db locked. With RY_INSTALL_PKG_REMOVE_CASCADE=1, installed reverse deps are appended to the removal set."
     if not command -q pacman
         _warn "pacman not found, skipping PKGS_DEL removal"; return 0
     end
@@ -3936,8 +3972,11 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
     set -l _del_installed (pacman -Qq 2>/dev/null)
     for pkg in $PKGS_DEL
         contains -- "$pkg" $_del_installed; or continue
-        set -l _ok_pkg (_csp_filter_rdeps "$pkg")
-        test -n "$_ok_pkg"; and set -a to_del "$_ok_pkg"
+        for _emit in (_csp_filter_rdeps "$pkg")
+            test -z "$_emit"; and continue
+            contains -- "$_emit" $to_del; and continue
+            set -a to_del "$_emit"
+        end
     end
     if test (count $to_del) -gt 0
         _log "PKG_REMOVE_REQUESTED: $to_del"
@@ -4214,7 +4253,38 @@ function _bwg_eval_marker --argument-names wipe_marker existing_count existing_h
     return 1
 end
 
-function _boot_wipe_gate --argument-names esp wipe_marker --description "Gate for SDBOOT_REMOVE_EXISTING=yes — rc=0 ack, rc=EXIT_PREFLIGHT/EXIT_BOOT_CRIT refusal"
+function _bwg_managed_only --argument-names esp --description "Auto-ack probe: rc=0 if every loader entry matches a name sdboot-manage gen will regenerate from \$esp/vmlinuz-* (i.e. <name>.conf or <name>-fallback.conf), rc=1 otherwise. No-side-effects beyond logging."
+    set -l _entries (sudo -n find "$esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | string split0)
+    set -l _e_ps $pipestatus
+    for _rc in $_e_ps
+        test "$_rc" = 0; or return 1
+    end
+    test (count $_entries) -eq 0; and return 1
+    set -l _vmlinuz (sudo -n find "$esp" -maxdepth 1 -type f -name 'vmlinuz-*' -printf '%f\0' 2>/dev/null | string split0)
+    set -l _v_ps $pipestatus
+    for _rc in $_v_ps
+        test "$_rc" = 0; or return 1
+    end
+    test (count $_vmlinuz) -eq 0; and return 1
+    set -l _kernel_names
+    for _vm in $_vmlinuz
+        set -a _kernel_names (string replace -r '^vmlinuz-' '' -- "$_vm")
+    end
+    set -l _foreign
+    for _e in $_entries
+        set -l _base (string replace -r '\.conf$' '' -- "$_e")
+        set -l _name (string replace -r -- '-fallback$' '' "$_base")
+        contains -- "$_name" $_kernel_names; or set -a _foreign "$_e"
+    end
+    if test (count $_foreign) -gt 0
+        _log "BOOT_WIPE_AUTO_ACK_DECLINE: foreign_entries=$_foreign managed_kernels=$_kernel_names"
+        return 1
+    end
+    _log "BOOT_WIPE_AUTO_ACK: entries=$_entries managed_kernels=$_kernel_names"
+    return 0
+end
+
+function _boot_wipe_gate --argument-names esp wipe_marker --description "Gate for SDBOOT_REMOVE_EXISTING=yes — rc=0 ack, rc=EXIT_PREFLIGHT/EXIT_BOOT_CRIT refusal. Auto-acks when all entries are sdboot-manage-regenerable (<vmlinuz-name>.conf / -fallback.conf)."
     _enum_boot_entries "$esp"
     if test "$_RY_BOOT_PIPE_OK" = false
         _err "Cannot enumerate $esp/loader/entries — refusing wipe gate"
@@ -4225,27 +4295,37 @@ function _boot_wipe_gate --argument-names esp wipe_marker --description "Gate fo
     set -l _existing_entries $_RY_BOOT_COUNT
     set -l _existing_hash $_RY_BOOT_HASH
     set -l _acknowledged false
+    set -l _ack_source ""
     if test "$RY_INSTALL_CONFIRM_BOOT_WIPE" = 1
         set _acknowledged true
+        set _ack_source env
         _log "BOOT_WIPE_ACK: env var RY_INSTALL_CONFIRM_BOOT_WIPE=1 entries=$_existing_entries hash=$_existing_hash"
     else if test -f "$wipe_marker"
         if _bwg_eval_marker "$wipe_marker" "$_existing_entries" "$_existing_hash"
             set _acknowledged true
+            set _ack_source marker
         else
             set -g INSTALL_HAD_ERRORS true
             return $EXIT_BOOT_CRIT
         end
+    else if _bwg_managed_only "$esp"
+        set _acknowledged true
+        set _ack_source auto
     end
     if test "$_acknowledged" = false
         _err "SDBOOT_REMOVE_EXISTING=yes will delete $_existing_entries existing $esp/loader/entries/*.conf file(s)"
-        _err "  Manual entries (rescue, Windows, custom kernels) will be LOST."
+        _err "  Foreign entries detected (not regenerable from $esp/vmlinuz-*) — manual entries (rescue, Windows, custom kernels) will be LOST."
         _err "  To proceed (one-time): RY_INSTALL_CONFIRM_BOOT_WIPE=1 ./ry-install.fish"
         _err "  After the first successful run, marker file $wipe_marker will record the entry-set hash and suppress this gate until the entry set changes."
         set -g INSTALL_HAD_ERRORS true
         return $EXIT_BOOT_CRIT
     end
-    _warn "SDBOOT_REMOVE_EXISTING=yes — all existing $esp/loader/entries/*.conf will be deleted and regenerated."
-    _warn "Manual entries (rescue, Windows, custom kernels) will be LOST."
+    if test "$_ack_source" = auto
+        _info "SDBOOT_REMOVE_EXISTING=yes — $_existing_entries existing $esp/loader/entries/*.conf will be regenerated from $esp/vmlinuz-* (no foreign entries detected)."
+    else
+        _warn "SDBOOT_REMOVE_EXISTING=yes — all existing $esp/loader/entries/*.conf will be deleted and regenerated."
+        _warn "Manual entries (rescue, Windows, custom kernels) will be LOST."
+    end
     return 0
 end
 

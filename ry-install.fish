@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.5.35 (2026-05-07) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.5.36 (2026-05-07) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.5.35"
+set -g VERSION "4.5.36"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -242,6 +242,12 @@ function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_
     else
         printf '%s\n' missing
     end
+    return 0
+end
+
+function _resolve_systemd_ver --description "Cache systemd major version into _RY_SYSTEMD_VER (anchored regex on systemctl --version line 1); empty on parse failure"
+    set -q _RY_SYSTEMD_VER; and return 0
+    set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
     return 0
 end
 
@@ -721,7 +727,6 @@ set -g SYSCTL_VALUES \
     "fs.protected_fifos=2" \
     "fs.protected_regular=2" \
     "vm.compaction_proactiveness=0"
-# PKGS_ADD=14 PKGS_DEL=8 AUR=1 must equal README counts
 set -g PKGS_ADD \
     mkinitcpio-firmware \
     nftables \
@@ -749,7 +754,6 @@ set -g PKGS_DEL \
 # AUR packages — installed via paru (not pacman)
 set -g AUR_PKGS mt76-mt7925-dkms
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
-# MASK=10 must equal README Masked Services count
 set -g MASK \
     ananicy-cpp.service \
     power-profiles-daemon.service \
@@ -818,7 +822,21 @@ function _ir_precompute_caches --description "Precompute _SYS_TMP_DIRS, _USR_TMP
     end
 end
 
-function _init_runtime --description "Cache root UUID, validate hardware sanity, validate timing globals, precompute tmp-dir cache"
+function _ir_validate_counts --description "Refuse to deploy when KERNEL_PARAMS / LOGIND_IGNORE_KEYS / ENV_VARS / SYSCTL_VALUES / PKGS_ADD / PKGS_DEL / MASK count drift from documented invariants"
+    set -l _expect KERNEL_PARAMS:15 LOGIND_IGNORE_KEYS:9 ENV_VARS:13 SYSCTL_VALUES:16 PKGS_ADD:14 PKGS_DEL:8 AUR_PKGS:1 MASK:10
+    for _kv in $_expect
+        set -l _parts (string split -m1 ':' -- "$_kv")
+        set -l _name $_parts[1]
+        set -l _want $_parts[2]
+        set -l _got (count $$_name)
+        if test "$_got" -ne "$_want"
+            _err_loud "$_name count drift: got=$_got expected=$_want — README/script desync, refuse to deploy"
+            _pre_dispatch_exit $EXIT_PREFLIGHT
+        end
+    end
+end
+
+function _init_runtime --description "Cache root UUID, validate hardware sanity, validate timing + count invariants, precompute tmp-dir cache"
     _ir_resolve_root_uuid
     test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
     if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
@@ -826,6 +844,8 @@ function _init_runtime --description "Cache root UUID, validate hardware sanity,
         test -n "$_cpu_model"; and not string match -q -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"; and _warn "Built-in defaults expect $EXPECTED_CPU_MATCH but detected: $_cpu_model"
     end
     _ir_validate_timing
+    _ir_validate_counts
+    test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
     _ir_precompute_caches
     for _kp in $KERNEL_PARAMS
         if string match -qr -- '\s' "$_kp"; or string match -q -- '*"*' "$_kp"
@@ -862,11 +882,7 @@ end
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Embedded content for /etc/systemd/logind.conf.d/99-cachyos-logind.conf"
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
     printf '%s\n' "[Login]"
-    if not set -q _RY_SYSTEMD_VER
-        # anchor 'systemd <major>'
-        set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null \
-            | head -n 1 | string match -rg -- '^systemd (\d+)')
-    end
+    _resolve_systemd_ver
     for key in $LOGIND_IGNORE_KEYS
         if test "$key" = HandleSecureAttentionKey
             test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 256; and continue
@@ -948,7 +964,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     not command -q sudo; and _err "Sudo credential cache failed: sudo not found"; and return 1
     set -l _sudo_err (mktemp -t ry-sudo-err.XXXXXX 2>/dev/null; or echo /dev/null)
     test "$_sudo_err" = /dev/null; and _log "MKTEMP_FAIL: ry-sudo-err — sudo error message will be unavailable"
-    test "$_sudo_err" != /dev/null; and set -ga _TRACKED_TMPFILES "$_sudo_err"
+    _track_tmpfile "$_sudo_err"
     # Probe sudo -n -v first
     sudo -n -v 2>"$_sudo_err"
     set -l _rc $status
@@ -1014,6 +1030,12 @@ function _rm_tmp --argument-names path use_sudo --description "Sudo-aware tmpfil
         command rm -f -- "$path" 2>/dev/null
     end
     _untrack_tmpfile "$path"
+end
+
+function _track_tmpfile --argument-names path --description "Track a tmpfile/dir in _TRACKED_TMPFILES iff non-empty + not /dev/null sentinel; single source of truth for register-after-mktemp idiom"
+    test -n "$path"; or return 0
+    test "$path" = /dev/null; and return 0
+    set -ga _TRACKED_TMPFILES "$path"
 end
 
 function _is_symlink --argument-names path use_sudo --description "Sudo-aware test -L probe"
@@ -1388,15 +1410,14 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     set log_cmd (string replace -ar -- '/tmp/ry-[A-Za-z0-9_.-]+' '/tmp/ry-[REDACTED]' "$log_cmd")
     _log "RUN: $log_cmd"
     set -l _run_dir (mktemp -d -t ry-run.XXXXXX 2>/dev/null)
+    _track_tmpfile "$_run_dir"
     if test -z "$_run_dir"; or not test -d "$_run_dir"
-        # Fail-loud; silent stderr would mask transient
         _log "RUN_ABORT: mktemp -d failed — refusing to execute without stderr capture"
         _err "_run: cannot allocate tmpdir for stdout/stderr capture — aborting command"
         return 1
     end
     set -l stderr_tmp "$_run_dir/stderr"
     set -l stdout_tmp "$_run_dir/stdout"
-    set -ga _TRACKED_TMPFILES "$_run_dir"
     # SECURITY: $argv internal callers only
     set -l _run_timeout (_run_resolve_timeout)
     if test -n "$_run_timeout"; and command -q timeout
@@ -1754,12 +1775,12 @@ function _verify_unit_content --argument-names dst --description "Verify systemd
     set -l _intended_scope system
     string match -q '*/.config/systemd/user/*' -- "$dst"; and set _intended_scope user
     set -l tmp (mktemp --suffix=.service -t ry-val-unit.XXXXXX 2>/dev/null)
+    _track_tmpfile "$tmp"
     test -n "$tmp"; or begin
         _fail "  $dst: mktemp failed"
         return 1
     end
     command chmod -- 600 "$tmp" 2>/dev/null
-    set -ga _TRACKED_TMPFILES "$tmp"
     if not printf '%s\n' $content >"$tmp" 2>/dev/null
         _rm_tmp "$tmp" false
         _fail "  $dst: failed to write unit tmpfile for verification"
@@ -1863,10 +1884,7 @@ function _check_env_ssh_auth_sock --description "Phase 3: environment.d has SSH_
         return 1
     end
     # systemd-env-d-generator(8) ${VAR} expansion requires
-    if not set -q _RY_SYSTEMD_VER
-        # anchored regex
-        set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
-    end
+    _resolve_systemd_ver
     if test -n "$_RY_SYSTEMD_VER"; and test "$_RY_SYSTEMD_VER" -lt 232
         _warn "  $dst: systemd $_RY_SYSTEMD_VER < 232; \${XDG_RUNTIME_DIR} expansion not supported (upgrade systemd or pin SSH_AUTH_SOCK to /run/user/\$UID/ssh-agent.socket)"
     end
@@ -1875,7 +1893,7 @@ end
 
 function _rvc_fish_syntax --argument-names dst --description "Validate fish source via fish --no-execute; rc=0 ok, rc=1 syntax error (logged + previewed)"
     set -l _fish_err_tmp (mktemp -t ry-fish-syntax.XXXXXX 2>/dev/null; or echo /dev/null)
-    test "$_fish_err_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$_fish_err_tmp"
+    _track_tmpfile "$_fish_err_tmp"
     test "$_fish_err_tmp" = /dev/null; and _log "MKTEMP_FAIL: ry-fish-syntax — diagnostic preview unavailable on syntax-check failure"
     printf '%s\n' $argv[2..] | fish --no-execute 2>"$_fish_err_tmp"
     set -l _ps $pipestatus
@@ -1987,8 +2005,8 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     set -l dst_dir (dirname -- "$dst")
     _awf_validate_parent "$dst" "$dst_dir" $use_sudo $_expected_uid; or return 1
     set -l tmpfile (_as $use_sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
+    _track_tmpfile "$tmpfile"
     test -z "$tmpfile"; and _fail "→ $dst (mktemp failed)"; and return 1
-    set -ga _TRACKED_TMPFILES "$tmpfile"
     if _is_symlink "$tmpfile" $use_sudo
         _rm_tmp "$tmpfile" $use_sudo
         _fail "→ $dst (temp file is symlink — aborting)"; return 1
@@ -2201,7 +2219,7 @@ end
 function _vss_logind --description "_verify_static_system sub: logind.conf.d keys (with systemd<256 HandleSecureAttentionKey skip)"
     _chk_file /etc/systemd/logind.conf.d/99-cachyos-logind.conf; or return 0
     # mirror generator's systemd<256 skip for HandleSecureAttentionKey.
-    not set -q _RY_SYSTEMD_VER; and set -g _RY_SYSTEMD_VER (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
+    _resolve_systemd_ver
     for key in $LOGIND_IGNORE_KEYS
         if test "$key" = HandleSecureAttentionKey
             test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 256; and continue
@@ -2429,7 +2447,7 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
             _fail "  ssh-auth-sock.fish: empty (truncated write?)"
         else
             set -l _fs_err_tmp (mktemp -t ry-fish-syntax-vs.XXXXXX 2>/dev/null; or echo /dev/null)
-            test "$_fs_err_tmp" != /dev/null; and set -ga _TRACKED_TMPFILES "$_fs_err_tmp"
+            _track_tmpfile "$_fs_err_tmp"
             test "$_fs_err_tmp" = /dev/null; and _log "MKTEMP_FAIL: ry-fish-syntax-vs — diagnostic preview unavailable"
             if fish --no-execute "$fish_script" 2>"$_fs_err_tmp"
                 _ok "  ssh-auth-sock.fish: syntax OK"
@@ -3484,7 +3502,7 @@ end
 
 function _ip_probe_sudo_policy --description "Probe sudo -l: reject incompatible Defaults; require unrestricted ALL grant. rc=0 ok, rc=EXIT_PREFLIGHT block."
     set -l _sudo_l_err (mktemp -t ry-sudo-l-err.XXXXXX 2>/dev/null; or echo /dev/null)
-    test "$_sudo_l_err" != /dev/null; and set -ga _TRACKED_TMPFILES "$_sudo_l_err"
+    _track_tmpfile "$_sudo_l_err"
     set -l _sudo_lines (sudo -n -l 2>"$_sudo_l_err" | command grep -v '^[[:space:]]*#')
     set -l sudo_all 0
     for _sl in $_sudo_lines
@@ -3531,12 +3549,12 @@ end
 
 function _mkinitcpio_revert --argument-names backup_bytes --description "Restore /etc/mkinitcpio.conf from in-memory backup bytes (pacman -Syu rollback). Returns 0 on success, 1 on any stage failure."
     set -l _mki_tmp (sudo -n mktemp -p /etc .ry-install.mki.XXXXXX 2>/dev/null)
+    _track_tmpfile "$_mki_tmp"
     if test -z "$_mki_tmp"
         _err "  /etc/mkinitcpio.conf revert failed at mktemp — current conf may reference uninstalled modules"
         _log "MKINITCPIO_REVERT_FAIL: mktemp failed"
         return 1
     end
-    set -ga _TRACKED_TMPFILES "$_mki_tmp"
     # post-mktemp symlink check (mirrors _atomic_write_file). Defence-in-depth.
     if sudo -n test -L -- "$_mki_tmp" 2>/dev/null
         _rm_tmp "$_mki_tmp" true
@@ -3762,8 +3780,8 @@ end
 
 function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite: mktemp → awk transform → chmod/chown ref → findmnt verify → mv. rc=0 ok, rc=1 fail"
     set -l tmpfstab (sudo -n mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null)
+    _track_tmpfile "$tmpfstab"
     test -z "$tmpfstab"; and _fail "  /etc/fstab: mktemp failed"; and return 1
-    set -ga _TRACKED_TMPFILES "$tmpfstab"
     if sudo -n test -L "$tmpfstab"
         _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: temp file is symlink — aborting"; return 1
     end
@@ -4287,8 +4305,8 @@ function _if_write_wipe_marker --description "Atomically write boot-wipe marker 
     set -l _prev_umask (umask); umask 0177
     set -l _marker_tmp (mktemp -p "$_marker_dir" .boot-wipe.XXXXXX 2>/dev/null)
     umask $_prev_umask
+    _track_tmpfile "$_marker_tmp"
     test -z "$_marker_tmp"; and _warn "Failed to mktemp boot-wipe marker tmpfile"; and return 0
-    set -ga _TRACKED_TMPFILES "$_marker_tmp"
     if not printf '%s %s\n' "$_post_count" "$_post_hash" >"$_marker_tmp" 2>/dev/null
         _rm_tmp "$_marker_tmp" false; _warn "Failed to write boot-wipe marker tmpfile"; return 0
     end
@@ -4482,11 +4500,11 @@ function _ry_do_install_file --argument-names target --description "Install a si
         return $EXIT_USAGE
     end
     set -l _use_sudo (string split '|' -- "$_resolved")[2]
+    set -l _canon_target (command realpath -m -- "$target" 2>/dev/null; or echo "$target")
     _echo "── ry-install v$VERSION - Install Single File ──"
     if test "$_use_sudo" = true
         _ensure_sudo_cached; or return $EXIT_PREFLIGHT
-        set -l _ka_target (command realpath -m -- "$target" 2>/dev/null; or echo "$target")
-        test (_post_hook_for_target "$_ka_target") = boot; and _start_sudo_keepalive
+        test (_post_hook_for_target "$_canon_target") = boot; and _start_sudo_keepalive
     end
     if not _ry_install_file "$target" $_use_sudo
         _err "Failed to install: $target"
@@ -4497,9 +4515,9 @@ function _ry_do_install_file --argument-names target --description "Install a si
     _echo
     _ok "Installed: $target"
     set -l _hook_rc 0
-    set -l _h (_post_hook_for_target "$target")
+    set -l _h (_post_hook_for_target "$_canon_target")
     if test -n "$_h"
-        _idf_dispatch_hook "$target" "$_h"
+        _idf_dispatch_hook "$_canon_target" "$_h"
         set _hook_rc $status
     end
     _kill_sudo_keepalive
@@ -4660,7 +4678,7 @@ set -l _ORIG_ARGV $argv
 set -l _ap_errfile (mktemp -t ry-argparse-err.XXXXXX 2>/dev/null)
 # mktemp fail → /dev/null only. Never fall back to LOG_FILE.
 test -z "$_ap_errfile"; and set _ap_errfile /dev/null
-test "$_ap_errfile" != /dev/null; and set -ga _TRACKED_TMPFILES "$_ap_errfile"
+_track_tmpfile "$_ap_errfile"
 argparse --name=(basename -- (status filename)) \
     --exclusive=verify-static,verify-runtime,check,install-file \
     h/help v/version V/verbose \

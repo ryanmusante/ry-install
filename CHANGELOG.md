@@ -5,6 +5,21 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.5.36 - 2026-05-07
+--------------------
+
+  * correctness: tmpfile registration moved before validation at every `mktemp` site (`_run`, `_verify_unit_content`, `_atomic_write_file`, `_mkinitcpio_revert`, `_fstab_atomic_replace`, `_if_write_wipe_marker`, top-level argparse error capture). Closes the signal-arrives-between-`mktemp`-and-`set -ga` window where an interrupted child could leave an unknown tmpfile on disk; `_cleanup_tmpfiles` name-prefix sweep already bounded blast radius, but per-run cleanup is now exact.
+  * correctness: `_ry_do_install_file` canonicalises `target` once at entry (`realpath -m`) and reuses for both the `boot`-tag keepalive trigger and the post-hook dispatch. Previously `_post_hook_for_target` was called twice with raw vs canonicalised paths; non-canonical user input could route the keepalive trigger and the hook dispatch to different rules.
+  * helpers: extract `_track_tmpfile` (single source of truth for non-empty + non-/dev/null tmpfile registration; replaces 11 `set -ga _TRACKED_TMPFILES` call sites including the four pre-existing `test "$X" != /dev/null; and set -ga` sentinel-guarded forms).
+  * helpers: extract `_resolve_systemd_ver` (single source of truth for cached `systemctl --version` major-number parse; replaces three inline lazy-init blocks at `_content__etc_systemd_logind*`, `_check_env_ssh_auth_sock`, and `_vss_logind`).
+  * preflight: `_ir_validate_counts` promoted from comment-only invariants to runtime asserts in `_init_runtime`. `KERNEL_PARAMS=15`, `LOGIND_IGNORE_KEYS=9`, `ENV_VARS=13`, `SYSCTL_VALUES=16`, `PKGS_ADD=14`, `PKGS_DEL=8`, `AUR_PKGS=1`, `MASK=10`. Drift returns `EXIT_PREFLIGHT` via `_err_loud`.
+  * dead-code: `# PKGS_ADD=14 PKGS_DEL=8 AUR=1 must equal README counts` and `# MASK=10 must equal README Masked Services count` invariant comments dropped (now enforced at runtime).
+  * docs: README `Environment Variables` section corrected from 13 vars → 14 vars; `SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket` row added (emitted by the generator but absent from the table — required for systemd-user services to find the local agent socket regardless of fish/conf.d session-priority logic).
+  * docs: README `logind.conf.d` row notes `HandleSecureAttentionKey` requires systemd ≥ 256; emitted-key count is 9 on ≥ 256, 8 on 252–255 (mirrors generator gate).
+  * docs: README `Network Stack` adds caveat block: when `iwd` is not installed at install-time, both `iwd/main.conf` and `NetworkManager/conf.d/99-cachyos-nm.conf` are skipped via `_should_skip_iwd`.
+  * docs: README `Data Directory & Logs` event-type list refreshed to enumerate prefix families instead of a stale total.
+  * docs: README version badge bump 4.5.35 → 4.5.36.
+
 v4.5.35 - 2026-05-07
 --------------------
 

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.5.35-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.5.36-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -227,13 +227,16 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 | `iwd/main.conf` | EnableNetworkConfiguration=false, DriverQuirks=`PowerSaveDisable=*`, NameResolvingService=systemd |
 | `NetworkManager` | wifi.backend=iwd, wifi.powersave=2, wifi.iwd.autoconnect=false |
 
+> [!NOTE]
+> If `iwd` is not installed at install-time, both `iwd/main.conf` and `NetworkManager/conf.d/99-cachyos-nm.conf` are skipped (deploying `wifi.backend=iwd` against an absent backend would leave NM unable to associate). Install `iwd` first — `sudo pacman -S --needed iwd` — or re-run `ry-install` after installation.
+
 ### System Tuning
 
 `coredump.conf.d` is critical: Wine/Proton crashes can produce multi-GB cores that fill `/var`. `/etc/fstab` is the only path modified outside the checksum pipeline (still atomic).
 
 | File | Setting |
 |---|---|
-| `logind.conf.d` | Ignore 9 power/suspend/hibernate/reboot key events |
+| `logind.conf.d` | Ignore 9 power/suspend/hibernate/reboot key events (`HandleSecureAttentionKey` requires systemd ≥ 256; 8 keys emitted on systemd 252–255) |
 | `coredump.conf.d` | Storage=none, ProcessSizeMax=0 |
 | `drirc` | RADV unified VRAM heap (APU) |
 | `sysctl.d` | BBR+fq, tcp_fastopen=3, 10 GbE buffers, 16 tunables |
@@ -241,14 +244,15 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 
 ### Environment Variables
 
-13 vars in `~/.config/environment.d/10-environment.conf`. Debug logging silenced by default.
+14 vars in `~/.config/environment.d/10-environment.conf` (13 gaming/debug + 1 systemd-user `SSH_AUTH_SOCK` binding). Debug logging silenced by default.
 
 <a id="environment-variables-list"></a>
 <details>
-<summary><b>Show 13 environment variables</b></summary>
+<summary><b>Show 14 environment variables</b></summary>
 
 | Variable | Value |
 |---|---|
+| `SSH_AUTH_SOCK` | `${XDG_RUNTIME_DIR}/ssh-agent.socket` (binds systemd-user services to the local agent socket; fish/conf.d resolves forwarded > gcr > systemd for interactive sessions) |
 | `DXVK_LOG_LEVEL` / `DXVK_LOG_PATH` | `none` |
 | `ENABLE_LAYER_MESA_ANTI_LAG` | `1` (AMD-only) |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
@@ -417,7 +421,7 @@ All runtime state under `~/ry-install/`. Logs auto-prune at `MAX_LOGS=50` (oldes
 | `~/ry-install/.lock/` | Instance guard |
 | `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker (delete to re-prompt) |
 
-NDJSON schema: every line is `{"ts":ISO8601,"event":NAME,"data":STR,...}`. Common events: `header`, `footer`, `ok`/`fail`/`warn`/`err`/`info`, `prog_step_start`/`prog_step_end`, `run`, `stderr`, `section`, `bug`. ~65 prefix-routed event types follow the same schema.
+NDJSON schema: every line is `{"ts":ISO8601,"event":NAME,"data":STR,...}`. Common events: `header`, `footer`, `ok`/`fail`/`warn`/`err`/`info`, `prog_step_start`/`prog_step_end`, `run`, `stderr`, `section`, `bug`. Additional prefix-routed event types (e.g. `BOOT_*`, `CHECK_*`, `MKINITCPIO_*`, `PKG_REMOVE_*`, `SUDO_*`, `VERIFY_*`) follow the same schema.
 
 ```fish
 jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl

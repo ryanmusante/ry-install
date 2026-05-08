@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.7 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.8 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.7"
+set -g VERSION "4.6.8"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -545,6 +545,7 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     set --erase _KCONFIG_LOADED
     set --erase _RY_SKIP_IWD
     set --erase _RY_ESP_PATH
+    set --erase _RY_BOOT_PATH
     set --erase _RY_SYSTEMD_VER
     # Release LOCK_DIR mutex
     set -q _RY_HOLDS_LOCK; and set -q LOCK_DIR; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
@@ -4113,6 +4114,21 @@ function _resolve_esp --description "Resolve EFI system partition path (cached);
     echo "$_p"
 end
 
+function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, else ESP) per Boot Loader Specification (cached); falls back to ESP. BLS Type #1 entries' linux=/initrd= paths are anchored here, and \$BOOT/loader/entries/ holds the .conf files."
+    if set -q _RY_BOOT_PATH; and test -n "$_RY_BOOT_PATH"
+        echo "$_RY_BOOT_PATH"
+        return 0
+    end
+    set -l _p ""
+    command -q bootctl; and set _p (sudo -n bootctl -x 2>/dev/null | string trim --)
+    # bootctl -x prints \$BOOT (XBOOTLDR if separate, else ESP). Fall back to ESP — they collapse when no XBOOTLDR partition is present, which is the common case (systemd-boot directly on ESP at /boot).
+    if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
+        set _p (_resolve_esp)
+    end
+    set -g _RY_BOOT_PATH "$_p"
+    echo "$_p"
+end
+
 function _enum_boot_entries --argument-names esp --description "Enumerate \$esp/loader/entries/*.conf — sets _RY_BOOT_COUNT, _RY_BOOT_HASH, _RY_BOOT_PIPE_OK"
     set -l _basenames (sudo -n find "$esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
     # capture $pipestatus immediately; mirrors v4.4.31 fstab pattern.
@@ -4126,19 +4142,19 @@ function _enum_boot_entries --argument-names esp --description "Enumerate \$esp/
     test "$_RY_BOOT_COUNT" -gt 0; and set -g _RY_BOOT_HASH (printf '%s\0' $_basenames | sha256sum | string split ' ')[1]
 end
 
-function _pbs_check_kernels --argument-names esp --description "_preflight_boot_sanity sub: enumerate vmlinuz-* in ESP root; verify all are non-zero. Echoes error count to stdout."
+function _pbs_check_kernels --argument-names boot --description "_preflight_boot_sanity sub: enumerate vmlinuz-* in \$BOOT root; verify all are non-zero. Echoes error count to stdout."
     set -l errors 0
-    set -l vmlinuz_files (sudo -n find "$esp" -maxdepth 1 -name 'vmlinuz-*' -type f -print0 2>/dev/null | string split0)
+    set -l vmlinuz_files (sudo -n find "$boot" -maxdepth 1 -name 'vmlinuz-*' -type f -print0 2>/dev/null | string split0)
     set -l _vm_ps $pipestatus
     set -l _vm_pipe_ok true
     for _rc in $_vm_ps
         test "$_rc" = 0; or set _vm_pipe_ok false
     end
     if test "$_vm_pipe_ok" = false
-        _err "Cannot enumerate $esp/ for vmlinuz-* (sudo lapsed or read error)"
+        _err "Cannot enumerate $boot/ for vmlinuz-* (sudo lapsed or read error)"
         set errors (math $errors + 1)
     else if test (count $vmlinuz_files) -eq 0
-        _err "No vmlinuz found in $esp/"
+        _err "No vmlinuz found in $boot/"
         set errors (math $errors + 1)
     else
         for f in $vmlinuz_files
@@ -4152,19 +4168,19 @@ function _pbs_check_kernels --argument-names esp --description "_preflight_boot_
     echo $errors
 end
 
-function _pbs_check_initrds --argument-names esp --description "_preflight_boot_sanity sub: enumerate initramfs-*.img in ESP root; verify all are non-zero. Echoes error count to stdout."
+function _pbs_check_initrds --argument-names boot --description "_preflight_boot_sanity sub: enumerate initramfs-*.img in \$BOOT root; verify all are non-zero. Echoes error count to stdout."
     set -l errors 0
-    set -l initrd_files (sudo -n find "$esp" -maxdepth 1 -name 'initramfs-*.img' -type f -print0 2>/dev/null | string split0)
+    set -l initrd_files (sudo -n find "$boot" -maxdepth 1 -name 'initramfs-*.img' -type f -print0 2>/dev/null | string split0)
     set -l _ir_ps $pipestatus
     set -l _ir_pipe_ok true
     for _rc in $_ir_ps
         test "$_rc" = 0; or set _ir_pipe_ok false
     end
     if test "$_ir_pipe_ok" = false
-        _err "Cannot enumerate $esp/ for initramfs-*.img (sudo lapsed or read error)"
+        _err "Cannot enumerate $boot/ for initramfs-*.img (sudo lapsed or read error)"
         set errors (math $errors + 1)
     else if test (count $initrd_files) -eq 0
-        _err "No initramfs found in $esp/"
+        _err "No initramfs found in $boot/"
         set errors (math $errors + 1)
     else
         for f in $initrd_files
@@ -4178,37 +4194,38 @@ function _pbs_check_initrds --argument-names esp --description "_preflight_boot_
     echo $errors
 end
 
-function _pbs_entry_has_valid_kernel --argument-names esp conf --description "Probe a single loader-entry .conf for a kernel image inside ESP; rc=0 valid, rc=1 invalid/missing"
+function _pbs_entry_has_valid_kernel --argument-names boot conf --description "Probe a single loader-entry .conf for a kernel image inside \$BOOT. Per BLS Type #1, linux= is anchored on \$BOOT regardless of leading slash (the slash is partition-relative, not system-absolute). rc=0 valid, rc=1 invalid/missing/escapes."
     set -l linux_line (sudo -n grep -m1 '^linux ' -- "$conf" 2>/dev/null | string replace -r '^linux\s+' '' | string trim --)
     test -z "$linux_line"; and return 1
-    set -l linux_check
-    string match -q -- '/*' "$linux_line"; and set linux_check "$linux_line"; or set linux_check "$esp/$linux_line"
-    set -l linux_canon (command realpath -m -- "$linux_check" 2>/dev/null)
+    # BLS Type #1: linux= is anchored on $BOOT regardless of leading slash. Strip any leading slashes and rejoin under $boot.
+    set -l linux_rel (string replace -r '^/+' '' -- "$linux_line")
+    set -l linux_canon (command realpath -m -- "$boot/$linux_rel" 2>/dev/null)
     test -z "$linux_canon"; and _warn "  Loader entry path could not be canonicalized: $conf ($linux_line)"; and return 1
-    set -l _esp_re (string escape --style=regex -- "$esp")
-    if not string match -qr -- "^"$_esp_re"(/|\$)" "$linux_canon"
-        _warn "  Loader entry escapes ESP boundary: $conf -> $linux_canon"; return 1
+    # Defense against `..` traversal in linux= — canonical path must remain inside $BOOT.
+    set -l _boot_re (string escape --style=regex -- "$boot")
+    if not string match -qr -- "^"$_boot_re"(/|\$)" "$linux_canon"
+        _warn "  Loader entry escapes \$BOOT boundary: $conf -> $linux_canon"; return 1
     end
     sudo -n test -f "$linux_canon" 2>/dev/null
 end
 
-function _pbs_check_entries --argument-names esp --description "Enumerate ESP/loader/entries/*.conf; verify ≥1 references a valid kernel inside ESP. Echoes error count."
+function _pbs_check_entries --argument-names boot --description "Enumerate \$BOOT/loader/entries/*.conf; verify ≥1 references a valid kernel inside \$BOOT. Echoes error count."
     set -l errors 0
-    set -l confs (sudo -n find "$esp/loader/entries" -maxdepth 1 -name '*.conf' -type f -print0 2>/dev/null | string split0)
+    set -l confs (sudo -n find "$boot/loader/entries" -maxdepth 1 -name '*.conf' -type f -print0 2>/dev/null | string split0)
     set -l _cf_ps $pipestatus
     for _rc in $_cf_ps
         test "$_rc" = 0; or begin
-            _err "Cannot enumerate $esp/loader/entries (sudo lapsed or read error)"
+            _err "Cannot enumerate $boot/loader/entries (sudo lapsed or read error)"
             set errors (math $errors + 1); echo $errors; return
         end
     end
     if test (count $confs) -eq 0
-        _err "No boot loader entries in $esp/loader/entries/"
+        _err "No boot loader entries in $boot/loader/entries/"
         set errors (math $errors + 1); echo $errors; return
     end
     set -l valid_entry false
     for conf in $confs
-        if _pbs_entry_has_valid_kernel "$esp" "$conf"
+        if _pbs_entry_has_valid_kernel "$boot" "$conf"
             set valid_entry true; break
         end
     end
@@ -4218,11 +4235,11 @@ end
 
 function _preflight_boot_sanity --description "Verify boot artifacts are viable after rebuild"
     _check_sudo_keepalive
-    set -l _esp (_resolve_esp)
-    set -l errors (math (_pbs_check_kernels "$_esp") + (_pbs_check_initrds "$_esp") + (_pbs_check_entries "$_esp"))
+    set -l _boot (_resolve_boot_path)
+    set -l errors (math (_pbs_check_kernels "$_boot") + (_pbs_check_initrds "$_boot") + (_pbs_check_entries "$_boot"))
     if test $errors -gt 0
         _err "Boot sanity check failed ($errors error(s)) — DO NOT REBOOT"
-        _info "  Inspect: ls -la $_esp/vmlinuz-* $_esp/initramfs-*.img"
+        _info "  Inspect: ls -la $_boot/vmlinuz-* $_boot/initramfs-*.img"
         # lint:ignore (user-facing shell advice)
         _info "  Rebuild: sudo mkinitcpio -P && sudo sdboot-manage gen"
         return 1

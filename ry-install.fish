@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.17 (2026-05-09) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v5.0 (2026-05-09) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.17"
+set -g VERSION "5.0"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -673,8 +673,7 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
     _teardown exit $_exit_status
 end
 
-# === GTR9_PRO BUILT-IN DEFAULTS ===
-# 1:1 mapping to _ry_get_file_content
+# === GTR9_PRO BUILT-IN DEFAULTS === — 1:1 mapping to _ry_get_file_content
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" \
     "/etc/kernel/cmdline" \
@@ -872,7 +871,8 @@ function _ir_precompute_caches --description "Precompute _SYS_TMP_DIRS, _USR_TMP
     set -g _PROFILE_USES_WIFI_BACKEND false
     for _d in $SYSTEM_DESTINATIONS
         if string match -q '*nm.conf' -- "$_d"; or string match -q '*/iwd/*' -- "$_d"
-            set -g _PROFILE_USES_WIFI_BACKEND true; break
+            set -g _PROFILE_USES_WIFI_BACKEND true
+            break
         end
     end
 end
@@ -2378,7 +2378,10 @@ end
 
 function _vsp_pacman_conf --description "Inspect IgnorePkg / ParallelDownloads in /etc/pacman.conf"
     _echo "── pacman.conf ──"
-    test -f /etc/pacman.conf; or _warn "  /etc/pacman.conf not found"; or return 0
+    if not test -f /etc/pacman.conf
+        _warn "  /etc/pacman.conf not found"
+        return 0
+    end
     set -l ignore_lines (command grep -E -- '^[[:space:]]*IgnorePkg' /etc/pacman.conf 2>/dev/null)
     if test -n "$ignore_lines"
         for line in $ignore_lines; _ok "  $line"; end

@@ -5,36 +5,63 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v5.0 - 2026-05-09
+-----------------
+
+  * release: 4.6.20 → 5.0; stable milestone, no functional changes.
+
+v4.6.20 - 2026-05-09
+--------------------
+
+  * style: collapse 2-line `# === GTR9_PRO BUILT-IN DEFAULTS ===`
+    section banner above `SYSTEM_DESTINATIONS` into one line.
+  * release: 4.6.19 → 4.6.20.
+
+v4.6.19 - 2026-05-09
+--------------------
+
+  * verify: `_vsp_pacman_conf` — replace broken
+    `or _warn …; or return 0` chain with explicit `if not test -f`
+    block (warn-then-return now actually returns when
+    `/etc/pacman.conf` is absent).
+  * release: 4.6.18 → 4.6.19.
+
+v4.6.18 - 2026-05-09
+--------------------
+
+  * style: `_ir_precompute_caches` — split `set -g
+    _PROFILE_USES_WIFI_BACKEND true; break` to one statement per line,
+    matching sibling `_ir_*` functions. `fish_indent --check` reports one
+    fewer cosmetic hunk; behaviour unchanged.
+  * release: 4.6.17 → 4.6.18.
+
 v4.6.17 - 2026-05-09
 --------------------
 
-  * verify: drop unreachable `case pipe` arm from `_teardown` and the
-    `141 SIGPIPE` line from help text + README signals/exit-codes
-    tables. `_cleanup_pipe` has set `_RY_OUTPUT_BROKEN` and returned
-    since v4.6.16; the script no longer terminates on SIGPIPE, so the
-    hard-coded 141 footer path is dead. `_teardown`'s `case '*'` now
-    catches any future stray call as an unknown-mode error.
-  * packages: move `mkinitcpio-firmware` from `PKGS_ADD` to `AUR_PKGS`
-    — the package is AUR-only, so the pacman path emitted "target not
-    found" and the recovery hint pointed at the wrong tool. Adjusts
-    `_ir_validate_counts` invariants to `PKGS_ADD:12 AUR_PKGS:2`. paru
-    is now a hard prerequisite (was: optional, MT7925 DKMS only).
+  * verify: drop unreachable `case pipe` arm from `_teardown` and
+    `141 SIGPIPE` row from help / README signals tables.
+  * packages: move `mkinitcpio-firmware` from `PKGS_ADD` to
+    `AUR_PKGS`; paru is now a hard prerequisite.
+    `_ir_validate_counts` invariants → `PKGS_ADD:12 AUR_PKGS:2`.
   * style: hoist `PROFILE_NAME` / `PROFILE_DESC` /
-    `_RY_MANAGED_FILE_COUNT` above `_ry_show_help`; drops the
-    early-help fallback constants and the KEEP-IN-SYNC comment. The
-    GTR9_PRO defaults block now asserts `count $SYSTEM_DESTINATIONS
-    $USER_DESTINATIONS $SERVICE_DESTINATIONS == $_RY_MANAGED_FILE_COUNT`
-    and bails `EXIT_PREFLIGHT` on drift.
+    `_RY_MANAGED_FILE_COUNT` above `_ry_show_help`; assert dst-list
+    count == declared.
   * release: 4.6.16 → 4.6.17.
 
 v4.6.16 - 2026-05-08
 --------------------
 
-  * verify: `_cg_access_ok` drops `--` separator from `sudo -n test -f -- "$file"` — coreutils `test` parses 3-arg `-f -- PATH` as a binary-op form and exits rc=2 ("binary operator expected"), which made every `_chk_grep` against a `/boot/*` file falsely emit `FAIL: <token>: FILE NOT FOUND` even when the file existed and contained the token. Affected all four `loader.conf` directive checks (`default @saved`, `timeout 0`, `console-mode keep`, `editor no`) plus any other `/boot/*` grep — the file-existence path itself was correct (`_chk_file` L1574 has no `--`); only the read-access pre-flight was broken.
-  * install: `_mkinitcpio_revert` post-mktemp symlink check `sudo -n test -L -- "$_mki_tmp"` drops `--` for the same reason — coreutils returned rc=2 unconditionally, so the `if` branch never fired and the defence-in-depth TOCTOU symlink-replacement check silently always passed. Latent bug; no observed user impact.
-  * verify: `_cleanup_pipe` no longer terminates the process on SIGPIPE — sets `_RY_OUTPUT_BROKEN` flag and returns. Previous behaviour exited 141 mid-run when stdout/stderr consumer closed early (e.g. piped through `head`/`less`/closed pager), truncating verify-runtime to ~16 cmdline checks before services/modules/sysctl/network/session checks ran. JSONL log on disk is now the canonical output stream; verification always runs to completion regardless of stdout/stderr disposition. Footer is emitted via the natural exit path (`_cleanup_on_exit` / `_INTENDED_EXIT_CODE`) with the actual exit code, no longer a hard-coded 141 + `interrupted: true`.
-  * verify: `_msg_print`, `_err_loud`, `_echo` short-circuit on `_RY_OUTPUT_BROKEN` — avoids EPIPE-induced re-entry into the SIGPIPE handler from every subsequent leveled-message write. JSONL emission via `_log` is unaffected (it writes to the log file fd, not stderr).
-  * verify: `_verify_summary` switches from `_fail` / `_warn` / `_ok` to `_msg_nocount FAIL|WARN|OK` for the `Results: …` summary line. The summary itself was incrementing the `VERIFY_FAIL` / `VERIFY_WARN` / `VERIFY_OK` counter it was reporting on, causing the JSONL footer's `fail` / `warn` / `pass` to be one greater than the actual count (e.g. footer `fail=5` while the displayed summary said `4 FAIL`). On-screen summary always used the pre-bump snapshot, so the discrepancy was footer-only.
+  * verify: `_cg_access_ok` drops `--` from `sudo -n test -f`
+    (coreutils parses 3-arg form as binary-op rc=2; falsely failed
+    `/boot/*` `_chk_grep` calls).
+  * install: `_mkinitcpio_revert` drops `--` from post-mktemp
+    `test -L` symlink check (same rc=2 cause; latent).
+  * verify: `_cleanup_pipe` no longer exits 141 on SIGPIPE — sets
+    `_RY_OUTPUT_BROKEN`, returns; JSONL log is canonical.
+  * verify: `_msg_print` / `_err_loud` / `_echo` short-circuit on
+    `_RY_OUTPUT_BROKEN` (avoids re-entry on EPIPE).
+  * verify: `_verify_summary` uses `_msg_nocount` — fixes JSONL
+    footer pass/fail/warn off-by-one.
   * release: 4.6.15 → 4.6.16.
 
 v4.6.15 - 2026-05-08
@@ -72,9 +99,13 @@ v4.6.12 - 2026-05-08
 v4.6.11 - 2026-05-08
 --------------------
 
-  * pkg: 8 read-only `pacman -Q*` / `-T` / `-Qi` invocations (`_should_skip_iwd`, `_verify_static_system`, `_verify_static_packages`, `_vrs_vulkan`, `_install_packages`, `_csp_remove_pkgs`, `_configure_services_pkg_remove`, `_if_nm_restart`) gain `command` prefix — shadow-immunity for users with autoloaded `~/.config/fish/functions/pacman.fish`; rest of script already uses `command pacman` / `sudo -n pacman` consistently.
-  * keepalive: `_start_sudo_keepalive` child loop drops `2>/dev/null` on the breaking `sudo -n -v` so cred-expiry stderr lands in `SUDO_KEEPALIVE_ERR`; `_check_sudo_keepalive` now surfaces the specific reason instead of a generic warn. Successful refreshes remain silent.
-  * style: `_ry_show_help` fallback comment annotates lockstep with `$PROFILE_DESC` (L686) and `$_RY_MANAGED_FILE_COUNT` (L706) — drift between hardcoded fallbacks and runtime globals would silently desync early-peek vs post-argparse `-h` output.
+  * pkg: 8 read-only `pacman -Q*` / `-T` / `-Qi` invocations gain
+    `command` prefix (shadow-immunity for autoloaded `pacman.fish`).
+  * keepalive: `_start_sudo_keepalive` child drops `2>/dev/null` on
+    breaking `sudo -n -v` so cred-expiry stderr lands in
+    `SUDO_KEEPALIVE_ERR`.
+  * style: `_ry_show_help` fallback comment annotates lockstep with
+    `$PROFILE_DESC` and `$_RY_MANAGED_FILE_COUNT` globals.
   * release: 4.6.10 → 4.6.11.
 
 v4.6.10 - 2026-05-08
@@ -86,14 +117,23 @@ v4.6.10 - 2026-05-08
 v4.6.9 - 2026-05-08
 -------------------
 
-  * atomic-write: `_atomic_write_file`, `_mkinitcpio_revert`, `_fstab_atomic_replace`, `_if_write_wipe_marker`, `_acquire_lock_fresh` use `mv -T` / `mv -Tf` — refuses target-as-directory.
-  * lock: `_reclaim_stale_lock` liveness probe via `test -d /proc/$old_pid` (owner-independent); old `kill -0` returned EPERM=ESRCH=1 and skipped the fish-comm check against another user's running instance.
-  * pacman: `_csp_remove_pkgs` and `_ip_pacman_invoke` re-test `/var/lib/pacman/db.lck` on failure; emits explicit "became locked during run" with `PKG_REMOVE_BATCH_FAIL_DBLOCK` JSONL marker.
-  * aur: `_install_aur_packages` skips per-package retry when `count $AUR_PKGS ≤ 1` (single-pkg retry runs the same paru invocation twice).
-  * check: `_check_phase_files` consumes `_installed_bytes` rc directly (0=ok / 1=drift / 2=preflight); old `test -z $actual` mis-mapped missing system files to preflight.
-  * finalize: `_install_finalize` gates `_if_write_wipe_marker` on `INSTALL_HAD_ERRORS=false` so the marker hash never advances on a partially-failed deploy.
-  * style: 6 multi-line comment blocks collapsed to single-line. Log-rotation comment corrected: only `string split0` returns rc=1 on empty input, `sort -zn` returns 0.
-  * docs: README install-flow row reworded to `mask 11 desktop/power units (5 sleep targets + 6 service/socket masks; lvm2-monitor auto-skipped under LVM)`.
+  * atomic-write: `_atomic_write_file` / `_mkinitcpio_revert` /
+    `_fstab_atomic_replace` / `_if_write_wipe_marker` /
+    `_acquire_lock_fresh` use `mv -T` / `mv -Tf` (refuses
+    target-as-directory).
+  * lock: `_reclaim_stale_lock` liveness via `test -d /proc/$old_pid`
+    (owner-independent; replaces `kill -0` EPERM≠ESRCH).
+  * pacman: `_csp_remove_pkgs` / `_ip_pacman_invoke` re-test
+    `/var/lib/pacman/db.lck` on failure; emits
+    `PKG_REMOVE_BATCH_FAIL_DBLOCK`.
+  * aur: `_install_aur_packages` skips per-pkg retry when
+    `count $AUR_PKGS ≤ 1`.
+  * check: `_check_phase_files` consumes `_installed_bytes` rc
+    directly (0/1/2 = ok / drift / preflight).
+  * finalize: `_install_finalize` gates `_if_write_wipe_marker` on
+    `INSTALL_HAD_ERRORS=false`.
+  * style: 6 multi-line comment blocks collapsed to single-line.
+  * docs: README install-flow row reworded for mask/LVM behaviour.
   * release: 4.6.8 → 4.6.9.
 
 v4.6.8 - 2026-05-08
@@ -139,12 +179,20 @@ v4.6.4 - 2026-05-08
 v4.6.3 - 2026-05-08
 -------------------
 
-  * keepalive: critical fix — `_start_sudo_keepalive` child-fish loop used `--` against fish builtin `test`, which (unlike POSIX) rejects it. `--` removed from fish-builtin invocations; external GNU calls retain it.
-  * progress: `_progress_init` appends explicit CUP after DECSTBM so cursor lands at scroll-region bottom. `_progress_on_winch` bracketed with DECSC/DECRC.
-  * preflight: `_init_runtime` CPU model match switched to case-insensitive.
-  * boot: install-error gating split — `_RY_BOOT_TAINTED` (boot-critical) vs `INSTALL_HAD_ERRORS`. `_install_rebuild_boot` gates on the former; service-runtime failures no longer block rebuild.
-  * services: `_cse_batch_enable` distinguishes "enable ok, --now start failed" (warn, no taint) from "enable failed" (err, taint). New `ENABLE_OK_START_FAIL` marker.
-  * keepalive: child stderr captured to tracked tmpfile; reason surfaced on premature exit.
+  * keepalive: critical fix — `_start_sudo_keepalive` child-fish
+    loop dropped `--` against fish builtin `test` (rejects it,
+    unlike POSIX).
+  * progress: `_progress_init` appends explicit CUP after DECSTBM;
+    `_progress_on_winch` bracketed with DECSC/DECRC.
+  * preflight: `_init_runtime` CPU model match → case-insensitive.
+  * boot: install-error gating split — `_RY_BOOT_TAINTED` vs
+    `INSTALL_HAD_ERRORS`. `_install_rebuild_boot` gates on the
+    former only.
+  * services: `_cse_batch_enable` distinguishes "enable ok, --now
+    start failed" (warn) from "enable failed" (err); new
+    `ENABLE_OK_START_FAIL` marker.
+  * keepalive: child stderr captured to tracked tmpfile; surfaces
+    reason on premature exit.
   * release: 4.6.2 → 4.6.3.
 
 v4.6.2 - 2026-05-08
@@ -201,14 +249,23 @@ v4.5.34 - 2026-05-07
 v4.5.33 - 2026-05-06
 --------------------
 
-  * helpers: extract `_redact_argv_elements` (NUL-emit, single source of truth); `_installed_bytes` rc-set 0=ok / 1=read fail / 2=sudo lapse.
-  * structure: `_configure_services_preset` split into `_configure_services_resolved_restart` + `_configure_services_pkg_remove`.
+  * helpers: extract `_redact_argv_elements`; `_installed_bytes`
+    rc-set 0/1/2 = ok / read-fail / sudo-lapse.
+  * structure: `_configure_services_preset` split into
+    `_configure_services_resolved_restart` +
+    `_configure_services_pkg_remove`.
   * naming: `_PROFILE_USES_NM` → `_PROFILE_USES_WIFI_BACKEND`.
-  * correctness: `_grep_kparam` validates every declared `$KERNEL_PARAMS` member against rendered cmdline; `_boot_wipe_gate` hash error includes 16-char prefixes; `_fail "...(pipestatus=...)"` sites use `string join , -- $_ps` with `(empty)` fallback.
-  * cross-site: `_grep_kv` argv-count BUG guard; `_configure_services_pkg_remove` `command -q pacman` guard; ssh-agent `--user enable` failure bumps `_ret`; `_mkinitcpio_revert` chmod/chown via `--reference=`.
-  * dead-code: `$HOME/ry-install` → `_RY_HOME_DIR`; `3600` → `_RY_RUN_TIMEOUT_DEFAULT`.
-  * UX: peek and `_ry_show_help` exit-code-3 wording harmonised to "preflight".
-  * docs: README `Managed Files` cpupower-epp.service scope `System` → `Service`.
+  * correctness: `_grep_kparam` validates every `$KERNEL_PARAMS`
+    member; `_boot_wipe_gate` hash err includes 16-char prefixes.
+  * cross-site: `_grep_kv` argv-count guard;
+    `_configure_services_pkg_remove` `command -q pacman` guard;
+    `_mkinitcpio_revert` chmod/chown via `--reference=`.
+  * dead-code: `$HOME/ry-install` → `_RY_HOME_DIR`; `3600` →
+    `_RY_RUN_TIMEOUT_DEFAULT`.
+  * UX: peek and `_ry_show_help` exit-code-3 wording harmonised to
+    "preflight".
+  * docs: README `Managed Files` cpupower-epp scope System →
+    Service.
 
 v4.5.32 - 2026-05-06
 --------------------
@@ -243,17 +300,23 @@ v4.5.28 - 2026-05-04
 v4.5.27 - 2026-05-04
 --------------------
 
-  * verify: `_verify_summary` surfaces `VERIFY_GEN_FAIL` and treats it as hard failure for verdict.
+  * verify: `_verify_summary` surfaces `VERIFY_GEN_FAIL`, treats as
+    hard failure for verdict.
   * verify: `_chk_grep` always uses `grep -wF` (whole-word).
-  * cleanup: `_do_cleanup` two-pass tmpfile sweep — plain `rm` then sudo-aware fallback for /etc, /boot, /var orphans.
+  * cleanup: `_do_cleanup` two-pass tmpfile sweep — plain `rm` then
+    sudo-aware fallback for /etc, /boot, /var orphans.
   * dispatch: `_run` rejects dash-prefixed `argv[1]` with rc 2.
-  * refactor: 7 largest verify/install orchestrators split into focused helpers (each ≤ 90 lines).
-  * boot: `_resolve_esp` final fallback to /boot emits `_warn`.
+  * refactor: 7 largest verify/install orchestrators split (each
+    ≤ 90 lines).
+  * boot: `_resolve_esp` final /boot fallback emits `_warn`.
   * deps: `ping` added to soft-deps probe.
   * post-hooks: `_post_sysctl` probes `command -q sysctl` first.
-  * generators: sysctl content generator returns rc 13 on count mismatch.
+  * generators: sysctl content generator returns rc 13 on count
+    mismatch.
 
-  Migration: `--verify-static` / `--verify-runtime` rc when only failure is generator failure changed 0 → 1 with `gen_fail=N` in summary.
+  Migration: `--verify-static` / `--verify-runtime` rc when only
+  failure is generator failure changed 0 → 1 with `gen_fail=N` in
+  summary.
 
 v4.5.25 - 2026-05-03
 --------------------

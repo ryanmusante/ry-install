@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v5.0 (2026-05-09) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v5.0.1 (2026-05-09) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "5.0"
+set -g VERSION "5.0.1"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -207,7 +207,7 @@ umask $_prev_umask
 not test -f "$LOG_FILE"; and echo "[ERR] Failed to create log file: $LOG_FILE" >&2; and _ry_exit $EXIT_PREFLIGHT
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g INSTALL_HAD_ERRORS false
-# _RY_BOOT_TAINTED: only set true by failures that mean on-disk pkg state or boot-critical configs may be inconsistent with embedded mkinitcpio.conf/cmdline/sdboot-manage.conf; service-runtime failures are orthogonal to initramfs rebuild safety.
+# _RY_BOOT_TAINTED: true iff pkg state or boot-critical configs (mkinitcpio.conf/cmdline/sdboot-manage.conf) may need initramfs rebuild; service-runtime failures don't taint.
 set -g _RY_BOOT_TAINTED false
 set -g _RY_BOOT_CRITICAL_DSTS \
     "/boot/loader/loader.conf" \
@@ -2065,7 +2065,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
             return 1
         end
     else
-        # Tighten umask for user-scope mkdir so newly-created intermediate dirs are 0700; counters umask 002 envs (USERGROUPS_ENAB) where mkdir -p would otherwise yield 0775 and trip _awf_validate_parent.
+        # umask 0077 for user-scope mkdir: forces 0700 on intermediates; counters USERGROUPS_ENAB (umask 002) which would yield 0775 and trip _awf_validate_parent.
         set -l _prev_umask (umask)
         umask 0077
         set -l _mkdir_rc 0

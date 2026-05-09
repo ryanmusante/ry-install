@@ -5,6 +5,15 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v5.0.1 - 2026-05-09
+-------------------
+
+  * style: trim verbose comment at L210 (`_RY_BOOT_TAINTED`
+    explanation 250→167 chars); technical signal preserved.
+  * style: trim verbose comment at L2068 (umask 0077 rationale
+    235→158 chars); technical signal preserved.
+  * release: 5.0 → 5.0.1.
+
 v5.0 - 2026-05-09
 -----------------
 

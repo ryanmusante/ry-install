@@ -5,6 +5,16 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.6.16 - 2026-05-08
+--------------------
+
+  * verify: `_cg_access_ok` drops `--` separator from `sudo -n test -f -- "$file"` — coreutils `test` parses 3-arg `-f -- PATH` as a binary-op form and exits rc=2 ("binary operator expected"), which made every `_chk_grep` against a `/boot/*` file falsely emit `FAIL: <token>: FILE NOT FOUND` even when the file existed and contained the token. Affected all four `loader.conf` directive checks (`default @saved`, `timeout 0`, `console-mode keep`, `editor no`) plus any other `/boot/*` grep — the file-existence path itself was correct (`_chk_file` L1574 has no `--`); only the read-access pre-flight was broken.
+  * install: `_mkinitcpio_revert` post-mktemp symlink check `sudo -n test -L -- "$_mki_tmp"` drops `--` for the same reason — coreutils returned rc=2 unconditionally, so the `if` branch never fired and the defence-in-depth TOCTOU symlink-replacement check silently always passed. Latent bug; no observed user impact.
+  * verify: `_cleanup_pipe` no longer terminates the process on SIGPIPE — sets `_RY_OUTPUT_BROKEN` flag and returns. Previous behaviour exited 141 mid-run when stdout/stderr consumer closed early (e.g. piped through `head`/`less`/closed pager), truncating verify-runtime to ~16 cmdline checks before services/modules/sysctl/network/session checks ran. JSONL log on disk is now the canonical output stream; verification always runs to completion regardless of stdout/stderr disposition. Footer is emitted via the natural exit path (`_cleanup_on_exit` / `_INTENDED_EXIT_CODE`) with the actual exit code, no longer a hard-coded 141 + `interrupted: true`.
+  * verify: `_msg_print`, `_err_loud`, `_echo` short-circuit on `_RY_OUTPUT_BROKEN` — avoids EPIPE-induced re-entry into the SIGPIPE handler from every subsequent leveled-message write. JSONL emission via `_log` is unaffected (it writes to the log file fd, not stderr).
+  * verify: `_verify_summary` switches from `_fail` / `_warn` / `_ok` to `_msg_nocount FAIL|WARN|OK` for the `Results: …` summary line. The summary itself was incrementing the `VERIFY_FAIL` / `VERIFY_WARN` / `VERIFY_OK` counter it was reporting on, causing the JSONL footer's `fail` / `warn` / `pass` to be one greater than the actual count (e.g. footer `fail=5` while the displayed summary said `4 FAIL`). On-screen summary always used the pre-bump snapshot, so the discrepancy was footer-only.
+  * release: 4.6.15 → 4.6.16.
+
 v4.6.15 - 2026-05-08
 --------------------
 

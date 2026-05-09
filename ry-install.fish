@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.15 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.16 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.15"
+set -g VERSION "4.6.16"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -660,18 +660,10 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     exit $_sig_exit
 end
 
-function _cleanup_pipe --on-signal PIPE --description "Signal handler: clean up on SIGPIPE (broken pipe)"
-    test "$_CLEANUP_DONE" = true; and return 0
-    set -g _CLEANUP_DONE true
-    _teardown pipe
-    if test "$_RY_INSTALL_SOURCED" = true
-        set -g _RY_INSTALL_LAST_EXIT 141
-        set -g _RY_INSTALL_BAILING true
-        _ry_erase_handlers
-        _ry_namespace_cleanup bail
-        return 141
-    end
-    exit 141
+function _cleanup_pipe --on-signal PIPE --description "Signal handler: mark stderr/stdout broken; continue (JSONL log is canonical)"
+    set -q _RY_OUTPUT_BROKEN; and return 0
+    set -g _RY_OUTPUT_BROKEN true
+    _log "SIGPIPE_RECEIVED: stderr/stdout consumer closed; continuing with JSONL log only"
 end
 
 function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensure cleanup runs on fish_exit"
@@ -1226,6 +1218,7 @@ function _msg_print --argument-names level --description "Internal: leveled mess
     set -l msg (string join -- " " $argv[2..])
     test -z "$msg"; and return 0
     test "$QUIET" = false; or return 0
+    set -q _RY_OUTPUT_BROKEN; and return 0
     if test "$NO_COLOR" = true; or not isatty 2
         echo "[$level] $msg" >&2
         return 0
@@ -1288,6 +1281,7 @@ end
 function _err_loud --description "Fatal-preflight err: always emits [ERR] to stderr regardless of QUIET; logs to JSONL. Use only at sites where the user MUST see the cause of an imminent bail."
     set -l msg (string join -- " " $argv)
     _log "ERR: $msg"
+    set -q _RY_OUTPUT_BROKEN; and return 0
     if test "$NO_COLOR" = true; or not isatty 2
         echo "[ERR] $msg" >&2
     else
@@ -1302,7 +1296,7 @@ end
 
 function _echo --description "Print a plain message without level prefix"
     _log "ECHO: $argv"
-    if test "$QUIET" = false
+    if test "$QUIET" = false; and not set -q _RY_OUTPUT_BROKEN
         echo "$argv" >&2
     end
 end
@@ -1322,15 +1316,15 @@ function _verify_summary --description "Print verification pass/fail/warn summar
     test "$snap_fail" -gt 0; and set summary "$summary, $snap_fail FAIL"
     test "$snap_gen_fail" -gt 0; and set summary "$summary, $snap_gen_fail GEN_FAIL"
     if test "$snap_fail" -gt 0; or test "$snap_gen_fail" -gt 0
-        _fail "$summary"
+        _msg_nocount FAIL "$summary"
         _log "VERIFY_RESULT: status=fail ok=$snap_ok fail=$snap_fail warn=$snap_warn gen_fail=$snap_gen_fail"
         return 1
     else if test "$snap_warn" -gt 0
-        _warn "$summary"
+        _msg_nocount WARN "$summary"
         _log "VERIFY_RESULT: status=warn ok=$snap_ok fail=$snap_fail warn=$snap_warn gen_fail=$snap_gen_fail"
         return 0
     else
-        _ok "$summary"
+        _msg_nocount OK "$summary"
         _log "VERIFY_RESULT: status=ok ok=$snap_ok fail=$snap_fail warn=$snap_warn gen_fail=$snap_gen_fail"
         return 0
     end
@@ -1591,7 +1585,7 @@ function _cg_access_ok --argument-names file label is_boot --description "Pre-fl
     end
     not command -q sudo; and _fail "  $label: sudo required for /boot path"; and return 1
     not sudo -n true 2>/dev/null; and _warn "  $label: sudo cache lapsed — re-run with sudo -v"; and return 1
-    not sudo -n test -f -- "$file" 2>/dev/null; and _fail "  $label: FILE NOT FOUND"; and return 1
+    not sudo -n test -f "$file" 2>/dev/null; and _fail "  $label: FILE NOT FOUND"; and return 1
     return 0
 end
 
@@ -3605,7 +3599,7 @@ function _mkinitcpio_revert --argument-names backup_bytes --description "Restore
         return 1
     end
     # post-mktemp symlink check (mirrors _atomic_write_file). Defence-in-depth.
-    if sudo -n test -L -- "$_mki_tmp" 2>/dev/null
+    if sudo -n test -L "$_mki_tmp" 2>/dev/null
         _rm_tmp "$_mki_tmp" true
         _err "  /etc/mkinitcpio.conf revert failed at symlink check — current conf may reference uninstalled modules"
         _log "MKINITCPIO_REVERT_FAIL: tmp is symlink"

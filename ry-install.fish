@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.12 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.13 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.12"
+set -g VERSION "4.6.13"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -35,7 +35,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g _MY_UID (id -u)
 
 function _ry_show_help --description "Display usage information and available subcommands"
-    # Fallback constants — KEEP IN SYNC with the runtime globals at L686 (PROFILE_DESC) and L706 ($_RY_MANAGED_FILE_COUNT). Used only when early-peek `-h`/`--help` runs before the GTR9_PRO defaults block has loaded; drift desyncs early-peek vs post-argparse help output.
+    # Fallback constants — KEEP IN SYNC with $PROFILE_DESC and $_RY_MANAGED_FILE_COUNT in the GTR9_PRO defaults block. Used only when early-peek `-h`/`--help` runs before the defaults block has loaded; drift desyncs help output.
     set -l _file_count 15
     set -q _RY_MANAGED_FILE_COUNT; and test -n "$_RY_MANAGED_FILE_COUNT"; and set _file_count $_RY_MANAGED_FILE_COUNT
     set -l _profile_desc "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
@@ -47,7 +47,7 @@ Single fish script, $_file_count embedded configs, no external dependencies.
 Usage: "(status filename)" [OPTIONS]
 INSTALLATION:
   (no args)         Unattended install (the only mode)
-  -V, --verbose     Show output for install/check (silent by default; verify modes are always verbose)
+  -V, --verbose     Show output for install/check (silent by default; verify-* and --install-file are always verbose)
 VERIFICATION:
   --verify-static   Check config files exist with correct content
   --verify-runtime  Check live system state (run after reboot)
@@ -458,16 +458,14 @@ function _reclaim_stale_lock --description "Stale-lock reclaim: /proc/<pid>/comm
     if test -n "$old_pid"; and string match -qr '^\d+$' -- "$old_pid"; and test -d /proc/$old_pid
         set -l _old_comm (command cat -- /proc/$old_pid/comm 2>/dev/null | string trim --)
         if test "$_old_comm" = fish
-            # Defense-in-depth against fish-PID reuse by an unrelated fish process: confirm
-            # /proc/<pid>/cmdline references "ry-install" before refusing reclaim.
+            # Defense-in-depth against fish-PID reuse: confirm /proc/<pid>/cmdline references "ry-install" before refusing reclaim.
             set -l _old_cmdline (command tr '\0' ' ' </proc/$old_pid/cmdline 2>/dev/null | string trim --)
             if string match -q '*ry-install*' -- "$_old_cmdline"
                 echo "[ERR] Another ry-install instance is running (PID $old_pid)" >&2
                 _pre_dispatch_log_cleanup
                 return 1
             end
-            # comm=fish but cmdline lacks ry-install → unrelated fish process reused this PID.
-            # Fall through to flock-reclaim.
+            # comm=fish but cmdline lacks ry-install → unrelated fish reused this PID; fall through to flock-reclaim.
         end
         # PID alive but not fish → reused. Fall through to flock-reclaim.
     end

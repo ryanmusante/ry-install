@@ -5,6 +5,15 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.6.13 - 2026-05-08
+--------------------
+
+  * style: `_ry_show_help` fallback comment drops bit-rotted line refs (`L686` / `L706`) — references `$PROFILE_DESC` / `$_RY_MANAGED_FILE_COUNT` by name only.
+  * style: `_reclaim_stale_lock` two 2-line comment blocks collapsed to single-line (fish-PID-reuse defence + cmdline-mismatch fall-through).
+  * docs: README `-V, --verbose` row + script help-text sync — `--install-file` is forced-verbose (matches dispatcher gate `MODE != install ∧ MODE != check ⇒ QUIET=false`).
+  * docs: README admonitions trimmed — six `> [!*]` blocks shortened without altering technical content (Quick Start NOTE/IMPORTANT, Initramfs IMPORTANT, NetworkManager NOTE, Packages CAUTION/NOTE).
+  * release: 4.6.12 → 4.6.13.
+
 v4.6.12 - 2026-05-08
 --------------------
 

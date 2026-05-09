@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.6.12-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.6.13-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -72,10 +72,10 @@ chmod +x ry-install.fish
 Typical first-run duration: **3–8 minutes**.
 
 > [!NOTE]
-> **Installing over WiFi?** The NetworkManager backend switch (wpa_supplicant → iwd) is deferred until next reboot. On ethernet, `sudo systemctl restart NetworkManager` applies immediately.
+> **Over WiFi:** the NM backend switch (wpa_supplicant → iwd) is deferred to next reboot. **On ethernet:** `sudo systemctl restart NetworkManager` applies it immediately.
 
 > [!IMPORTANT]
-> Initramfs rebuild refuses to run when on-disk package state or boot-critical configs (`/etc/mkinitcpio.conf`, `/etc/kernel/cmdline`, `/boot/loader/loader.conf`, `/etc/sdboot-manage.conf`) may be inconsistent with the embedded content. Service-runtime failures (e.g. a `systemctl enable --now` start failing because the unit's runtime config is invalid) do **not** block boot rebuild — they're surfaced as warnings. Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1`. Only the literal value `1` is accepted.
+> Initramfs rebuild aborts when on-disk package state or boot-critical configs (`/etc/mkinitcpio.conf`, `/etc/kernel/cmdline`, `/boot/loader/loader.conf`, `/etc/sdboot-manage.conf`) may be inconsistent with embedded content. Service-runtime failures are warn-only and don't gate the rebuild. Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1` (literal `1` only).
 
 ## Scope
 
@@ -126,7 +126,7 @@ All modes are non-interactive. Verification flags are read-only.
 | Flag | Description |
 |---|---|
 | (no args) | Full unattended install |
-| `-V, --verbose` | Show output for install/check (silent by default) |
+| `-V, --verbose` | Show output for install/check (silent by default; verify-* and `--install-file` are always verbose) |
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |
 | `--check` | Silent idempotency probe (exit 0=clean, 3=preflight, 10=drift) |
@@ -203,7 +203,7 @@ systemd-boot + sdboot-manage. `editor no` blocks live cmdline tampering; `timeou
 | Compression | `zstd -1 -T0` |
 
 > [!IMPORTANT]
-> `mkinitcpio -P` is **not** invoked when package install or a boot-critical config deploy (`mkinitcpio.conf`/`kernel/cmdline`/`loader.conf`/`sdboot-manage.conf`) failed. Service-runtime `--now` start failures are reported as warnings and do not gate the rebuild. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
+> `mkinitcpio -P` is skipped when package install or a boot-critical config deploy (`mkinitcpio.conf` / `kernel/cmdline` / `loader.conf` / `sdboot-manage.conf`) failed. Service-runtime `--now` start failures are warn-only and don't gate the rebuild. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ### System Services
 
@@ -228,7 +228,7 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 | `NetworkManager` | wifi.backend=iwd, wifi.powersave=2, wifi.iwd.autoconnect=false |
 
 > [!NOTE]
-> If `iwd` is not installed at install-time, both `iwd/main.conf` and `NetworkManager/conf.d/99-cachyos-nm.conf` are skipped (deploying `wifi.backend=iwd` against an absent backend would leave NM unable to associate). Install `iwd` first — `sudo pacman -S --needed iwd` — or re-run `ry-install` after installation.
+> If `iwd` is missing at install-time, both `iwd/main.conf` and `NetworkManager/conf.d/99-cachyos-nm.conf` are skipped — deploying `wifi.backend=iwd` against an absent backend would leave NM unable to associate. Install first: `sudo pacman -S --needed iwd`, then re-run.
 
 ### System Tuning
 
@@ -291,10 +291,10 @@ Deprecated — do not re-introduce: `DXVK_ASYNC`, `DXVK_FRAME_RATE`, `WINE_FULLS
 Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported).
 
 > [!CAUTION]
-> Set `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` to switch to `pacman -Sy --needed` (refresh+install only, no system upgrade). Violates Arch policy — accept the dependency-version-skew risk.
+> `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` switches the Packages phase to `pacman -Sy --needed` (refresh + install only, no upgrade). Violates Arch's no-partial-upgrade policy — accept the dependency-skew risk.
 
 > [!NOTE]
-> Removal of a `PKGS_DEL` member is skipped when an installed package outside `PKGS_DEL` reverse-depends on it. Set `RY_INSTALL_PKG_REMOVE_CASCADE=1` to cascade — both the target and its installed reverse deps are added to the removal set in a single `pacman -Rns` invocation. Inspect the dep chain first: `pactree -ru <pkg>`.
+> A `PKGS_DEL` removal is skipped when an installed package outside the set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1` (target + rdeps to one `pacman -Rns`). Inspect first: `pactree -ru <pkg>`.
 
 | Action | Count | Packages |
 |---|---|---|

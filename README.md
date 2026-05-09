@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.6.14-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.6.15-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -232,7 +232,7 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 
 ### System Tuning
 
-`coredump.conf.d` is critical: Wine/Proton crashes can produce multi-GB cores that fill `/var`. `/etc/fstab` is the only path modified outside the checksum pipeline (still atomic).
+`coredump.conf.d` prevents Wine/Proton multi-GB cores from filling `/var`. `/etc/fstab` is the only path modified outside the checksum pipeline (still atomic).
 
 | File | Setting |
 |---|---|
@@ -422,9 +422,9 @@ All runtime state under `~/ry-install/`. Logs auto-prune at `MAX_LOGS=50` (oldes
 |---|---|
 | `~/ry-install/logs/YYYY-MM-DD/` | NDJSON logs (`*.jsonl`) |
 | `~/ry-install/.lock/` | Instance guard |
-| `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker (entry-set hash; written after every successful rebuild whether ack came from auto / env / marker) |
+| `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker (entry-set hash; refreshed on every successful rebuild) |
 
-NDJSON schema: every line is `{"ts":ISO8601,"event":NAME,"data":STR,...}`. Common events: `header`, `footer`, `ok`/`fail`/`warn`/`err`/`info`, `prog_step_start`/`prog_step_end`, `run`, `stderr`, `section`, `bug`. Additional prefix-routed event types (e.g. `BOOT_*`, `CHECK_*`, `MKINITCPIO_*`, `PKG_REMOVE_*`, `SUDO_*`, `VERIFY_*`) follow the same schema.
+NDJSON schema: `{"ts":ISO8601,"event":NAME,"data":STR,...}`. Common events: `header`, `footer`, `ok`/`fail`/`warn`/`err`/`info`, `run`, `stderr`, `section`. Prefix-routed types (`BOOT_*`, `CHECK_*`, `MKINITCPIO_*`, `PKG_REMOVE_*`, `SUDO_*`, `VERIFY_*`) follow the same schema.
 
 ```fish
 jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl
@@ -479,7 +479,7 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 <details>
 <summary><b>Progress bar disabled under mosh</b></summary>
 
-The pinned bottom-row bar uses DECSTBM scroll-region sequences which mosh does not honor. Under mosh the bar is suppressed; `progress` JSONL events still emit. Use SSH, tmux, or local terminal.
+DECSTBM scroll-region sequences aren't honored by mosh; the bar is suppressed but `progress` JSONL events still emit. Use SSH, tmux, or a local terminal.
 
 </details>
 
@@ -487,7 +487,7 @@ The pinned bottom-row bar uses DECSTBM scroll-region sequences which mosh does n
 <details>
 <summary><b>Sudo keepalive process failed to start</b></summary>
 
-`_start_sudo_keepalive` forks a hermetic `fish --no-config -c …` child that re-runs `sudo -n -v` every `SUDO_KEEPALIVE_INTERVAL` (45s) tied to `LOCK_DIR`'s inode. If the fork or the immediate `kill -0` post-check fails, the install proceeds without a refresh loop and emits `_warn "Sudo keepalive process failed to start — long installs may require re-auth"`. The install does not abort. On a multi-minute `pacman -Syu` the cached sudo credential may expire mid-run and downstream `sudo -n` calls will fail. Mitigation: re-run `sudo -v` interactively, then re-invoke `./ry-install.fish` (idempotent — drifted destinations re-deploy, fresh ones skip). Root cause is usually fork limits (`ulimit -u`), AppArmor/SELinux denial on the fish child, or a `/proc` mount that blocks `kill -0`. Stderr from the failed child is captured to `SUDO_KEEPALIVE_ERR` (`mktemp -t ry-ka-err.XXXXXX`) and surfaced by `_check_sudo_keepalive` on first post-fork call.
+`_start_sudo_keepalive` forks a hermetic `fish --no-config -c …` child that re-runs `sudo -n -v` every 45s, tied to `LOCK_DIR`'s inode. If the fork or post-fork `kill -0` fails, the install proceeds with a warn (no abort) and downstream `sudo -n` may fail mid-`pacman -Syu`. Mitigation: `sudo -v; and ./ry-install.fish` (idempotent). Common causes: fork limit (`ulimit -u`), AppArmor/SELinux denial, or a `/proc` mount blocking `kill -0`. Child stderr is captured to `SUDO_KEEPALIVE_ERR` and surfaced by `_check_sudo_keepalive`.
 
 </details>
 

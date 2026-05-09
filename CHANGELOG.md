@@ -5,6 +5,14 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.6.15 - 2026-05-08
+--------------------
+
+  * docs: README `Sudo keepalive process failed to start` Known-Issues prose trimmed — vital path (fork → keepalive contract → mitigation → causes → stderr capture) preserved; verbose restatement of the warn message and "drifted destinations re-deploy" parenthetical dropped.
+  * docs: README `Progress bar disabled under mosh` prose trimmed.
+  * docs: README `System Tuning` lead-in tightened; `Data Directory & Logs` boot-wipe-ack row trimmed; NDJSON schema event list compacted (drops `prog_step_*` / `bug` from common-events list — still emitted, still in JSONL, just not enumerated in the README).
+  * release: 4.6.14 → 4.6.15.
+
 v4.6.14 - 2026-05-08
 --------------------
 

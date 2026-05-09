@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.14 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.15 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.14"
+set -g VERSION "4.6.15"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.6.13-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.6.14-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -146,7 +146,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 | **Preflight** | Validate prerequisites, acquire lock, validate runtime |
 | **Packages** | `pacman -Syu --needed`; opt-in `-Sy` via `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1`; AUR via paru |
 | **Configuration** | Deploy all 15 embedded config files (atomic writes; system + service units + user) |
-| **Services** | `daemon-reload`, enable system units (cpupower-epp.service, fstrim.timer, NM-dispatcher), mask 11 desktop/power units (5 sleep targets + 6 service/socket masks; `lvm2-monitor` auto-skipped when LVM detected), enable user ssh-agent.service |
+| **Services** | `daemon-reload`; enable cpupower-epp / fstrim.timer / NM-dispatcher; mask 11 desktop/power units (`lvm2-monitor` auto-skipped under LVM); enable user `ssh-agent.service` |
 | **Boot** | Rebuild initramfs (gated on no-prior-errors), update systemd-boot entries |
 | **Finalize** | Cache cleanup, NM restart (deferred on active WiFi) |
 
@@ -236,7 +236,7 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 
 | File | Setting |
 |---|---|
-| `logind.conf.d` | Ignore 9 power/suspend/hibernate/reboot key events (`HandleSecureAttentionKey` requires systemd ≥ 256; 8 keys emitted on systemd 252–255) |
+| `logind.conf.d` | Ignore 9 power/suspend/reboot key events (8 on systemd 252–255 — `HandleSecureAttentionKey` needs ≥256) |
 | `coredump.conf.d` | Storage=none, ProcessSizeMax=0 |
 | `drirc` | RADV unified VRAM heap (APU) |
 | `sysctl.d` | BBR+fq, tcp_fastopen=3, 10 GbE buffers, 16 tunables |
@@ -252,7 +252,7 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 
 | Variable | Value |
 |---|---|
-| `SSH_AUTH_SOCK` | `${XDG_RUNTIME_DIR}/ssh-agent.socket` (binds systemd-user services to the local agent socket; fish/conf.d resolves forwarded > gcr > systemd for interactive sessions) |
+| `SSH_AUTH_SOCK` | `${XDG_RUNTIME_DIR}/ssh-agent.socket` (systemd-user binding; fish conf.d resolves forwarded > gcr > systemd interactively) |
 | `DXVK_LOG_LEVEL` / `DXVK_LOG_PATH` | `none` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
 | `PROTON_ENABLE_WAYLAND` | `1` (experimental; breaks Steam Overlay) |
@@ -317,7 +317,7 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 | `lvm2-monitor.service` | Skipped if LVM detected |
 | `NetworkManager-wait-online.service` | Unnecessary boot delay |
 | `systemd-coredump.socket` | Eliminates spawn-and-discard on Wine crashes |
-| `ufw.service` | Firewall not used on this profile (mask retained even if `ufw` package is installed; mask survives package install/removal) |
+| `ufw.service` | Firewall not used; mask survives `ufw` install/removal |
 | `sleep.target` / `suspend.target` / `hibernate.target` / `hybrid-sleep.target` / `suspend-then-hibernate.target` | Desktop — no power management |
 
 </details>
@@ -358,23 +358,23 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → post-mktemp symlink check → chmod → `mv -T` (same FS, refuses target-as-directory); parent dir must be root- or self-owned, not symlinked, not group/world-writable |
-| Permissions | System 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600. User-scope `mkdir -p` runs under `umask 0077` so newly-created intermediate dirs are 0700 (counters umask 002 / `USERGROUPS_ENAB` envs) |
-| fstab | Idempotent; `findmnt --verify` before write; symlinked fstab rejected; **no backup — snapshot first** |
-| Boot rebuild gate | `mkinitcpio -P` refuses to run when package install or boot-critical config deploy failed (`_RY_BOOT_TAINTED`); service-runtime failures do not gate. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1` |
-| Boot-wipe gate | `SDBOOT_REMOVE_EXISTING=yes` auto-acks when every `loader/entries/*.conf` matches a `vmlinuz-*` in the ESP (sdboot-manage will regenerate them). Foreign entries (`windows.conf`, `rescue.conf`, custom kernels) preserve the refusal. Override: `RY_INSTALL_CONFIRM_BOOT_WIPE=1`. Marker file at `~/ry-install/.boot-wipe-acknowledged` records the entry-set hash on first successful run. |
-| Pacnew handling | `.pacnew` at managed destinations is silently resolved (re-deploy embedded content + `rm`); embedded content is the source of truth for managed paths. `.pacsave` continues to warn (out-of-scope for auto-resolve). |
+| Atomic writes | tmp → post-mktemp symlink check → chmod → `mv -T`; parent must be root/self-owned, not symlinked, not group/world-writable |
+| Permissions | system 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600; user-scope `mkdir` runs under `umask 0077` |
+| fstab | Idempotent; `findmnt --verify` before write; symlink rejected. **No backup — snapshot first.** |
+| Boot rebuild gate | `mkinitcpio -P` skipped when package install or boot-critical config deploy failed (`_RY_BOOT_TAINTED`). Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1` |
+| Boot-wipe gate | Auto-acks when every entry maps to a `vmlinuz-*`; foreign entries refuse. Override: `RY_INSTALL_CONFIRM_BOOT_WIPE=1` |
+| Pacnew handling | `.pacnew` at managed paths re-deploys + removes; `.pacsave` warn-only |
 | KERNEL_PARAMS hygiene | Preflight rejects whitespace or `"` in any param |
-| Sysctl invariant | Generator returns rc 13 if printed line count ≠ `count $SYSCTL_VALUES` |
-| Subprocess control | `_run` uses `timeout --foreground`; `_do_cleanup` reaps via `pkill -P` before keepalive teardown |
-| Stderr surfacing | First 5 lines of subprocess stderr mirror to fd 2 on rc≠0, even under `QUIET=true`. Under `--verbose`, full stderr **then** full stdout are mirrored to fd 2 (block-ordered, not interleaved with the child's own stream-mixing). |
+| Sysctl invariant | Generator returns rc 13 if printed lines ≠ `count $SYSCTL_VALUES` |
+| Subprocess control | `_run` uses `timeout --foreground`; `_do_cleanup` reaps via `pkill -P` |
+| Stderr surfacing | First 5 stderr lines mirror to fd 2 on rc≠0 (even under `QUIET=true`); `--verbose` mirrors full stderr then full stdout |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + `flock(1)` stale reclaim |
-| Re-source guard | `_RY_INSTALL_LOADED` blocks double-source within the same shell session; cleared on every clean exit path including the `--help` / `--version` early-peek |
-| Credentials | 15 lowercase secret-flag patterns redacted in logs (passphrase, password, token, key, secret, api-key, apikey, psk, wpa-psk, private-key, auth, bearer, cookie, client-secret, credential) |
+| Re-source guard | `_RY_INSTALL_LOADED` blocks double-source per session |
+| Credentials | 15 lowercase secret-flag patterns redacted in logs |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE → 141 |
-| mkinitcpio rollback | Pre-deploy bytes captured; restored via atomic mv on `pacman -Syu` failure (rollback only when pre-deploy backup succeeded; skipped on sudo lapse — `MKINITCPIO_BACKUP_SKIPPED` logged) |
-| Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard; self-heal on rotation race |
+| mkinitcpio rollback | Pre-deploy bytes captured; restored on `pacman -Syu` failure. Skipped on sudo lapse (`MKINITCPIO_BACKUP_SKIPPED`) |
+| Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard; rotation-race self-heal |
 
 <a id="exit-codes"></a>
 <details>
@@ -402,7 +402,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Variable | Default | Purpose |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). `0` disables. |
-| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Literal `=1` to ack boot-entry wipe (rejects `01`, `true`, `yes`, etc.). Override only — auto-ack already passes when every existing entry maps to a `vmlinuz-*` in the ESP. Re-prompts on entry-set hash change. |
+| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Literal `=1` to ack boot-entry wipe (override; auto-ack passes when every entry maps to a `vmlinuz-*`). Re-prompts on entry-set hash change. |
 | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | Literal `=1` switches Packages phase to `pacman -Sy --needed` (no system upgrade). Violates Arch policy. |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | Literal `=1` required to bypass torn-package gate. Recovery only. |
 | `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | Literal `=1` cascades installed reverse deps into the removal set when a `PKGS_DEL` package is blocked. Default skips with warn. |
@@ -502,12 +502,12 @@ The pinned bottom-row bar uses DECSTBM scroll-region sequences which mosh does n
 | Stale lock | `rm -rf ~/ry-install/.lock/` (only if no `pgrep -af ry-install`) |
 | AUR pkg missing | `command -q paru; or sudo pacman -S --needed paru`, then re-run |
 | Sudo cache expired | `sudo -v; and ./ry-install.fish` |
-| Sudo keepalive failed to start | Refresh credential and re-run: `sudo -v; and ./ry-install.fish` (run before `pacman -Syu` in case of fork-limit denial) |
+| Sudo keepalive failed to start | `sudo -v; and ./ry-install.fish` (run before `pacman -Syu` on fork-limit denial) |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
 | Initramfs rebuild refused | Fix root cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
-| `Foreign entries detected` at boot-wipe gate | Inspect `/boot/loader/entries/*.conf`. If foreign entries (Windows, rescue, custom kernels) are disposable: `RY_INSTALL_CONFIRM_BOOT_WIPE=1 ./ry-install.fish`. To preserve them: keep them out of `loader/entries/` (e.g. relocate to a separate `entries-extra/` directory referenced manually). |
+| `Foreign entries detected` at boot-wipe gate | Inspect `/boot/loader/entries/*.conf`. Disposable: `RY_INSTALL_CONFIRM_BOOT_WIPE=1 ./ry-install.fish`. Preserve: relocate them out of `loader/entries/` |
 | `PKGS_DEL` member skipped (reverse deps) | `RY_INSTALL_PKG_REMOVE_CASCADE=1 ./ry-install.fish` cascades the rdeps. Inspect the dep chain first: `pactree -ru <pkg>`. |
-| `Enabled but failed to start: <unit>` | Unit is enabled (next-boot OK); start blocked by missing/invalid runtime config. Diagnose: `systemctl status <unit>; journalctl -u <unit> -b`. |
+| `Enabled but failed to start: <unit>` | Enabled (next-boot OK); start blocked by invalid runtime config. `systemctl status <unit>; journalctl -u <unit> -b` |
 
 ## References
 

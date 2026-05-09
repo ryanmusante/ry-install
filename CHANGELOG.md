@@ -5,6 +5,13 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.6.14 - 2026-05-08
+--------------------
+
+  * docs: README `Safety & Reliability` table — 17 rows trimmed to vital info; redundant rationale, parenthetical elaborations, and full secret-flag enumeration moved out (flag list lives in `_RY_SECRET_FLAGS` at script L33).
+  * docs: README other tables trimmed — Install Flow Services row, System Tuning logind row, Environment Variables `SSH_AUTH_SOCK` row, Masked Services `ufw.service` row, Runtime Variables `RY_INSTALL_CONFIRM_BOOT_WIPE` row, Troubleshooting `Foreign entries` / `Sudo keepalive` / `Enabled but failed to start` rows.
+  * release: 4.6.13 → 4.6.14.
+
 v4.6.13 - 2026-05-08
 --------------------
 

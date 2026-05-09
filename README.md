@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.6.11-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.6.12-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -43,6 +43,7 @@
     - [MediaTek MT7925](#known-issues-mt7925)
     - [NetworkManager + iwd](#known-issues-nm-iwd)
     - [Progress bar under mosh](#known-issues-mosh)
+    - [Sudo keepalive failed to start](#known-issues-keepalive)
 - [Troubleshooting](#troubleshooting)
 - [References](#references)
 - [License](#license)
@@ -482,6 +483,14 @@ The pinned bottom-row bar uses DECSTBM scroll-region sequences which mosh does n
 
 </details>
 
+<a id="known-issues-keepalive"></a>
+<details>
+<summary><b>Sudo keepalive process failed to start</b></summary>
+
+`_start_sudo_keepalive` forks a hermetic `fish --no-config -c …` child that re-runs `sudo -n -v` every `SUDO_KEEPALIVE_INTERVAL` (45s) tied to `LOCK_DIR`'s inode. If the fork or the immediate `kill -0` post-check fails, the install proceeds without a refresh loop and emits `_warn "Sudo keepalive process failed to start — long installs may require re-auth"`. The install does not abort. On a multi-minute `pacman -Syu` the cached sudo credential may expire mid-run and downstream `sudo -n` calls will fail. Mitigation: re-run `sudo -v` interactively, then re-invoke `./ry-install.fish` (idempotent — drifted destinations re-deploy, fresh ones skip). Root cause is usually fork limits (`ulimit -u`), AppArmor/SELinux denial on the fish child, or a `/proc` mount that blocks `kill -0`. Stderr from the failed child is captured to `SUDO_KEEPALIVE_ERR` (`mktemp -t ry-ka-err.XXXXXX`) and surfaced by `_check_sudo_keepalive` on first post-fork call.
+
+</details>
+
 ## Troubleshooting
 
 | Problem | Diagnostic / Fix |
@@ -493,6 +502,7 @@ The pinned bottom-row bar uses DECSTBM scroll-region sequences which mosh does n
 | Stale lock | `rm -rf ~/ry-install/.lock/` (only if no `pgrep -af ry-install`) |
 | AUR pkg missing | `command -q paru; or sudo pacman -S --needed paru`, then re-run |
 | Sudo cache expired | `sudo -v; and ./ry-install.fish` |
+| Sudo keepalive failed to start | Refresh credential and re-run: `sudo -v; and ./ry-install.fish` (run before `pacman -Syu` in case of fork-limit denial) |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
 | Initramfs rebuild refused | Fix root cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
 | `Foreign entries detected` at boot-wipe gate | Inspect `/boot/loader/entries/*.conf`. If foreign entries (Windows, rescue, custom kernels) are disposable: `RY_INSTALL_CONFIRM_BOOT_WIPE=1 ./ry-install.fish`. To preserve them: keep them out of `loader/entries/` (e.g. relocate to a separate `entries-extra/` directory referenced manually). |

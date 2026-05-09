@@ -5,6 +5,14 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.6.12 - 2026-05-08
+--------------------
+
+  * lock: `_reclaim_stale_lock` adds `/proc/<pid>/cmdline` substring match for "ry-install" before refusing reclaim — defence-in-depth against fish-PID reuse by an unrelated fish process. Old behaviour blocked reclaim on bare `comm == fish` even when the new fish had no relation to ry-install.
+  * preflight: `_ir_validate_counts` invariant set extended with `MKINITCPIO_HOOKS:11` + `MKINITCPIO_MODULES:1` — catches hook-order regressions before they corrupt the rendered `mkinitcpio.conf`.
+  * docs: README adds Known-Issues entry for `Sudo keepalive process failed to start` (`_start_sudo_keepalive` warn path) plus matching Troubleshooting row; TOC updated.
+  * release: 4.6.11 → 4.6.12.
+
 v4.6.11 - 2026-05-08
 --------------------
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.11 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.12 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.11"
+set -g VERSION "4.6.12"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -453,14 +453,21 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock; rc=0 ac
     return 0
 end
 
-function _reclaim_stale_lock --description "Stale-lock reclaim: /proc/<pid>/comm liveness probe + flock(1) atomic reclaim. rc=0 reclaimed, rc=1 contention/hard error"
+function _reclaim_stale_lock --description "Stale-lock reclaim: /proc/<pid>/comm + cmdline liveness probe + flock(1) atomic reclaim. rc=0 reclaimed, rc=1 contention/hard error"
     set -l old_pid (command cat -- "$LOCK_FILE" 2>/dev/null)
     if test -n "$old_pid"; and string match -qr '^\d+$' -- "$old_pid"; and test -d /proc/$old_pid
         set -l _old_comm (command cat -- /proc/$old_pid/comm 2>/dev/null | string trim --)
         if test "$_old_comm" = fish
-            echo "[ERR] Another ry-install instance is running (PID $old_pid)" >&2
-            _pre_dispatch_log_cleanup
-            return 1
+            # Defense-in-depth against fish-PID reuse by an unrelated fish process: confirm
+            # /proc/<pid>/cmdline references "ry-install" before refusing reclaim.
+            set -l _old_cmdline (command tr '\0' ' ' </proc/$old_pid/cmdline 2>/dev/null | string trim --)
+            if string match -q '*ry-install*' -- "$_old_cmdline"
+                echo "[ERR] Another ry-install instance is running (PID $old_pid)" >&2
+                _pre_dispatch_log_cleanup
+                return 1
+            end
+            # comm=fish but cmdline lacks ry-install → unrelated fish process reused this PID.
+            # Fall through to flock-reclaim.
         end
         # PID alive but not fish → reused. Fall through to flock-reclaim.
     end
@@ -886,8 +893,8 @@ function _ir_precompute_caches --description "Precompute _SYS_TMP_DIRS, _USR_TMP
     end
 end
 
-function _ir_validate_counts --description "Refuse to deploy when KERNEL_PARAMS / LOGIND_IGNORE_KEYS / ENV_VARS / SYSCTL_VALUES / PKGS_ADD / PKGS_DEL / MASK count drift from documented invariants"
-    set -l _expect KERNEL_PARAMS:15 LOGIND_IGNORE_KEYS:9 ENV_VARS:11 SYSCTL_VALUES:16 PKGS_ADD:13 PKGS_DEL:7 AUR_PKGS:1 MASK:11
+function _ir_validate_counts --description "Refuse to deploy when KERNEL_PARAMS / MKINITCPIO_HOOKS / MKINITCPIO_MODULES / LOGIND_IGNORE_KEYS / ENV_VARS / SYSCTL_VALUES / PKGS_ADD / PKGS_DEL / MASK count drift from documented invariants"
+    set -l _expect KERNEL_PARAMS:15 MKINITCPIO_HOOKS:11 MKINITCPIO_MODULES:1 LOGIND_IGNORE_KEYS:9 ENV_VARS:11 SYSCTL_VALUES:16 PKGS_ADD:13 PKGS_DEL:7 AUR_PKGS:1 MASK:11
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv")
         set -l _name $_parts[1]

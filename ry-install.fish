@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v4.6.16 (2026-05-08) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v4.6.17 (2026-05-09) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "4.6.16"
+set -g VERSION "4.6.17"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -33,17 +33,15 @@ set -g EXIT_GEN_SYSCTL 13
 set -g _RY_SECRET_FLAGS --passphrase --password --token --key --secret --api-key --apikey --psk --wpa-psk --private-key --auth --bearer --cookie --client-secret --credential
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g _MY_UID (id -u)
+set -g PROFILE_NAME gtr9_pro
+set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
+set -g _RY_MANAGED_FILE_COUNT 15
 
 function _ry_show_help --description "Display usage information and available subcommands"
-    # Fallback constants — KEEP IN SYNC with $PROFILE_DESC and $_RY_MANAGED_FILE_COUNT in the GTR9_PRO defaults block. Used only when early-peek `-h`/`--help` runs before the defaults block has loaded; drift desyncs help output.
-    set -l _file_count 15
-    set -q _RY_MANAGED_FILE_COUNT; and test -n "$_RY_MANAGED_FILE_COUNT"; and set _file_count $_RY_MANAGED_FILE_COUNT
-    set -l _profile_desc "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
-    set -q PROFILE_DESC; and test -n "$PROFILE_DESC"; and set _profile_desc "$PROFILE_DESC"
     echo "
 ry-install v$VERSION
-Self-contained CachyOS configuration for $_profile_desc
-Single fish script, $_file_count embedded configs, no external dependencies.
+Self-contained CachyOS configuration for $PROFILE_DESC
+Single fish script, $_RY_MANAGED_FILE_COUNT embedded configs, no external dependencies.
 Usage: "(status filename)" [OPTIONS]
 INSTALLATION:
   (no args)         Unattended install (the only mode)
@@ -63,7 +61,7 @@ Unattended install is the only mode. There is no preview, diff, or repair mode.
 For drift detection, use --verify-static / --verify-runtime.
 EXIT CODES:
   0 ok · 1 non-critical · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 drift
-  129/130/131/143 signal (HUP/INT/QUIT/TERM) · 134/138/140 signal (ABRT/USR1/USR2) · 141 SIGPIPE
+  129/130/131/143 signal (HUP/INT/QUIT/TERM) · 134/138/140 signal (ABRT/USR1/USR2)
 ENVIRONMENT:
   RY_RUN_TIMEOUT=<seconds>    Wall-clock limit for each _run. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable.
   RY_INSTALL_CONFIRM_BOOT_WIPE=1    One-time ack for SDBOOT_REMOVE_EXISTING=yes (override; auto-ack handles managed-only entry sets).
@@ -76,7 +74,7 @@ See README.md for full reference.
 "
 end
 
-set -l _early_cleanup _RY_INSTALL_LOADED _RY_INSTALL_SOURCED _RY_PRE_GLOBALS _RY_INSTALL_BAILING _RY_INSTALL_LAST_EXIT VERSION EXIT_OK EXIT_FAIL EXIT_USAGE EXIT_PREFLIGHT EXIT_BOOT_CRIT EXIT_LOCK EXIT_DRIFT EXIT_GEN_NOFN EXIT_GEN_NOUUID EXIT_GEN_SYSCTL _RY_SECRET_FLAGS _RY_RUN_TIMEOUT_DEFAULT _MY_UID
+set -l _early_cleanup _RY_INSTALL_LOADED _RY_INSTALL_SOURCED _RY_PRE_GLOBALS _RY_INSTALL_BAILING _RY_INSTALL_LAST_EXIT VERSION EXIT_OK EXIT_FAIL EXIT_USAGE EXIT_PREFLIGHT EXIT_BOOT_CRIT EXIT_LOCK EXIT_DRIFT EXIT_GEN_NOFN EXIT_GEN_NOUUID EXIT_GEN_SYSCTL _RY_SECRET_FLAGS _RY_RUN_TIMEOUT_DEFAULT _MY_UID PROFILE_NAME PROFILE_DESC _RY_MANAGED_FILE_COUNT
 for _early_arg in $argv
     switch "$_early_arg"
         case -h --help
@@ -609,9 +607,6 @@ function _teardown --argument-names mode --description "Unified cleanup: progres
         case signal
             _write_footer "$argv[2]" interrupted
             _do_cleanup
-        case pipe
-            _write_footer 141 interrupted
-            _do_cleanup
         case exit
             # _do_cleanup added
             _write_footer "$argv[2]" cleanup_exit
@@ -679,8 +674,6 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
 end
 
 # === GTR9_PRO BUILT-IN DEFAULTS ===
-set -g PROFILE_NAME gtr9_pro
-set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
 # 1:1 mapping to _ry_get_file_content
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" \
@@ -700,7 +693,9 @@ set -g USER_DESTINATIONS \
     "$HOME/.config/systemd/user/ssh-agent.service"
 set -g SERVICE_DESTINATIONS \
     "/etc/systemd/system/cpupower-epp.service"
-set -g _RY_MANAGED_FILE_COUNT (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
+set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
+test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; and echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; and _ry_exit $EXIT_PREFLIGHT
+test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g LOADER_DEFAULT "@saved"
 set -g LOADER_TIMEOUT 0
 set -g LOADER_CONSOLE_MODE keep
@@ -790,7 +785,6 @@ set -g SYSCTL_VALUES \
     "fs.protected_regular=2" \
     "vm.compaction_proactiveness=0"
 set -g PKGS_ADD \
-    mkinitcpio-firmware \
     nvme-cli \
     cachyos-gaming-meta \
     cachyos-gaming-applications \
@@ -812,7 +806,7 @@ set -g PKGS_DEL \
     cachyos-micro-settings \
     btop
 # AUR packages — installed via paru (not pacman)
-set -g AUR_PKGS mt76-mt7925-dkms
+set -g AUR_PKGS mt76-mt7925-dkms mkinitcpio-firmware
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
 set -g MASK \
     ananicy-cpp.service \
@@ -884,7 +878,7 @@ function _ir_precompute_caches --description "Precompute _SYS_TMP_DIRS, _USR_TMP
 end
 
 function _ir_validate_counts --description "Refuse to deploy when KERNEL_PARAMS / MKINITCPIO_HOOKS / MKINITCPIO_MODULES / LOGIND_IGNORE_KEYS / ENV_VARS / SYSCTL_VALUES / PKGS_ADD / PKGS_DEL / MASK count drift from documented invariants"
-    set -l _expect KERNEL_PARAMS:15 MKINITCPIO_HOOKS:11 MKINITCPIO_MODULES:1 LOGIND_IGNORE_KEYS:9 ENV_VARS:11 SYSCTL_VALUES:16 PKGS_ADD:13 PKGS_DEL:7 AUR_PKGS:1 MASK:11
+    set -l _expect KERNEL_PARAMS:15 MKINITCPIO_HOOKS:11 MKINITCPIO_MODULES:1 LOGIND_IGNORE_KEYS:9 ENV_VARS:11 SYSCTL_VALUES:16 PKGS_ADD:12 PKGS_DEL:7 AUR_PKGS:2 MASK:11
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv")
         set -l _name $_parts[1]

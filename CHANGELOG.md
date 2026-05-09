@@ -5,6 +5,28 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v4.6.17 - 2026-05-09
+--------------------
+
+  * verify: drop unreachable `case pipe` arm from `_teardown` and the
+    `141 SIGPIPE` line from help text + README signals/exit-codes
+    tables. `_cleanup_pipe` has set `_RY_OUTPUT_BROKEN` and returned
+    since v4.6.16; the script no longer terminates on SIGPIPE, so the
+    hard-coded 141 footer path is dead. `_teardown`'s `case '*'` now
+    catches any future stray call as an unknown-mode error.
+  * packages: move `mkinitcpio-firmware` from `PKGS_ADD` to `AUR_PKGS`
+    — the package is AUR-only, so the pacman path emitted "target not
+    found" and the recovery hint pointed at the wrong tool. Adjusts
+    `_ir_validate_counts` invariants to `PKGS_ADD:12 AUR_PKGS:2`. paru
+    is now a hard prerequisite (was: optional, MT7925 DKMS only).
+  * style: hoist `PROFILE_NAME` / `PROFILE_DESC` /
+    `_RY_MANAGED_FILE_COUNT` above `_ry_show_help`; drops the
+    early-help fallback constants and the KEEP-IN-SYNC comment. The
+    GTR9_PRO defaults block now asserts `count $SYSTEM_DESTINATIONS
+    $USER_DESTINATIONS $SERVICE_DESTINATIONS == $_RY_MANAGED_FILE_COUNT`
+    and bails `EXIT_PREFLIGHT` on drift.
+  * release: 4.6.16 → 4.6.17.
+
 v4.6.16 - 2026-05-08
 --------------------
 

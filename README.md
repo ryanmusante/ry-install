@@ -1,12 +1,12 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-4.6.16-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-4.6.17-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> Self-contained CachyOS configuration manager. Single Fish script, 15 embedded configs, no required external dependencies (paru optional; needed for MT7925 DKMS).
+> Self-contained CachyOS configuration manager. Single Fish script, 15 embedded configs, no required external dependencies (paru required for AUR packages: `mkinitcpio-firmware`, `mt76-mt7925-dkms`).
 
 **Target system:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware Reference](#hardware-reference).
 
@@ -94,7 +94,7 @@ Typical first-run duration: **3–8 minutes**.
 | Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `timeout` |
 | Free space | 2 GB on `/`, 200 MB on `/boot` |
 | Network | `curl` required |
-| paru | Optional, for AUR (`mt76-mt7925-dkms`) |
+| paru | Required, for AUR (`mkinitcpio-firmware`, `mt76-mt7925-dkms`) |
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -298,9 +298,9 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 
 | Action | Count | Packages |
 |---|---|---|
-| **Install** | 13 | mkinitcpio-firmware, nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, mesa, lib32-mesa, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
+| **Install** | 12 | nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, mesa, lib32-mesa, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
 | **Remove** | 7 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, octopi, micro, cachyos-micro-settings, btop |
-| **AUR** | 1 | mt76-mt7925-dkms (paru required; soft-fail if absent) |
+| **AUR** | 2 | mkinitcpio-firmware, mt76-mt7925-dkms (paru required; soft-fail if absent) |
 
 ### Masked Services
 
@@ -372,7 +372,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Instance lock | Atomic mkdir + `flock(1)` stale reclaim |
 | Re-source guard | `_RY_INSTALL_LOADED` blocks double-source per session |
 | Credentials | 15 lowercase secret-flag patterns redacted in logs |
-| Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE → 141 |
+| Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE handled non-fatally (JSONL log canonical) |
 | mkinitcpio rollback | Pre-deploy bytes captured; restored on `pacman -Syu` failure. Skipped on sudo lapse (`MKINITCPIO_BACKUP_SKIPPED`) |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard; rotation-race self-heal |
 
@@ -391,7 +391,6 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | `10` | Drift (`--check` only) |
 | `129/130/131/143` | Signal (HUP / INT / QUIT / TERM) |
 | `134/138/140` | Signal (ABRT / USR1 / USR2) |
-| `141` | SIGPIPE |
 
 </details>
 

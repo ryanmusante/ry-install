@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-5.0.15-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-5.0.18-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -103,7 +103,7 @@ backup orchestration, multi-user provisioning, non-CachyOS distros, laptops
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | Systemd | ≥ 250 (advisory; older versions warn, install proceeds; ≥ 256 enables `HandleSecureAttentionKey`) |
 | Sudo | Unrestricted — no `requiretty`, `tty_tickets`, or `timestamp_timeout=0` |
-| Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `timeout` |
+| Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `grep -m`, `timeout` |
 | Free space | 2 GB on `/`, 200 MB on `/boot` |
 | Network | `curl` required |
 | paru | Required, for AUR (`mkinitcpio-firmware`, `mt76-mt7925-dkms`) |
@@ -407,12 +407,12 @@ Re-run `--verify-static` after changes.
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | Non-critical failure / verification drift / old-kernel preflight warn |
+| `1` | `--verify-static` / `--verify-runtime` FAIL count, non-critical install warn, or old-kernel preflight warn |
 | `2` | Usage error (argparse + policy refusals) |
 | `3` | Preflight failed |
 | `4` | Boot-critical failure |
 | `5` | Lock failed |
-| `10` | Drift (`--check` only) |
+| `10` | `--check` drift |
 | `129/130/131/143` | Signal (HUP / INT / QUIT / TERM) |
 | `134/138/140` | Signal (ABRT / USR1 / USR2) |
 

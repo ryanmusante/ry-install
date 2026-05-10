@@ -5,6 +5,129 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v5.0.18 - 2026-05-10
+--------------------
+
+  * cleanup: `_do_cleanup` /tmp sweep — replaced broad
+    `-name 'ry-*'` glob with explicit allowlist of six mktemp
+    template prefixes (`ry-sudo-err.*`, `ry-run.*`,
+    `ry-val-unit.*`, `ry-ka-err.*`, `ry-sudo-l-err.*`,
+    `ry-argparse-err.*`). Prevents collateral deletion of
+    unrelated user-owned `/tmp/ry-*` files (including
+    `ry-install.fish` if invoked from /tmp).
+  * verify-static: `_verify_static_checksum` — branch on
+    `_installed_bytes` exit code (0/1/2) instead of
+    `test -z "$actual"`. Decouples "could not read" from
+    "file exists but empty"; mirrors `_check_phase_files`
+    rc-branching pattern.
+  * runtime: `_vrk_module_state` blacklist iteration — derive
+    module list from `module_blacklist=` parse of
+    `KERNEL_PARAMS` instead of hardcoded `for mod in pcspkr`.
+    Tracks profile drift automatically.
+  * runtime: `_vrkg_vram` numeric guard — shape-validate
+    `_vram_bytes` with regex before `test -gt` instead of
+    relying on test's rc=2-on-non-numeric inversion.
+  * sudo: `_ip_probe_sudo_policy` — removed no-op `!PASSWD\b`
+    alternative from restrictive-tag regex (not valid
+    sudoers syntax; matched nothing).
+  * preflight: added GNU grep probe (`grep -m1`) to
+    GNU-coreutils preflight chain alongside existing
+    sort/stat/find/df/timeout checks. `_pbs_entry_has_valid_kernel`
+    relies on `grep -m1`.
+  * help: exit-code summary split — `1` is now
+    `verify-* FAIL or non-critical install warn`,
+    `10` is `--check drift`. Removes ambiguity over which
+    mode emits which code.
+  * cleanup: removed vestigial fish-completions sweep
+    (`~/.config/fish/completions/.ry-install.*`); no current
+    writer for that path.
+  * style: hygiene — quote `$fish_pid` in printf splat at
+    `_acquire_lock_fresh`; tightened multi-line comment
+    blocks to single line.
+
+v5.0.17 - 2026-05-10
+--------------------
+
+  * security: `_chk_file` — explicit `sudo -n test -L` reject
+    for `/boot/*` paths before the `-f` probe. `test -f`
+    follows symlinks; rejecting symlinks first is
+    defense-in-depth against planted-link smuggle vectors
+    (low-risk on vfat ESPs, residual on ext4 XBOOTLDR
+    partitions). Existing `_pbs_entry_has_valid_kernel`
+    realpath+boundary guard already covered loader-entry
+    `linux=` paths; this closes the gap for the simpler
+    presence-check sites (`_vsb_loader`, `_vsb_cmdline`,
+    `_vsb_mkinitcpio`).
+  * style: pre-argparse `-h/--help` and `-v/--version`
+    fast-path documented inline. Intentional CLI convention:
+    help takes precedence over unknown-positional errors;
+    skips preflight overhead for trivial queries.
+  * style: `_ry_exit` log-dir rmdir cascade annotated as
+    race-safe (rmdir bails silently on ENOTEMPTY).
+  * style: top-level mode-rename block annotated — log-rename
+    failure is non-fatal, old preflight-named path retained
+    and reported via final stderr "[i] Log file:" message.
+
+v5.0.16 - 2026-05-10
+--------------------
+
+  * generators: `_ry_content_bytes` — preserves the dispatcher's
+    exit code (`EXIT_GEN_NOFN`/`NOUUID`/`SYSCTL`) instead of
+    collapsing to `rc=1`. Callers (`_check_phase_files`,
+    `_verify_static_checksum`, `_ry_install_file`) now branch on
+    `$status` rather than `test -z "$expected"`, decoupling
+    generator-failure from legitimate empty-content. Future
+    zero-byte configs would have been mis-flagged.
+  * skip-iwd: `_should_skip_iwd` — glob
+    `*/NetworkManager/*nm.conf` replaced with an explicit
+    allowlist `$_RY_IWD_GATED_DSTS` containing the two iwd-gated
+    destinations. Future NM drop-ins not ending in `nm.conf`
+    cannot be inadvertently iwd-gated, and additions are now
+    discoverable in one place.
+  * preflight: `HOME` post-trim re-validation. Edge case
+    `HOME="/"` previously normalized to empty string; subsequent
+    `LOG_DIR`/`LOCK_DIR` computation derived from `$HOME` would
+    produce surprising paths. Now refuses to proceed with
+    `EXIT_PREFLIGHT` if `HOME` is empty or non-dir after trim.
+  * mkinitcpio: `_mkinitcpio_hook_exists` — new helper collapses
+    the duplicated four-path file existence check that previously
+    lived in both `--existence-only` and default branches of
+    `_ry_validate_mkinitcpio_hooks`. Single source of truth for
+    the `/{usr/lib,etc}/initcpio/{install,hooks}/` path set.
+  * install: `_install_rebuild_boot` sets `_RY_BOOT_REBUILD_OK`
+    on success; `_install_finalize` gates `_if_write_wipe_marker`
+    on this specific flag rather than the generic
+    `INSTALL_HAD_ERRORS`. Decouples marker refresh from
+    post-boot phase failures unrelated to boot rebuild.
+  * verify: `_vsb_sdboot` — added duplicate-key guard before
+    quote-count assertion. Multiple `^LINUX_OPTIONS=` lines from a
+    manually-edited `sdboot-manage.conf` now warn + skip rather
+    than risk mis-extraction.
+  * verify: `_grep_kv` — defensive `string escape --style=regex`
+    applied to separator (currently `' '` or `'='`, both
+    regex-safe). Future separator additions cannot inject regex
+    metacharacters.
+  * verify: `_check_avail` — disk-space display shows `<1unit`
+    instead of `0unit` when nonzero raw bytes round down to zero.
+    Eliminates the "0GB available, need 2GB minimum" semantic
+    confusion.
+  * runtime: `_vrs_nm_perms` — single-index pipestatus check
+    annotated as intentional (split0 rc=1 on empty input is a
+    valid state here: no `.nmconnection` files = no WiFi
+    configured). Contrast with `_enum_boot_entries` where empty
+    is an error.
+  * logging: `_run` TMPDIR-redact chain split from 5-link
+    `and` chain into an explicit `if`-block. Functionally
+    identical; eases future edits.
+  * logging: `_run_resolve_timeout` — inline trace comment for
+    dense `and`/`or` short-circuit chain.
+  * style: `_far_awk_rewrite` — description annotated to note
+    that `OFS="\t"` applies only to rewritten ext4 entries;
+    passthrough lines retain original whitespace (mount(8)
+    tolerates both).
+  * style: `$_RY_POST_HOOKS` — order-significant first-match-wins
+    semantics documented inline.
+
 v5.0.15 - 2026-05-10
 --------------------
 

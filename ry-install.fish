@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v5.0.5 (2026-05-09) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v5.0.6 (2026-05-10) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -18,7 +18,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "5.0.5"
+set -g VERSION "5.0.6"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -769,8 +769,7 @@ set -g ENV_VARS \
     "PROTON_ENABLE_WAYLAND=1" \
     "PROTON_LOCAL_SHADER_CACHE=1" \
     "PROTON_USE_NTSYNC=1" \
-    "RADV_EXPERIMENTAL=transfer_queue" \
-    "RADV_PERFTEST=sam,nircache" \
+    "RADV_PERFTEST=sam,nircache,transfer_queue" \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
     "WINEDEBUG=-all"
@@ -888,7 +887,7 @@ function _ir_precompute_caches --description "Precompute _SYS_TMP_DIRS, _USR_TMP
 end
 
 function _ir_validate_counts --description "Refuse to deploy when KERNEL_PARAMS / MKINITCPIO_HOOKS / MKINITCPIO_MODULES / LOGIND_IGNORE_KEYS / ENV_VARS / SYSCTL_VALUES / PKGS_ADD / PKGS_DEL / MASK count drift from documented invariants"
-    set -l _expect KERNEL_PARAMS:15 MKINITCPIO_HOOKS:11 MKINITCPIO_MODULES:1 LOGIND_IGNORE_KEYS:9 ENV_VARS:11 SYSCTL_VALUES:16 PKGS_ADD:12 PKGS_DEL:7 AUR_PKGS:2 MASK:11
+    set -l _expect KERNEL_PARAMS:15 MKINITCPIO_HOOKS:11 MKINITCPIO_MODULES:1 LOGIND_IGNORE_KEYS:9 ENV_VARS:10 SYSCTL_VALUES:16 PKGS_ADD:13 PKGS_DEL:7 AUR_PKGS:2 MASK:11
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv")
         set -l _name $_parts[1]

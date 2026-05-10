@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-5.0.5-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-5.0.6-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -245,11 +245,11 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 
 ### Environment Variables
 
-12 vars in `~/.config/environment.d/10-environment.conf` (11 gaming/debug + 1 systemd-user `SSH_AUTH_SOCK` binding). Debug logging silenced by default.
+11 vars in `~/.config/environment.d/10-environment.conf` (10 gaming/debug + 1 systemd-user `SSH_AUTH_SOCK` binding). Debug logging silenced by default.
 
 <a id="environment-variables-list"></a>
 <details>
-<summary><b>Show 12 environment variables</b></summary>
+<summary><b>Show 11 environment variables</b></summary>
 
 | Variable | Value |
 |---|---|
@@ -259,8 +259,7 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 | `PROTON_ENABLE_WAYLAND` | `1` (experimental; breaks Steam Overlay) |
 | `PROTON_LOCAL_SHADER_CACHE` | `1` |
 | `PROTON_USE_NTSYNC` | `1` |
-| `RADV_EXPERIMENTAL` | `transfer_queue` |
-| `RADV_PERFTEST` | `sam,nircache` |
+| `RADV_PERFTEST` | `sam,nircache,transfer_queue` |
 | `VKD3D_DEBUG` / `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |
 

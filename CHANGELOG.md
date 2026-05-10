@@ -5,6 +5,23 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v5.0.6 - 2026-05-10
+-------------------
+
+  * env: RADV `transfer_queue` is gated by `RADV_PERFTEST`, not by
+    `RADV_EXPERIMENTAL` (which silently no-op'd the request). Folded
+    into `RADV_PERFTEST=sam,nircache,transfer_queue`; the standalone
+    `RADV_EXPERIMENTAL` line is dropped. ENV_VARS member count drops
+    11 → 10.
+  * preflight: `_ir_validate_counts` ENV_VARS invariant 11 → 10
+    tracks the env-var change above.
+  * preflight: `_ir_validate_counts` PKGS_ADD invariant 12 → 13
+    tracks the htop addition in v5.0.3 that was missed at the time.
+  * docs: README env-var table drops `RADV_EXPERIMENTAL` row, updates
+    `RADV_PERFTEST` value, and resyncs prose count (12 → 11) and
+    summary count (12 → 11).
+  * release: 5.0.5 → 5.0.6.
+
 v5.0.5 - 2026-05-09
 -------------------
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v5.0.7 (2026-05-10) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v5.0.11 (2026-05-10) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -17,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "5.0.8"
+set -g VERSION "5.0.11"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -34,7 +34,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g _MY_UID (id -u)
 set -g PROFILE_NAME gtr9_pro
 set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
-set -g _RY_MANAGED_FILE_COUNT 15
+set -g _RY_MANAGED_FILE_COUNT 12
 
 function _ry_show_help --description "Display usage information and available subcommands"
     echo "
@@ -674,15 +674,12 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/mkinitcpio.conf" \
     "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
     "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
-    "/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf" \
     "/etc/iwd/main.conf" \
     "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     /etc/drirc \
     "/etc/sysctl.d/99-cachyos-sysctl.conf"
 set -g USER_DESTINATIONS \
-    "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" \
-    "$HOME/.config/environment.d/10-environment.conf" \
-    "$HOME/.config/systemd/user/ssh-agent.service"
+    "$HOME/.config/environment.d/10-environment.conf"
 set -g SERVICE_DESTINATIONS \
     "/etc/systemd/system/cpupower-epp.service"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
@@ -805,7 +802,6 @@ set -g MASK \
     power-profiles-daemon.service \
     lvm2-monitor.service \
     NetworkManager-wait-online.service \
-    systemd-coredump.socket \
     ufw.service \
     sleep.target \
     suspend.target \
@@ -820,6 +816,8 @@ set -g ROOT_AVAIL_CRIT 2
 set -g ROOT_AVAIL_WARN 5
 set -g BOOT_TIME_TARGET 15
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
+
+# RUNTIME INIT — root UUID, hardware sanity, count/timing invariants, tmp-dir cache
 
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID; gates absence by mode (preflight-fatal except --check log-only)"
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
@@ -868,7 +866,7 @@ function _ir_precompute_caches --description "Precompute _SYS_TMP_DIRS, _USR_TMP
     end
 end
 function _ir_validate_counts --description "Refuse to deploy when KERNEL_PARAMS / MKINITCPIO_HOOKS / MKINITCPIO_MODULES / LOGIND_IGNORE_KEYS / ENV_VARS / SYSCTL_VALUES / PKGS_ADD / PKGS_DEL / MASK count drift from documented invariants"
-    set -l _expect KERNEL_PARAMS:15 MKINITCPIO_HOOKS:11 MKINITCPIO_MODULES:1 LOGIND_IGNORE_KEYS:9 ENV_VARS:10 SYSCTL_VALUES:16 PKGS_ADD:13 PKGS_DEL:7 AUR_PKGS:2 MASK:11
+    set -l _expect KERNEL_PARAMS:15 MKINITCPIO_HOOKS:11 MKINITCPIO_MODULES:1 LOGIND_IGNORE_KEYS:9 ENV_VARS:10 SYSCTL_VALUES:16 PKGS_ADD:13 PKGS_DEL:7 AUR_PKGS:2 MASK:10
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv")
         set -l _name $_parts[1]
@@ -900,6 +898,8 @@ function _init_runtime --description "Cache root UUID, validate hardware sanity,
     end
 end
 
+# CONTENT GENERATORS — _content_<dst>; dispatched by _ry_get_file_content via _tmpfile_key
+
 function _content__boot_loader_loader.conf --description "Embedded content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -930,9 +930,6 @@ function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --descriptio
         printf '%s\n' "$key=ignore"
     end
 end
-function _content__etc_systemd_coredump.conf.d_99-cachyos-coredump.conf --description "Embedded content for /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf"
-    printf '%s\n' "# Disable coredump storage — Wine/Proton crashes can write multi-GB dumps" "[Coredump]" "Storage=none" "ProcessSizeMax=0"
-end
 function _content__etc_iwd_main.conf --description "Embedded content for /etc/iwd/main.conf"
     printf '%s\n' "# iwd configuration - minimal config for NetworkManager backend" "[General]" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "" "[DriverQuirks]"
     for quirk in $IWD_DRIVER_QUIRKS
@@ -945,18 +942,11 @@ function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "E
 end
 
 # style: keep last printf-arg on the same line. fish_indent strips quotes from `'end'` (verified safe — `end` only terminates blocks as the first word of a command, not as a printf argument); content output is byte-identical either way.
-function _content_HOME_.config_fish_conf.d_10-ssh-auth-sock.fish --description "Embedded content for \$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish"
-    printf '%s\n' '# SSH agent socket for fish shell -- priority: forwarded > gcr > systemd' 'if status is-interactive; and set -q XDG_RUNTIME_DIR; and not set -q SSH_CONNECTION' '    if test -S "$XDG_RUNTIME_DIR/gcr/ssh"' '        set -gx SSH_AUTH_SOCK "$XDG_RUNTIME_DIR/gcr/ssh"' '    else if test -S "$XDG_RUNTIME_DIR/ssh-agent.socket"' '        set -gx SSH_AUTH_SOCK "$XDG_RUNTIME_DIR/ssh-agent.socket"' '    end' end # lint:ignore (literal printf-arg, not a block terminator)
-end
 function _content_HOME_.config_environment.d_10-environment.conf --description "Embedded content for \$HOME/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (COSMIC, Flatpak, D-Bus activated apps)"
-    printf '%s\n' 'SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket'
     for var in $ENV_VARS
         printf '%s\n' "$var"
     end
-end
-function _content_HOME_.config_systemd_user_ssh-agent.service --description "Embedded content for \$HOME/.config/systemd/user/ssh-agent.service"
-    printf '%s\n' '[Unit]' 'Description=SSH authentication agent' '' '[Service]' 'Type=simple' 'ExecStart=/usr/bin/ssh-agent -D -a %t/ssh-agent.socket' 'Restart=on-failure' 'RestartSec=5' '' '[Install]' 'WantedBy=default.target'
 end
 function _content__etc_systemd_system_cpupower-epp.service --description "Embedded content for /etc/systemd/system/cpupower-epp.service"
     # Service intentionally succeeds on partial EPP write
@@ -1855,55 +1845,11 @@ function _grep_xml_tag --argument-names dst --description "Validate drirc XML ha
     return 0
 end
 
-function _check_env_ssh_auth_sock --description "Phase 3: environment.d has SSH_AUTH_SOCK= and no %t literal"
-    set -l dst "$HOME/.config/environment.d/10-environment.conf"
-    set -l content (_ry_get_file_content "$dst")
-    test $status -ne 0; and _fail "  $dst: content generator failed"; and return 1
-    string match -qr '^SSH_AUTH_SOCK=' -- $content; or begin
-        _fail "  $dst: missing SSH_AUTH_SOCK="
-        return 1
-    end
-    string match -q -- '*%t*' $content; and begin
-        _fail "  $dst: forbidden %t literal present"
-        return 1
-    end
-    # systemd-env-d-generator(8) ${VAR} expansion requires
-    _resolve_systemd_ver
-    if test -n "$_RY_SYSTEMD_VER"; and test "$_RY_SYSTEMD_VER" -lt 232
-        _warn "  $dst: systemd $_RY_SYSTEMD_VER < 232; \${XDG_RUNTIME_DIR} expansion not supported (upgrade systemd or pin SSH_AUTH_SOCK to /run/user/\$UID/ssh-agent.socket)"
-    end
-    return 0
-end
-
-function _rvc_fish_syntax --argument-names dst --description "Validate fish source via fish --no-execute; rc=0 ok, rc=1 syntax error (logged + previewed)"
-    set -l _fish_err_tmp (mktemp -t ry-fish-syntax.XXXXXX 2>/dev/null; or echo /dev/null)
-    _track_tmpfile "$_fish_err_tmp"
-    test "$_fish_err_tmp" = /dev/null; and _log "MKTEMP_FAIL: ry-fish-syntax — diagnostic preview unavailable on syntax-check failure"
-    printf '%s\n' $argv[2..] | fish --no-execute 2>"$_fish_err_tmp"
-    set -l _ps $pipestatus
-    set -l _rc 0
-    if test $_ps[1] -ne 0; or test $_ps[2] -ne 0
-        set -l _ps_str (string join , -- $_ps)
-        test -z "$_ps_str"; and set _ps_str "(empty)"
-        _fail "  $dst: fish syntax check failed (pipestatus=$_ps_str)"
-        if test "$_fish_err_tmp" != /dev/null; and test -s "$_fish_err_tmp"
-            _log "VALIDATE_FISH_STDERR: "(command head -n 5 -- "$_fish_err_tmp" 2>/dev/null | string join '; ')
-            for _ferr_line in (command head -n 5 -- "$_fish_err_tmp" 2>/dev/null)
-                _info "    $_ferr_line"
-            end
-        end
-        set _rc 1
-    end
-    test "$_fish_err_tmp" != /dev/null; and _rm_tmp "$_fish_err_tmp" false
-    return $_rc
-end
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family; rc=0 ok, rc=1 fail"
     set -l _content $argv[2..]
     switch "$dst"
         case '*.service'
             _verify_unit_content "$dst" $_content
-        case '*.fish'
-            _rvc_fish_syntax "$dst" $_content
         case '*/loader.conf' '*/sdboot-manage.conf'
             _grep_kv "$dst" $_content
         case '*/kernel/cmdline'
@@ -1940,7 +1886,6 @@ function _ry_validate_configs --description "Run all embedded config validators"
         end
         _rvc_dispatch "$dst" $content; or set errors (math $errors + 1)
     end
-    _check_env_ssh_auth_sock; or set errors (math $errors + 1)
     test $errors -gt 0; and _err "Validation failed with $errors error(s)"; and return $EXIT_PREFLIGHT
     _ok "All configurations validated"
     return 0
@@ -2277,7 +2222,7 @@ function _vss_drirc_sysctl --description "_verify_static_system sub: drirc XML t
     end
 end
 
-function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, coredump, iwd, NM, drirc, sysctl"
+function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, iwd, NM, drirc, sysctl"
     set -l _skip_iwd false
     not command -q pacman; or not command pacman -Qi iwd >/dev/null 2>&1; and set _skip_iwd true
     _echo "SYSTEM CONFIGURATION"
@@ -2295,13 +2240,6 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _echo "── logind.conf ──"
     _vss_logind
     _echo
-    _echo "── coredump.conf ──"
-    if _chk_file /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf
-        for kv in Storage=none ProcessSizeMax=0
-            _chk_grep /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf "$kv"
-        end
-    end
-    _echo
     _echo "── iwd ──"
     _vss_iwd $_skip_iwd
     _echo
@@ -2311,22 +2249,14 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _vss_drirc_sysctl
     _echo
 end
-function _verify_static_user --description "Verify SSH agent fish script, environment.d, ssh-agent.service unit"
+function _verify_static_user --description "Verify environment.d ENV_VARS"
     _echo "USER CONFIGURATION"
     _echo
-    _echo "── SSH agent ──"
-    _chk_file "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish"; and _chk_grep "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish" SSH_AUTH_SOCK "SSH_AUTH_SOCK configured"
     if _chk_file "$HOME/.config/environment.d/10-environment.conf"
-        _chk_grep "$HOME/.config/environment.d/10-environment.conf" "SSH_AUTH_SOCK=" "SSH_AUTH_SOCK for systemd"
         for exp in $ENV_VARS
             # full name=value match (mirrors _verify_runtime_env coverage).
             _chk_grep "$HOME/.config/environment.d/10-environment.conf" "$exp" "$exp"
         end
-    end
-    set -l _ssh_unit "$HOME/.config/systemd/user/ssh-agent.service"
-    if _chk_file "$_ssh_unit"
-        _chk_grep "$_ssh_unit" ssh-agent "ssh-agent ExecStart"
-        _chk_grep "$_ssh_unit" "WantedBy=default.target" "ssh-agent WantedBy"
     end
     _echo
 end
@@ -2423,7 +2353,7 @@ function _verify_static_services --description "Verify SERVICE_DESTINATIONS file
     end
     _echo
 end
-function _verify_static_syntax --description "Validate mkinitcpio hooks ordering, systemd unit files, fish scripts"
+function _verify_static_syntax --description "Validate mkinitcpio hooks ordering, systemd unit files"
     _echo "SYNTAX VALIDATION"
     _echo
     _echo "── mkinitcpio hooks ──"
@@ -2440,32 +2370,6 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
     _echo "── systemd units ──"
     for unit in $SERVICE_DESTINATIONS
         test -f "$unit"; and _verify_unit_syntax "$unit" (basename -- "$unit")
-    end
-    set -l user_svc "$HOME/.config/systemd/user/ssh-agent.service"
-    test -f "$user_svc"; and _verify_unit_syntax "$user_svc" "ssh-agent.service (user)"
-    _echo
-    _echo "── fish scripts ──"
-    set -l fish_script "$HOME/.config/fish/conf.d/10-ssh-auth-sock.fish"
-    if test -f "$fish_script"
-        if not test -s "$fish_script"
-            _fail "  ssh-auth-sock.fish: empty (truncated write?)"
-        else
-            set -l _fs_err_tmp (mktemp -t ry-fish-syntax-vs.XXXXXX 2>/dev/null; or echo /dev/null)
-            _track_tmpfile "$_fs_err_tmp"
-            test "$_fs_err_tmp" = /dev/null; and _log "MKTEMP_FAIL: ry-fish-syntax-vs — diagnostic preview unavailable"
-            if fish --no-execute "$fish_script" 2>"$_fs_err_tmp"
-                _ok "  ssh-auth-sock.fish: syntax OK"
-            else
-                _fail "  ssh-auth-sock.fish: INVALID SYNTAX"
-                if test "$_fs_err_tmp" != /dev/null; and test -s "$_fs_err_tmp"
-                    _log "VERIFY_FISH_STDERR: "(command head -n 5 -- "$_fs_err_tmp" 2>/dev/null | string join '; ')
-                    for _ferr_line in (command head -n 5 -- "$_fs_err_tmp" 2>/dev/null)
-                        _info "    $_ferr_line"
-                    end
-                end
-            end
-            test "$_fs_err_tmp" != /dev/null; and _rm_tmp "$_fs_err_tmp" false
-        end
     end
     _echo
 end
@@ -2618,18 +2522,6 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
     end
     return 0
 end
-function _check_phase_user_ssh --description "--check phase: user-scope ssh-agent.service is-enabled. Returns EXIT_PREFLIGHT if no user-bus."
-    set -l _ssh_unit_file "$HOME/.config/systemd/user/ssh-agent.service"
-    test -f "$_ssh_unit_file"; or return 0
-    set -l _ssh_state (systemctl --user is-enabled ssh-agent.service 2>/dev/null | string trim --)
-    if test -z "$_ssh_state"
-        _log "CHECK_PREFLIGHT: cannot determine ssh-agent state (no user-bus session?)"
-        return $EXIT_PREFLIGHT
-    end
-    test "$_ssh_state" = enabled; or set -g _RY_CHECK_DRIFT 1
-    return 0
-end
-
 function _ry_do_check --description "Silent idempotency probe — exit 0 if clean, EXIT_DRIFT if drifted, EXIT_PREFLIGHT if prereqs fail"
     # Phase 1: sudo cache + systemctl availability
     if not command -q sudo; or not sudo -n true 2>/dev/null
@@ -2656,12 +2548,6 @@ function _ry_do_check --description "Silent idempotency probe — exit 0 if clea
         return $_rc
     end
     _check_phase_units
-    set _rc $status
-    if test $_rc -ne 0
-        set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
-        return $_rc
-    end
-    _check_phase_user_ssh
     set _rc $status
     if test $_rc -ne 0
         set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
@@ -2876,7 +2762,7 @@ function _vrk_module_state --description "Runtime kparam check: module parameter
     end
     _echo
 end
-function _vrk_clocksource_coredump --description "Runtime kparam check: clocksource (with TSC demotion correlation) + coredump.conf"
+function _vrk_clocksource --description "Runtime kparam check: clocksource (with TSC demotion correlation)"
     _echo "── Clocksource ──"
     if test -f /sys/devices/system/clocksource/clocksource0/current_clocksource
         set -l _cs (command cat -- /sys/devices/system/clocksource/clocksource0/current_clocksource 2>/dev/null | string trim --)
@@ -2889,6 +2775,8 @@ function _vrk_clocksource_coredump --description "Runtime kparam check: clocksou
                 for _l in $_tsc_demote
                     _info "  dmesg: $_l"
                 end
+            else if test (count $_RY_DMESG_CACHE) -eq 0
+                _info "  dmesg: cannot scan (sudo lapsed or dmesg unavailable — TSC demotion check skipped)"
             else
                 _info "  dmesg: no TSC demotion markers found — check BIOS/firmware"
             end
@@ -2897,27 +2785,16 @@ function _vrk_clocksource_coredump --description "Runtime kparam check: clocksou
         end
     end
     _echo
-    _echo "── Coredump config ──"
-    if test -f /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf
-        if command grep -q -- 'Storage=none' /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf 2>/dev/null
-            _ok "  coredump: Storage=none"
-        else
-            _fail "  coredump: Storage!=none in /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf"
-        end
-    else
-        _warn "  coredump: /etc/systemd/coredump.conf.d/99-cachyos-coredump.conf not found"
-    end
-    _echo
 end
 
-function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource, coredump"
+function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource"
     set -g _RY_DMESG_CACHE
     command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null; and set -g _RY_DMESG_CACHE (sudo -n dmesg 2>/dev/null)
     _vrk_cmdline
     _vrk_gpu_state
     _vrk_cpu_state
     _vrk_module_state
-    _vrk_clocksource_coredump
+    _vrk_clocksource
     set --erase _RY_DMESG_CACHE
 end
 
@@ -2982,40 +2859,6 @@ function _vrsv_sys_units --description "Runtime services check: 5-unit batch (cp
     _vrsv_chk_nm_dispatcher "$parsed[4]"
     _vrsv_chk_active_enabled NetworkManager.service "$parsed[5]"
 end
-function _vrsv_ssh_agent --description "Runtime services check: ssh-agent.service (user) + SSH_AUTH_SOCK runtime"
-    set -l _u (_unit_state_user ssh-agent.service)
-    # count<3 branch is reachable when no user-bus session.
-    if test (count $_u) -lt 3
-        if not set -q XDG_RUNTIME_DIR
-            _warn "  ssh-agent.service: no user-bus session (XDG_RUNTIME_DIR unset — likely sudo or headless)"
-        else
-            _warn "  ssh-agent.service: systemctl --user returned no data"
-        end
-    else if test "$_u[2]" = active
-        if test "$_u[3]" = enabled
-            _ok "  ssh-agent.service: active (enabled)"
-        else
-            _warn "  ssh-agent.service: active but $_u[3] (will not persist)"
-        end
-    else if test -f "$HOME/.config/systemd/user/ssh-agent.service"
-        _fail "  ssh-agent.service: $_u[2] (expected: active)"
-    else
-        _warn "  ssh-agent.service: not installed"
-    end
-    if set -q SSH_AUTH_SOCK; and test -S "$SSH_AUTH_SOCK"
-        if string match -q '*ssh-agent*' -- "$SSH_AUTH_SOCK"
-            _ok "  SSH_AUTH_SOCK: ssh-agent ($SSH_AUTH_SOCK)"
-        else
-            _ok "  SSH_AUTH_SOCK: active ($SSH_AUTH_SOCK)"
-        end
-    else if not set -q XDG_RUNTIME_DIR
-        _warn "  SSH_AUTH_SOCK: XDG_RUNTIME_DIR not set (not in graphical session?)"
-    else if set -q SSH_AUTH_SOCK
-        _warn "  SSH_AUTH_SOCK: set but socket missing ($SSH_AUTH_SOCK)"
-    else
-        _warn "  SSH_AUTH_SOCK: not set (re-login may be required after install)"
-    end
-end
 function _vrsv_wifi --description "Runtime services check: WiFi interface, iwd process, NM wifi radio + device state"
     _echo
     _echo "WIFI STATE"
@@ -3053,11 +2896,10 @@ function _vrsv_wifi --description "Runtime services check: WiFi interface, iwd p
     end
 end
 
-function _verify_runtime_services --description "Verify systemd unit states (sys batch + ssh-agent user) and WiFi runtime"
+function _verify_runtime_services --description "Verify systemd unit states (sys batch) and WiFi runtime"
     _echo "SERVICE STATE"
     _echo
     _vrsv_sys_units
-    _vrsv_ssh_agent
     _vrsv_wifi
     return 0
 end
@@ -3830,7 +3672,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
 end
 
 function _far_awk_rewrite --argument-names tmpfstab --description "Run fstab awk rewrite into tmpfstab via tee; rc=0 ok, rc=1 pipeline failure"
-    set -l _awk_script (string join \n 'BEGIN { OFS = "\t" }' '/^[[:space:]]*#/ || NF < 4 { print; next }' '$3 != "ext4" { print; next }' '{' '    n = split($4, opts, ",")' '    has_noat = 0; has_lazy = 0; out = ""' '    for (i = 1; i <= n; i++) {' '        o = opts[i]' '        if (o == "relatime" || o == "atime" || o == "strictatime") continue' '        if (o ~ /^commit=/) continue' '        if (o == "noatime") has_noat = 1' '        if (o == "lazytime") has_lazy = 1' '        out = (out == "" ? o : out "," o)' '    }' '    if (!has_noat)  out = (out == "" ? "noatime"  : out ",noatime")' '    if (!has_lazy)  out = (out == "" ? "lazytime" : out ",lazytime")' '    out = (out == "" ? "commit=10" : out ",commit=10")' '    $4 = out' '    print' '}' | string collect)
+    set -l _awk_script (string join \n 'BEGIN { OFS = "\t" }' '/^[[:space:]]*#/ || NF < 4 { print; next }' '$3 != "ext4" { print; next }' '$4 ~ /(^|,)noatime(,|$)/ && $4 ~ /(^|,)lazytime(,|$)/ && $4 ~ /(^|,)commit=10(,|$)/ { print; next }' '{' '    n = split($4, opts, ",")' '    has_noat = 0; has_lazy = 0; out = ""' '    for (i = 1; i <= n; i++) {' '        o = opts[i]' '        if (o == "relatime" || o == "atime" || o == "strictatime") continue' '        if (o ~ /^commit=/) continue' '        if (o == "noatime") has_noat = 1' '        if (o == "lazytime") has_lazy = 1' '        out = (out == "" ? o : out "," o)' '    }' '    if (!has_noat)  out = (out == "" ? "noatime"  : out ",noatime")' '    if (!has_lazy)  out = (out == "" ? "lazytime" : out ",lazytime")' '    out = (out == "" ? "commit=10" : out ",commit=10")' '    $4 = out' '    print' '}' | string collect)
     command awk "$_awk_script" /etc/fstab | sudo -n tee -- "$tmpfstab" >/dev/null
     set -l _ps $pipestatus
     if test "$_ps[1]" -ne 0; or test "$_ps[2]" -ne 0
@@ -4062,33 +3904,10 @@ function _cse_batch_enable --description "Batch enable system units; falls back 
     end
     return $_ret
 end
-function _cse_ssh_agent --description "Enable user ssh-agent.service; gates --now on active user-bus; rc=1 on enable failure"
-    if not systemctl --user cat ssh-agent.service >/dev/null 2>&1
-        _warn "ssh-agent.service user unit not found"
-        _info "  Expected at ~/.config/systemd/user/ssh-agent.service"
-        return 0
-    end
-    set -l _has_user_bus false
-    set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"; and set _has_user_bus true
-    if test "$_has_user_bus" = false
-        _info "  ssh-agent.service: enabling without --now (no active user-bus session — start manually post-login)"
-        not _run systemctl --user enable ssh-agent.service; and _warn "Failed to enable ssh-agent.service"; and return 1
-        return 0
-    end
-    if not _run systemctl --user enable --now ssh-agent.service
-        _warn "Failed to enable ssh-agent.service"
-        return 1
-    end
-    _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"; or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
-    return 0
-end
-
-function _configure_services_enable --description "Daemon-reload, batch-enable system units, enable ssh-agent (user)"
+function _configure_services_enable --description "Daemon-reload, batch-enable system units"
     set -l _ret 0
     set -l _units (_cse_collect_units)
     _cse_batch_enable $_units; or set _ret 1
-    not _run systemctl --user daemon-reload; and _warn "Systemctl --user daemon-reload failed"
-    _cse_ssh_agent; or set _ret 1
     return $_ret
 end
 
@@ -4104,6 +3923,8 @@ function _install_configure_services --description "Enable, start, and configure
     _configure_services_enable; or set _ret 1
     return $_ret
 end
+
+# BOOT PATH RESOLUTION — ESP/$BOOT discovery + entry enumeration
 
 function _resolve_esp --description "Resolve EFI system partition path (cached); falls back to /boot."
     if set -q _RY_ESP_PATH; and test -n "$_RY_ESP_PATH"
@@ -4122,9 +3943,15 @@ function _resolve_esp --description "Resolve EFI system partition path (cached);
         end
     end
     if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
-        set _p /boot
-        functions -q _warn; and _warn "  ESP autodetect failed — defaulting to /boot. Verify systemd-boot mount: findmnt /boot"
-        functions -q _log; and _log "ESP_RESOLVE_FALLBACK: bootctl/findmnt failed, defaulting to /boot"
+        if test -d /boot; or sudo -n test -d /boot 2>/dev/null
+            set _p /boot
+            functions -q _warn; and _warn "  ESP autodetect failed — defaulting to /boot. Verify systemd-boot mount: findmnt /boot"
+            functions -q _log; and _log "ESP_RESOLVE_FALLBACK: bootctl/findmnt failed, defaulting to /boot"
+        else
+            functions -q _err; and _err "  ESP autodetect failed AND /boot is not a directory — cannot resolve boot path"
+            functions -q _log; and _log "ESP_RESOLVE_HARD_FAIL: bootctl/findmnt failed AND /boot missing"
+            set _p ""
+        end
     end
     set -g _RY_ESP_PATH "$_p"
     echo "$_p"
@@ -4605,7 +4432,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
-set -g _RY_POST_HOOKS "/boot/*|boot" "/etc/mkinitcpio*|boot" "/etc/sdboot-manage*|boot" "/etc/kernel/cmdline|boot" "*.service|service" "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/iwd/main.conf|nm" "*/NetworkManager/conf.d/*|nm" "*/sysctl.d/*|sysctl" "*/coredump.conf.d/*|coredump" "*/environment.d/*|envd" "/etc/drirc|drirc" "*/fish/conf.d/*.fish|fish"
+set -g _RY_POST_HOOKS "/boot/*|boot" "/etc/mkinitcpio*|boot" "/etc/sdboot-manage*|boot" "/etc/kernel/cmdline|boot" "*.service|service" "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/iwd/main.conf|nm" "*/NetworkManager/conf.d/*|nm" "*/sysctl.d/*|sysctl" "*/environment.d/*|envd" "/etc/drirc|drirc"
 
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path; empty stdout = no match. Single iteration site over \$_RY_POST_HOOKS."
     for _entry in $_RY_POST_HOOKS
@@ -4630,7 +4457,7 @@ function _idf_match_dst --argument-names target --description "Match $target aga
     echo ""
 end
 function _idf_dispatch_hook --argument-names target tag --description "Dispatch a single post-hook tag to its _post_* handler; rc=1 on unknown tag"
-    set -l _known boot service resolved logind nm sysctl coredump envd drirc fish
+    set -l _known boot service resolved logind nm sysctl envd drirc
     if not contains -- "$tag" $_known
         _err "Internal: unknown post-hook tag '$tag' (target=$target)"
         return 1
@@ -4681,7 +4508,9 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-function _post_boot --argument-names target --description "Post-hook: rebuild boot entries (mkinitcpio + sdboot-manage); honors _boot_wipe_gate when SDBOOT_REMOVE_EXISTING=yes"
+# POST-INSTALL HOOKS — invoked by _ry_do_install_file after a single managed file is deployed
+
+function _post_boot --argument-names target --description "Post-hook: rebuild boot entries (mkinitcpio + sdboot-manage); honors _boot_wipe_gate when SDBOOT_REMOVE_EXISTING=yes; refreshes wipe marker on success"
     _echo
     set -l _rc 0
     set -l _failed_step ""
@@ -4721,6 +4550,8 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
         _err "CRITICAL: boot sanity check failed after single-file install — DO NOT REBOOT"
         return $EXIT_BOOT_CRIT
     end
+    # Refresh boot-wipe marker post-rebuild — parity with _install_finalize. Without this, repeated --install-file of boot-tagged targets leaves the marker stale; the gate falls through to _bwg_managed_only every time instead of fast-acking via marker hash.
+    test "$SDBOOT_REMOVE_EXISTING" = yes; and _if_write_wipe_marker
     return 0
 end
 function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit"
@@ -4736,11 +4567,7 @@ function _post_service --argument-names target --description "Post-hook: daemon-
         else if _run systemctl --user enable --now -- (basename -- "$target")
             set _enable_ok true
         end
-        if test "$_enable_ok" = true
-            if string match -q '*ssh-agent*' -- "$target"; and test "$_has_user_bus" = true
-                _run systemctl --user set-environment SSH_AUTH_SOCK="$XDG_RUNTIME_DIR/ssh-agent.socket"; or _warn "Failed to propagate SSH_AUTH_SOCK to systemd user environment"
-            end
-        else
+        if test "$_enable_ok" = false
             _warn "Failed to enable "(basename -- "$target")" (user)"
             set _rc 1
         end
@@ -4786,16 +4613,6 @@ function _post_sysctl --argument-names target --description "Post-hook: apply sy
     end
     return 0
 end
-function _post_coredump --argument-names target --description "Post-hook: reload coredump.socket"
-    _echo
-    _run sudo -n systemctl daemon-reload; or _warn "daemon-reload failed"
-    if systemctl is-enabled systemd-coredump.socket >/dev/null 2>&1
-        _run sudo -n systemctl restart systemd-coredump.socket; or _warn "systemd-coredump.socket restart failed"
-    else
-        _info "  systemd-coredump.socket not active — new config takes effect on next crash"
-    end
-    return 0
-end
 function _post_envd --argument-names target --description "Post-hook: notify session restart needed for environment.d"
     _info "environment.d $target changed — log out and back in (or restart user session) to apply"
     _info "  Active systemd --user services retain old environment until restarted"
@@ -4803,10 +4620,6 @@ function _post_envd --argument-names target --description "Post-hook: notify ses
 end
 function _post_drirc --argument-names target --description "Post-hook: notify Wayland/X restart needed for drirc"
     _info "drirc $target changed — restart Wayland/X session or relaunch affected applications to apply"
-    return 0
-end
-function _post_fish --argument-names target --description "Post-hook: notify shell-restart needed for fish/conf.d/*.fish"
-    _info "fish config $target changed — open a new fish shell or run 'source $target' to apply"
     return 0
 end
 

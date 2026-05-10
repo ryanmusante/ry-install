@@ -5,6 +5,111 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v5.0.11 - 2026-05-10
+--------------------
+
+  * ssh-agent: user-scope `ssh-agent.service` and the
+    `~/.config/fish/conf.d/10-ssh-auth-sock.fish` socket-priority
+    helper removed from managed destinations. The
+    `SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket` line is
+    dropped from the `environment.d/10-environment.conf` generator.
+    `_content_*ssh-auth-sock.fish`, `_content_*ssh-agent.service`,
+    `_check_env_ssh_auth_sock`, `_check_phase_user_ssh`,
+    `_vrsv_ssh_agent`, and `_cse_ssh_agent` deleted. SSH agent
+    handling now defers entirely to whatever the user configures
+    outside ry-install scope.
+  * config dispatch: `*/fish/conf.d/*.fish` post-hook glob removed
+    from `_RY_POST_HOOKS`; `_idf_dispatch_hook` allowlist drops
+    `fish`; `_post_fish` and `_rvc_fish_syntax` deleted (no managed
+    fish config files remain). `_rvc_dispatch` drops the `*.fish`
+    case.
+  * verify: `_verify_static_user` reduces to environment.d ENV_VARS
+    coverage (description: "Verify environment.d ENV_VARS"). The
+    "── SSH agent ──" subsection is gone. `_verify_static_syntax`
+    drops the user-svc + fish-script blocks (description: "Validate
+    mkinitcpio hooks ordering, systemd unit files").
+    `_verify_runtime_services` drops the ssh-agent call (description:
+    "Verify systemd unit states (sys batch) and WiFi runtime").
+  * services: `_configure_services_enable` drops the
+    `_cse_ssh_agent` call and the user-scope `daemon-reload` (no
+    managed user services remain). Description: "Daemon-reload,
+    batch-enable system units". `_post_service` drops the
+    `*ssh-agent*` SSH_AUTH_SOCK propagation block; success branch
+    inverted to a single failure check.
+  * counts: `_RY_MANAGED_FILE_COUNT` 14 → 12. `USER_DESTINATIONS`
+    reduces from 3 to 1 entry (environment.d only).
+    `_ir_validate_counts` invariants unchanged (ENV_VARS:10 stays —
+    the SSH_AUTH_SOCK line was a separate printf, never part of
+    `$ENV_VARS`).
+  * docs: README install-flow row counts resync (Configuration 14
+    → 12); ssh-agent.service mention removed from Services row;
+    Environment Variables section drops "11 vars (10 + 1 binding)"
+    framing → "10 vars"; SSH_AUTH_SOCK row removed from env-vars
+    table; Show count 11 → 10. User Configuration table reduces to
+    a single row. Managed Files section: header and table drop the
+    two SSH user destinations; count 14 → 12.
+  * release: 5.0.10 → 5.0.11.
+
+v5.0.10 - 2026-05-10
+--------------------
+
+  * coredump: `/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf`
+    removed from managed destinations; `_content_*` generator,
+    `_post_coredump` hook, and `*/coredump.conf.d/*` entry in
+    `_RY_POST_HOOKS` deleted. `_idf_dispatch_hook` allowlist drops
+    `coredump`. Managed file count 15 → 14
+    (`_RY_MANAGED_FILE_COUNT` invariant updated).
+  * mask: `systemd-coredump.socket` removed from `MASK`. Coredump
+    handling reverts to upstream systemd defaults; users wanting the
+    prior Wine/Proton dump suppression can deploy
+    `coredump.conf.d/Storage=none` independently or `systemctl mask
+    systemd-coredump.socket` manually. MASK count 11 → 10
+    (`_ir_validate_counts` invariant updated).
+  * verify: `_verify_static_system` drops the coredump.conf
+    block (description trimmed: "Verify ntsync, modules-load,
+    resolved, logind, iwd, NM, drirc, sysctl"). `_vrk_clocksource_coredump`
+    renamed to `_vrk_clocksource` — the coredump file-presence check
+    is gone; clocksource + TSC-demotion correlation retained.
+    `_verify_runtime_kparams` description and call site updated.
+  * docs: README "System Tuning" intro and table drop the
+    `coredump.conf.d` row; "Masked Services" header and table drop
+    `systemd-coredump.socket`; "Managed Files" header and table drop
+    the coredump destination; install-flow row counts resync
+    (Configuration 15 → 14, Services mask 11 → 10).
+  * release: 5.0.9 → 5.0.10.
+
+v5.0.9 - 2026-05-10
+-------------------
+
+  * boot: `_post_boot` now refreshes `~/ry-install/.boot-wipe-acknowledged`
+    after successful entry rebuild when `SDBOOT_REMOVE_EXISTING=yes`,
+    matching `_install_finalize`. `--install-file` of a boot-tagged
+    target no longer leaves the marker stale; subsequent runs fast-ack
+    via marker hash instead of falling through to `_bwg_managed_only`
+    every time.
+  * fstab: `_far_awk_rewrite` adds a pre-skip block — ext4 lines that
+    already have `noatime`, `lazytime`, AND `commit=10` pass through
+    unchanged. Eliminates incidental space→tab conversion of correctly
+    configured entries when any other ext4 line needed a rewrite. The
+    OFS-driven recompose now fires only on lines that actually need a
+    change.
+  * verify: `_vrk_clocksource_coredump` distinguishes "scanned dmesg,
+    no TSC demotion markers" from "could not scan dmesg" (empty
+    `_RY_DMESG_CACHE` from sudo lapse or `kernel.dmesg_restrict=1`
+    without sudo). Prior message misleadingly suggested checking
+    BIOS/firmware when no scan happened.
+  * boot: `_resolve_esp` `/boot` fallback now verifies `/boot` is a
+    directory before caching. In chroot/recovery scenarios where
+    `/boot` is unmounted, autodetect emits a clear error
+    (`ESP_RESOLVE_HARD_FAIL`) and caches an empty path; downstream
+    consumers fail their `test -d` checks gracefully instead of
+    operating on a phantom path.
+  * style: header comment version corrected (was lagging at v5.0.7).
+  * style: 4 namespace section headers added — `# RUNTIME INIT`,
+    `# CONTENT GENERATORS`, `# BOOT PATH RESOLUTION`,
+    `# POST-INSTALL HOOKS` — for navigability of the 5023-line script.
+  * release: 5.0.8 → 5.0.9.
+
 v5.0.8 - 2026-05-10
 -------------------
 

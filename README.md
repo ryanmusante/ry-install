@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-5.0.8-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-5.0.11-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -146,8 +146,8 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 |---|---|
 | **Preflight** | Validate prerequisites, acquire lock, validate runtime |
 | **Packages** | `pacman -Syu --needed`; opt-in `-Sy` via `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1`; AUR via paru |
-| **Configuration** | Deploy all 15 embedded config files (atomic writes; system + service units + user) |
-| **Services** | `daemon-reload`; enable cpupower-epp / fstrim.timer / NM-dispatcher; mask 11 desktop/power units (`lvm2-monitor` auto-skipped under LVM); enable user `ssh-agent.service` |
+| **Configuration** | Deploy all 12 embedded config files (atomic writes; system + service units + user) |
+| **Services** | `daemon-reload`; enable cpupower-epp / fstrim.timer / NM-dispatcher; mask 10 desktop/power units (`lvm2-monitor` auto-skipped under LVM) |
 | **Boot** | Rebuild initramfs (gated on no-prior-errors), update systemd-boot entries |
 | **Finalize** | Cache cleanup, NM restart (deferred on active WiFi) |
 
@@ -233,27 +233,25 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 
 ### System Tuning
 
-`coredump.conf.d` prevents Wine/Proton multi-GB cores from filling `/var`. `/etc/fstab` is the only path modified outside the checksum pipeline (still atomic).
+`/etc/fstab` is the only path modified outside the checksum pipeline (still atomic).
 
 | File | Setting |
 |---|---|
 | `logind.conf.d` | Ignore 9 power/suspend/reboot key events (8 on systemd 252–255 — `HandleSecureAttentionKey` needs ≥256) |
-| `coredump.conf.d` | Storage=none, ProcessSizeMax=0 |
 | `drirc` | RADV unified VRAM heap (APU) |
 | `sysctl.d` | BBR+fq, tcp_fastopen=3, 10 GbE buffers, 16 tunables |
 | `/etc/fstab` | `noatime,lazytime,commit=10` on ext4 |
 
 ### Environment Variables
 
-11 vars in `~/.config/environment.d/10-environment.conf` (10 gaming/debug + 1 systemd-user `SSH_AUTH_SOCK` binding). Debug logging silenced by default.
+10 vars in `~/.config/environment.d/10-environment.conf`. Debug logging silenced by default.
 
 <a id="environment-variables-list"></a>
 <details>
-<summary><b>Show 11 environment variables</b></summary>
+<summary><b>Show 10 environment variables</b></summary>
 
 | Variable | Value |
 |---|---|
-| `SSH_AUTH_SOCK` | `${XDG_RUNTIME_DIR}/ssh-agent.socket` (systemd-user binding; fish conf.d resolves forwarded > gcr > systemd interactively) |
 | `DXVK_LOG_LEVEL` / `DXVK_LOG_PATH` | `none` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
 | `PROTON_ENABLE_WAYLAND` | `1` (experimental; breaks Steam Overlay) |
@@ -282,9 +280,7 @@ Deprecated — do not re-introduce: `DXVK_ASYNC`, `DXVK_FRAME_RATE`, `WINE_FULLS
 
 | File | Purpose |
 |---|---|
-| `fish/conf.d/10-ssh-auth-sock.fish` | SSH socket priority: forwarded > gcr > systemd agent |
 | `environment.d/10-environment.conf` | Env vars for systemd user services |
-| `systemd/user/ssh-agent.service` | Persistent `ssh-agent -D` with crash recovery |
 
 ### Packages
 
@@ -304,11 +300,11 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 
 ### Masked Services
 
-11 units masked — **review before laptop use:**
+10 units masked — **review before laptop use:**
 
 <a id="masked-services-list"></a>
 <details>
-<summary><b>Show masked services (11)</b></summary>
+<summary><b>Show masked services (10)</b></summary>
 
 | Service | Reason |
 |---|---|
@@ -316,7 +312,6 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 | `power-profiles-daemon.service` | Conflicts with cpupower-epp |
 | `lvm2-monitor.service` | Skipped if LVM detected |
 | `NetworkManager-wait-online.service` | Unnecessary boot delay |
-| `systemd-coredump.socket` | Eliminates spawn-and-discard on Wine crashes |
 | `ufw.service` | Firewall not used; mask survives `ufw` install/removal |
 | `sleep.target` / `suspend.target` / `hibernate.target` / `hybrid-sleep.target` / `suspend-then-hibernate.target` | Desktop — no power management |
 
@@ -324,11 +319,11 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 
 ## Managed Files
 
-15 files deployed via atomic writes (tmp → symlink-check → chmod → `mv -T`).
+12 files deployed via atomic writes (tmp → symlink-check → chmod → `mv -T`).
 
 <a id="managed-files-list"></a>
 <details>
-<summary><b>Show all 15 destinations</b></summary>
+<summary><b>Show all 12 destinations</b></summary>
 
 | Scope | Path |
 |---|---|
@@ -338,15 +333,12 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 | System | `/etc/mkinitcpio.conf` |
 | System | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` |
 | System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
-| System | `/etc/systemd/coredump.conf.d/99-cachyos-coredump.conf` |
 | System | `/etc/iwd/main.conf` |
 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
 | System | `/etc/drirc` |
 | System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
 | Service | `/etc/systemd/system/cpupower-epp.service` |
-| User | `~/.config/fish/conf.d/10-ssh-auth-sock.fish` |
 | User | `~/.config/environment.d/10-environment.conf` |
-| User | `~/.config/systemd/user/ssh-agent.service` |
 
 </details>
 

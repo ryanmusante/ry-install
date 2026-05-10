@@ -1,12 +1,14 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-5.0.11-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-5.0.15-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
-[![license](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![license](https://img.shields.io/badge/license-MIT-green.svg)
 
-> Self-contained CachyOS configuration manager. Single Fish script, 15 embedded configs, no required external dependencies (paru required for AUR packages: `mkinitcpio-firmware`, `mt76-mt7925-dkms`).
+> Self-contained CachyOS configuration manager. Single Fish script, 12 embedded configs,
+> no required external dependencies (paru required for AUR packages:
+> `mkinitcpio-firmware`, `mt76-mt7925-dkms`).
 
 **Target system:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware Reference](#hardware-reference).
 
@@ -72,16 +74,25 @@ chmod +x ry-install.fish
 Typical first-run duration: **3–8 minutes**.
 
 > [!NOTE]
-> **Over WiFi:** the NM backend switch (wpa_supplicant → iwd) is deferred to next reboot. **On ethernet:** `sudo systemctl restart NetworkManager` applies it immediately.
+> **Over WiFi:** the NM backend switch (wpa_supplicant → iwd) is deferred to next reboot.
+> **On ethernet:** `sudo systemctl restart NetworkManager` applies it immediately.
 
 > [!IMPORTANT]
-> Initramfs rebuild aborts when on-disk package state or boot-critical configs (`/etc/mkinitcpio.conf`, `/etc/kernel/cmdline`, `/boot/loader/loader.conf`, `/etc/sdboot-manage.conf`) may be inconsistent with embedded content. Service-runtime failures are warn-only and don't gate the rebuild. Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1` (literal `1` only).
+> Initramfs rebuild aborts when on-disk package state or boot-critical configs
+> (`/etc/mkinitcpio.conf`, `/etc/kernel/cmdline`, `/boot/loader/loader.conf`,
+> `/etc/sdboot-manage.conf`) may be inconsistent with embedded content.
+> Service-runtime failures are warn-only and don't gate the rebuild.
+> Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1` (literal `1` only).
 
 ## Scope
 
-**In scope:** system-wide CachyOS configuration (kernel cmdline, initramfs, systemd units, network stack, sysctl, gaming env vars), package install/remove via pacman + paru, masking of laptop power-management units for desktop use, single-user systemd `--user` units.
+**In scope:** system-wide CachyOS configuration (kernel cmdline, initramfs, systemd units,
+network stack, sysctl, gaming env vars), package install/remove via pacman + paru,
+masking of laptop power-management units for desktop use, single-user systemd `--user` units.
 
-**Out of scope:** dotfiles, shell prompts, editor config, secrets management, backup orchestration, multi-user provisioning, non-CachyOS distros, laptops (script masks all sleep/suspend targets).
+**Out of scope:** dotfiles, shell prompts, editor config, secrets management,
+backup orchestration, multi-user provisioning, non-CachyOS distros, laptops
+(script masks all sleep/suspend targets).
 
 ## Prerequisites
 
@@ -90,6 +101,7 @@ Typical first-run duration: **3–8 minutes**.
 | CachyOS | systemd-boot, ext4 |
 | Fish | ≥ 3.6 (≥ 4.0 recommended) |
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
+| Systemd | ≥ 250 (advisory; older versions warn, install proceeds; ≥ 256 enables `HandleSecureAttentionKey`) |
 | Sudo | Unrestricted — no `requiretty`, `tty_tickets`, or `timestamp_timeout=0` |
 | Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `timeout` |
 | Free space | 2 GB on `/`, 200 MB on `/boot` |
@@ -102,11 +114,13 @@ sudo -v                          # warm sudo cache
 df -h / /boot                    # verify space
 ```
 
-Review [Masked Services](#masked-services) before running on laptops. Check [CachyOS](https://wiki.cachyos.org) and [Arch news](https://archlinux.org/news/) before any `pacman -Syu`.
+Review [Masked Services](#masked-services) before running on laptops.
+Check [CachyOS](https://wiki.cachyos.org) and [Arch news](https://archlinux.org/news/) before any `pacman -Syu`.
 
 ## Hardware Reference
 
-Kernel parameters and tuning values are calibrated for the components below. Other hardware requires editing the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.fish`.
+Kernel parameters and tuning values are calibrated for the components below.
+Other hardware requires editing the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.fish`.
 
 | Component | Detail |
 |---|---|
@@ -117,7 +131,8 @@ Kernel parameters and tuning values are calibrated for the components below. Oth
 | NIC | Dual Intel E610-XT2 10 GbE |
 | BIOS | P110+ — [Beelink downloads](https://dr.bee-link.cn/) |
 
-Track [kernel bugzilla](https://bugzilla.kernel.org) and [Mesa gfx1151 issues](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) for regressions.
+Track [kernel bugzilla](https://bugzilla.kernel.org) and
+[Mesa gfx1151 issues](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) for regressions.
 
 ## Usage
 
@@ -153,7 +168,8 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 
 ## Configuration Reference
 
-All values are embedded in the script and deployed via the paths in [Managed Files](#managed-files). To retune, edit the inlined defaults block at the top of `ry-install.fish`.
+All values are embedded in the script and deployed via the paths in [Managed Files](#managed-files).
+To retune, edit the inlined defaults block at the top of `ry-install.fish`.
 
 ### Kernel Parameters
 
@@ -204,7 +220,10 @@ systemd-boot + sdboot-manage. `editor no` blocks live cmdline tampering; `timeou
 | Compression | `zstd -1 -T0` |
 
 > [!IMPORTANT]
-> `mkinitcpio -P` is skipped when package install or a boot-critical config deploy (`mkinitcpio.conf` / `kernel/cmdline` / `loader.conf` / `sdboot-manage.conf`) failed. Service-runtime `--now` start failures are warn-only and don't gate the rebuild. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
+> `mkinitcpio -P` is skipped when package install or a boot-critical config deploy
+> (`mkinitcpio.conf` / `kernel/cmdline` / `loader.conf` / `sdboot-manage.conf`) failed.
+> Service-runtime `--now` start failures are warn-only and don't gate the rebuild.
+> Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ### System Services
 
@@ -214,7 +233,9 @@ systemd-boot + sdboot-manage. `editor no` blocks live cmdline tampering; `timeou
 | `fstrim.timer` | Weekly TRIM (system-pre-existing; enabled here) |
 | `NetworkManager.service` | Pre-enabled by CachyOS base install (verified active+enabled post-install; verify-runtime warns "not installed" if absent) |
 
-Implicit units enabled by deployed conf.d files: `systemd-resolved.service` (via `resolved.conf.d`), `NetworkManager-dispatcher.service` (via `NetworkManager/conf.d`).
+Implicit units enabled by deployed conf.d files:
+`systemd-resolved.service` (via `resolved.conf.d`),
+`NetworkManager-dispatcher.service` (via `NetworkManager/conf.d`).
 
 `power-profiles-daemon` is masked separately ([Masked Services](#masked-services)) to prevent EPP conflicts.
 
@@ -229,7 +250,10 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 | `NetworkManager` | wifi.backend=iwd, wifi.powersave=2, wifi.iwd.autoconnect=false |
 
 > [!NOTE]
-> If `iwd` is missing at install-time, both `iwd/main.conf` and `NetworkManager/conf.d/99-cachyos-nm.conf` are skipped — deploying `wifi.backend=iwd` against an absent backend would leave NM unable to associate. Install first: `sudo pacman -S --needed iwd`, then re-run.
+> If `iwd` is missing at install-time, both `iwd/main.conf` and
+> `NetworkManager/conf.d/99-cachyos-nm.conf` are skipped — deploying `wifi.backend=iwd`
+> against an absent backend would leave NM unable to associate.
+> Install first: `sudo pacman -S --needed iwd`, then re-run.
 
 ### System Tuning
 
@@ -272,7 +296,9 @@ WiFi locked to iwd backend (NM) with power-save off — required for MT7925 stab
 | `MESA_VK_WSI_PRESENT_MODE=mailbox` | Latency-sensitive titles under Wayland (breaks vsync) |
 | `PROTON_FSR4_RDNA3_UPGRADE=1` | Force FSR4 on gfx1151 |
 
-Deprecated — do not re-introduce: `DXVK_ASYNC`, `DXVK_FRAME_RATE`, `WINE_FULLSCREEN_FSR`, `DISABLE_LAYER_MESA_ANTI_LAG`, `ENABLE_LAYER_MESA_ANTI_LAG`, `PROTON_NO_WM_DECORATION`. (`VKD3D_FRAME_RATE` is **retained** — still valid.)
+Deprecated — do not re-introduce: `DXVK_ASYNC`, `DXVK_FRAME_RATE`, `WINE_FULLSCREEN_FSR`,
+`DISABLE_LAYER_MESA_ANTI_LAG`, `ENABLE_LAYER_MESA_ANTI_LAG`, `PROTON_NO_WM_DECORATION`.
+(`VKD3D_FRAME_RATE` is **retained** — still valid.)
 
 </details>
 
@@ -284,13 +310,18 @@ Deprecated — do not re-introduce: `DXVK_ASYNC`, `DXVK_FRAME_RATE`, `WINE_FULLS
 
 ### Packages
 
-Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported).
+Default: `pacman -Syu --needed` per Arch's
+[no-partial-upgrade policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported).
 
 > [!CAUTION]
-> `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` switches the Packages phase to `pacman -Sy --needed` (refresh + install only, no upgrade). Violates Arch's no-partial-upgrade policy — accept the dependency-skew risk.
+> `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` switches the Packages phase to `pacman -Sy --needed`
+> (refresh + install only, no upgrade). Violates Arch's no-partial-upgrade policy —
+> accept the dependency-skew risk.
 
 > [!NOTE]
-> A `PKGS_DEL` removal is skipped when an installed package outside the set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1` (target + rdeps to one `pacman -Rns`). Inspect first: `pactree -ru <pkg>`.
+> A `PKGS_DEL` removal is skipped when an installed package outside the set
+> reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1`
+> (target + rdeps to one `pacman -Rns`). Inspect first: `pactree -ru <pkg>`.
 
 | Action | Count | Packages |
 |---|---|---|
@@ -344,7 +375,8 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 
 ## Customization
 
-Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.fish`. Re-run `--verify-static` after changes.
+Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.fish`.
+Re-run `--verify-static` after changes.
 
 ## Safety & Reliability
 
@@ -365,7 +397,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Re-source guard | `_RY_INSTALL_LOADED` blocks double-source per session |
 | Credentials | 15 lowercase secret-flag patterns redacted in logs |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE handled non-fatally (JSONL log canonical) |
-| mkinitcpio rollback | Pre-deploy bytes captured; restored on `pacman -Syu` failure. Skipped on sudo lapse (`MKINITCPIO_BACKUP_SKIPPED`) |
+| mkinitcpio rollback | Pre-deploy snapshot to tracked tmpfile (`/etc/.ry-install.mki-backup.*`); restored byte-exact on `pacman -Syu` failure. Skipped on sudo lapse (`MKINITCPIO_BACKUP_SKIPPED`). Snapshot tmpfile is removed on install success and on signal/cleanup. |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; single-writer guard; rotation-race self-heal |
 
 <a id="exit-codes"></a>
@@ -375,7 +407,7 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | Non-critical failure / verification drift |
+| `1` | Non-critical failure / verification drift / old-kernel preflight warn |
 | `2` | Usage error (argparse + policy refusals) |
 | `3` | Preflight failed |
 | `4` | Boot-critical failure |
@@ -407,15 +439,20 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 <details>
 <summary><b>Data Directory & Logs</b></summary>
 
-All runtime state under `~/ry-install/`. Logs auto-prune at `MAX_LOGS=50` (oldest first; `*.jsonl` and `*.log` under `~/ry-install/logs/`).
+All runtime state under `~/ry-install/`. Logs auto-prune at `MAX_LOGS=50`
+(oldest first; `*.jsonl` and `*.log` under `~/ry-install/logs/`).
 
 | Path | Contents |
 |---|---|
 | `~/ry-install/logs/YYYY-MM-DD/` | NDJSON logs (`*.jsonl`) |
-| `~/ry-install/.lock/` | Instance guard |
+| `~/ry-install/.lock/` | Instance guard (atomic mkdir) |
+| `~/ry-install/.lock-broker` | flock(1) target for stale-lock reclaim (scoped to ry-install) |
 | `~/ry-install/.boot-wipe-acknowledged` | Boot-wipe ack marker (entry-set hash; refreshed on every successful rebuild) |
 
-NDJSON schema: `{"ts":ISO8601,"event":NAME,"data":STR,...}`. Common events: `header`, `footer`, `ok`/`fail`/`warn`/`err`/`info`, `run`, `stderr`, `section`. Prefix-routed types (`BOOT_*`, `CHECK_*`, `MKINITCPIO_*`, `PKG_REMOVE_*`, `SUDO_*`, `VERIFY_*`) follow the same schema.
+NDJSON schema: `{"ts":ISO8601,"event":NAME,"data":STR,...}`.
+Common events: `header`, `footer`, `ok`/`fail`/`warn`/`err`/`info`, `run`, `stderr`, `section`.
+Prefix-routed types (`BOOT_*`, `CHECK_*`, `MKINITCPIO_*`, `PKG_REMOVE_*`, `SUDO_*`, `VERIFY_*`)
+follow the same schema.
 
 ```fish
 jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl
@@ -425,7 +462,10 @@ jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl
 
 ## Uninstall
 
-No automated uninstaller. Use [Managed Files](#managed-files) as the rollback source-of-truth: unmask units, `rm` deployed paths, restore `/etc/fstab` from your snapshot, optionally `pacman -S`/`-Rns` to reverse package changes, then `mkinitcpio -P && sdboot-manage gen` and reboot.
+No automated uninstaller. Use [Managed Files](#managed-files) as the rollback source-of-truth:
+unmask units, `rm` deployed paths, restore `/etc/fstab` from your snapshot,
+optionally `pacman -S`/`-Rns` to reverse package changes,
+then `mkinitcpio -P && sdboot-manage gen` and reboot.
 
 ## Known Issues
 
@@ -470,7 +510,8 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 <details>
 <summary><b>Progress bar disabled under mosh</b></summary>
 
-DECSTBM scroll-region sequences aren't honored by mosh; the bar is suppressed but `progress` JSONL events still emit. Use SSH, tmux, or a local terminal.
+DECSTBM scroll-region sequences aren't honored by mosh; the bar is suppressed
+but `progress` JSONL events still emit. Use SSH, tmux, or a local terminal.
 
 </details>
 
@@ -478,7 +519,13 @@ DECSTBM scroll-region sequences aren't honored by mosh; the bar is suppressed bu
 <details>
 <summary><b>Sudo keepalive process failed to start</b></summary>
 
-`_start_sudo_keepalive` forks a hermetic `fish --no-config -c …` child that re-runs `sudo -n -v` every 45s, tied to `LOCK_DIR`'s inode. If the fork or post-fork `kill -0` fails, the install proceeds with a warn (no abort) and downstream `sudo -n` may fail mid-`pacman -Syu`. Mitigation: `sudo -v; and ./ry-install.fish` (idempotent). Common causes: fork limit (`ulimit -u`), AppArmor/SELinux denial, or a `/proc` mount blocking `kill -0`. Child stderr is captured to `SUDO_KEEPALIVE_ERR` and surfaced by `_check_sudo_keepalive`.
+`_start_sudo_keepalive` forks a hermetic `fish --no-config -c …` child that re-runs
+`sudo -n -v` every 45s, tied to `LOCK_DIR`'s inode. If the fork or post-fork `kill -0`
+fails, the install proceeds with a warn (no abort) and downstream `sudo -n` may fail
+mid-`pacman -Syu`. Mitigation: `sudo -v; and ./ry-install.fish` (idempotent).
+Common causes: fork limit (`ulimit -u`), AppArmor/SELinux denial, or a `/proc` mount
+blocking `kill -0`. Child stderr is captured to `SUDO_KEEPALIVE_ERR` and surfaced
+by `_check_sudo_keepalive`.
 
 </details>
 
@@ -512,4 +559,4 @@ DECSTBM scroll-region sequences aren't honored by mosh; the bar is suppressed bu
 
 ## License
 
-[MIT](LICENSE) © 2026 Ryan Musante
+MIT © 2026 Ryan Musante

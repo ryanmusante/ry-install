@@ -5,6 +5,258 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v5.0.15 - 2026-05-10
+--------------------
+
+  * verify: `_vsp_required`, `_vsp_aur`, `_vsp_removed`,
+    `_vsp_pacman_conf` — four package-presence checks converted
+    from `cmd; and _ok …; or _fail …` chains to explicit
+    `if/else`. Prior form let `_ok`/`_warn`'s exit code reach
+    the `or` arm (e.g. when `_RY_OUTPUT_BROKEN` short-circuits
+    emit), firing both verdicts against the same record. Each
+    helper now emits exactly one verdict per record. Mirrors
+    the `_vrsv_chk_*` conversion in v5.0.14.
+  * verify: `_cg_access_ok` — non-boot read-access branch
+    rewritten from `; and _fail …; or _fail …` to explicit
+    `if test -f / else`. Same double-emit risk as the `_vsp_*`
+    family; harmonised on the same shape.
+  * verify: `_unit_state_user` removed. Defined but never
+    invoked; user-scope `systemctl --user show` is not part of
+    the documented verify-static or verify-runtime contract.
+  * content: `_content_…_resolved.conf` — inline comment marks
+    `LLMNR`, `DNSOverTLS`, `DNSSEC` as fixed-policy directives
+    (intentionally not promoted to `$RESOLVED_*` vars).
+    `MulticastDNS` remains the only knob. No output change.
+  * content: `_content_…_nm.conf` — inline comment marks
+    `wifi.iwd.autoconnect=false` as an architectural pairing
+    with `wifi.backend=iwd` (NM owns autoconnect; iwd does
+    not). No output change.
+  * docs: README license badge link removed. The deliverable
+    archive ships source + README + CHANGELOG only; LICENSE
+    lives upstream. Badge now renders without a broken
+    in-archive href. License section text de-linked to match.
+
+v5.0.14 - 2026-05-10
+--------------------
+
+  * verify: `_vrsv_chk_cpupower`, `_vrsv_chk_resolved`,
+    `_vrsv_chk_nm_dispatcher`, `_vrsv_chk_fstrim` — five
+    `cmd; and _ok …; or _fail …` chains converted to explicit
+    `if/else`. Prior form let `_ok`'s exit code reach the `or`
+    arm (e.g. when `_RY_OUTPUT_BROKEN` short-circuits emit),
+    firing both verdicts against the same record. Each helper
+    now emits exactly one verdict per record.
+  * verify: `_idf_match_dst` — `; or test …; and echo|return`
+    chain in the SYSTEM/SERVICE and USER scope loops rewritten
+    as explicit `if/end`. Brittle precedence with the trailing
+    `; and echo "true|true"; and return 0` removed; control flow
+    now reads in one pass.
+  * check: `_ry_do_check` — `$_checked -eq 0` skip-cascade returns
+    `EXIT_PREFLIGHT` (was `EXIT_DRIFT`). Empty checked-set is a
+    prerequisite failure (every dst skipped via
+    `_should_skip_iwd`), not drift. Restores the documented
+    `--check` exit semantics. JSONL marker also re-tagged
+    `CHECK_PREFLIGHT`.
+  * cli: fish-version guard at top-level rewritten from chained
+    `; or begin; …; end; and echo; and _ry_exit` to explicit
+    `if test … else if begin … end; …; end`. Same semantics
+    (≥ 3.6 required); readable in one pass.
+  * cli: top-level root probe uses cached `$_MY_UID` instead of
+    forking `id -u`. `_MY_UID` is cached at script init (line
+    35); reuse parallels existing convention and saves one fork.
+  * sudo: `_RY_LOG_OWNER_PID` switches from `set -gx` to `set -g`.
+    Internal-only variable, no child process consumes it; removes
+    a harmless env-leak into `pacman`, `mkinitcpio`, `paru`,
+    `sdboot-manage`, etc.
+  * sudo keepalive: embedded `fish -c` child gets `; or break`
+    after `command sleep $argv[3]`. If `sleep` is signalled or
+    the interval is unparseable (defended upstream by
+    `_ir_validate_timing`), the child exits cleanly rather than
+    busy-looping `sudo -n -v` at full speed. Defense-in-depth.
+  * sudo keepalive: dead `_RY_NO_LOG=1` env var dropped from the
+    `fish --no-config -c` invocation. No parent functions are
+    loaded in the child; no `_log` ever runs there. The var was
+    inert.
+  * sudo: `_ip_probe_sudo_policy` Runas-spec regex broadens from
+    `(ALL|root)` to also accept `(%groupname)` (e.g. `%wheel`).
+    Sudoers configs using `(%wheel) NOPASSWD: ALL` no longer
+    false-negative on the policy probe. Pre-screen only —
+    actual sudo capability is already verified by `sudo -n -v`
+    upstream in `_ensure_sudo_cached`.
+  * verify: `_vrk_module_state` amdgpu hex compare validates
+    `^0x[0-9a-fA-F]+$` before `printf '%d'`. Prior fallback
+    path (`echo` original on `printf` failure) would silently
+    compare hex-string vs decimal-string on a malformed sysfs
+    value.
+  * style: 2-line comment block above `_broker` declaration in
+    `_reclaim_stale_lock` consolidated into a single line. Three
+    truncated mid-sentence comment fragments in
+    `_kill_sudo_keepalive` kill-loop removed; one consolidated
+    explanatory comment retained above the `pkill -P` line.
+  * style: blank line inserted after section banners
+    `# Summary counters for JSONL footer` and `# SIGNAL &
+    TEARDOWN HANDLERS …` for parity with the 12 other banner
+    sections (all blank-before / blank-after).
+  * style: `# === SCRIPT GUARDS & EXIT CODES ===` banner added
+    above the top constants block. Parallels the existing
+    `# === GTR9_PRO BUILT-IN DEFAULTS ===` banner above the
+    per-profile defaults.
+  * release: 5.0.13 → 5.0.14.
+
+v5.0.13 - 2026-05-10
+--------------------
+
+  * lock: `_reclaim_stale_lock` PID-liveness probe extracted to a
+    dedicated helper `_rcl_probe_owner_pid` (argument-named, rc=0
+    stale / rc=1 live ry-install). Brings `_reclaim_stale_lock`
+    under the 50-line function-size ceiling; the /proc/<pid>/comm
+    + cmdline defense-in-depth path is now independently testable.
+  * verify: `_vsb_sdboot` LINUX_OPTIONS extraction gains a pre-parse
+    quote-count assertion — exactly two `"` chars required before the
+    PCRE backref runs. Manual edits to `/etc/sdboot-manage.conf` with
+    embedded `\"` no longer mis-extract; `_warn` + skip instead.
+    Lint:ignore comment refreshed to reference the new guard.
+  * log: `_json_str` fast-path no longer relies on fish's
+    left-to-right `; and printf …; and return` chain. Rewritten as
+    an explicit `if not match; printf | string collect; return
+    $status; end` so a non-zero `string collect` exit propagates
+    correctly rather than falling through to the slow-path escapes.
+  * sudo keepalive: `_start_sudo_keepalive` embedded `fish -c` child
+    block gains a `# lint:ignore (embedded fish -c child …)` tag for
+    consistency with the four `lint:ignore` tags already on the
+    `flock(1)` `/bin/sh -c` block in `_reclaim_stale_lock`.
+    Documents the boundary so future refactors do not fold it into
+    parent-scope helpers.
+  * style: 3 missing blank lines inserted before single-line section
+    comments — before `# internal-only sentinels` (after
+    `set -g EXIT_DRIFT`), before `# NO_COLOR: presence-alone …`
+    (after `set -g QUIET true`), and before `# _RY_BOOT_TAINTED: …`
+    (after `set -g INSTALL_HAD_ERRORS false`). Brings section-banner
+    spacing to fully consistent.
+  * docs: README Quick Start callouts (`> [!NOTE]`, `> [!IMPORTANT]`),
+    Scope paragraphs, blockquote intro, and Hardware Reference prose
+    rewrapped to ≤120-char lines for diff-friendliness. Table rows
+    remain on single lines (GFM table constraint). Rendered output
+    unchanged.
+  * docs: CHANGELOG v5.0.12 entry — replace stale absolute line-number
+    references (`L4669/L4730/L594/L979/L4646/L4666`) with
+    function-name / section-banner references that survive future
+    edits. v5.0.1 entry receives the same treatment (`L210/L2068`
+    → symbol-anchored).
+  * release: 5.0.12 → 5.0.13.
+
+v5.0.12 - 2026-05-10
+--------------------
+
+  * cli: early-arg `-h`/`--help` and `-v`/`--version` now honour
+    `_RY_INSTALL_SOURCED` before `exit 0`. Prior code would kill the
+    user's interactive shell when ry-install was sourced with `-h`
+    (`source ry-install.fish -h`). Both branches now: `test
+    "$_RY_INSTALL_SOURCED" = true; and return 0; exit 0`. Mirrors the
+    pattern used by `_ry_exit` / `_pre_dispatch_exit` elsewhere.
+  * cli: `_ry_show_help` in early-arg loop now writes to stderr
+    (`>&2`), matching the other invocation sites in the argparse
+    error path and the positional-rejection path. Diagnostic-style
+    output stays out of stdout pipelines.
+  * perms: `_chk_perms` boolean rewritten — explicit `_bad` flag
+    instead of fish's left-to-right `; or test …; and _fail …; and
+    return 1` chain. Prior chain silently passed when ONLY perms
+    differed (owner matched): `test perms != expected; or test owner
+    != expected; and _fail` evaluated as `((test or test) and _fail)`,
+    so a perms-only mismatch left the chain status at 0 and `_fail`
+    never ran. New form runs each comparison once, ORs the failure
+    bits, then emits a single `_fail` covering both fields. Adds a
+    `<2 parts` malformed-stat guard so `_parts[2]` is never read empty.
+  * fstab: `_install_fstab_opts` and `_far_awk_rewrite` fall through
+    to `sudo -n awk` when `/etc/fstab` is not user-readable (mode 0640
+    or stricter). Prior `not test -r /etc/fstab → _fail` blocked
+    hardened-sudoers configs from rewriting. Hard fail only if even
+    `sudo -n test -r` reports unreadable. `_vre_fstab` mirrors the
+    same fall-through for verify-runtime.
+  * fstab: `_install_fstab_opts` declares `set -l ext4_lines` at
+    function scope before the readable/sudo branches; prior `set -l`
+    inside each `if/else` arm was block-scoped and would not persist
+    past `end`.
+  * lock: `_reclaim_stale_lock` now flock-targets a dedicated
+    `~/ry-install/.lock-broker` file rather than the shared
+    `~/ry-install` parent directory. Defence-in-depth against
+    hypothetical future tools also locking the parent path.
+  * mkinitcpio rollback: snapshot moves from in-memory fish variable
+    (`_RY_MKI_BACKUP`) to a tracked tmpfile path (`_RY_MKI_BACKUP_FILE`)
+    under `/etc/.ry-install.mki-backup.XXXXXX`. Eliminates two
+    issues: (a) fish command substitution strips trailing whitespace
+    before `string collect` runs, so a config file with a final
+    newline would round-trip to one without; (b) config content held
+    in a fish global persisted across the entire run. Restore path
+    uses `sudo -n cp` from the snapshot to a fresh atomic-write
+    tmpfile, then `chmod`/`chown --reference` + `mv -T` as before.
+    Success path removes the snapshot via `_rm_tmp`; signal/exit
+    cleanup pipeline already tracks it.
+  * verify: `_vrs_installed_file_perms` user-file owner check drops
+    group-name comparison — only owner-name is enforced. Prior
+    `(id -un):(id -gn)` would spuriously fail for files created
+    under a non-default umask, `chgrp`-touched, or under an
+    sgid-bit parent dir. Group is read live from the file's stat
+    and folded into the expected-owner string so `_chk_perms`
+    output still shows it; only the comparison logic ignores
+    group-drift.
+  * pkgs: `_csp_filter_rdeps` pactree parser strips optional
+    `pkg=1.2.3` version suffix per line before comparison. Prior
+    `string match -v -- "$pkg"` would fail to exclude the seed
+    package when pactree emitted versioned output, causing the
+    cascade list to include the seed pkg twice.
+  * boot perf: `_vrs_boot_perf` boot-time integer conversion uses
+    `math "round($total_sec)"` instead of `LC_ALL=C printf "%.0f"`.
+    Removes libc-dependent rounding-mode behaviour (banker vs
+    half-up); `math` round is deterministic.
+  * generators: `_awf_render_to_tmp` `switch` cases use the symbolic
+    `$EXIT_GEN_NOFN` / `$EXIT_GEN_NOUUID` / `$EXIT_GEN_SYSCTL`
+    constants instead of literal `11/12/13`. Future renumbering
+    won't silently mis-route error classes.
+  * verify: `_verify_static_services` scaling_governor anti-regression
+    grep is anchored with `(^|[^#])scaling_governor` to skip
+    comments. Prior bare grep would false-positive if a future
+    `# scaling_governor` comment was added.
+  * post-hooks: `_RY_POST_HOOKS` reformatted with line
+    continuations. `/etc/mkinitcpio*` and `/etc/sdboot-manage*`
+    globs split into anchored
+    `/etc/mkinitcpio.conf` + `/etc/mkinitcpio.d/*` and
+    `/etc/sdboot-manage.conf` + `/etc/sdboot-manage.d/*` pairs
+    (each tag still routes to `boot`). New table is 14 lines,
+    one entry per line — diff-friendly.
+  * config: `INITRD_WARN_MB=100` extracted as named constant
+    (was hard-coded in `_boot_initrd_size_scan`); parallels
+    `BOOT_SPACE_*` / `ROOT_AVAIL_*`.
+  * style: file-creation arg quoting — `_atomic_write_file "$dst"
+    "$perms" "$use_sudo"` (was unquoted `$perms` / `$use_sudo`).
+    Cosmetic, no behaviour change (neither var contains whitespace).
+  * style: raw `printf '\n' >&2` in `_install_preflight` replaced
+    with `_echo`, honouring QUIET.
+  * style: 4 navigation-anchor section comments added —
+    `# SIGNAL & TEARDOWN HANDLERS`, `# DISPATCH TABLE`,
+    `# PRE-DISPATCH TEARDOWN HELPERS`, and
+    `# TOP-LEVEL ARGPARSE + MODE DISPATCH`. Mirrors the v5.0.9
+    navigation anchor pass.
+  * style: cpupower-epp service comment expanded — "succeeds on
+    partial EPP write; failed cores logged to journal via stderr"
+    documents the `2>/dev/null || echo … >&2` pattern in the
+    embedded ExecStart.
+  * counts: README managed-file count drift resync — "15 embedded
+    configs" → "12 embedded configs" in README:9; identical fix to
+    the `_install_system_files` description ("Deploy all 15
+    embedded config files" → "Deploy all 12"). Both were missed
+    in the v5.0.10 / v5.0.11 resync passes.
+  * docs: README Prerequisites table gains a `Systemd ≥ 250
+    (advisory)` row, documenting `_ry_check_deps` warn-only check
+    against systemctl version. README Exit Codes table
+    code-`1` row clarified to include "old-kernel preflight warn".
+    Help text `EXIT CODES` line mirrors.
+  * docs: README Data Directory table gains
+    `~/ry-install/.lock-broker` row tracking the new flock
+    target. mkinitcpio rollback row updated to describe the
+    tmpfile-based snapshot.
+  * release: 5.0.11 → 5.0.12.
+
 v5.0.11 - 2026-05-10
 --------------------
 
@@ -261,10 +513,12 @@ v5.0.2 - 2026-05-09
 v5.0.1 - 2026-05-09
 -------------------
 
-  * style: trim verbose comment at L210 (`_RY_BOOT_TAINTED`
-    explanation 250→167 chars); technical signal preserved.
-  * style: trim verbose comment at L2068 (umask 0077 rationale
-    235→158 chars); technical signal preserved.
+  * style: trim verbose comment above `set -g _RY_BOOT_TAINTED`
+    (`_RY_BOOT_TAINTED` explanation 250→167 chars); technical
+    signal preserved.
+  * style: trim verbose comment above the user-scope `mkdir`
+    `umask 0077` block in `_ry_install_file` (235→158 chars);
+    technical signal preserved.
   * release: 5.0 → 5.0.1.
 
 v5.0 - 2026-05-09

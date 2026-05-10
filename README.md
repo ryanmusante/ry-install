@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-5.0.1-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-5.0.5-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -130,7 +130,8 @@ All modes are non-interactive. Verification flags are read-only.
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |
 | `--check` | Silent idempotency probe (exit 0=clean, 3=preflight, 10=drift) |
-| `--install-file <path>` | Re-deploy a single managed file |
+| `--install-file <path>` | Re-deploy a single managed file (absolute path required; use `--install-file=<path>` for paths starting with `-`) |
+| `--` | End of options. Anything after `--` is treated as a positional and rejected with exit 2. `-h`/`--help` and `-v`/`--version` *before* `--` are still honoured. |
 | `-h, --help` / `-v, --version` | Help / version |
 
 ## Install Flow
@@ -298,7 +299,7 @@ Default: `pacman -Syu --needed` per Arch's [no-partial-upgrade policy](https://w
 
 | Action | Count | Packages |
 |---|---|---|
-| **Install** | 12 | nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, mesa, lib32-mesa, fd, sd, dust, procs, bottom, git-delta, lm_sensors |
+| **Install** | 13 | nvme-cli, cachyos-gaming-meta, cachyos-gaming-applications, mesa, lib32-mesa, fd, sd, dust, procs, bottom, htop, git-delta, lm_sensors |
 | **Remove** | 7 | plymouth, cachyos-plymouth-bootanimation, cachyos-plymouth-theme, octopi, micro, cachyos-micro-settings, btop |
 | **AUR** | 2 | mkinitcpio-firmware, mt76-mt7925-dkms (paru required; soft-fail if absent) |
 
@@ -400,12 +401,12 @@ Edit the `# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top of `ry-install.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). `0` disables. |
-| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Literal `=1` to ack boot-entry wipe (override; auto-ack passes when every entry maps to a `vmlinuz-*`). Re-prompts on entry-set hash change. |
+| `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). Accepts any non-negative integer (leading zeros tolerated); `0` disables. |
+| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Literal `=1` to ack boot-entry wipe (override; auto-ack passes when every entry maps to a `vmlinuz-*`). Persisted in `~/ry-install/.boot-wipe-acknowledged`; re-prompts on entry-set hash change. |
 | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | Literal `=1` switches Packages phase to `pacman -Sy --needed` (no system upgrade). Violates Arch policy. |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | Literal `=1` required to bypass torn-package gate. Recovery only. |
 | `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | Literal `=1` cascades installed reverse deps into the removal set when a `PKGS_DEL` package is blocked. Default skips with warn. |
-| `NO_COLOR` | unset | Suppress ANSI color (also auto on `TERM=dumb` / non-TTY). |
+| `NO_COLOR` | unset | Suppress ANSI color when set (any value, including empty; per [no-color.org](https://no-color.org/)). Auto on `TERM=dumb` / non-TTY. |
 
 > Secret-flag redaction is **case-sensitive lowercase**. Use lowercase flag names with `_run`-piped commands.
 

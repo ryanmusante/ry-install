@@ -1,5 +1,5 @@
 #!/usr/bin/env fish
-# ry-install v5.0.6 (2026-05-10) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
+# ry-install v5.0.7 (2026-05-10) — CachyOS config manager | Ryan Musante | MIT. Dynamic dispatch: _ry_get_file_content → _content_<key>. Module-state via `set -g` globals namespaced _RY_* / _* / SCREAMING_SNAKE_CASE; erased in _ry_namespace_cleanup; re-source guard _RY_INSTALL_LOADED.
 if set -q _RY_INSTALL_LOADED
     echo "ry-install already loaded in this session" >&2
     if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
@@ -8,7 +8,6 @@ if set -q _RY_INSTALL_LOADED
         exit 1
     end
 end
-# reset bail sentinel + last-exit on fresh load.
 set -e _RY_INSTALL_BAILING
 set -e _RY_INSTALL_LAST_EXIT
 set -g _RY_PRE_GLOBALS (set --names -g)
@@ -18,7 +17,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
 else
     set -g _RY_INSTALL_SOURCED false
 end
-set -g VERSION "5.0.6"
+set -g VERSION "5.0.7"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -153,26 +152,21 @@ test "$parts[1]" -lt 3; or begin
 end; and echo "[ERR] fish 3.6+ required (found: $fish_ver)" >&2; and _ry_exit $EXIT_PREFLIGHT
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -gx PATH /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin
-# TMPDIR writability gate
 set -l _ry_tmpprobe_dir (set -q TMPDIR; and test -n "$TMPDIR"; and printf '%s' "$TMPDIR"; or printf '%s' /tmp)
 not test -w "$_ry_tmpprobe_dir"; and echo "[ERR] tmp dir not writable: $_ry_tmpprobe_dir" >&2; and _ry_exit $EXIT_PREFLIGHT
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 not printf 'b\0a\0' | command sort -z 2>/dev/null | command tr -d '\0' | command grep -q '^ab$'; and echo "[ERR] GNU sort with NUL-delimited sort (-z) required (busybox/BSD sort detected)" >&2; and _ry_exit $EXIT_PREFLIGHT
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-# GNU stat -c probe
 not command stat -c '%a' / >/dev/null 2>&1; and echo "[ERR] GNU stat with -c format flag required (BSD stat detected)" >&2; and _ry_exit $EXIT_PREFLIGHT
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-# GNU find -printf probe (BSD find lacks -printf)
 not command find /tmp -maxdepth 0 -printf '' 2>/dev/null; and echo "[ERR] GNU find with -printf required (BSD find detected)" >&2; and _ry_exit $EXIT_PREFLIGHT
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-# GNU df --output probe (BSD df lacks --output)
 not command df --output=avail / >/dev/null 2>&1; and echo "[ERR] GNU df with --output required (BSD df detected)" >&2; and _ry_exit $EXIT_PREFLIGHT
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 not command -q timeout; and echo "[ERR] GNU coreutils timeout(1) required (used by _run for hang-protection)" >&2; and _ry_exit $EXIT_PREFLIGHT
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g _RY_SLEEP_FRAC 1
 command sleep 0.05 2>/dev/null; and set -g _RY_SLEEP_FRAC 0.1
-# Timestamps: DATE_LABEL for dirs
 set -g DATE_LABEL (date '+%Y-%m-%d')
 set -g TIMESTAMP (date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
 set -gx _RY_LOG_OWNER_PID $fish_pid
@@ -184,7 +178,6 @@ set -g HOME (string trim -r -c / -- "$HOME")
 set -g _RY_HOME_DIR "$HOME/ry-install"
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 set -g LOG_DIR "$_RY_HOME_DIR/logs/$DATE_LABEL"
-# Boot-wipe acknowledgement marker
 set -g BOOT_WIPE_MARKER "$_RY_HOME_DIR/.boot-wipe-acknowledged"
 set -l _prev_mkdir_umask (umask)
 umask 0077
@@ -236,7 +229,6 @@ set -g KVER_MINOR (string replace -r '[^0-9].*' '' -- "$KVER_PARTS[2]")
 test -z "$KVER_MINOR"; or not string match -qr '^\d+$' -- "$KVER_MINOR"; and echo "[ERR] Cannot parse kernel minor version from uname -r: $KVER" >&2; and _ry_exit $EXIT_PREFLIGHT
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
 function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy-loaded; empty on missing config)"
-    # sentinel-based gate
     if not set -q _KCONFIG_LOADED
         if test -f /proc/config.gz
             set -g _KCONFIG_DATA (command zcat /proc/config.gz 2>/dev/null)
@@ -552,7 +544,6 @@ function _do_cleanup --description "Master cleanup: remove tmpfiles, release loc
     set --erase _RY_ESP_PATH
     set --erase _RY_BOOT_PATH
     set --erase _RY_SYSTEMD_VER
-    # Release LOCK_DIR mutex
     set -q _RY_HOLDS_LOCK; and set -q LOCK_DIR; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
     _kill_sudo_keepalive
     if command -q pkill
@@ -1335,7 +1326,6 @@ function _verify_summary --description "Print verification pass/fail/warn summar
     end
 end
 
-
 function _progress_init --description "Open scroll region; draw initial bar"
     # _PROG_TOTAL derived from count $_PROG_STEPS, not hardcoded
     set -g _PROG_STEPS Preflight Packages Configuration Services Boot Finalize
@@ -1510,12 +1500,10 @@ function _run --description "Execute a command with logging, stdout/stderr captu
         _log "OUTPUT: "(string join -- " | " (command head -n 100 -- "$stdout_tmp"))
         test "$QUIET" = false; and command cat -- "$stdout_tmp" >&2
     end
-    # stdout_tmp & stderr_tmp are inside _run_dir
     test -d "$_run_dir"; and command rm -rf --preserve-root -- "$_run_dir" 2>/dev/null; and _untrack_tmpfile "$_run_dir"
     _log "EXIT: $ret cmd=$log_cmd"
     return $ret
 end
-
 
 function _chk_eq --argument-names label actual expected --description "Compare actual vs expected; emit _ok or _fail"
     if test "$actual" = "$expected"
@@ -1548,7 +1536,6 @@ function _chk_perms --argument-names path expected_perms expected_owner use_sudo
     else
         set _po (command stat -c '%a %U:%G' -- "$path" 2>/dev/null)
     end
-    # stat-fail guard
     test -z "$_po"; and _fail "  $path: stat failed (file disappeared or unreadable)"; and return 1
     set -l _parts (string split -n ' ' -- "$_po")
     test "$_parts[1]" != "$expected_perms"; or test "$_parts[2]" != "$expected_owner"; and _fail "  $path: $_parts[1] $_parts[2] (expected: $expected_perms $expected_owner)"; and return 1
@@ -1615,7 +1602,6 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     set _stage1_rc $pipestatus[1]
     set _grep_rc $pipestatus[2]
     switch $_stage1_rc
-        # proceed
         case 0
         case 1
             _fail "  $label: MISSING (file has no non-comment lines)"
@@ -1649,7 +1635,6 @@ end
 function _ry_check_deps --description "Verify required packages are installed"
     _log DEPS_CHECK_START
     set -l missing
-    # hard deps.
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
         stat date curl timeout mktemp awk head tail cut sed find \
         grep sort cat printf chmod chown mv rm tee ip getent \
@@ -1673,7 +1658,6 @@ end
 
 function _ry_check_network --description "Verify network connectivity (single HEAD + raw-IP fallback)"
     _log NET_CHECK_START
-    # curl is a reqd dep
     curl -sfI --connect-timeout 3 --max-time 5 https://archlinux.org >/dev/null 2>&1; and _ok "Network connectivity: OK"; and return 0
     if ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1
         # cover both DNS-broken and 443-egress-blocked modes
@@ -1756,7 +1740,6 @@ function _ry_check_kernel_version --description "Verify running kernel version m
     end
     return 0
 end
-
 
 function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS ordering and presence"
     set -l existence_only false
@@ -1852,12 +1835,10 @@ function _grep_kv --argument-names dst --description "Validate kv pairs (loader.
             set keys LINUX_OPTIONS LINUX_FALLBACK_OPTIONS DEFAULT_ENTRY REMOVE_EXISTING OVERWRITE_EXISTING REMOVE_OBSOLETE
             set sep '='
         case '*'
-            # defensive default.
             _log "BUG: _grep_kv called for unsupported dst=$dst"
             return 2
     end
     for key in $keys
-        # Escape key.
         set -l _key_re (string escape --style=regex -- "$key")
         string match -qr -- "^$_key_re$sep" $content; or begin
             _fail "  $dst: missing key '$key'"
@@ -1908,7 +1889,6 @@ end
 function _grep_xml_tag --argument-names dst --description "Validate drirc XML has required tags"
     test (count $argv) -lt 2; and _log "BUG: _grep_xml_tag called without content (dst=$dst)"; and return 2
     set -l content $argv[2..-1]
-    # tightened '<application' → '<application '.
     for tag in '<driconf>' '<device>' '<application '
         string match -q -- "*$tag*" $content; or begin
             _fail "  $dst: missing XML tag '$tag'"
@@ -1966,27 +1946,20 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
     switch "$dst"
         case '*.service'
             _verify_unit_content "$dst" $_content
-            return $status
         case '*.fish'
             _rvc_fish_syntax "$dst" $_content
-            return $status
         case '*/loader.conf' '*/sdboot-manage.conf'
             _grep_kv "$dst" $_content
-            return $status
         case '*/kernel/cmdline'
             _grep_kparam "$dst" $_content
-            return $status
         case '*/sysctl.d/*'
             _grep_sysctl_kv "$dst" $_content
-            return $status
         case '*/drirc'
             _grep_xml_tag "$dst" $_content
-            return $status
         case '*/mkinitcpio.conf' '*/environment.d/*'
             return 0
         case '*'
             _grep_ini_header "$dst" $_content
-            return $status
     end
 end
 
@@ -2327,7 +2300,6 @@ function _vss_iwd --argument-names skip_iwd --description "_verify_static_system
     _chk_file /etc/iwd/main.conf; or return 0
     _chk_grep /etc/iwd/main.conf "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG"
     for quirk in $IWD_DRIVER_QUIRKS
-        # full key=value match.
         _chk_grep /etc/iwd/main.conf "$quirk" "DriverQuirks $quirk"
     end
     _chk_grep /etc/iwd/main.conf "NameResolvingService=$IWD_DNS_SERVICE" "DNS via $IWD_DNS_SERVICE"
@@ -2351,7 +2323,6 @@ function _vss_drirc_sysctl --description "_verify_static_system sub: drirc XML t
     _echo
     _echo "── sysctl drop-in ──"
     if _chk_file /etc/sysctl.d/99-cachyos-sysctl.conf
-        # compare key + value, not just key presence
         for entry in $SYSCTL_VALUES
             set -l parts (string split -m1 '=' -- "$entry")
             set -l key $parts[1]
@@ -2362,7 +2333,6 @@ function _vss_drirc_sysctl --description "_verify_static_system sub: drirc XML t
 end
 
 function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, coredump, iwd, NM, drirc, sysctl"
-    # Pre-compute iwd state once
     set -l _skip_iwd false
     not command -q pacman; or not command pacman -Qi iwd >/dev/null 2>&1; and set _skip_iwd true
     _echo "SYSTEM CONFIGURATION"
@@ -2482,7 +2452,6 @@ function _verify_static_services --description "Verify SERVICE_DESTINATIONS file
         _chk_file "$svc_file"
     end
     if test -f /etc/systemd/system/cpupower-epp.service
-        # scaling_governor ExecStart absent:
         _chk_grep /etc/systemd/system/cpupower-epp.service energy_performance_preference "cpupower-epp EPP ExecStart"
         command grep -q -- scaling_governor /etc/systemd/system/cpupower-epp.service 2>/dev/null; and _warn "  cpupower-epp: scaling_governor ExecStart present — remove it (amd_pstate=active uses powersave+EPP)"
         _chk_grep /etc/systemd/system/cpupower-epp.service "WantedBy=multi-user.target" "cpupower-epp WantedBy"
@@ -2570,7 +2539,6 @@ function _verify_static_checksum --description "Verify embedded content hash mat
         _should_skip_iwd "$dst"; and continue
         set -l expected (_ry_content_bytes "$dst")
         set -l actual (_installed_bytes "$dst")
-        # replaced switch "$expected::$actual" with explicit checks.
         if test -z "$expected"
             _fail_silent "  $dst: generator failed"
             set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
@@ -2629,9 +2597,7 @@ function _check_phase_files --description "--check phase: file content hash comp
         set -l _ib_rc $status
         switch $_ib_rc
             case 0
-                # readable; fall through
             case 1
-                # missing or unreadable → drift
                 set -g _RY_CHECK_DRIFT 1
                 continue
             case 2
@@ -2653,7 +2619,6 @@ function _check_phase_cmdline --description "--check phase: kernel cmdline conta
         set -g _RY_CHECK_DRIFT 1
         return 0
     end
-    # whole-word regex match (escaped)
     for _p in $KERNEL_PARAMS
         set -l _p_re (string escape --style=regex -- "$_p")
         string match -qr -- "(^|\s)$_p_re(\s|\$)" "$_cmdline"; or set -g _RY_CHECK_DRIFT 1
@@ -3131,7 +3096,6 @@ function _vrsv_wifi --description "Runtime services check: WiFi interface, iwd p
     _echo
     _echo "WIFI STATE"
     _echo
-    # use cached _PROFILE_USES_WIFI_BACKEND rather than re-deriving locally
     if test "$_PROFILE_USES_WIFI_BACKEND" = false
         _info "  iwd/NetworkManager not managed — skipping WiFi state checks"
         return 0
@@ -3376,7 +3340,6 @@ function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KS
     _vre_ntsync
 end
 
-
 function _vrs_nm_perms --description "Runtime session check: NetworkManager system-connections perms (0600 root:root)"
     set -l nm_conn_dir /etc/NetworkManager/system-connections
     if not test -d "$nm_conn_dir"
@@ -3450,7 +3413,6 @@ function _vrs_parent_dirs --description "Runtime session check: parent directori
             end
             set -l perms (string split ' ' -- "$_po")[1]
             set -l owner (string split ' ' -- "$_po")[2]
-            # parent-dir mode parse
             if test "$owner" != "root:root"
                 _fail "  $dir: $perms $owner (expected: root:root)"
                 set dir_bad (math $dir_bad + 1)
@@ -3476,7 +3438,6 @@ function _vrs_vulkan --description "Runtime session check: Vulkan driver package
         _info "  EXPECTED_VULKAN_PKGS not defined — skipping"
         return 0
     end
-    # single pacman -Qq replaces N forks of pacman -Q (one per pkg).
     set -l _vk_installed
     command -q pacman; and set _vk_installed (command pacman -Qq 2>/dev/null)
     set -l _vk_missing 0
@@ -3951,7 +3912,6 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
         set -l opts_field (printf '%s\n' "$line" | command awk '{ print $4 }')
         if not string match -qr '(^|,)noatime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)lazytime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"
             set -g _RY_FSTAB_NEEDS_CHANGE true
-            # -rg + non-capturing
             set -l _existing_commit (string match -rg -- '(?:^|,)commit=([0-9]+)(?:,|$)' -- "$opts_field")
             test -n "$_existing_commit"; and test "$_existing_commit" != 10; and set -ga _RY_FSTAB_COMMIT_OVERRIDES "$_existing_commit"
         end
@@ -4513,7 +4473,6 @@ function _boot_initrd_size_scan --argument-names esp --description "Post-rebuild
         return 0
     end
     for initrd in $_initrd_list
-        # stat -c %s gives exact bytes
         set -l size_b (sudo -n stat -c '%s' -- "$initrd" 2>/dev/null)
         if test -n "$size_b"; and string match -qr '^\d+$' -- "$size_b"
             set -l size_mb (math "floor($size_b / 1048576)")
@@ -4780,28 +4739,7 @@ function _idf_dispatch_hook --argument-names target tag --description "Dispatch 
         _err "Internal: unknown post-hook tag '$tag' (target=$target)"
         return 1
     end
-    switch $tag
-        case boot
-            _post_boot "$target"
-        case service
-            _post_service "$target"
-        case resolved
-            _post_resolved "$target"
-        case logind
-            _post_logind "$target"
-        case nm
-            _post_nm "$target"
-        case sysctl
-            _post_sysctl "$target"
-        case coredump
-            _post_coredump "$target"
-        case envd
-            _post_envd "$target"
-        case drirc
-            _post_drirc "$target"
-        case fish
-            _post_fish "$target"
-    end
+    _post_$tag "$target"
 end
 
 function _ry_do_install_file --argument-names target --description "Install a single named config file"
@@ -4877,7 +4815,6 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
         end
     end
     if test $_rc -ne 0
-        # name the failed step in the diagnostic log
         _log "BOOT_REBUILD_FAILED: step='$_failed_step' target=$target"
         _err "CRITICAL: boot rebuild cascade failed at '$_failed_step' — DO NOT REBOOT"
         # lint:ignore (user-facing shell advice)
@@ -5041,7 +4978,6 @@ if set -q _flag_version
     _pre_dispatch_exit 0
 end
 test "$_RY_INSTALL_BAILING" = true; and return $_RY_INSTALL_LAST_EXIT
-# root check after --help/--version
 if test (id -u) -eq 0
     echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2
     _pre_dispatch_exit $EXIT_USAGE
@@ -5144,7 +5080,6 @@ if test "$_RY_INSTALL_BAILING" = true
     test "$_RY_INSTALL_SOURCED" = true; and _ry_namespace_cleanup bail
     return $_RY_INSTALL_LAST_EXIT
 end
-# derive from LOG_DIR rather than hardcoded HOME path
 set -l _log_base_rot (dirname -- "$LOG_DIR")
 set -l _rot_rows (command find "$_log_base_rot" -maxdepth 2 \( -name '*.jsonl' -o -name '*.log' \) -type f -not -samefile "$LOG_FILE" -printf '%T@\t%p\0' 2>/dev/null | LC_ALL=C sort -zn | string split0)
 set -l _rot_ps $pipestatus

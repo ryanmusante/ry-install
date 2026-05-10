@@ -5,6 +5,25 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v5.0.7 - 2026-05-10
+-------------------
+
+  * style: `_idf_dispatch_hook` 10-case switch collapsed to dynamic
+    `_post_$tag "$target"` dispatch. Pre-existing allowlist
+    `contains -- "$tag" $_known` retained as the gate; unknown-tag
+    error path unchanged.
+  * style: `_rvc_dispatch` drops trailing `return $status` after each
+    validator call; fish returns last-command status implicitly.
+    Behaviour preserved across all eight branches.
+  * style: 33 single-line "what" comments removed (labels restated
+    by adjacent code; historical change-notes). Section banners,
+    `lint:ignore` markers, `SECURITY:` tags, and "why" comments
+    retained.
+  * style: 4 incidental double-blank line clusters collapsed.
+  * verify: 15/15 `_content_*` payload outputs byte-identical to
+    v5.0.6.
+  * release: 5.0.6 → 5.0.7.
+
 v5.0.6 - 2026-05-10
 -------------------
 

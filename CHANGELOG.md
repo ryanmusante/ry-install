@@ -5,6 +5,21 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v5.0.8 - 2026-05-10
+-------------------
+
+  * style: 114 cluster-internal blank lines removed between
+    consecutive same-prefix `_NS_*` functions (e.g. `_content_`,
+    `_post_`, `_ry_`, `_chk_`, `_vrsv_`). 113 namespace-boundary
+    blanks retained as section separators; 23 top-level/function
+    boundary blanks retained. No banner comments added — function
+    names self-document namespace; "why-not-what" comment rule
+    precludes namespace labels.
+  * verify: 246/246 functions retained, 827/827 top-level `end`
+    statements retained, zero consecutive-blank lines, all 15
+    `_content_*` payload outputs byte-identical to v5.0.7.
+  * release: 5.0.7 → 5.0.8.
+
 v5.0.7 - 2026-05-10
 -------------------
 

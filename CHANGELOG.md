@@ -5,6 +5,136 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v5.0.23 - 2026-05-11
+--------------------
+
+  * security: `_redact_text` — match greedy multi-token values (stops at
+    next dash-flag or pipe); previously only the first whitespace-
+    separated token after a flag was redacted, leaving `--cookie a b c`
+    with `b c` exposed.
+  * security: `_run` — redact captured stderr/stdout line-by-line before
+    joining with ` | ` for `_log`. Previous join-then-redact let the
+    pipe separator be consumed as the secret value, leaving the real
+    value on the following pseudo-line unredacted.
+  * fstab: `_far_awk_rewrite`, `_fstab_needs_change` — skip ext4
+    entries whose options field (`$4`) is digits-only. Such lines are
+    malformed per fstab(5) (likely an absent options column with `$4`
+    absorbing the dump field); rewriting them previously prepended the
+    dump value to the options string.
+  * preflight: `_ir_validate_counts` — extend invariant map with
+    `EXPECTED_VULKAN_PKGS:3`, `EXPECTED_SERVICES:3`,
+    `_RY_PKG_MANAGED_SERVICES:1`. Drift in these arrays now fails the
+    preflight gate instead of going silently.
+  * preflight: `_detect_lvm` — `pvs` probe honors `RY_RUN_TIMEOUT`
+    clamped to ≤10s. Was hardcoded 10s; long `RY_RUN_TIMEOUT` values now
+    do not lengthen the preflight probe, short values still apply.
+  * style: trim multi-line rationale comment in
+    `_content__etc_systemd_system_cpupower-epp.service` into one line.
+  * release: 5.0.22 → 5.0.23.
+
+v5.0.22 - 2026-05-10
+--------------------
+
+  * aur: `_install_aur_packages` — drop `_RY_BOOT_TAINTED=true` from
+    paru-missing / single-pkg / per-pkg failure paths. AUR pkgs are not
+    boot-critical; tainting blocked `mkinitcpio -P` for users without
+    paru. `INSTALL_HAD_ERRORS=true` still surfaces the warning.
+  * aur: `_install_aur_packages` — paru gains `--removemake` alongside
+    `--cleanafter`; make-only deps no longer persist.
+  * packages: `_install_packages` — mkinitcpio.conf pre-deploy failure
+    cleans `_RY_MKI_BACKUP_FILE` + erases `_RY_MKI_HAD_ORIG` before
+    return 1; prevents stale globals.
+  * packages: `_ip_pacman_invoke` — retry warning notes `-Syyu` handles
+    transient mirror staleness (not pkg conflicts); points to JSONL.
+  * verify: `_vrk_module_state` split into `_vrkm_amdgpu` (hex-aware
+    compare) and `_vrkm_blacklist` (module_blacklist scan).
+  * install-file: `_idf_match_dst` short-circuits on literal
+    `target = dst` before forking `realpath -m`.
+  * install: `_install_finalize` dropped redundant system `daemon-reload`;
+    user `daemon-reload` retained.
+  * verify: `_vrk_cmdline` — `/proc/cmdline preempt=` fallback when
+    `_RY_DMESG_CACHE` is empty; reports cmdline intent w/ caveat.
+  * help: `_ry_show_help` rewritten as `printf '%s\n' …` line list.
+    Exit-code 1 description synced with README.
+  * sudo: `_check_sudo_keepalive` probes `sudo -n true` on keepalive
+    death; distinguishes "cache still valid" from "credentials lapsed".
+  * boot: `_pbs_entry_has_valid_kernel` grep anchor
+    `'^[[:space:]]*linux[[:space:]]'` (was `'^linux[[:space:]]'`).
+  * post-hook: `_post_service` adds `systemctl --user is-system-running`
+    fallback user-systemd probe.
+  * release: 5.0.21 → 5.0.22.
+
+v5.0.21 - 2026-05-10
+--------------------
+
+  * security: `_run` — captured stderr/stdout now passes through
+    `_redact_text` before `_log STDERR:` / `_log OUTPUT:` so subcommand
+    output containing `--password=`, `--token=`, `--bearer …` etc. does
+    not leak into JSONL. Case-insensitive across `$_RY_SECRET_FLAGS`;
+    handles both `=value` and space-separated `flag value` forms.
+  * boot: `_pbs_entry_has_valid_kernel` — accept tab-separated BLS
+    `linux<TAB>/path` per freedesktop spec; grep anchor changed from
+    `'^linux '` to `'^linux[[:space:]]'`.
+  * boot: `_preflight_boot_sanity` — capture each sub-check error count
+    separately, validate as integer, sum explicitly; non-integer sub
+    stdout coerces to 1 rather than throwing in `math`.
+  * progress: `_progress` — refuse to mutate counter on unknown step
+    name; logs BUG and returns 1 instead of incrementing past an
+    invalid label.
+  * preflight: `_ip_probe_sudo_policy` — capture `sudo -n -l` rc
+    separately; distinguishes "credential not cached" from "policy
+    denies ALL". Two error strings instead of one ambiguous message.
+  * verify: `_verify_static_services` — `scaling_governor` regression
+    scan now scopes to live `ExecStart` lines via grep prefilter;
+    previously `(^|[^#])` matched whitespace-indented comments
+    (e.g. `   # ExecStart=...scaling_governor`).
+  * services: `_csp_filter_rdeps` — when `pactree` is absent and the
+    rdep filter is bypassed, log `PACTREE_BYPASS: pkg=<name>` so the
+    specific package emitted unfiltered is recorded.
+  * verify: `_chk_path_mode_in` — emit `_info "$label: not present"`
+    when the probed path does not exist; was silent (no signal that
+    `~/.ssh/authorized_keys` check was skipped).
+  * verify: `_vrs_vulkan` — install hint now lists only missing
+    packages, not the full `EXPECTED_VULKAN_PKGS` set.
+  * style: `_kill_sudo_keepalive`, `_check_sudo_keepalive` — `command
+    kill` consistently; bare `kill` removed (was function-shadowable).
+  * style: `_run` — BUG-guard return code raised to 255 (was 1/2);
+    no longer collides with subprocess `rc=1` / `rc=2`.
+  * style: `_run_resolve_timeout` — dense `not …; or …; and …` opener
+    replaced with explicit if/elif for the unset/empty case, per
+    project comment policy.
+  * style: trim multi-clause inline rationale comments.
+  * release: 5.0.20 → 5.0.21.
+
+v5.0.20 - 2026-05-10
+--------------------
+
+  * boot: `_vsb_entries`, `_enum_boot_entries`, `_pbs_check_kernels`,
+    `_pbs_check_initrds`, `_pbs_check_entries`, `_bwg_managed_only`,
+    `_boot_initrd_size_scan` — `find … -print0 | string split0` pipestatus
+    iteration treated empty-match (split0 rc=1) as enumeration failure;
+    inspect `pipestatus[1]` (find) only. Empty boot/loader/entries now
+    correctly reports "NONE" instead of "cannot enumerate".
+  * preflight: `_init_runtime` rejects PKGS_ADD / PKGS_DEL / AUR_PKGS
+    members starting with `-` (pacman/paru would parse as flag past `--`).
+  * preflight: `_detect_lvm` gates `pvs` invocation on `command -q pvs`;
+    avoids 10s `timeout` fallback on systems without lvm2 installed.
+  * services: `cpupower-epp.service` adds `NoNewPrivileges=true`,
+    `PrivateTmp=true`, `ProtectHome=true`. Stronger flags (`ProtectSystem=
+    strict`, `ProtectKernelTunables=true`) would block the /sys EPP
+    write — intentionally omitted. Verified via `systemd-analyze verify`.
+    Re-deploys on existing installs: `--verify-static` will report
+    cpupower-epp.service MISMATCH until next run.
+  * runtime: `_vrk_cmdline` (preempt), `_vrkg_rebar_sam`, `_vrk_clocksource`
+    (TSC demote) — guard `printf | grep` over `_RY_DMESG_CACHE` when
+    cache is empty (sudo lapsed or dmesg unavailable).
+  * style: `_verify_static_system` skip-iwd computation — dense
+    `not A; or not B; and C` chain → explicit if/elif.
+  * security: bootstrap assertion — refuse to load if `_RY_SECRET_FLAGS`
+    entry contains a glob metachar (`[`, `]`, `*`, `?`, `\`); redactor
+    relies on glob-safe values for the `flag=value` match path.
+  * release: 5.0.19 → 5.0.20.
+
 v5.0.19 - 2026-05-10
 --------------------
 

@@ -5,6 +5,46 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v6.1.0 - 2026-05-12
+-------------------
+
+  * progress: restore `_progress_now`, `_progress_init`, `_progress`,
+    `_progress_redraw`, `_progress_done`, `_progress_teardown`,
+    `_progress_on_winch` + 6 phase callsites (Preflight, Packages,
+    Configuration, Services, Boot, Finalize) + skip-cascade marker on
+    `EXIT_BOOT_CRIT` path. Pinned DECSTBM bottom-row bar; auto-skipped
+    on non-TTY / mosh / tmux / STY / `screen*` or when `tput` absent.
+    JSONL emits `PROG_STEP_START`, `PROG_STEP_END`, `PROG_DONE`.
+    `_PROG_BAR_WIDTH=40`.
+  * progress: `_progress_done` now logs final `PROG_STEP_END` (v5
+    omitted the last step's elapsed-seconds line).
+  * progress: `_progress_teardown` + `_progress_on_winch` guard on
+    `set -q _PROG_PINNED` so verify/check/install-file modes (which
+    never run `_progress_init`) are no-ops.
+  * services/mask: drop unreachable LVM-detection `_warn`/`_info`
+    branches from `_configure_services_mask`; `_mask_list_effective`
+    returns `$MASK` verbatim since v6.0.0. Function description
+    corrected.
+  * preflight/deps: drop `flock` from required-tool list (never
+    invoked; lock implementation uses atomic `mkdir`).
+  * verify-static/system: drop empty `── Per-installed-kernel ntsync
+    metadata ──` section header (orphaned in v6.0.0).
+  * dispatch/argv: rename `_argv_redacted` → `_argv_for_log`
+    (redactor removed in v6.0.0).
+  * messaging/network: explicit `else` in `_ry_check_network`
+    fallback branch (no semantic change).
+  * sdboot/parse: `string split ':'` → `string split -m1 ':'` for
+    `KEY:value` pairs in `_vsb_sdboot`.
+  * lock/log: drop trailing `; or true` after `mkdir -p` parent of
+    `LOCK_DIR` and after final `chmod 600` on log file (errors
+    already silenced via `2>/dev/null`).
+  * post_boot: drop redundant `set -q _RY_BOOT_TAINTED` guard
+    (global initialised at bootstrap).
+  * user-bus: extract `_has_user_bus_active` helper; replace three
+    inline `XDG_RUNTIME_DIR/bus` + `systemctl --user is-system-running`
+    probes (`_vre_envvars`, `_install_finalize`, `_post_service`).
+  * version: bump 6.0.0 → 6.1.0; header dated 2026-05-12.
+
 v6.0.0 - 2026-05-12
 -------------------
 

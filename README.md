@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-6.0.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-6.1.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -245,7 +245,7 @@ set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1`
 |---|---|
 | `ananicy-cpp.service` | Manual tuning preferred |
 | `power-profiles-daemon.service` | Conflicts with cpupower-epp |
-| `lvm2-monitor.service` | Skipped if LVM detected |
+| `lvm2-monitor.service` | Always masked; LVM users must edit `$MASK` directly before run |
 | `NetworkManager-wait-online.service` | Unnecessary boot delay |
 | `ufw.service` | Firewall not used; mask survives ufw install/removal |
 | `sleep.target` / `suspend.target` / `hibernate.target` / `hybrid-sleep.target` / `suspend-then-hibernate.target` | Desktop — no power management |
@@ -290,6 +290,7 @@ set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1`
 | Boot-entry wipe | `SDBOOT_REMOVE_EXISTING` (default `yes`); set `no` to preserve entries |
 | Pacnew handling | `.pacnew` at managed paths re-deploys + removes; `.pacsave` warn-only |
 | Subprocess control | `_run` uses `timeout --foreground`; `_do_cleanup` reaps via `pkill -P` |
+| Progress bar | Pinned bottom-row DECSTBM bar for install mode (6 phases); auto-skipped on non-TTY, `mosh`, `tmux`, `STY`, `screen*`, or when `tput` absent; `WINCH` re-anchors on resize. Per-step timings → JSONL `PROG_STEP_*` events |
 | Stderr surfacing | First 5 stderr lines on rc≠0; `--verbose` mirrors full; first 500 lines to JSONL with truncation sentinel |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir; refuses on stale (`rm -rf ~/ry-install/.lock` to clear) |

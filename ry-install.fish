@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v6.0.0 (2026-05-12) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.1.0 (2026-05-12) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     return 1 2>/dev/null; or exit 1
 end
 
 # === SCRIPT GUARDS & EXIT CODES ===
-set -g VERSION "6.0.0"
+set -g VERSION "6.1.0"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -81,7 +81,7 @@ end
 set -e _early_cleanup _early_arg
 
 function _ry_erase_handlers --description "Erase signal/exit handler functions; single-source-of-truth for the handler list"
-    functions -e _cleanup _cleanup_pipe _cleanup_on_exit _cleanup_other 2>/dev/null
+    functions -e _cleanup _cleanup_pipe _cleanup_on_exit _cleanup_other _progress_on_winch 2>/dev/null
 end
 function _ry_exit --argument-names code --description "Set bail sentinel and exit"
     test -z "$code"; and set code 0
@@ -209,6 +209,7 @@ set -g _USR_TMP_DIRS
 set -g _PROFILE_USES_WIFI_BACKEND false
 set -g _RY_AWK_EXT4_FILTER '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g NM_RESTART_DELAY 3
+set -g _PROG_BAR_WIDTH 40
 set -g KVER (uname -r)
 set -g KVER_PARTS (string split '.' -- "$KVER")
 set -g KVER_MAJOR $KVER_PARTS[1]
@@ -366,7 +367,7 @@ end
 function _acquire_lock --description "Acquire instance lock (atomic mkdir; refuse if stale)"
     set -g LOCK_DIR "$_RY_HOME_DIR/.lock"
     set -g LOCK_FILE "$LOCK_DIR/pid"
-    command mkdir -p -- (dirname -- "$LOCK_DIR") 2>/dev/null; or true
+    command mkdir -p -- (dirname -- "$LOCK_DIR") 2>/dev/null
     _acquire_lock_fresh
     set -l _fresh_rc $status
     test $_fresh_rc -eq 0; and return 0
@@ -472,6 +473,7 @@ set -g VERIFY_WARN 0
 set -g VERIFY_GEN_FAIL 0
 
 function _teardown --argument-names mode --description "Unified cleanup: progress teardown, footer, resources"
+    _progress_teardown
     switch $mode
         case signal
             _write_footer "$argv[2]" interrupted
@@ -1220,6 +1222,107 @@ function _verify_summary --description "Print verification pass/fail/warn summar
     end
 end
 
+function _progress_now --description "Monotonic seconds (integer floor of /proc/uptime first field; falls back to date +%s if uptime unreadable)"
+    set -l _u (command cat -- /proc/uptime 2>/dev/null | string split ' ')[1]
+    if string match -qr '^\d+(\.\d+)?$' -- "$_u"
+        math "floor($_u)"
+        return 0
+    end
+    date +%s
+end
+
+function _progress_init --description "Open scroll region; draw initial bar; no-op on non-TTY / mosh / tmux / screen / tput-absent"
+    set -g _PROG_STEPS Preflight Packages Configuration Services Boot Finalize
+    set -g _PROG_CUR 0
+    set -g _PROG_TOTAL (count $_PROG_STEPS)
+    set -g _PROG_START (_progress_now)
+    set -g _PROG_STEP_START $_PROG_START
+    set -g _PROG_STEP_NAME ""
+    set -g _PROG_PINNED false
+    isatty 2; or return 0
+    command -q tput; or return 0
+    set -q TMUX; and return 0
+    set -q STY; and return 0
+    string match -q 'screen*' -- "$TERM"; and return 0
+    set -q MOSH_CONNECTION; and return 0
+    string match -q 'mosh*' -- "$TERM_PROGRAM"; and return 0
+    set -l rows (tput lines 2>/dev/null)
+    string match -qr '^\d+$' -- "$rows"; or return 0
+    test $rows -ge 10; or return 0
+    tput cup 0 0 >/dev/null 2>&1; or return 0
+    set -g _PROG_PINNED true
+    set -g _PROG_ROWS $rows
+    set -l _scroll_bot (math $_PROG_ROWS - 1)
+    printf '\e[1;%dr\e[%d;1H' $_scroll_bot $_scroll_bot >&2
+    _progress_redraw "" 0
+end
+
+function _progress --argument-names name outcome --description "Advance progress counter and emit step-end log; optional outcome marker (e.g. 'skip')"
+    if not contains -- "$name" $_PROG_STEPS
+        _log "BUG: _progress called with unknown step name='$name' (known: "(string join ',' -- $_PROG_STEPS)") — refusing to mutate counter"
+        return 1
+    end
+    set -g _PROG_CUR (math "min($_PROG_CUR + 1, $_PROG_TOTAL)")
+    set -l now (_progress_now)
+    test -n "$_PROG_STEP_NAME"; and _log "PROG_STEP_END: name=$_PROG_STEP_NAME secs="(math $now - $_PROG_STEP_START)
+    set -g _PROG_STEP_NAME $name
+    set -g _PROG_STEP_START $now
+    set -l _outcome_marker
+    test -n "$outcome"; and set _outcome_marker " outcome=$outcome"
+    _log "PROG_STEP_START: [$_PROG_CUR/$_PROG_TOTAL] $name$_outcome_marker"
+    test "$_PROG_PINNED" = true; or return 0
+    _progress_redraw "$name" $_PROG_CUR
+end
+
+function _progress_redraw --argument-names name current --description "Redraw pinned progress bar at terminal bottom row (DECSC/DECRC bracket preserves cursor)"
+    set -l pct (math "floor($current * 100 / $_PROG_TOTAL)")
+    set -l filled (math "floor($current * $_PROG_BAR_WIDTH / $_PROG_TOTAL)")
+    set -l empty (math "$_PROG_BAR_WIDTH - $filled")
+    set -l bar
+    test $filled -gt 0; and set bar (string repeat -n $filled '█')
+    test $empty -gt 0; and set bar "$bar"(string repeat -n $empty '░')
+    printf '\e7\e[%d;1H\e[K[%s] %3d%% %s\e8' \
+        $_PROG_ROWS "$bar" $pct "$name" >&2
+end
+
+function _progress_done --description "Finalize progress bar (or hold position on skip-cascade) and log elapsed seconds"
+    set -l _now (_progress_now)
+    set -l elapsed (math $_now - $_PROG_START)
+    test -n "$_PROG_STEP_NAME"; and _log "PROG_STEP_END: name=$_PROG_STEP_NAME secs="(math $_now - $_PROG_STEP_START)
+    set -l _skip false
+    set -q _PROG_FINALIZED_SKIP; and test "$_PROG_FINALIZED_SKIP" = true; and set _skip true
+    _log "PROG_DONE: elapsed_secs=$elapsed skip=$_skip"
+    test "$_PROG_PINNED" = true; or return 0
+    printf '\e[r' >&2
+    if test "$_skip" = true
+        set -l pct (math "floor($_PROG_CUR * 100 / $_PROG_TOTAL)")
+        printf '\e[%d;1H\e[K[%s] %3d%% Aborted (%ds)\n' \
+            $_PROG_ROWS (string repeat -n $_PROG_BAR_WIDTH '░') $pct $elapsed >&2
+    else
+        printf '\e[%d;1H\e[K[%s] 100%% Done (%ds)\n' \
+            $_PROG_ROWS (string repeat -n $_PROG_BAR_WIDTH '█') $elapsed >&2
+    end
+    set -g _PROG_PINNED false
+end
+
+function _progress_teardown --description "Clear pinned progress bar and reset scroll region (signal/abort path)"
+    set -q _PROG_PINNED; or return 0
+    test "$_PROG_PINNED" = true; or return 0
+    printf '\e[r\e[%d;1H\e[K\n' $_PROG_ROWS >&2
+    set -g _PROG_PINNED false
+end
+
+function _progress_on_winch --on-signal WINCH --description "Re-anchor progress bar on terminal resize"
+    set -q _PROG_PINNED; or return 0
+    test "$_PROG_PINNED" = true; or return 0
+    set -l _new_rows (tput lines 2>/dev/null)
+    string match -qr '^\d+$' -- "$_new_rows"; or return 0
+    test "$_new_rows" -lt 10; and return 0
+    set -g _PROG_ROWS $_new_rows
+    printf '\e7\e[1;%dr\e8' (math $_PROG_ROWS - 1) >&2
+    _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
+end
+
 function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable seconds integer or empty (empty = disable); warns once on invalid values"
     if not set -q RY_RUN_TIMEOUT
         echo $_RY_RUN_TIMEOUT_DEFAULT
@@ -1466,7 +1569,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     _log DEPS_CHECK_START
     set -l missing
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
-        timeout mktemp awk curl getent flock sudo
+        timeout mktemp awk curl getent sudo
         command -q $cmd; or set -a missing $cmd
     end
     if test (count $missing) -gt 0
@@ -1492,9 +1595,9 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
     curl -sfI --connect-timeout 3 --max-time 5 https://cloudflare.com >/dev/null 2>&1; and _ok "Network connectivity: OK (fallback host)"; and return 0
     if ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1
         _err "Network connectivity: HTTPS or DNS unreachable (raw-IP ICMP works; check /etc/resolv.conf or 443 egress)"
-        return 1
+    else
+        _err "Network connectivity: FAILED — cannot reach archlinux.org, cloudflare.com, or 1.1.1.1"
     end
-    _err "Network connectivity: FAILED — cannot reach archlinux.org, cloudflare.com, or 1.1.1.1"
     return 1
 end
 
@@ -1999,8 +2102,8 @@ function _vsb_sdboot --description "_verify_static_boot sub: /etc/sdboot-manage.
         "REMOVE_EXISTING:$SDBOOT_REMOVE_EXISTING" \
         "REMOVE_OBSOLETE:$SDBOOT_REMOVE_OBSOLETE" \
         "DEFAULT_ENTRY:$SDBOOT_DEFAULT_ENTRY"
-        set -l _k (string split ':' -- $_kv)[1]
-        set -l _v (string split ':' -- $_kv)[2]
+        set -l _k (string split -m1 ':' -- $_kv)[1]
+        set -l _v (string split -m1 ':' -- $_kv)[2]
         _chk_grep /etc/sdboot-manage.conf "$_k=\"$_v\"" "$_k=$_v"
     end
     _chk_grep /etc/sdboot-manage.conf 'LINUX_FALLBACK_OPTIONS="quiet"' "LINUX_FALLBACK_OPTIONS=quiet"
@@ -2113,8 +2216,6 @@ function _vss_ntsync_modules --description "_verify_static_system sub: ntsync st
         case missing
             _info "  ntsync: module not loaded"
     end
-    _echo
-    _echo "── Per-installed-kernel ntsync metadata ──"
     _echo
     _echo "── Modules autoload ──"
     if test -f /usr/lib/modules-load.d/10-ntsync.conf
@@ -2954,13 +3055,7 @@ end
 function _vre_envvars --description "Runtime env check: ENV_VARS via systemctl --user show-environment"
     _echo "ENVIRONMENT STATE"
     _echo
-    set -l _has_user_bus false
-    set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"; and set _has_user_bus true
-    if test "$_has_user_bus" = false
-        set -l _user_state (systemctl --user is-system-running 2>/dev/null | string trim --)
-        test -n "$_user_state"; and test "$_user_state" != offline; and set _has_user_bus true
-    end
-    if test "$_has_user_bus" = false
+    if not _has_user_bus_active
         _info "  Skipping ENV_VARS runtime check (no active user-bus — log in graphically or enable-linger to verify)"
         _echo
         return 0
@@ -3386,6 +3481,13 @@ function _is_wifi_active_route --description "True if the default route exits vi
     return 1
 end
 
+function _has_user_bus_active --description "True iff a user systemd manager is reachable (XDG_RUNTIME_DIR/bus socket or is-system-running != offline). No args."
+    set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"; and return 0
+    set -l _user_state (systemctl --user is-system-running 2>/dev/null | string trim --)
+    test -n "$_user_state"; and test "$_user_state" != offline; and return 0
+    return 1
+end
+
 function _ip_probe_sudo_policy --description "Probe sudo -l: reject incompatible Defaults; require unrestricted ALL grant. rc=0 ok, rc=EXIT_PREFLIGHT block."
     set -l _sudo_l_err (_mktemp_or_null -t ry-sudo-l-err.XXXXXX)
     _track_tmpfile "$_sudo_l_err"
@@ -3420,6 +3522,7 @@ function _ip_probe_sudo_policy --description "Probe sudo -l: reject incompatible
 end
 
 function _install_preflight --description "Run all preflight checks before installation"
+    _progress Preflight
     _ensure_sudo_cached; or return $EXIT_PREFLIGHT
     _ip_probe_sudo_policy; or begin
         return $EXIT_PREFLIGHT
@@ -3655,6 +3758,7 @@ end
 
 function _install_packages --description "Install managed packages via pacman -Syu"
     set -l _fn_err false
+    _progress Packages
     _echo
     _info "Package installation..."
     set -l pkgs_to_install $PKGS_ADD
@@ -3735,6 +3839,7 @@ end
 
 function _install_system_files --description "Deploy all 12 embedded config files (system + user + service units) to the system"
     set -l _fn_err false
+    _progress Configuration
     _echo
     _info "Installing system configuration files..."
     _log "=== INSTALL SYSTEM FILES ==="
@@ -4063,14 +4168,8 @@ function _csm_retry_individual --description "_configure_services_mask sub. Per-
     return $_ret
 end
 
-function _configure_services_mask --description "Apply MASK list (LVM-aware via _mask_list_effective); pre-filters already-masked + not-installed units, batch-mask with per-unit retry on failure"
+function _configure_services_mask --description "Apply MASK list; pre-filter already-masked + not-installed units, batch-mask with per-unit retry on failure"
     set -l safe_mask (_mask_list_effective)
-    if test (count $safe_mask) -lt (count $MASK)
-        _warn "LVM detected — lvm2 services will NOT be masked"
-    end
-    if not command -q sudo; or not sudo -n true 2>/dev/null
-        _info "LVM detection may be incomplete (sudo not cached)"
-    end
     test (count $safe_mask) -eq 0; and return 0
     set -l _to_mask (_csm_filter_units $safe_mask)
     test (count $_to_mask) -eq 0; and return 0
@@ -4140,6 +4239,7 @@ function _configure_services_enable --description "Daemon-reload, batch-enable s
 end
 
 function _install_configure_services --description "Enable, start, and configure systemd services"
+    _progress Services
     _echo
     _info "Post-installation tasks..."
     set -l _ret 0
@@ -4391,6 +4491,7 @@ function _irb_verify_entries --argument-names esp --description "Re-enumerate bo
 end
 
 function _install_rebuild_boot --description "Regenerate initramfs and bootloader entries"
+    _progress Boot
     set -g _RY_BOOT_REBUILD_OK false
     test "$SYSTEM_UPGRADED" = true; and _ok "System upgraded during package installation"
     if test "$_RY_BOOT_TAINTED" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
@@ -4505,14 +4606,9 @@ function _if_nm_restart --description "Restart NetworkManager when iwd backend s
 end
 
 function _install_finalize --description "Run post-install verification, cleanup, and summary"
+    _progress Finalize
     test "$SDBOOT_REMOVE_EXISTING" = yes; and test "$_RY_BOOT_REBUILD_OK" = true; and _if_write_wipe_marker
-    set -l _has_user_bus false
-    set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"; and set _has_user_bus true
-    if test "$_has_user_bus" = false
-        set -l _user_state (systemctl --user is-system-running 2>/dev/null | string trim --)
-        test -n "$_user_state"; and test "$_user_state" != offline; and set _has_user_bus true
-    end
-    if test "$_has_user_bus" = true
+    if _has_user_bus_active
         not _run systemctl --user daemon-reload; and _warn "Systemctl --user daemon-reload failed"
     else
         _info "Skipping systemctl --user daemon-reload (no active user-bus — log in graphically or enable-linger)"
@@ -4575,6 +4671,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _echo
     _echo "ry-install v$VERSION"
     _echo
+    _progress_init
     _install_preflight; or return $EXIT_PREFLIGHT
     _echo
     _rdi_run_phases
@@ -4584,9 +4681,12 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
         _err "Boot-critical failure — skipping finalization"
         _err "Fix boot issue first: sudo mkinitcpio -P && sudo sdboot-manage gen"
+        set -g _PROG_FINALIZED_SKIP true
+        _progress Finalize skip
     else
         not _install_finalize; and set -g INSTALL_HAD_ERRORS true
     end
+    _progress_done
     _rdi_summary $_boot_rc
     _log_section "INSTALLATION END"
     if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
@@ -4723,7 +4823,7 @@ end
 
 function _post_boot --argument-names target --description "Post-hook: rebuild boot entries (mkinitcpio + sdboot-manage); refreshes wipe marker on success"
     _echo
-    if set -q _RY_BOOT_TAINTED; and test "$_RY_BOOT_TAINTED" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
+    if test "$_RY_BOOT_TAINTED" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
         _err "Refusing initramfs rebuild — boot-critical state is tainted (prior aborted install?)"
         _err "  Re-run unattended install OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
         _log "POST_BOOT_REFUSED: _RY_BOOT_TAINTED=true target=$target"
@@ -4749,14 +4849,8 @@ function _post_service --argument-names target --description "Post-hook: daemon-
     set -l _rc 0
     if string match -q "$HOME/*" -- "$target"
         _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
-        set -l _has_user_bus false
-        set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"; and set _has_user_bus true
-        if test "$_has_user_bus" = false
-            set -l _user_state (systemctl --user is-system-running 2>/dev/null | string trim --)
-            test -n "$_user_state"; and test "$_user_state" != offline; and set _has_user_bus true
-        end
         set -l _enable_ok false
-        if test "$_has_user_bus" = false
+        if not _has_user_bus_active
             _info "  "(basename -- "$target")": enabling without --now (no active user-bus session — start manually post-login)"
             _run systemctl --user enable -- (basename -- "$target"); and set _enable_ok true
         else if _run systemctl --user enable --now -- (basename -- "$target")
@@ -4922,12 +5016,12 @@ if not test -f "$LOG_FILE"
     end
     umask $_prev_umask
 else
-    command chmod -- 600 "$LOG_FILE" 2>/dev/null; or true
+    command chmod -- 600 "$LOG_FILE" 2>/dev/null
 end
 set -l _argv_parts
 set -l _argv_in (status filename) $_ORIG_ARGV
-set -l _argv_redacted $_argv_in
-for _r in $_argv_redacted
+set -l _argv_for_log $_argv_in
+for _r in $_argv_for_log
     set -a _argv_parts '"'(_json_str "$_r")'"'
 end
 set -l _argv_json '['(string join ',' $_argv_parts)']'

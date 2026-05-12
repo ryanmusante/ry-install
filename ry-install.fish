@@ -1,12 +1,8 @@
 #!/usr/bin/env fish
 # ry-install v6.0.0 (2026-05-12) — CachyOS config manager | Ryan Musante | MIT.
-if set -q _RY_INSTALL_LOADED
-    echo "ry-install already loaded in this session" >&2
-    if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
-        return 1
-    else
-        exit 1
-    end
+if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
+    echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
+    return 1 2>/dev/null; or exit 1
 end
 
 # === SCRIPT GUARDS & EXIT CODES ===
@@ -54,7 +50,6 @@ function _ry_show_help --description "Display usage information and available su
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
         "  RY_INITRD_WARN_MB=<MB>  Initramfs size warning threshold. Default 100." \
-        "  RY_INSTALL_CONFIRM_BOOT_WIPE=1  Ack boot-entry wipe." \
         "  RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1  Use pacman -Sy --needed (install-only)." \
         "  RY_INSTALL_FORCE_BOOT_REBUILD=1  Bypass torn-package gate (recovery)." \
         "  RY_INSTALL_PKG_REMOVE_CASCADE=1  Cascade-remove reverse deps." \
@@ -64,7 +59,6 @@ function _ry_show_help --description "Display usage information and available su
 end
 
 set -l _early_cleanup \
-    _RY_INSTALL_LOADED \
     _RY_INSTALL_BAILING _RY_INSTALL_LAST_EXIT VERSION \
     EXIT_OK EXIT_FAIL EXIT_USAGE EXIT_PREFLIGHT EXIT_BOOT_CRIT EXIT_LOCK EXIT_DRIFT \
     EXIT_GEN_NOFN EXIT_GEN_NOUUID EXIT_GEN_SYSCTL \
@@ -213,9 +207,7 @@ set -g _TRACKED_TMPFILES
 set -g _SYS_TMP_DIRS
 set -g _USR_TMP_DIRS
 set -g _PROFILE_USES_WIFI_BACKEND false
-set -g MAX_LOGS 50
 set -g _RY_AWK_EXT4_FILTER '!/^[[:space:]]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
-set -g SUDO_KEEPALIVE_INTERVAL 45
 set -g NM_RESTART_DELAY 3
 set -g KVER (uname -r)
 set -g KVER_PARTS (string split '.' -- "$KVER")
@@ -444,7 +436,6 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached script-i
     set --erase _RY_BOOT_PATH
     set --erase _RY_SYSTEMD_VER
     set --erase _RY_SYSTEMD_VER_TRIED
-    set --erase _RY_HAS_LVM
     set --erase _RY_DEPLOYED_SERVICES
     set --erase _RY_BOOT_COUNT
     set --erase _RY_BOOT_HASH
@@ -4960,7 +4951,7 @@ switch $MODE
 end
 if test "$_RY_INSTALL_BAILING" = true
     _write_footer "$_RY_INSTALL_LAST_EXIT" interrupted
-    return $_RY_INSTALL_LAST_EXIT
+    exit $_RY_INSTALL_LAST_EXIT
 end
 set -g _RY_EXIT_CODE 0
 switch $MODE
@@ -4985,7 +4976,7 @@ switch $MODE
 end
 if test "$_RY_INSTALL_BAILING" = true
     set -g _RY_INSTALL_LAST_EXIT $_RY_EXIT_CODE
-    return $_RY_EXIT_CODE
+    exit $_RY_EXIT_CODE
 end
 set -g _INTENDED_EXIT_CODE $_RY_EXIT_CODE
 _write_footer "$_RY_EXIT_CODE" ""

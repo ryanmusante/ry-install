@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-5.0.31-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-5.0.35-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -285,20 +285,22 @@ set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1`
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → post-mktemp symlink check → chmod → `mv -T`; parent must be root/self-owned, not symlinked, not group/world-writable |
+| Atomic writes | tmp → post-mktemp symlink check → chmod → `mv -T`; parent must not be symlinked |
 | Permissions | system 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600 |
 | fstab | Idempotent; `findmnt --verify` before write when available (advisory if missing); symlink rejected. **No backup — snapshot first.** |
-| Boot rebuild gate | `mkinitcpio -P` skipped when package install or boot-critical config deploy failed. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1` |
-| Boot-wipe gate | Auto-acks when every entry maps to `vmlinuz-*`; foreign entries refuse. Override: `RY_INSTALL_CONFIRM_BOOT_WIPE=1` |
+| Boot rebuild gate | `mkinitcpio -P` skipped when package install or boot-critical config deploy failed. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`. `--install-file <path>` also honors the gate (parity with main install). |
+| Boot-entry wipe | Controlled by `SDBOOT_REMOVE_EXISTING` (default `yes`). Set to `no` in the script to preserve existing entries |
 | Pacnew handling | `.pacnew` at managed paths re-deploys + removes; `.pacsave` warn-only |
 | Subprocess control | `_run` uses `timeout --foreground` (hard-fails if `timeout(1)` requested but missing); `_do_cleanup` reaps via `pkill -P` |
 | Stderr surfacing | First 5 stderr lines mirror to fd 2 on rc≠0; `--verbose` mirrors full output; first 500 lines captured to JSONL with a truncation-sentinel event on overflow |
 | Root detection | Refuses to run as root; sudo invoked internally |
-| Instance lock | Atomic mkdir + `flock(1)` stale reclaim |
-| Credentials | Secret-flag values redacted in argv logging **and** in captured stderr/stdout (case-insensitive long forms). Single-token match: redacts the immediate token after `--flag <value>`; trailing context (URLs, diagnostic text, next argument) preserved. Multi-token unquoted secret values (e.g. `--cookie a b c`) must use `--flag=value` form to remain fully redacted. |
+| Instance lock | Atomic mkdir; refuses on stale (`rm -rf ~/ry-install/.lock` to clear) |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE handled non-fatally |
 | mkinitcpio rollback | Pre-deploy snapshot to tracked tmpfile; restored byte-exact on `pacman -Syu` failure or on signal interruption during the snapshot→pacman window. `_do_cleanup` runs the revert before the tmpfile sweep |
+| mkinitcpio hook revalidation | After `pacman -Syu`, declared `MKINITCPIO_HOOKS` are re-probed against on-disk install/hooks files. A hook removed or renamed by an upgrade (e.g. `udev` → `systemd`) is caught here instead of breaking `mkinitcpio -P` later; taints boot-critical state when missing. |
+| Bootloader detection | `_resolve_esp` falls back to `/boot` when `bootctl`/`findmnt` autodetect fails. `sdboot-manage gen/update` then refuses to run if `/boot` isn't `vfat` (GRUB / non-UEFI / no-ESP systems are out-of-scope for this script). |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`; oldest-mtime rotation at `MAX_LOGS=50`, empty date-dir prune |
+| Execution model | Exec-only. The load guard refuses `source ry-install.fish`; use `./ry-install.fish` |
 
 <details>
 <summary><b>Exit codes</b></summary>
@@ -323,9 +325,9 @@ set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1`
 | Variable | Default | Purpose |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds); `0` disables (no hang protection — only use for diagnostic re-runs of a wedged `_run` invocation; a wedged `pacman` or `paru` will block forever) |
-| `RY_INSTALL_CONFIRM_BOOT_WIPE` | unset | Literal `=1` to ack boot-entry wipe |
+| `RY_INITRD_WARN_MB` | `100` | Initramfs size warning threshold (megabytes; positive integer). Modern AMD setups with DKMS + GPU firmware routinely exceed 100 MB — bump here instead of editing the script |
 | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | Literal `=1` for `pacman -Sy --needed` (no system upgrade) |
-| `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | Literal `=1` to bypass torn-package gate |
+| `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | Literal `=1` to bypass torn-package gate (also bypasses `_post_boot` taint gate for `--install-file`) |
 | `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | Literal `=1` cascades installed reverse deps into removal set |
 | `NO_COLOR` | unset | Suppress ANSI color (any value, per [no-color.org](https://no-color.org/)) |
 
@@ -397,11 +399,14 @@ then `mkinitcpio -P && sdboot-manage gen` and reboot.
 <details>
 <summary><b>Other</b></summary>
 
-- **Progress bar disabled under mosh:** DECSTBM scroll-region
-  sequences not honored. JSONL `progress` events still emit.
-- **Sudo keepalive failed to start:** common causes: fork limit,
-  AppArmor/SELinux denial, `/proc` mount blocking `kill -0`.
-  Mitigation: `sudo -v; and ./ry-install.fish`.
+- **Stale instance lock:** if a previous run was killed forcibly,
+  `~/ry-install/.lock` may remain. Re-run will refuse with
+  `EXIT_LOCK (5)`. Clear manually after verifying no live process:
+  `pgrep -af ry-install; or rm -rf ~/ry-install/.lock`.
+- **Sudo re-prompts mid-run:** long phases (mkinitcpio, AUR builds)
+  may exceed your sudoers `timestamp_timeout`. Run
+  `sudo -v && ./ry-install.fish`, or bump `timestamp_timeout` in
+  `/etc/sudoers.d/`.
 - **`systemctl --user` operations skipped (SSH without linger):**
   `_install_finalize` and `--verify-runtime` ENV_VARS check probe
   for an active user-bus (`$XDG_RUNTIME_DIR/bus` or
@@ -428,7 +433,7 @@ then `mkinitcpio -P && sdboot-manage gen` and reboot.
 | Sudo cache expired | `sudo -v; and ./ry-install.fish` |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
 | Initramfs rebuild refused | Fix root cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
-| `Foreign entries detected` | Inspect `/boot/loader/entries/*.conf`. Disposable: `RY_INSTALL_CONFIRM_BOOT_WIPE=1`. Preserve: relocate them |
+| `Foreign entries detected` | Inspect `/boot/loader/entries/*.conf`. Disposable: re-run install (`SDBOOT_REMOVE_EXISTING=yes` default wipes them). Preserve: relocate them, or set `SDBOOT_REMOVE_EXISTING=no` in the script |
 | `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1` cascades rdeps. Inspect: `pactree -ru <pkg>` |
 | `Enabled but failed to start: <unit>` | `systemctl status <unit>; journalctl -u <unit> -b` |
 | `/etc/.ry-install.*` orphan | Sudo cache lapsed mid-cleanup. Manual: `sudo rm /etc/.ry-install.*` (and `/boot/.ry-install.*`, `/var/.ry-install.*`), then re-run install. Files remain tracked across retries within a run, but a hard sudo failure can leave them on disk. |

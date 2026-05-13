@@ -57,8 +57,7 @@ artifacts (kernels, initrds, `loader/entries/*.conf`) enumerated on
 partition exists.
 
 **Out of scope:** dotfiles, shells, editors, secrets, backups,
-multi-user provisioning, non-CachyOS distros, laptops; Unified Kernel
-Image (UKI) boot flows and BLS Type #2 entries.
+multi-user provisioning, non-CachyOS distros, laptops; UKI.
 
 ## Prerequisites
 
@@ -69,7 +68,7 @@ Image (UKI) boot flows and BLS Type #2 entries.
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | Systemd | ≥ 250 (advisory); ≥ 256 enables `HandleSecureAttentionKey` |
 | Sudo | Unrestricted — no `requiretty`, `tty_tickets`, `timestamp_timeout=0` |
-| Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `grep -m`, `awk`, `head -n`, `timeout` |
+| Coreutils | GNU |
 | iproute2 | `ip(8)` — used by the default-route-on-WiFi probe |
 | Free space | 2 GB `/`, 200 MB `/boot` |
 | Network | `curl` |
@@ -206,11 +205,6 @@ Install first: `sudo pacman -S --needed iwd`, then re-run.
 Per-game overrides (Steam launch options): `MESA_VK_WSI_PRESENT_MODE=mailbox`
 (latency-sensitive under Wayland), `PROTON_FSR4_RDNA3_UPGRADE=1`
 (force FSR4 on gfx1151).
-
-Deprecated, do not re-introduce: `DXVK_ASYNC`, `DXVK_FRAME_RATE`,
-`WINE_FULLSCREEN_FSR`, `DISABLE_LAYER_MESA_ANTI_LAG`,
-`ENABLE_LAYER_MESA_ANTI_LAG`, `PROTON_NO_WM_DECORATION`.
-(`VKD3D_FRAME_RATE` retained — still valid.)
 
 </details>
 

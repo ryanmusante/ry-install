@@ -5,6 +5,123 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v6.2.6 - 2026-05-13
+-------------------
+
+  * data-tables/wrap: top-level array declarations
+    `SYSTEM_DESTINATIONS`, `KERNEL_PARAMS`, `LOGIND_IGNORE_KEYS`,
+    `ENV_VARS`, `SYSCTL_VALUES`, `MASK`, and the function-local
+    `_ir_validate_counts._expect` invariant table now wrap one
+    element per continuation line. No semantic change; improves
+    diff granularity when adding, removing, or reordering single
+    entries.
+  * script: 4947 → 5030 LOC (+83).
+
+v6.2.5 - 2026-05-13
+-------------------
+
+  * preflight/boot-files: `_pbs_check_boot_files` now snapshots
+    `$pipestatus` into `_ps` immediately after the `find | string
+    split0` pipeline before passing to `_pipe_all_ok`, matching the
+    idiom already used by `_pbs_check_entries`,
+    `_boot_initrd_size_scan`, and `_vrs_nm_perms`. Functionally
+    equivalent today, robust against refactors that insert a
+    command between the pipeline and the rc check.
+  * mkinitcpio/array-parse: dropped dead `functions -q _warn` guard
+    inside `_ry_mkinitcpio_array`. `_warn` is defined hundreds of
+    lines before the caller is reachable; the guard could not be
+    false at runtime.
+  * output/separators: collapsed ~52 standalone `_echo` blank-line
+    separators across verification + installation routines
+    (`_verify_static_boot`, `_verify_static_system`,
+    `_verify_static_user`, `_verify_static_packages`,
+    `_verify_static_services`, `_verify_static_syntax`,
+    `_verify_runtime_session`, `_verify_summary`, `_vrk_gpu_state`,
+    `_ry_verify_static`, `_ry_verify_runtime`, `_install_packages`,
+    `_install_system_files`, `_install_configure_services`,
+    `_rdi_summary`, `_ry_do_install`). Section headers retained;
+    only intra-section spacing trimmed.
+  * script: 4999 → 4947 LOC (-52).
+
+v6.2.4 - 2026-05-13
+-------------------
+
+  * run/timeout: `_run` bypasses `RY_RUN_TIMEOUT` for `pacman`,
+    `paru`, `mkinitcpio`, `sdboot-manage`, `paccache`. The default
+    3600s cap + `SIGTERM`/`SIGKILL` mid-`pacman -Syu` would sever
+    an active transaction and bypass ALPM rollback on slow networks.
+    Detection on `argv[1]` or `argv[3]` when sudo-prefixed; logs
+    `TIMEOUT_BYPASS`.
+  * dmesg/cache: `_verify_runtime_kparams` invokes `sudo -n dmesg`
+    once and slices for cache + count instead of fetching twice;
+    eliminates ring-buffer rotation drift between calls.
+  * preflight/boot-files: `_pbs_check_kernels` and
+    `_pbs_check_initrds` (46 LOC of paste duplication) unified into
+    `_pbs_check_boot_files <boot> <glob> <label>`.
+  * chk_grep/sudo-branch: dual `if is_boot; sudo -n grep | grep;
+    else; command grep | grep` branches collapsed to a single
+    `_as $is_boot grep ... | grep` pipe; `$pipestatus` semantics
+    unchanged; `_cg_access_ok` validates sudo cache pre-pipe.
+  * content/double-collect: `_ry_content_bytes` redundant second
+    `string collect` pass on a scalar removed.
+  * log-dir/perms: three `chmod 700` + two `stat -c '%a'` calls
+    collapsed to one multi-path `chmod` + one validation `stat`.
+  * nm/restart-delay: dropped dead regex guard on
+    `NM_RESTART_DELAY` (literal `3`).
+  * thp_ksm/dedup: `_vre_thp_ksm` enabled/defrag blocks collapsed
+    into a colon-encoded data-driven loop; `shrink_underused` and
+    KSM remain inline (different sysfs schema).
+  * fstab/dedup: `_vre_fstab` mount-option triple
+    (`noatime`/`lazytime`/`commit=10`) collapsed into a loop with
+    `:csv` vs `:substr` discriminator; CSV path anchors
+    `(^|,)opt(,|$)`.
+  * services/fstrim-merge: `_vrsv_chk_fstrim` deleted; merged into
+    `_vrsv_chk_active_enabled fstrim.timer` at call site. Behavior
+    gain: `not-found` warn-skips consistent with peers; inactive
+    state now reports actual state instead of `NOT active`.
+  * preflight/int-coerce: `_preflight_boot_sanity` three
+    `string match -qr '^\d+$' -- "$_x"; or set _x 1` lines folded
+    into a `for _v in _k _i _e; ... $$_v ...; end` loop via fish
+    dynamic-var expansion.
+
+v6.2.3 - 2026-05-13
+-------------------
+
+  * dispatch/argv: `--help` and `--version` now exit `0`. The
+    pre-exit `set -e $_early_cleanup …` erased `_RY_INSTALL_BAILING`
+    and `_RY_INSTALL_LAST_EXIT` (not yet set at early-arg time);
+    `set -e` on an unset variable returns rc=4, contaminating
+    `$status` so that `exit $EXIT_OK` — which had ALSO just been
+    erased — degenerated into `exit` with no argument and exited
+    with the inherited rc=4 (boot-critical). Drop the pre-exit
+    cleanup entirely: `exit` ends the process, the cleanup is
+    unreachable. Regression from v6.2.2 dispatch refactor.
+  * pipestatus/all-stages: introduce `_pipe_all_ok` helper; convert
+    eight enumerate-via-`find | (sort -z |)? string split0` sites
+    (`_enum_boot_entries`, `_pbs_check_kernels`, `_pbs_check_initrds`,
+    `_pbs_check_entries`, `_vsb_entries`, `_vrs_nm_perms`,
+    `_boot_initrd_size_scan`, `_installed_bytes`) from stage-1-only
+    to all-stages checks. Defence-in-depth against `sort` / `string
+    split0` / `string collect` failures on the post-find pipe.
+  * tmpdir/mktemp: introduce `_tmp_dir` helper; replace six deprecated
+    `mktemp -t TEMPLATE` invocations (`_ensure_sudo_cached`, `_run`,
+    `_verify_unit_content`, `_ip_probe_sudo_policy`, `_far_awk_rewrite`,
+    argparse error capture) with `mktemp -p (_tmp_dir) TEMPLATE`.
+    `_dc_sweep_filesystem` reuses the helper, dropping inline
+    `$TMPDIR`-or-`/tmp` reconstructions.
+  * post-hook/dispatch: drop dead `_RY_POST_HOOKS` patterns for
+    `/etc/mkinitcpio.d/*` and `/etc/sdboot-manage.d/*`. `_idf_match_dst`
+    only resolves declared destinations, so the `.d/` patterns were
+    unreachable via `--install-file`.
+  * boot-wipe-marker: `_if_write_wipe_marker` now ends with an
+    explicit `return 0`. Previous implicit return leaked the last
+    branch's `_log` / `_warn` rc; harmless under current callers but
+    inconsistent with sibling hook helpers.
+  * help/env-vars: `_ry_show_help` now documents
+    `RY_INSTALL_SKIP_HARDWARE_CHECK=1` alongside the other
+    `RY_INSTALL_*` overrides (was only mentioned in `_init_runtime`
+    error output and README).
+
 v6.2.2 - 2026-05-13
 -------------------
 

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-6.2.2-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-6.2.6-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -135,8 +135,10 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 ## Configuration
 
 All values are embedded in the script and deployed to the paths in
-[Managed Files](#managed-files). To retune, edit the
-`# === GTR9_PRO BUILT-IN DEFAULTS ===` block at the top.
+[Managed Files](#managed-files). To retune, edit the `set -g` profile
+globals near the top of `ry-install.fish` (`LOADER_*`, `SDBOOT_*`,
+`KERNEL_PARAMS`, `MKINITCPIO_*`, `SYSCTL_VALUES`, `ENV_VARS`, `PKGS_*`,
+`AUR_PKGS`, `MASK`, `EXPECTED_SERVICES`).
 
 <details>
 <summary><b>Kernel cmdline (15 params + implicit <code>rw</code>, <code>root=UUID=…</code>)</b></summary>
@@ -335,7 +337,7 @@ set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1`
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). `0` disables — wedged `pacman`/`paru` will block forever |
+| `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (seconds). `0` disables. Long-running package and boot ops (`pacman`, `paru`, `mkinitcpio`, `sdboot-manage`, `paccache`) bypass the cap to prevent SIGKILL mid-transaction (rollback bypass). See `TIMEOUT_BYPASS` log marker |
 | `RY_INITRD_WARN_MB` | `100` | Initramfs size warning (MB). Bump here for AMD DKMS + GPU firmware setups |
 | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | `=1` → `pacman -Sy --needed` (install-only, no upgrade) |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses torn-package gate; also bypasses `_post_boot` taint gate for `--install-file` |

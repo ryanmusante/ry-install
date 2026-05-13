@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-6.1.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-6.2.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -69,7 +69,7 @@ Image (UKI) boot flows and BLS Type #2 entries.
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | Systemd | ≥ 250 (advisory); ≥ 256 enables `HandleSecureAttentionKey` |
 | Sudo | Unrestricted — no `requiretty`, `tty_tickets`, `timestamp_timeout=0` |
-| Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `grep -m`, `timeout` |
+| Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `grep -m`, `awk`, `timeout` |
 | Free space | 2 GB `/`, 200 MB `/boot` |
 | Network | `curl` |
 | paru | For AUR (`mkinitcpio-firmware`, `mt76-mt7925-dkms`) |
@@ -286,7 +286,7 @@ set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1`
 | Atomic writes | tmp → symlink check → chmod → `mv -T`; parent must not be symlinked |
 | Permissions | system 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600 |
 | fstab | Idempotent; `findmnt --verify` advisory; symlink rejected. **No backup — snapshot first** |
-| Boot rebuild gate | `mkinitcpio -P` skipped on torn-package state. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1` |
+| Boot rebuild gate | `mkinitcpio -P` skipped on torn-package state. Override: `RY_INSTALL_FORCE_BOOT_REBUILD=1`. A failed mkinitcpio.conf revert is an unconditional gate — FORCE does not bypass |
 | Boot-entry wipe | `SDBOOT_REMOVE_EXISTING` (default `yes`); set `no` to preserve entries |
 | Pacnew handling | `.pacnew` at managed paths re-deploys + removes; `.pacsave` warn-only |
 | Subprocess control | `_run` uses `timeout --foreground`; `_do_cleanup` reaps via `pkill -P` |
@@ -295,7 +295,7 @@ set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1`
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir; refuses on stale (`rm -rf ~/ry-install/.lock` to clear) |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal |
-| mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert on `pacman -Syu` failure or signal during snapshot→pacman window |
+| mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert on `pacman -Syu` failure or signal during snapshot→pacman window. On revert success the AUR phase is skipped to avoid building against an inconsistent state |
 | mkinitcpio hook revalidation | Post-`pacman -Syu`, declared `MKINITCPIO_HOOKS` re-probed against on-disk hooks; missing → boot taint |
 | Bootloader detection | `_resolve_esp` falls back to `/boot`; `sdboot-manage` refuses if `/boot` not vfat (GRUB/non-UEFI out-of-scope) |
 | Log integrity | NDJSON to `~/ry-install/logs/YYYY-MM-DD/*.jsonl`. No auto-rotation; prune with `find ~/ry-install/logs -mtime +30 -delete` |

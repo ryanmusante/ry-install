@@ -5,6 +5,60 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v6.2.0 - 2026-05-12
+-------------------
+
+  * dispatch/argv: move `--install-file` value validation and
+    positional-arg check ahead of the root-UID check; usage-form
+    errors now surface their actual cause instead of being masked
+    by "must not run as root".
+  * boot/rollback: `_ip_pacman_invoke` sets `_RY_PACMAN_REVERTED`
+    on successful mkinitcpio.conf revert + `_RY_MKI_REVERT_FAILED`
+    on revert failure. `_rdi_run_phases` skips the AUR phase when
+    pacman was rolled back (avoids building against inconsistent
+    mkinitcpio state).
+  * boot/rebuild: `_install_rebuild_boot` and `_post_boot` now
+    refuse unconditionally on `_RY_MKI_REVERT_FAILED=true`;
+    `RY_INSTALL_FORCE_BOOT_REBUILD` does NOT bypass this gate.
+  * preflight/disk: `_check_avail` now fails install loudly when
+    `df --output=avail` parse fails (was: warn-only). Verify modes
+    retain the warn-only behaviour.
+  * preflight/fish: tolerate trailing non-digits in `FISH_VERSION`
+    minor field (mirrors `KVER_MINOR` handling); dev builds like
+    `3.7b1` no longer fail the regex.
+  * preflight/timeout: probe `timeout(1)` once at bootstrap into
+    `_RY_TIMEOUT_OK`; drop the redundant per-call check in `_run`.
+  * preflight/nm: validate `NM_RESTART_DELAY` is a non-negative
+    integer at bootstrap.
+  * verify-static/cmdline: `_vsb_cmdline` reads `/etc/kernel/cmdline`
+    via plain `cat` first (file is conventionally 0644), falls back
+    to sudo only on read failure; same change applied to `_vrk_cmdline`
+    against `/proc/cmdline`.
+  * verify-runtime/fstab: `_vre_fstab` now emits a warn for ext4-like
+    fstab rows with fewer than 4 fields (previously dropped silently
+    by `_RY_AWK_EXT4_FILTER`).
+  * fstab/awk: replace POSIX `[[:space:]]` with `[ \t]` in the ext4
+    filter and the awk-rewrite script; broader portability across
+    awk implementations.
+  * messaging/_as: convert guard chains to explicit `if … end`
+    (EPIPE-on-_log safety, consistency with v5.0.34 conversion).
+  * boot/sha: parse sha256sum output with `string match -rg '^(\S+)'`
+    in `_enum_boot_entries` and `_verify_static_checksum` (robust
+    against whitespace drift in coreutils output).
+  * argparse/error: cap argparse-error capture to `head -n 3`, joined
+    with `; `; emit explicit marker when the tmpfile fell back to
+    `/dev/null`.
+  * mkinitcpio/hooks: `_vmh_existence_only` takes hooks as `$argv`
+    instead of a single space-joined string; caller drops the quotes.
+  * scope: explicit `-g` on `set INSTALL_FILE_TARGET …` and on every
+    `set _RY_EXIT_CODE $status` arm of the mode-dispatch switch
+    (defensive — was relying on existing-scope inheritance).
+  * cleanup/_dc_erase_globals: erase `_RY_PACMAN_REVERTED` +
+    `_RY_MKI_REVERT_FAILED` alongside the other run-scoped globals.
+  * descriptions: trim verbose `--description` strings on 17 function
+    declarations to one concise line.
+  * version: bump 6.1.0 → 6.2.0; header dated 2026-05-12.
+
 v6.1.0 - 2026-05-12
 -------------------
 

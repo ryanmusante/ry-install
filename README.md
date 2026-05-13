@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-6.2.1-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-6.2.2-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -69,7 +69,7 @@ Image (UKI) boot flows and BLS Type #2 entries.
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | Systemd | ≥ 250 (advisory); ≥ 256 enables `HandleSecureAttentionKey` |
 | Sudo | Unrestricted — no `requiretty`, `tty_tickets`, `timestamp_timeout=0` |
-| Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `grep -m`, `awk`, `timeout` |
+| Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `grep -m`, `awk`, `head -n`, `timeout` |
 | iproute2 | `ip(8)` — used by the default-route-on-WiFi probe |
 | Free space | 2 GB `/`, 200 MB `/boot` |
 | Network | `curl` |
@@ -94,6 +94,14 @@ Check [CachyOS](https://wiki.cachyos.org) and
 | WiFi | MediaTek MT7925 (WiFi 7) |
 | NIC | Dual Intel E610-XT2 10 GbE |
 | BIOS | P110+ — [Beelink downloads](https://dr.bee-link.cn/) |
+
+> [!IMPORTANT]
+> Preflight refuses to deploy on hardware that doesn't match
+> `EXPECTED_CPU_MATCH` (default: `Ryzen AI Max`). `amdgpu.cwsr_enable=0`,
+> `MKINITCPIO_MODULES=(amdgpu)`, and the gfx1151 cmdline are
+> profile-specific; deploying them on Intel/NVIDIA/different-AMD silicon
+> sets incorrect kernel parameters and breaks initramfs. Override at
+> your own risk: `RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish`.
 
 Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 [Mesa gfx1151](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151).
@@ -224,7 +232,10 @@ Default: `pacman -Syu --needed` per Arch's
 
 > [!CAUTION]
 > AUR invocation is `paru -S --needed --noconfirm --skipreview
-> --cleanafter --removemake`. `--skipreview` is required for unattended
+> --cleanafter`. `--removemake` is intentionally NOT passed — DKMS
+> packages (`mt76-mt7925-dkms`) rebuild against the running kernel on
+> every kernel upgrade and need makedeps (`gcc`, `linux-cachyos-headers`,
+> `dkms`) to remain installed. `--skipreview` is required for unattended
 > install but **also suppresses interactive PGP key import prompts**;
 > a package whose maintainer key is not yet in the user keyring will
 > fail with `error: invalid or corrupted package (PGP signature)`.
@@ -329,6 +340,7 @@ set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1`
 | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | `=1` → `pacman -Sy --needed` (install-only, no upgrade) |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses torn-package gate; also bypasses `_post_boot` taint gate for `--install-file` |
 | `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | `=1` cascades installed reverse deps into removal set |
+| `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses the hard-fail when `EXPECTED_CPU_MATCH` doesn't match `/proc/cpuinfo` (deploying anyway) |
 | `NO_COLOR` | unset | Suppress ANSI color (any value, per [no-color.org](https://no-color.org/)) |
 
 </details>

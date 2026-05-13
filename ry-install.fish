@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.2.1 (2026-05-13) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.2.2 (2026-05-13) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     return 1 2>/dev/null; or exit 1
 end
-set -g VERSION "6.2.1"
+set -g VERSION "6.2.2"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -69,11 +69,11 @@ for _early_arg in $argv
         case -h --help
             _ry_show_help
             set -e $_early_cleanup _early_cleanup _early_arg 2>/dev/null
-            exit 0
+            exit $EXIT_OK
         case -v --version
             echo "v$VERSION"
             set -e $_early_cleanup _early_cleanup _early_arg 2>/dev/null
-            exit 0
+            exit $EXIT_OK
     end
 end
 set -e _early_cleanup _early_arg
@@ -151,14 +151,13 @@ command sleep 0.05 2>/dev/null; and set -g _RY_SLEEP_FRAC 0.1
 set -g DATE_LABEL (date '+%Y-%m-%d')
 set -g TIMESTAMP (date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
 if test -z "$HOME"; or not test -d "$HOME"
-    set -g HOME (getent passwd $_MY_UID 2>/dev/null | cut -d: -f6)
+    set -g HOME (string split ':' -- (getent passwd $_MY_UID 2>/dev/null))[6]
     if test -z "$HOME"; or not test -d "$HOME"
         echo "[ERR] Cannot determine HOME directory" >&2
         _ry_exit $EXIT_PREFLIGHT
     end
 end
-set -g HOME (string trim -- "$HOME")
-set -g HOME (string trim -r -c / -- "$HOME")
+set -g HOME (string trim -r -c / -- (string trim -- "$HOME"))
 if test -z "$HOME"; or not test -d "$HOME"
     echo "[ERR] HOME resolves to empty/non-dir after normalization: '$HOME'" >&2
     _ry_exit $EXIT_PREFLIGHT
@@ -281,7 +280,9 @@ function _verify_unit_syntax --description "Verify systemd unit syntax via syste
     set -l unit_path $argv[1]
     set -l label $argv[2]
     set -l intended_scope $argv[3]
-    _log "VERIFY_UNIT: $label ($unit_path) scope="(test -n "$intended_scope"; and echo $intended_scope; or echo "auto")
+    set -l _scope_label auto
+    test -n "$intended_scope"; and set _scope_label $intended_scope
+    _log "VERIFY_UNIT: $label ($unit_path) scope=$_scope_label"
     command -q systemd-analyze; or begin
         _warn "  systemd-analyze not available — skipping $label"
         return 0
@@ -363,7 +364,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock; rc=0 ac
     _log "LOCK_ACQUIRED: pid=$fish_pid dir=$LOCK_DIR"
     return 0
 end
-function _acquire_lock --description "Acquire instance lock (atomic mkdir; retry once on stale lock with dead PID)"
+function _acquire_lock --description "Acquire instance lock (atomic mkdir; retry once on stale lock with dead PID; verifies own PID after reclaim)"
     set -g LOCK_DIR "$_RY_HOME_DIR/.lock"
     set -g LOCK_FILE "$LOCK_DIR/pid"
     command mkdir -p -- (dirname -- "$LOCK_DIR") 2>/dev/null
@@ -376,7 +377,15 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; retry
         functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID not running, reclaiming)"
         command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
         _acquire_lock_fresh
-        test $status -eq 0; and return 0
+        if test $status -eq 0
+            set -l _owner_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
+            if test "$_owner_pid" = "$fish_pid"
+                return 0
+            end
+            functions -q _log; and _log "LOCK_RECLAIM_RACE: post-reclaim owner_pid='$_owner_pid' != fish_pid=$fish_pid — refusing"
+            set --erase _RY_HOLDS_LOCK
+            return 1
+        end
     end
     return 1
 end
@@ -454,12 +463,14 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached script-i
     set --erase _RY_ESP_FALLBACK
     set --erase _RY_PACMAN_REVERT_ATTEMPTED
     set --erase _RY_MKI_REVERT_FAILED
+    set --erase _RY_AUR_PARTIAL
+    set --erase _PROG_CLOCK
 end
-function _dc_kill_children --description "_do_cleanup sub. Release lock; reap children via pkill -TERM then -KILL after 0.5 s grace."
+function _dc_kill_children --description "_do_cleanup sub. Release lock; reap children via pkill -TERM then -KILL after fractional-sleep grace window."
     set -q _RY_HOLDS_LOCK; and set -q LOCK_DIR; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
     if command -q pkill
         command pkill -TERM -P "$fish_pid" 2>/dev/null
-        command sleep 0.5 2>/dev/null
+        command sleep $_RY_SLEEP_FRAC 2>/dev/null
         command pkill -KILL -P "$fish_pid" 2>/dev/null
     end
 end
@@ -494,7 +505,7 @@ end
 
 function _cleanup_other --on-signal USR1 --on-signal USR2 --on-signal ABRT --description "Signal handler: clean up on USR1/USR2/ABRT"
     test "$_CLEANUP_DONE" = true; and return 0
-    _cleanup $argv
+    _cleanup $argv[1]
 end
 
 function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal QUIT --description "Signal handler: clean up on INT/TERM/HUP/QUIT (also delegated to from _cleanup_other for USR1/USR2/ABRT)"
@@ -676,8 +687,18 @@ end
 function _init_runtime --description "Cache root UUID, validate hardware sanity, validate timing + count invariants, precompute tmp-dir cache"
     _ir_resolve_root_uuid
     if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
-        set -l _cpu_model (command grep -m1 -- 'model name' /proc/cpuinfo 2>/dev/null | string replace -r '^.*: ' '')
-        test -n "$_cpu_model"; and not string match -q -i -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"; and _warn "Built-in defaults expect $EXPECTED_CPU_MATCH but detected: $_cpu_model"
+        set -l _cpu_model (string match -rg -- '^model name\s*:\s*(.*)$' < /proc/cpuinfo 2>/dev/null)[1]
+        if test -n "$_cpu_model"; and not string match -q -i -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"
+            if test "$RY_INSTALL_SKIP_HARDWARE_CHECK" = 1
+                _warn "Hardware mismatch (override): expected $EXPECTED_CPU_MATCH, detected: $_cpu_model"
+                _log "HARDWARE_MISMATCH_OVERRIDE: expected=$EXPECTED_CPU_MATCH detected=$_cpu_model"
+            else
+                _err_loud "Hardware mismatch: profile $PROFILE_NAME expects $EXPECTED_CPU_MATCH, detected: $_cpu_model"
+                _err_loud "  Deploying gfx1151/Strix Halo defaults on non-matching CPU would set incorrect kernel cmdline + initramfs MODULES."
+                _err_loud "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish"
+                _pre_dispatch_exit $EXIT_PREFLIGHT
+            end
+        end
     end
     _ir_validate_counts
     _ir_validate_keys
@@ -803,9 +824,10 @@ function _ensure_sudo_cached --description "Cache sudo credential once before pa
     set -l _rc $status
     if test $_rc -ne 0
         if isatty 0; and isatty 2
-            sudo -v 2>"$_sudo_err"
+            sudo -v
             set _rc $status
         else
+            _err "Sudo credential required but stdin/stderr is not a TTY — pre-cache via 'sudo -v' before running"
             _log "SUDO_CACHE_NONINTERACTIVE: stdin or stderr is not a tty — refusing interactive sudo -v"
         end
     end
@@ -969,7 +991,7 @@ function _json_str --description "Escape a string for safe JSON embedding (RFC 8
     set s (string replace -a -- \t '\\t' "$s" | string collect)
     set s (string replace -a -- \b '\\b' "$s" | string collect)
     set s (string replace -a -- \f '\\f' "$s" | string collect)
-    for _hex in 00 01 02 03 04 05 06 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f
+    for _hex in 00 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f
         set s (string replace -a -- (printf '\x'$_hex) '\u00'$_hex "$s" | string collect)
     end
     printf '%s' "$s" | string collect --allow-empty
@@ -1121,12 +1143,26 @@ function _verify_summary --description "Print verification pass/fail/warn summar
     end
 end
 
-function _progress_now --description "Monotonic seconds (integer floor of /proc/uptime first field; falls back to date +%s if uptime unreadable)"
+function _progress_now --description "Monotonic seconds (cached source: /proc/uptime if first call succeeded, else date +%s; never mix epochs within a run)"
+    if set -q _PROG_CLOCK; and test "$_PROG_CLOCK" = uptime
+        set -l _u (command cat -- /proc/uptime 2>/dev/null | string split ' ')[1]
+        if string match -qr '^\d+(\.\d+)?$' -- "$_u"
+            math "floor($_u)"
+            return 0
+        end
+        date +%s
+        return 0
+    else if set -q _PROG_CLOCK
+        date +%s
+        return 0
+    end
     set -l _u (command cat -- /proc/uptime 2>/dev/null | string split ' ')[1]
     if string match -qr '^\d+(\.\d+)?$' -- "$_u"
+        set -g _PROG_CLOCK uptime
         math "floor($_u)"
         return 0
     end
+    set -g _PROG_CLOCK epoch
     date +%s
 end
 function _progress_init --description "Open scroll region; draw initial bar; no-op on non-TTY / mosh / tmux / screen / tput-absent"
@@ -1229,7 +1265,10 @@ function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable 
     end
     if string match -qr '^[0-9]+$' -- "$RY_RUN_TIMEOUT"
         set -l _t (math "$RY_RUN_TIMEOUT")
-        test $_t -eq 0; and echo ""; and return
+        if test $_t -eq 0
+            echo ""
+            return
+        end
         echo $_t
         return
     end
@@ -1295,6 +1334,13 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     _run_emit_stream STDERR "$stderr_tmp" $ret $_cap
     _run_emit_stream OUTPUT "$stdout_tmp" $ret $_cap
     _rm_tmp "$_run_dir" false
+    if test -n "$_run_timeout"
+        if test "$ret" -eq 124
+            _log "TIMEOUT_TERM: timeout=$_run_timeout"s" cmd=$log_cmd"
+        else if test "$ret" -eq 137
+            _log "TIMEOUT_KILL: timeout=$_run_timeout"s" cmd=$log_cmd (SIGKILL after 10s grace)"
+        end
+    end
     _log "EXIT: $ret cmd=$log_cmd"
     return $ret
 end
@@ -1457,7 +1503,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     _log DEPS_CHECK_START
     set -l missing
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
-        timeout mktemp awk curl getent sudo
+        timeout mktemp awk curl getent sudo head df
         command -q $cmd; or set -a missing $cmd
     end
     if test (count $missing) -gt 0
@@ -1534,16 +1580,16 @@ function _ry_check_kernel_version --description "Verify running kernel version m
     set -l kver $KVER
     set -l major $KVER_MAJOR
     set -l minor $KVER_MINOR
-    _info "Kernel version: $kver"
-    if _kver_below $major $minor 0 6 14 0
-        _warn "Kernel $kver < 6.14: ntsync and gfx1151 fixes unavailable"
-        _info "  Upgrade kernel before or during install (pacman -Syu)"
-        return 1
-    end
     set -l kver_patch 0
     if set -q KVER_PARTS[3]
         set -l _patch_clean (string replace -r '[^0-9].*' '' -- "$KVER_PARTS[3]")
         test -n "$_patch_clean"; and set kver_patch $_patch_clean
+    end
+    _info "Kernel version: $kver"
+    if _kver_below $major $minor $kver_patch 6 14 0
+        _warn "Kernel $kver < 6.14: ntsync and gfx1151 fixes unavailable"
+        _info "  Upgrade kernel before or during install (pacman -Syu)"
+        return 1
     end
     if _kver_below $major $minor $kver_patch 6 18 4
         _warn "Kernel $kver below README stability floor 6.18.4 (gfx1151)"
@@ -1810,7 +1856,8 @@ function _ry_validate_configs --description "Run all embedded config validators"
 end
 function _ry_mkinitcpio_array --argument-names key file --description "First non-comment KEY=... line from a conf file"
     test -z "$file"; and set file /etc/mkinitcpio.conf
-    set -l _all_lines (command grep -E "^[[:space:]]*$key=" "$file" 2>/dev/null)
+    set -l _key_re (string escape --style=regex -- "$key")
+    set -l _all_lines (command grep -E "^[[:space:]]*$_key_re=" "$file" 2>/dev/null)
     test (count $_all_lines) -gt 1; and functions -q _warn; and _warn "  $file: multiple $key= lines found ("(count $_all_lines)") — using first"
     test (count $_all_lines) -gt 0; and printf '%s\n' "$_all_lines[1]"
 end
@@ -2281,7 +2328,10 @@ function _verify_static_services --description "Verify SERVICE_DESTINATIONS file
     end
     if test -f /etc/systemd/system/cpupower-epp.service
         _chk_grep /etc/systemd/system/cpupower-epp.service energy_performance_preference "cpupower-epp EPP ExecStart"
-        command grep -E '^[[:space:]]*ExecStart' /etc/systemd/system/cpupower-epp.service 2>/dev/null | command grep -q -- scaling_governor; and _warn "  cpupower-epp: scaling_governor ExecStart present — remove it (amd_pstate=active uses powersave+EPP)"
+        set -l _execstart (systemctl cat cpupower-epp.service 2>/dev/null | string match -rg -- '^\s*ExecStart\s*=\s*(.*)$')
+        if test -n "$_execstart"; and string match -q -- '*scaling_governor*' "$_execstart"
+            _warn "  cpupower-epp: scaling_governor ExecStart present — remove it (amd_pstate=active uses powersave+EPP)"
+        end
         _chk_grep /etc/systemd/system/cpupower-epp.service "WantedBy=multi-user.target" "cpupower-epp WantedBy"
     end
     _echo
@@ -2552,9 +2602,6 @@ function _vrk_cmdline --description "Runtime kparam check: /proc/cmdline + preem
     _echo "KERNEL CMDLINE"
     _echo
     set -l cmdline (command cat -- /proc/cmdline 2>/dev/null)
-    if test -z "$cmdline"; and command -q sudo; and sudo -n true 2>/dev/null
-        set cmdline (sudo -n cat -- /proc/cmdline 2>/dev/null)
-    end
     for param in $KERNEL_PARAMS
         set -l _param_re (string escape --style=regex -- "$param")
         if string match -qr -- "(^|\s)$_param_re(\s|\$)" "$cmdline"
@@ -3398,7 +3445,7 @@ function _ip_probe_sudo_policy --description "Probe sudo -l: reject incompatible
     set -l _sudo_lines (printf '%s\n' $_sudo_l_out)
     set -l sudo_all 0
     for _sl in $_sudo_lines
-        if string match -qr -- '\bDefaults\b.*\b(requiretty|tty_tickets|timestamp_timeout=0)\b' "$_sl"
+        if string match -qr -- '\bDefaults\b.*(?<![\w!])(requiretty|tty_tickets|timestamp_timeout=0)\b' "$_sl"
             _err "Sudoers contains incompatible Defaults: $_sl"
             _rm_tmp "$_sudo_l_err" false
             return $EXIT_PREFLIGHT
@@ -3684,7 +3731,7 @@ function _install_packages --description "Install managed packages via pacman -S
     test "$_fn_err" = true; and return 1
     return 0
 end
-function _install_aur_packages --description "Install AUR packages via paru"
+function _install_aur_packages --description "Install AUR packages via paru (no --removemake; DKMS needs makedeps on kernel upgrade)"
     not set -q AUR_PKGS; or test (count $AUR_PKGS) -eq 0; and return 0
     if not command -q paru
         _err "paru not found — cannot install AUR packages: $AUR_PKGS"
@@ -3694,7 +3741,8 @@ function _install_aur_packages --description "Install AUR packages via paru"
         return 1
     end
     set -l _had_fail false
-    if not _run paru -S --needed --noconfirm --skipreview --cleanafter --removemake -- $AUR_PKGS
+    set -g _RY_AUR_PARTIAL false
+    if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- $AUR_PKGS
         if test (count $AUR_PKGS) -le 1
             _warn "AUR install failed: $AUR_PKGS"
             set -g INSTALL_HAD_ERRORS true
@@ -3702,10 +3750,11 @@ function _install_aur_packages --description "Install AUR packages via paru"
         else
             _warn "AUR batch install failed — retrying per-package to identify failures"
             for pkg in $AUR_PKGS
-                if not _run paru -S --needed --noconfirm --skipreview --cleanafter --removemake -- "$pkg"
+                if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- "$pkg"
                     _warn "AUR install failed: $pkg"
                     set -g INSTALL_HAD_ERRORS true
                     set _had_fail true
+                    set -g _RY_AUR_PARTIAL true
                 end
             end
         end
@@ -4158,10 +4207,13 @@ function _resolve_esp --description "Resolve EFI system partition path (cached);
     end
     set -l _p ""
     if command -q bootctl
-        set _p (sudo -n bootctl -p 2>/dev/null | string trim -- | string trim -r -c /)
-        set -l _bc_ps $pipestatus
-        if test "$_bc_ps[1]" -ne 0
-            functions -q _log; and _log "ESP_BOOTCTL_PIPE_FAIL: bootctl -p rc=$_bc_ps[1] (sudo lapse or bootctl error); falling through to findmnt"
+        set _p (bootctl -p 2>/dev/null | string trim -- | string trim -r -c /)
+        if test -z "$_p"
+            set _p (sudo -n bootctl -p 2>/dev/null | string trim -- | string trim -r -c /)
+            set -l _bc_ps $pipestatus
+            if test "$_bc_ps[1]" -ne 0
+                functions -q _log; and _log "ESP_BOOTCTL_PIPE_FAIL: bootctl -p rc=$_bc_ps[1] (sudo lapse or bootctl error); falling through to findmnt"
+            end
         end
     end
     if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
@@ -4197,10 +4249,13 @@ function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, 
     end
     set -l _p ""
     if command -q bootctl
-        set _p (sudo -n bootctl -x 2>/dev/null | string trim -- | string trim -r -c /)
-        set -l _bc_ps $pipestatus
-        if test "$_bc_ps[1]" -ne 0
-            functions -q _log; and _log "BOOT_BOOTCTL_PIPE_FAIL: bootctl -x rc=$_bc_ps[1] (sudo lapse or bootctl error); falling through to ESP"
+        set _p (bootctl -x 2>/dev/null | string trim -- | string trim -r -c /)
+        if test -z "$_p"
+            set _p (sudo -n bootctl -x 2>/dev/null | string trim -- | string trim -r -c /)
+            set -l _bc_ps $pipestatus
+            if test "$_bc_ps[1]" -ne 0
+                functions -q _log; and _log "BOOT_BOOTCTL_PIPE_FAIL: bootctl -x rc=$_bc_ps[1] (sudo lapse or bootctl error); falling through to ESP"
+            end
         end
     end
     if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
@@ -4463,7 +4518,6 @@ function _if_write_wipe_marker --description "Atomically write boot-wipe marker 
         _warn "Failed to write boot-wipe marker tmpfile"
         return 0
     end
-    command chmod -- 600 "$_marker_tmp" 2>/dev/null
     if command mv -Tf -- "$_marker_tmp" "$_wipe_marker" 2>/dev/null
         _untrack_tmpfile "$_marker_tmp"
         _log "BOOT_WIPE_MARKER_UPDATED: $_wipe_marker count=$_post_count hash=$_post_hash"
@@ -4564,6 +4618,10 @@ function _rdi_summary --description "Print final install summary"
         _err "Some steps had errors - review log for details"
         _echo
     end
+    if set -q _RY_AUR_PARTIAL; and test "$_RY_AUR_PARTIAL" = true
+        _warn "AUR phase completed with partial success — some packages failed (see JSONL log)"
+        _echo
+    end
     _info "Manual steps required:"
     _info "  1. Run 'rehash' or start new shell (updates command paths)"
     _info "  2. REBOOT to apply kernel cmdline and module changes"
@@ -4610,7 +4668,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
-set -g _RY_POST_HOOKS "/boot/*|boot" "/etc/mkinitcpio.conf|boot" "/etc/mkinitcpio.d/*|boot" "/etc/sdboot-manage.conf|boot" "/etc/sdboot-manage.d/*|boot" "/etc/kernel/cmdline|boot" "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/iwd/main.conf|nm" "*/NetworkManager/conf.d/*|nm" "*/sysctl.d/*|sysctl" "*/environment.d/*|envd" "/etc/drirc|drirc" "*.service|service"
+set -g _RY_POST_HOOKS "/boot/*|boot" "/efi/*|boot" "/etc/mkinitcpio.conf|boot" "/etc/mkinitcpio.d/*|boot" "/etc/sdboot-manage.conf|boot" "/etc/sdboot-manage.d/*|boot" "/etc/kernel/cmdline|boot" "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/iwd/main.conf|nm" "*/NetworkManager/conf.d/*|nm" "*/sysctl.d/*|sysctl" "*/environment.d/*|envd" "/etc/drirc|drirc" "*.service|service"
 
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path; empty stdout = no match. Single iteration site over \$_RY_POST_HOOKS."
     for _entry in $_RY_POST_HOOKS
@@ -4650,7 +4708,7 @@ function _idf_dispatch_hook --argument-names target tag --description "Dispatch 
     _post_$tag "$target"
 end
 
-function _ry_do_install_file --argument-names target --description "Install a single named config file"
+function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"
     _log_section "INSTALL-FILE START"
     if test -z "$target"
         _err "Usage: ry-install.fish --install-file <path>"
@@ -4668,7 +4726,6 @@ function _ry_do_install_file --argument-names target --description "Install a si
         return $EXIT_USAGE
     end
     set -l _use_sudo (string split '|' -- "$_resolved")[2]
-    set -l _canon_target (command realpath -m -- "$target" 2>/dev/null; or echo "$target")
     _echo "── ry-install v$VERSION - Install Single File ──"
     if test "$_use_sudo" = true
         _ensure_sudo_cached; or return $EXIT_PREFLIGHT
@@ -4681,9 +4738,9 @@ function _ry_do_install_file --argument-names target --description "Install a si
     _echo
     _ok "Installed: $target"
     set -l _hook_rc 0
-    set -l _h (_post_hook_for_target "$_canon_target")
+    set -l _h (_post_hook_for_target "$target")
     if test -n "$_h"
-        _idf_dispatch_hook "$_canon_target" "$_h"
+        _idf_dispatch_hook "$target" "$_h"
         set _hook_rc $status
     end
     _log_section "INSTALL-FILE END"
@@ -4933,7 +4990,9 @@ for _r in $_argv_for_log
     set -a _argv_parts '"'(_json_str "$_r")'"'
 end
 set -l _argv_json '['(string join ',' $_argv_parts)']'
-printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' (date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" (test "$QUIET" = false; and echo true; or echo false) "$_argv_json" >>"$LOG_FILE" 2>/dev/null
+set -l _verbose_json false
+test "$QUIET" = false; and set _verbose_json true
+printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' (date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null
 test $status -eq 0; and set -g _RY_HEADER_WRITTEN true
 switch $MODE
     case install-file

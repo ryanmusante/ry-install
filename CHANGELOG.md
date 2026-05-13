@@ -5,6 +5,84 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v6.2.2 - 2026-05-13
+-------------------
+
+  * logging/json: complete RFC 8259 escape table; `_json_str` now
+    escapes `0x07` (BEL) and `0x0b` (VT) as `\u0007` / `\u000b`
+    (previously passed through unescaped, producing JSONL that some
+    parsers rejected as invalid).
+  * preflight/hardware: `EXPECTED_CPU_MATCH` mismatch now refuses to
+    deploy. Override: `RY_INSTALL_SKIP_HARDWARE_CHECK=1`. Profile is
+    Strix-Halo specific (`amdgpu.cwsr_enable=0`,
+    `MKINITCPIO_MODULES=(amdgpu)`); deploying on Intel/NVIDIA silicon
+    set incorrect kernel cmdline + initramfs.
+  * preflight/sudo: `_ip_probe_sudo_policy` regex now uses a
+    negative-character-class lookbehind to skip `Defaults !KEYWORD`
+    negations (previously rejected `Defaults !requiretty`, which
+    explicitly DISABLES the incompatible directive).
+  * preflight/sudo: `_ensure_sudo_cached` no longer redirects stderr
+    of the interactive `sudo -v` fallback (previously hid the
+    password prompt). Non-TTY refusal path now emits `_err` instead
+    of silent log-only.
+  * install-file/post-hooks: `_RY_POST_HOOKS` recognises `/efi/*` as
+    a boot-rebuild trigger alongside `/boot/*`. `--install-file`
+    against an `/efi/loader/loader.conf` no longer silently skips
+    mkinitcpio + sdboot-manage.
+  * install-file/canonical: `_ry_do_install_file` passes the
+    caller-canonicalized path directly to `_ry_install_file` and
+    `_post_hook_for_target`. Drops a redundant second `realpath -m`.
+  * lock/race: `_acquire_lock` verifies its own PID owns the lock
+    file after a stale reclaim. Closes a TOCTOU window where two
+    concurrent instances could both reclaim the same dead-PID lock.
+  * cleanup/reap: `_dc_kill_children` reads the probe-derived
+    `_RY_SLEEP_FRAC` for the SIGTERM→SIGKILL grace window (was
+    hardcoded `0.5`, which silently became 0 on integer-only sleep).
+  * verify-static/services: cpupower-epp ExecStart check moved from
+    raw `grep ExecStart` to `systemctl cat | string match -rg
+    ExecStart=…`, correctly resolving drop-ins and line
+    continuations.
+  * verify-runtime/cmdline: drop sudo fallback for `/proc/cmdline`
+    read (world-readable on stock Linux).
+  * aur/dkms: `paru` invocation no longer passes `--removemake`.
+    DKMS packages (`mt76-mt7925-dkms`) rebuild on every kernel
+    upgrade and need `gcc` + `linux-cachyos-headers` + `dkms` to
+    remain installed. `_RY_AUR_PARTIAL` tracks per-package retry
+    fallout and surfaces in the final summary.
+  * preflight/clock: `_progress_now` caches the chosen clock source
+    (`/proc/uptime` integer-floor vs `date +%s`) into `_PROG_CLOCK`
+    on first call; subsequent calls never mix monotonic-uptime
+    deltas with wall-clock-epoch deltas mid-run.
+  * preflight/deps: `_ry_check_deps` required-tool list now includes
+    `head` (used by argparse + `_run` stderr capture) and `df`
+    (used by `_check_avail`).
+  * run/timeout: `_run` emits `TIMEOUT_TERM` (rc=124) and
+    `TIMEOUT_KILL` (rc=137) markers distinct from generic `EXIT:`,
+    enabling JSONL grep on the SIGTERM-vs-SIGKILL boundary.
+  * preflight/cpu: `_init_runtime` reads `/proc/cpuinfo` via
+    `string match -rg '^model name\s*:\s*(.*)$' < /proc/cpuinfo`;
+    drops a `command grep`.
+  * preflight/home: `getent passwd | string split ':'` instead of
+    `getent | cut`; fold two-pass `string trim` into one.
+  * verify-unit-syntax: extract scope label into explicit local
+    instead of inline `and echo / or echo` ternary.
+  * resolve-esp/boot: try `bootctl -p` / `bootctl -x` without sudo
+    first (systemd ≥ 250 grants unprivileged query); fall back to
+    `sudo -n bootctl` on empty result. Removes unnecessary sudo
+    overhead on the common path.
+  * boot-wipe-marker: drop redundant `chmod 600` after mktemp
+    (`umask 0177` already produces mode 600).
+  * mkinitcpio/conf-parse: `_ry_mkinitcpio_array` regex-escapes
+    `$key` before grep interpolation (defensive — current callers
+    pass literal keys, but the interface was unsafe).
+  * dispatch/argv: pre-dispatch `--help` and `--version` paths exit
+    via `$EXIT_OK` sentinel instead of literal `0` (consistency
+    with the rest of the exit-code surface).
+  * signals/delegation: `_cleanup_other` passes explicit
+    `$argv[1]` to `_cleanup` instead of `$argv` (no behavioural
+    change; explicitness for future-proofing).
+  * version: bump 6.2.1 → 6.2.2; header dated 2026-05-13.
+
 v6.2.1 - 2026-05-13
 -------------------
 

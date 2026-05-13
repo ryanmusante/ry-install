@@ -1,12 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.2.0 (2026-05-12) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.2.1 (2026-05-13) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     return 1 2>/dev/null; or exit 1
 end
-
-# === SCRIPT GUARDS & EXIT CODES ===
-set -g VERSION "6.2.0"
+set -g VERSION "6.2.1"
 set -g EXIT_OK 0
 set -g EXIT_FAIL 1
 set -g EXIT_USAGE 2
@@ -200,11 +198,7 @@ end
 set -g INSTALL_HAD_ERRORS false
 
 set -g _RY_BOOT_TAINTED false
-set -g _RY_BOOT_CRITICAL_DSTS \
-    "/boot/loader/loader.conf" \
-    /etc/kernel/cmdline \
-    "/etc/sdboot-manage.conf" \
-    "/etc/mkinitcpio.conf"
+set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" /etc/kernel/cmdline "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _TRACKED_TMPFILES
 set -g _SYS_TMP_DIRS
 set -g _USR_TMP_DIRS
@@ -369,14 +363,21 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock; rc=0 ac
     _log "LOCK_ACQUIRED: pid=$fish_pid dir=$LOCK_DIR"
     return 0
 end
-
-function _acquire_lock --description "Acquire instance lock (atomic mkdir; refuse if stale)"
+function _acquire_lock --description "Acquire instance lock (atomic mkdir; retry once on stale lock with dead PID)"
     set -g LOCK_DIR "$_RY_HOME_DIR/.lock"
     set -g LOCK_FILE "$LOCK_DIR/pid"
     command mkdir -p -- (dirname -- "$LOCK_DIR") 2>/dev/null
     _acquire_lock_fresh
     set -l _fresh_rc $status
     test $_fresh_rc -eq 0; and return 0
+    test $_fresh_rc -ne 2; and return 1
+    set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
+    if string match -qr '^\d+$' -- "$_stale_pid"; and not kill -0 "$_stale_pid" 2>/dev/null
+        functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID not running, reclaiming)"
+        command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
+        _acquire_lock_fresh
+        test $status -eq 0; and return 0
+    end
     return 1
 end
 
@@ -391,7 +392,6 @@ function _dc_mki_revert --description "_do_cleanup sub: signal-time mkinitcpio.c
     end
     set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
 end
-
 function _dc_sweep_tmpfiles --description "_do_cleanup sub. Remove tracked tmpfiles/dirs; sudo-escalate on stuck system-path tmps; erase tracking list."
     _cleanup_tmpfiles
     set -l _stuck_tmpfiles
@@ -404,7 +404,7 @@ function _dc_sweep_tmpfiles --description "_do_cleanup sub. Remove tracked tmpfi
     end
     if test (count $_stuck_tmpfiles) -gt 0; and command -q sudo; and sudo -n true 2>/dev/null
         for _tf in $_stuck_tmpfiles
-            if string match -q '/etc/*' -- "$_tf"; or string match -q '/boot/*' -- "$_tf"; or string match -q '/var/*' -- "$_tf"
+            if string match -q '/etc/*' -- "$_tf"; or string match -q '/boot/*' -- "$_tf"; or string match -q '/efi/*' -- "$_tf"; or string match -q '/var/*' -- "$_tf"
                 if sudo -n test -d "$_tf" 2>/dev/null
                     sudo -n rm -rf --preserve-root -- "$_tf" 2>/dev/null
                 else if sudo -n test -f "$_tf" 2>/dev/null
@@ -415,7 +415,6 @@ function _dc_sweep_tmpfiles --description "_do_cleanup sub. Remove tracked tmpfi
     end
     set --erase _TRACKED_TMPFILES
 end
-
 function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for leftover ry-* tmpfiles/dirs by explicit glob allowlist."
     set -l _tmpdir (set -q TMPDIR; and test -n "$TMPDIR"; and printf '%s\n' "$TMPDIR"; or printf '%s\n' /tmp)
     set -l _tmp_globs \
@@ -434,7 +433,6 @@ function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for l
     command find "$_tmpdir" -mindepth 2 -maxdepth 2 -path "$_tmpdir/ry-run.*" -type f -user "$_MY_UID" -delete 2>/dev/null
     command find "$_tmpdir" -maxdepth 1 -name 'ry-run.*' -type d -empty -user "$_MY_UID" -delete 2>/dev/null
 end
-
 function _dc_erase_globals --description "_do_cleanup sub. Erase cached script-internal globals (dmesg, kconfig, paths, sets)."
     set --erase _KCONFIG_DATA
     set --erase _KCONFIG_LOADED
@@ -454,15 +452,14 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached script-i
     set --erase _USR_TMP_DIRS
     set --erase _PROFILE_USES_WIFI_BACKEND
     set --erase _RY_ESP_FALLBACK
-    set --erase _RY_PACMAN_REVERTED
+    set --erase _RY_PACMAN_REVERT_ATTEMPTED
     set --erase _RY_MKI_REVERT_FAILED
 end
-
-function _dc_kill_children --description "_do_cleanup sub. Release lock; reap children via pkill -TERM then -KILL."
+function _dc_kill_children --description "_do_cleanup sub. Release lock; reap children via pkill -TERM then -KILL after 0.5 s grace."
     set -q _RY_HOLDS_LOCK; and set -q LOCK_DIR; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
     if command -q pkill
         command pkill -TERM -P "$fish_pid" 2>/dev/null
-        command sleep $_RY_SLEEP_FRAC 2>/dev/null
+        command sleep 0.5 2>/dev/null
         command pkill -KILL -P "$fish_pid" 2>/dev/null
     end
 end
@@ -545,24 +542,10 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
     _teardown exit $_exit_status
 end
 
-set -g SYSTEM_DESTINATIONS \
-    "/boot/loader/loader.conf" \
-    /etc/kernel/cmdline \
-    "/etc/sdboot-manage.conf" \
-    "/etc/mkinitcpio.conf" \
-    "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
-    "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
-    "/etc/iwd/main.conf" \
-    "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-    /etc/drirc \
-    "/etc/sysctl.d/99-cachyos-sysctl.conf"
-set -g USER_DESTINATIONS \
-    "$HOME/.config/environment.d/10-environment.conf"
-set -g SERVICE_DESTINATIONS \
-    "/etc/systemd/system/cpupower-epp.service"
-set -g _RY_IWD_GATED_DSTS \
-    "/etc/iwd/main.conf" \
-    "/etc/NetworkManager/conf.d/99-cachyos-nm.conf"
+set -g SYSTEM_DESTINATIONS "/boot/loader/loader.conf" /etc/kernel/cmdline "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf" "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" "/etc/iwd/main.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" /etc/drirc "/etc/sysctl.d/99-cachyos-sysctl.conf"
+set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
+set -g SERVICE_DESTINATIONS "/etc/systemd/system/cpupower-epp.service"
+set -g _RY_IWD_GATED_DSTS "/etc/iwd/main.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"
     echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2
@@ -576,117 +559,26 @@ set -g SDBOOT_DEFAULT_ENTRY manual
 set -g SDBOOT_OVERWRITE yes
 set -g SDBOOT_REMOVE_EXISTING yes
 set -g SDBOOT_REMOVE_OBSOLETE yes
-set -g KERNEL_PARAMS \
-    iommu=pt \
-    amd_pstate=active \
-    amdgpu.cwsr_enable=0 \
-    amdgpu.ppfeaturemask=0xfffd3fff \
-    loglevel=3 \
-    module_blacklist=pcspkr \
-    nowatchdog \
-    pcie_aspm.policy=performance \
-    quiet \
-    rd.systemd.show_status=auto \
-    rd.udev.log_level=3 \
-    split_lock_detect=off \
-    tsc=reliable \
-    usbcore.autosuspend=-1 \
-    zswap.enabled=0
+set -g KERNEL_PARAMS iommu=pt amd_pstate=active amdgpu.cwsr_enable=0 amdgpu.ppfeaturemask=0xfffd3fff loglevel=3 module_blacklist=pcspkr nowatchdog pcie_aspm.policy=performance quiet rd.systemd.show_status=auto rd.udev.log_level=3 split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
-set -g MKINITCPIO_HOOKS \
-    base \
-    systemd \
-    autodetect \
-    microcode \
-    modconf \
-    kms \
-    keyboard \
-    sd-vconsole \
-    block \
-    filesystems \
-    fsck
+set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd
 set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 set -g RESOLVED_MDNS resolve
-set -g LOGIND_IGNORE_KEYS \
-    HandlePowerKey \
-    HandlePowerKeyLongPress \
-    HandleSuspendKey \
-    HandleSuspendKeyLongPress \
-    HandleHibernateKey \
-    HandleHibernateKeyLongPress \
-    HandleRebootKey \
-    HandleRebootKeyLongPress \
-    HandleSecureAttentionKey
+set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKey HandleSuspendKeyLongPress HandleHibernateKey HandleHibernateKeyLongPress HandleRebootKey HandleRebootKeyLongPress HandleSecureAttentionKey
 set -g IWD_ENABLE_NETWORK_CONFIG false
 set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"
 set -g IWD_DNS_SERVICE systemd
 set -g NM_WIFI_BACKEND iwd
 set -g NM_WIFI_POWERSAVE 2
 set -g NM_LOG_LEVEL WARN
-set -g ENV_VARS \
-    "DXVK_LOG_LEVEL=none" \
-    "DXVK_LOG_PATH=none" \
-    "MESA_SHADER_CACHE_MAX_SIZE=4G" \
-    "PROTON_ENABLE_WAYLAND=1" \
-    "PROTON_LOCAL_SHADER_CACHE=1" \
-    "PROTON_USE_NTSYNC=1" \
-    "RADV_PERFTEST=sam,nircache,transfer_queue" \
-    "VKD3D_DEBUG=none" \
-    "VKD3D_SHADER_DEBUG=none" \
-    "WINEDEBUG=-all"
-set -g SYSCTL_VALUES \
-    "net.core.default_qdisc=fq" \
-    "net.core.netdev_max_backlog=16384" \
-    "net.core.rmem_max=134217728" \
-    "net.core.wmem_max=134217728" \
-    "net.ipv4.tcp_congestion_control=bbr" \
-    "net.ipv4.tcp_fastopen=3" \
-    "net.ipv4.tcp_mtu_probing=1" \
-    "net.ipv4.tcp_notsent_lowat=131072" \
-    "net.ipv4.tcp_rmem=4096 87380 134217728" \
-    "net.ipv4.tcp_slow_start_after_idle=0" \
-    "net.ipv4.tcp_wmem=4096 65536 134217728" \
-    "vm.max_map_count=2147483642" \
-    "vm.watermark_boost_factor=0" \
-    "fs.protected_fifos=2" \
-    "fs.protected_regular=2" \
-    "vm.compaction_proactiveness=0"
-set -g PKGS_ADD \
-    nvme-cli \
-    cachyos-gaming-meta \
-    cachyos-gaming-applications \
-    mesa \
-    lib32-mesa \
-    fd \
-    sd \
-    dust \
-    procs \
-    bottom \
-    htop \
-    git-delta \
-    lm_sensors
-set -g PKGS_DEL \
-    plymouth \
-    cachyos-plymouth-bootanimation \
-    cachyos-plymouth-theme \
-    octopi \
-    micro \
-    cachyos-micro-settings \
-    btop
+set -g ENV_VARS "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MESA_SHADER_CACHE_MAX_SIZE=4G" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "PROTON_USE_NTSYNC=1" "RADV_PERFTEST=sam,nircache,transfer_queue" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
+set -g SYSCTL_VALUES "net.core.default_qdisc=fq" "net.core.netdev_max_backlog=16384" "net.core.rmem_max=134217728" "net.core.wmem_max=134217728" "net.ipv4.tcp_congestion_control=bbr" "net.ipv4.tcp_fastopen=3" "net.ipv4.tcp_mtu_probing=1" "net.ipv4.tcp_notsent_lowat=131072" "net.ipv4.tcp_rmem=4096 87380 134217728" "net.ipv4.tcp_slow_start_after_idle=0" "net.ipv4.tcp_wmem=4096 65536 134217728" "vm.max_map_count=2147483642" "vm.watermark_boost_factor=0" "fs.protected_fifos=2" "fs.protected_regular=2" "vm.compaction_proactiveness=0"
+set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors
+set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme octopi micro cachyos-micro-settings btop
 set -g AUR_PKGS mkinitcpio-firmware mt76-mt7925-dkms
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
-set -g MASK \
-    ananicy-cpp.service \
-    power-profiles-daemon.service \
-    lvm2-monitor.service \
-    NetworkManager-wait-online.service \
-    ufw.service \
-    sleep.target \
-    suspend.target \
-    hibernate.target \
-    hybrid-sleep.target \
-    suspend-then-hibernate.target
+set -g MASK ananicy-cpp.service power-profiles-daemon.service lvm2-monitor.service NetworkManager-wait-online.service ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
 set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200
@@ -699,9 +591,6 @@ if set -q RY_INITRD_WARN_MB; and string match -qr '^[1-9][0-9]*$' -- "$RY_INITRD
     set -g INITRD_WARN_MB $RY_INITRD_WARN_MB
 end
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
-
-# RUNTIME INIT — root UUID, hardware sanity, count/timing invariants, tmp-dir cache
-
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID; gates absence by mode (preflight-fatal except --check log-only)"
     set -g _ROOT_UUID (findmnt -no UUID / 2>/dev/null)
     if test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -- "$_ROOT_UUID"
@@ -772,7 +661,6 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         end
     end
 end
-
 function _ir_validate_keys --description "Refuse to deploy when two managed destinations produce the same _tmpfile_key (function-dispatch collision)"
     set -l _seen_keys
     for _d in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
@@ -807,9 +695,6 @@ function _init_runtime --description "Cache root UUID, validate hardware sanity,
         end
     end
 end
-
-# CONTENT GENERATORS — _content_<dst>; dispatched by _ry_get_file_content via _tmpfile_key
-
 function _content__boot_loader_loader.conf --description "Embedded content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -850,7 +735,6 @@ end
 function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Embedded content for /etc/NetworkManager/conf.d/99-cachyos-nm.conf"
     printf '%s\n' "# NetworkManager configuration - iwd backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "wifi.iwd.autoconnect=false" "" "[logging]" "level=$NM_LOG_LEVEL"
 end
-
 function _content_HOME_.config_environment.d_10-environment.conf --description "Embedded content for \$HOME/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (COSMIC, Flatpak, D-Bus activated apps)"
     for var in $ENV_VARS
@@ -902,9 +786,6 @@ function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Embedded c
         return $EXIT_GEN_SYSCTL
     end
 end
-
-# DISPATCH TABLE — _ry_get_file_content + _tmpfile_key helpers
-
 function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"
     set -l fn "_content_"(_tmpfile_key "$dst")
     functions -q $fn; or return $EXIT_GEN_NOFN
@@ -1035,7 +916,7 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
     end
 end
 function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"
-    string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"; or string match -q '/usr/*' -- "$dst"; or string match -q '/var/*' -- "$dst"; or string match -q '/srv/*' -- "$dst"; or string match -q '/opt/*' -- "$dst"; or string match -q '/root/*' -- "$dst"
+    string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"; or string match -q '/efi/*' -- "$dst"; or string match -q '/usr/*' -- "$dst"; or string match -q '/var/*' -- "$dst"; or string match -q '/srv/*' -- "$dst"; or string match -q '/opt/*' -- "$dst"; or string match -q '/root/*' -- "$dst"
 end
 
 function _installed_bytes --argument-names dst --description "Raw bytes of installed file. Returns: 0=ok (bytes on stdout), 1=read fail, 2=sudo lapse (system dst)."
@@ -1075,7 +956,7 @@ function _mask_list_effective --description "Effective MASK list"
     printf '%s\n' $MASK
 end
 
-function _json_str --description "Escape a string for safe JSON embedding"
+function _json_str --description "Escape a string for safe JSON embedding (RFC 8259)"
     set -l s "$argv[1]"
     if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"
         printf '%s' "$s" | string collect --allow-empty
@@ -1086,7 +967,11 @@ function _json_str --description "Escape a string for safe JSON embedding"
     set s (string replace -a -- \n '\\n' "$s" | string collect)
     set s (string replace -a -- \r '\\r' "$s" | string collect)
     set s (string replace -a -- \t '\\t' "$s" | string collect)
-    set s (string replace -ar -- '[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]' '?' "$s" | string collect)
+    set s (string replace -a -- \b '\\b' "$s" | string collect)
+    set s (string replace -a -- \f '\\f' "$s" | string collect)
+    for _hex in 00 01 02 03 04 05 06 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f
+        set s (string replace -a -- (printf '\x'$_hex) '\u00'$_hex "$s" | string collect)
+    end
     printf '%s' "$s" | string collect --allow-empty
 end
 
@@ -1244,7 +1129,6 @@ function _progress_now --description "Monotonic seconds (integer floor of /proc/
     end
     date +%s
 end
-
 function _progress_init --description "Open scroll region; draw initial bar; no-op on non-TTY / mosh / tmux / screen / tput-absent"
     set -g _PROG_STEPS Preflight Packages Configuration Services Boot Finalize
     set -g _PROG_CUR 0
@@ -1298,7 +1182,6 @@ function _progress_redraw --argument-names name current --description "Redraw pi
     printf '\e7\e[%d;1H\e[K[%s] %3d%% %s\e8' \
         $_PROG_ROWS "$bar" $pct "$name" >&2
 end
-
 function _progress_done --description "Finalize progress bar (or hold position on skip-cascade) and log elapsed seconds"
     set -l _now (_progress_now)
     set -l elapsed (math $_now - $_PROG_START)
@@ -1318,14 +1201,12 @@ function _progress_done --description "Finalize progress bar (or hold position o
     end
     set -g _PROG_PINNED false
 end
-
 function _progress_teardown --description "Clear pinned progress bar and reset scroll region (signal/abort path)"
     set -q _PROG_PINNED; or return 0
     test "$_PROG_PINNED" = true; or return 0
     printf '\e[r\e[%d;1H\e[K\n' $_PROG_ROWS >&2
     set -g _PROG_PINNED false
 end
-
 function _progress_on_winch --on-signal WINCH --description "Re-anchor progress bar on terminal resize"
     set -q _PROG_PINNED; or return 0
     test "$_PROG_PINNED" = true; or return 0
@@ -1359,7 +1240,6 @@ function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable 
     end
     echo $_RY_RUN_TIMEOUT_DEFAULT
 end
-
 function _run_emit_stream --argument-names label_tag tmpfile ret cap --description "_run sub. Capture stream from tmpfile, log it, emit to stderr per QUIET/rc. label_tag = STDERR|OUTPUT."
     test -s "$tmpfile"; or return 0
     set -l _total (command wc -l <"$tmpfile" 2>/dev/null | string trim --)
@@ -1587,7 +1467,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     set -l systemd_ver (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
     test -n "$systemd_ver"; and test "$systemd_ver" -lt 250; and _warn "Systemd version $systemd_ver detected; some features require 250+"
     for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput \
-        swapon zramctl lsmod modprobe pkill nmcli ping realpath
+        swapon zramctl lsmod modprobe pkill nmcli ping realpath ip
         command -q $cmd; or _warn "Expected tool not found: $cmd (from base packages)"
     end
     if set -q AUR_PKGS; and test (count $AUR_PKGS) -gt 0; and not command -q paru
@@ -1712,7 +1592,6 @@ function _vmh_existence_only --description "_ry_validate_mkinitcpio_hooks sub. E
     test $errors -eq 0
     return $status
 end
-
 function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: ordering invariants (base-first, no dupes, after/before pairs); echoes error count"
     set -l hooks $argv
     set -l errors 0
@@ -1968,7 +1847,6 @@ function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description 
     end
     return 0
 end
-
 function _awf_symlink_check --argument-names dst tmpfile use_sudo phase --description "_atomic_write_file sub: probe tmpfile for symlink; rc=0 ok, rc=1 symlink or sudo lapse (caller _rm_tmp + abort)"
     _is_symlink "$tmpfile" $use_sudo
     set -l _sym_rc $status
@@ -1985,7 +1863,6 @@ function _awf_symlink_check --argument-names dst tmpfile use_sudo phase --descri
     end
     return 0
 end
-
 function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --description "chmod + sudo cache check + atomic mv. rc=0 ok, rc=1 fail, rc=EXIT_BOOT_CRIT on sudo lapse mid-mv."
     set -l _sp
     test "$use_sudo" = true; and set _sp sudo -n
@@ -2075,9 +1952,6 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     _atomic_write_file "$dst" "$perms" "$use_sudo"
     return $status
 end
-
-# FILE OPERATIONS — diff, install, verify
-
 function _vsb_loader --description "_verify_static_boot sub: /boot/loader/loader.conf key/value verification"
     _echo "── loader.conf ──"
     _chk_file /boot/loader/loader.conf; or return 0
@@ -2674,9 +2548,6 @@ function _gather_cpu_state --description "Collect CPU frequency path for represe
     end
     return 0
 end
-
-# RUNTIME VERIFICATION — live sysfs/procfs state checks
-
 function _vrk_cmdline --description "Runtime kparam check: /proc/cmdline + preemption model"
     _echo "KERNEL CMDLINE"
     _echo
@@ -3583,7 +3454,6 @@ function _mr_copy_size_verify --argument-names backup_file _mki_tmp --descriptio
     end
     return 0
 end
-
 function _mr_chmod_chown_mv --argument-names _mki_tmp --description "_mkinitcpio_revert sub. chmod/chown --reference + atomic mv. rc=0 ok, rc=1 any failure."
     if not sudo -n chmod --reference=/etc/mkinitcpio.conf -- "$_mki_tmp" 2>/dev/null
         _err "  /etc/mkinitcpio.conf revert failed at chmod — current conf may reference uninstalled modules"
@@ -3698,7 +3568,7 @@ function _ip_pacman_invoke --description "Run pacman -Syu (or -Sy via RY_INSTALL
                 _err "Package installation failed after retry"
             end
             if test "$_RY_MKI_HAD_ORIG" = true; and test -n "$_RY_MKI_BACKUP_FILE"
-                set -g _RY_PACMAN_REVERTED true
+                set -g _RY_PACMAN_REVERT_ATTEMPTED true
                 if not _mkinitcpio_revert "$_RY_MKI_BACKUP_FILE"
                     set -g _RY_MKI_REVERT_FAILED true
                     _err "Mkinitcpio revert failed — boot state may be inconsistent; aborting"
@@ -3753,7 +3623,6 @@ function _ip_scan_pacnew --description "Scan managed destinations for .pacnew/.p
         _log "PACSAVE_FOUND: $_pacsave_found"
     end
 end
-
 function _ip_run_and_verify --description "_install_packages sub: run pacman -Syu, verify pkgs installed, revalidate mkinitcpio hooks; rc=1 sets INSTALL_HAD_ERRORS + _RY_BOOT_TAINTED"
     set -l pkgs_to_install $argv
     set -l _err false
@@ -3952,7 +3821,6 @@ function _far_build_awk_script --description "_far_awk_rewrite sub. Emit the awk
         '    print' \
         '}'
 end
-
 function _far_awk_rewrite --argument-names tmpfstab --description "awk-rewrite fstab into tmpfstab via tee; rc=0 ok, rc=1 pipeline failure; rewritten ext4 rows use single-space OFS, other rows pass through verbatim"
     set -l _awk_script (_far_build_awk_script | string collect)
     set -l _tee_err (command mktemp -t .ry-install.tee-err.XXXXXX 2>/dev/null)
@@ -4089,6 +3957,12 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
     test -z "$_t"; and set _t 60
     test "$_t" -gt 60; and set _t 60
     set -l _rdeps_raw (command timeout "$_t" pactree -ru "$pkg" 2>/dev/null | string trim -- | string replace -r '[=<>].*$' '' | string match -rv -- "^($_pkg_re|)\$")
+    set -l _ps $pipestatus
+    if test "$_ps[1]" -ne 0
+        _warn "  $pkg: pactree probe failed (rc=$_ps[1]) — skipping for safety"
+        _log "PACTREE_PROBE_FAIL: pkg=$pkg rc=$_ps[1] (timeout, missing pkg, or db error)"
+        return 0
+    end
     set -l _rdeps
     for _r in $_rdeps_raw
         contains -- "$_r" $PKGS_DEL; and continue
@@ -4173,7 +4047,6 @@ function _csm_filter_units --description "_configure_services_mask sub. Pre-filt
         echo "$_unit"
     end
 end
-
 function _csm_retry_individual --description "_configure_services_mask sub. Per-unit retry after batch mask failed. Re-probes is-enabled (race-safe). rc=0 all ok, rc=1 any failure."
     set -l _ret 0
     for _unit in $argv
@@ -4278,9 +4151,6 @@ function _install_configure_services --description "Enable, start, and configure
     _configure_services_enable; or set _ret 1
     return $_ret
 end
-
-# BOOT PATH RESOLUTION — ESP/$BOOT discovery + entry enumeration
-
 function _resolve_esp --description "Resolve EFI system partition path (cached); falls back to /boot."
     if set -q _RY_ESP_PATH; and test -n "$_RY_ESP_PATH"
         echo "$_RY_ESP_PATH"
@@ -4460,7 +4330,6 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     _ok "Boot sanity: vmlinuz present, initramfs non-zero, entries valid"
     return 0
 end
-
 
 function _boot_initrd_size_scan --argument-names esp --description "Post-rebuild initramfs size sanity check; warn if >100 MB. Returns 0 always (advisory)."
     set -l _initrd_list (sudo -n find "$esp" -maxdepth 1 -type f -name 'initramfs-*.img' -print0 2>/dev/null | string split0)
@@ -4661,7 +4530,7 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases; 
         _err "Aborting remaining phases: mkinitcpio.conf revert failed (boot state inconsistent)"
         return 0
     end
-    if set -q _RY_PACMAN_REVERTED; and test "$_RY_PACMAN_REVERTED" = true
+    if set -q _RY_PACMAN_REVERT_ATTEMPTED; and test "$_RY_PACMAN_REVERT_ATTEMPTED" = true
         _warn "Skipping AUR phase: pacman -Syu was rolled back (avoiding install against inconsistent mkinitcpio state)"
         _log "AUR_SKIP_AFTER_REVERT: pacman rolled back; AUR phase bypassed"
     else
@@ -4741,21 +4610,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
-set -g _RY_POST_HOOKS \
-    "/boot/*|boot" \
-    "/etc/mkinitcpio.conf|boot" \
-    "/etc/mkinitcpio.d/*|boot" \
-    "/etc/sdboot-manage.conf|boot" \
-    "/etc/sdboot-manage.d/*|boot" \
-    "/etc/kernel/cmdline|boot" \
-    "*/resolved.conf.d/*|resolved" \
-    "*/logind.conf.d/*|logind" \
-    "*/iwd/main.conf|nm" \
-    "*/NetworkManager/conf.d/*|nm" \
-    "*/sysctl.d/*|sysctl" \
-    "*/environment.d/*|envd" \
-    "/etc/drirc|drirc" \
-    "*.service|service"
+set -g _RY_POST_HOOKS "/boot/*|boot" "/etc/mkinitcpio.conf|boot" "/etc/mkinitcpio.d/*|boot" "/etc/sdboot-manage.conf|boot" "/etc/sdboot-manage.d/*|boot" "/etc/kernel/cmdline|boot" "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/iwd/main.conf|nm" "*/NetworkManager/conf.d/*|nm" "*/sysctl.d/*|sysctl" "*/environment.d/*|envd" "/etc/drirc|drirc" "*.service|service"
 
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path; empty stdout = no match. Single iteration site over \$_RY_POST_HOOKS."
     for _entry in $_RY_POST_HOOKS

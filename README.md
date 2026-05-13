@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-6.2.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-6.2.1-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -70,6 +70,7 @@ Image (UKI) boot flows and BLS Type #2 entries.
 | Systemd | ≥ 250 (advisory); ≥ 256 enables `HandleSecureAttentionKey` |
 | Sudo | Unrestricted — no `requiretty`, `tty_tickets`, `timestamp_timeout=0` |
 | Coreutils | GNU `sort -z`, `stat -c`, `find -printf`, `df --output`, `grep -m`, `awk`, `timeout` |
+| iproute2 | `ip(8)` — used by the default-route-on-WiFi probe |
 | Free space | 2 GB `/`, 200 MB `/boot` |
 | Network | `curl` |
 | paru | For AUR (`mkinitcpio-firmware`, `mt76-mt7925-dkms`) |
@@ -293,7 +294,7 @@ set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1`
 | Progress bar | Pinned bottom-row DECSTBM bar for install mode (6 phases); auto-skipped on non-TTY, `mosh`, `tmux`, `STY`, `screen*`, or when `tput` absent; `WINCH` re-anchors on resize. Per-step timings → JSONL `PROG_STEP_*` events |
 | Stderr surfacing | First 5 stderr lines on rc≠0; `--verbose` mirrors full; first 500 lines to JSONL with truncation sentinel |
 | Root detection | Refuses to run as root; sudo invoked internally |
-| Instance lock | Atomic mkdir; refuses on stale (`rm -rf ~/ry-install/.lock` to clear) |
+| Instance lock | Atomic mkdir; auto-reclaims when recorded PID is not running (`kill -0` probe) — emits `LOCK_STALE_CLAIM` and retries once |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal |
 | mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert on `pacman -Syu` failure or signal during snapshot→pacman window. On revert success the AUR phase is skipped to avoid building against an inconsistent state |
 | mkinitcpio hook revalidation | Post-`pacman -Syu`, declared `MKINITCPIO_HOOKS` re-probed against on-disk hooks; missing → boot taint |
@@ -399,9 +400,11 @@ then `mkinitcpio -P && sdboot-manage gen` and reboot.
 <summary><b>Other</b></summary>
 
 - **Stale instance lock:** if a previous run was killed forcibly,
-  `~/ry-install/.lock` may remain. Re-run will refuse with
-  `EXIT_LOCK (5)`. Clear manually after verifying no live process:
-  `pgrep -af ry-install; or rm -rf ~/ry-install/.lock`.
+  `~/ry-install/.lock` may remain. The next run probes the recorded
+  PID with `kill -0`; if the process is gone, the lock is reclaimed
+  automatically (look for `LOCK_STALE_CLAIM` in the JSONL log).
+  Manual clear is only needed when the recorded PID *is* live but
+  unrelated: `pgrep -af ry-install; or rm -rf ~/ry-install/.lock`.
 - **Sudo re-prompts mid-run:** long phases (mkinitcpio, AUR builds)
   may exceed your sudoers `timestamp_timeout`. Run
   `sudo -v && ./ry-install.fish`, or bump `timestamp_timeout` in
@@ -427,7 +430,7 @@ then `mkinitcpio -P && sdboot-manage gen` and reboot.
 | WiFi backend mismatch | `grep wifi.backend /etc/NetworkManager/conf.d/99-cachyos-nm.conf; and pgrep -x iwd` |
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
-| Stale lock | `rm -rf ~/ry-install/.lock/` (only if no `pgrep -af ry-install`) |
+| Stale lock | Auto-reclaimed when recorded PID is dead; manual: `rm -rf ~/ry-install/.lock/` (only if `pgrep -af ry-install` is empty) |
 | AUR pkg missing | `command -q paru; or sudo pacman -S --needed paru`, then re-run |
 | Sudo cache expired | `sudo -v; and ./ry-install.fish` |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |

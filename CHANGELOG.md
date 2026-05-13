@@ -5,6 +5,42 @@ Maintained in kernel.org ChangeLog format: newest release first, dated
 heading per release, terse bullets naming the subsystem before the
 change. Detail belongs in commit messages, not here.
 
+v6.2.1 - 2026-05-13
+-------------------
+
+  * pkg-removal/pactree: `_csp_filter_rdeps` inspects `$pipestatus[1]`
+    after the timed `pactree -ru` pipeline; fails closed (skips the
+    package, emits `PACTREE_PROBE_FAIL`) on rc≠0 so a probe timeout
+    can no longer be misread as "package has no reverse dependencies".
+  * lock/reclaim: `_acquire_lock` retries once when `LOCK_DIR` exists
+    AND the recorded pid is not running (`kill -0` probe); emits
+    `LOCK_STALE_CLAIM` and reclaims. Manual `rm -rf ~/ry-install/.lock`
+    no longer required after a non-graceful exit.
+  * cleanup/reap: `_dc_kill_children` widens the SIGTERM → SIGKILL
+    grace window to 500 ms (was `_RY_SLEEP_FRAC`, 100 ms when
+    fractional sleep is available). Mitigates races against children
+    masking SIGTERM briefly (e.g. pacman during db-lock acquisition).
+  * paths/sudo-gate: `_is_system_dst` and the `_do_cleanup` tmpfile
+    sudo-escalation allowlist now recognise `/efi/*` alongside
+    `/boot/*`, matching layouts where the ESP is mounted at `/efi`
+    rather than `/boot` (BLS without XBOOTLDR collapses to ESP).
+  * logging/json: `_json_str` emits `\u00XX` escapes for non-printable
+    bytes (RFC 8259) instead of the lossy `?` substitute; JSONL log
+    values now round-trip cleanly through any JSON parser.
+  * preflight/deps: `_ry_check_deps` warn-list now includes `ip(8)`
+    (iproute2); used by `_is_wifi_active_route` for the
+    default-route-on-WiFi check.
+  * pacman/rollback: `_RY_PACMAN_REVERTED` renamed to
+    `_RY_PACMAN_REVERT_ATTEMPTED` to reflect that the sentinel is set
+    before revert outcome is known. No behavioural change.
+  * style: collapse multi-line array declarations
+    (`KERNEL_PARAMS`, `MKINITCPIO_HOOKS`, `LOGIND_IGNORE_KEYS`,
+    `ENV_VARS`, `SYSCTL_VALUES`, `PKGS_ADD`, `PKGS_DEL`, `MASK`,
+    `SYSTEM_DESTINATIONS`, `_RY_POST_HOOKS`, …) into single-line
+    form; drop section-marker comments; tighten blank lines between
+    same-prefix sub-functions. No functional change; script drops
+    from 5132 to 4987 lines.
+
 v6.2.0 - 2026-05-12
 -------------------
 

@@ -1,6 +1,296 @@
 ry-install ChangeLog
 ====================
 
+v6.5.2 - 2026-05-14
+-------------------
+
+  * Script header: the version string in the line-2 header comment
+    was still `v6.5` — it had not been bumped alongside the `VERSION`
+    global and the README badge in the v6.5.1 release. Header,
+    `VERSION`, and README badge now all read 6.5.2.
+
+  * sha256sum: the three bare `sha256sum` invocations
+    (`_verify_static_checksum` expected/actual content-hash compare,
+    `_enum_boot_entries` entry-set hash) now use the `command
+    sha256sum` form, matching the coreutils-invocation convention
+    already applied to every other required coreutils binary in the
+    file. No behavior change — `sha256sum` is in the required-command
+    list and unconditionally present.
+
+  * dispatch: the post-argparse `case install-file` arm carried an
+    unreachable `test -z "$INSTALL_FILE_TARGET"` usage guard.
+    `argparse` rejects an empty `--install-file=` value (and a
+    missing value) before the mode switch is reached, so
+    `INSTALL_FILE_TARGET` is always non-empty at that point. The dead
+    guard is removed and `case install-file` / `case install` are
+    merged — both did nothing but acquire the instance lock. The
+    defensive empty-target guard inside `_ry_do_install_file` itself
+    is retained.
+
+  * _install_preflight: the four uniform
+    `<check>; or begin; set -g _PROG_FINALIZED_SKIP true;
+    return $EXIT_PREFLIGHT; end` blocks (`_ensure_sudo_cached`,
+    `_ip_probe_sudo_policy`, `_ry_check_deps`, `_ry_check_disk_space`)
+    collapsed into a single `for` loop over the check names. Check
+    order, the progress-bar skip sentinel, and the `EXIT_PREFLIGHT`
+    return are unchanged; `_ry_check_network`,
+    `_ry_check_kernel_version`, and `_ry_validate_configs` keep their
+    bespoke handling.
+
+  * _resolve_esp / _resolve_boot_path: the shared `bootctl -p` /
+    `bootctl -x` probe (user invocation, sudo fallback, pipestatus
+    check, fall-through log marker) factored into a `_bootctl_dir`
+    helper taking the flag, log tag, and fall-through note. Both
+    resolvers call it with their respective arguments; resolution
+    order, the `_RY_ESP_TRIED` / `_RY_BOOT_TRIED` caching sentinels,
+    and `/boot` fallback behavior are unchanged.
+
+  * Net effect: 5023 -> 4991 lines. No functional change to the
+    install / verify / check flows beyond the corrected header
+    version string.
+
+  * README: version badge -> 6.5.2.
+
+v6.5.1 - 2026-05-14
+-------------------
+
+  * _resolve_esp / _resolve_boot_path: a hard-fail (bootctl and
+    findmnt both unable to resolve a path, /boot absent) cached an
+    empty string into _RY_ESP_PATH / _RY_BOOT_PATH. The cache guard
+    was `set -q VAR; and test -n "$VAR"`, so an empty cached value
+    read as "not cached" and every subsequent call re-ran the full
+    autodetect — re-emitting the `ESP autodetect failed` warning and
+    re-probing sudo on each invocation. Resolution is now gated on
+    dedicated `_RY_ESP_TRIED` / `_RY_BOOT_TRIED` sentinels (mirroring
+    _resolve_systemd_ver), so an unresolved path is cached and warned
+    about exactly once. Both sentinels are cleared in
+    _dc_erase_globals alongside the existing cache vars.
+
+  * _run_emit_stream: the captured-stream line total came from
+    `wc -l`, which counts newlines and therefore undercounts by one
+    when a command's stdout/stderr ends without a trailing newline.
+    That could suppress the `*_TRUNCATED` JSONL marker even when the
+    output was actually clipped at the 500-line cap. The count now
+    adds one when the file's last byte is not a newline.
+
+  * _vre_zram: the ZRAM service check hard-coded
+    `systemd-zram-setup@zram0.service`; a zram swap device with any
+    other instance name produced a false `ZRAM service: not found`.
+    The instance name is now derived from the live `swapon` device,
+    falling back to `zram0` only when no zram swap is active.
+
+  * _post_service: removed an unreachable `$HOME/*` user-unit branch.
+    SERVICE_DESTINATIONS contains only a system path, so the branch
+    was dead code; the function now handles the system path directly.
+
+  * _csm_retry_individual: dropped a redundant per-unit re-filter.
+    Its only caller passes a list already filtered by
+    _csm_filter_units (masked / not-installed units removed), so the
+    second pass could never skip anything, and re-masking an
+    already-masked unit is idempotent.
+
+  * _cleanup_other: removed a redundant `_CLEANUP_DONE` guard already
+    enforced as the first statement of _cleanup.
+
+  * Removed the vestigial boot-wipe marker: BOOT_WIPE_MARKER, the
+    _if_write_wipe_marker function, its two call sites, and the
+    write-only _RY_BOOT_REBUILD_OK flag. The marker file
+    (~/ry-install/.boot-wipe-acknowledged) was written after a
+    successful entry rebuild but never read by any code path — no
+    behavior depended on it.
+
+  * README: documented that the ext4 fstab rewrite drops the
+    `defaults` token and normalizes atime/commit options. Mount
+    semantics are unchanged; only the literal fstab text differs.
+
+  * Net effect: 5087 -> 5023 lines. No functional change to the
+    install / verify / check flows beyond the fixes above.
+
+  * README: version badge -> 6.5.1.
+
+v6.5 - 2026-05-14
+-----------------
+
+  * _dc_sweep_tmpfiles: the post-`rm` `TMPFILE_STUCK` log no longer
+    fires on a *successful* sudo removal. The branches were written
+    `sudo -n rm … 2>/dev/null; or functions -q _log; and _log …`,
+    which fish parses as `(rm or functions-q) and _log`: when `rm`
+    succeeded the `or` clause was satisfied, the chain status stayed
+    success, and the trailing `and _log` ran regardless — emitting a
+    spurious `TMPFILE_STUCK: <path> (sudo rm -rf failed)` /
+    `(sudo rm -f failed)` JSONL event for a path that was in fact
+    removed cleanly, and obscuring genuinely stuck paths. Both
+    branches now wrap the log call in an explicit `or begin … end`
+    block so it is reached only on real removal failure. The
+    user-mode passes and the `no sudo or outside escalation paths`
+    branch were already correct and are unchanged.
+  * _verify_static_services: the `scaling_governor` ExecStart probe
+    no longer aborts when `systemctl cat cpupower-epp.service`
+    returns more than one `ExecStart=` line. `string match -rg`
+    yields one list element per match, so a unit carrying a drop-in
+    (or any second `ExecStart=`) made `_execstart` a multi-element
+    list and `test -n "$_execstart"` failed with "too many
+    arguments". The guard is now `test (count $_execstart) -gt 0`
+    and the `string match` runs against the unquoted list, so every
+    ExecStart line is inspected. The shipped unit has a single
+    ExecStart, so observable output is unchanged for a clean install.
+  * head/tail: fourteen `head`/`tail` call sites that piped without
+    the `command` prefix now use `command head` / `command tail`,
+    matching the coreutils-invocation convention used elsewhere in
+    the file. Both are already in the required-command list, so this
+    is a consistency normalization, not a behavior change. Affected:
+    _resolve_systemd_ver, _verify_unit_syntax, _check_avail,
+    _verify_static_syntax, _vrkg_rebar_sam, _verify_runtime_kparams,
+    _vre_zram, _vrs_boot_perf, _fstab_atomic_replace.
+  * _json_str: dropped the `00` entry from the control-character
+    escape loop. `(printf '\x00')` collapses to an empty needle in
+    fish command substitution (NUL cannot occur inside a fish
+    string), so `string replace -a` over it was an unreachable
+    no-op; the U+0000..U+001F range is fully covered by the
+    remaining entries plus the dedicated `\n \r \t \b \f` replaces.
+  * comments: the two-line `_run_emit_stream` QUIET-stderr rationale
+    and the two-line `_ry_do_install` discarded-return-code note
+    each collapsed to a single line. A one-line note was added at
+    the `argparse` call recording that `h/help` and `v/version` are
+    serviced by the early-exit option loop and are declared on
+    `argparse` only so an unknown-option error is not raised.
+  * README: version badge -> 6.5.
+
+v6.4 - 2026-05-14
+-----------------
+
+  * _vsb_entries: a lapsed sudo credential or an unresolved `$BOOT`
+    path no longer produces a spurious `Boot entries: NONE` FAIL.
+    Previously, when `sudo -n test -d "$BOOT/loader/entries"` returned
+    non-zero (sudo timestamp expired) the enumeration block was
+    skipped, leaving `entry_count` at 0 and `_entries_pipe_ok` at its
+    initialized `true`, so control fell through to the `NONE` FAIL
+    branch — indistinguishable from a genuinely empty entries
+    directory. The function now: returns early with a WARN when
+    `_resolve_boot_path` yields an empty string; probes `sudo -n true`
+    and WARNs on a lapsed credential instead of reporting NONE; and
+    distinguishes a missing `loader/entries` directory from a present
+    but empty one. The genuine-empty path still FAILs.
+  * _ry_check_deps: the required-command loop now also checks `tee`,
+    `stat`, `find`, `cp`, `chmod`, `chown`, `sort`, `install`, `cat`,
+    and `rm`. All ten are used on critical paths (`tee` in the
+    atomic-write and fstab-rewrite render pipes, `stat` in permission
+    and size verification, `sort` in boot-entry enumeration, the
+    rest throughout). They are coreutils and effectively always
+    present, but the contract is "verify required packages are
+    installed" and the list was incomplete.
+  * _ry_check_deps: systemd major-version detection now calls
+    `_resolve_systemd_ver` and reads the cached `_RY_SYSTEMD_VER`
+    global instead of re-parsing `systemctl --version` inline. The
+    parse logic was duplicated verbatim between the two functions.
+  * _progress_init: the pinned scroll-region progress bar is now
+    skipped when `_RY_NO_COLOR` is true. `TERM=dumb` already sets
+    that sentinel during early init; the bar's DECSTBM/cursor-save
+    escape sequences are inappropriate for a dumb terminal. Other
+    suppression gates (tmux/screen/mosh, non-tty, missing `tput`)
+    are unchanged.
+  * _install_configure_services: removed the dead `; or set _ret 1`
+    clauses on the `_configure_services_resolved_restart` and
+    `_configure_services_pkg_remove` calls. Both functions
+    unconditionally `return 0`, so the clauses could never fire. The
+    `_configure_services_mask` and `_configure_services_enable`
+    clauses are retained — those functions do propagate failure.
+  * _check_avail, _enum_boot_entries: `LC_ALL=C` invocations
+    normalized to the `env LC_ALL=C` prefix form used elsewhere in
+    the file (`_vrkm_blacklist`, `_ip_probe_sudo_policy`). Inline
+    `VAR=val cmd` is fish-valid; this is a style normalization only.
+  * _run_emit_stream: added an inline comment documenting that the
+    `QUIET=true` + `STDERR` + non-zero-rc branch deliberately
+    surfaces up to five stderr lines, so package/bootloader failures
+    are visible without `--verbose`.
+  * _ry_do_install: added an inline comment noting that
+    `_rdi_run_phases`'s return code is intentionally discarded —
+    phase-failure state is carried in the `INSTALL_HAD_ERRORS`
+    global and checked at function end.
+  * _ip_pacman_invoke, _csp_remove_pkgs: the `db.lck` pre-check
+    error message now states the lock may be either a live pacman
+    process or a stale lock from a crashed run, rather than implying
+    it is always an active lock.
+  * README: version badge → 6.4; new Troubleshooting row for the
+    expected `logind.conf.d` checksum MISMATCH when systemd crosses
+    the 255↔256 boundary between install and `--verify-static`
+    (`HandleSecureAttentionKey` is version-gated in both the content
+    generator and the verifier, so the on-disk file legitimately
+    diverges from the regenerated content after a systemd major
+    upgrade).
+
+v6.3 - 2026-05-14
+-----------------
+
+  * _dc_sweep_tmpfiles: tracked tmpfiles that survive both the user-mode
+    `rm` pass and the sudo-escalated `rm` pass are now logged as
+    `TMPFILE_STUCK: <path> (<reason>)` JSONL events before
+    `_TRACKED_TMPFILES` is erased. Reasons are differentiated:
+    `sudo rm -rf failed` / `sudo rm -f failed` / `no sudo or outside
+    escalation paths`. Previously, files outside `/etc /boot /efi /var`
+    or files surviving the sudo `rm` were dropped without trace,
+    leaving operators no record of which paths the next install would
+    inherit.
+  * dispatch/header: JSONL `event=header` write at top-level now sets
+    `_RY_LOG_WRITE_FAIL` on failure, so the closing `[WARN] Log writes
+    failed during this run` notice fires consistently. Previously the
+    sentinel was only updated by `_log` body writes and footer; a
+    header-only write failure (rare, but possible if `LOG_FILE` filled
+    the partition between creation and first write) ran silently.
+  * _err_loud: emission body deduplicated. The function used to carry
+    a verbatim copy of `_msg_print`'s color/tty branch; it now calls
+    `_msg_print --force ERR $argv`. The new sentinel `--force` (first
+    positional, consumed before `level`) bypasses the `QUIET=true`
+    short-circuit while preserving the existing `_RY_OUTPUT_BROKEN` and
+    `_RY_NO_COLOR` gates. No emitted-output change for any caller.
+  * _ok, _fail, _fail_silent, _info, _warn, _err: collapsed from
+    three-line definitions to one-line definitions
+    (`function X; _msg LEVEL $argv; end`). `--description` strings
+    removed from these six wrappers and from all twelve `_content__*`
+    embedded-content generators; the function names are
+    self-documenting and `functions --details` still resolves the
+    bodies. No behavior change.
+  * _is_wifi_active_route: `ip -4` and `ip -6` invocations collapsed
+    into a `for _af in -4 -6` loop. The two `awk` invocations were
+    byte-identical except for the protocol flag.
+  * _ry_check_network: `curl` retries against `archlinux.org` and
+    `cloudflare.com` collapsed into a `for _host in ...` loop with an
+    index counter for the "primary"/"fallback host" `_ok` message
+    differentiation. Wire-level behavior (per-host timeouts,
+    connect-timeout, max-time, raw-IP ICMP fallback) unchanged.
+  * _vrsv_chk_nm_dispatcher: `static` is now accepted as a valid
+    UnitFileState alongside `enabled`. NetworkManager-dispatcher.service
+    ships with `WantedBy=` empty and is normally `static`;
+    `systemctl is-enabled` returns `static` for the shipped unit.
+    Previously, runtime verification reported a spurious FAIL on a
+    clean install where the unit had not been explicitly `enable`'d.
+  * _msg_print: leading positional `--force` consumed as a sentinel
+    that bypasses the `QUIET=true` early-return. Existing call sites
+    pass `level` as `$argv[1]` unchanged; only `_err_loud` uses the
+    new path.
+  * _tmpfile_key: `set p HOME(string sub ...)` concatenation rewritten
+    as `set -l _rest (string sub ...); set p "HOME$_rest"`. fish-valid
+    juxtaposition concatenation worked, but read as a typo on cursory
+    review. Output is byte-identical for every destination key.
+  * _run: argument validation rewritten from `test ...; and _log ...;
+    and return 255` semicolon-and chains into explicit `if` blocks.
+    The chain relied on `_log` returning 0 on every path (it does), so
+    behavior is unchanged; the rewrite removes a latent fragility
+    where a future `_log` change could break the `return 255`.
+  * _vre_thp_ksm: `set -l _active (string match -r ...)[2]` rewritten
+    as `set -l _m (string match ...); set -l _active $_m[2]`. Indexing
+    a command substitution inline is fish-valid; the two-step form
+    matches the convention used elsewhere in the file.
+  * _json_str: description updated to "RFC 8259 mandatory + DEL". The
+    escape table is mandatory characters (U+0000..U+001F, `"`, `\`)
+    plus U+007F (DEL); 8259 does not mandate DEL escaping but does not
+    forbid it. The description now matches the implementation.
+  * README: reference tables (Prerequisites, Safety & Reliability,
+    Runtime variables, Troubleshooting, and the collapsible
+    Configuration tables) trimmed to vital fields. Long prose cells
+    moved to the surrounding paragraph text or dropped; no documented
+    behavior removed.
+
 v6.2.13 - 2026-05-14
 --------------------
 

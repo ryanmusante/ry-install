@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.2.13 (2026-05-14) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.5.2 (2026-05-14) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.2.13"
+set -g VERSION "6.5.2"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -151,7 +151,6 @@ if test -z "$HOME"; or not test -d "$HOME"
 end
 set -g _RY_HOME_DIR "$HOME/ry-install"
 set -g LOG_DIR "$_RY_HOME_DIR/logs/$DATE_LABEL"
-set -g BOOT_WIPE_MARKER "$_RY_HOME_DIR/.boot-wipe-acknowledged"
 set -l _prev_mkdir_umask (umask)
 umask 0077
 command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
@@ -223,7 +222,7 @@ end
 
 function _resolve_systemd_ver --description "Cache systemd major version into _RY_SYSTEMD_VER"
     set -q _RY_SYSTEMD_VER_TRIED; and return 0
-    set -l _v (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
+    set -l _v (systemctl --version 2>/dev/null | command head -n 1 | string match -rg -- '^systemd (\d+)')
     if test -n "$_v"
         set -g _RY_SYSTEMD_VER $_v
     else
@@ -263,11 +262,11 @@ function _verify_unit_syntax --argument-names unit_path label intended_scope --d
     end
     set -l _err_out (systemd-analyze $user_flag verify "$unit_path" 2>&1)
     if test $status -eq 0
-        test -n "$_err_out"; and _log "VERIFY_UNIT_WARN: ($label) "(printf '%s\n' $_err_out | head -n 5)
+        test -n "$_err_out"; and _log "VERIFY_UNIT_WARN: ($label) "(printf '%s\n' $_err_out | command head -n 5)
         _ok "  $label: syntax OK"
         return 0
     end
-    _log "VERIFY_UNIT_ERR: ($label) "(printf '%s\n' $_err_out | head -n 5)
+    _log "VERIFY_UNIT_ERR: ($label) "(printf '%s\n' $_err_out | command head -n 5)
     _fail "  $label: INVALID SYNTAX"
     return 1
 end
@@ -381,15 +380,21 @@ function _dc_sweep_tmpfiles --description "_do_cleanup sub. Remove tracked tmpfi
             command rm -f -- "$_tf" 2>/dev/null; or set -a _stuck_tmpfiles "$_tf"
         end
     end
-    if test (count $_stuck_tmpfiles) -gt 0; and command -q sudo; and sudo -n true 2>/dev/null
-        for _tf in $_stuck_tmpfiles
-            if string match -q '/etc/*' -- "$_tf"; or string match -q '/boot/*' -- "$_tf"; or string match -q '/efi/*' -- "$_tf"; or string match -q '/var/*' -- "$_tf"
-                if sudo -n test -d "$_tf" 2>/dev/null
-                    sudo -n rm -rf --preserve-root -- "$_tf" 2>/dev/null
-                else if sudo -n test -f "$_tf" 2>/dev/null
-                    sudo -n rm -f -- "$_tf" 2>/dev/null
+    set -l _has_sudo false
+    test (count $_stuck_tmpfiles) -gt 0; and command -q sudo; and sudo -n true 2>/dev/null; and set _has_sudo true
+    for _tf in $_stuck_tmpfiles
+        if test "$_has_sudo" = true; and begin; string match -q '/etc/*' -- "$_tf"; or string match -q '/boot/*' -- "$_tf"; or string match -q '/efi/*' -- "$_tf"; or string match -q '/var/*' -- "$_tf"; end
+            if sudo -n test -d "$_tf" 2>/dev/null
+                sudo -n rm -rf --preserve-root -- "$_tf" 2>/dev/null; or begin
+                    functions -q _log; and _log "TMPFILE_STUCK: $_tf (sudo rm -rf failed)"
+                end
+            else if sudo -n test -f "$_tf" 2>/dev/null
+                sudo -n rm -f -- "$_tf" 2>/dev/null; or begin
+                    functions -q _log; and _log "TMPFILE_STUCK: $_tf (sudo rm -f failed)"
                 end
             end
+        else
+            functions -q _log; and _log "TMPFILE_STUCK: $_tf (no sudo or outside escalation paths)"
         end
     end
     set --erase _TRACKED_TMPFILES
@@ -414,6 +419,7 @@ function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for l
 end
 function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _KCONFIG_DATA _KCONFIG_LOADED _RY_SKIP_IWD _RY_ESP_PATH _RY_BOOT_PATH
+    set --erase _RY_ESP_TRIED _RY_BOOT_TRIED
     set --erase _RY_SYSTEMD_VER _RY_SYSTEMD_VER_TRIED _RY_DEPLOYED_SERVICES
     set --erase _RY_BOOT_COUNT _RY_BOOT_HASH _RY_BOOT_PIPE_OK _CPU_PATH
     set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
@@ -462,7 +468,6 @@ function _teardown --argument-names mode --description "Unified cleanup: progres
 end
 
 function _cleanup_other --on-signal USR1 --on-signal USR2 --on-signal ABRT --description "Signal handler: clean up on USR1/USR2/ABRT"
-    test "$_CLEANUP_DONE" = true; and return 0
     _cleanup $argv[1]
 end
 
@@ -757,26 +762,26 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
         end
     end
 end
-function _content__boot_loader_loader.conf --description "Embedded content for /boot/loader/loader.conf"
+function _content__boot_loader_loader.conf
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
-function _content__etc_kernel_cmdline --description "Embedded content for /etc/kernel/cmdline"
+function _content__etc_kernel_cmdline
     test -z "$_ROOT_UUID"; and return $EXIT_GEN_NOUUID
     printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
 end
-function _content__etc_sdboot-manage.conf --description "Embedded content for /etc/sdboot-manage.conf"
+function _content__etc_sdboot-manage.conf
     printf '%s\n' "# sdboot-manage configuration — changes require: sudo sdboot-manage gen && sudo sdboot-manage update" "LINUX_OPTIONS=\""(string join -- " " $KERNEL_PARAMS)"\"" "LINUX_FALLBACK_OPTIONS=\"quiet\"" "DEFAULT_ENTRY=\"$SDBOOT_DEFAULT_ENTRY\"" "REMOVE_EXISTING=\"$SDBOOT_REMOVE_EXISTING\"" "OVERWRITE_EXISTING=\"$SDBOOT_OVERWRITE\"" "REMOVE_OBSOLETE=\"$SDBOOT_REMOVE_OBSOLETE\""
 end
-function _content__etc_mkinitcpio.conf --description "Embedded content for /etc/mkinitcpio.conf"
+function _content__etc_mkinitcpio.conf
     printf '%s\n' "# mkinitcpio configuration — changes require: sudo mkinitcpio -P && sudo sdboot-manage update" "MODULES=("(string join -- " " $MKINITCPIO_MODULES)")" "BINARIES=()" "FILES=()" "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")" "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"
         printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"
     end
 end
-function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Embedded content for /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf"
+function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf
     printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=no" "DNSOverTLS=opportunistic" "DNSSEC=allow-downgrade"
 end
-function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Embedded content for /etc/systemd/logind.conf.d/99-cachyos-logind.conf"
+function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
     printf '%s\n' "[Login]"
     _resolve_systemd_ver
@@ -789,23 +794,23 @@ function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --descriptio
         printf '%s\n' "$key=ignore"
     end
 end
-function _content__etc_iwd_main.conf --description "Embedded content for /etc/iwd/main.conf"
+function _content__etc_iwd_main.conf
     printf '%s\n' "# iwd configuration - minimal config for NetworkManager backend" "[General]" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "" "[DriverQuirks]"
     for quirk in $IWD_DRIVER_QUIRKS
         printf '%s\n' "$quirk"
     end
     printf '%s\n' "" "[Network]" "NameResolvingService=$IWD_DNS_SERVICE"
 end
-function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Embedded content for /etc/NetworkManager/conf.d/99-cachyos-nm.conf"
+function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf
     printf '%s\n' "# NetworkManager configuration - iwd backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "wifi.iwd.autoconnect=false" "" "[logging]" "level=$NM_LOG_LEVEL"
 end
-function _content_HOME_.config_environment.d_10-environment.conf --description "Embedded content for \$HOME/.config/environment.d/10-environment.conf"
+function _content_HOME_.config_environment.d_10-environment.conf
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (COSMIC, Flatpak, D-Bus activated apps)"
     for var in $ENV_VARS
         printf '%s\n' "$var"
     end
 end
-function _content__etc_systemd_system_cpupower-epp.service --description "Embedded content for /etc/systemd/system/cpupower-epp.service"
+function _content__etc_systemd_system_cpupower-epp.service
     # `$$cpu` in ExecStart is intentional: systemd.service(5) unescapes `$$`→`$` so bash receives `$cpu` (loop var); `$cpu` would expand from systemd's empty env and silently no-op.
     printf '%s\n' \
         '[Unit]' \
@@ -829,10 +834,10 @@ function _content__etc_systemd_system_cpupower-epp.service --description "Embedd
         '[Install]' \
         'WantedBy=multi-user.target'
 end
-function _content__etc_drirc --description "Embedded content for /etc/drirc"
+function _content__etc_drirc
     printf '%s\n' '<driconf>' '  <device>' '    <application name="Default">' '      <option name="radv_enable_unified_heap_on_apu"' '              value="true" />' '    </application>' '  </device>' '</driconf>'
 end
-function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Embedded content for /etc/sysctl.d/99-cachyos-sysctl.conf"
+function _content__etc_sysctl.d_99-cachyos-sysctl.conf
     printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf; overrides net.core.netdev_max_backlog 4096 → 16384)"
     set -l _printed 0
     for entry in $SYSCTL_VALUES
@@ -909,7 +914,8 @@ end
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path"
     set -l p $path
     if string match -q -- "$HOME/*" "$p"
-        set p HOME(string sub -s (math (string length -- "$HOME") + 1) -- "$p")
+        set -l _rest (string sub -s (math (string length -- "$HOME") + 1) -- "$p")
+        set p "HOME$_rest"
     else if test "$p" = "$HOME"
         set p HOME
     end
@@ -1033,7 +1039,7 @@ function _mask_list_effective --description "Effective MASK list"
     printf '%s\n' $MASK
 end
 
-function _json_str --description "Escape a string for safe JSON embedding (RFC 8259)"
+function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)"
     set -l s "$argv[1]"
     if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"
         printf '%s' "$s" | string collect --allow-empty
@@ -1046,7 +1052,7 @@ function _json_str --description "Escape a string for safe JSON embedding (RFC 8
     set s (string replace -a -- \t '\\t' "$s" | string collect)
     set s (string replace -a -- \b '\\b' "$s" | string collect)
     set s (string replace -a -- \f '\\f' "$s" | string collect)
-    for _hex in 00 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f
+    for _hex in 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f
         set s (string replace -a -- (printf '\x'$_hex) '\u00'$_hex "$s" | string collect)
     end
     printf '%s' "$s" | string collect --allow-empty
@@ -1081,9 +1087,17 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
 end
 
 function _msg_print --argument-names level --description "Internal: leveled message to stderr"
+    set -l _force false
+    if test "$level" = --force
+        set _force true
+        set level $argv[2]
+        set argv $argv[2..]
+    end
     set -l msg (string join -- " " $argv[2..])
     test -z "$msg"; and return 0
-    test "$QUIET" = false; or return 0
+    if test "$_force" = false
+        test "$QUIET" = false; or return 0
+    end
     set -q _RY_OUTPUT_BROKEN; and return 0
     if test "$_RY_NO_COLOR" = true; or not isatty 2
         echo "[$level] $msg" >&2
@@ -1132,38 +1146,16 @@ function _msg_nocount --argument-names level --description "Like _msg but skips 
     _msg_print $argv
 end
 
-function _ok --description "Print an OK-level status message"
-    _msg OK $argv
-end
-function _fail --description "Print a FAIL-level status message"
-    _msg FAIL $argv
-end
-function _fail_silent --description "Print FAIL without bumping VERIFY_FAIL"
-    _msg_nocount FAIL $argv
-end
-function _info --description "Print an INFO-level status message"
-    _msg INFO $argv
-end
-function _warn --description "Print a WARN-level status message"
-    _msg WARN $argv
-end
-function _err --description "Print an ERR-level status message"
-    _msg ERR $argv
-end
+function _ok; _msg OK $argv; end
+function _fail; _msg FAIL $argv; end
+function _fail_silent; _msg_nocount FAIL $argv; end
+function _info; _msg INFO $argv; end
+function _warn; _msg WARN $argv; end
+function _err; _msg ERR $argv; end
 function _err_loud --description "Fatal-preflight err: always emits [ERR] to stderr regardless of QUIET"
     set -l msg (string join -- " " $argv)
     _log "ERR: $msg"
-    set -q _RY_OUTPUT_BROKEN; and return 0
-    if test "$_RY_NO_COLOR" = true; or not isatty 2
-        echo "[ERR] $msg" >&2
-    else
-        begin
-            set_color red
-            printf '[ERR]'
-            set_color normal
-            echo " $msg"
-        end >&2
-    end
+    _msg_print --force ERR $argv
 end
 
 function _echo --description "Print a plain message without level prefix"
@@ -1230,6 +1222,7 @@ function _progress_init --description "Open scroll region; draw initial bar"
     set -g _PROG_STEP_START $_PROG_START
     set -g _PROG_STEP_NAME ""
     set -g _PROG_PINNED false
+    test "$_RY_NO_COLOR" = true; and return 0
     isatty 2; or return 0
     command -q tput; or return 0
     set -q TMUX; and return 0
@@ -1340,6 +1333,9 @@ end
 function _run_emit_stream --argument-names label_tag tmpfile ret cap --description "_run sub. Capture stream, log, emit per QUIET/rc"
     test -s "$tmpfile"; or return 0
     set -l _total (command wc -l <"$tmpfile" 2>/dev/null | string trim --)
+    # wc -l counts newlines; a final line with no trailing newline is otherwise missed.
+    set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
+    test -n "$_last_byte"; and string match -qr '^\d+$' -- "$_total"; and set _total (math $_total + 1)
     set -l _redacted
     for _l in (command head -n $cap -- "$tmpfile")
         set -a _redacted "$_l"
@@ -1353,6 +1349,7 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
             printf '%s\n' "$_l" >&2
         end
     else if test "$label_tag" = STDERR; and test $ret -ne 0
+        # Intentional: even under QUIET, surface up to 5 stderr lines on failure so pacman/sdboot-manage errors are visible without --verbose.
         for _l in $_redacted[1..5]
             printf '%s\n' "$_l" >&2
         end
@@ -1385,8 +1382,14 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
     echo "$_t"
 end
 function _run --description "Execute a command with logging, stdout/stderr capture, and timeout enforcement"
-    test (count $argv) -eq 0; and _log "BUG: _run called with no arguments"; and return 255
-    string match -q -- '-*' "$argv[1]"; and _log "BUG: _run called with dash-prefixed argv[1]='$argv[1]' — refusing"; and return 255
+    if test (count $argv) -eq 0
+        _log "BUG: _run called with no arguments"
+        return 255
+    end
+    if string match -q -- '-*' "$argv[1]"
+        _log "BUG: _run called with dash-prefixed argv[1]='$argv[1]' — refusing"
+        return 255
+    end
     set -l log_cmd (_run_redact_cmd $argv)
     _log "RUN: $log_cmd"
     set -l _run_dir (command mktemp -d -p (_tmp_dir) ry-run.XXXXXX 2>/dev/null)
@@ -1572,15 +1575,16 @@ function _ry_check_deps --description "Verify required packages are installed"
     _log DEPS_CHECK_START
     set -l missing
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
-        timeout mktemp awk grep curl getent sudo head df mv
+        timeout mktemp awk grep curl getent sudo head df mv \
+        tee stat find cp chmod chown sort install cat rm
         command -q $cmd; or set -a missing $cmd
     end
     if test (count $missing) -gt 0
         _err "missing: $missing"
         return 1
     end
-    set -l systemd_ver (systemctl --version 2>/dev/null | head -n 1 | string match -rg -- '^systemd (\d+)')
-    test -n "$systemd_ver"; and test "$systemd_ver" -lt 250; and _warn "Systemd version $systemd_ver detected; some features require 250+"
+    _resolve_systemd_ver
+    test -n "$_RY_SYSTEMD_VER"; and test "$_RY_SYSTEMD_VER" -lt 250; and _warn "Systemd version $_RY_SYSTEMD_VER detected; some features require 250+"
     set -l _opt_missing
     for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput \
         swapon zramctl lsmod modprobe pkill nmcli ping realpath ip
@@ -1596,8 +1600,14 @@ function _ry_check_deps --description "Verify required packages are installed"
 end
 function _ry_check_network --description "Verify network connectivity (HTTPS primary + secondary + raw-IP fallback)"
     _log NET_CHECK_START
-    curl -sfI --connect-timeout 3 --max-time 5 https://archlinux.org >/dev/null 2>&1; and _ok "Network connectivity: OK"; and return 0
-    curl -sfI --connect-timeout 3 --max-time 5 https://cloudflare.com >/dev/null 2>&1; and _ok "Network connectivity: OK (fallback host)"; and return 0
+    set -l _idx 0
+    for _host in archlinux.org cloudflare.com
+        set _idx (math $_idx + 1)
+        if curl -sfI --connect-timeout 3 --max-time 5 "https://$_host" >/dev/null 2>&1
+            test $_idx -eq 1; and _ok "Network connectivity: OK"; or _ok "Network connectivity: OK (fallback host)"
+            return 0
+        end
+    end
     if ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1
         _err "Network connectivity: HTTPS or DNS unreachable (raw-IP ICMP works; check /etc/resolv.conf or 443 egress)"
     else
@@ -1607,7 +1617,7 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
 end
 
 function _check_avail --argument-names path divisor unit crit warn --description "Compare available bytes at path against crit/warn thresholds (in scaled units)"
-    set -l _b (LC_ALL=C df --output=avail -B1 -- "$path" 2>/dev/null | tail -n 1 | string trim --)
+    set -l _b (env LC_ALL=C df --output=avail -B1 -- "$path" 2>/dev/null | command tail -n 1 | string trim --)
     set -l _v ""
     test -n "$_b"; and string match -qr '^\d+$' -- "$_b"; and set _v (math "floor($_b / $divisor)")
     if test -z "$_v"; or not string match -qr '^\d+$' -- "$_v"
@@ -2180,16 +2190,28 @@ end
 function _vsb_entries --description "_verify_static_boot sub: \$BOOT entries enumeration + count check"
     _echo "── Boot entries ──"
     set -l _boot (_resolve_boot_path)
+    if test -z "$_boot"
+        _warn "  Boot entries: cannot resolve \$BOOT path (bootctl/findmnt failed) — skipping"
+        return 0
+    end
     set -l entry_count 0
     set -l _entries_pipe_ok true
+    set -l _entries_dir_probed false
     if sudo -n test -d "$_boot/loader/entries" 2>/dev/null
+        set _entries_dir_probed true
         set -l _entries (sudo -n find "$_boot/loader/entries" -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0)
         set -l _ps $pipestatus
         _pipe_all_ok $_ps; or set _entries_pipe_ok false
         set entry_count (count $_entries)
+    else if not sudo -n true 2>/dev/null
+        _warn "  Boot entries: sudo cache lapsed — cannot enumerate $_boot/loader/entries"
+        return 0
     end
     if test "$_entries_pipe_ok" = false
         _warn "  Boot entries: cannot enumerate $_boot/loader/entries (sudo lapsed or read error)"
+    else if test "$_entries_dir_probed" = false
+        _fail "  Boot entries: $_boot/loader/entries/ does not exist"
+        _info "  System may not boot! Run: sudo sdboot-manage gen --verbose"
     else if test "$entry_count" -gt 0
         _ok "  Boot entries: $entry_count found"
     else
@@ -2393,7 +2415,7 @@ function _verify_static_services --description "Verify SERVICE_DESTINATIONS file
     if test -f /etc/systemd/system/cpupower-epp.service
         _chk_grep /etc/systemd/system/cpupower-epp.service energy_performance_preference "cpupower-epp EPP ExecStart"
         set -l _execstart (systemctl cat cpupower-epp.service 2>/dev/null | string match -rg -- '^\s*ExecStart\s*=\s*(.*)$')
-        if test -n "$_execstart"; and string match -q -- '*scaling_governor*' "$_execstart"
+        if test (count $_execstart) -gt 0; and string match -q -- '*scaling_governor*' $_execstart
             _warn "  cpupower-epp: scaling_governor ExecStart present — remove it (amd_pstate=active uses powersave+EPP)"
         end
         _chk_grep /etc/systemd/system/cpupower-epp.service "WantedBy=multi-user.target" "cpupower-epp WantedBy"
@@ -2426,7 +2448,7 @@ end
 function _verify_static_syntax --description "Validate mkinitcpio hooks ordering, systemd unit files"
     _echo "SYNTAX VALIDATION"
     _echo "── mkinitcpio hooks ──"
-    set -l hooks_syntax_line (command grep -E '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | command grep -v '^#' | head -n 1)
+    set -l hooks_syntax_line (command grep -E '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | command grep -v '^#' | command head -n 1)
     if test -n "$hooks_syntax_line"
         set -l hooks_str (string replace -r '.*HOOKS=\(([^)]*)\).*' '$1' -- "$hooks_syntax_line")
         set hooks_str (string replace -ra '\s+' ' ' -- "$hooks_str" | string trim --)
@@ -2474,8 +2496,8 @@ function _verify_static_checksum --description "Verify embedded content hash mat
             _ok "  $dst: match"
         else
             _fail "  $dst: MISMATCH"
-            set -l _exp_sha (printf '%s' "$expected" | sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
-            set -l _act_sha (printf '%s' "$actual" | sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
+            set -l _exp_sha (printf '%s' "$expected" | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
+            set -l _act_sha (printf '%s' "$actual" | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
             test -z "$_exp_sha"; and set _exp_sha ERR
             test -z "$_act_sha"; and set _act_sha ERR
             _log "VERIFY_STATIC_MISMATCH: dst=$dst expected_content_sha=$_exp_sha actual_content_sha=$_act_sha expected_bytes="(string length -- "$expected")" actual_bytes="(string length -- "$actual")
@@ -2729,7 +2751,7 @@ function _vrkg_rebar_sam --description "_vrk_gpu_state sub: ReBAR/SAM status via
         _info "  lspci not available for ReBAR check"
         return 0
     end
-    set -l bar_size (lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*256M|Region.*Memory.*512M|Region.*Memory.*[0-9]G' | head -n 1)
+    set -l bar_size (lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*256M|Region.*Memory.*512M|Region.*Memory.*[0-9]G' | command head -n 1)
     if test -n "$bar_size"
         _ok "  ReBAR/SAM: large BAR detected"
         _info "  $bar_size"
@@ -2886,9 +2908,9 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
         set -g _RY_DMESG_CACHE $_full[1..5000]
         test "$_full_count" -gt 5000 2>/dev/null; and _log "DMESG_CAPPED: kept=5000 of $_full_count lines"
         if test (count $_RY_DMESG_CACHE) -gt 0
-            set -g _RY_DMESG_PREEMPT (printf '%s\n' $_RY_DMESG_CACHE | command grep -o 'Dynamic Preempt: [a-z]*' | head -n 1)
-            set -g _RY_DMESG_BAR (printf '%s\n' $_RY_DMESG_CACHE | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large|above.4g' | head -n 1)
-            set -g _RY_DMESG_TSC (printf '%s\n' $_RY_DMESG_CACHE | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | head -n 3)
+            set -g _RY_DMESG_PREEMPT (printf '%s\n' $_RY_DMESG_CACHE | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
+            set -g _RY_DMESG_BAR (printf '%s\n' $_RY_DMESG_CACHE | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large|above.4g' | command head -n 1)
+            set -g _RY_DMESG_TSC (printf '%s\n' $_RY_DMESG_CACHE | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
         end
     end
     if test (count $_RY_DMESG_CACHE) -eq 0
@@ -2963,16 +2985,16 @@ function _vrsv_chk_resolved --argument-names rec_str --description "Check system
         _fail "  systemd-resolved: $rec[2] (expected: active — DNS may be broken)"
     end
 end
-function _vrsv_chk_nm_dispatcher --argument-names rec_str --description "Check NM-dispatcher: enabled + (active|inactive) acceptable (on-demand)"
+function _vrsv_chk_nm_dispatcher --argument-names rec_str --description "Check NM-dispatcher: enabled or static + (active|inactive) acceptable (on-demand)"
     set -l rec (string split ':' -- "$rec_str")
-    if test "$rec[3]" != enabled
-        _fail "  NetworkManager-dispatcher: $rec[3] (expected: enabled)"
+    if test "$rec[3]" != enabled; and test "$rec[3]" != static
+        _fail "  NetworkManager-dispatcher: $rec[3] (expected: enabled or static)"
         return 0
     end
     if test "$rec[2]" = active; or test "$rec[2]" = inactive
         _ok "  NetworkManager-dispatcher: $rec[3] ($rec[2])"
     else
-        _warn "  NetworkManager-dispatcher: $rec[2] (enabled but unexpected state)"
+        _warn "  NetworkManager-dispatcher: $rec[2] ($rec[3] but unexpected state)"
     end
 end
 function _vrsv_sys_units --description "Runtime services check: 5-unit batch"
@@ -3110,7 +3132,8 @@ function _vre_thp_ksm --description "Runtime env check: THP enabled/defrag/shrin
         if string match -q -- "*$_parts[2]*" "$_val"
             _ok "  THP $_parts[1]: $_parts[3]"
         else
-            set -l _active (string match -r '\[(\S+)\]' -- "$_val")[2]
+            set -l _m (string match -r '\[(\S+)\]' -- "$_val")
+            set -l _active $_m[2]
             test -n "$_active"; or set _active "$_val"
             set -l _hint "recommended: $_parts[3]"
             test -n "$_parts[4]"; and set _hint "$_hint — $_parts[4]"
@@ -3135,8 +3158,10 @@ function _vre_thp_ksm --description "Runtime env check: THP enabled/defrag/shrin
     end
 end
 function _vre_zram --description "Runtime env check: zram service + active swap device"
-    set -l _zram_state (systemctl is-enabled systemd-zram-setup@zram0.service 2>/dev/null | string trim --)
     set -l _zram_swap (swapon --show=NAME,TYPE 2>/dev/null | command grep zram)
+    set -l _zram_dev (printf '%s\n' $_zram_swap | command awk '/zram/ {n=$1; sub(".*/","",n); print n; exit}')
+    test -z "$_zram_dev"; and set _zram_dev zram0
+    set -l _zram_state (systemctl is-enabled "systemd-zram-setup@$_zram_dev.service" 2>/dev/null | string trim --)
     if test "$_zram_state" = masked
         _fail "  ZRAM service: masked (expected: enabled or static+active)"
     else if test "$_zram_state" = enabled
@@ -3152,10 +3177,10 @@ function _vre_zram --description "Runtime env check: zram service + active swap 
     end
     _echo "── ZRAM device ──"
     if test -n "$_zram_swap"
-        set -l _zram_info (zramctl --output NAME,ALGORITHM,DISKSIZE,TOTAL,COMP-RATIO --noheadings 2>/dev/null | head -n 1 | string trim --)
+        set -l _zram_info (zramctl --output NAME,ALGORITHM,DISKSIZE,TOTAL,COMP-RATIO --noheadings 2>/dev/null | command head -n 1 | string trim --)
         _ok "  ZRAM swap active: $_zram_info"
     else
-        set -l _any_swap (swapon --show=NAME,SIZE 2>/dev/null | tail -n +2)
+        set -l _any_swap (swapon --show=NAME,SIZE 2>/dev/null | command tail -n +2)
         if test -z "$_any_swap"
             _fail "  No swap available (ZRAM not active, no swap file/partition)"
         else
@@ -3364,7 +3389,7 @@ function _vrs_boot_perf --description "Runtime session check: systemd-analyze bo
         _warn "  systemd-analyze not available"
         return 0
     end
-    set -l boot_time (systemd-analyze 2>/dev/null | head -n 1)
+    set -l boot_time (systemd-analyze 2>/dev/null | command head -n 1)
     _info "  $boot_time"
     _log "BOOT_TIME_CHECK: parsing systemd-analyze output"
     if not string match -qr -- '= [0-9.]+s\b' "$boot_time"
@@ -3387,7 +3412,7 @@ function _vrs_boot_perf --description "Runtime session check: systemd-analyze bo
         end
     end
     _echo "  Slowest services:"
-    set -l blame (systemd-analyze blame 2>/dev/null | head -n 3)
+    set -l blame (systemd-analyze blame 2>/dev/null | command head -n 3)
     for line in $blame
         _info "    $line"
     end
@@ -3436,9 +3461,10 @@ function _dir_group_or_world_writable --argument-names mode --description "True 
 end
 
 function _is_wifi_active_route --description "True if default route exits via wireless interface"
-    set -l _def_iface (ip -4 route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
-    if test -z "$_def_iface"
-        set _def_iface (ip -6 route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
+    set -l _def_iface ""
+    for _af in -4 -6
+        set _def_iface (ip $_af route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}')
+        test -n "$_def_iface"; and break
     end
     test -z "$_def_iface"; and return 1
     test -d "/sys/class/net/$_def_iface/wireless"; and return 0
@@ -3496,19 +3522,8 @@ end
 
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
-    _ensure_sudo_cached; or begin
-        set -g _PROG_FINALIZED_SKIP true
-        return $EXIT_PREFLIGHT
-    end
-    _ip_probe_sudo_policy; or begin
-        set -g _PROG_FINALIZED_SKIP true
-        return $EXIT_PREFLIGHT
-    end
-    _ry_check_deps; or begin
-        set -g _PROG_FINALIZED_SKIP true
-        return $EXIT_PREFLIGHT
-    end
-    _ry_check_disk_space; or begin
+    for _chk in _ensure_sudo_cached _ip_probe_sudo_policy _ry_check_deps _ry_check_disk_space
+        $_chk; and continue
         set -g _PROG_FINALIZED_SKIP true
         return $EXIT_PREFLIGHT
     end
@@ -3643,7 +3658,7 @@ function _ip_pacman_invoke --description "Run pacman -Syu (or -Sy via RY_INSTALL
         _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
     end
     if test -f /var/lib/pacman/db.lck
-        _err "Pacman database is locked (/var/lib/pacman/db.lck exists) — skipping package install"
+        _err "Pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run; skipping package install"
         return 1
     end
     if not _run sudo -n pacman $_pacman_first -- $argv
@@ -3979,7 +3994,7 @@ function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp 
         if test $status -ne 0
             _rm_tmp "$tmpfstab" true
             _fail "  /etc/fstab: findmnt --verify failed:"
-            for _vl in (printf '%s\n' $_verify_out | head -n 3)
+            for _vl in (printf '%s\n' $_verify_out | command head -n 3)
                 _fail "    $_vl"
             end
             return 1
@@ -4082,7 +4097,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
 end
 function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on batch failure"
     if test -f /var/lib/pacman/db.lck
-        _err "Pacman database is locked (/var/lib/pacman/db.lck exists) — skipping package removal"
+        _err "Pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run; skipping package removal"
         set -g INSTALL_HAD_ERRORS true
         return 0
     end
@@ -4152,22 +4167,13 @@ function _csm_filter_units --description "_configure_services_mask sub. Pre-filt
         printf '%s\n' "$_unit"
     end
 end
-function _csm_retry_individual --description "_configure_services_mask sub. Per-unit retry after batch mask failed"
+function _csm_retry_individual --description "_configure_services_mask sub. Per-unit retry after batch mask failed (argv pre-filtered by _csm_filter_units)"
     set -l _ret 0
     for _unit in $argv
-        set -l _state (systemctl is-enabled -- $_unit 2>/dev/null | string trim)
-        if test "$_state" = masked
-            _log "MASK_ALREADY: $_unit"
-            continue
-        end
-        if test -z "$_state"
-            _info "Mask skip (unit not installed): $_unit"
-            _log "MASK_NOT_INSTALLED: $_unit"
-            continue
-        end
         if _run sudo -n systemctl mask -- $_unit
             _ok "Masked: $_unit"
         else
+            set -l _state (systemctl is-enabled -- $_unit 2>/dev/null | string trim)
             _warn "Failed to mask: $_unit (is-enabled=$_state)"
             set _ret 1
         end
@@ -4247,28 +4253,28 @@ function _install_configure_services --description "Enable, start, and configure
     _progress Services
     _info "Post-installation tasks..."
     set -l _ret 0
-    _configure_services_resolved_restart; or set _ret 1
-    _configure_services_pkg_remove; or set _ret 1
+    _configure_services_resolved_restart
+    _configure_services_pkg_remove
     _configure_services_mask; or set _ret 1
     _configure_services_enable; or set _ret 1
     return $_ret
 end
-function _resolve_esp --description "Resolve EFI system partition path (cached)"
-    if set -q _RY_ESP_PATH; and test -n "$_RY_ESP_PATH"
+function _bootctl_dir --argument-names flag logtag fallnote --description "bootctl path probe (user then sudo); empty on failure"
+    command -q bootctl; or return 0
+    set -l _p (bootctl $flag 2>/dev/null | string trim -- | string trim -r -c /)
+    if test -z "$_p"
+        set _p (sudo -n bootctl $flag 2>/dev/null | string trim -- | string trim -r -c /)
+        set -l _bc_ps $pipestatus
+        test "$_bc_ps[1]" -ne 0; and functions -q _log; and _log "$logtag: bootctl $flag rc=$_bc_ps[1] (sudo lapse or bootctl error); $fallnote"
+    end
+    printf '%s' "$_p"
+end
+function _resolve_esp --description "Resolve EFI system partition path (cached; empty result also cached)"
+    if set -q _RY_ESP_TRIED
         echo "$_RY_ESP_PATH"
         return 0
     end
-    set -l _p ""
-    if command -q bootctl
-        set _p (bootctl -p 2>/dev/null | string trim -- | string trim -r -c /)
-        if test -z "$_p"
-            set _p (sudo -n bootctl -p 2>/dev/null | string trim -- | string trim -r -c /)
-            set -l _bc_ps $pipestatus
-            if test "$_bc_ps[1]" -ne 0
-                functions -q _log; and _log "ESP_BOOTCTL_PIPE_FAIL: bootctl -p rc=$_bc_ps[1] (sudo lapse or bootctl error); falling through to findmnt"
-            end
-        end
-    end
+    set -l _p (_bootctl_dir -p ESP_BOOTCTL_PIPE_FAIL "falling through to findmnt")
     if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
         for _candidate in /efi /boot/efi /boot
             set -l _fs (command findmnt -no FSTYPE -- "$_candidate" 2>/dev/null)
@@ -4293,39 +4299,31 @@ function _resolve_esp --description "Resolve EFI system partition path (cached)"
         set -g _RY_ESP_FALLBACK false
     end
     set -g _RY_ESP_PATH "$_p"
+    set -g _RY_ESP_TRIED true
     echo "$_p"
 end
-function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, else ESP) per BLS (cached)"
-    if set -q _RY_BOOT_PATH; and test -n "$_RY_BOOT_PATH"
+function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, else ESP) per BLS (cached; empty result also cached)"
+    if set -q _RY_BOOT_TRIED
         echo "$_RY_BOOT_PATH"
         return 0
     end
-    set -l _p ""
-    if command -q bootctl
-        set _p (bootctl -x 2>/dev/null | string trim -- | string trim -r -c /)
-        if test -z "$_p"
-            set _p (sudo -n bootctl -x 2>/dev/null | string trim -- | string trim -r -c /)
-            set -l _bc_ps $pipestatus
-            if test "$_bc_ps[1]" -ne 0
-                functions -q _log; and _log "BOOT_BOOTCTL_PIPE_FAIL: bootctl -x rc=$_bc_ps[1] (sudo lapse or bootctl error); falling through to ESP"
-            end
-        end
-    end
+    set -l _p (_bootctl_dir -x BOOT_BOOTCTL_PIPE_FAIL "falling through to ESP")
     if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
         set _p (_resolve_esp)
     end
     set -g _RY_BOOT_PATH "$_p"
+    set -g _RY_BOOT_TRIED true
     echo "$_p"
 end
 
 function _enum_boot_entries --argument-names esp --description "Enumerate \$esp/loader/entries/*.conf"
-    set -l _basenames (sudo -n find "$esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | LC_ALL=C sort -z | string split0)
+    set -l _basenames (sudo -n find "$esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | env LC_ALL=C sort -z | string split0)
     set -l _ps $pipestatus
     set -g _RY_BOOT_PIPE_OK true
     _pipe_all_ok $_ps; or set -g _RY_BOOT_PIPE_OK false
     set -g _RY_BOOT_COUNT (count $_basenames)
     set -g _RY_BOOT_HASH ""
-    test "$_RY_BOOT_COUNT" -gt 0; and set -g _RY_BOOT_HASH (printf '%s\0' $_basenames | sha256sum | string match -rg -- '^(\S+)')
+    test "$_RY_BOOT_COUNT" -gt 0; and set -g _RY_BOOT_HASH (printf '%s\0' $_basenames | command sha256sum | string match -rg -- '^(\S+)')
 end
 
 function _pbs_check_boot_files --argument-names boot glob label --description "_preflight_boot_sanity sub: enumerate \$glob in \$boot root"
@@ -4473,7 +4471,6 @@ end
 
 function _install_rebuild_boot --description "Regenerate initramfs and bootloader entries"
     _progress Boot
-    set -g _RY_BOOT_REBUILD_OK false
     test "$SYSTEM_UPGRADED" = true; and _ok "System upgraded during package installation"
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
         _err "Refusing initramfs rebuild — mkinitcpio.conf revert failed (boot state inconsistent)"
@@ -4511,50 +4508,9 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         _err "CRITICAL: Boot sanity failed — aborting remaining steps"
         return $EXIT_BOOT_CRIT
     end
-    set -g _RY_BOOT_REBUILD_OK true
     return 0
 end
 
-function _if_write_wipe_marker --description "Atomically write boot-wipe marker after successful entry rebuild"
-    set -l _boot (_resolve_boot_path)
-    set -l _wipe_marker $BOOT_WIPE_MARKER
-    _enum_boot_entries "$_boot"
-    set -l _post_count $_RY_BOOT_COUNT
-    if test "$_RY_BOOT_PIPE_OK" = false
-        _warn "Failed to enumerate /boot/loader/entries for marker update — leaving marker untouched"
-        _log "BOOT_WIPE_MARKER_SKIP: pipestatus failure during enumeration"
-        return 0
-    end
-    if test "$_post_count" -lt 1
-        _warn "No boot loader entries present after rebuild — refusing to write 0-count marker"
-        _log "BOOT_WIPE_MARKER_SKIP: post_count=0"
-        return 0
-    end
-    set -l _post_hash $_RY_BOOT_HASH
-    set -l _marker_dir (dirname -- "$_wipe_marker")
-    set -l _prev_umask (umask)
-    umask 0177
-    set -l _marker_tmp (command mktemp -p "$_marker_dir" .boot-wipe.XXXXXX 2>/dev/null)
-    umask $_prev_umask
-    _track_tmpfile "$_marker_tmp"
-    if test -z "$_marker_tmp"
-        _warn "Failed to mktemp boot-wipe marker tmpfile"
-        return 0
-    end
-    if not printf '%s %s\n' "$_post_count" "$_post_hash" >"$_marker_tmp" 2>/dev/null
-        _rm_tmp "$_marker_tmp" false
-        _warn "Failed to write boot-wipe marker tmpfile"
-        return 0
-    end
-    if command mv -Tf -- "$_marker_tmp" "$_wipe_marker" 2>/dev/null
-        _untrack_tmpfile "$_marker_tmp"
-        _log "BOOT_WIPE_MARKER_UPDATED: $_wipe_marker count=$_post_count hash=$_post_hash"
-    else
-        _rm_tmp "$_marker_tmp" false
-        _warn "Failed to atomically install boot-wipe marker"
-    end
-    return 0
-end
 function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk2 -ruk0"
     if not set -q SYSTEM_UPGRADED; or test "$SYSTEM_UPGRADED" != true
         _log "PACMAN_CACHE_TRIM_SKIP: SYSTEM_UPGRADED=false (idempotent re-run)"
@@ -4595,7 +4551,6 @@ end
 
 function _install_finalize --description "Run post-install verification, cleanup, and summary"
     _progress Finalize
-    test "$SDBOOT_REMOVE_EXISTING" = yes; and test "$_RY_BOOT_REBUILD_OK" = true; and _if_write_wipe_marker
     if _has_user_bus_active
         not _run systemctl --user daemon-reload; and _warn "Systemctl --user daemon-reload failed"
     else
@@ -4667,6 +4622,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _echo "ry-install v$VERSION"
     _progress_init
     _install_preflight; or return $EXIT_PREFLIGHT
+    # _rdi_run_phases rc is intentionally discarded: phase-failure state is carried in the INSTALL_HAD_ERRORS global, checked at function end.
     _rdi_run_phases
     _install_rebuild_boot
     set -l _boot_rc $status
@@ -4822,33 +4778,15 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
         _err "CRITICAL: boot sanity check failed after single-file install — DO NOT REBOOT"
         return $EXIT_BOOT_CRIT
     end
-    test "$SDBOOT_REMOVE_EXISTING" = yes; and _if_write_wipe_marker
     return 0
 end
 function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit"
     set -l _rc 0
     set -l _bn (basename -- "$target")
-    if string match -q "$HOME/*" -- "$target"
-        set -l _enable_ok false
-        if not _has_user_bus_active
-            _info "  $_bn: enabling without --now (no active user-bus session — start manually post-login)"
-            _run systemctl --user enable -- "$_bn"; and set _enable_ok true
-        else
-            _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
-            if _run systemctl --user enable --now -- "$_bn"
-                set _enable_ok true
-            end
-        end
-        if test "$_enable_ok" = false
-            _warn "Failed to enable $_bn (user)"
-            set _rc 1
-        end
-    else
-        _run sudo -n systemctl daemon-reload; or _warn "Systemctl daemon-reload failed"
-        if not _run sudo -n systemctl enable --now -- "$_bn"
-            _warn "Failed to enable $_bn (system)"
-            set _rc 1
-        end
+    _run sudo -n systemctl daemon-reload; or _warn "Systemctl daemon-reload failed"
+    if not _run sudo -n systemctl enable --now -- "$_bn"
+        _warn "Failed to enable $_bn (system)"
+        set _rc 1
     end
     return $_rc
 end
@@ -4921,6 +4859,7 @@ set -g INSTALL_FILE_TARGET ""
 set -l _ORIG_ARGV $argv
 set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) ry-argparse-err.XXXXXX)
 _track_tmpfile "$_ap_errfile"
+# h/help and v/version are handled by the early-exit loop near the top; declared here only so argparse accepts them rather than erroring on an unknown option.
 argparse --name=(status basename) \
     --exclusive=verify-static,verify-runtime,check,install-file \
     h/help v/version V/verbose \
@@ -5017,21 +4956,10 @@ set -l _argv_json '['(string join ',' $_argv_parts)']'
 set -l _verbose_json false
 test "$QUIET" = false; and set _verbose_json true
 printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' (date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null
-test $status -eq 0; and set -g _RY_HEADER_WRITTEN true
+test $status -eq 0; and set -g _RY_HEADER_WRITTEN true; or set -g _RY_LOG_WRITE_FAIL true
 _init_runtime
 switch $MODE
-    case install-file
-        if test -z "$INSTALL_FILE_TARGET"
-            _err "Usage: ry-install.fish --install-file <path>"
-            _echo
-            _info "Managed files:"
-            for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
-                _echo "  $dst"
-            end
-            _pre_dispatch_exit $EXIT_USAGE
-        end
-        _acquire_lock; or _pre_dispatch_exit $EXIT_LOCK
-    case install
+    case install-file install
         _acquire_lock; or _pre_dispatch_exit $EXIT_LOCK
     case '*'
 end

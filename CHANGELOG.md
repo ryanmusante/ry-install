@@ -1,6 +1,70 @@
 ry-install ChangeLog
 ====================
 
+v6.5.3 - 2026-05-14
+-------------------
+
+  * dispatch: bundled help/version short flags no longer fall through
+    to a full install. The early-exit option loop near the top of the
+    script matches only exact tokens (`-h`, `--help`, `-v`,
+    `--version`) via `switch`, so a bundled form such as `-hV` or
+    `-hv` skipped it, reached `argparse`, and set `_flag_help` /
+    `_flag_version` — but nothing after `argparse` read those flags,
+    so `MODE` stayed `install` and the script ran an unattended
+    install. `_flag_help` and `_flag_version` are now handled in the
+    post-argparse block: `--help` prints usage and exits 0,
+    `--version` prints the version and exits 0. The early-exit loop is
+    kept as the fast path for exact tokens (it touches no filesystem
+    state). The comment at the `argparse` call is updated to match.
+
+  * dispatch: the v6.5.2 entry below states that `argparse` rejects an
+    empty `--install-file=` value before the mode switch. It does not
+    — `argparse` accepts an empty `=` value and sets the flag to an
+    empty string. The empty-value rejection is the
+    `test -z "$_if_val"` guard in the post-argparse `_flag_install_file`
+    block, which is retained. The v6.5.2 removal of the *duplicate*
+    guard from the `case install-file` dispatch arm remains correct —
+    that guard was genuinely redundant. No code change for this item.
+
+  * _ry_mkinitcpio_array, _verify_static_syntax: the three `grep`
+    invocations that read `/etc/mkinitcpio.conf` (the `KEY=` line
+    parse, and the `HOOKS=` line parse with its `grep -v '^#'` filter)
+    now pass `--` before the pattern, matching the end-of-options
+    convention applied to every other `grep` / `rm` / `mv` call in the
+    file. The file argument is a constant and the patterns are
+    `^`-anchored, so this is a consistency normalization, not a fix
+    for an observed failure.
+
+  * _vrsv_wifi, _is_wifi_active_route: the two `basename` calls (both
+    fed the output of `dirname -- ...`) now pass `--`. Input is always
+    an absolute `/sys/class/net/...` path, so this is defense-in-depth
+    for the end-of-options convention, not a fix for an observed
+    failure.
+
+  * preflight/TMPDIR: a `TMPDIR` that is set but not an absolute path
+    now falls back to `/tmp` (with a `[WARN]`) before the writability
+    probe. A relative or dash-prefixed `TMPDIR` would otherwise reach
+    the `find "$TMPDIR" ...` cleanup-sweep calls, where `find` parses
+    a dash-prefixed argument as an expression rather than a path. The
+    existing set-but-non-writable fallback is unchanged.
+
+  * Net effect: 4991 -> 5003 lines. No functional change to the
+    install / verify / check flows beyond the help/version dispatch
+    fix.
+
+  * README: version badge -> 6.5.3; removed a stale reference to
+    `~/ry-install/.boot-wipe-acknowledged` (the boot-wipe marker was
+    removed in v6.5.1); the "Other" Known Issues sub-section, the
+    Managed Files "Destinations" sub-section, and the "Data directory
+    & logs" sub-section converted from prose lists to tables for
+    consistency with the other collapsible sections. Added a Contents
+    section linking every top-level heading. Trimmed the Prerequisites
+    fstab paragraph and the Hardware notice to vital information.
+    Removed the metadata parentheticals (param counts, the
+    environment.d path, `gfx1151`) from the collapsible summary labels
+    — the `Kernel cmdline` body now states that `rw` and `root=UUID=`
+    are appended implicitly.
+
 v6.5.2 - 2026-05-14
 -------------------
 

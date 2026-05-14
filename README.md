@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-6.5.2-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-6.5.3-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -13,6 +13,23 @@
 **Target:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware](#hardware).
 
 ---
+
+## Contents
+
+- [Quick Start](#quick-start)
+- [Scope](#scope)
+- [Prerequisites](#prerequisites)
+- [Hardware](#hardware)
+- [Usage](#usage)
+- [Install Flow](#install-flow)
+- [Configuration](#configuration)
+- [Managed Files](#managed-files)
+- [Safety & Reliability](#safety--reliability)
+- [Uninstall](#uninstall)
+- [Known Issues](#known-issues)
+- [Troubleshooting](#troubleshooting)
+- [References](#references)
+- [License](#license)
 
 ## Quick Start
 
@@ -72,12 +89,9 @@ multi-user provisioning, non-CachyOS distros, laptops; UKI.
 | Free space | 2 GB `/`, 200 MB `/boot` |
 | paru | For AUR packages only |
 
-The fstab option rewrite applies only to ext4 entries. The options
-column is normalized: the `defaults` token is dropped (the kernel
-applies the same `rw,suid,dev,exec,auto,nouser,async` set regardless),
-and any existing `relatime`/`atime`/`strictatime` or `commit=` value is
-replaced. Net mount semantics are unchanged; only the literal text
-differs, so a manual `diff` of `/etc/fstab` will show the rewrite.
+The ext4 `/etc/fstab` rewrite drops the `defaults` token and replaces
+any existing atime / `commit=` options. Mount semantics are unchanged
+— only the literal text differs.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -100,12 +114,11 @@ Check [CachyOS](https://wiki.cachyos.org) and
 | BIOS | P110+ — [Beelink downloads](https://dr.bee-link.cn/) |
 
 > [!IMPORTANT]
-> Preflight refuses to deploy on hardware that doesn't match
-> `EXPECTED_CPU_MATCH` (default: `Ryzen AI Max`). `amdgpu.cwsr_enable=0`,
-> `MKINITCPIO_MODULES=(amdgpu)`, and the gfx1151 cmdline are
-> profile-specific; deploying them on Intel/NVIDIA/different-AMD silicon
-> sets incorrect kernel parameters and breaks initramfs. Override at
-> your own risk: `RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish`.
+> Preflight refuses to deploy on hardware not matching
+> `EXPECTED_CPU_MATCH` (default `Ryzen AI Max`): the amdgpu modules and
+> gfx1151 cmdline are profile-specific and break initramfs on other
+> silicon. Override at your own risk:
+> `RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish`.
 
 Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 [Mesa gfx1151](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151).
@@ -146,7 +159,7 @@ globals near the top of `ry-install.fish` (`LOADER_*`, `SDBOOT_*`,
 `AUR_PKGS`, `MASK`, `EXPECTED_SERVICES`).
 
 <details>
-<summary><b>Kernel cmdline (15 params + implicit <code>rw</code>, <code>root=UUID=…</code>)</b></summary>
+<summary><b>Kernel cmdline</b></summary>
 
 | Parameter | Purpose |
 |---|---|
@@ -162,8 +175,9 @@ globals near the top of `ry-install.fish` (`LOADER_*`, `SDBOOT_*`,
 | `nowatchdog`, `module_blacklist=pcspkr` | Disable watchdog / PC speaker |
 | `quiet`, `loglevel=3`, `rd.systemd.show_status=auto`, `rd.udev.log_level=3` | Quiet boot |
 
-Single value per parameter; comma-separated multi-value lists are not
-supported by the verifier.
+`rw` and `root=UUID=<root>` are appended implicitly and are not among
+the 15 listed parameters. Single value per parameter; comma-separated
+multi-value lists are not supported by the verifier.
 
 </details>
 
@@ -191,7 +205,7 @@ Install first: `sudo pacman -S --needed iwd`, then re-run.
 </details>
 
 <details>
-<summary><b>Environment variables (10 — <code>~/.config/environment.d/10-environment.conf</code>)</b></summary>
+<summary><b>Environment variables</b></summary>
 
 | Variable | Value |
 |---|---|
@@ -244,7 +258,7 @@ set reverse-depends on it. Cascade with `RY_INSTALL_PKG_REMOVE_CASCADE=1`
 </details>
 
 <details>
-<summary><b>Masked services (10)</b></summary>
+<summary><b>Masked services</b></summary>
 
 | Service | Reason |
 |---|---|
@@ -264,22 +278,28 @@ accepts either).
 
 ## Managed Files
 
-12 files deployed via atomic writes (tmp → symlink-check → chmod → `mv -T`).
+12 files deployed via atomic writes (tmp → symlink check → chmod → `mv -T`).
 
 <details>
 <summary><b>Destinations</b></summary>
 
-**System (10):** `/boot/loader/loader.conf`, `/etc/kernel/cmdline`,
-`/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`,
-`/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`,
-`/etc/systemd/logind.conf.d/99-cachyos-logind.conf`,
-`/etc/iwd/main.conf`,
-`/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/drirc`,
-`/etc/sysctl.d/99-cachyos-sysctl.conf`
+| Scope | Path |
+|---|---|
+| System | `/boot/loader/loader.conf` |
+| System | `/etc/kernel/cmdline` |
+| System | `/etc/sdboot-manage.conf` |
+| System | `/etc/mkinitcpio.conf` |
+| System | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` |
+| System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
+| System | `/etc/iwd/main.conf` |
+| System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
+| System | `/etc/drirc` |
+| System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
+| Service | `/etc/systemd/system/cpupower-epp.service` |
+| User | `~/.config/environment.d/10-environment.conf` |
 
-**Service (1):** `/etc/systemd/system/cpupower-epp.service`
-
-**User (1):** `~/.config/environment.d/10-environment.conf`
+System files deploy `0644`, the user file `0600`. The two `iwd` rows
+are skipped when `iwd` is not installed.
 
 </details>
 
@@ -339,12 +359,14 @@ accepts either).
 <details>
 <summary><b>Data directory & logs</b></summary>
 
-Runtime state under `~/ry-install/`: `logs/YYYY-MM-DD/*.jsonl` (NDJSON
-run logs), `.lock/` (instance guard), `.boot-wipe-acknowledged`
-(entry-set hash marker). No auto-rotation; prune with
-`find ~/ry-install/logs -mtime +30 -delete`.
+| Path under `~/ry-install/` | Contents |
+|---|---|
+| `logs/YYYY-MM-DD/*.jsonl` | NDJSON run logs, one file per run |
+| `.lock/` | Instance guard (atomic mkdir + pid file) |
 
-NDJSON schema: `{"ts":ISO8601,"event":NAME,"data":STR,...}`.
+No auto-rotation; prune with
+`find ~/ry-install/logs -mtime +30 -delete`. NDJSON schema:
+`{"ts":ISO8601,"event":NAME,"data":STR,...}`.
 
 ```fish
 jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl
@@ -362,7 +384,7 @@ then `mkinitcpio -P && sdboot-manage gen` and reboot.
 ## Known Issues
 
 <details>
-<summary><b>Strix Halo GPU (gfx1151)</b></summary>
+<summary><b>Strix Halo GPU</b></summary>
 
 | Issue | Workaround |
 |---|---|
@@ -397,19 +419,12 @@ then `mkinitcpio -P && sdboot-manage gen` and reboot.
 <details>
 <summary><b>Other</b></summary>
 
-- **Stale instance lock:** the next run probes the recorded PID with
-  `kill -0` and reclaims automatically if dead (`LOCK_STALE_CLAIM` in
-  the log). Manual clear only when the PID is live but unrelated:
-  `pgrep -af ry-install; or rm -rf ~/ry-install/.lock`.
-- **Sudo re-prompts mid-run:** long phases may exceed sudoers
-  `timestamp_timeout`. Run `sudo -v && ./ry-install.fish` or bump the
-  timeout in `/etc/sudoers.d/`.
-- **`systemctl --user` skipped (SSH without linger):** absent user-bus
-  → single skip-info, no spurious warns. Enable:
-  `loginctl enable-linger $USER`.
-- **AUR PGP signature failures:** `--skipreview` suppresses key import.
-  `gpg --recv-keys <KEYID>` before re-running, or `paru -S <pkg>`
-  without `--skipreview`.
+| Issue | Workaround |
+|---|---|
+| Stale instance lock | Auto-reclaimed if the recorded PID is dead (`LOCK_STALE_CLAIM` in the log); clear manually with `rm -rf ~/ry-install/.lock` only if `pgrep -af ry-install` is empty |
+| Sudo re-prompts mid-run | Long phases may exceed sudoers `timestamp_timeout` — run `sudo -v && ./ry-install.fish`, or raise the timeout in `/etc/sudoers.d/` |
+| `systemctl --user` skipped (SSH, no linger) | Absent user-bus yields a single skip-info, no spurious warns; enable with `loginctl enable-linger $USER` |
+| AUR PGP signature failure | `--skipreview` suppresses key import — `gpg --recv-keys <KEYID>` then re-run, or `paru -S <pkg>` without `--skipreview` |
 
 </details>
 

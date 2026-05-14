@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.5.2 (2026-05-14) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.5.3 (2026-05-14) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.5.2"
+set -g VERSION "6.5.3"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -118,6 +118,10 @@ for _ry_p in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin $PATH
 end
 set -gx PATH $_ry_path_new
 set --erase _ry_path_new _ry_p
+if set -q TMPDIR; and test -n "$TMPDIR"; and not string match -q -- '/*' "$TMPDIR"
+    echo "[WARN] TMPDIR is not an absolute path ($TMPDIR) — falling back to /tmp" >&2
+    set -gx TMPDIR /tmp
+end
 set -l _ry_tmpprobe_dir (set -q TMPDIR; and test -n "$TMPDIR"; and test -d "$TMPDIR"; and printf '%s' "$TMPDIR"; or printf '%s' /tmp)
 if not test -w "$_ry_tmpprobe_dir"
     if test "$_ry_tmpprobe_dir" != /tmp; and test -w /tmp
@@ -1939,7 +1943,7 @@ end
 function _ry_mkinitcpio_array --argument-names key file --description "First non-comment KEY=... line from a conf file"
     test -z "$file"; and set file /etc/mkinitcpio.conf
     set -l _key_re (string escape --style=regex -- "$key")
-    set -l _all_lines (command grep -E "^[[:space:]]*$_key_re=" "$file" 2>/dev/null)
+    set -l _all_lines (command grep -E -- "^[[:space:]]*$_key_re=" "$file" 2>/dev/null)
     test (count $_all_lines) -gt 1; and _warn "  $file: multiple $key= lines found ("(count $_all_lines)") — using first"
     test (count $_all_lines) -gt 0; and printf '%s\n' "$_all_lines[1]"
 end
@@ -2448,7 +2452,7 @@ end
 function _verify_static_syntax --description "Validate mkinitcpio hooks ordering, systemd unit files"
     _echo "SYNTAX VALIDATION"
     _echo "── mkinitcpio hooks ──"
-    set -l hooks_syntax_line (command grep -E '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | command grep -v '^#' | command head -n 1)
+    set -l hooks_syntax_line (command grep -E -- '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | command grep -v -- '^#' | command head -n 1)
     if test -n "$hooks_syntax_line"
         set -l hooks_str (string replace -r '.*HOOKS=\(([^)]*)\).*' '$1' -- "$hooks_syntax_line")
         set hooks_str (string replace -ra '\s+' ' ' -- "$hooks_str" | string trim --)
@@ -3021,7 +3025,7 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state
     set -l wlan_iface ""
     for iface in /sys/class/net/*/wireless
         if test -d "$iface"
-            set wlan_iface (basename (dirname -- "$iface"))
+            set wlan_iface (basename -- (dirname -- "$iface"))
             break
         end
     end
@@ -3472,7 +3476,7 @@ function _is_wifi_active_route --description "True if default route exits via wi
         case 'tun*' 'tap*' 'wg*' 'ppp*' 'gre*' 'gretap*' 'sit*' 'ip6tnl*' 'ipip*' 'br*' 'bridge*' 'macvlan*' 'macvtap*' 'vlan*' 'bond*' 'geneve*' 'vxlan*' 'nlmon*'
             for _phy in /sys/class/net/*/wireless
                 test -d "$_phy"; or continue
-                set -l _name (basename (dirname -- "$_phy"))
+                set -l _name (basename -- (dirname -- "$_phy"))
                 set -l _state (command cat -- "/sys/class/net/$_name/operstate" 2>/dev/null | string trim --)
                 test "$_state" = up; and return 0
             end
@@ -4859,7 +4863,7 @@ set -g INSTALL_FILE_TARGET ""
 set -l _ORIG_ARGV $argv
 set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) ry-argparse-err.XXXXXX)
 _track_tmpfile "$_ap_errfile"
-# h/help and v/version are handled by the early-exit loop near the top; declared here only so argparse accepts them rather than erroring on an unknown option.
+# h/help and v/version: the early-exit loop near the top is the fast path for exact tokens; the post-argparse block below is the catch-all that also covers bundled short flags (e.g. -hV).
 argparse --name=(status basename) \
     --exclusive=verify-static,verify-runtime,check,install-file \
     h/help v/version V/verbose \
@@ -4881,6 +4885,14 @@ if test $_argparse_rc -ne 0
     _pre_dispatch_exit $EXIT_USAGE
 end
 _rm_tmp "$_ap_errfile" false
+if set -q _flag_help
+    _ry_show_help
+    _pre_dispatch_exit $EXIT_OK
+end
+if set -q _flag_version
+    echo "v$VERSION"
+    _pre_dispatch_exit $EXIT_OK
+end
 set -q _flag_verify_static; and set -g MODE verify-static
 set -q _flag_verify_runtime; and set -g MODE verify-runtime
 set -q _flag_check; and set -g MODE check

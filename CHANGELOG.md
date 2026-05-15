@@ -4,104 +4,66 @@ ry-install ChangeLog
 v6.5.7 - 2026-05-14
 -------------------
 
-  * _init_runtime: the KERNEL_PARAMS sanity gate
+  * _init_runtime: KERNEL_PARAMS sanity gate
     `string match -qr -- '[\s"`$;\\]' "$_kp"` had two source
-    backslashes between the `;` and the closing `]`, intending to put
-    `\\` in the PCRE pattern so the class would contain a literal
-    backslash plus the terminator. Fish single-quote semantics
-    collapse each `\\` to one `\` (the only escapes recognised inside
-    single quotes are `\\` and `\'`), so PCRE actually received nine
-    bytes — `[\s"`$;\]` — with only one backslash before the bracket.
-    Inside a class, `\]` is an escaped `]` (literal, does not close),
-    leaving the class with no terminator; PCRE refused to compile and
-    `string match` returned rc=2 for every `$KERNEL_PARAMS` member
-    (15 on this profile), emitting `Regular expression compile error:
-    missing terminating ]` to stderr fifteen times at the top of every
-    install. The bootstrap stage runs before `_log` opens the JSONL,
-    so the stderr noise was visible on the TTY but never captured in
-    any log file. More consequential: `rc=2` reads as "no match" to
-    the surrounding `if`, so the validator body — `_err_loud` +
-    `_pre_dispatch_exit $EXIT_PREFLIGHT` — never fired. Every
-    KERNEL_PARAMS member containing whitespace, an unescaped quote,
-    backtick, dollar, or semicolon would have silently propagated
-    into `/etc/kernel/cmdline` and sdboot-manage `LINUX_OPTIONS=`.
-    The profile's actual params are all clean tokens, so the latent
-    failure mode never surfaced in practice; the gate has been dead
-    since the validator was introduced. Doubled the trailing
-    backslashes (source `\\` -> `\\\\`) so fish delivers `\\` to PCRE
-    as a literal-backslash escape; verified against all 15 real
-    KERNEL_PARAMS plus six representative bad inputs (space, quote,
-    semicolon, dollar, backtick, lone backslash) — all six now
-    blocked, all 15 legitimate params pass without stderr noise.
+    backslashes before the `]`. Fish single-quotes collapse `\\` to
+    one `\` (only `\\` and `\'` are escapes inside single quotes), so
+    PCRE received `[\s"`$;\]` — the `\]` parsed as an escaped literal
+    `]` and the class had no terminator. `string match` returned
+    rc=2 for every member, emitting `Regular expression compile
+    error: missing terminating ]` to stderr fifteen times at the top
+    of every install (pre-`_log`, never captured in JSONL). rc=2
+    also reads as "no match" to the surrounding `if`, so the
+    validator silently accepted whitespace / quotes / shell
+    metachars instead of aborting via `_err_loud` +
+    `_pre_dispatch_exit` — dead since introduction. Doubled the
+    trailing source backslashes (`\\` -> `\\\\`) so fish delivers
+    `\\` to PCRE as one literal-backslash escape. Profile params are
+    all clean tokens, so install behaviour is unchanged apart from
+    the fifteen stderr lines disappearing.
 
-  * Other regexes: ran every other single-quoted (43) and
-    double-quoted (51) `string match -qr` pattern in the script
-    through PCRE the same way (`string match -qr -- $pat ""`) to
-    flush any other latent compile failures. Line 758 was the only
-    one; the remaining 93 patterns compile clean.
+  * Other regexes: ran every single-quoted (43) and double-quoted
+    (51) `string match -qr` pattern through PCRE the same way; line
+    758 was the only failure.
 
-  * Net effect: 4996 -> 4996 lines (single-character source delta on
-    line 758). No exit-code or footer-schema impact; the validator
-    becomes functional for the first time, but the profile's actual
-    KERNEL_PARAMS members all pass it, so observable install
-    behaviour is identical apart from the disappearance of the
-    fifteen `string match: Regular expression compile error` lines
-    at startup.
+  * Net effect: 4996 -> 4996 lines (single-character source delta
+    on line 758). No exit-code or footer-schema impact.
 
   * README: version badge -> 6.5.7.
 
 v6.5.6 - 2026-05-14
 -------------------
 
-  * _msg: OK/WARN/FAIL counter increments were gated behind
-    `if test "$VERIFY_MODE" = true`, so the `VERIFY_OK`/`VERIFY_FAIL`/
-    `VERIFY_WARN` globals only moved in `verify-static` /
-    `verify-runtime`. `_write_footer` reads those same globals
-    unconditionally and prints them as the footer's `pass`/`fail`/
-    `warn` fields for every mode — meaning an install run that
-    emitted half a dozen `WARN:` lines (deferred NM restart on active
-    WiFi, plymouth reverse-dep block, transient AUR retry, etc.) still
-    closed with `"pass":0,"fail":0,"warn":0,"gen_fail":0`. The
-    structural always-zero install summary made
-    `jq 'select(.event=="footer" and .warn>0)'` etc. unusable for
-    install/install-file logs. Removed the gate; `_msg` now counts in
-    every mode. The reset+snapshot contract used by
-    `_ry_verify_static` / `_ry_verify_runtime` is unchanged (each
-    zeroes the counters at entry and `_verify_summary` snapshots
-    before printing via `_msg_nocount`), so verify-mode totals are
-    identical to v6.5.5. `--check` mode footers remain `0,0,0,0`
-    because the `_check_phase_*` helpers use `_log` directly and never
-    enter the `_msg` family — correct for a silent idempotency probe.
+  * _msg: OK/WARN/FAIL increments (`VERIFY_OK`/`VERIFY_FAIL`/
+    `VERIFY_WARN`) were gated behind `if test "$VERIFY_MODE" = true`,
+    so they only moved in `verify-static` / `verify-runtime`.
+    `_write_footer` prints those globals as the footer's
+    `pass`/`fail`/`warn` for every mode — install runs that emitted
+    `WARN:` lines (deferred NM restart, plymouth reverse-dep block,
+    transient AUR retry) still closed with `"pass":0,"fail":0,
+    "warn":0,"gen_fail":0`. Removed the gate; `_msg` now counts in
+    every mode. Verify modes byte-identical (each zeroes counters at
+    entry; `_verify_summary` snapshots before printing via
+    `_msg_nocount`). `--check` footers remain `0,0,0,0` — the
+    `_check_phase_*` helpers use `_log` directly and never enter the
+    `_msg` family.
 
-  * VERIFY_MODE: with the gate above gone, the variable was read
-    nowhere (only written — twice in `_ry_verify_static`, twice in
-    `_ry_verify_runtime`, and a trailing `set -g VERIFY_MODE false`
-    inside `_verify_summary`; no separate top-level initialiser).
-    Removed all five assignments; `_msg_nocount` still exists as the
-    explicit opt-out for `_verify_summary`'s own summary line and for
-    `_verify_static_checksum`'s `_fail_silent` generator-failure path
-    (which bumps `VERIFY_GEN_FAIL` itself, separately from the
-    `FAIL`/`WARN` counters).
+  * VERIFY_MODE: once the gate above was gone the variable was read
+    nowhere. Removed all five assignments (`_ry_verify_static` x2,
+    `_ry_verify_runtime` x2, `_verify_summary` x1); the
+    `set -g VERIFY_OK 0; …` resets at verify entry are kept.
 
-  * README: the documented jq one-liner
-    `jq 'select(.event == "fail")'` matched zero records — the script
-    only ever emits three event types (`header`, `log`, `footer`).
-    Errors are `log` events whose `data` field begins with `FAIL:` or
-    `ERR:`. Replaced with
-    `jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))'`,
-    added a second example for the per-run `footer` event, and
-    documented the three event types and the footer's
-    `exit_code`/`pass`/`fail`/`warn`/`gen_fail` keys (previously
-    hand-waved by `...` in the schema line) — the schema note now
-    explicitly states the counters are populated in every mode, which
-    matches the `_msg` change above.
+  * README: jq one-liner `select(.event == "fail")` matched nothing
+    — the script only emits `header` / `log` / `footer`. Replaced
+    with `select(.event == "log" and (.data | test("^(FAIL|ERR):")))`
+    plus a second example for `footer`, and documented the three
+    event types and the footer's `exit_code`/`pass`/`fail`/`warn`/
+    `gen_fail` keys.
 
-  * Net effect: 5003 -> 4996 lines (7 lines removed: the 2-line
-    `if`/`end` gate in `_msg`, and five `set -g VERIFY_MODE` writes
-    across `_ry_verify_static` (2), `_ry_verify_runtime` (2), and
-    `_verify_summary` (1)). Only the install + install-file footer
-    JSON changes observably; verify-static / verify-runtime / check /
-    install exit codes are unchanged.
+  * Net effect: 5003 -> 4996 lines (the 2-line `if`/`end` gate in
+    `_msg` plus five `set -g VERIFY_MODE` writes). Only install +
+    install-file footer JSON changes observably; exit codes
+    unchanged.
 
   * README: version badge -> 6.5.6.
 

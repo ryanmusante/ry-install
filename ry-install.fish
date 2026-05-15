@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.5.7 (2026-05-14) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.5.9 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.5.7"
+set -g VERSION "6.5.9"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -266,11 +266,11 @@ function _verify_unit_syntax --argument-names unit_path label intended_scope --d
     end
     set -l _err_out (systemd-analyze $user_flag verify "$unit_path" 2>&1)
     if test $status -eq 0
-        test -n "$_err_out"; and _log "VERIFY_UNIT_WARN: ($label) "(printf '%s\n' $_err_out | command head -n 5)
+        test -n "$_err_out"; and _log "VERIFY_UNIT_WARN: ($label) "(printf '%s\n' $_err_out | command head -n 5 | string join '; ')
         _ok "  $label: syntax OK"
         return 0
     end
-    _log "VERIFY_UNIT_ERR: ($label) "(printf '%s\n' $_err_out | command head -n 5)
+    _log "VERIFY_UNIT_ERR: ($label) "(printf '%s\n' $_err_out | command head -n 5 | string join '; ')
     _fail "  $label: INVALID SYNTAX"
     return 1
 end
@@ -2450,7 +2450,7 @@ end
 function _verify_static_syntax --description "Validate mkinitcpio hooks ordering, systemd unit files"
     _echo "SYNTAX VALIDATION"
     _echo "── mkinitcpio hooks ──"
-    set -l hooks_syntax_line (command grep -E -- '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | command grep -v -- '^#' | command head -n 1)
+    set -l hooks_syntax_line (command grep -E -- '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | command head -n 1)
     if test -n "$hooks_syntax_line"
         set -l hooks_str (string replace -r '.*HOOKS=\(([^)]*)\).*' '$1' -- "$hooks_syntax_line")
         set hooks_str (string replace -ra '\s+' ' ' -- "$hooks_str" | string trim --)
@@ -3327,6 +3327,7 @@ function _vrs_installed_file_perms --description "Runtime session check: install
     else if test $perm_checked -eq 0
         _warn "  No installed files found to check"
     end
+    test $perm_vfat_skipped -gt 0; and _info "  $perm_vfat_skipped file(s) skipped on vfat boot partition (unix perms synthesized from mount options)"
 end
 function _vrs_parent_dirs --description "Runtime session check: parent dirs of managed files"
     _echo "── Parent directories ──"
@@ -3496,7 +3497,7 @@ function _ip_probe_sudo_policy --description "Probe sudo -l: reject incompatible
     set -l _sudo_l_rc $status
     if test $_sudo_l_rc -ne 0
         set -l _reason ""
-        test -s "$_sudo_l_err"; and set _reason (command head -n 1 -- "$_sudo_l_err" 2>/dev/null | string trim)
+        test -s "$_sudo_l_err"; and set _reason (command head -n 1 -- "$_sudo_l_err" 2>/dev/null | string trim --)
         _log "SUDO_LIST_NO_CRED: rc=$_sudo_l_rc reason='$_reason'"
         _rm_tmp "$_sudo_l_err" false
         _err "Unattended install requires cached sudo credential (sudo -l rc=$_sudo_l_rc)"
@@ -4156,7 +4157,7 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
 end
 function _csm_filter_units --description "_configure_services_mask sub. Pre-filter unit list"
     for _unit in $argv
-        set -l _state (systemctl is-enabled -- $_unit 2>/dev/null | string trim)
+        set -l _state (systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
         if test "$_state" = masked
             _log "MASK_ALREADY: $_unit"
             continue
@@ -4175,7 +4176,7 @@ function _csm_retry_individual --description "_configure_services_mask sub. Per-
         if _run sudo -n systemctl mask -- $_unit
             _ok "Masked: $_unit"
         else
-            set -l _state (systemctl is-enabled -- $_unit 2>/dev/null | string trim)
+            set -l _state (systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
             _warn "Failed to mask: $_unit (is-enabled=$_state)"
             set _ret 1
         end
@@ -4230,7 +4231,7 @@ function _cse_batch_enable --description "Batch enable system units"
         if _run sudo -n systemctl enable --now -- $_unit
             _ok "Enabled: $_unit"
         else
-            set -l _enabled_state (systemctl is-enabled -- $_unit 2>/dev/null | string trim)
+            set -l _enabled_state (systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
             if test "$_enabled_state" = enabled; or test "$_enabled_state" = enabled-runtime; or test "$_enabled_state" = alias; or test "$_enabled_state" = static
                 _warn "Enabled but failed to start: $_unit (will activate on next boot if config is fixed)"
                 _warn "  Diagnose: systemctl status $_unit; journalctl -u $_unit -b"
@@ -4906,7 +4907,7 @@ if set -q _flag_install_file
     if test -n "$_canon"
         set -g INSTALL_FILE_TARGET "$_canon"
     else
-        _warn "realpath -m failed on '$_if_val' — using literal path; managed-file validation may not match"
+        echo "[WARN] realpath -m failed on '$_if_val' — using literal path; managed-file validation may not match" >&2
         set -g INSTALL_FILE_TARGET "$_if_val"
     end
 end
@@ -4928,7 +4929,7 @@ set -l _log_rename_ok true
 if test -f "$old_log"; and test "$old_log" != "$new_log"
     if not command mv -- "$old_log" "$new_log" 2>/dev/null
         set _log_rename_ok false
-        _warn "Log rename failed: $old_log -> $new_log (keeping old path)"
+        echo "[WARN] Log rename failed: $old_log -> $new_log (keeping old path)" >&2
     end
 end
 test "$_log_rename_ok" = true; and set -g LOG_FILE "$new_log"

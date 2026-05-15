@@ -1,6 +1,22 @@
 ry-install ChangeLog
 ====================
 
+v6.5.9 - 2026-05-15
+-------------------
+
+  * _verify_unit_syntax: VERIFY_UNIT_WARN/_ERR `_log` calls concatenated a fixed prefix with multi-line `systemd-analyze verify` stderr, triggering fish Cartesian product — N stderr lines produced N argv tokens, repeating the prefix once per line in the JSONL `data` field. Pipe through `string join '; '` before concat; one prefix per event regardless of stderr arity.
+
+  * _vrs_installed_file_perms: `perm_vfat_skipped` counter tracked per-file `/boot/*` skips on vfat ESPs but was absent from the finalization summary, asymmetric with the `perm_checked`/`perm_bad` totals. Added trailing `_info` line emitting the aggregate count when non-zero; xfs/ext4 `/boot` unaffected.
+
+  * _verify_static_syntax: HOOKS-line extraction ran `grep -E '^[[:space:]]*HOOKS=' | grep -v -- '^#' | head -n 1`; the first regex's `^[[:space:]]*HOOKS=` anchor already structurally excludes comment-prefixed lines. Removed the dead `grep -v` stage.
+
+  * Style: normalized four `string trim` call-sites (lines 3499, 4159, 4178, 4233) to `string trim --` for consistency with the 27 other invocations; all four read systemctl/head pipe stdin, no behaviour change. Line count 4996 -> 4997 (+1 from perm_vfat_skipped summary). README badge -> 6.5.9.
+
+v6.5.8 - 2026-05-15
+-------------------
+
+  * Top-level dispatcher: two `_warn` calls fired before the JSONL `header` event, both writing a `log` event ahead of the header and violating the schema documented in README ("the `header` event MUST be the first line"). (1) `realpath -m` failure on `--install-file` value (line 4909) ran before the header was written; `_warn` → `_msg` → `_log` auto-created the log file and appended a `WARN` line, then the header was appended *after* it. As a side effect the file was preserved by `_pre_dispatch_log_cleanup` (which gates on `_RY_LOG_WRITTEN`), leaving a one-line stale log on aborted runs. (2) Log-rename failure (line 4931) ran after log-file creation but still before the header, same out-of-order schema breach for the old path. Both rare in practice (realpath -m only fails on unparseable paths; rename only fails on cross-fs `mv` within `$LOG_DIR`, which is single-fs). Replaced both with direct `echo "[WARN] ..." >&2`, matching the existing pre-`_log` convention at lines 122/128/162. No other top-level (script-flow, non-function-body) call to the `_warn`/`_log`/`_msg`/`_info` family before header creation now remains (verified via AST-aware sweep). Line count unchanged at 4996; observable behaviour change is the two warnings now go only to stderr, not JSONL, and stale log files are no longer left behind on a `realpath -m` abort. README badge -> 6.5.8.
+
 v6.5.7 - 2026-05-14
 -------------------
 

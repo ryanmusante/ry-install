@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.5.10 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.5.11 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.5.10"
+set -g VERSION "6.5.11"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -80,6 +80,8 @@ function _ry_exit --argument-names code --description "Set bail sentinel and exi
         set -q LOG_DIR; and command rmdir -- "$LOG_DIR" 2>/dev/null
         set -q LOG_DIR; and command rmdir -- (dirname -- "$LOG_DIR") 2>/dev/null
         set -q HOME; and command rmdir -- "$HOME/ry-install" 2>/dev/null
+    else
+        functions -q _write_footer; and _write_footer "$code" bail
     end
     functions -q _do_cleanup; and _do_cleanup
     _ry_erase_handlers
@@ -507,6 +509,7 @@ end
 function _cleanup_pipe --on-signal PIPE --description "Signal handler: mark stderr/stdout broken"
     set -q _RY_OUTPUT_BROKEN; and return 0
     set -g _RY_OUTPUT_BROKEN true
+    set -q _RY_HEADER_WRITTEN; or return 0
     _log "SIGPIPE_RECEIVED: stderr/stdout consumer closed; continuing with JSONL log only"
 end
 function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensure cleanup runs on fish_exit"
@@ -3040,7 +3043,7 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state
     if command -q nmcli
         set -l nm_wifi_enabled (nmcli -t -f WIFI general 2>/dev/null | string trim --)
         test -n "$nm_wifi_enabled"; and _info "  NM wifi radio: $nm_wifi_enabled"
-        set -l wifi_state (nmcli -t -f TYPE,STATE device 2>/dev/null | string match -rg '^wifi:(.*)$')[1]
+        set -l wifi_state (nmcli -t -f TYPE,STATE device 2>/dev/null | string match -rg -- '^wifi:(.*)$')[1]
         if test "$wifi_state" = connected
             _ok "  WiFi device: connected"
         else if test -n "$wifi_state"
@@ -4262,9 +4265,9 @@ function _install_configure_services --description "Enable, start, and configure
 end
 function _bootctl_dir --argument-names flag logtag fallnote --description "bootctl path probe (user then sudo); empty on failure"
     command -q bootctl; or return 0
-    set -l _p (bootctl $flag 2>/dev/null | string trim -- | string trim -r -c /)
+    set -l _p (bootctl $flag 2>/dev/null | string trim -- | string trim -r -c / --)
     if test -z "$_p"
-        set _p (sudo -n bootctl $flag 2>/dev/null | string trim -- | string trim -r -c /)
+        set _p (sudo -n bootctl $flag 2>/dev/null | string trim -- | string trim -r -c / --)
         set -l _bc_ps $pipestatus
         test "$_bc_ps[1]" -ne 0; and functions -q _log; and _log "$logtag: bootctl $flag rc=$_bc_ps[1] (sudo lapse or bootctl error); $fallnote"
     end

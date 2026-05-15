@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.5.3 (2026-05-14) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.5.5 (2026-05-14) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.5.3"
+set -g VERSION "6.5.5"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -409,9 +409,10 @@ function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for l
         'ry-sudo-err.*' \
         'ry-run.*' \
         'ry-val-unit.*' \
-        'ry-ka-err.*' \
         'ry-sudo-l-err.*' \
-        'ry-argparse-err.*'
+        'ry-argparse-err.*' \
+        'ry-fstab-tee-err.*' \
+        'ry-fstab-awk-err.*'
     set -l _find_name_args
     for _g in $_tmp_globs
         test -n "$_find_name_args"; and set -a _find_name_args -o
@@ -1537,8 +1538,8 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     set -l is_boot false
     string match -q '/boot/*' -- "$file"; and set is_boot true
     _cg_access_ok "$file" "$label" $is_boot; or return 1
-    set -l _grep_flags -qwF
-    _as $is_boot grep -v '^[[:space:]]*#' -- "$file" 2>/dev/null | command grep $_grep_flags -- "$pattern" 2>/dev/null
+    set -l _grep_flags -wF
+    _as $is_boot grep -v '^[[:space:]]*#' -- "$file" 2>/dev/null | command grep $_grep_flags -- "$pattern" >/dev/null 2>/dev/null
     set -l _stage1_rc $pipestatus[1]
     set -l _grep_rc $pipestatus[2]
     switch $_stage1_rc
@@ -2624,7 +2625,11 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
             return $EXIT_PREFLIGHT
         end
         test "$_v[1]" = not-found; and continue
-        test "$_v[3]" = enabled; or set -g _RY_CHECK_DRIFT 1
+        if test "$unit" = NetworkManager-dispatcher.service
+            test "$_v[3]" = enabled; or test "$_v[3]" = static; or set -g _RY_CHECK_DRIFT 1
+        else
+            test "$_v[3]" = enabled; or set -g _RY_CHECK_DRIFT 1
+        end
     end
     return 0
 end
@@ -3935,8 +3940,8 @@ function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk scr
 end
 function _far_awk_rewrite --argument-names tmpfstab --description "awk-rewrite fstab into tmpfstab via tee"
     set -l _awk_script (_far_build_awk_script | string collect)
-    set -l _tee_err (command mktemp -p (_tmp_dir) .ry-install.tee-err.XXXXXX 2>/dev/null)
-    set -l _awk_err (command mktemp -p (_tmp_dir) .ry-install.awk-err.XXXXXX 2>/dev/null)
+    set -l _tee_err (_mktemp_or_null -p (_tmp_dir) ry-fstab-tee-err.XXXXXX)
+    set -l _awk_err (_mktemp_or_null -p (_tmp_dir) ry-fstab-awk-err.XXXXXX)
     _track_tmpfile "$_tee_err"
     _track_tmpfile "$_awk_err"
     if test -r /etc/fstab
@@ -4569,7 +4574,6 @@ end
 
 function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
     not _install_packages; and set -g INSTALL_HAD_ERRORS true
-    test "$_RY_INSTALL_BAILING" = true; and return 0
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
         _err "Aborting remaining phases: mkinitcpio.conf revert failed (boot state inconsistent)"
         return 0
@@ -4580,7 +4584,6 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
     else
         not _install_aur_packages; and set -g INSTALL_HAD_ERRORS true
     end
-    test "$_RY_INSTALL_BAILING" = true; and return 0
     # AUR may have transitively installed iwd; re-probe before _should_skip_iwd caches.
     set --erase _RY_SKIP_IWD
     command -q updatedb; and begin
@@ -4589,11 +4592,8 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
     command -q pkgfile; and begin
         _run sudo -n pkgfile --update; or _warn "Pkgfile update failed"
     end
-    test "$_RY_INSTALL_BAILING" = true; and return 0
     not _install_system_files; and set -g INSTALL_HAD_ERRORS true
-    test "$_RY_INSTALL_BAILING" = true; and return 0
     not _install_fstab_opts; and set -g INSTALL_HAD_ERRORS true
-    test "$_RY_INSTALL_BAILING" = true; and return 0
     not _install_configure_services; and set -g INSTALL_HAD_ERRORS true
     test "$INSTALL_HAD_ERRORS" = true; and return 1
     return 0

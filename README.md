@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-6.5.3-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-6.5.5-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -85,7 +85,7 @@ multi-user provisioning, non-CachyOS distros, laptops; UKI.
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | Systemd | ≥ 250 (≥ 256 for `HandleSecureAttentionKey`) |
 | Sudo | Unrestricted (no `requiretty` / `tty_tickets` / `timestamp_timeout=0`) |
-| Tooling | GNU coreutils, `ip(8)`, `curl` |
+| Tooling | GNU coreutils, `curl` (`ip(8)` recommended) |
 | Free space | 2 GB `/`, 200 MB `/boot` |
 | paru | For AUR packages only |
 

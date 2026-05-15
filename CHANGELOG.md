@@ -1,6 +1,84 @@
 ry-install ChangeLog
 ====================
 
+v6.5.5 - 2026-05-14
+-------------------
+
+  * _chk_grep: the comment-strip / pattern-match pipeline ran the
+    second stage as `grep -qwF`. `grep -q` exits on the first match,
+    closing the pipe; when the matched token is not near the end of a
+    large config file the upstream `grep -v '^#'` is still writing and
+    dies with SIGPIPE (exit 141). `_chk_grep` reads that stage-1 code,
+    falls through its `0`/`1` switch arms to `case '*'`, and emits a
+    spurious `cannot read file (stage-1 rc=141 — sudo lapse or read
+    error)` WARN instead of the correct OK. The current managed files
+    are all far smaller than the 64 KiB pipe buffer, so `grep -v`
+    always finishes writing before `grep -q` reads and the bug never
+    triggers in practice — but it is latent for any larger managed
+    destination. The second stage now runs `grep -wF ... >/dev/null`
+    (output discarded, no early exit): `grep -wF` consumes its entire
+    input, so stage 1 never receives SIGPIPE and `$pipestatus[1]` is
+    reliable. `-w`/`-F` semantics and the 0/1/2 exit-status contract
+    are unchanged.
+
+  * _far_awk_rewrite: the awk-stderr and tee-stderr capture tmpfiles
+    were created in `(_tmp_dir)` with a `.ry-install.` prefix
+    (`.ry-install.tee-err.XXXXXX`, `.ry-install.awk-err.XXXXXX`). Every
+    other `_tmp_dir` tmpfile uses the `ry-` prefix; the `.ry-install.`
+    prefix is the convention for tmpfiles created *in a managed
+    destination directory* (swept by `_cleanup_tmpfiles`). As a
+    result these two files were not matched by the
+    `_dc_sweep_filesystem` fallback glob set and would survive in
+    `/tmp` if a run were SIGKILL'd between their creation and the
+    tracked-tmpfile cleanup. Renamed to `ry-fstab-tee-err.XXXXXX` /
+    `ry-fstab-awk-err.XXXXXX` and added both globs to
+    `_dc_sweep_filesystem`. They remain tracked + explicitly removed
+    on every normal path; this only closes the killed-mid-run gap.
+
+  * Net effect: 5001 -> 5003 lines. The `_chk_grep` change is the only
+    behavior change (and only observable on managed files larger than
+    one pipe buffer); install / verify-runtime / check flows are
+    otherwise unchanged.
+
+  * README: version badge -> 6.5.5.
+
+v6.5.4 - 2026-05-14
+-------------------
+
+  * _check_phase_units: the --check implicit-service loop required
+    NetworkManager-dispatcher.service to be `enabled`, but the unit
+    ships `static` (`WantedBy=` empty) on a clean CachyOS install — so
+    `--check` returned `EXIT_DRIFT` (10) on a correctly-installed
+    system. `--verify-runtime` already accepts `static` for this unit
+    (v6.3); the `--check` path now does too. systemd-resolved.service
+    still requires `enabled`.
+
+  * _far_awk_rewrite: the awk-stderr and tee-stderr capture tmpfiles
+    were allocated with a bare `command mktemp`; on mktemp failure the
+    path was an empty string and `2>"$_awk_err"` / `2>"$_tee_err"`
+    became an invalid-redirection error, failing the fstab rewrite.
+    Both now use `_mktemp_or_null`, matching every other tmpfile that
+    feeds a redirect (empty result → `/dev/null` sentinel).
+
+  * _dc_sweep_filesystem: dropped the vestigial `ry-ka-err.*` cleanup
+    glob. The sudo-keepalive helpers that produced those tmpfiles were
+    removed in v6.0; no code path creates them.
+
+  * _rdi_run_phases: removed five unreachable
+    `test "$_RY_INSTALL_BAILING" = true; and return 0` guards. The
+    only writer of the sentinel, `_ry_exit`, calls `exit` immediately
+    after setting it, so it can never be observed true mid-function
+    (v6.2.7 removed two of the same class).
+
+  * Net effect: 5003 -> 5001 lines. The `--check` NM-dispatcher fix is
+    the only behavior change; the install / verify-static /
+    verify-runtime flows are unchanged.
+
+  * README: version badge -> 6.5.4; Prerequisites `Tooling` row marks
+    `ip(8)` as recommended rather than required — the script classes
+    it optional (`_ry_check_deps` optional-tool list) and degrades
+    gracefully when it is absent.
+
 v6.5.3 - 2026-05-14
 -------------------
 
@@ -175,541 +253,97 @@ v6.5.1 - 2026-05-14
 v6.5 - 2026-05-14
 -----------------
 
-  * _dc_sweep_tmpfiles: the post-`rm` `TMPFILE_STUCK` log no longer
-    fires on a *successful* sudo removal. The branches were written
-    `sudo -n rm … 2>/dev/null; or functions -q _log; and _log …`,
-    which fish parses as `(rm or functions-q) and _log`: when `rm`
-    succeeded the `or` clause was satisfied, the chain status stayed
-    success, and the trailing `and _log` ran regardless — emitting a
-    spurious `TMPFILE_STUCK: <path> (sudo rm -rf failed)` /
-    `(sudo rm -f failed)` JSONL event for a path that was in fact
-    removed cleanly, and obscuring genuinely stuck paths. Both
-    branches now wrap the log call in an explicit `or begin … end`
-    block so it is reached only on real removal failure. The
-    user-mode passes and the `no sudo or outside escalation paths`
-    branch were already correct and are unchanged.
-  * _verify_static_services: the `scaling_governor` ExecStart probe
-    no longer aborts when `systemctl cat cpupower-epp.service`
-    returns more than one `ExecStart=` line. `string match -rg`
-    yields one list element per match, so a unit carrying a drop-in
-    (or any second `ExecStart=`) made `_execstart` a multi-element
-    list and `test -n "$_execstart"` failed with "too many
-    arguments". The guard is now `test (count $_execstart) -gt 0`
-    and the `string match` runs against the unquoted list, so every
-    ExecStart line is inspected. The shipped unit has a single
-    ExecStart, so observable output is unchanged for a clean install.
-  * head/tail: fourteen `head`/`tail` call sites that piped without
-    the `command` prefix now use `command head` / `command tail`,
-    matching the coreutils-invocation convention used elsewhere in
-    the file. Both are already in the required-command list, so this
-    is a consistency normalization, not a behavior change. Affected:
-    _resolve_systemd_ver, _verify_unit_syntax, _check_avail,
-    _verify_static_syntax, _vrkg_rebar_sam, _verify_runtime_kparams,
-    _vre_zram, _vrs_boot_perf, _fstab_atomic_replace.
-  * _json_str: dropped the `00` entry from the control-character
-    escape loop. `(printf '\x00')` collapses to an empty needle in
-    fish command substitution (NUL cannot occur inside a fish
-    string), so `string replace -a` over it was an unreachable
-    no-op; the U+0000..U+001F range is fully covered by the
-    remaining entries plus the dedicated `\n \r \t \b \f` replaces.
-  * comments: the two-line `_run_emit_stream` QUIET-stderr rationale
-    and the two-line `_ry_do_install` discarded-return-code note
-    each collapsed to a single line. A one-line note was added at
-    the `argparse` call recording that `h/help` and `v/version` are
-    serviced by the early-exit option loop and are declared on
-    `argparse` only so an unknown-option error is not raised.
-  * README: version badge -> 6.5.
+  * _dc_sweep_tmpfiles spurious-TMPFILE_STUCK fix (or-chain precedence); _verify_static_services multi-ExecStart guard; 14 head/tail sites use `command` prefix; _json_str drops unreachable NUL escape; _run_emit_stream / _ry_do_install / argparse comment trims; README badge -> 6.5.
 
 v6.4 - 2026-05-14
 -----------------
 
-  * _vsb_entries: a lapsed sudo credential or an unresolved `$BOOT`
-    path no longer produces a spurious `Boot entries: NONE` FAIL.
-    Previously, when `sudo -n test -d "$BOOT/loader/entries"` returned
-    non-zero (sudo timestamp expired) the enumeration block was
-    skipped, leaving `entry_count` at 0 and `_entries_pipe_ok` at its
-    initialized `true`, so control fell through to the `NONE` FAIL
-    branch — indistinguishable from a genuinely empty entries
-    directory. The function now: returns early with a WARN when
-    `_resolve_boot_path` yields an empty string; probes `sudo -n true`
-    and WARNs on a lapsed credential instead of reporting NONE; and
-    distinguishes a missing `loader/entries` directory from a present
-    but empty one. The genuine-empty path still FAILs.
-  * _ry_check_deps: the required-command loop now also checks `tee`,
-    `stat`, `find`, `cp`, `chmod`, `chown`, `sort`, `install`, `cat`,
-    and `rm`. All ten are used on critical paths (`tee` in the
-    atomic-write and fstab-rewrite render pipes, `stat` in permission
-    and size verification, `sort` in boot-entry enumeration, the
-    rest throughout). They are coreutils and effectively always
-    present, but the contract is "verify required packages are
-    installed" and the list was incomplete.
-  * _ry_check_deps: systemd major-version detection now calls
-    `_resolve_systemd_ver` and reads the cached `_RY_SYSTEMD_VER`
-    global instead of re-parsing `systemctl --version` inline. The
-    parse logic was duplicated verbatim between the two functions.
-  * _progress_init: the pinned scroll-region progress bar is now
-    skipped when `_RY_NO_COLOR` is true. `TERM=dumb` already sets
-    that sentinel during early init; the bar's DECSTBM/cursor-save
-    escape sequences are inappropriate for a dumb terminal. Other
-    suppression gates (tmux/screen/mosh, non-tty, missing `tput`)
-    are unchanged.
-  * _install_configure_services: removed the dead `; or set _ret 1`
-    clauses on the `_configure_services_resolved_restart` and
-    `_configure_services_pkg_remove` calls. Both functions
-    unconditionally `return 0`, so the clauses could never fire. The
-    `_configure_services_mask` and `_configure_services_enable`
-    clauses are retained — those functions do propagate failure.
-  * _check_avail, _enum_boot_entries: `LC_ALL=C` invocations
-    normalized to the `env LC_ALL=C` prefix form used elsewhere in
-    the file (`_vrkm_blacklist`, `_ip_probe_sudo_policy`). Inline
-    `VAR=val cmd` is fish-valid; this is a style normalization only.
-  * _run_emit_stream: added an inline comment documenting that the
-    `QUIET=true` + `STDERR` + non-zero-rc branch deliberately
-    surfaces up to five stderr lines, so package/bootloader failures
-    are visible without `--verbose`.
-  * _ry_do_install: added an inline comment noting that
-    `_rdi_run_phases`'s return code is intentionally discarded —
-    phase-failure state is carried in the `INSTALL_HAD_ERRORS`
-    global and checked at function end.
-  * _ip_pacman_invoke, _csp_remove_pkgs: the `db.lck` pre-check
-    error message now states the lock may be either a live pacman
-    process or a stale lock from a crashed run, rather than implying
-    it is always an active lock.
-  * README: version badge → 6.4; new Troubleshooting row for the
-    expected `logind.conf.d` checksum MISMATCH when systemd crosses
-    the 255↔256 boundary between install and `--verify-static`
-    (`HandleSecureAttentionKey` is version-gated in both the content
-    generator and the verifier, so the on-disk file legitimately
-    diverges from the regenerated content after a systemd major
-    upgrade).
+  * _vsb_entries distinguishes lapsed-sudo / unresolved-$BOOT from genuine-empty entries dir; _ry_check_deps adds 10 coreutils + reuses _resolve_systemd_ver; _progress_init skipped under NO_COLOR; dead `; or set _ret 1` clauses dropped; LC_ALL=C normalized to `env` prefix; _run_emit_stream / _ry_do_install comments; db.lck message wording; README badge -> 6.4 + logind.conf.d MISMATCH troubleshooting row.
 
 v6.3 - 2026-05-14
 -----------------
 
-  * _dc_sweep_tmpfiles: tracked tmpfiles that survive both the user-mode
-    `rm` pass and the sudo-escalated `rm` pass are now logged as
-    `TMPFILE_STUCK: <path> (<reason>)` JSONL events before
-    `_TRACKED_TMPFILES` is erased. Reasons are differentiated:
-    `sudo rm -rf failed` / `sudo rm -f failed` / `no sudo or outside
-    escalation paths`. Previously, files outside `/etc /boot /efi /var`
-    or files surviving the sudo `rm` were dropped without trace,
-    leaving operators no record of which paths the next install would
-    inherit.
-  * dispatch/header: JSONL `event=header` write at top-level now sets
-    `_RY_LOG_WRITE_FAIL` on failure, so the closing `[WARN] Log writes
-    failed during this run` notice fires consistently. Previously the
-    sentinel was only updated by `_log` body writes and footer; a
-    header-only write failure (rare, but possible if `LOG_FILE` filled
-    the partition between creation and first write) ran silently.
-  * _err_loud: emission body deduplicated. The function used to carry
-    a verbatim copy of `_msg_print`'s color/tty branch; it now calls
-    `_msg_print --force ERR $argv`. The new sentinel `--force` (first
-    positional, consumed before `level`) bypasses the `QUIET=true`
-    short-circuit while preserving the existing `_RY_OUTPUT_BROKEN` and
-    `_RY_NO_COLOR` gates. No emitted-output change for any caller.
-  * _ok, _fail, _fail_silent, _info, _warn, _err: collapsed from
-    three-line definitions to one-line definitions
-    (`function X; _msg LEVEL $argv; end`). `--description` strings
-    removed from these six wrappers and from all twelve `_content__*`
-    embedded-content generators; the function names are
-    self-documenting and `functions --details` still resolves the
-    bodies. No behavior change.
-  * _is_wifi_active_route: `ip -4` and `ip -6` invocations collapsed
-    into a `for _af in -4 -6` loop. The two `awk` invocations were
-    byte-identical except for the protocol flag.
-  * _ry_check_network: `curl` retries against `archlinux.org` and
-    `cloudflare.com` collapsed into a `for _host in ...` loop with an
-    index counter for the "primary"/"fallback host" `_ok` message
-    differentiation. Wire-level behavior (per-host timeouts,
-    connect-timeout, max-time, raw-IP ICMP fallback) unchanged.
-  * _vrsv_chk_nm_dispatcher: `static` is now accepted as a valid
-    UnitFileState alongside `enabled`. NetworkManager-dispatcher.service
-    ships with `WantedBy=` empty and is normally `static`;
-    `systemctl is-enabled` returns `static` for the shipped unit.
-    Previously, runtime verification reported a spurious FAIL on a
-    clean install where the unit had not been explicitly `enable`'d.
-  * _msg_print: leading positional `--force` consumed as a sentinel
-    that bypasses the `QUIET=true` early-return. Existing call sites
-    pass `level` as `$argv[1]` unchanged; only `_err_loud` uses the
-    new path.
-  * _tmpfile_key: `set p HOME(string sub ...)` concatenation rewritten
-    as `set -l _rest (string sub ...); set p "HOME$_rest"`. fish-valid
-    juxtaposition concatenation worked, but read as a typo on cursory
-    review. Output is byte-identical for every destination key.
-  * _run: argument validation rewritten from `test ...; and _log ...;
-    and return 255` semicolon-and chains into explicit `if` blocks.
-    The chain relied on `_log` returning 0 on every path (it does), so
-    behavior is unchanged; the rewrite removes a latent fragility
-    where a future `_log` change could break the `return 255`.
-  * _vre_thp_ksm: `set -l _active (string match -r ...)[2]` rewritten
-    as `set -l _m (string match ...); set -l _active $_m[2]`. Indexing
-    a command substitution inline is fish-valid; the two-step form
-    matches the convention used elsewhere in the file.
-  * _json_str: description updated to "RFC 8259 mandatory + DEL". The
-    escape table is mandatory characters (U+0000..U+001F, `"`, `\`)
-    plus U+007F (DEL); 8259 does not mandate DEL escaping but does not
-    forbid it. The description now matches the implementation.
-  * README: reference tables (Prerequisites, Safety & Reliability,
-    Runtime variables, Troubleshooting, and the collapsible
-    Configuration tables) trimmed to vital fields. Long prose cells
-    moved to the surrounding paragraph text or dropped; no documented
-    behavior removed.
+  * _dc_sweep_tmpfiles logs TMPFILE_STUCK before erase; header-write sets log-write-fail sentinel; _err_loud deduped via `_msg_print --force`; six _msg wrappers + content generators collapsed to one line; _is_wifi_active_route / _ry_check_network loop-folded; _vrsv_chk_nm_dispatcher accepts `static`; _tmpfile_key / _run / _vre_thp_ksm / _json_str rewrites; README reference tables trimmed.
 
 v6.2.13 - 2026-05-14
 --------------------
 
-  * _run: function split into _run, _run_redact_cmd, and
-    _run_effective_timeout. Tmpdir-path redaction of the logged command
-    and timeout resolution / bypass selection are now self-contained
-    helpers. Wire-level behaviour (logged RUN string, TIMEOUT_BYPASS
-    marker, timeout invocation, exit-code propagation) unchanged.
-  * _content__etc_systemd_system_cpupower-epp.service: the `$$cpu`
-    rationale (systemd.service(5) unescapes `$$`→`$`) collapsed from
-    five comment lines to one. No code change.
+  * _run split into _run / _run_redact_cmd / _run_effective_timeout; cpupower-epp `$$cpu` rationale comment collapsed to one line.
 
 v6.2.12 - 2026-05-14
 --------------------
 
-  * _ry_install_file, _verify_static_checksum, _check_phase_files:
-    content equality test fixed for files whose embedded vs installed
-    bytes differ only by `<space>` vs `<newline>` token boundaries.
-    `set -l x (cmd)` splits stdout on newlines into a fish array;
-    `test "$x" = "$y"` then joins quoted-array elements with single
-    spaces, so `"a b\nc\n"` and `"a\nb c\n"` compared EQUAL. Three
-    callsites now pipe through `string collect --no-trim-newlines
-    --allow-empty` to preserve newline positions in a single-element
-    scalar comparison. Function return codes are recovered from
-    `$pipestatus[1]` (was: `$status`, which would have reflected
-    `string collect`'s rc rather than the content generator's).
-    Affects: idempotency skip in install path, sha256 mismatch
-    detection in --verify-static, drift detection in --check.
-  * _run_emit_stream: STDERR/STDOUT line replay uses `printf '%s\n'
-    "$_l"` instead of `echo $_l`. Fish builtin `echo` consumes bare
-    `-n`, `-e`, `-E`, and `-{n,e,E}` combinations as flags when the
-    arg matches exactly. Captured pacman/awk/sudo output containing
-    a line equal to (e.g.) `-n` was previously suppressed entirely.
-    `--noconfirm`, `-Sy`, etc. were never affected (flag-set is
-    strict).
-  * _echo: same flag-injection class — `echo "$argv"` replaced with
-    `printf '%s\n' (string join ' ' -- $argv)`. Empty-argv preserves
-    the prior "empty line on stderr" behavior.
-  * _csm_filter_units, _csp_filter_rdeps: capture-pipe emits switched
-    from `echo "$pkg"` / `echo "$_unit"` to `printf '%s\n'`. Package
-    names cannot begin with `-` per Arch packaging spec and systemd
-    unit names cannot either, so the change is defense-in-depth, not
-    a fix for an observed failure mode.
-  * _write_footer: `$extra_key` is now passed through `_json_str`
-    before concatenation into the JSONL footer. All current callers
-    (`interrupted`, `cleanup_exit`, empty) are JSON-safe literals;
-    the change closes the contract gap for future callers.
-  * _verify_static_syntax: `string trim --` added between the
-    whitespace-collapse `string replace -ra '\s+' ' '` and the
-    `string split ' '` of HOOKS=. Eliminates leading/trailing empty
-    array elements when /etc/mkinitcpio.conf had surrounding
-    whitespace inside the HOOKS=( ... ) parens. Downstream
-    `_vmh_existence_only` already skipped empty hooks, so behavior
-    is unchanged; the change removes a sharp edge.
-  * _progress_init: pinned-progress-bar terminal probe now also
-    bails when `$ZELLIJ` is set. Zellij does not advertise itself
-    via `$TERM` (xterm-256color); scroll-region escape sequences
-    leak into the pane background otherwise.
-  * _content__etc_systemd_system_cpupower-epp.service: inline
-    comment added explaining why `$$cpu` is intentional. systemd
-    unescapes `$$`→`$` in ExecStart per systemd.service(5); bash
-    receives `$cpu`. The previous unannotated `$$cpu` looked like a
-    typo on cursory review.
+  * Content-equality compare via `string collect` (space-vs-newline token-boundary bug, pipestatus[1] recovery); _run_emit_stream / _echo / _csm_filter_units / _csp_filter_rdeps emit via `printf` (echo flag-injection); _write_footer extra_key through _json_str; _verify_static_syntax HOOKS `string trim`; _progress_init bails under $ZELLIJ; cpupower-epp `$$cpu` inline comment.
 
-v6.2.11 - 2026-05-14
+v6.2.11 - 2026-05-13
 --------------------
 
-  * _csp_filter_rdeps: pipestatus gate narrowed from `_pipe_all_ok $_ps`
-    back to `test $_ps[1] -ne 0`. The widened check (introduced v6.2.8)
-    treated `string replace -r` and `string match -rv` non-match returns
-    (rc=1) as pipeline failure, causing PKGS_DEL members with no rdeps
-    or no version operators to be silently skipped on every system with
-    pacman-contrib installed. Only the first stage (timeout/pactree)
-    represents a real probe failure.
-  * dispatch/header: JSONL `event=header` line written before
-    `_init_runtime` so preflight failures inside `_ir_resolve_root_uuid`
-    et al. preserve a parseable log (was: log content without header).
-  * dispatch/log-create: lazy creation in `_log` covers the common
-    path; top-level eager creation removed. Closes the signal window
-    between log-file creation (formerly ~line 169) and signal-handler
-    install (line 469). Failure to set mode 0600 on the fallback
-    `touch`+`chmod` path now hard-fails preflight instead of warn-only.
-  * dispatch/root-check: refusal-to-run-as-root hoisted from
-    post-argparse to immediately after UID parse. Root no longer hits
-    the HOME-normalisation gate first with a misleading error.
-  * lock/perms: `LOCK_DIR` chmod 700 applied immediately after mkdir
-    (was: inherits umask; ~/ry-install 0700 made this academic).
-  * lock/cleanup: `_RY_LOCK_DIR_OWNED` sentinel set immediately after
-    mkdir success so signal-driven cleanup removes the lock dir even
-    when the script is killed mid-`mktemp`/`mv`.
-  * _verify_unit_syntax: `--argument-names unit_path label intended_scope`
-    declaration replaces positional `$argv[1..3]` reads. Matches the
-    convention used by every other helper in the file.
-  * _post_resolved, _post_sysctl: `--argument-names target` added for
-    dispatch-table parity with the other six `_post_*` handlers.
-  * _early_usage_exit: also prints `_ry_show_help` to stderr, matching
-    the argparse-failure path. `--install-file=foo` and friends now
-    show help, not just an `[ERR]` line.
-  * _run/timeout-bypass: `updatedb` and `pkgfile --update` added to
-    the bypass list. Slow filesystems were hitting the 1h cap during
-    post-install DB rebuilds with no rollback to recover.
-  * preflight/TMPDIR: probe adds `test -d "$TMPDIR"` so a set-but-
-    invalid `TMPDIR` falls back to `/tmp` cleanly.
-  * preflight/HOME: getent-passwd pipeline gains `head -n 1` so
-    nsswitch chains returning multiple matches don't concatenate
-    field-6 values into a malformed path.
-  * _vrs_boot_perf: `systemd-analyze` parse anchors on the `= Xs Total`
-    match (last `= Xs` token) and tightens the format probe regex.
-  * _vsc_static_checksum: log marker rewords `expected_sha`/`actual_sha`
-    to `expected_content_sha`/`actual_content_sha` — these are SHA256
-    of the trimmed content used for comparison parity, not of the raw
-    on-disk file.
-  * _cse_collect_units: loop emitting one unit per `echo` replaced with
-    a single `printf '%s\n' $_enable` after the loop.
-  * _dc_erase_globals: adds `_RY_HOLDS_LOCK`, `_RY_LOCK_DIR_OWNED` to
-    the erase list.
-  * style: drop dead global `_RY_TIMEOUT_OK` (set once at preflight,
-    never read).
+  * _csp_filter_rdeps pipestatus gate narrowed to stage 1; JSONL header before _init_runtime; lazy _log creation, eager top-level removed; root-check hoisted after UID parse; LOCK_DIR chmod 700 + _RY_LOCK_DIR_OWNED set post-mkdir; _verify_unit_syntax / _post_* `--argument-names`; _early_usage_exit prints help; updatedb / pkgfile timeout-bypass; TMPDIR / HOME preflight hardening; _vrs_boot_perf parse anchor; _vsc_static_checksum log wording; _cse_collect_units printf; _dc_erase_globals additions; drop dead _RY_TIMEOUT_OK.
 
 v6.2.10 - 2026-05-14
 --------------------
 
-  * _ry_check_deps: `grep` added to required-cmds list (used in
-    9 sites: chk_grep, mkinitcpio array parse, sdboot LINUX_OPTIONS
-    extract, pacman.conf inspect, mkinitcpio hooks-line parse,
-    NM-perms branch, BLS loader-entry probe, blacklist scan).
-  * _verify_static_packages: capture `pacman -Qq` exit status; on
-    failure (db lock, read error) skip per-pkg verification with a
-    single warn instead of false-flagging every PKGS_ADD entry as
-    NOT INSTALLED against an empty installed-list.
-  * _ip_run_and_verify: capture `pacman -T` status; treat rc not in
-    {0, 127} as verification failure (db lock, permission). Was:
-    empty stdout + non-zero rc silently reported "All packages
-    verified installed".
-  * _csp_remove_pkgs/retry: check `pacman -Qq` rc on the per-pkg
-    retry list; abort retry with a warn instead of running
-    `pacman -R` against a stale/empty pkg set.
-  * _idf_match_dst: return single token (`true`/`false`) instead of
-    `true|true`/`true|false`. `_ry_do_install_file` reads it
-    directly; no split needed.
-  * _content/_vss_logind: `HandleSecureAttentionKey` skip on
-    systemd<256 rewritten as explicit `if`-block (was relying on
-    `test … ; or test … ; and continue` precedence).
-  * _vsb_mkinitcpio: `COMPRESSION_OPTIONS` match now per-token,
-    order-independent. Was substring match — reordered
-    `(-T0 -1)` reported MISSING.
-  * _verify_runtime_kparams: dmesg slice extractions (preempt-line,
-    BAR-line, TSC-line) precomputed once into globals instead of
-    three full re-scans of the 5000-line cache.
-  * _pb_rebuild_cascade: dropped dead `_failed_step` local; step
-    label inlined in `_log` calls.
-  * _resolve_systemd_ver and 26 other `--description` strings
-    trimmed to leading clause; parenthetical detail dropped where
-    it duplicated the function body.
-  * _msg_print: color switch hoisted out of the `begin … end` block
-    so the colored stderr write is a straight-line sequence.
-  * _dc_erase_globals: 25 single-name `set --erase` lines collapsed
-    into 8 grouped lines (fish accepts multiple names per call).
-  * top-level: EXIT_* constants grouped (3 lines vs 10) and counter
-    inits in `_ry_verify_static`/`_ry_verify_runtime` joined.
-  * boot-time: `-lt` → `-le` so an exact-target boot-time
-    (e.g. 15.0s against `BOOT_TIME_TARGET=15`) reports "within".
-  * dispatch: `QUIET` toggle simplified from nested `begin` blocks
-    to single conjunction.
-  * style: dedupe two-call `string split` patterns in `_vsb_sdboot`,
-    `_vrs_parent_dirs`, `_vrkm_amdgpu`; drop no-op `printf '%s\n'`
-    around already-split capture in `_ip_probe_sudo_policy`; drop
-    `string split -n` for fixed-format stat output; mkinitcpio
-    snapshot tmpfile prefix unified to `.ry-install.mki-snap`;
-    `string match -r | tail -n 1` → `string match -rg`; nmcli
-    `grep | head | cut` → `string match -rg` capture.
-  * script: 5054 → ~5008 LOC; 214241 → ~212200 B (~−2 KB).
+  * _ry_check_deps adds `grep`; pacman -Qq / -T status capture across verify + remove paths; _idf_match_dst single-token return; logind HandleSecureAttentionKey explicit if-block; _vsb_mkinitcpio per-token COMPRESSION_OPTIONS match; _verify_runtime_kparams dmesg-slice precompute; _pb_rebuild_cascade dead local; --description trims; _msg_print / _dc_erase_globals / EXIT_* / boot-time `-le` / dispatch QUIET style cleanups; 5054 -> ~5008 LOC.
 
 v6.2.9 - 2026-05-13
 -------------------
 
-  * HOME fallback: getent-passwd field-6 extraction uses
-    `awk -F: '{print $6}'` instead of `string split -m6 ':' …[6]`.
-    Robust to passwd entries with `:` in GECOS.
-  * _atomic_write_file: removed unused `_expected_uid` local.
-  * _ry_check_deps: `mv` added to required-cmds (boot-lock install
-    and boot-wipe marker both depend on GNU `mv -T`).
-  * comments: collapsed verbose `--description` strings to single
-    leading clause; ~3.5 KB shaved.
+  * HOME field-6 via `awk -F:` (GECOS-tolerant); _atomic_write_file dead local removed; _ry_check_deps adds `mv`; verbose `--description` strings collapsed to leading clause.
 
 v6.2.8 - 2026-05-13
 -------------------
 
-  * dispatch/log-filename: log rename (`preflight-*.jsonl` →
-    `<mode>-*.jsonl`) now happens before `_init_runtime`.
-  * dispatch/lock-ordering: `_acquire_lock` runs before JSONL
-    header write — no orphan log on lock contention.
-  * _install_preflight: every early-return sets
-    `_PROG_FINALIZED_SKIP=true` so the progress bar renders
-    aborted instead of "1/6 Done".
-  * _msg/_msg_nocount: empty-message short-circuit hoisted from
-    `_msg_print` into the callers; `_log` call also skipped.
-  * _dc_erase_globals: also erases `_RY_PACTREE_MISSING_WARNED`
-    and `_RY_RUN_TIMEOUT_WARNED` for symmetry.
-  * _csp_filter_rdeps: pipestatus gate widened from `_ps[1]` to
-    `_pipe_all_ok $_ps`.
-  * _csp_remove_pkgs: batch-removal success emits visible
-    `_ok "Removed: $argv"`.
-  * _progress_init: TTY-feature probe replaced `tput cup 0 0` with
-    read-only `tput cols` (no cursor side effect).
-  * _ry_do_install: dropped dead `$_boot_rc` argument to
-    `_rdi_summary`.
+  * Log rename + _acquire_lock before JSONL header; _install_preflight early-returns set _PROG_FINALIZED_SKIP; empty-message short-circuit hoisted to callers; _dc_erase_globals symmetry; _csp_filter_rdeps pipestatus widened; _csp_remove_pkgs visible _ok; _progress_init read-only TTY probe; _ry_do_install dead arg dropped.
 
 v6.2.7 - 2026-05-13
 -------------------
 
-  * perms/user-files: user destinations deploy 0600 (was 0644).
-  * _as/sentinel: BUG rc 2 → 250 for non-bool `use_sudo`
-    (avoid colliding with downstream tee/sudo exit-2 paths).
-  * _run/sudo-bypass: effective-cmd detection scans past dash-flags
-    after `sudo` instead of hard-indexing `$argv[3]`.
-  * _run/abort: distinct rc=251 for tmpdir-alloc failure.
-  * _run_emit_stream: stdout label `OUTPUT` → `STDOUT`.
-  * _ry_check_deps: optional-tool absences batched into one warn.
-  * _vmh_order_checks: hoist `string split ':'` to one call/iter.
-  * _far_awk_rewrite: capture awk stderr to its own tmpfile.
-  * _is_system_dst: drop `/root/*` from system-path allowlist.
-  * _dc_sweep_filesystem: `find -xdev` added.
-  * _install_aur_packages: rewrote `not set -q … or …; and return`
-    chain as explicit `if`.
-  * _post_service: hoist basename; user-bus daemon-reload gated by
-    `_has_user_bus_active`.
-  * _if_trim_pacman_cache, _if_nm_restart: explicit `return 0`.
-  * 9 sites: bare `return` → `return 0`.
-  * cat: drop `--` end-of-options on lock-file reads.
-  * HOME-parse: `string split -m6 ':'` for GECOS `:` tolerance.
-  * set/erase: replace `set -e` with `set --erase`.
-  * dispatch: removed two unreachable `_RY_INSTALL_BAILING` checks.
-  * argv-log: dropped dead `_argv_for_log` intermediate.
-  * sourcing-guard: simplified `return 1 2>/dev/null; or exit 1`
-    to direct `exit 1`.
+  * user destinations 0600; _as BUG rc -> 250; _run sudo-bypass dash-flag scan; _run tmpdir-alloc rc 251; STDOUT label; optional-tool absences batched; _vmh_order_checks / _far_awk_rewrite / _is_system_dst / _dc_sweep_filesystem / _install_aur_packages / _post_service tweaks; explicit `return 0` across 11 sites; cat `--` drop on lock reads; `set -e` -> `set --erase`; two unreachable _RY_INSTALL_BAILING checks removed; dead intermediates dropped; sourcing-guard simplified.
 
 v6.2.6 - 2026-05-13
 -------------------
 
-  * data-tables/wrap: top-level array decls wrap one element per
-    continuation line for diff granularity.
+  * Top-level array declarations wrap one element per continuation line for diff granularity.
 
 v6.2.5 - 2026-05-13
 -------------------
 
-  * preflight/boot-files: `_pbs_check_boot_files` snapshots
-    `$pipestatus` into `_ps` before `_pipe_all_ok` for refactor
-    robustness.
-  * mkinitcpio/array-parse: dropped dead `functions -q _warn`
-    guard inside `_ry_mkinitcpio_array`.
-  * output/separators: collapsed ~52 standalone `_echo` blank-line
-    separators in verification + install routines.
+  * _pbs_check_boot_files snapshots `$pipestatus` before _pipe_all_ok; dead `functions -q _warn` guard dropped from _ry_mkinitcpio_array; ~52 standalone _echo blank-line separators collapsed.
 
 v6.2.4 - 2026-05-13
 -------------------
 
-  * run/timeout: `_run` bypasses `RY_RUN_TIMEOUT` for `pacman`,
-    `paru`, `mkinitcpio`, `sdboot-manage`, `paccache` (SIGKILL
-    would skip rollback). Emits `TIMEOUT_BYPASS` log marker.
-  * _run/log-prefix: tmpfile paths under `$TMPDIR` redacted in
-    addition to `/tmp/`.
-  * timeout/probe: `command timeout` invocation refuses to run if
-    `timeout(1)` absent (was a soft warn).
-  * _run_emit_stream: log first 500 lines per stream (was 100);
-    new `STDERR_TRUNCATED`/`STDOUT_TRUNCATED` sentinels.
-  * _msg/levels: `_err_loud` always emits regardless of QUIET;
-    used at preflight bail-points.
-  * _vsb_sdboot: only extract LINUX_OPTIONS when quote-count == 2.
+  * _run timeout-bypass for pacman / paru / mkinitcpio / sdboot-manage / paccache (TIMEOUT_BYPASS marker); tmpfile-path redaction under $TMPDIR; `command timeout` refuses if timeout(1) absent; capture cap 100 -> 500 with _TRUNCATED sentinels; _err_loud always emits regardless of QUIET; _vsb_sdboot quote-count == 2 guard.
 
 v6.2.3 - 2026-05-13
 -------------------
 
-  * _ip_pacman_invoke: `-Syu` retry path uses `-Syyu` only
-    (forced db re-sync); fall-through `-Sy --needed` only when
-    `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1`.
-  * _install_aur_packages: per-pkg retry after batch failure;
-    `_RY_AUR_PARTIAL=true` surfaced in summary.
-  * _ip_scan_pacnew: managed `.pacnew` auto-resolves via
-    re-deploy; `.pacsave` warn-only.
-  * _vrkg_perf_level: scan all `/sys/class/drm/card*/device`,
-    report per-card.
-  * _vrkg_rebar_sam: dmesg cache + lspci fallback.
-  * _vrkg_vram: `mem_info_vram_total` BIOS carveout check.
+  * _ip_pacman_invoke -Syyu retry / -Sy gated on RY_INSTALL_ALLOW_PARTIAL_UPGRADE; _install_aur_packages per-pkg retry; .pacnew auto-resolve at managed paths; _vrkg_perf_level per-card scan; _vrkg_rebar_sam dmesg + lspci fallback; _vrkg_vram BIOS carveout check.
 
 v6.2.2 - 2026-05-13
 -------------------
 
-  * _atomic_write_file: post-write symlink re-check (TOCTOU).
-  * _ry_install_file: skip-probe via `_installed_bytes` compare.
-  * _fstab_atomic_replace: `findmnt --verify` hard-fail.
-  * _vrs_nm_perms: `find -print0 | string split0` + pipestatus.
-  * _vrs_parent_dirs: refuse group/world-writable managed parents.
-  * _vrs_vulkan: `EXPECTED_VULKAN_PKGS` check (DXVK/VKD3D dep).
-  * _post_boot: `RY_INSTALL_FORCE_BOOT_REBUILD` taint-gate parity
-    with `_install_rebuild_boot`.
+  * _atomic_write_file post-write symlink re-check (TOCTOU); _ry_install_file skip-probe via _installed_bytes; _fstab_atomic_replace findmnt --verify hard-fail; _vrs_nm_perms pipestatus; _vrs_parent_dirs refuses group/world-writable parents; _vrs_vulkan EXPECTED_VULKAN_PKGS check; _post_boot force-rebuild taint-gate parity.
 
 v6.2.1 - 2026-05-13
 -------------------
 
-  * _ir_validate_counts: hard-fail when documented array counts
-    drift from declared invariants (`_RY_MANAGED_FILE_COUNT`,
-    `KERNEL_PARAMS`, `MKINITCPIO_HOOKS`, etc.).
-  * _ir_validate_keys: refuse deploy when two managed destinations
-    produce the same `_tmpfile_key` (dispatch collision).
-  * _init_runtime: precompute caches before any sudo write.
-  * _RY_POST_HOOKS: first-match table for `--install-file` hooks.
+  * _ir_validate_counts array-count invariants; _ir_validate_keys _tmpfile_key collision refuse; _init_runtime precomputes caches before any sudo write; _RY_POST_HOOKS first-match table for --install-file hooks.
 
 v6.2.0 - 2026-05-12
 -------------------
 
-  * --install-file: single-file redeploy with per-target post-hook
-    dispatch (boot, service, resolved, logind, nm, sysctl, envd,
-    drirc); paths canonicalised via `realpath -m`.
-  * argparse: `--exclusive` group for mode flags; positional after
-    `--` rejected; empty `--install-file=` rejected.
-  * lock: atomic `mkdir` + pid-file; stale-lock auto-reclaim on
-    dead PID (`kill -0`); `EXIT_LOCK (5)` on contention.
+  * --install-file single-file redeploy with per-target post-hook dispatch (paths canonicalised via `realpath -m`); argparse --exclusive mode group + post-`--` positional reject; atomic mkdir + pid-file lock with dead-PID stale-lock reclaim.
 
 v6.1.0 - 2026-05-12
 -------------------
 
-  * user-bus: replaced systemd-keepalive workaround with inline
-    `XDG_RUNTIME_DIR/bus` + `systemctl --user is-system-running`
-    probes (`_vre_envvars`, `_install_finalize`, `_post_service`).
+  * user-bus detection via inline `XDG_RUNTIME_DIR/bus` + `systemctl --user is-system-running` probes, replacing the systemd-keepalive workaround.
 
 v6.0.0 - 2026-05-12
 -------------------
 
-Reduction release: 5994 → 4985 LOC (-16.8%).
-
-  * preflight: drop GNU-tool sanity probes (timeout retained).
-  * source-mode: drop `_ry_bail_check` + 34 sites,
-    `_ry_namespace_cleanup`; load guard refuses `source` at head.
-  * ntsync: drop per-installed-kernel probes; running-kernel
-    `_ntsync_state` retained.
-  * kernel-params: drop `_validate_kernel_params` (advisory).
-  * initramfs: drop `_ir_validate_timing`.
-  * sudo-keepalive: drop `_*_sudo_keepalive` + 19 sites + interval
-    global. User: long phases may re-prompt — `sudo -v` first.
-  * progress: drop `_progress*` + JSONL `progress` events.
-  * logging/rotation: drop tail-of-script rotation; manual prune
-    via `find ~/ry-install/logs -mtime +30 -delete`.
-  * logging/_log: drop parallel-child PID guard; entries emit
-    `event="log"` with raw `data`.
-  * credentials/redact: drop `_redact_*` (script passes no secrets
-    via argv).
-  * atomic-writes: drop `_awf_validate_parent`,
-    `_awf_parent_changed`, TOCTOU re-stat.
-  * boot/sdboot: drop `_boot_wipe_gate` family;
-    `RY_INSTALL_CONFIRM_BOOT_WIPE` no longer consulted.
-  * lock: drop `.lock-broker` artifact; stale lock now exits
-    `EXIT_LOCK`.
-  * services/mask: drop LVM detection; `lvm2-monitor.service`
-    always masked.
+  * Reduction release 5994 -> 4985 LOC: drop GNU-tool sanity probes, source-mode scaffolding (_ry_bail_check + 34 sites, _ry_namespace_cleanup), ntsync per-kernel probes, _validate_kernel_params, _ir_validate_timing, sudo-keepalive (+ 19 sites), _progress* + JSONL progress events, tail-of-script log rotation, parallel-child PID guard, _redact_*, atomic-write TOCTOU re-stat, boot-wipe gate family, .lock-broker artifact, LVM detection.
 
 v5.0.35 - 2026-05-11: preflight/awk `n==1` → `n==3`; sudo-keepalive `env LC_ALL=C stat` fix; `cond; and _err` → `if`; AUR PGP remediation hint; `findmnt --verify` per-line failures; redactor dash-flag guard.
 v5.0.34 - 2026-05-11: 24 `cond; and _err X; and return N` → explicit `if` (EPIPE short-circuited return); `realpath` soft-dep; pactree 60s ceiling under `RY_RUN_TIMEOUT=0`; `_acquire_lock` failure via `_pre_dispatch_exit`; `_write_footer` sets log-write-fail flag; `_progress_*` monotonic seconds.

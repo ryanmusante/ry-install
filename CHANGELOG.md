@@ -4,68 +4,12 @@ ry-install ChangeLog
 v6.5.7 - 2026-05-14
 -------------------
 
-  * _init_runtime: KERNEL_PARAMS sanity gate
-    `string match -qr -- '[\s"`$;\\]' "$_kp"` had two source
-    backslashes before the `]`. Fish single-quotes collapse `\\` to
-    one `\` (only `\\` and `\'` are escapes inside single quotes), so
-    PCRE received `[\s"`$;\]` — the `\]` parsed as an escaped literal
-    `]` and the class had no terminator. `string match` returned
-    rc=2 for every member, emitting `Regular expression compile
-    error: missing terminating ]` to stderr fifteen times at the top
-    of every install (pre-`_log`, never captured in JSONL). rc=2
-    also reads as "no match" to the surrounding `if`, so the
-    validator silently accepted whitespace / quotes / shell
-    metachars instead of aborting via `_err_loud` +
-    `_pre_dispatch_exit` — dead since introduction. Doubled the
-    trailing source backslashes (`\\` -> `\\\\`) so fish delivers
-    `\\` to PCRE as one literal-backslash escape. Profile params are
-    all clean tokens, so install behaviour is unchanged apart from
-    the fifteen stderr lines disappearing.
-
-  * Other regexes: ran every single-quoted (43) and double-quoted
-    (51) `string match -qr` pattern through PCRE the same way; line
-    758 was the only failure.
-
-  * Net effect: 4996 -> 4996 lines (single-character source delta
-    on line 758). No exit-code or footer-schema impact.
-
-  * README: version badge -> 6.5.7.
+  * _init_runtime KERNEL_PARAMS regex `[\s"`$;\\]` — fish single-quote collapsed `\\` → one `\`, PCRE saw class with no terminator and returned rc=2 for every member (15× `Regular expression compile error` to stderr at install start, pre-`_log`, never in JSONL); rc=2 also read as "no match", so the validator silently accepted shell metachars instead of aborting — dead since introduction; source `\\` → `\\\\`; swept other 93 `string match -qr` patterns clean; profile params clean so observable behaviour unchanged apart from disappearing stderr noise; README badge -> 6.5.7.
 
 v6.5.6 - 2026-05-14
 -------------------
 
-  * _msg: OK/WARN/FAIL increments (`VERIFY_OK`/`VERIFY_FAIL`/
-    `VERIFY_WARN`) were gated behind `if test "$VERIFY_MODE" = true`,
-    so they only moved in `verify-static` / `verify-runtime`.
-    `_write_footer` prints those globals as the footer's
-    `pass`/`fail`/`warn` for every mode — install runs that emitted
-    `WARN:` lines (deferred NM restart, plymouth reverse-dep block,
-    transient AUR retry) still closed with `"pass":0,"fail":0,
-    "warn":0,"gen_fail":0`. Removed the gate; `_msg` now counts in
-    every mode. Verify modes byte-identical (each zeroes counters at
-    entry; `_verify_summary` snapshots before printing via
-    `_msg_nocount`). `--check` footers remain `0,0,0,0` — the
-    `_check_phase_*` helpers use `_log` directly and never enter the
-    `_msg` family.
-
-  * VERIFY_MODE: once the gate above was gone the variable was read
-    nowhere. Removed all five assignments (`_ry_verify_static` x2,
-    `_ry_verify_runtime` x2, `_verify_summary` x1); the
-    `set -g VERIFY_OK 0; …` resets at verify entry are kept.
-
-  * README: jq one-liner `select(.event == "fail")` matched nothing
-    — the script only emits `header` / `log` / `footer`. Replaced
-    with `select(.event == "log" and (.data | test("^(FAIL|ERR):")))`
-    plus a second example for `footer`, and documented the three
-    event types and the footer's `exit_code`/`pass`/`fail`/`warn`/
-    `gen_fail` keys.
-
-  * Net effect: 5003 -> 4996 lines (the 2-line `if`/`end` gate in
-    `_msg` plus five `set -g VERIFY_MODE` writes). Only install +
-    install-file footer JSON changes observably; exit codes
-    unchanged.
-
-  * README: version badge -> 6.5.6.
+  * _msg: dropped `if test "$VERIFY_MODE" = true` gate so OK/WARN/FAIL counters track install + install-file modes (footer `pass`/`fail`/`warn` no longer structurally zero); verify reset+snapshot contract unchanged; `--check` footers stay `0,0,0,0` (no `_msg` calls); removed five dead `set -g VERIFY_MODE` writes; README jq `select(.event == "fail")` (no such event) → `select(.event == "log" and (.data | test("^(FAIL|ERR):")))` plus footer-schema doc; net 5003 → 4996 lines; README badge -> 6.5.6.
 
 v6.5.5 - 2026-05-14
 -------------------
@@ -410,42 +354,3 @@ v6.0.0 - 2026-05-12
 -------------------
 
   * Reduction release 5994 -> 4985 LOC: drop GNU-tool sanity probes, source-mode scaffolding (_ry_bail_check + 34 sites, _ry_namespace_cleanup), ntsync per-kernel probes, _validate_kernel_params, _ir_validate_timing, sudo-keepalive (+ 19 sites), _progress* + JSONL progress events, tail-of-script log rotation, parallel-child PID guard, _redact_*, atomic-write TOCTOU re-stat, boot-wipe gate family, .lock-broker artifact, LVM detection.
-
-v5.0.35 - 2026-05-11: preflight/awk `n==1` → `n==3`; sudo-keepalive `env LC_ALL=C stat` fix; `cond; and _err` → `if`; AUR PGP remediation hint; `findmnt --verify` per-line failures; redactor dash-flag guard.
-v5.0.34 - 2026-05-11: 24 `cond; and _err X; and return N` → explicit `if` (EPIPE short-circuited return); `realpath` soft-dep; pactree 60s ceiling under `RY_RUN_TIMEOUT=0`; `_acquire_lock` failure via `_pre_dispatch_exit`; `_write_footer` sets log-write-fail flag; `_progress_*` monotonic seconds.
-v5.0.33 - 2026-05-11: bootstrap chained-test refactor; KERNEL_PARAMS metachar reject; `df -B`; fstab awk strips `defaults`; install-file dispatch tag whitelist from `_post_<tag>`; sudo-policy `LC_ALL=C`; dmesg cache 5000; cpupower-epp service hardened (ProtectSystem/LockPersonality/MemoryDenyWriteExecute).
-v5.0.32 - 2026-05-12: redact combined-alternation; preflight `mv -T`/`chmod --reference`; awk POSIX probe; `RY_INITRD_WARN_MB`; mkinitcpio post-pacman hook revalidation; lock atomic pid-file; pactree honors `RY_RUN_TIMEOUT=0`.
-v5.0.31 - 2026-05-12: `_MY_UID` regex; `_ir_validate_keys`; `_awf_render_to_tmp` BUG vs tee-fail distinction; `_post_boot` install-file parity.
-v5.0.30 - 2026-05-11: `_RY_SECRET_FLAGS` `$` reject; `_RY_SYSTEMD_VER_TRIED` sentinel; `_run` hard-fails on missing `timeout(1)`; capture cap 100 → 500; mask list pre-filter; cache-trim gated on `SYSTEM_UPGRADED=true`.
-v5.0.29 - 2026-05-11: `$BOOT` via `bootctl -x` (XBOOTLDR); mkinitcpio signal-time revert; byte-exact size verify; `daemon-reload --user` gated on user-bus.
-v5.0.28 - 2026-05-11: `-h`/`--help` to stdout; user-mode perms 0600 → 0644; cloudflare.com secondary HTTPS probe; `_run` redaction; lock `chmod 600` post `mv -Tf`.
-v5.0.27 - 2026-05-11: `_RY_HAS_LVM` memoization; `_vre_thp_ksm` raw sysfs fallback; `--check` unconditionally silent; virtual-iface allowlist.
-v5.0.26 - 2026-05-11: cpupower-epp `$$cpu` escape; `_vrsv_chk_cpupower` reads cpu0 EPP; `NO_COLOR` byte-preserved; keepalive lower bound.
-v5.0.25 - 2026-05-11: defensive `2>/dev/null` on sudo probes; parent inode/uid/mode TOCTOU snapshot; `_mktemp_or_null`; `_RY_CANON_*` precomputed.
-v5.0.24 - 2026-05-11: `_log` JSONL truncation indexing fix; `_is_symlink` rc=2 on sudo lapse; SSH key checks dropped.
-v5.0.23 - 2026-05-11: `_redact_text` greedy multi-token; `_run` line-by-line redact; fstab skips digits-only options; `_ir_validate_counts` map extended.
-v5.0.22 - 2026-05-10: drop `_RY_BOOT_TAINTED` on AUR failure; paru `--removemake`; `_vrk_module_state` split.
-v5.0.21 - 2026-05-10: `_run` redact before log; `_pbs_entry_has_valid_kernel` tab-sep `linux<TAB>`; sudo-policy "not cached" vs "denies ALL".
-v5.0.20 - 2026-05-10: `find -print0 | string split0` pipestatus `[1]`; dash-prefix pkg name reject; `cpupower-epp.service` hardening.
-v5.0.19 - 2026-05-10: `_redact_argv_elements` case-insensitive; `bootctl` advisory; `--skipreview` on batch+per-pkg.
-v5.0.18 - 2026-05-10: cleanup mktemp allowlist; `_verify_static_checksum` branches on `_installed_bytes` rc; runtime blacklist from `module_blacklist=` parse; `grep -m1` probe.
-v5.0.17 - 2026-05-10: `_chk_file` rejects `/boot/*` symlinks.
-v5.0.16 - 2026-05-10: `_ry_content_bytes` preserves dispatcher rc; `_RY_IWD_GATED_DSTS`; refuse empty/non-dir HOME.
-v5.0.15 - 2026-05-10: fstab passthrough whitespace; reject empty `--install-file=`; lock reclaim flock-broker only when PID dead.
-v5.0.14 - 2026-05-10: `_pbs_entry_has_valid_kernel` `realpath -m`; `_bwg_managed_only` auto-ack.
-v5.0.13 - 2026-05-10: keepalive hermetic child via `fish --no-config -c`; `_do_cleanup` `pkill -P` TERM→KILL.
-v5.0.12 - 2026-05-10: pinned scroll-region progress bar (DECSTBM); SIGWINCH re-anchor; skipped under mosh/tmux/screen.
-v5.0.11 - 2026-05-10: pre-deploy `/etc/mkinitcpio.conf` before `pacman -Syu`; byte-exact revert on failure.
-v5.0.10 - 2026-05-10: pactree cascade under `RY_INSTALL_PKG_REMOVE_CASCADE=1`; pacman `-Syyu` retry.
-v5.0.9  - 2026-05-10: services split "enable ok, --now failed" from "enable failed"; NM restart deferred when WiFi is active route.
-v5.0.8  - 2026-05-10: `_resolve_esp`/`_resolve_boot_path` via bootctl; `_preflight_boot_sanity` vmlinuz+initramfs+valid-entry.
-v5.0.7  - 2026-05-10: `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` → `pacman -Sy --needed`; `RY_INSTALL_FORCE_BOOT_REBUILD` bypasses taint gate.
-v5.0.6  - 2026-05-10: `_vre_zram` accepts `static`+active swap; THP defer+madvise + shrink_underused=0 + ksm.run=0.
-v5.0.5  - 2026-05-10: `.pacnew` auto-resolve at managed paths; `_post_sysctl` runs `sysctl --system`.
-v5.0.4  - 2026-05-10: NO_COLOR no-color.org spec; `RY_RUN_TIMEOUT` unified via `math`; `_cleanup` reports actual signal name.
-v5.0.3  - 2026-05-09: `htop` added to PKGS_ADD; `_post_boot` honours wipe gate; `_vsb_cmdline` verifies live root UUID.
-v5.0.2  - 2026-05-09: `_vre_zram` accepts `static`+swap; paru `--cleanafter`.
-v5.0.1  - 2026-05-09: style — trim verbose comments.
-v5.0    - 2026-05-09: stable milestone.
-
-Pre-v5.0 history archived to `ChangeLog-4.x` upstream.

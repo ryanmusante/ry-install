@@ -1,280 +1,91 @@
 ry-install ChangeLog
 ====================
 
+v6.5.10 - 2026-05-15
+--------------------
+
+  * _enum_boot_entries: dropped write-only `_RY_BOOT_PIPE_OK` and `_RY_BOOT_HASH` globals (sha256 fork wasted on a hash no caller reads) plus the now-redundant `env LC_ALL=C sort -z` stage (only `count` consumes the result). _dc_erase_globals trimmed to match.
+
+  * _awf_finalize_mv: removed dead `dst_dir` local (never referenced in body); v6.2.9 missed this one when clearing the sibling local from _atomic_write_file.
+
+  * _verify_unit_syntax: dropped redundant empty `set user_flag` from the `system` scope branch; `set -l user_flag` at function entry already initialises empty. Branch now uses `!= system` to collapse the explicit-no-op arm while preserving the user-path auto-detect gate.
+
+  * Net effect: 4997 -> 4990 lines. No behaviour change in install / verify / check flows; dead-code only. README badge -> 6.5.10.
+
 v6.5.9 - 2026-05-15
 -------------------
 
-  * _verify_unit_syntax: VERIFY_UNIT_WARN/_ERR `_log` calls concatenated a fixed prefix with multi-line `systemd-analyze verify` stderr, triggering fish Cartesian product — N stderr lines produced N argv tokens, repeating the prefix once per line in the JSONL `data` field. Pipe through `string join '; '` before concat; one prefix per event regardless of stderr arity.
+  * _verify_unit_syntax: VERIFY_UNIT_WARN/_ERR `_log` calls piped multi-line `systemd-analyze` stderr through `string join '; '` to suppress fish Cartesian product (N stderr lines → N prefix-duplicated argv tokens).
 
-  * _vrs_installed_file_perms: `perm_vfat_skipped` counter tracked per-file `/boot/*` skips on vfat ESPs but was absent from the finalization summary, asymmetric with the `perm_checked`/`perm_bad` totals. Added trailing `_info` line emitting the aggregate count when non-zero; xfs/ext4 `/boot` unaffected.
+  * _vrs_installed_file_perms: emit aggregate `perm_vfat_skipped` count when non-zero (was tracked per-file but absent from summary).
 
-  * _verify_static_syntax: HOOKS-line extraction ran `grep -E '^[[:space:]]*HOOKS=' | grep -v -- '^#' | head -n 1`; the first regex's `^[[:space:]]*HOOKS=` anchor already structurally excludes comment-prefixed lines. Removed the dead `grep -v` stage.
+  * _verify_static_syntax: removed dead `grep -v '^#'` stage from HOOKS-line extraction; the preceding `^[[:space:]]*HOOKS=` anchor already excludes comment-prefixed lines.
 
-  * Style: normalized four `string trim` call-sites (lines 3499, 4159, 4178, 4233) to `string trim --` for consistency with the 27 other invocations; all four read systemctl/head pipe stdin, no behaviour change. Line count 4996 -> 4997 (+1 from perm_vfat_skipped summary). README badge -> 6.5.9.
+  * Style: normalised four `string trim` call-sites to `string trim --`. 4996 -> 4997 lines. README badge -> 6.5.9.
 
 v6.5.8 - 2026-05-15
 -------------------
 
-  * Top-level dispatcher: two `_warn` calls fired before the JSONL `header` event, both writing a `log` event ahead of the header and violating the schema documented in README ("the `header` event MUST be the first line"). (1) `realpath -m` failure on `--install-file` value (line 4909) ran before the header was written; `_warn` → `_msg` → `_log` auto-created the log file and appended a `WARN` line, then the header was appended *after* it. As a side effect the file was preserved by `_pre_dispatch_log_cleanup` (which gates on `_RY_LOG_WRITTEN`), leaving a one-line stale log on aborted runs. (2) Log-rename failure (line 4931) ran after log-file creation but still before the header, same out-of-order schema breach for the old path. Both rare in practice (realpath -m only fails on unparseable paths; rename only fails on cross-fs `mv` within `$LOG_DIR`, which is single-fs). Replaced both with direct `echo "[WARN] ..." >&2`, matching the existing pre-`_log` convention at lines 122/128/162. No other top-level (script-flow, non-function-body) call to the `_warn`/`_log`/`_msg`/`_info` family before header creation now remains (verified via AST-aware sweep). Line count unchanged at 4996; observable behaviour change is the two warnings now go only to stderr, not JSONL, and stale log files are no longer left behind on a `realpath -m` abort. README badge -> 6.5.8.
+  * Top-level dispatcher: replaced two pre-header `_warn` calls (realpath -m failure on --install-file value; log-rename failure) with direct `echo >&2`. Both wrote a JSONL `log` event ahead of the `header`, violating schema and leaving stale log files on aborted runs.
 
 v6.5.7 - 2026-05-14
 -------------------
 
-  * _init_runtime KERNEL_PARAMS regex `[\s"`$;\\]` — fish single-quote collapsed `\\` → one `\`, PCRE saw class with no terminator and returned rc=2 for every member (15× `Regular expression compile error` to stderr at install start, pre-`_log`, never in JSONL); rc=2 also read as "no match", so the validator silently accepted shell metachars instead of aborting — dead since introduction; source `\\` → `\\\\`; swept other 93 `string match -qr` patterns clean; profile params clean so observable behaviour unchanged apart from disappearing stderr noise; README badge -> 6.5.7.
+  * _init_runtime KERNEL_PARAMS metachar regex: fish single-quote collapsed `\\` → one `\`, PCRE saw class with no terminator and returned rc=2 for every member (silent accept of shell metachars). Source `\\` → `\\\\`; swept other 93 `string match -qr` patterns clean.
 
 v6.5.6 - 2026-05-14
 -------------------
 
-  * _msg: dropped `if test "$VERIFY_MODE" = true` gate so OK/WARN/FAIL counters track install + install-file modes (footer `pass`/`fail`/`warn` no longer structurally zero); verify reset+snapshot contract unchanged; `--check` footers stay `0,0,0,0` (no `_msg` calls); removed five dead `set -g VERIFY_MODE` writes; README jq `select(.event == "fail")` (no such event) → `select(.event == "log" and (.data | test("^(FAIL|ERR):")))` plus footer-schema doc; net 5003 → 4996 lines; README badge -> 6.5.6.
+  * _msg: dropped `VERIFY_MODE` gate so OK/WARN/FAIL counters track install + install-file modes; footer pass/fail/warn no longer structurally zero in those modes. Removed five dead `set -g VERIFY_MODE` writes; README jq snippet updated to match footer schema.
 
 v6.5.5 - 2026-05-14
 -------------------
 
-  * _chk_grep: the comment-strip / pattern-match pipeline ran the
-    second stage as `grep -qwF`. `grep -q` exits on the first match,
-    closing the pipe; when the matched token is not near the end of a
-    large config file the upstream `grep -v '^#'` is still writing and
-    dies with SIGPIPE (exit 141). `_chk_grep` reads that stage-1 code,
-    falls through its `0`/`1` switch arms to `case '*'`, and emits a
-    spurious `cannot read file (stage-1 rc=141 — sudo lapse or read
-    error)` WARN instead of the correct OK. The current managed files
-    are all far smaller than the 64 KiB pipe buffer, so `grep -v`
-    always finishes writing before `grep -q` reads and the bug never
-    triggers in practice — but it is latent for any larger managed
-    destination. The second stage now runs `grep -wF ... >/dev/null`
-    (output discarded, no early exit): `grep -wF` consumes its entire
-    input, so stage 1 never receives SIGPIPE and `$pipestatus[1]` is
-    reliable. `-w`/`-F` semantics and the 0/1/2 exit-status contract
-    are unchanged.
+  * _chk_grep: second stage now runs `grep -wF` instead of `grep -q` (q exits on first match, SIGPIPE-killing the stage-1 comment-strip when matched token is far from EOF on managed files larger than the pipe buffer). Latent only — current managed files all fit within 64 KiB.
 
-  * _far_awk_rewrite: the awk-stderr and tee-stderr capture tmpfiles
-    were created in `(_tmp_dir)` with a `.ry-install.` prefix
-    (`.ry-install.tee-err.XXXXXX`, `.ry-install.awk-err.XXXXXX`). Every
-    other `_tmp_dir` tmpfile uses the `ry-` prefix; the `.ry-install.`
-    prefix is the convention for tmpfiles created *in a managed
-    destination directory* (swept by `_cleanup_tmpfiles`). As a
-    result these two files were not matched by the
-    `_dc_sweep_filesystem` fallback glob set and would survive in
-    `/tmp` if a run were SIGKILL'd between their creation and the
-    tracked-tmpfile cleanup. Renamed to `ry-fstab-tee-err.XXXXXX` /
-    `ry-fstab-awk-err.XXXXXX` and added both globs to
-    `_dc_sweep_filesystem`. They remain tracked + explicitly removed
-    on every normal path; this only closes the killed-mid-run gap.
-
-  * Net effect: 5001 -> 5003 lines. The `_chk_grep` change is the only
-    behavior change (and only observable on managed files larger than
-    one pipe buffer); install / verify-runtime / check flows are
-    otherwise unchanged.
-
-  * README: version badge -> 6.5.5.
+  * _far_awk_rewrite: awk/tee stderr tmpfiles renamed from `.ry-install.{tee,awk}-err.XXXXXX` to `ry-{fstab-tee,fstab-awk}-err.XXXXXX`; added matching globs to `_dc_sweep_filesystem`. Closes the SIGKILL-mid-run leak window.
 
 v6.5.4 - 2026-05-14
 -------------------
 
-  * _check_phase_units: the --check implicit-service loop required
-    NetworkManager-dispatcher.service to be `enabled`, but the unit
-    ships `static` (`WantedBy=` empty) on a clean CachyOS install — so
-    `--check` returned `EXIT_DRIFT` (10) on a correctly-installed
-    system. `--verify-runtime` already accepts `static` for this unit
-    (v6.3); the `--check` path now does too. systemd-resolved.service
-    still requires `enabled`.
+  * _check_phase_units: NetworkManager-dispatcher.service now accepts `static` (ships static on clean CachyOS — `--verify-runtime` already permits it since v6.3); systemd-resolved.service still requires `enabled`.
 
-  * _far_awk_rewrite: the awk-stderr and tee-stderr capture tmpfiles
-    were allocated with a bare `command mktemp`; on mktemp failure the
-    path was an empty string and `2>"$_awk_err"` / `2>"$_tee_err"`
-    became an invalid-redirection error, failing the fstab rewrite.
-    Both now use `_mktemp_or_null`, matching every other tmpfile that
-    feeds a redirect (empty result → `/dev/null` sentinel).
+  * _far_awk_rewrite: awk/tee stderr tmpfiles allocated via `_mktemp_or_null` (bare `command mktemp` returned empty string on alloc failure, turning `2>"$_err"` into an invalid redirection).
 
-  * _dc_sweep_filesystem: dropped the vestigial `ry-ka-err.*` cleanup
-    glob. The sudo-keepalive helpers that produced those tmpfiles were
-    removed in v6.0; no code path creates them.
+  * _dc_sweep_filesystem: dropped vestigial `ry-ka-err.*` glob (sudo-keepalive helpers removed in v6.0). _rdi_run_phases: removed five unreachable `_RY_INSTALL_BAILING` guards.
 
-  * _rdi_run_phases: removed five unreachable
-    `test "$_RY_INSTALL_BAILING" = true; and return 0` guards. The
-    only writer of the sentinel, `_ry_exit`, calls `exit` immediately
-    after setting it, so it can never be observed true mid-function
-    (v6.2.7 removed two of the same class).
-
-  * Net effect: 5003 -> 5001 lines. The `--check` NM-dispatcher fix is
-    the only behavior change; the install / verify-static /
-    verify-runtime flows are unchanged.
-
-  * README: version badge -> 6.5.4; Prerequisites `Tooling` row marks
-    `ip(8)` as recommended rather than required — the script classes
-    it optional (`_ry_check_deps` optional-tool list) and degrades
-    gracefully when it is absent.
+  * README: Prerequisites Tooling row marks `ip(8)` recommended (script classes it optional and degrades gracefully).
 
 v6.5.3 - 2026-05-14
 -------------------
 
-  * dispatch: bundled help/version short flags no longer fall through
-    to a full install. The early-exit option loop near the top of the
-    script matches only exact tokens (`-h`, `--help`, `-v`,
-    `--version`) via `switch`, so a bundled form such as `-hV` or
-    `-hv` skipped it, reached `argparse`, and set `_flag_help` /
-    `_flag_version` — but nothing after `argparse` read those flags,
-    so `MODE` stayed `install` and the script ran an unattended
-    install. `_flag_help` and `_flag_version` are now handled in the
-    post-argparse block: `--help` prints usage and exits 0,
-    `--version` prints the version and exits 0. The early-exit loop is
-    kept as the fast path for exact tokens (it touches no filesystem
-    state). The comment at the `argparse` call is updated to match.
+  * Dispatch: bundled short flags (`-hV`, `-hv`) now route through argparse's `_flag_help` / `_flag_version` post-block (early-exit `switch` only matched exact tokens, so bundled form previously fell through to a full install).
 
-  * dispatch: the v6.5.2 entry below states that `argparse` rejects an
-    empty `--install-file=` value before the mode switch. It does not
-    — `argparse` accepts an empty `=` value and sets the flag to an
-    empty string. The empty-value rejection is the
-    `test -z "$_if_val"` guard in the post-argparse `_flag_install_file`
-    block, which is retained. The v6.5.2 removal of the *duplicate*
-    guard from the `case install-file` dispatch arm remains correct —
-    that guard was genuinely redundant. No code change for this item.
+  * _ry_mkinitcpio_array, _verify_static_syntax, _vrsv_wifi, _is_wifi_active_route: end-of-options `--` added before `grep` patterns and `basename` arguments for consistency with the rest of the script.
 
-  * _ry_mkinitcpio_array, _verify_static_syntax: the three `grep`
-    invocations that read `/etc/mkinitcpio.conf` (the `KEY=` line
-    parse, and the `HOOKS=` line parse with its `grep -v '^#'` filter)
-    now pass `--` before the pattern, matching the end-of-options
-    convention applied to every other `grep` / `rm` / `mv` call in the
-    file. The file argument is a constant and the patterns are
-    `^`-anchored, so this is a consistency normalization, not a fix
-    for an observed failure.
+  * Preflight: TMPDIR that is set but not absolute falls back to /tmp with a `[WARN]` before the writability probe (prevents a dash-prefixed TMPDIR reaching `find "$TMPDIR" ...` as an expression).
 
-  * _vrsv_wifi, _is_wifi_active_route: the two `basename` calls (both
-    fed the output of `dirname -- ...`) now pass `--`. Input is always
-    an absolute `/sys/class/net/...` path, so this is defense-in-depth
-    for the end-of-options convention, not a fix for an observed
-    failure.
-
-  * preflight/TMPDIR: a `TMPDIR` that is set but not an absolute path
-    now falls back to `/tmp` (with a `[WARN]`) before the writability
-    probe. A relative or dash-prefixed `TMPDIR` would otherwise reach
-    the `find "$TMPDIR" ...` cleanup-sweep calls, where `find` parses
-    a dash-prefixed argument as an expression rather than a path. The
-    existing set-but-non-writable fallback is unchanged.
-
-  * Net effect: 4991 -> 5003 lines. No functional change to the
-    install / verify / check flows beyond the help/version dispatch
-    fix.
-
-  * README: version badge -> 6.5.3; removed a stale reference to
-    `~/ry-install/.boot-wipe-acknowledged` (the boot-wipe marker was
-    removed in v6.5.1); the "Other" Known Issues sub-section, the
-    Managed Files "Destinations" sub-section, and the "Data directory
-    & logs" sub-section converted from prose lists to tables for
-    consistency with the other collapsible sections. Added a Contents
-    section linking every top-level heading. Trimmed the Prerequisites
-    fstab paragraph and the Hardware notice to vital information.
-    Removed the metadata parentheticals (param counts, the
-    environment.d path, `gfx1151`) from the collapsible summary labels
-    — the `Kernel cmdline` body now states that `rw` and `root=UUID=`
-    are appended implicitly.
+  * README: removed stale `.boot-wipe-acknowledged` reference; converted three sub-sections to tables; added Contents nav; trimmed Prerequisites/Hardware paragraphs.
 
 v6.5.2 - 2026-05-14
 -------------------
 
-  * Script header: the version string in the line-2 header comment
-    was still `v6.5` — it had not been bumped alongside the `VERSION`
-    global and the README badge in the v6.5.1 release. Header,
-    `VERSION`, and README badge now all read 6.5.2.
+  * Script header version string bumped (was still `v6.5` in line-2 comment despite VERSION global + README badge at 6.5.1).
 
-  * sha256sum: the three bare `sha256sum` invocations
-    (`_verify_static_checksum` expected/actual content-hash compare,
-    `_enum_boot_entries` entry-set hash) now use the `command
-    sha256sum` form, matching the coreutils-invocation convention
-    already applied to every other required coreutils binary in the
-    file. No behavior change — `sha256sum` is in the required-command
-    list and unconditionally present.
-
-  * dispatch: the post-argparse `case install-file` arm carried an
-    unreachable `test -z "$INSTALL_FILE_TARGET"` usage guard.
-    `argparse` rejects an empty `--install-file=` value (and a
-    missing value) before the mode switch is reached, so
-    `INSTALL_FILE_TARGET` is always non-empty at that point. The dead
-    guard is removed and `case install-file` / `case install` are
-    merged — both did nothing but acquire the instance lock. The
-    defensive empty-target guard inside `_ry_do_install_file` itself
-    is retained.
-
-  * _install_preflight: the four uniform
-    `<check>; or begin; set -g _PROG_FINALIZED_SKIP true;
-    return $EXIT_PREFLIGHT; end` blocks (`_ensure_sudo_cached`,
-    `_ip_probe_sudo_policy`, `_ry_check_deps`, `_ry_check_disk_space`)
-    collapsed into a single `for` loop over the check names. Check
-    order, the progress-bar skip sentinel, and the `EXIT_PREFLIGHT`
-    return are unchanged; `_ry_check_network`,
-    `_ry_check_kernel_version`, and `_ry_validate_configs` keep their
-    bespoke handling.
-
-  * _resolve_esp / _resolve_boot_path: the shared `bootctl -p` /
-    `bootctl -x` probe (user invocation, sudo fallback, pipestatus
-    check, fall-through log marker) factored into a `_bootctl_dir`
-    helper taking the flag, log tag, and fall-through note. Both
-    resolvers call it with their respective arguments; resolution
-    order, the `_RY_ESP_TRIED` / `_RY_BOOT_TRIED` caching sentinels,
-    and `/boot` fallback behavior are unchanged.
-
-  * Net effect: 5023 -> 4991 lines. No functional change to the
-    install / verify / check flows beyond the corrected header
-    version string.
-
-  * README: version badge -> 6.5.2.
+  * sha256sum / dispatcher / preflight: bare `sha256sum` calls switched to `command sha256sum`; unreachable empty-`INSTALL_FILE_TARGET` guard removed (argparse rejects pre-dispatch); four uniform preflight check blocks collapsed into a for-loop. `_resolve_esp` / `_resolve_boot_path` factored shared bootctl probe into `_bootctl_dir`.
 
 v6.5.1 - 2026-05-14
 -------------------
 
-  * _resolve_esp / _resolve_boot_path: a hard-fail (bootctl and
-    findmnt both unable to resolve a path, /boot absent) cached an
-    empty string into _RY_ESP_PATH / _RY_BOOT_PATH. The cache guard
-    was `set -q VAR; and test -n "$VAR"`, so an empty cached value
-    read as "not cached" and every subsequent call re-ran the full
-    autodetect — re-emitting the `ESP autodetect failed` warning and
-    re-probing sudo on each invocation. Resolution is now gated on
-    dedicated `_RY_ESP_TRIED` / `_RY_BOOT_TRIED` sentinels (mirroring
-    _resolve_systemd_ver), so an unresolved path is cached and warned
-    about exactly once. Both sentinels are cleared in
-    _dc_erase_globals alongside the existing cache vars.
+  * _resolve_esp / _resolve_boot_path: hard-fail (bootctl + findmnt + /boot all absent) now cached on `_RY_ESP_TRIED` / `_RY_BOOT_TRIED` sentinels; previous `test -n "$VAR"` guard treated cached empty as "not cached" and re-ran autodetect on every call.
 
-  * _run_emit_stream: the captured-stream line total came from
-    `wc -l`, which counts newlines and therefore undercounts by one
-    when a command's stdout/stderr ends without a trailing newline.
-    That could suppress the `*_TRUNCATED` JSONL marker even when the
-    output was actually clipped at the 500-line cap. The count now
-    adds one when the file's last byte is not a newline.
+  * _run_emit_stream: `wc -l` line count now adds one when the captured file's last byte is not a newline (suppressed `*_TRUNCATED` JSONL marker when output clipped at the 500-line cap and lacked trailing newline).
 
-  * _vre_zram: the ZRAM service check hard-coded
-    `systemd-zram-setup@zram0.service`; a zram swap device with any
-    other instance name produced a false `ZRAM service: not found`.
-    The instance name is now derived from the live `swapon` device,
-    falling back to `zram0` only when no zram swap is active.
+  * _vre_zram: ZRAM service check derives instance name from live `swapon` device (was hard-coded `zram0`; any other instance produced false `not found`).
 
-  * _post_service: removed an unreachable `$HOME/*` user-unit branch.
-    SERVICE_DESTINATIONS contains only a system path, so the branch
-    was dead code; the function now handles the system path directly.
+  * _post_service / _csm_retry_individual / _cleanup_other / _ip_pacman_invoke: removed dead `$HOME/*` user-unit branch, redundant per-unit re-filter, redundant `_CLEANUP_DONE` guard, and the vestigial boot-wipe marker family.
 
-  * _csm_retry_individual: dropped a redundant per-unit re-filter.
-    Its only caller passes a list already filtered by
-    _csm_filter_units (masked / not-installed units removed), so the
-    second pass could never skip anything, and re-masking an
-    already-masked unit is idempotent.
-
-  * _cleanup_other: removed a redundant `_CLEANUP_DONE` guard already
-    enforced as the first statement of _cleanup.
-
-  * Removed the vestigial boot-wipe marker: BOOT_WIPE_MARKER, the
-    _if_write_wipe_marker function, its two call sites, and the
-    write-only _RY_BOOT_REBUILD_OK flag. The marker file
-    (~/ry-install/.boot-wipe-acknowledged) was written after a
-    successful entry rebuild but never read by any code path — no
-    behavior depended on it.
-
-  * README: documented that the ext4 fstab rewrite drops the
-    `defaults` token and normalizes atime/commit options. Mount
-    semantics are unchanged; only the literal fstab text differs.
-
-  * Net effect: 5087 -> 5023 lines. No functional change to the
-    install / verify / check flows beyond the fixes above.
-
-  * README: version badge -> 6.5.1.
+  * README: documented that the ext4 fstab rewrite drops `defaults` and normalises atime/commit options; mount semantics unchanged.
 
 v6.5 - 2026-05-14
 -----------------

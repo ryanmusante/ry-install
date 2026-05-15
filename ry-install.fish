@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.5.9 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.5.10 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.5.9"
+set -g VERSION "6.5.10"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -259,9 +259,8 @@ function _verify_unit_syntax --argument-names unit_path label intended_scope --d
     set -l user_flag
     if test "$intended_scope" = user
         set user_flag --user
-    else if test "$intended_scope" = system
-        set user_flag
-    else
+    else if test "$intended_scope" != system
+        # auto-detect only when scope is unspecified; system scope stays empty
         string match -q '*/.config/systemd/user/*' -- "$unit_path"; and set user_flag --user
     end
     set -l _err_out (systemd-analyze $user_flag verify "$unit_path" 2>&1)
@@ -426,7 +425,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _KCONFIG_DATA _KCONFIG_LOADED _RY_SKIP_IWD _RY_ESP_PATH _RY_BOOT_PATH
     set --erase _RY_ESP_TRIED _RY_BOOT_TRIED
     set --erase _RY_SYSTEMD_VER _RY_SYSTEMD_VER_TRIED _RY_DEPLOYED_SERVICES
-    set --erase _RY_BOOT_COUNT _RY_BOOT_HASH _RY_BOOT_PIPE_OK _CPU_PATH
+    set --erase _RY_BOOT_COUNT _CPU_PATH
     set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
     set --erase _PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_PACMAN_REVERT_ATTEMPTED
     set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED
@@ -1997,7 +1996,6 @@ end
 function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --description "chmod + sudo cache check + atomic mv"
     set -l _sp
     test "$use_sudo" = true; and set _sp sudo -n
-    set -l dst_dir (dirname -- "$dst")
     if not _run $_sp chmod -- $perms "$tmpfile"
         _fail "→ $dst (chmod failed)"
         return 1
@@ -4320,13 +4318,8 @@ function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, 
 end
 
 function _enum_boot_entries --argument-names esp --description "Enumerate \$esp/loader/entries/*.conf"
-    set -l _basenames (sudo -n find "$esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | env LC_ALL=C sort -z | string split0)
-    set -l _ps $pipestatus
-    set -g _RY_BOOT_PIPE_OK true
-    _pipe_all_ok $_ps; or set -g _RY_BOOT_PIPE_OK false
+    set -l _basenames (sudo -n find "$esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | string split0)
     set -g _RY_BOOT_COUNT (count $_basenames)
-    set -g _RY_BOOT_HASH ""
-    test "$_RY_BOOT_COUNT" -gt 0; and set -g _RY_BOOT_HASH (printf '%s\0' $_basenames | command sha256sum | string match -rg -- '^(\S+)')
 end
 
 function _pbs_check_boot_files --argument-names boot glob label --description "_preflight_boot_sanity sub: enumerate \$glob in \$boot root"

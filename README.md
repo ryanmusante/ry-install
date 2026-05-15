@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-6.5.5-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-6.5.7-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -365,11 +365,16 @@ are skipped when `iwd` is not installed.
 | `.lock/` | Instance guard (atomic mkdir + pid file) |
 
 No auto-rotation; prune with
-`find ~/ry-install/logs -mtime +30 -delete`. NDJSON schema:
-`{"ts":ISO8601,"event":NAME,"data":STR,...}`.
+`find ~/ry-install/logs -mtime +30 -delete`. Three event types:
+`header` (run metadata), `log` (`{"ts":…,"event":"log","data":STR}`),
+and `footer` (`{…,"exit_code":N,"pass":N,"fail":N,"warn":N,"gen_fail":N}`).
+The `pass`/`fail`/`warn` counters are populated in every mode.
 
 ```fish
-jq 'select(.event == "fail")' ~/ry-install/logs/**/*.jsonl
+# failures/errors are log events whose data is prefixed FAIL:/ERR:
+jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl
+# per-run outcome at a glance
+jq 'select(.event == "footer")' ~/ry-install/logs/**/*.jsonl
 ```
 
 </details>

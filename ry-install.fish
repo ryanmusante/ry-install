@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.5.5 (2026-05-14) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.5.7 (2026-05-14) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.5.5"
+set -g VERSION "6.5.7"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -755,7 +755,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     _ir_validate_keys
     _ir_precompute_caches
     for _kp in $KERNEL_PARAMS
-        if string match -qr -- '[\s"`$;\\]' "$_kp"
+        if string match -qr -- '[\s"`$;\\\\]' "$_kp"
             _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         end
@@ -1131,15 +1131,13 @@ function _msg --argument-names level --description "Format and print a leveled s
     set -l msg (string join -- " " $argv[2..])
     test -z "$msg"; and return 0
     _log "$level: $msg"
-    if test "$VERIFY_MODE" = true
-        switch $level
-            case OK
-                set -g VERIFY_OK (math $VERIFY_OK + 1)
-            case FAIL ERR
-                set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
-            case WARN
-                set -g VERIFY_WARN (math $VERIFY_WARN + 1)
-        end
+    switch $level
+        case OK
+            set -g VERIFY_OK (math $VERIFY_OK + 1)
+        case FAIL ERR
+            set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
+        case WARN
+            set -g VERIFY_WARN (math $VERIFY_WARN + 1)
     end
     _msg_print $argv
 end
@@ -1177,7 +1175,6 @@ function _verify_summary --description "Print verification pass/fail/warn summar
     set -l snap_warn $VERIFY_WARN
     set -l snap_gen_fail 0
     set -q VERIFY_GEN_FAIL; and set snap_gen_fail $VERIFY_GEN_FAIL
-    set -g VERIFY_MODE false
     set -l summary "Results: $snap_ok OK"
     test "$snap_warn" -gt 0; and set summary "$summary, $snap_warn WARN"
     test "$snap_fail" -gt 0; and set summary "$summary, $snap_fail FAIL"
@@ -2517,7 +2514,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
         _err "Sudo required for verification"
         return $EXIT_PREFLIGHT
     end
-    set -g VERIFY_MODE true
     set -g VERIFY_OK 0; set -g VERIFY_FAIL 0; set -g VERIFY_WARN 0; set -g VERIFY_GEN_FAIL 0
     _info "Static verification (config files)..."
     _verify_static_boot
@@ -2530,7 +2526,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
     _log_section "STATIC VERIFICATION END"
     _verify_summary
     set -l ret $status
-    set -g VERIFY_MODE false
     return $ret
 end
 
@@ -3443,7 +3438,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
         _err "Sudo required for verification"
         return $EXIT_PREFLIGHT
     end
-    set -g VERIFY_MODE true
     set -g VERIFY_OK 0; set -g VERIFY_FAIL 0; set -g VERIFY_WARN 0; set -g VERIFY_GEN_FAIL 0
     _info "Runtime verification (live system state)..."
     _verify_runtime_kparams
@@ -3453,7 +3447,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _log_section "RUNTIME VERIFICATION END"
     _verify_summary
     set -l ret $status
-    set -g VERIFY_MODE false
     return $ret
 end
 

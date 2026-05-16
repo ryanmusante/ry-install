@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-6.5.18-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -184,8 +184,8 @@ Default: `pacman -Syu --needed` per Arch's
 
 | Action | Count |
 |---|---|
-| Install (`PKGS_ADD`) | 13 |
-| Remove (`PKGS_DEL`) | 7 |
+| Install (`PKGS_ADD`) | 14 |
+| Remove (`PKGS_DEL`) | 8 |
 | AUR (`AUR_PKGS`) | 2 |
 
 > [!CAUTION]
@@ -367,6 +367,8 @@ then `mkinitcpio -P && sdboot-manage gen` and reboot.
 | `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1`; inspect first with `pactree -ru <pkg>` |
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
 | `/etc/.ry-install.*` orphan | `sudo rm /etc/.ry-install.* /boot/.ry-install.* /var/.ry-install.*`, then re-run |
+| `set-wireless-regdom` exits 1 every boot | `echo 'WIRELESS_REGDOM="<CC>"' \| sudo tee /etc/conf.d/wireless-regdom` (e.g., `US`, `GB`, `DE`) |
+| PipeWire `nice-level Permission denied` | `sudo gpasswd -a $USER realtime` then re-login (requires `realtime-privileges`, added by `PKGS_ADD`) |
 
 ## References
 

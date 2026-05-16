@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.5.18 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.0 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.5.18"
+set -g VERSION "7.0"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -623,12 +623,14 @@ set -g SYSCTL_VALUES \
     "fs.protected_fifos=2" \
     "fs.protected_regular=2" \
     "vm.compaction_proactiveness=0"
-set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors
-set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme octopi micro cachyos-micro-settings btop
+set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges
+set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme octopi micro cachyos-micro-settings btop bolt
 set -g AUR_PKGS mkinitcpio-firmware mt76-mt7925-dkms
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
 set -g MASK \
     ananicy-cpp.service \
+    avahi-daemon.service \
+    avahi-daemon.socket \
     power-profiles-daemon.service \
     lvm2-monitor.service \
     NetworkManager-wait-online.service \
@@ -715,10 +717,10 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         LOGIND_IGNORE_KEYS:9 \
         ENV_VARS:10 \
         SYSCTL_VALUES:16 \
-        PKGS_ADD:13 \
-        PKGS_DEL:7 \
+        PKGS_ADD:14 \
+        PKGS_DEL:8 \
         AUR_PKGS:2 \
-        MASK:10 \
+        MASK:12 \
         EXPECTED_VULKAN_PKGS:3 \
         EXPECTED_SERVICES:3 \
         _RY_PKG_MANAGED_SERVICES:1
@@ -817,7 +819,7 @@ function _content__etc_iwd_main.conf
     printf '%s\n' "" "[Network]" "NameResolvingService=$IWD_DNS_SERVICE"
 end
 function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf
-    printf '%s\n' "# NetworkManager configuration - iwd backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "wifi.iwd.autoconnect=false" "" "[logging]" "level=$NM_LOG_LEVEL"
+    printf '%s\n' "# NetworkManager configuration - iwd backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"
 end
 function _content_HOME_.config_environment.d_10-environment.conf
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (COSMIC, Flatpak, D-Bus activated apps)"
@@ -2320,7 +2322,6 @@ function _vss_nm --argument-names skip_iwd --description "_verify_static_system 
     _chk_file /etc/NetworkManager/conf.d/99-cachyos-nm.conf; or return 0
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.backend=$NM_WIFI_BACKEND" "wifi backend $NM_WIFI_BACKEND"
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.powersave=$NM_WIFI_POWERSAVE" "WiFi powersave $NM_WIFI_POWERSAVE"
-    _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.iwd.autoconnect=false" "iwd autoconnect disabled"
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "level=$NM_LOG_LEVEL" "logging level $NM_LOG_LEVEL"
 end
 function _vss_drirc_sysctl --description "_verify_static_system sub: drirc XML tag + sysctl drop-in key=value check"
@@ -2962,6 +2963,17 @@ function _vrk_clocksource --description "Runtime kparam check: clocksource (with
     _echo
 end
 
+function _vrk_audio_state --description "Surface ACP ASoC machine-driver gap on Strix Halo (HDMI/USB audio unaffected)"
+    test (count $_RY_DMESG_CACHE) -eq 0; and return 0
+    # acp_asoc_acp70 fires once per boot on Strix Halo until linux ships a matching ASoC machine driver
+    set -l _hit (printf '%s\n' $_RY_DMESG_CACHE | command grep -m1 -E 'acp_asoc_acp7[0-9]\.[0-9]+: warning: No matching ASoC machine driver found')
+    test -z "$_hit"; and return 0
+    _echo "── ACP audio state ──"
+    _info "  ACP ASoC machine driver missing (Strix Halo) — internal analog audio via ACP not routed"
+    _info "    HDMI audio (snd_hda_intel) and USB audio paths are unaffected"
+    _log "ACP_NO_MACHINE_DRIVER: $_hit"
+end
+
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource"
     set -g _RY_DMESG_CACHE
     set -g _RY_DMESG_PREEMPT
@@ -2993,6 +3005,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     _vrk_gpu_state
     _vrk_cpu_state
     _vrk_module_state
+    _vrk_audio_state
     _vrk_clocksource
     set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
 end
@@ -3585,6 +3598,24 @@ function _ip_probe_sudo_policy --description "Probe sudo -l: reject incompatible
     return 0
 end
 
+function _ry_check_wireless_regdom --description "Warn if WIRELESS_REGDOM unset — set-wireless-regdom will fail every boot otherwise"
+    # cfg80211 udev rule pipes /etc/conf.d/wireless-regdom through set-wireless-regdom on boot.
+    set -l _conf /etc/conf.d/wireless-regdom
+    if not test -f $_conf
+        _warn "  Wireless regulatory domain unset (no $_conf) — cfg80211 will use restrictive defaults"
+        _info "    Fix: echo 'WIRELESS_REGDOM=\"<CC>\"' | sudo tee $_conf  (e.g., US, GB, DE)"
+        _log "REGDOM_MISSING: $_conf absent"
+        return 0
+    end
+    if not command grep -qE '^[[:space:]]*WIRELESS_REGDOM=' $_conf 2>/dev/null
+        _warn "  $_conf present but WIRELESS_REGDOM= not set — set-wireless-regdom will exit 1"
+        _info "    Fix: echo 'WIRELESS_REGDOM=\"<CC>\"' | sudo tee $_conf"
+        _log "REGDOM_UNSET: $_conf has no WIRELESS_REGDOM key"
+        return 0
+    end
+    return 0
+end
+
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
     for _chk in _ensure_sudo_cached _ip_probe_sudo_policy _ry_check_deps _ry_check_disk_space
@@ -3598,6 +3629,7 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
     not _ry_check_kernel_version; and set -g INSTALL_HAD_ERRORS true
+    _ry_check_wireless_regdom
     _echo
     if not _ry_validate_configs
         _err "Configuration validation failed - aborting"
@@ -4282,7 +4314,27 @@ function _csm_retry_individual --description "_configure_services_mask sub. Per-
     return $_ret
 end
 
+function _csm_disable_ufw_rules --description "Flush ufw rules before mask so kernel-level iptables/nftables rules don't persist post-mask"
+    # `systemctl mask ufw.service` does not flush live netfilter rules; `ufw disable` does.
+    contains -- ufw.service $MASK; or return 0
+    command -q ufw; or return 0
+    set -l _state (systemctl is-active ufw.service 2>/dev/null | string trim --)
+    if test "$_state" != active
+        _log "UFW_RULE_FLUSH_SKIP: ufw.service is-active=$_state"
+        return 0
+    end
+    if _run sudo -n ufw --force disable
+        _ok "ufw disabled — netfilter rules flushed prior to mask"
+        _log "UFW_RULE_FLUSH_OK"
+    else
+        _warn "ufw --force disable failed — netfilter rules may persist until reboot"
+        _log "UFW_RULE_FLUSH_FAIL"
+    end
+    return 0
+end
+
 function _configure_services_mask --description "Apply MASK list; batch-mask with per-unit retry"
+    _csm_disable_ufw_rules
     set -l safe_mask (_mask_list_effective)
     test (count $safe_mask) -eq 0; and return 0
     set -l _to_mask (_csm_filter_units $safe_mask)
@@ -4699,6 +4751,14 @@ function _rdi_summary --description "Print final install summary"
     _info "Manual steps required:"
     _info "  1. Run 'rehash' or start new shell (updates command paths)"
     _info "  2. REBOOT to apply kernel cmdline and module changes"
+    # realtime-privileges grants RT scheduling via the 'realtime' group; group changes need re-login.
+    if command -q pacman; and pacman -Qq realtime-privileges >/dev/null 2>&1
+        set -l _uname (getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}')
+        if test -n "$_uname"; and not id -nG -- "$_uname" 2>/dev/null | string match -qr '\brealtime\b'
+            _info "  3. Add user to realtime group for PipeWire RT scheduling:"
+            _info "       sudo gpasswd -a $_uname realtime  (then log out and back in)"
+        end
+    end
     _info "Post-reboot verification: ./ry-install.fish --verify-static; and ./ry-install.fish --verify-runtime"
     if test "$INSTALL_HAD_ERRORS" = true
         _warn "Done (with warnings - see above)"

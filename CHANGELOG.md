@@ -1,6 +1,11 @@
 ry-install ChangeLog
 ====================
 
+v7.0.8 - 2026-05-16
+-------------------
+
+  * README: all collapsible sections (`<details>`) now use tables for mobile-friendly rendering. `Destinations` (was bulleted list) → 13-row Scope/Path table; `Logs` (was prose) → 8-row Property/Value table; `Packages` cautions (were alert blockquotes) → 4-row Caveat/Detail table; `Scope` (was in/out paragraphs) → 2-row Status/Items table; `Install Flow` (was code block + bullets) → 6-row #/Phase/Action table. Profile-highlights `Setting` column renamed `Key setting`. Anchor link `Safety--reliability` corrected. Script: version sync only (no behaviour change). 5060 lines, no script changes besides VERSION + header.
+
 v7.0.7 - 2026-05-16
 -------------------
 

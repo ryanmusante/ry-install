@@ -145,7 +145,7 @@ Preflight → Packages → Configuration → Services → Boot → Finalize
 - **Preflight:** validate prerequisites, acquire lock, validate runtime
 - **Packages:** `pacman -Syu --needed`; AUR via paru
 - **Configuration:** deploy 13 embedded config files (atomic)
-- **Services:** `daemon-reload`; enable; mask 10 desktop/power units
+- **Services:** `daemon-reload`; enable; mask 12 desktop/power units
 - **Boot:** rebuild initramfs, update systemd-boot entries
 - **Finalize:** cache cleanup, NM restart (deferred on WiFi)
 

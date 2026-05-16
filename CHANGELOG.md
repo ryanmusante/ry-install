@@ -1,6 +1,11 @@
 ry-install ChangeLog
 ====================
 
+v6.5.16 - 2026-05-15
+--------------------
+
+  * `_msg_print` argv mutation removed (`_msg_start` index variable replaces `set argv $argv[2..]`; semantics preserved). Single-line `# why` comments added above `_ry_exit` (pre-bootstrap callability), `_json_str` hex loop (NUL omission rationale), `_ry_get_file_content` and `_idf_dispatch_hook` (dynamic dispatch sites). Header v6.5.15 -> v6.5.16; 5075 -> 5081 lines. No behaviour change.
+
 v6.5.15 - 2026-05-16
 --------------------
 

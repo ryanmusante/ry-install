@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.5.15 (2026-05-16) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.5.16 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.5.15"
+set -g VERSION "6.5.16"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -66,6 +66,7 @@ set --erase _early_arg
 function _ry_erase_handlers --description "Erase signal/exit handler functions"
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit _cleanup_other _progress_on_winch 2>/dev/null
 end
+# Callable pre-bootstrap: _log/_write_footer/_do_cleanup invocations are `functions -q`-guarded.
 function _ry_exit --argument-names code --description "Set bail sentinel and exit"
     test -z "$code"; and set code 0
     if set -q _RY_INSTALL_BAILING; and test "$_RY_INSTALL_BAILING" = true
@@ -877,6 +878,7 @@ end
 function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"
     set -l fn "_content_"(_tmpfile_key "$dst")
     functions -q $fn; or return $EXIT_GEN_NOFN
+    # Dynamic dispatch: function name built from destination path via _tmpfile_key.
     $fn
 end
 
@@ -1075,6 +1077,7 @@ function _json_str --description "Escape a string for safe JSON embedding (RFC 8
     set s (string replace -a -- \t '\\t' "$s" | string collect)
     set s (string replace -a -- \b '\\b' "$s" | string collect)
     set s (string replace -a -- \f '\\f' "$s" | string collect)
+    # 00 (NUL) omitted: fish strings cannot carry NUL — truncated at variable boundary, never reaches this function.
     for _hex in 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f
         set s (string replace -a -- (printf '\x'$_hex) '\u00'$_hex "$s" | string collect)
     end
@@ -1111,12 +1114,14 @@ end
 
 function _msg_print --argument-names level --description "Internal: leveled message to stderr"
     set -l _force false
+    # _msg_start indexes msg-part-1 in argv; --force shifts past the sentinel without mutating argv.
+    set -l _msg_start 2
     if test "$level" = --force
         set _force true
         set level $argv[2]
-        set argv $argv[2..]
+        set _msg_start 3
     end
-    set -l msg (string join -- " " $argv[2..])
+    set -l msg (string join -- " " $argv[$_msg_start..])
     test -z "$msg"; and return 0
     if test "$_force" = false
         test "$QUIET" = false; or return 0
@@ -4759,6 +4764,7 @@ function _idf_dispatch_hook --argument-names target tag --description "Dispatch 
         _err "Internal: unknown post-hook tag '$tag' (target=$target)"
         return 1
     end
+    # Dynamic dispatch: handler resolved from _RY_POST_HOOKS table tag.
     _post_$tag "$target"
 end
 

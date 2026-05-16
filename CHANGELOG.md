@@ -1,6 +1,11 @@
 ry-install ChangeLog
 ====================
 
+v6.5.17 - 2026-05-15
+--------------------
+
+  * README tables trimmed to vital rows: Prerequisites 8 -> 4 rows (script-enforced gates folded to prose); Hardware 6 -> 3 rows (CPU/GPU/RAM only); Safety & Reliability 15 -> 8 rows; Strix Halo Issues 5 -> 3 rows; Troubleshooting 13 -> 7 rows. Kernel-cmdline / boot-loader / env-vars / masked-services tables collapsed into a single "Profile highlights" matrix (script remains source of truth). Packages table drops per-pkg listing (counts only). Destinations table reformatted as scoped lists. Exit-codes signal rows collapsed to one. Header v6.5.16 -> v6.5.17. No script behaviour change.
+
 v6.5.16 - 2026-05-15
 --------------------
 

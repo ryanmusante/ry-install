@@ -1,12 +1,13 @@
 #!/usr/bin/env fish
-# ry-install v7.0.8 (2026-05-16) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.0.12 (2026-05-16) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.0.8"
+set -g VERSION "7.0.12"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+# EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g _MY_UID (command id -u)
@@ -23,7 +24,7 @@ function _ry_show_help --description "Display usage information and available su
         "Usage: "(status filename)" [OPTIONS]" \
         "INSTALLATION:" \
         "  (no args)         Default mode: unattended install" \
-        "  -V, --verbose     Show install/check output (silent by default)" \
+        "  -V, --verbose     Show install output (silent by default; --check is always silent)" \
         "VERIFICATION:" \
         "  --verify-static   Check config files match expected content" \
         "  --verify-runtime  Check live system state (run after reboot)" \
@@ -144,6 +145,10 @@ if not command -q stat
     echo "[ERR] GNU coreutils stat(1) required (used for mode/owner verification)" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
+if not command -q date
+    echo "[ERR] GNU coreutils date(1) required (used for timestamps in DATE_LABEL, TIMESTAMP, JSONL ts fields)" >&2
+    _ry_exit $EXIT_PREFLIGHT
+end
 set -g _RY_SLEEP_FRAC 1
 command sleep 0.05 2>/dev/null; and set -g _RY_SLEEP_FRAC 0.1
 set -g DATE_LABEL (command date '+%Y-%m-%d')
@@ -189,6 +194,7 @@ set -g _SYS_TMP_DIRS
 set -g _USR_TMP_DIRS
 set -g _PROFILE_USES_WIFI_BACKEND false
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
+set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 set -g NM_RESTART_DELAY 3
 set -g _PROG_BAR_WIDTH 40
 set -g KVER (uname -r)
@@ -872,7 +878,7 @@ function _ry_get_file_content --argument-names dst --description "Generate expec
     # Dynamic dispatch: function name built from destination path via _tmpfile_key.
     $fn
 end
-function _ensure_sudo_cached --description "Cache sudo credential once before parallel forking"
+function _ensure_sudo_cached --description "Cache sudo credential once before repeated sudo -n calls"
     if not command -q sudo
         _err "Sudo credential cache failed: sudo not found"
         return 1
@@ -1065,7 +1071,7 @@ function _json_str --description "Escape a string for safe JSON embedding (RFC 8
     end
     printf '%s' "$s" | string collect --allow-empty
 end
-function _log_section --argument-names name --description "Emit a section-event JSONL marker"
+function _log_section --argument-names name --description "Emit a section boundary marker line via _log"
     _log "=== $name ==="
 end
 function _log --description "Append a timestamped JSONL line to LOG_FILE"
@@ -1568,7 +1574,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     set -l missing
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
         timeout mktemp awk grep curl getent sudo head df mv \
-        tee stat find cp chmod chown sort install cat rm
+        tee stat find cp chmod chown sort install cat rm date
         command -q $cmd; or set -a missing $cmd
     end
     if test (count $missing) -gt 0
@@ -2637,12 +2643,15 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
     return 0
 end
 function _ry_do_check --description "Silent idempotency probe"
+    _log_section "CHECK START"
     if not command -q sudo; or not sudo -n true 2>/dev/null
         _log "CHECK_PREFLIGHT: sudo not cached"
+        _log_section "CHECK END"
         return $EXIT_PREFLIGHT
     end
     if not command -q systemctl
         _log "CHECK_PREFLIGHT: systemctl not available"
+        _log_section "CHECK END"
         return $EXIT_PREFLIGHT
     end
     set -g _RY_CHECK_DRIFT 0
@@ -2652,28 +2661,36 @@ function _ry_do_check --description "Silent idempotency probe"
     set _rc $status
     if test $_rc -ne 0
         set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
+        _log_section "CHECK END"
         return $_rc
     end
     _check_phase_cmdline
     set _rc $status
     if test $_rc -ne 0
         set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
+        _log_section "CHECK END"
         return $_rc
     end
     _check_phase_units
     set _rc $status
     if test $_rc -ne 0
         set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
+        _log_section "CHECK END"
         return $_rc
     end
     set -l _drift $_RY_CHECK_DRIFT
     set -l _checked $_RY_CHECK_FILES_CHECKED
     set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
-    test $_drift -ne 0; and return $EXIT_DRIFT
+    if test $_drift -ne 0
+        _log_section "CHECK END"
+        return $EXIT_DRIFT
+    end
     if test $_checked -eq 0
         _log "CHECK_PREFLIGHT: no files could be checked (all skipped by _should_skip_iwd)"
+        _log_section "CHECK END"
         return $EXIT_PREFLIGHT
     end
+    _log_section "CHECK END"
     return $EXIT_OK
 end
 function _gather_cpu_state --description "Collect CPU frequency path for representative core"
@@ -2852,7 +2869,9 @@ function _vrkm_blacklist --description "_vrk_module_state sub: module_blacklist=
         return 0
     end
     for mod in $_bl_mods
-        if command env LC_ALL=C lsmod 2>/dev/null | command grep -q -- "^$mod "
+        # lsmod normalizes hyphens to underscores in module names
+        set -l _mod_lsmod (string replace -a -- '-' '_' "$mod")
+        if command env LC_ALL=C lsmod 2>/dev/null | command grep -q -- "^$_mod_lsmod "
             _fail "  $mod: LOADED (should be blacklisted)"
         else
             _ok "  $mod: not loaded"
@@ -3210,10 +3229,10 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
     set -l _fstab_malformed
     if test -r /etc/fstab
         set _fstab_ext4 (command awk "$_RY_AWK_EXT4_FILTER" /etc/fstab 2>/dev/null)
-        set _fstab_malformed (command awk '!/^[ \t]*#/ && NF < 4 && $0 ~ /ext4/ { print $0 }' /etc/fstab 2>/dev/null)
+        set _fstab_malformed (command awk "$_RY_AWK_EXT4_MALFORMED_FILTER" /etc/fstab 2>/dev/null)
     else if sudo -n test -r /etc/fstab 2>/dev/null
         set _fstab_ext4 (sudo -n awk "$_RY_AWK_EXT4_FILTER" /etc/fstab 2>/dev/null)
-        set _fstab_malformed (sudo -n awk '!/^[ \t]*#/ && NF < 4 && $0 ~ /ext4/ { print $0 }' /etc/fstab 2>/dev/null)
+        set _fstab_malformed (sudo -n awk "$_RY_AWK_EXT4_MALFORMED_FILTER" /etc/fstab 2>/dev/null)
     else
         _warn "  /etc/fstab not readable (even via sudo) — skipping mount-option check"
         return 0

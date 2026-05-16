@@ -1,6 +1,26 @@
 ry-install ChangeLog
 ====================
 
+v7.0.12 - 2026-05-16
+--------------------
+
+  * Pre-bootstrap `command -q date` check added alongside the existing `timeout(1)` / `stat(1)` checks at L141-150 — `date(1)` is consumed at L150-151 (`DATE_LABEL`, `TIMESTAMP`) BEFORE `_ry_check_deps` runs, so missing `date` previously produced silently malformed log paths and empty `ts` fields in JSONL for `--check` / `--install-file` modes (which skip `_ry_check_deps`); fails loud with `[ERR] GNU coreutils date(1) required (used for timestamps in DATE_LABEL, TIMESTAMP, JSONL ts fields)` → exit `$EXIT_PREFLIGHT`. Help text `-V, --verbose` clarified: was "Show install/check output (silent by default)" → now "Show install output (silent by default; --check is always silent)" — `_ry_do_check` uses `_log` only (no `_msg`/`_ok`/`_fail`/`_echo`) so `QUIET=false` had no visible effect when paired with `--check`. 5075 -> 5079 lines.
+
+v7.0.11 - 2026-05-16
+--------------------
+
+  * `_ry_check_deps` required-cmds list adds `date(1)` (was implicitly assumed; 8 callsites depend on it for ISO 8601 / epoch timestamps in DATE_LABEL, TIMESTAMP, JSONL `ts` fields, and `_progress_now` monotonic clock) — missing `date` would have silently produced malformed `{"ts":""…}` JSONL records; `_log_section` description corrected to match implementation ("Emit a section boundary marker line via _log" — body emits a normal `event:"log"` line with `data:"=== name ==="`, not a distinct event type); `_ry_do_check` gains `_log_section "CHECK START"` / `"CHECK END"` boundary markers at all 8 return paths for parity with the 4 other modes' START/END pairs. 5064 -> 5075 lines.
+
+v7.0.10 - 2026-05-16
+--------------------
+
+  * `_vre_fstab` malformed-line filter hoisted to `_RY_AWK_EXT4_MALFORMED_FILTER` global (parallel to existing `_RY_AWK_EXT4_FILTER`); regex tightened from substring `ext4` to whitespace/comma-bounded match — avoids false-positive `[WARN] ext4-like entry with too few fields` on malformed lines whose tokens contain `ext4` as a substring only (e.g. `LABEL=ext4_root`, `UUID=… /mnt my_ext4`). Comma-adjacent `ext4,defaults` still matches. 5063 -> 5064 lines.
+
+v7.0.9 - 2026-05-16
+-------------------
+
+  * `_vrkm_blacklist` translates hyphens→underscores before `lsmod` compare (lsmod normalizes kernel module names with `_`; defensive for any future `module_blacklist=` entry containing `-`); `EXIT_GEN_NOFN/NOUUID/SYSCTL` gain inline rationale comment marking them as internal sub-codes (`_awf_render_to_tmp` converts to `EXIT_FAIL`; never the process exit code); `_ensure_sudo_cached` description reworded ("repeated sudo -n calls" — no parallel forking occurs in this codebase). 5060 -> 5063 lines.
+
 v7.0.8 - 2026-05-16
 -------------------
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.0.2 (2026-05-16) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.0.4 (2026-05-16) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.0.2"
+set -g VERSION "7.0.4"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -244,7 +244,7 @@ function _resolve_systemd_ver --description "Cache systemd major version into _R
     return 0
 end
 function _unit_state --argument-names unit --description "Return Load/Active/UnitFile state as 3-element list"
-    systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null | string split \n
+    systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null
 end
 function _unit_state_padded --argument-names unit --description "Return _unit_state values"
     set -l _v (_unit_state "$unit")
@@ -1145,12 +1145,12 @@ function _msg_nocount --argument-names level --description "Like _msg but skips 
 end
 
 # Invariant: _ok/_fail/_warn/_info/_err always return 0 (callers chain via `; and`/`; or`).
-function _ok; _msg OK $argv; end
-function _fail; _msg FAIL $argv; end
-function _fail_silent; _msg_nocount FAIL $argv; end
-function _info; _msg INFO $argv; end
-function _warn; _msg WARN $argv; end
-function _err; _msg ERR $argv; end
+function _ok; _msg OK $argv; return 0; end
+function _fail; _msg FAIL $argv; return 0; end
+function _fail_silent; _msg_nocount FAIL $argv; return 0; end
+function _info; _msg INFO $argv; return 0; end
+function _warn; _msg WARN $argv; return 0; end
+function _err; _msg ERR $argv; return 0; end
 function _err_loud --description "Fatal-preflight err: always emits [ERR] to stderr regardless of QUIET"
     set -l msg (string join -- " " $argv)
     _log "ERR: $msg"
@@ -1568,6 +1568,10 @@ function _ry_check_deps --description "Verify required packages are installed"
     end
     if test (count $missing) -gt 0
         _err "missing: $missing"
+        return 1
+    end
+    if not env LC_ALL=C df --output=avail / >/dev/null 2>&1
+        _err "df(1) lacks --output flag — GNU coreutils required (busybox/uutils not supported)"
         return 1
     end
     _resolve_systemd_ver
@@ -2141,7 +2145,7 @@ function _vsb_mkinitcpio --description "_verify_static_boot sub: /etc/mkinitcpio
     _chk_file /etc/mkinitcpio.conf; or return 0
     set -l modules_line (_ry_mkinitcpio_array MODULES)
     _echo "  Config: $modules_line"
-    string match -q '*amdgpu*' -- "$modules_line"
+    string match -qr -- '\bamdgpu\b' "$modules_line"
     _chk_present $status amdgpu MISSING "present (early KMS)"
     for mod in $MKINITCPIO_MODULES
         test "$mod" = amdgpu; and continue
@@ -3518,7 +3522,7 @@ function _ip_probe_sudo_policy --description "Probe sudo -l: reject incompatible
     _rm_tmp "$_sudo_l_err" false
     return 0
 end
-function _ry_check_wireless_regdom --description "Warn if WIRELESS_REGDOM unset — set-wireless-regdom will fail every boot otherwise"
+function _ry_check_wireless_regdom --description "Warn if WIRELESS_REGDOM unset or invalid — set-wireless-regdom skips iw reg set otherwise, leaving cfg80211 in world domain"
     # cfg80211 udev rule pipes /etc/conf.d/wireless-regdom through set-wireless-regdom on boot.
     set -l _conf /etc/conf.d/wireless-regdom
     if not test -f $_conf
@@ -3527,10 +3531,10 @@ function _ry_check_wireless_regdom --description "Warn if WIRELESS_REGDOM unset 
         _log "REGDOM_MISSING: $_conf absent"
         return 0
     end
-    if not command grep -qE '^[[:space:]]*WIRELESS_REGDOM=' $_conf 2>/dev/null
-        _warn "  $_conf present but WIRELESS_REGDOM= not set — set-wireless-regdom will exit 1"
+    if not command grep -qE '^[[:space:]]*WIRELESS_REGDOM="?[A-Z]{2}"?[[:space:]]*$' $_conf 2>/dev/null
+        _warn "  $_conf present but WIRELESS_REGDOM not set to a valid 2-letter ISO 3166-1 code — set-wireless-regdom will skip iw reg set"
         _info "    Fix: echo 'WIRELESS_REGDOM=\"<CC>\"' | sudo tee $_conf"
-        _log "REGDOM_UNSET: $_conf has no WIRELESS_REGDOM key"
+        _log "REGDOM_INVALID: $_conf missing or empty WIRELESS_REGDOM value"
         return 0
     end
     return 0
@@ -4688,11 +4692,12 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
+# First-match-wins; most-specific paths first, `*.service` catchall last.
 set -g _RY_POST_HOOKS "/boot/*|boot" "/efi/*|boot" "/etc/mkinitcpio.conf|boot" "/etc/sdboot-manage.conf|boot" "/etc/kernel/cmdline|boot" "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/iwd/main.conf|nm" "*/NetworkManager/conf.d/*|nm" "*/sysctl.d/*|sysctl" "*/environment.d/*|envd" "/etc/drirc|drirc" "*.service|service"
 
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"
     for _entry in $_RY_POST_HOOKS
-        set -l _parts (string split '|' -- $_entry)
+        set -l _parts (string split -r -m1 '|' -- $_entry)
         if string match -q "$_parts[1]" -- "$target"
             echo "$_parts[2]"
             return 0

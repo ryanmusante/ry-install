@@ -1,20 +1,15 @@
 ry-install ChangeLog
 ====================
 
-v7.0.2 - 2026-05-16
+v7.0.4 - 2026-05-16
 -------------------
 
-  * `ENV_VARS`: split deprecated `RADV_PERFTEST=transfer_queue` into `RADV_EXPERIMENTAL=transfer_queue` (Mesa ≥ 26.1.0; older Mesa emits a deprecation warning on the legacy key per docs.mesa3d.org/envvars.html). `RADV_PERFTEST` now `sam,nircache`. `_ir_validate_counts`: ENV_VARS invariant 10 -> 11. Header v7.0.1 -> v7.0.2; 5035 -> 5036 lines.
-
-v7.0.1 - 2026-05-16
--------------------
-
-  * 117 inter-function blank lines collapsed (style harmonised — 122 fn-boundaries were already tight pre-edit; the loose 117 now match). Non-blank content sha256 unchanged; `fish --no-execute` clean; `--help`/`--version`/`--check` dispatch verified. Header v7.0 -> v7.0.1; 5152 -> 5035 lines.
+  * `_ry_check_wireless_regdom` regex tightened to require a non-empty 2-letter ISO 3166-1 code (`'^[[:space:]]*WIRELESS_REGDOM="?[A-Z]{2}"?[[:space:]]*$'`) — `WIRELESS_REGDOM=""` and bare `WIRELESS_REGDOM=` now warn alongside the missing-key case (upstream `/usr/bin/set-wireless-regdom` silently skips `iw reg set` when the value is empty, leaving cfg80211 in the restrictive `world` domain). `_post_hook_for_target` switches `string split '|'` -> `string split -r -m1 '|'` (right-anchored, single split) — pattern column may now contain literal `|` without mistokenisation. `_unit_state` drops the redundant terminal `| string split \n` pipe — `systemctl show --value` emits one property per line, command-substitution already line-splits, and no caller of `_unit_state`/`_unit_state_padded` consumes the function's return code. Header v7.0.3 -> v7.0.4; line count unchanged (5041).
 
 v7.0 - 2026-05-15
 -----------------
 
-  * NM 1.56.0 compat: drop `wifi.iwd.autoconnect=false` from `99-cachyos-nm.conf` (key rejected as unknown; iwd's `EnableNetworkConfiguration=false` already prevents autoconnect). MASK adds `avahi-daemon.{service,socket}` (10 -> 12) — systemd-resolved becomes sole mDNS responder. New `_csm_disable_ufw_rules` flushes netfilter pre-mask. PKGS_ADD +`realtime-privileges` (13 -> 14, `_rdi_summary` surfaces `gpasswd -a <user> realtime` hint). PKGS_DEL +`bolt` (7 -> 8, Strix Halo USB4 IDs unrecognised by boltd). New `_ry_check_wireless_regdom` and `_vrk_audio_state` non-blocking probes (regdom config, ACP70 ASoC gap). `_ir_validate_counts` invariants synced. Header v6.5.18 -> v7.0; 5092 -> 5152 lines.
+  * NM 1.56.0 compat: drop `wifi.iwd.autoconnect=false` from `99-cachyos-nm.conf` (key rejected as unknown; iwd's `EnableNetworkConfiguration=false` already prevents autoconnect). MASK adds `avahi-daemon.{service,socket}` (10 -> 12) — systemd-resolved becomes sole mDNS responder. New `_csm_disable_ufw_rules` flushes netfilter pre-mask (`systemctl mask ufw.service` does not flush live iptables/nftables rules; `ufw --force disable` does). PKGS_ADD +`realtime-privileges` (13 -> 14, `_rdi_summary` surfaces `gpasswd -a <user> realtime` hint for PipeWire RT scheduling). PKGS_DEL +`bolt` (7 -> 8, Strix Halo USB4 IDs unrecognised by boltd). New `_ry_check_wireless_regdom` and `_vrk_audio_state` non-blocking probes (regdom config, ACP70 ASoC machine-driver gap). `ENV_VARS`: split deprecated `RADV_PERFTEST=transfer_queue` into `RADV_EXPERIMENTAL=transfer_queue` (Mesa ≥ 26.1.0; older Mesa emits a deprecation warning per docs.mesa3d.org/envvars.html); `RADV_PERFTEST` retained as `sam,nircache`. `_ok`/`_fail`/`_fail_silent`/`_info`/`_warn`/`_err` one-liners gain explicit `; return 0` — rc-0 invariant no longer load-bearing for the `; and X; or Y` if-else idioms. `_vsb_mkinitcpio` amdgpu probe `*amdgpu*` -> `\bamdgpu\b` (word-boundary, consistency with `_chk_token_in`; eliminates `noamdgpu`/`amdgpu2` substring false-positive). `_ry_check_deps` adds upfront `env LC_ALL=C df --output=avail / >/dev/null 2>&1` probe — surfaces non-GNU coreutils (busybox/uutils) at preflight with a clear error rather than mid-run. `_RY_POST_HOOKS` first-match-wins ordering documented inline (`*.service` catchall last). 117 inter-function blank lines collapsed (style harmonised — 122 fn-boundaries already tight pre-edit). `_ir_validate_counts` invariants synced. Header v6.5.18 -> v7.0; 5092 -> 5041 lines.
 
 v6.5.18 - 2026-05-15
 --------------------

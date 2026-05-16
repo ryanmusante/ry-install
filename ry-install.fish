@@ -79,7 +79,7 @@ function _ry_exit --argument-names code --description "Set bail sentinel and exi
     if not set -q _RY_HEADER_WRITTEN; and not set -q _RY_LOG_WRITTEN
         set -q LOG_FILE; and command rm -f -- "$LOG_FILE" 2>/dev/null
         set -q LOG_DIR; and command rmdir -- "$LOG_DIR" 2>/dev/null
-        set -q LOG_DIR; and command rmdir -- (dirname -- "$LOG_DIR") 2>/dev/null
+        set -q LOG_DIR; and command rmdir -- (command dirname -- "$LOG_DIR") 2>/dev/null
         set -q HOME; and command rmdir -- "$HOME/ry-install" 2>/dev/null
     else
         functions -q _write_footer; and _write_footer "$code" bail
@@ -268,7 +268,7 @@ function _verify_unit_syntax --argument-names unit_path label intended_scope --d
     else if test "$intended_scope" != system
         string match -q '*/.config/systemd/user/*' -- "$unit_path"; and set user_flag --user
     end
-    set -l _err_out (systemd-analyze $user_flag verify "$unit_path" 2>&1)
+    set -l _err_out (command systemd-analyze $user_flag verify "$unit_path" 2>&1)
     if test $status -eq 0
         test -n "$_err_out"; and _log "VERIFY_UNIT_WARN: ($label) "(printf '%s\n' $_err_out | command head -n 5 | string join '; ')
         _ok "  $label: syntax OK"
@@ -342,7 +342,7 @@ end
 function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale-lock reclaim)"
     set -g LOCK_DIR "$_RY_HOME_DIR/.lock"
     set -g LOCK_FILE "$LOCK_DIR/pid"
-    command mkdir -p -- (dirname -- "$LOCK_DIR") 2>/dev/null
+    command mkdir -p -- (command dirname -- "$LOCK_DIR") 2>/dev/null
     _acquire_lock_fresh
     set -l _fresh_rc $status
     test $_fresh_rc -eq 0; and return 0
@@ -663,12 +663,12 @@ end
 function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend / canonical-dst caches"
     set -g _SYS_TMP_DIRS
     for _d in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
-        set -l _dir (dirname -- "$_d")
+        set -l _dir (command dirname -- "$_d")
         contains -- "$_dir" $_SYS_TMP_DIRS; or set -a _SYS_TMP_DIRS "$_dir"
     end
     set -g _USR_TMP_DIRS
     for _d in $USER_DESTINATIONS
-        set -l _dir (dirname -- "$_d")
+        set -l _dir (command dirname -- "$_d")
         contains -- "$_dir" $_USR_TMP_DIRS; or set -a _USR_TMP_DIRS "$_dir"
     end
     set -g _PROFILE_USES_WIFI_BACKEND false
@@ -1799,7 +1799,7 @@ function _verify_unit_content --argument-names dst --description "Verify systemd
         _fail "  $dst: failed to write unit tmpfile for verification"
         return 1
     end
-    _verify_unit_syntax "$tmp" (basename -- "$dst") "$_intended_scope"
+    _verify_unit_syntax "$tmp" (command basename -- "$dst") "$_intended_scope"
     set -l rc $status
     _rm_tmp "$tmp" false
     return $rc
@@ -2007,7 +2007,7 @@ function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --descript
     return 0
 end
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write. rc=0 ok; rc=1 any failure"
-    set -l dst_dir (dirname -- "$dst")
+    set -l dst_dir (command dirname -- "$dst")
     set -l tmpfile (_as $use_sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
     _track_tmpfile "$tmpfile"
     if test -z "$tmpfile"
@@ -2041,7 +2041,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
         _warn "Skipping $dst: iwd package not installed"
         return 0
     end
-    set -l dir (dirname -- "$dst")
+    set -l dir (command dirname -- "$dst")
     if test "$use_sudo" = true
         if not _run sudo -n mkdir -p -- "$dir"
             _fail "Cannot create directory: $dir"
@@ -2446,7 +2446,7 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
     end
     _echo "── systemd units ──"
     for unit in $SERVICE_DESTINATIONS
-        test -f "$unit"; and _verify_unit_syntax "$unit" (basename -- "$unit")
+        test -f "$unit"; and _verify_unit_syntax "$unit" (command basename -- "$unit")
     end
 end
 function _verify_static_checksum --description "Verify embedded content hash matches installed file SHA256"
@@ -3039,7 +3039,7 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state
     set -l wlan_iface ""
     for iface in /sys/class/net/*/wireless
         if test -d "$iface"
-            set wlan_iface (basename -- (dirname -- "$iface"))
+            set wlan_iface (command basename -- (command dirname -- "$iface"))
             break
         end
     end
@@ -3346,7 +3346,7 @@ function _vrs_parent_dirs --description "Runtime session check: parent dirs of m
     set -l dir_checked 0
     set -l checked_dirs
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
-        set -l dir (dirname -- "$dst")
+        set -l dir (command dirname -- "$dst")
         contains -- "$dir" $checked_dirs; and continue
         set -a checked_dirs "$dir"
         if sudo -n test -d "$dir" 2>/dev/null
@@ -3405,7 +3405,7 @@ function _vrs_boot_perf --description "Runtime session check: systemd-analyze bo
         _warn "  systemd-analyze not available"
         return 0
     end
-    set -l boot_time (systemd-analyze 2>/dev/null | command head -n 1)
+    set -l boot_time (command systemd-analyze 2>/dev/null | command head -n 1)
     _info "  $boot_time"
     _log "BOOT_TIME_CHECK: parsing systemd-analyze output"
     if not string match -qr -- '= [0-9.]+s\b' "$boot_time"
@@ -3428,7 +3428,7 @@ function _vrs_boot_perf --description "Runtime session check: systemd-analyze bo
         end
     end
     _echo "  Slowest services:"
-    set -l blame (systemd-analyze blame 2>/dev/null | command head -n 3)
+    set -l blame (command systemd-analyze blame 2>/dev/null | command head -n 3)
     for line in $blame
         _info "    $line"
     end
@@ -3482,7 +3482,7 @@ function _is_wifi_active_route --description "True if default route exits via wi
         case 'tun*' 'tap*' 'wg*' 'ppp*' 'gre*' 'gretap*' 'sit*' 'ip6tnl*' 'ipip*' 'br[0-9]*' 'br-*' 'bridge*' 'macvlan*' 'macvtap*' 'vlan*' 'bond*' 'geneve*' 'vxlan*' 'nlmon*'
             for _phy in /sys/class/net/*/wireless
                 test -d "$_phy"; or continue
-                set -l _name (basename -- (dirname -- "$_phy"))
+                set -l _name (command basename -- (command dirname -- "$_phy"))
                 set -l _state (command cat -- "/sys/class/net/$_name/operstate" 2>/dev/null | string trim --)
                 test "$_state" = up; and return 0
             end
@@ -3909,7 +3909,7 @@ function _install_system_files --description "Deploy all embedded config + servi
     set -l _svc_failed false
     for dst in $SERVICE_DESTINATIONS
         if _ry_install_file "$dst" true
-            set -a _RY_DEPLOYED_SERVICES (basename -- "$dst")
+            set -a _RY_DEPLOYED_SERVICES (command basename -- "$dst")
         else
             set _svc_failed true
         end
@@ -4829,7 +4829,7 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
 end
 function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit"
     set -l _rc 0
-    set -l _bn (basename -- "$target")
+    set -l _bn (command basename -- "$target")
     _run sudo -n systemctl daemon-reload; or _warn "Systemctl daemon-reload failed"
     if not _run sudo -n systemctl enable --now -- "$_bn"
         _warn "Failed to enable $_bn (system)"
@@ -4897,7 +4897,7 @@ function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/d
     set -q _RY_LOG_WRITTEN; and test "$_RY_LOG_WRITTEN" = true; and set _preserve true
     test "$_preserve" = false; and command rm -f -- "$LOG_FILE" 2>/dev/null
     command rmdir -- "$LOG_DIR" 2>/dev/null
-    command rmdir -- (dirname -- "$LOG_DIR") 2>/dev/null
+    command rmdir -- (command dirname -- "$LOG_DIR") 2>/dev/null
     command rmdir -- "$_RY_HOME_DIR" 2>/dev/null
 end
 function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: log/dir cleanup, then exit"

@@ -24,7 +24,7 @@
 - [Install Flow](#install-flow)
 - [Configuration](#configuration)
 - [Managed Files](#managed-files)
-- [Safety & Reliability](#safety--reliability)
+- [Safety & Reliability](#safety-reliability)
 - [Uninstall](#uninstall)
 - [Known Issues](#known-issues)
 - [Troubleshooting](#troubleshooting)

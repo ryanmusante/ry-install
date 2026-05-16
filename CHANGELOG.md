@@ -1,6 +1,16 @@
 ry-install ChangeLog
 ====================
 
+v6.5.15 - 2026-05-16
+--------------------
+
+  * Single-line `# why` comments added above three regression-prone sites: `_installed_bytes` bare `printf '%s' "$_bytes"` (warns that adding a terminal `| string collect` would break symmetry with `_ry_content_bytes`); `_vs_read_symmetry_selftest` 12-byte canonical payload (documents the 2 × 5 chars + 2 newlines structure that exercises the historical asymmetry); `_aur_verify_mt7925` paired `pacman -Qi` / `modinfo` probes (documents the two distinct DKMS failure modes — db entry vs built artefact). `_vs_read_symmetry_selftest` `--description` reworded for clarity. Header v6.5.14 -> v6.5.15; 5072 -> 5075 lines. No behaviour change.
+
+v6.5.14 - 2026-05-16
+--------------------
+
+  * `_installed_bytes` terminal `printf '%s' "$_bytes" | string collect --no-trim-newlines --allow-empty` collapsed to bare `printf '%s' "$_bytes"`; outer command-sub `| string collect --no-trim-newlines --allow-empty` at `_verify_static_checksum`, `_check_phase_files`, and `_ry_install_file` no longer injects a phantom `\n` (output now byte-symmetric with `_ry_content_bytes`). Side effects fixed: `--verify-static` no longer reports MISMATCH (actual_bytes = expected_bytes + 1) for every managed config on clean state; `_atomic_write_file` skip-if-unchanged optimisation correctly elides bit-identical rewrites (`/etc/mkinitcpio.conf` second-pass deploy emits `(unchanged)` instead of a duplicate write — the first-pass write before `pacman -Syu` remains by design); `_check_phase_files` no longer reports false drift (exit 10) on clean state. New `/etc/tmpfiles.d/99-cachyos-thp.conf` managed dest (12 -> 13; `_RY_MANAGED_FILE_COUNT` bumped) writes `0` to `transparent_hugepage/shrink_underused`; `_configure_services_thp_apply` runs `systemd-tmpfiles --create` post-deploy so the value lands without reboot. `_aur_verify_mt7925` post-paru: when `mt76-mt7925-dkms` is in `AUR_PKGS`, asserts `pacman -Qi mt76-mt7925-dkms` AND `modinfo mt7925e` resolve; WARN-only on missing module. `_vs_read_symmetry_selftest` `--verify-static` preflight: writes 12-byte tmpfile, reads via `_installed_bytes`, aborts with `VERIFY_LOGIC_BUG` log on asymmetry. README managed-files count 12 -> 13 + THP row; UMA Frame Buffer BIOS prerequisite note; plymouth-kcm cascade flag clarification. Header v6.5.13 -> v6.5.14; 5005 -> 5072 lines.
+
 v6.5.13 - 2026-05-15
 --------------------
 

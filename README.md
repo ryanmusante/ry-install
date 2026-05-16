@@ -1,12 +1,12 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-6.5.13-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-6.5.15-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 ![license](https://img.shields.io/badge/license-MIT-green.svg)
 
-> Self-contained CachyOS configuration manager. Single Fish script, 12
+> Self-contained CachyOS configuration manager. Single Fish script, 13
 > embedded configs, no required external dependencies (paru required
 > for AUR: `mkinitcpio-firmware`, `mt76-mt7925-dkms`).
 
@@ -119,6 +119,14 @@ Check [CachyOS](https://wiki.cachyos.org) and
 > gfx1151 cmdline are profile-specific and break initramfs on other
 > silicon. Override at your own risk:
 > `RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish`.
+
+> [!IMPORTANT]
+> BIOS prerequisite: set **UMA Frame Buffer Size** to `Auto` or
+> `512 MB` (not a fixed 16 GB carveout). The Strix Halo APU uses UMA
+> with shared system memory; a large fixed carveout wastes RAM that
+> would otherwise be available to the OS and is dynamically backed
+> when the GPU needs it. `--verify-runtime` warns when
+> `mem_info_vram_total` exceeds 512 MB.
 
 Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 [Mesa gfx1151](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151).
@@ -278,7 +286,7 @@ accepts either).
 
 ## Managed Files
 
-12 files deployed via atomic writes (tmp → symlink check → chmod → `mv -T`).
+13 files deployed via atomic writes (tmp → symlink check → chmod → `mv -T`).
 
 <details>
 <summary><b>Destinations</b></summary>
@@ -295,11 +303,15 @@ accepts either).
 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
 | System | `/etc/drirc` |
 | System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
+| System | `/etc/tmpfiles.d/99-cachyos-thp.conf` |
 | Service | `/etc/systemd/system/cpupower-epp.service` |
 | User | `~/.config/environment.d/10-environment.conf` |
 
 System files deploy `0644`, the user file `0600`. The two `iwd` rows
-are skipped when `iwd` is not installed.
+are skipped when `iwd` is not installed. `99-cachyos-thp.conf` writes
+`0` to `/sys/kernel/mm/transparent_hugepage/shrink_underused` on every
+boot via `systemd-tmpfiles-setup.service`; applied immediately during
+install via `systemd-tmpfiles --create`.
 
 </details>
 
@@ -450,7 +462,7 @@ then `mkinitcpio -P && sdboot-manage gen` and reboot.
 | Stale lock | Auto-reclaimed if PID dead; manual `rm -rf ~/ry-install/.lock/` only if `pgrep -af ry-install` empty |
 | AUR pkg missing | `command -q paru; or sudo pacman -S --needed paru`, then re-run |
 | Sudo cache expired | `sudo -v; and ./ry-install.fish` |
-| `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1`; inspect `pactree -ru <pkg>` |
+| `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1`; inspect `pactree -ru <pkg>`. Plasma desktops carry `plymouth-kcm` as a reverse dep of `plymouth`; cascade is required to remove the bootsplash stack |
 | `Enabled but failed to start: <unit>` | `systemctl status <unit>; journalctl -u <unit> -b` |
 | `/etc/.ry-install.*` orphan | `sudo rm /etc/.ry-install.* /boot/.ry-install.* /var/.ry-install.*`, then re-run |
 

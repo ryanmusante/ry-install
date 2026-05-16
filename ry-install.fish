@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.5.13 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.5.15 (2026-05-16) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.5.13"
+set -g VERSION "6.5.15"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -12,7 +12,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g _MY_UID (id -u)
 set -g PROFILE_NAME gtr9_pro
 set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
-set -g _RY_MANAGED_FILE_COUNT 12
+set -g _RY_MANAGED_FILE_COUNT 13
 
 function _ry_show_help --description "Display usage information and available subcommands"
     printf '%s\n' \
@@ -539,7 +539,8 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/iwd/main.conf" \
     "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     /etc/drirc \
-    "/etc/sysctl.d/99-cachyos-sysctl.conf"
+    "/etc/sysctl.d/99-cachyos-sysctl.conf" \
+    "/etc/tmpfiles.d/99-cachyos-thp.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -g SERVICE_DESTINATIONS "/etc/systemd/system/cpupower-epp.service"
 set -g _RY_IWD_GATED_DSTS "/etc/iwd/main.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf"
@@ -869,6 +870,10 @@ function _content__etc_sysctl.d_99-cachyos-sysctl.conf
         return $EXIT_GEN_SYSCTL
     end
 end
+function _content__etc_tmpfiles.d_99-cachyos-thp.conf
+    # systemd-tmpfiles writes runtime sysfs tunables on every boot
+    printf '%s\n' "# THP shrink_underused: keep huge pages intact on high-RAM workstations (128 GB profile)" "w /sys/kernel/mm/transparent_hugepage/shrink_underused - - - - 0"
+end
 function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"
     set -l fn "_content_"(_tmpfile_key "$dst")
     functions -q $fn; or return $EXIT_GEN_NOFN
@@ -1036,7 +1041,8 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
         set -l _ps $pipestatus
         _pipe_all_ok $_ps; or return 1
     end
-    printf '%s' "$_bytes" | string collect --no-trim-newlines --allow-empty
+    # bare printf — adding `| string collect --no-trim-newlines --allow-empty` causes outer command-sub at callers to inject a phantom \n (breaks symmetry with _ry_content_bytes)
+    printf '%s' "$_bytes"
     return 0
 end
 
@@ -2520,6 +2526,28 @@ function _verify_static_checksum --description "Verify embedded content hash mat
     _echo
 end
 
+function _vs_read_symmetry_selftest --description "Preflight: detect read-symmetry regressions in _installed_bytes (asymmetric trailing newline)"
+    set -l _tmp (_mktemp_or_null -p (_tmp_dir) ry-readsym.XXXXXX)
+    if test -z "$_tmp"; or test "$_tmp" = /dev/null
+        _log "READ_SYMMETRY_SKIP: mktemp returned no path"
+        return 0
+    end
+    _track_tmpfile "$_tmp"
+    # canonical 12-byte payload: 2 lines of 5 chars + 2 trailing newlines — exercises the exact path that historically dropped/added a \n
+    printf '%s\n' line1 line2 > "$_tmp"
+    set -l _disk_bytes (command stat -c %s -- "$_tmp" 2>/dev/null)
+    set -l _read (_installed_bytes "$_tmp" | string collect --no-trim-newlines --allow-empty)
+    set -l _read_len (string length -- "$_read")
+    _rm_tmp "$_tmp" false
+    if test "$_disk_bytes" = 12; and test "$_read_len" = 12
+        _log "READ_SYMMETRY_OK: disk=12 read=12"
+        return 0
+    end
+    _fail "  read-symmetry self-test: disk=$_disk_bytes read=$_read_len (expected both=12) — verifier logic is broken; results UNRELIABLE"
+    _log "VERIFY_LOGIC_BUG: read-symmetry self-test failed disk=$_disk_bytes read=$_read_len fish="(fish --version 2>/dev/null | string match -rg 'version (\S+)')
+    return 1
+end
+
 function _ry_verify_static --description "Verify installed configs match embedded checksums"
     _log_section "STATIC VERIFICATION START"
     _ensure_sudo_cached; or begin
@@ -2527,6 +2555,11 @@ function _ry_verify_static --description "Verify installed configs match embedde
         return $EXIT_PREFLIGHT
     end
     set -g VERIFY_OK 0; set -g VERIFY_FAIL 0; set -g VERIFY_WARN 0; set -g VERIFY_GEN_FAIL 0
+    if not _vs_read_symmetry_selftest
+        _log_section "STATIC VERIFICATION END"
+        _verify_summary
+        return 1
+    end
     _info "Static verification (config files)..."
     _verify_static_boot
     _verify_static_system
@@ -3844,6 +3877,35 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
         _info "  Alternatively, install the affected package manually: paru -S <pkg> (without --skipreview)."
         return 1
     end
+    _aur_verify_mt7925
+    return 0
+end
+
+function _aur_verify_mt7925 --description "Post-AUR check: mt76-mt7925-dkms pkg installed AND mt7925e module built (paru rc=0 alone is not definitive)"
+    contains -- mt76-mt7925-dkms $AUR_PKGS; or return 0
+    if not command -q pacman
+        _log "MT7925_VERIFY_SKIP: pacman not found"
+        return 0
+    end
+    if not command pacman -Qi mt76-mt7925-dkms >/dev/null 2>&1
+        _warn "  mt76-mt7925-dkms: paru reported success but pacman -Qi cannot find the package — DKMS build likely failed"
+        _warn "  Inspect: paru -S mt76-mt7925-dkms (no --skipreview), then dkms status"
+        _log "MT7925_VERIFY_PKG_MISSING: pacman -Qi mt76-mt7925-dkms returned non-zero"
+        return 0
+    end
+    if not command -q modinfo
+        _log "MT7925_VERIFY_SKIP: modinfo not found"
+        return 0
+    end
+    # pacman -Qi confirms the pkg entered the db; modinfo confirms the DKMS build produced a loadable .ko — the two probe distinct failure modes
+    if command modinfo mt7925e >/dev/null 2>&1
+        _ok "  mt76-mt7925-dkms verified (mt7925e modinfo found)"
+        _log "MT7925_VERIFY_OK: pkg installed and mt7925e module discoverable"
+    else
+        _warn "  mt76-mt7925-dkms installed but mt7925e module not found — DKMS build silently failed"
+        _warn "  Inspect: dkms status mt76-mt7925; sudo dkms install mt76-mt7925/(pacman -Q mt76-mt7925-dkms | awk '{print \$2}')"
+        _log "MT7925_VERIFY_MODULE_MISSING: pkg installed but modinfo mt7925e failed"
+    end
     return 0
 end
 
@@ -4071,6 +4133,13 @@ function _configure_services_resolved_restart --description "Restart systemd-res
     return 0
 end
 
+function _configure_services_thp_apply --description "Apply THP tmpfiles.d entry immediately (avoid reboot dependency for verify-runtime)"
+    test -f /etc/tmpfiles.d/99-cachyos-thp.conf; or return 0
+    command -q systemd-tmpfiles; or return 0
+    not _run sudo -n systemd-tmpfiles --create -- /etc/tmpfiles.d/99-cachyos-thp.conf; and _warn "systemd-tmpfiles --create for 99-cachyos-thp.conf failed (will apply on next boot)"
+    return 0
+end
+
 function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-line: \$pkg + installed rdeps (cascade=1) or nothing (blocked)"
     if not command -q pactree
         if not set -q _RY_PACTREE_MISSING_WARNED
@@ -4270,6 +4339,7 @@ function _install_configure_services --description "Enable, start, and configure
     _info "Post-installation tasks..."
     set -l _ret 0
     _configure_services_resolved_restart
+    _configure_services_thp_apply
     _configure_services_pkg_remove
     _configure_services_mask; or set _ret 1
     _configure_services_enable; or set _ret 1

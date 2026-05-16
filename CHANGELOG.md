@@ -1,6 +1,11 @@
 ry-install ChangeLog
 ====================
 
+v6.5.18 - 2026-05-15
+--------------------
+
+  * `_rvc_dispatch` `*/tmpfiles.d/*` case added (dispatches to new `_grep_tmpfiles_entry`); previously `/etc/tmpfiles.d/99-cachyos-thp.conf` fell through to the `*` catchall and was checked by `_grep_ini_header`, which raised `no [Section] header found` and aborted preflight with `EXIT_PREFLIGHT` (3) — tmpfiles.d uses systemd-tmpfiles syntax (`Type Path Mode UID GID Age Argument`) per `man tmpfiles.d`, not INI. `_grep_tmpfiles_entry` asserts ≥1 line matching `^[a-zA-Z][!\-=+~^]*[[:space:]]+\S` (type letter, zero-or-more modifier chars adjacent to type, whitespace, path); comment and empty lines correctly skipped by the anchor. Regression introduced in v6.5.14 when the tmpfiles.d destination was added without a matching dispatcher case. Header v6.5.17 -> v6.5.18; 5081 -> 5092 lines. Behaviour change: preflight no longer false-fails on tmpfiles.d destinations.
+
 v6.5.17 - 2026-05-15
 --------------------
 

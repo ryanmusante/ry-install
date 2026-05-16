@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.5.17 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.5.18 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.5.17"
+set -g VERSION "6.5.18"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -1913,6 +1913,15 @@ function _grep_xml_tag --argument-names dst --description "Validate drirc XML ha
     end
     return 0
 end
+function _grep_tmpfiles_entry --argument-names dst --description 'Validate ≥1 systemd-tmpfiles.d entry line'
+    test (count $argv) -lt 2; and _log "BUG: _grep_tmpfiles_entry called without content (dst=$dst)"; and return 2
+    # tmpfiles.d format: TypeLetter[!\-=+~^]* <ws> Path …  (man tmpfiles.d, src/tmpfiles); NOT INI.
+    string match -qre '^[a-zA-Z][!\-=+~^]*[[:space:]]+\S' -- $argv[2..-1]; or begin
+        _fail "  $dst: no tmpfiles.d entries found"
+        return 1
+    end
+    return 0
+end
 
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family"
     set -l _content $argv[2..]
@@ -1925,6 +1934,8 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_kparam "$dst" $_content
         case '*/sysctl.d/*'
             _grep_sysctl_kv "$dst" $_content
+        case '*/tmpfiles.d/*'
+            _grep_tmpfiles_entry "$dst" $_content
         case '*/drirc'
             _grep_xml_tag "$dst" $_content
         case '*/mkinitcpio.conf' '*/environment.d/*'

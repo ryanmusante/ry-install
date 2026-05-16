@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v6.5.11 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v6.5.13 (2026-05-15) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "6.5.11"
+set -g VERSION "6.5.13"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
@@ -139,6 +139,10 @@ if not command -q timeout
     echo "[ERR] GNU coreutils timeout(1) required (used by _run for hang-protection)" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
+if not command -q stat
+    echo "[ERR] GNU coreutils stat(1) required (used for mode/owner verification)" >&2
+    _ry_exit $EXIT_PREFLIGHT
+end
 set -g _RY_SLEEP_FRAC 1
 command sleep 0.05 2>/dev/null; and set -g _RY_SLEEP_FRAC 0.1
 set -g DATE_LABEL (date '+%Y-%m-%d')
@@ -166,11 +170,14 @@ command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
 end
 umask $_prev_mkdir_umask
 command chmod -- 700 "$_RY_HOME_DIR" "$_RY_HOME_DIR/logs" "$LOG_DIR" 2>/dev/null
-set -l _ld_mode (command stat -c '%a' -- "$_RY_HOME_DIR" 2>/dev/null)
-if test "$_ld_mode" != 700
-    echo "[ERR] Log dir mode is $_ld_mode (expected 700): $_RY_HOME_DIR" >&2
-    _ry_exit $EXIT_PREFLIGHT
+for _ld_path in "$_RY_HOME_DIR" "$_RY_HOME_DIR/logs" "$LOG_DIR"
+    set -l _ld_mode (command stat -c '%a' -- "$_ld_path" 2>/dev/null)
+    if test "$_ld_mode" != 700
+        echo "[ERR] Log dir mode is $_ld_mode (expected 700): $_ld_path" >&2
+        _ry_exit $EXIT_PREFLIGHT
+    end
 end
+set --erase _ld_path
 set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"
 set -g INSTALL_HAD_ERRORS false
 
@@ -262,7 +269,6 @@ function _verify_unit_syntax --argument-names unit_path label intended_scope --d
     if test "$intended_scope" = user
         set user_flag --user
     else if test "$intended_scope" != system
-        # auto-detect only when scope is unspecified; system scope stays empty
         string match -q '*/.config/systemd/user/*' -- "$unit_path"; and set user_flag --user
     end
     set -l _err_out (systemd-analyze $user_flag verify "$unit_path" 2>&1)
@@ -357,7 +363,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
                 return 0
             end
             functions -q _log; and _log "LOCK_RECLAIM_RACE: post-reclaim owner_pid='$_owner_pid' != fish_pid=$fish_pid — refusing"
-            set --erase _RY_HOLDS_LOCK
+            set --erase _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
             return 1
         end
     end
@@ -818,7 +824,7 @@ function _content_HOME_.config_environment.d_10-environment.conf
     end
 end
 function _content__etc_systemd_system_cpupower-epp.service
-    # `$$cpu` in ExecStart is intentional: systemd.service(5) unescapes `$$`→`$` so bash receives `$cpu` (loop var); `$cpu` would expand from systemd's empty env and silently no-op.
+    # $$cpu: systemd.service(5) unescapes $$→$ so bash sees loop var $cpu.
     printf '%s\n' \
         '[Unit]' \
         'Description=Set CPU EPP to performance (amd_pstate=active: powersave governor + performance EPP)' \
@@ -992,7 +998,11 @@ function _pipe_all_ok --description "True iff every stage of \$pipestatus (passe
 end
 
 function _tmp_dir --description "Return \$TMPDIR if set, else /tmp"
-    set -q TMPDIR; and test -n "$TMPDIR"; and printf '%s' "$TMPDIR"; or printf '%s' /tmp
+    if set -q TMPDIR; and test -n "$TMPDIR"
+        printf '%s' "$TMPDIR"
+    else
+        printf '%s' /tmp
+    end
 end
 
 function _is_symlink --argument-names path use_sudo --description "Sudo-aware test -L (rc 0/1/2 = symlink/not/sudo-lapse)"
@@ -1151,6 +1161,7 @@ function _msg_nocount --argument-names level --description "Like _msg but skips 
     _msg_print $argv
 end
 
+# Invariant: _ok/_fail/_warn/_info/_err always return 0 (callers chain via `; and`/`; or`).
 function _ok; _msg OK $argv; end
 function _fail; _msg FAIL $argv; end
 function _fail_silent; _msg_nocount FAIL $argv; end
@@ -1337,7 +1348,7 @@ end
 function _run_emit_stream --argument-names label_tag tmpfile ret cap --description "_run sub. Capture stream, log, emit per QUIET/rc"
     test -s "$tmpfile"; or return 0
     set -l _total (command wc -l <"$tmpfile" 2>/dev/null | string trim --)
-    # wc -l counts newlines; a final line with no trailing newline is otherwise missed.
+    # wc -l misses unterminated final line; add 1 when tail byte is non-empty.
     set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
     test -n "$_last_byte"; and string match -qr '^\d+$' -- "$_total"; and set _total (math $_total + 1)
     set -l _redacted
@@ -1353,7 +1364,7 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
             printf '%s\n' "$_l" >&2
         end
     else if test "$label_tag" = STDERR; and test $ret -ne 0
-        # Intentional: even under QUIET, surface up to 5 stderr lines on failure so pacman/sdboot-manage errors are visible without --verbose.
+        # QUIET bypass: surface ≤5 stderr lines on rc≠0.
         for _l in $_redacted[1..5]
             printf '%s\n' "$_l" >&2
         end
@@ -2005,7 +2016,7 @@ function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --descript
     end
     if test "$use_sudo" = true; and not sudo -n true 2>/dev/null
         _err "sudo credential lapsed before atomic mv of $dst"
-        return $EXIT_BOOT_CRIT
+        return $EXIT_FAIL
     end
     if not _run $_sp mv -T -- "$tmpfile" "$dst"
         _fail "→ $dst (atomic move failed)"
@@ -3221,7 +3232,8 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
             set -l _p (string split ':' -- "$_check")
             set -l _hit false
             if test "$_p[2]" = csv
-                string match -qr '(^|,)'$_p[1]'(,|$)' -- "$_opts"; and set _hit true
+                set -l _re (string escape --style=regex -- "$_p[1]")
+                string match -qr '(^|,)'$_re'(,|$)' -- "$_opts"; and set _hit true
             else
                 string match -q '*'$_p[1]'*' -- "$_opts"; and set _hit true
             end
@@ -4574,7 +4586,7 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
     else
         not _install_aur_packages; and set -g INSTALL_HAD_ERRORS true
     end
-    # AUR may have transitively installed iwd; re-probe before _should_skip_iwd caches.
+    # AUR may have transitively installed iwd; re-probe.
     set --erase _RY_SKIP_IWD
     command -q updatedb; and begin
         _run sudo -n updatedb; or _warn "Updatedb failed"
@@ -4616,7 +4628,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _echo "ry-install v$VERSION"
     _progress_init
     _install_preflight; or return $EXIT_PREFLIGHT
-    # _rdi_run_phases rc is intentionally discarded: phase-failure state is carried in the INSTALL_HAD_ERRORS global, checked at function end.
+    # rc discarded; phase failures tracked via INSTALL_HAD_ERRORS.
     _rdi_run_phases
     _install_rebuild_boot
     set -l _boot_rc $status
@@ -4853,7 +4865,6 @@ set -g INSTALL_FILE_TARGET ""
 set -l _ORIG_ARGV $argv
 set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) ry-argparse-err.XXXXXX)
 _track_tmpfile "$_ap_errfile"
-# h/help and v/version: the early-exit loop near the top is the fast path for exact tokens; the post-argparse block below is the catch-all that also covers bundled short flags (e.g. -hV).
 argparse --name=(status basename) \
     --exclusive=verify-static,verify-runtime,check,install-file \
     h/help v/version V/verbose \
@@ -4983,7 +4994,8 @@ switch $MODE
         _ry_do_install
         set -g _RY_EXIT_CODE $status
     case '*'
-        _err "Unknown mode: $MODE"
+        _msg_print --force ERR "Unknown mode: $MODE"
+        _log "ERR: Unknown mode: $MODE"
         set -g _RY_EXIT_CODE $EXIT_USAGE
 end
 set -g _INTENDED_EXIT_CODE $_RY_EXIT_CODE

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.0.2-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -170,7 +170,7 @@ content byte-for-byte.
 | Network | NetworkManager + iwd backend; `resolved` with DoT + DNSSEC + mDNS |
 | Sysctl | BBR+fq, `tcp_fastopen=3`, 10 GbE TCP buffers (16 tunables) |
 | fstab | `noatime,lazytime,commit=10` on ext4 (idempotent rewrite) |
-| Env | `PROTON_USE_NTSYNC=1`, `RADV_PERFTEST=sam,nircache,transfer_queue`, `MESA_SHADER_CACHE_MAX_SIZE=4G` (10 vars) |
+| Env | `PROTON_USE_NTSYNC=1`, `RADV_PERFTEST=sam,nircache`, `RADV_EXPERIMENTAL=transfer_queue`, `MESA_SHADER_CACHE_MAX_SIZE=4G` (11 vars) |
 
 Read the script for exact values.
 

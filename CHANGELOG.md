@@ -1,6 +1,16 @@
 ry-install ChangeLog
 ====================
 
+v7.0.2 - 2026-05-16
+-------------------
+
+  * `ENV_VARS`: split deprecated `RADV_PERFTEST=transfer_queue` into `RADV_EXPERIMENTAL=transfer_queue` (Mesa ≥ 26.1.0; older Mesa emits a deprecation warning on the legacy key per docs.mesa3d.org/envvars.html). `RADV_PERFTEST` now `sam,nircache`. `_ir_validate_counts`: ENV_VARS invariant 10 -> 11. Header v7.0.1 -> v7.0.2; 5035 -> 5036 lines.
+
+v7.0.1 - 2026-05-16
+-------------------
+
+  * 117 inter-function blank lines collapsed (style harmonised — 122 fn-boundaries were already tight pre-edit; the loose 117 now match). Non-blank content sha256 unchanged; `fish --no-execute` clean; `--help`/`--version`/`--check` dispatch verified. Header v7.0 -> v7.0.1; 5152 -> 5035 lines.
+
 v7.0 - 2026-05-15
 -----------------
 

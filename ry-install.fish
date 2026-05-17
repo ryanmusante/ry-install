@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.1.1 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.2.1 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.1.1"
+set -g VERSION "7.2.1"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -12,7 +12,7 @@ set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PROFILE_NAME gtr9_pro
 set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
-set -g _RY_MANAGED_FILE_COUNT 13
+set -g _RY_MANAGED_FILE_COUNT 12
 
 function _ry_show_help --description "Display usage information and available subcommands"
     printf '%s\n' \
@@ -542,11 +542,11 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
     "/etc/iwd/main.conf" \
     "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
-    /etc/drirc \
+    "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/99-cachyos-sysctl.conf" \
     "/etc/tmpfiles.d/99-cachyos-thp.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
-set -g SERVICE_DESTINATIONS "/etc/systemd/system/cpupower-epp.service"
+set -g SERVICE_DESTINATIONS
 set -g _RY_IWD_GATED_DSTS "/etc/iwd/main.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"
@@ -627,7 +627,7 @@ set -g SYSCTL_VALUES \
     "fs.protected_fifos=2" \
     "fs.protected_regular=2" \
     "vm.compaction_proactiveness=0"
-set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges
+set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges cpupower
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme octopi micro cachyos-micro-settings btop bolt
 set -g AUR_PKGS mkinitcpio-firmware mt76-mt7925-dkms
 set -g _RY_PKG_REMOVE_SKIPS
@@ -645,7 +645,7 @@ set -g MASK \
     hibernate.target \
     hybrid-sleep.target \
     suspend-then-hibernate.target
-set -g EXPECTED_SERVICES cpupower-epp.service fstrim.timer NetworkManager.service
+set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200
 set -g BOOT_SPACE_WARN 500
@@ -722,7 +722,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         LOGIND_IGNORE_KEYS:9 \
         ENV_VARS:11 \
         SYSCTL_VALUES:16 \
-        PKGS_ADD:14 \
+        PKGS_ADD:15 \
         PKGS_DEL:8 \
         AUR_PKGS:2 \
         MASK:12 \
@@ -832,32 +832,8 @@ function _content_HOME_.config_environment.d_10-environment.conf
         printf '%s\n' "$var"
     end
 end
-function _content__etc_systemd_system_cpupower-epp.service
-    # $$cpu: systemd.service(5) unescapes $$→$ so bash sees loop var $cpu.
-    printf '%s\n' \
-        '[Unit]' \
-        'Description=Set CPU EPP to performance (amd_pstate=active: powersave governor + performance EPP)' \
-        'ConditionPathExists=/sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference' \
-        'ConditionPathExists=/usr/bin/bash' \
-        '' \
-        '[Service]' \
-        'Type=oneshot' \
-        'RemainAfterExit=yes' \
-        'TimeoutStartSec=10' \
-        'StandardError=journal' \
-        'NoNewPrivileges=true' \
-        'PrivateTmp=true' \
-        'ProtectHome=true' \
-        'ProtectSystem=strict' \
-        'LockPersonality=true' \
-        'MemoryDenyWriteExecute=true' \
-        'ExecStart=/usr/bin/bash -c \'shopt -s nullglob; for cpu in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do echo performance > "$$cpu" 2>/dev/null || echo "EPP write failed: $$cpu" >&2; done; exit 0\'' \
-        '' \
-        '[Install]' \
-        'WantedBy=multi-user.target'
-end
-function _content__etc_drirc
-    printf '%s\n' '<driconf>' '  <device>' '    <application name="Default">' '      <option name="radv_enable_unified_heap_on_apu"' '              value="true" />' '    </application>' '  </device>' '</driconf>'
+function _content__etc_default_cpupower-service.conf
+    printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "governor='performance'"
 end
 function _content__etc_sysctl.d_99-cachyos-sysctl.conf
     printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf; overrides net.core.netdev_max_backlog 4096 → 16384)"
@@ -1123,7 +1099,7 @@ function _msg_print --argument-names level --description "Internal: leveled mess
     end
     set -q _RY_OUTPUT_BROKEN; and return 0
     if test "$_RY_NO_COLOR" = true; or not isatty 2
-        echo "[$level] $msg" >&2
+        printf '[%s] %s\n' "$level" "$msg" >&2
         return 0
     end
     set -l _color normal
@@ -1888,17 +1864,6 @@ function _grep_ini_header --argument-names dst --description 'Validate ≥1 [Sec
     end
     return 0
 end
-function _grep_xml_tag --argument-names dst --description "Validate drirc XML has required tags"
-    test (count $argv) -lt 2; and _log "BUG: _grep_xml_tag called without content (dst=$dst)"; and return 2
-    set -l content $argv[2..-1]
-    for tag in '<driconf>' '<device>' '<application '
-        string match -q -- "*$tag*" $content; or begin
-            _fail "  $dst: missing XML tag '$tag'"
-            return 1
-        end
-    end
-    return 0
-end
 function _grep_tmpfiles_entry --argument-names dst --description 'Validate ≥1 systemd-tmpfiles.d entry line'
     test (count $argv) -lt 2; and _log "BUG: _grep_tmpfiles_entry called without content (dst=$dst)"; and return 2
     # tmpfiles.d format: TypeLetter[!\-=+~^]* <ws> Path …  (man tmpfiles.d, src/tmpfiles); NOT INI.
@@ -1921,9 +1886,7 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_sysctl_kv "$dst" $_content
         case '*/tmpfiles.d/*'
             _grep_tmpfiles_entry "$dst" $_content
-        case '*/drirc'
-            _grep_xml_tag "$dst" $_content
-        case '*/mkinitcpio.conf' '*/environment.d/*'
+        case '*/mkinitcpio.conf' '*/environment.d/*' '*/default/cpupower-service.conf'
             return 0
         case '*'
             _grep_ini_header "$dst" $_content
@@ -2301,10 +2264,7 @@ function _vss_nm --argument-names skip_iwd --description "_verify_static_system 
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.powersave=$NM_WIFI_POWERSAVE" "WiFi powersave $NM_WIFI_POWERSAVE"
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "level=$NM_LOG_LEVEL" "logging level $NM_LOG_LEVEL"
 end
-function _vss_drirc_sysctl --description "_verify_static_system sub: drirc XML tag + sysctl drop-in key=value check"
-    _echo "── RADV driconf ──"
-    _chk_file /etc/drirc; and _chk_grep /etc/drirc radv_enable_unified_heap_on_apu unified_heap_on_apu
-    _echo
+function _vss_sysctl --description "_verify_static_system sub: sysctl drop-in key=value check"
     _echo "── sysctl drop-in ──"
     if _chk_file /etc/sysctl.d/99-cachyos-sysctl.conf
         for entry in $SYSCTL_VALUES
@@ -2315,7 +2275,7 @@ function _vss_drirc_sysctl --description "_verify_static_system sub: drirc XML t
         end
     end
 end
-function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, iwd, NM, drirc, sysctl"
+function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, iwd, NM, cpupower-service.conf, sysctl"
     set -l _skip_iwd false
     if not command -q pacman
         set _skip_iwd true
@@ -2337,7 +2297,9 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _vss_iwd $_skip_iwd
     _echo "── NetworkManager ──"
     _vss_nm $_skip_iwd
-    _vss_drirc_sysctl
+    _echo "── cpupower-service.conf ──"
+    _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "governor='performance'" "governor=performance"
+    _vss_sysctl
 end
 function _verify_static_user --description "Verify environment.d ENV_VARS"
     _echo "USER CONFIGURATION"
@@ -2419,17 +2381,11 @@ function _verify_static_packages --description "Verify PKGS_ADD, AUR_PKGS, PKGS_
 end
 function _verify_static_services --description "Verify SERVICE_DESTINATIONS files + masked services state"
     _echo SERVICES
-    _echo "── Service files ──"
-    for svc_file in $SERVICE_DESTINATIONS
-        _chk_file "$svc_file"
-    end
-    if test -f /etc/systemd/system/cpupower-epp.service
-        _chk_grep /etc/systemd/system/cpupower-epp.service energy_performance_preference "cpupower-epp EPP ExecStart"
-        set -l _execstart (command systemctl cat cpupower-epp.service 2>/dev/null | string match -rg -- '^\s*ExecStart\s*=\s*(.*)$')
-        if test (count $_execstart) -gt 0; and string match -q -- '*scaling_governor*' $_execstart
-            _warn "  cpupower-epp: scaling_governor ExecStart present — remove it (amd_pstate=active uses powersave+EPP)"
+    if test (count $SERVICE_DESTINATIONS) -gt 0
+        _echo "── Service files ──"
+        for svc_file in $SERVICE_DESTINATIONS
+            _chk_file "$svc_file"
         end
-        _chk_grep /etc/systemd/system/cpupower-epp.service "WantedBy=multi-user.target" "cpupower-epp WantedBy"
     end
     _echo "── Masked services ──"
     set -l _check_mask (_mask_list_effective)
@@ -2467,9 +2423,11 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
     else
         _warn "  Could not parse HOOKS from mkinitcpio.conf"
     end
-    _echo "── systemd units ──"
-    for unit in $SERVICE_DESTINATIONS
-        test -f "$unit"; and _verify_unit_syntax "$unit" (command basename -- "$unit")
+    if test (count $SERVICE_DESTINATIONS) -gt 0
+        _echo "── systemd units ──"
+        for unit in $SERVICE_DESTINATIONS
+            test -f "$unit"; and _verify_unit_syntax "$unit" (command basename -- "$unit")
+        end
     end
 end
 function _verify_static_checksum --description "Verify embedded content hash matches installed file SHA256"
@@ -2538,7 +2496,7 @@ function _vs_read_symmetry_selftest --description "Preflight: detect read-symmet
         return 0
     end
     _fail "  read-symmetry self-test: disk=$_disk_bytes read=$_read_len (expected both=12) — verifier logic is broken; results UNRELIABLE"
-    _log "VERIFY_LOGIC_BUG: read-symmetry self-test failed disk=$_disk_bytes read=$_read_len fish="(command fish --version 2>/dev/null | string match -rg 'version (\S+)')
+    _log "VERIFY_LOGIC_BUG: read-symmetry self-test failed disk=$_disk_bytes read=$_read_len fish=$FISH_VERSION"
     set -g _RY_READSYM_RESULT 1
     return 1
 end
@@ -2846,7 +2804,7 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
         set -l cpu_name (string replace -r '.*/cpu(\d+)/.*' 'cpu$1' -- "$_CPU_PATH")
         _info "  Checking $cpu_name (representative)"
         for check in "scaling_driver:amd-pstate-epp:Scaling driver" \
-            "scaling_governor:powersave:Governor" \
+            "scaling_governor:performance:Governor" \
             "energy_performance_preference:performance:EPP"
             set -l parts (string split ':' -- "$check")
             set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
@@ -3010,35 +2968,6 @@ function _vrsv_chk_active_enabled --argument-names label rec_str --description "
         _fail "  $label: $rec[2] (expected: active)"
     end
 end
-function _vrsv_chk_cpupower --argument-names rec_str --description "Check cpupower-epp.service (oneshot accepts 'exited')"
-    set -l rec (string split ':' -- "$rec_str")
-    if test "$rec[1]" = not-found
-        _warn "  cpupower-epp.service: not installed"
-        return 0
-    end
-    if test "$rec[2]" = active; or test "$rec[2]" = exited
-        if test "$rec[3]" = enabled
-            _ok "  cpupower-epp.service: $rec[2] (enabled)"
-        else
-            _warn "  cpupower-epp.service: $rec[2] but $rec[3] (will not persist)"
-        end
-        set -l _epp_path /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference
-        if test -f "$_epp_path"
-            set -l _epp_val (command cat -- "$_epp_path" 2>/dev/null | string trim --)
-            if test "$_epp_val" = performance
-                _ok "  cpupower-epp EPP value: $_epp_val (cpu0)"
-            else
-                _fail "  cpupower-epp EPP value: $_epp_val (cpu0, expected: performance — service started but write did not take effect)"
-            end
-        end
-        return 0
-    end
-    if test -f /etc/systemd/system/cpupower-epp.service
-        _fail "  cpupower-epp.service: $rec[2] (expected: active)"
-    else
-        _warn "  cpupower-epp.service: not installed"
-    end
-end
 function _vrsv_chk_resolved --argument-names rec_str --description "Check systemd-resolved active state, only when conf.d drop-in is deployed"
     set -l rec (string split ':' -- "$rec_str")
     test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
@@ -3060,18 +2989,34 @@ function _vrsv_chk_nm_dispatcher --argument-names rec_str --description "Check N
         _warn "  NetworkManager-dispatcher: $rec[2] ($rec[3] but unexpected state)"
     end
 end
+function _vrsv_chk_cpupower_governor --argument-names rec_str --description "Check cpupower.service (oneshot accepts 'exited'); governor applied from /etc/default/cpupower-service.conf"
+    set -l rec (string split ':' -- "$rec_str")
+    if test "$rec[1]" = not-found
+        _warn "  cpupower.service: not installed (PKGS_ADD includes cpupower; pacman db may be stale)"
+        return 0
+    end
+    if test "$rec[2]" = active; or test "$rec[2]" = exited
+        if test "$rec[3]" = enabled
+            _ok "  cpupower.service: $rec[2] (enabled)"
+        else
+            _warn "  cpupower.service: $rec[2] but $rec[3] (will not persist)"
+        end
+        return 0
+    end
+    _fail "  cpupower.service: $rec[2] (expected: active or exited)"
+end
 function _vrsv_sys_units --description "Runtime services check: 5-unit batch"
-    set -l sys_units cpupower-epp.service fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service NetworkManager.service
+    set -l sys_units fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service NetworkManager.service cpupower.service
     set -l parsed
     for _u in $sys_units
         set -l _v (_unit_state_padded $_u)
         set -a parsed "$_v[1]:$_v[2]:$_v[3]"
     end
-    _vrsv_chk_cpupower "$parsed[1]"
-    _vrsv_chk_active_enabled fstrim.timer "$parsed[2]"
-    _vrsv_chk_resolved "$parsed[3]"
-    _vrsv_chk_nm_dispatcher "$parsed[4]"
-    _vrsv_chk_active_enabled NetworkManager.service "$parsed[5]"
+    _vrsv_chk_active_enabled fstrim.timer "$parsed[1]"
+    _vrsv_chk_resolved "$parsed[2]"
+    _vrsv_chk_nm_dispatcher "$parsed[3]"
+    _vrsv_chk_active_enabled NetworkManager.service "$parsed[4]"
+    _vrsv_chk_cpupower_governor "$parsed[5]"
 end
 function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state"
     _echo
@@ -3993,21 +3938,23 @@ function _install_system_files --description "Deploy all embedded config + servi
         set -g INSTALL_HAD_ERRORS true
         set _fn_err true
     end
-    _info "Installing service unit files..."
-    _log "=== INSTALL SERVICE FILES ==="
-    set -g _RY_DEPLOYED_SERVICES
-    set -l _svc_failed false
-    for dst in $SERVICE_DESTINATIONS
-        if _ry_install_file "$dst" true
-            set -a _RY_DEPLOYED_SERVICES (command basename -- "$dst")
-        else
-            set _svc_failed true
+    if test (count $SERVICE_DESTINATIONS) -gt 0
+        _info "Installing service unit files..."
+        _log "=== INSTALL SERVICE FILES ==="
+        set -g _RY_DEPLOYED_SERVICES
+        set -l _svc_failed false
+        for dst in $SERVICE_DESTINATIONS
+            if _ry_install_file "$dst" true
+                set -a _RY_DEPLOYED_SERVICES (command basename -- "$dst")
+            else
+                set _svc_failed true
+            end
         end
-    end
-    if test "$_svc_failed" = true
-        _err "Service unit file installation failed"
-        set -g INSTALL_HAD_ERRORS true
-        set _fn_err true
+        if test "$_svc_failed" = true
+            _err "Service unit file installation failed"
+            set -g INSTALL_HAD_ERRORS true
+            set _fn_err true
+        end
     end
     _info "Installing user configuration files..."
     _log "=== INSTALL USER FILES ==="
@@ -4810,7 +4757,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
 end
 
 # First-match-wins (most-specific paths first, `*.service` catchall last); fish `string match` glob (no -r) — `*` spans `/`, so `*/dir/*` matches any-depth.
-set -g _RY_POST_HOOKS "/boot/*|boot" "/efi/*|boot" "/etc/mkinitcpio.conf|boot" "/etc/sdboot-manage.conf|boot" "/etc/kernel/cmdline|boot" "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/iwd/main.conf|nm" "*/NetworkManager/conf.d/*|nm" "*/sysctl.d/*|sysctl" "*/environment.d/*|envd" "/etc/drirc|drirc" "*/tmpfiles.d/*|tmpfiles" "*.service|service"
+set -g _RY_POST_HOOKS "/boot/*|boot" "/efi/*|boot" "/etc/mkinitcpio.conf|boot" "/etc/sdboot-manage.conf|boot" "/etc/kernel/cmdline|boot" "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/iwd/main.conf|nm" "*/NetworkManager/conf.d/*|nm" "*/sysctl.d/*|sysctl" "*/environment.d/*|envd" "/etc/default/cpupower-service.conf|cpupower" "*/tmpfiles.d/*|tmpfiles" "*.service|service"
 
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"
     for _entry in $_RY_POST_HOOKS
@@ -4949,7 +4896,7 @@ function _post_service --argument-names target --description "Post-hook: daemon-
         _warn "Failed to enable $_bn (system)"
         set _rc 1
     end
-    # try-restart picks up changed ExecStart on re-deploy for non-oneshot units; oneshot+RemainAfterExit (cpupower-epp) re-runs idempotently.
+    # try-restart picks up changed ExecStart on re-deploy for non-oneshot units; oneshot+RemainAfterExit re-runs idempotently.
     _run sudo -n systemctl try-restart -- "$_bn"; or _log "POST_SERVICE_TRY_RESTART: rc=non-zero unit=$_bn"
     return $_rc
 end
@@ -5007,8 +4954,9 @@ function _post_envd --argument-names target --description "Post-hook: notify ses
     _info "  Active systemd --user services retain old environment until restarted"
     return 0
 end
-function _post_drirc --argument-names target --description "Post-hook: notify Wayland/X restart needed for drirc"
-    _info "drirc $target changed — restart Wayland/X session or relaunch affected applications to apply"
+function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change"
+    _echo
+    _run sudo -n systemctl restart cpupower.service; or _warn "cpupower.service restart failed (governor change applies on next boot; under amd_pstate=active, governor=performance routes to EPP=performance internally)"
     return 0
 end
 function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/dir (no exit; for caller-managed return paths)"

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.1.1-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.2.1-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -178,7 +178,7 @@ Default: `pacman -Syu --needed` per Arch's
 
 | Action | Count |
 |---|---|
-| Install (`PKGS_ADD`) | 14 |
+| Install (`PKGS_ADD`) | 15 |
 | Remove (`PKGS_DEL`) | 8 |
 | AUR (`AUR_PKGS`) | 2 |
 
@@ -193,7 +193,7 @@ Default: `pacman -Syu --needed` per Arch's
 
 ## Managed Files
 
-13 files deployed via atomic writes (tmp → symlink check → chmod → `mv -T`).
+12 files deployed via atomic writes (tmp → symlink check → chmod → `mv -T`).
 System files install `0644`, the user file `0600`. The two `iwd`
 destinations are skipped when `iwd` is not installed.
 
@@ -210,10 +210,9 @@ destinations are skipped when `iwd` is not installed.
 | System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
 | System | `/etc/iwd/main.conf` |
 | System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
-| System | `/etc/drirc` |
+| System | `/etc/default/cpupower-service.conf` |
 | System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
 | System | `/etc/tmpfiles.d/99-cachyos-thp.conf` |
-| Service | `/etc/systemd/system/cpupower-epp.service` |
 | User | `~/.config/environment.d/10-environment.conf` |
 
 `99-cachyos-thp.conf` writes `0` to

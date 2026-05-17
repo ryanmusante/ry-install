@@ -1,6 +1,35 @@
 ry-install ChangeLog
 ====================
 
+v7.2.1 - 2026-05-17
+-------------------
+
+  * `cpupower-epp.service` dropped from managed destinations. `SERVICE_DESTINATIONS` is now empty; `_RY_MANAGED_FILE_COUNT` 13 → 12. EXPECTED_SERVICES 4 → 3 (cpupower-epp.service removed).
+  * Removed: `_content__etc_systemd_system_cpupower-epp.service`, `_vrsv_chk_cpupower` (EPP-state helper). `_vrsv_sys_units` 6-unit batch → 5-unit batch.
+  * `_verify_static_services`: `── Service files ──` header + loop now gated on `count $SERVICE_DESTINATIONS`; stale `scaling_governor`-in-ExecStart WARN block removed.
+  * `_verify_static_syntax`: `── systemd units ──` block gated on `count $SERVICE_DESTINATIONS`.
+  * `_install_system_files`: service deploy block (info + log + loop + failure dispatch) gated on `count $SERVICE_DESTINATIONS` — section silenced when no managed unit files.
+  * `_post_service` comment: stale `(cpupower-epp)` parenthetical removed. 5185 → 5129 L.
+
+v7.2.0 - 2026-05-17
+-------------------
+
+  * `/etc/drirc` dropped from managed destinations (RADV `radv_enable_unified_heap_on_apu` no longer enforced).
+  * `/etc/default/cpupower-service.conf` added as managed destination; content: `governor='performance'`.
+  * PKGS_ADD +`cpupower` (14 → 15). EXPECTED_SERVICES +`cpupower.service` (3 → 4).
+  * `_RY_POST_HOOKS`: `/etc/drirc|drirc` → `/etc/default/cpupower-service.conf|cpupower`. New `_post_cpupower` handler restarts `cpupower.service` on re-deploy.
+  * `_vrk_cpu_state`: `scaling_governor` expectation `powersave` → `performance` (cpupower.service routes `governor='performance'` to EPP=performance under amd_pstate=active).
+  * `_vrsv_sys_units`: 5-unit batch → 6-unit batch (+`cpupower.service`). New `_vrsv_chk_cpupower_governor` accepts oneshot active|exited + enabled.
+  * `_verify_static_system`: drop `_vss_drirc_sysctl`; rename helper to `_vss_sysctl`; add `cpupower-service.conf` content grep.
+  * `_rvc_dispatch`: drop `*/drirc` XML case; add `*/default/cpupower-service.conf` to the no-validation set (shell-style key=value, embedded content controlled).
+  * Removed: `_content__etc_drirc`, `_grep_xml_tag`, `_post_drirc`. 5181 → 5185 L.
+
+v7.1.2 - 2026-05-17
+-------------------
+
+  * `_msg_print` no-color/no-tty branch: `echo "[$level] $msg"` → `printf '[%s] %s\n'` — completes the v6.2.12 emit-fn printf migration (last bare-echo site in the level-message family).
+  * `_vs_read_symmetry_selftest`: log token `fish=` resolves from in-process `$FISH_VERSION` instead of `(command fish --version | string match)` — drops one fork on the cold-path. 5181 L unchanged.
+
 v7.1.1 - 2026-05-17
 -------------------
 

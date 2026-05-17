@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.2.6-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.3.1-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -141,11 +141,22 @@ Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 
 ## Configuration
 
-Every value below is embedded in `ry-install.fish` and deployed to the
-paths in [Managed Files](#managed-files). To retune, edit the `set -g`
-profile globals near the top of the script. The script is the source
-of truth — `--verify-static` matches installed files against embedded
-content byte-for-byte.
+Every value embedded in `ry-install.fish` is documented below, grouped
+by install-flow phase. Phases 1, 5, and 6 deploy no embedded data and
+are described in prose. To retune, edit the `set -g` profile globals
+near the top of the script. The script is the source of truth —
+`--verify-static` matches installed files against embedded content
+byte-for-byte.
+
+### Phase 1 — Preflight
+
+Validates fish ≥ 3.6, kernel ≥ 6.14, systemd ≥ 250, GNU coreutils,
+free space, unrestricted sudo, and `EXPECTED_CPU_MATCH` hardware
+fingerprint (`_install_preflight`). Acquires the instance lock
+(atomic `mkdir` + `chmod 0700`; auto-reclaims dead PIDs). Runs
+`_ir_validate_counts` — refuses to deploy on count drift in any
+`set -g` array (15 invariants). Override the hardware gate with
+`RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
 
 ### Phase 2 — Packages
 
@@ -237,7 +248,7 @@ the `PKGS_ADD` entry is idempotent via `--needed`).
 Destinations enumerated in [Managed Files](#managed-files).
 Boot-critical files (`/boot/loader/loader.conf`, `/etc/kernel/cmdline`,
 `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`) are deployed here
-but take effect after [Phase 5 (Boot)](#install-flow) rebuilds initramfs
+but take effect after [Phase 5 — Boot](#phase-5--boot) rebuilds initramfs
 and bootloader entries.
 
 <details>
@@ -526,6 +537,27 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 (`enabled` or `static`+(`active`\|`inactive`) accepted as on-demand).
 
 </details>
+
+### Phase 5 — Boot
+
+Rebuilds initramfs (`mkinitcpio -P`) and bootloader entries
+(`sdboot-manage gen` + `sdboot-manage update`) from the Phase 3
+config files (`/etc/mkinitcpio.conf`, `/etc/kernel/cmdline`,
+`/boot/loader/loader.conf`, `/etc/sdboot-manage.conf`). Pre-deploy
+snapshot of `mkinitcpio.conf` enables byte-exact revert on
+`pacman -Syu` failure or signal. Skipped when on-disk package state
+or boot-critical configs are inconsistent with embedded content;
+failed revert is an unconditional gate. Override after manual
+remediation with `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
+
+### Phase 6 — Finalize
+
+Pacman cache cleanup (`paccache`). NetworkManager restart to apply
+the wpa_supplicant → iwd backend switch — deferred to next reboot
+when WiFi is the active route. Writes the JSONL log footer with
+pass / fail / warn / gen_fail counters. Surfaces post-install
+manual steps: `rehash`, reboot, and `realtime`-group membership
+for PipeWire RT scheduling.
 
 ## Managed Files
 

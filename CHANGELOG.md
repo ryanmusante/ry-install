@@ -1,6 +1,19 @@
 ry-install ChangeLog
 ====================
 
+v7.3.1 - 2026-05-17
+-------------------
+
+  * README Configuration: add `Phase 1 — Preflight`, `Phase 5 — Boot`, `Phase 6 — Finalize` prose subsections (action-only phases, no embedded data). Intro reworded to note phases 1/5/6 carry no `set -g` payload.
+  * README: Phase 3 cross-ref `[Phase 5 (Boot)](#install-flow)` → `[Phase 5 — Boot](#phase-5--boot)`.
+  * VERSION 7.3.0 → 7.3.1. 5133 L unchanged.
+
+v7.3.0 - 2026-05-17
+-------------------
+
+  * Inline 6 standalone rationale comments to their target lines. 5139 → 5133 L.
+  * VERSION 7.2.6 → 7.3.0.
+
 v7.2.6 - 2026-05-17
 -------------------
 
@@ -41,7 +54,7 @@ v7.2.3 - 2026-05-17
 v7.2.2 - 2026-05-17
 -------------------
 
-  * README Configuration: 2 collapsibles → 19 per-domain collapsibles (kernel cmdline 15, bootloader 8, initramfs 4, resolved 4, logind 9, iwd 3, NM 3, cpupower 1, sysctl 16, tmpfiles 1, fstab, env 11, PKGS_ADD 15, PKGS_DEL 8, AUR 2, Vulkan 3, masked 12, enabled 3, caveats).
+  * README Configuration: 2 collapsibles → 19 per-domain collapsibles.
   * README: 13 → 12 embedded configs (tagline + Install Flow phase 3).
   * README Quick Start: 3 admonitions → 1 inline + 1 IMPORTANT. Hardware BIOS-prereq → `<details>`.
   * README: news-check + `--` orphan paragraphs folded into tables. Uninstall → 6-step list. 5129 L unchanged.
@@ -179,7 +192,7 @@ v7.0.8 - 2026-05-16
 v7.0.7 - 2026-05-16
 -------------------
 
-  * 68 bare system-cmd invocations gain `command` prefix (date, dirname, basename, systemctl, id, env, findmnt, systemd-analyze, tput, getent, nmcli, modinfo, swapon, pacman, curl, ping, pgrep, bootctl, ip, zramctl, kill). 5060 L unchanged.
+  * 68 bare system-cmd invocations gain `command` prefix. 5060 L unchanged.
 
 v7.0.6 - 2026-05-16
 -------------------
@@ -433,4 +446,4 @@ v6.1.0 - 2026-05-12
 v6.0.0 - 2026-05-12
 -------------------
 
-  * Reduction release 5994 → 4985 L: drop GNU-tool sanity probes, source-mode scaffolding, ntsync per-kernel probes, sudo-keepalive, JSONL progress events, tail-of-script log rotation, parallel-child PID guard, atomic-write TOCTOU re-stat, boot-wipe gate family, LVM detection.
+  * Reduction release 5994 → 4985 L: drop GNU-tool probes, source-mode scaffolding, ntsync probes, sudo-keepalive, JSONL progress events, log rotation, parallel-child PID guard, atomic-write TOCTOU re-stat, boot-wipe gates, LVM detection.

@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.2.6 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.3.1 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.2.6"
+set -g VERSION "7.3.1"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -863,8 +863,7 @@ end
 function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"
     set -l fn "_content_"(_tmpfile_key "$dst")
     functions -q $fn; or return $EXIT_GEN_NOFN
-    # Dynamic dispatch: function name built from destination path via _tmpfile_key.
-    $fn
+    $fn # Dynamic dispatch: function name built from destination path via _tmpfile_key.
 end
 function _ensure_sudo_cached --description "Cache sudo credential once before repeated sudo -n calls"
     if not command -q sudo
@@ -1087,8 +1086,7 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
 end
 function _msg_print --argument-names level --description "Internal: leveled message to stderr"
     set -l _force false
-    # _msg_start indexes msg-part-1 in argv; --force shifts past the sentinel without mutating argv.
-    set -l _msg_start 2
+    set -l _msg_start 2 # _msg_start indexes msg-part-1 in argv; --force shifts past the sentinel without mutating argv.
     if test "$level" = --force
         set _force true
         set level $argv[2]
@@ -1341,8 +1339,7 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
             printf '%s\n' "$_l" >&2
         end
     else if test "$label_tag" = STDERR; and test $ret -ne 0
-        # QUIET bypass: surface ≤5 stderr lines on rc≠0.
-        for _l in $_redacted[1..5]
+        for _l in $_redacted[1..5] # QUIET bypass: surface ≤5 stderr lines on rc≠0.
             printf '%s\n' "$_l" >&2
         end
     end
@@ -4688,8 +4685,7 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
     else
         not _install_aur_packages; and set -g INSTALL_HAD_ERRORS true
     end
-    # AUR may have transitively installed iwd; re-probe.
-    set --erase _RY_SKIP_IWD
+    set --erase _RY_SKIP_IWD # AUR may have transitively installed iwd; re-probe.
     command -q updatedb; and begin
         _run sudo -n updatedb; or _warn "Updatedb failed"
     end
@@ -4742,8 +4738,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
         test $_pre_rc -eq $EXIT_USAGE; and return $EXIT_USAGE
         return $EXIT_PREFLIGHT
     end
-    # rc discarded; phase failures tracked via INSTALL_HAD_ERRORS.
-    _rdi_run_phases
+    _rdi_run_phases # rc discarded; phase failures tracked via INSTALL_HAD_ERRORS.
     _install_rebuild_boot
     set -l _boot_rc $status
     test $_boot_rc -ne 0; and set -g INSTALL_HAD_ERRORS true
@@ -4803,8 +4798,7 @@ function _idf_dispatch_hook --argument-names target tag --description "Dispatch 
         _err "Internal: unknown post-hook tag '$tag' (target=$target)"
         return 1
     end
-    # Dynamic dispatch: handler resolved from _RY_POST_HOOKS table tag.
-    _post_$tag "$target"
+    _post_$tag "$target" # Dynamic dispatch: handler resolved from _RY_POST_HOOKS table tag.
 end
 function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"
     _log_section "INSTALL-FILE START"

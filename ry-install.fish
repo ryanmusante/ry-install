@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.0.19 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.1.1 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.0.19"
+set -g VERSION "7.1.1"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -23,7 +23,7 @@ function _ry_show_help --description "Display usage information and available su
         "Usage: "(status filename)" [OPTIONS]" \
         "INSTALLATION:" \
         "  (no args)         Default mode: unattended install" \
-        "  -V, --verbose     Show install output (silent by default; --check is always silent)" \
+        "  -V, --verbose     Show install output (install: silent by default; check: always silent; install-file/verify-*: always verbose)" \
         "VERIFICATION:" \
         "  --verify-static   Check config files match expected content" \
         "  --verify-runtime  Check live system state (run after reboot)" \
@@ -44,6 +44,7 @@ function _ry_show_help --description "Display usage information and available su
         "  RY_INSTALL_FORCE_BOOT_REBUILD=1  Bypass torn-package gate (recovery)." \
         "  RY_INSTALL_PKG_REMOVE_CASCADE=1  Cascade-remove reverse deps." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
+        "  RY_INSTALL_WIRELESS_REGDOM=<CC>  Write WIRELESS_REGDOM=<CC> to /etc/conf.d/wireless-regdom (opt-in)." \
         "  NO_COLOR  Suppress ANSI color (any value, per no-color.org)." \
         "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl" \
         ""
@@ -150,6 +151,7 @@ if not command -q date
     _ry_exit $EXIT_PREFLIGHT
 end
 set -g _RY_SLEEP_FRAC 1
+# GNU coreutils sleep accepts fractional seconds; non-GNU builds reject and stay on 1s.
 command sleep 0.05 2>/dev/null; and set -g _RY_SLEEP_FRAC 0.1
 set -g DATE_LABEL (command date '+%Y-%m-%d')
 set -g TIMESTAMP (command date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
@@ -357,13 +359,13 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     set -l _fresh_rc $status
     test $_fresh_rc -eq 0; and return 0
     test $_fresh_rc -ne 2; and return 1
-    set -l _stale_pid (command cat "$LOCK_FILE" 2>/dev/null | string trim --)
+    set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
     if string match -qr '^\d+$' -- "$_stale_pid"; and not command kill -0 "$_stale_pid" 2>/dev/null
         functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID not running, reclaiming)"
         command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
         _acquire_lock_fresh
         if test $status -eq 0
-            set -l _owner_pid (command cat "$LOCK_FILE" 2>/dev/null | string trim --)
+            set -l _owner_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
             if test "$_owner_pid" = "$fish_pid"
                 return 0
             end
@@ -444,7 +446,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
     set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
-    set --erase _RY_READSYM_RESULT
+    set --erase _RY_READSYM_RESULT _RY_PKG_REMOVE_SKIPS
 end
 function _dc_kill_children --description "_do_cleanup sub. Release lock"
     if set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED
@@ -628,6 +630,7 @@ set -g SYSCTL_VALUES \
 set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme octopi micro cachyos-micro-settings btop bolt
 set -g AUR_PKGS mkinitcpio-firmware mt76-mt7925-dkms
+set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
 set -g MASK \
     ananicy-cpp.service \
@@ -1425,9 +1428,9 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     _rm_tmp "$_run_dir" false
     if test -n "$_run_timeout"
         if test "$ret" -eq 124
-            _log "TIMEOUT_TERM: timeout=$_run_timeout"s" cmd=$log_cmd"
+            _log "TIMEOUT_TERM: timeout="$_run_timeout"s cmd=$log_cmd"
         else if test "$ret" -eq 137
-            _log "TIMEOUT_KILL: timeout=$_run_timeout"s" cmd=$log_cmd (SIGKILL after 10s grace)"
+            _log "TIMEOUT_KILL: timeout="$_run_timeout"s cmd=$log_cmd (SIGKILL after 10s grace)"
         end
     end
     _log "EXIT: $ret cmd=$log_cmd"
@@ -2477,14 +2480,14 @@ function _verify_static_checksum --description "Verify embedded content hash mat
         _should_skip_iwd "$dst"; and continue
         set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
         set -l _gen_rc $pipestatus[1]
-        set -l actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
-        set -l _ib_rc $pipestatus[1]
         if test $_gen_rc -ne 0
             _fail_silent "  $dst: generator failed (rc=$_gen_rc)"
             set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
             _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc"
             continue
         end
+        set -l actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
+        set -l _ib_rc $pipestatus[1]
         switch $_ib_rc
             case 1
                 _fail "  $dst: cannot read"
@@ -2820,11 +2823,12 @@ function _vrkg_vram --description "_vrk_gpu_state sub: BIOS VRAM carveout via me
         _info "  VRAM carveout: cannot read mem_info_vram_total"
         return 0
     end
-    set -l _vram_mb (math "$_vram_bytes / 1048576")
+    set -l _vram_mb (math --scale=0 "$_vram_bytes / 1048576")
     if test "$_vram_mb" -le 512
         _ok "  VRAM carveout: $_vram_mb MB"
     else
         _warn "  VRAM carveout: $_vram_mb MB (recommended: ≤512 MB for UMA — check BIOS)"
+        _info "    See README → Hardware → UMA Frame Buffer Size"
     end
 end
 function _vrk_gpu_state --description "Runtime kparam check: GPU performance level + ReBAR/SAM + VRAM carveout"
@@ -3581,10 +3585,43 @@ function _ry_check_wireless_regdom --description "Warn if WIRELESS_REGDOM unset 
     if not command grep -qE '^[[:space:]]*WIRELESS_REGDOM="?[A-Z]{2}"?[[:space:]]*$' $_conf 2>/dev/null
         _warn "  $_conf present but WIRELESS_REGDOM not set to a valid 2-letter ISO 3166-1 code — set-wireless-regdom will skip iw reg set"
         _info "    Fix: echo 'WIRELESS_REGDOM=\"<CC>\"' | sudo tee $_conf"
+        _info "    Or set RY_INSTALL_WIRELESS_REGDOM=<CC> on the next install run (e.g. US, GB, DE) — see README → Runtime variables"
         _log "REGDOM_INVALID: $_conf missing or empty WIRELESS_REGDOM value"
         return 0
     end
     return 0
+end
+function _ry_apply_wireless_regdom --description "Apply RY_INSTALL_WIRELESS_REGDOM env var to /etc/conf.d/wireless-regdom (opt-in)"
+    set -q RY_INSTALL_WIRELESS_REGDOM; or return 0
+    test -n "$RY_INSTALL_WIRELESS_REGDOM"; or return 0
+    set -l _cc (string trim -- "$RY_INSTALL_WIRELESS_REGDOM" | string upper --)
+    if not string match -qr -- '^[A-Z]{2}$' "$_cc"
+        _err "RY_INSTALL_WIRELESS_REGDOM='$RY_INSTALL_WIRELESS_REGDOM' invalid — must be a 2-letter ISO 3166-1 code (e.g. US, GB, DE)"
+        _log "REGDOM_ENV_INVALID: value=$RY_INSTALL_WIRELESS_REGDOM"
+        return $EXIT_USAGE
+    end
+    set -l _conf /etc/conf.d/wireless-regdom
+    if test -f $_conf; and command grep -qE '^[[:space:]]*WIRELESS_REGDOM="?'$_cc'"?[[:space:]]*$' $_conf 2>/dev/null
+        _ok "  WIRELESS_REGDOM=$_cc (already present in $_conf)"
+        _log "REGDOM_SET_NOOP: cc=$_cc file=$_conf"
+        return 0
+    end
+    set -l _payload 'WIRELESS_REGDOM="'$_cc'"'
+    set -l _err_tmp (_mktemp_or_null -p (_tmp_dir) ry-regdom-err.XXXXXX)
+    _track_tmpfile "$_err_tmp"
+    _log "RUN: sudo -n tee -- $_conf (stdin: WIRELESS_REGDOM=$_cc)"
+    if printf '%s\n' "$_payload" | sudo -n tee -- $_conf >/dev/null 2>"$_err_tmp"
+        _ok "  WIRELESS_REGDOM=$_cc → $_conf"
+        _log "REGDOM_SET: cc=$_cc file=$_conf"
+        _rm_tmp "$_err_tmp" false
+        return 0
+    end
+    set -l _err_msg ""
+    test "$_err_tmp" != /dev/null; and test -s "$_err_tmp"; and set _err_msg " err="(command head -n 1 -- "$_err_tmp" | string trim --)
+    _rm_tmp "$_err_tmp" false
+    _warn "  RY_INSTALL_WIRELESS_REGDOM: failed to write $_conf"
+    _log "REGDOM_SET_FAIL: cc=$_cc file=$_conf$_err_msg"
+    return 1
 end
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
@@ -3599,6 +3636,12 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
     not _ry_check_kernel_version; and set -g INSTALL_HAD_ERRORS true
+    _ry_apply_wireless_regdom
+    set -l _ar_rc $status
+    if test $_ar_rc -eq $EXIT_USAGE
+        set -g _PROG_FINALIZED_SKIP true
+        return $EXIT_USAGE
+    end
     _ry_check_wireless_regdom
     _echo
     if not _ry_validate_configs
@@ -3868,6 +3911,7 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
     end
     set -l _had_fail false
     set -g _RY_AUR_PARTIAL false
+    _log "AUR_NOISE_NOTE: paru/makepkg stderr/stdout may contain benign tokens — 'WARNING: Using existing \$srcdir/ tree' (cache reuse), 'error: command failed to execute correctly' (retried sub-step), 'BUILD_EXCLUSIVE directives ... do not match this kernel' (DKMS rejects build for an alternate kernel; mainline ships in-tree mt7925e). Authoritative success signal: MT7925_VERIFY_OK from _aur_verify_mt7925."
     if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- $AUR_PKGS
         if test (count $AUR_PKGS) -le 1
             _warn "AUR install failed: $AUR_PKGS"
@@ -4185,8 +4229,9 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
             printf '%s\n' $pkg $_rdeps
             return 0
         end
-        _warn "  $pkg has reverse dependencies: $_rdeps — skipping"
-        _warn "  To remove anyway (cascade): RY_INSTALL_PKG_REMOVE_CASCADE=1 ./ry-install.fish"
+        _info "  $pkg: skipped (reverse deps: $_rdeps)"
+        # Fish cmd-substitutions share parent shell state; this `set -a` propagates to the caller's loop.
+        set -a _RY_PKG_REMOVE_SKIPS "$pkg"
         return 0
     end
     printf '%s\n' "$pkg"
@@ -4231,6 +4276,7 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
         _warn "pacman not found, skipping PKGS_DEL removal"
         return 0
     end
+    set -g _RY_PKG_REMOVE_SKIPS
     set -l to_del
     set -l _del_installed (command pacman -Qq 2>/dev/null)
     for pkg in $PKGS_DEL
@@ -4240,6 +4286,10 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
             contains -- "$_emit" $to_del; and continue
             set -a to_del "$_emit"
         end
+    end
+    if test (count $_RY_PKG_REMOVE_SKIPS) -gt 0
+        _warn "  Skipped (reverse deps held by other packages): $_RY_PKG_REMOVE_SKIPS — set RY_INSTALL_PKG_REMOVE_CASCADE=1 to cascade"
+        _log "PKG_REMOVE_SKIPS: $_RY_PKG_REMOVE_SKIPS"
     end
     if test (count $to_del) -gt 0
         _log "PKG_REMOVE_REQUESTED: $to_del"
@@ -4643,9 +4693,8 @@ function _if_nm_restart --description "Restart NetworkManager when iwd backend s
         return 0
     end
     if _is_wifi_active_route
-        _warn "NetworkManager restart deferred — WiFi is the active route."
-        _warn "  Backend switch to iwd will not take effect until next reboot or manual restart."
-        _warn "  After reconnecting via ethernet (or post-reboot): sudo systemctl restart NetworkManager"
+        _warn "NetworkManager restart deferred — WiFi is the active route; iwd backend switch takes effect on reboot."
+        _info "  Or, after switching to ethernet: sudo systemctl restart NetworkManager"
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=finalize_backend_switch"
         return 0
     end
@@ -4730,7 +4779,12 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _log "MODE: unattended"
     _echo "ry-install v$VERSION"
     _progress_init
-    _install_preflight; or return $EXIT_PREFLIGHT
+    _install_preflight
+    set -l _pre_rc $status
+    if test $_pre_rc -ne 0
+        test $_pre_rc -eq $EXIT_USAGE; and return $EXIT_USAGE
+        return $EXIT_PREFLIGHT
+    end
     # rc discarded; phase failures tracked via INSTALL_HAD_ERRORS.
     _rdi_run_phases
     _install_rebuild_boot
@@ -4912,7 +4966,7 @@ function _post_nm --argument-names target --description "Post-hook: restart Netw
     _echo
     if _is_wifi_active_route
         _warn "NM/iwd config installed but NetworkManager restart deferred — WiFi is the active route."
-        _warn "  Config change will not take effect until next reboot or manual restart."
+        _info "  Config change will not take effect until next reboot or manual restart."
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=install_file target=$target"
     else
         # iwd reads main.conf only at startup; NM restart alone does not re-read it.

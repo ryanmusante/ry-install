@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.2.2-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.2.4-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -135,7 +135,7 @@ Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 | 1 | Preflight | Validate prerequisites, acquire lock, validate runtime |
 | 2 | Packages | `pacman -Syu --needed`; AUR via paru |
 | 3 | Configuration | Deploy 12 embedded config files (atomic) |
-| 4 | Services | `daemon-reload`; enable; mask 12 desktop/power units |
+| 4 | Services | fstab ext4 opts; `PKGS_DEL` removal; `daemon-reload`; enable; mask 12 desktop/power units |
 | 5 | Boot | Rebuild initramfs, update systemd-boot entries |
 | 6 | Finalize | Cache cleanup; NM restart (deferred when WiFi is active route) |
 
@@ -174,7 +174,7 @@ Deployed to `/etc/kernel/cmdline` (single line: `rw root=UUID=<uuid>
 </details>
 
 <details>
-<summary><b>Bootloader</b> — 8 keys (loader.conf + sdboot-manage.conf)</summary>
+<summary><b>Bootloader</b> — 10 keys (4 loader.conf + 6 sdboot-manage.conf)</summary>
 
 `/boot/loader/loader.conf`:
 
@@ -210,9 +210,11 @@ Deployed to `/etc/kernel/cmdline` (single line: `rw root=UUID=<uuid>
 | `COMPRESSION` | `zstd` |
 | `COMPRESSION_OPTIONS` | `(-1 -T0)` |
 
-11 hooks total; ordering verified by `_ry_validate_mkinitcpio_hooks`
-(systemd before autodetect; microcode after autodetect; block before
-filesystems; fsck last). Existence-only validation runs post-pacman.
+11 hooks total. `_vmh_order_checks` enforces 9 ordering invariants:
+`systemd`→`autodetect`, `autodetect`→`microcode`, `autodetect`→`modconf`,
+`systemd`→`sd-vconsole`, `systemd`→`keyboard`, `keyboard`→`sd-vconsole`,
+`modconf`→`kms`, `block`→`filesystems`, and `fsck` last. Existence-only
+validation also runs post-pacman.
 
 </details>
 

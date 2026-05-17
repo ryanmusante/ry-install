@@ -1,6 +1,29 @@
 ry-install ChangeLog
 ====================
 
+v7.2.4 - 2026-05-17
+-------------------
+
+  * `_vre_fstab`: `noatime:substr`/`lazytime:substr`/`commit=10:csv` 3-tuple spec → single csv-bounded `(^|,)tok(,|$)` regex for all 3 tokens. Old `lazytime:substr` false-matched `nolazytime` (the disable opt), silently reporting `lazytime present` when actually disabled; `noatime:substr` was safe but now symmetric. Loop refactored: 14 L → 9 L.
+  * `_ir_validate_counts`: +`_RY_POST_HOOKS:14` + `_RY_BOOT_CRITICAL_DSTS:4` invariants (13 → 15). Catches drift if a managed destination is added without a corresponding post-hook entry or if the boot-critical denylist gains/loses an entry.
+  * `_mr_copy_size_verify`: +`cmp -s` byte-content verify after size-equal check. Defence-in-depth: equal byte count is necessary but not sufficient. cmp guarded by `command -q` (graceful skip if absent — coreutils ships it, but kept defensive).
+  * `_dc_erase_globals`: +`_RY_BOOT_TAINTED` for symmetry with other process-local state flags (`_RY_HOLDS_LOCK`, `_RY_PACMAN_REVERT_ATTEMPTED`, etc.); functionally a no-op across runs since each run is a fresh process but closes the audit asymmetry.
+  * `_dc_kill_children` description: `Release lock` → `Release lock + terminate child PGID` (matched the body's `pkill -TERM -P` + `pkill -KILL -P` after grace period).
+  * `_verify_static_syntax`: `_verify_unit_syntax "$unit" (basename $unit)` 2-arg call → 3-arg with explicit `system` scope; function already handled empty arg via auto-detect, this is intent-explicit.
+  * `_ip_snapshot_mkinitcpio`: dropped redundant `sudo -n chmod 600 "$_snap"`; mktemp creates with 0600, and the revert path uses `chmod --reference=/etc/mkinitcpio.conf` on the *destination* — snapshot mode is irrelevant to final perms.
+  * `README.md`: `Bootloader` summary header `8 keys (loader.conf + sdboot-manage.conf)` → `10 keys (4 loader.conf + 6 sdboot-manage.conf)`. The 4 + 6 breakdown was already visible in the detail tables; only the header undercounted.
+  * `README.md`: `Initramfs` ordering blurb expanded — 4 named invariants → all 9 enforced (8 `BEFORE→AFTER` pairs + `fsck` last). Matches what `_vmh_order_checks` actually validates.
+  * `README.md`: `Install Flow` row 4 (`Services`) description gains `fstab ext4 opts` + `PKGS_DEL removal` — both happen between `_install_system_files` and `_install_configure_services` but were undocumented in the flow table.
+  * 5138 → 5139 L.
+
+v7.2.3 - 2026-05-17
+-------------------
+
+  * `_vmh_order_checks`: +2 pair rules (`systemd:autodetect`, `autodetect:microcode`) + new `fsck`-last-position check. README ordering invariants now enforced by validator (was: only `block:filesystems` overlapped).
+  * `_msg_print` color branch: `echo " $msg"` → `printf ' %s\n' "$msg"` — completes the v7.1.2 printf migration (last bare-echo site in the level-message family; closes the `-n`/`-e`/`-E` flag-interpretation path).
+  * `_vrs_boot_perf`: 2x `"$target""s target"` adjacent-quote concat → `"$target"s target` conventional form (cosmetic).
+  * 5129 → 5138 L.
+
 v7.2.2 - 2026-05-17
 -------------------
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.2.2 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.2.4 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.2.2"
+set -g VERSION "7.2.4"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -446,9 +446,9 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
     set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
-    set --erase _RY_READSYM_RESULT _RY_PKG_REMOVE_SKIPS
+    set --erase _RY_READSYM_RESULT _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED
 end
-function _dc_kill_children --description "_do_cleanup sub. Release lock"
+function _dc_kill_children --description "_do_cleanup sub. Release lock + terminate child PGID"
     if set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED
         set -q LOCK_DIR; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
     end
@@ -728,7 +728,9 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         MASK:12 \
         EXPECTED_VULKAN_PKGS:3 \
         EXPECTED_SERVICES:3 \
-        _RY_PKG_MANAGED_SERVICES:1
+        _RY_PKG_MANAGED_SERVICES:1 \
+        _RY_POST_HOOKS:14 \
+        _RY_BOOT_CRITICAL_DSTS:4
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv")
         set -l _name $_parts[1]
@@ -1117,7 +1119,7 @@ function _msg_print --argument-names level --description "Internal: leveled mess
         set_color $_color
         printf '[%s]' "$level"
         set_color normal
-        echo " $msg"
+        printf ' %s\n' "$msg"
     end >&2
 end
 function _msg --argument-names level --description "Format and print a leveled status message"
@@ -1727,7 +1729,7 @@ function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: ord
         end
     end
     # Pair format: "BEFORE:AFTER" — hook on the right MUST appear after hook on the left in MKINITCPIO_HOOKS (initramfs build order).
-    set -l order_checks "autodetect:modconf" "systemd:sd-vconsole" "systemd:keyboard" "keyboard:sd-vconsole" "modconf:kms" "block:filesystems"
+    set -l order_checks "systemd:autodetect" "autodetect:microcode" "autodetect:modconf" "systemd:sd-vconsole" "systemd:keyboard" "keyboard:sd-vconsole" "modconf:kms" "block:filesystems"
     for check in $order_checks
         set -l _sp (string split ':' -- "$check")
         set -l hook_before $_sp[1]
@@ -1742,6 +1744,15 @@ function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: ord
             _err "Mkinitcpio hook order: '$hook_before' must come before '$hook_after'"
             set errors (math $errors + 1)
         end
+    end
+    # fsck must be the final hook — runs after filesystems are mounted; misplacement defeats the early-boot fsck pass.
+    set -l _fsck_idx 0
+    for i in (seq (count $hooks))
+        test "$hooks[$i]" = fsck; and set _fsck_idx $i; and break
+    end
+    if test $_fsck_idx -gt 0; and test $_fsck_idx -ne (count $hooks)
+        _err "Mkinitcpio hook order: 'fsck' must be last (found at position $_fsck_idx of "(count $hooks)")"
+        set errors (math $errors + 1)
     end
     echo $errors
 end
@@ -2426,7 +2437,7 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
     if test (count $SERVICE_DESTINATIONS) -gt 0
         _echo "── systemd units ──"
         for unit in $SERVICE_DESTINATIONS
-            test -f "$unit"; and _verify_unit_syntax "$unit" (command basename -- "$unit")
+            test -f "$unit"; and _verify_unit_syntax "$unit" (command basename -- "$unit") system
         end
     end
 end
@@ -3218,18 +3229,11 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
     set -l _fstab_ok true
     for _fl in $_fstab_ext4
         set -l _opts (printf '%s\n' "$_fl" | command awk '{ print $4 }')
-        # substr: unambiguous flag, anywhere-in-opts is fine; csv: comma/end-boundary required so `commit=10` won't false-match inside `commit=100`.
-        for _check in 'noatime:substr' 'lazytime:substr' 'commit=10:csv'
-            set -l _p (string split ':' -- "$_check")
-            set -l _hit false
-            if test "$_p[2]" = csv
-                set -l _re (string escape --style=regex -- "$_p[1]")
-                string match -qr '(^|,)'$_re'(,|$)' -- "$_opts"; and set _hit true
-            else
-                string match -q '*'$_p[1]'*' -- "$_opts"; and set _hit true
-            end
-            if test "$_hit" = false
-                _fail "  ext4 entry missing $_p[1]: $_fl"
+        # All three options: comma/end-boundary required. `lazytime:substr` would false-match `nolazytime` (the disable opt); `noatime:substr` is safe today but kept symmetric.
+        for _tok in noatime lazytime commit=10
+            set -l _re (string escape --style=regex -- "$_tok")
+            if not string match -qr '(^|,)'$_re'(,|$)' -- "$_opts"
+                _fail "  ext4 entry missing $_tok: $_fl"
                 set _fstab_ok false
             end
         end
@@ -3408,9 +3412,9 @@ function _vrs_boot_perf --description "Runtime session check: systemd-analyze bo
                 set -l target $BOOT_TIME_TARGET
                 set -l time_int (math "round($total_sec)" 2>/dev/null)
                 if test -n "$time_int"; and test "$time_int" -le $target
-                    _ok "  Boot time within $target""s target"
+                    _ok "  Boot time within "$target"s target"
                 else if test -n "$time_int"
-                    _info "  Boot time exceeds $target""s target (ignored)"
+                    _info "  Boot time exceeds "$target"s target (ignored)"
                     _info "  Run 'systemd-analyze blame' to identify slow services"
                 end
             else
@@ -3595,7 +3599,7 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
 end
-function _mr_copy_size_verify --argument-names backup_file _mki_tmp --description "_mkinitcpio_revert sub: cp + byte-exact size verify"
+function _mr_copy_size_verify --argument-names backup_file _mki_tmp --description "_mkinitcpio_revert sub: cp + byte-exact size + content verify"
     if not sudo -n cp -- "$backup_file" "$_mki_tmp" 2>/dev/null
         _err "  /etc/mkinitcpio.conf revert failed at copy — current conf may reference uninstalled modules"
         _log "MKINITCPIO_REVERT_FAIL: cp $backup_file failed"
@@ -3606,6 +3610,12 @@ function _mr_copy_size_verify --argument-names backup_file _mki_tmp --descriptio
     if test -z "$_src_size"; or test -z "$_dst_size"; or not string match -qr '^[0-9]+$' -- "$_src_size"; or not string match -qr '^[0-9]+$' -- "$_dst_size"; or test "$_src_size" != "$_dst_size"
         _err "  /etc/mkinitcpio.conf revert failed at size verify (src=$_src_size dst=$_dst_size) — current conf may reference uninstalled modules"
         _log "MKINITCPIO_REVERT_FAIL: cp size mismatch src=$_src_size dst=$_dst_size"
+        return 1
+    end
+    # Defence-in-depth: size-equal is necessary but not sufficient; cmp confirms byte-content identity (cheap on a small conf file).
+    if command -q cmp; and not sudo -n cmp -s -- "$backup_file" "$_mki_tmp" 2>/dev/null
+        _err "  /etc/mkinitcpio.conf revert failed at cmp — same-size content drift between backup and tmp"
+        _log "MKINITCPIO_REVERT_FAIL: cmp content mismatch (size=$_src_size)"
         return 1
     end
     return 0
@@ -3688,7 +3698,7 @@ function _ip_snapshot_mkinitcpio --description "Snapshot /etc/mkinitcpio.conf fo
         _log "MKINITCPIO_BACKUP_FAIL: cp"
         return 0
     end
-    sudo -n chmod -- 600 "$_snap" 2>/dev/null
+    # mktemp creates with 0600 mode; explicit chmod was redundant. The revert path uses chmod --reference=/etc/mkinitcpio.conf on the *destination*, so snapshot mode is irrelevant to final perms.
     set -g _RY_MKI_BACKUP_FILE "$_snap"
     set -g _RY_MKI_HAD_ORIG true
 end

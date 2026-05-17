@@ -1,16 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.0.16 (2026-05-16) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.0.19 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.0.16"
+set -g VERSION "7.0.19"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
-set -g _MY_UID (command id -u)
 set -g PROFILE_NAME gtr9_pro
 set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
 set -g _RY_MANAGED_FILE_COUNT 13
@@ -63,6 +62,7 @@ for _early_arg in $argv
     end
 end
 set --erase _early_arg
+set -g _MY_UID (command id -u)
 
 function _ry_erase_handlers --description "Erase signal/exit handler functions"
     functions -e _cleanup _cleanup_pipe _cleanup_on_exit _cleanup_other _progress_on_winch 2>/dev/null
@@ -188,11 +188,13 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"
 set -g INSTALL_HAD_ERRORS false
 
 set -g _RY_BOOT_TAINTED false
+# Deploy failure on any of these 4 sets _RY_BOOT_TAINTED — blocks initramfs rebuild unless RY_INSTALL_FORCE_BOOT_REBUILD=1.
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" /etc/kernel/cmdline "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _TRACKED_TMPFILES
 set -g _SYS_TMP_DIRS
 set -g _USR_TMP_DIRS
 set -g _PROFILE_USES_WIFI_BACKEND false
+# NF-inverted pair: well-formed (>=4 cols) vs malformed (<4); MALFORMED uses word/comma bounds to skip LABEL=ext4_root substring hits (v7.0.10).
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 set -g NM_RESTART_DELAY 3
@@ -204,6 +206,7 @@ if not string match -qr '^\d+$' -- "$KVER_MAJOR"
     echo "[ERR] Cannot parse kernel major version from uname -r: $KVER" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
+# Strip non-digit suffix (e.g. `-cachyos1`, `-rc1`, `-arch1`) so version comparisons see integers, not strings.
 set -g KVER_MINOR (string replace -r '[^0-9].*' '' -- "$KVER_PARTS[2]")
 if test -z "$KVER_MINOR"; or not string match -qr '^\d+$' -- "$KVER_MINOR"
     echo "[ERR] Cannot parse kernel minor version from uname -r: $KVER" >&2
@@ -412,6 +415,7 @@ function _dc_sweep_tmpfiles --description "_do_cleanup sub. Remove tracked tmpfi
     set --erase _TRACKED_TMPFILES
 end
 function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for leftover ry-* tmpfiles"
+    functions -q _tmp_dir; or return 0
     set -l _tmpdir (_tmp_dir)
     set -l _tmp_globs \
         'ry-sudo-err.*' \
@@ -764,6 +768,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     _ir_validate_keys
     _ir_precompute_caches
     for _kp in $KERNEL_PARAMS
+        # Reject whitespace + shell metachars: would corrupt /etc/kernel/cmdline parsing or LINUX_OPTIONS quote-escaping in sdboot-manage.conf (v6.5.7).
         if string match -qr -- '[\s"`$;\\\\]' "$_kp"
             _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"
             _pre_dispatch_exit $EXIT_PREFLIGHT
@@ -1223,6 +1228,7 @@ function _progress_now --description "Monotonic seconds (cached uptime or epoch)
     command date +%s
 end
 function _progress_init --description "Open scroll region; draw initial bar"
+    # 6-phase list must stay in sync with README "Install Flow" table; phase skip in log = corresponding _install_* sub returned early.
     set -g _PROG_STEPS Preflight Packages Configuration Services Boot Finalize
     set -g _PROG_CUR 0
     set -g _PROG_TOTAL (count $_PROG_STEPS)
@@ -1407,6 +1413,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     set -l stdout_tmp "$_run_dir/stdout"
     set -l _run_timeout (_run_effective_timeout $argv)
     if test -n "$_run_timeout"
+        # --kill-after=10 sends SIGKILL 10s after SIGTERM if child doesn't exit; rc=124 (TERM caught), rc=137 (KILL after grace) — see TIMEOUT_TERM/TIMEOUT_KILL log events below.
         command timeout --foreground --kill-after=10 "$_run_timeout" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     else
         command $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
@@ -1723,7 +1730,10 @@ end
 function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: ordering invariants"
     set -l hooks $argv
     set -l errors 0
-    test (count $hooks) -eq 0; and echo 0; and return 0
+    if test (count $hooks) -eq 0
+        echo 0
+        return 0
+    end
     if test "$hooks[1]" != base
         _err "Mkinitcpio hook order: 'base' must be first (found: $hooks[1])"
         set errors (math $errors + 1)
@@ -1737,6 +1747,7 @@ function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: ord
             set -a _seen_hooks "$hook"
         end
     end
+    # Pair format: "BEFORE:AFTER" — hook on the right MUST appear after hook on the left in MKINITCPIO_HOOKS (initramfs build order).
     set -l order_checks "autodetect:modconf" "systemd:sd-vconsole" "systemd:keyboard" "keyboard:sd-vconsole" "modconf:kms" "block:filesystems"
     for check in $order_checks
         set -l _sp (string split ':' -- "$check")
@@ -2524,7 +2535,7 @@ function _vs_read_symmetry_selftest --description "Preflight: detect read-symmet
         return 0
     end
     _fail "  read-symmetry self-test: disk=$_disk_bytes read=$_read_len (expected both=12) — verifier logic is broken; results UNRELIABLE"
-    _log "VERIFY_LOGIC_BUG: read-symmetry self-test failed disk=$_disk_bytes read=$_read_len fish="(fish --version 2>/dev/null | string match -rg 'version (\S+)')
+    _log "VERIFY_LOGIC_BUG: read-symmetry self-test failed disk=$_disk_bytes read=$_read_len fish="(command fish --version 2>/dev/null | string match -rg 'version (\S+)')
     set -g _RY_READSYM_RESULT 1
     return 1
 end
@@ -2786,7 +2797,8 @@ function _vrkg_rebar_sam --description "_vrk_gpu_state sub: ReBAR/SAM status via
         _info "  lspci not available for ReBAR check"
         return 0
     end
-    set -l bar_size (lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*256M|Region.*Memory.*512M|Region.*Memory.*[0-9]G' | command head -n 1)
+    # ReBAR signal: BAR strictly >256 MB. 256 MB is the no-ReBAR cap on AMD GPUs; only 512 MB or GB-range entries indicate ReBAR/SAM is active.
+    set -l bar_size (command lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*512M|Region.*Memory.*[0-9]G' | command head -n 1)
     if test -n "$bar_size"
         _ok "  ReBAR/SAM: large BAR detected"
         _info "  $bar_size"
@@ -2855,6 +2867,7 @@ function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (h
         set -l sysfs_val (string trim -- (command cat -- "$ppath" 2>/dev/null))
         set -l sysfs_val_dec "$sysfs_val"
         set -l expected_dec "$expected"
+        # Normalize both sides to decimal: amdgpu sysfs returns hex on some kernels, decimal on others; string compare alone would false-mismatch.
         string match -qr '^0x[0-9a-fA-F]+$' -- "$sysfs_val"; and set sysfs_val_dec (printf '%d' "$sysfs_val" 2>/dev/null; or echo "$sysfs_val")
         string match -qr '^0x[0-9a-fA-F]+$' -- "$expected"; and set expected_dec (printf '%d' "$expected" 2>/dev/null; or echo "$expected")
         if test "$sysfs_val_dec" = "$expected_dec"
@@ -2950,11 +2963,12 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null | string split \n)
         set -l _full_count (count $_full)
+        # Cap to 5000 lines to bound fish list memory + downstream grep cost; ring buffer overflow on long-uptime systems already drops earlier kernel-init markers.
         set -g _RY_DMESG_CACHE $_full[1..5000]
         test "$_full_count" -gt 5000 2>/dev/null; and _log "DMESG_CAPPED: kept=5000 of $_full_count lines"
         if test (count $_RY_DMESG_CACHE) -gt 0
             set -g _RY_DMESG_PREEMPT (printf '%s\n' $_RY_DMESG_CACHE | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
-            set -g _RY_DMESG_BAR (printf '%s\n' $_RY_DMESG_CACHE | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large|above.4g' | command head -n 1)
+            set -g _RY_DMESG_BAR (printf '%s\n' $_RY_DMESG_CACHE | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large' | command head -n 1)
             set -g _RY_DMESG_TSC (printf '%s\n' $_RY_DMESG_CACHE | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
         end
     end
@@ -3255,6 +3269,7 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
     set -l _fstab_ok true
     for _fl in $_fstab_ext4
         set -l _opts (printf '%s\n' "$_fl" | command awk '{ print $4 }')
+        # substr: unambiguous flag, anywhere-in-opts is fine; csv: comma/end-boundary required so `commit=10` won't false-match inside `commit=100`.
         for _check in 'noatime:substr' 'lazytime:substr' 'commit=10:csv'
             set -l _p (string split ':' -- "$_check")
             set -l _hit false
@@ -3860,14 +3875,17 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
             set _had_fail true
         else
             _warn "AUR batch install failed — retrying per-package to identify failures"
+            set -l _retry_failed 0
             for pkg in $AUR_PKGS
                 if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- "$pkg"
                     _warn "AUR install failed: $pkg"
                     set -g INSTALL_HAD_ERRORS true
                     set _had_fail true
-                    set -g _RY_AUR_PARTIAL true
+                    set _retry_failed (math $_retry_failed + 1)
                 end
             end
+            # Partial = some-but-not-all failed; total per-pkg failure is full failure, not "partial".
+            test $_retry_failed -gt 0; and test $_retry_failed -lt (count $AUR_PKGS); and set -g _RY_AUR_PARTIAL true
         end
     end
     if test "$_had_fail" = true
@@ -3978,6 +3996,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
     end
 end
 function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk script for ext4 mount-opt rewrite"
+    # Idempotent rewrite: comments / non-ext4 / digits-only $4 / already-conformant ext4 lines pass through unchanged; only non-conformant ext4 entries are rewritten in-place.
     string join \n \
         'BEGIN { OFS = " " }' \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
@@ -4146,6 +4165,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
     set -l _t (_run_resolve_timeout)
     test -z "$_t"; and set _t 60
     test "$_t" -gt 60; and set _t 60
+    # Pipe chain: trim ws → strip version constraints `[=<>]…` → filter self ($pkg) + empty lines. Output is bare rdep package names, one per line.
     set -l _rdeps_raw (command timeout "$_t" pactree -ru "$pkg" 2>/dev/null | string trim -- | string replace -r '[=<>].*$' '' | string match -rv -- "^($_pkg_re|)\$")
     set -l _ps $pipestatus
     if test "$_ps[1]" -ne 0
@@ -4867,7 +4887,7 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
     end
     return 0
 end
-function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit"
+function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit (+ try-restart to pick up changed ExecStart)"
     set -l _rc 0
     set -l _bn (command basename -- "$target")
     _run sudo -n systemctl daemon-reload; or _warn "Systemctl daemon-reload failed"
@@ -4875,6 +4895,8 @@ function _post_service --argument-names target --description "Post-hook: daemon-
         _warn "Failed to enable $_bn (system)"
         set _rc 1
     end
+    # try-restart picks up changed ExecStart on re-deploy for non-oneshot units; oneshot+RemainAfterExit (cpupower-epp) re-runs idempotently.
+    _run sudo -n systemctl try-restart -- "$_bn"; or _log "POST_SERVICE_TRY_RESTART: rc=non-zero unit=$_bn"
     return $_rc
 end
 function _post_resolved --argument-names target --description "Post-hook: restart systemd-resolved"
@@ -4886,13 +4908,17 @@ function _post_logind --argument-names target --description "Post-hook: notify r
     _info "Logind config $target changed — reboot required (restarting logind kills all sessions)"
     return 0
 end
-function _post_nm --argument-names target --description "Post-hook: restart NetworkManager (deferred when WiFi is active route)"
+function _post_nm --argument-names target --description "Post-hook: restart NetworkManager (+ try-restart iwd when iwd/main.conf changes); deferred when WiFi is active route"
     _echo
     if _is_wifi_active_route
         _warn "NM/iwd config installed but NetworkManager restart deferred — WiFi is the active route."
         _warn "  Config change will not take effect until next reboot or manual restart."
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=install_file target=$target"
     else
+        # iwd reads main.conf only at startup; NM restart alone does not re-read it.
+        if string match -q '*/iwd/main.conf' -- "$target"
+            _run sudo -n systemctl try-restart iwd.service; or _warn "iwd try-restart failed (config will apply on next reboot)"
+        end
         _run sudo -n systemctl restart NetworkManager; or _warn "NetworkManager restart failed"
     end
     return 0
@@ -5021,6 +5047,7 @@ if test "$MODE" != check; and begin
     set -g QUIET false
 end
 set -l mode_label $MODE
+# Rename preflight-*.jsonl → MODE-*.jsonl now that MODE is known; orphan preflight-* in logs/ indicates rename failed (perms, inode pressure, or concurrent run).
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"
 set -l old_log "$LOG_FILE"
 set -l _log_rename_ok true

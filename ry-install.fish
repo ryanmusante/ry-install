@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.0.12 (2026-05-16) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.0.16 (2026-05-16) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.0.13"
+set -g VERSION "7.0.16"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -197,7 +197,7 @@ set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 set -g NM_RESTART_DELAY 3
 set -g _PROG_BAR_WIDTH 40
-set -g KVER (uname -r)
+set -g KVER (command uname -r)
 set -g KVER_PARTS (string split '.' -- "$KVER")
 set -g KVER_MAJOR $KVER_PARTS[1]
 if not string match -qr '^\d+$' -- "$KVER_MAJOR"
@@ -321,8 +321,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     if not command mkdir -- "$LOCK_DIR" 2>/dev/null
         return 2
     end
-    # Sentinel must precede chmod: cleanup gate at _dc_kill_children keys on _RY_LOCK_DIR_OWNED,
-    # so a signal arriving between mkdir success and the sentinel would leak LOCK_DIR.
+    # Sentinel must precede chmod; cleanup gate _dc_kill_children keys on _RY_LOCK_DIR_OWNED — signal between mkdir success and sentinel would leak LOCK_DIR.
     set -g _RY_LOCK_DIR_OWNED true
     command chmod -- 700 "$LOCK_DIR" 2>/dev/null
     set -l _pid_tmp (command mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
@@ -1565,8 +1564,7 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     end
 end
 function _chk_token_in --argument-names line token label --description "Verify a whole-word token is present in a config line"
-    # \b regex anchors at word/non-word boundary; assumes token starts and ends with word chars.
-    # Current callers (MKINITCPIO_MODULES, MKINITCPIO_HOOKS members) all comply.
+    # \b anchors at word/non-word boundary, assumes token has word-char start+end — callers (MKINITCPIO_MODULES, MKINITCPIO_HOOKS) all comply.
     set -l _re (string escape --style=regex -- "$token")
     if string match -qr "\\b$_re\\b" -- "$line"
         _ok "  $label: present"
@@ -3787,8 +3785,7 @@ function _ip_run_and_verify --description "_install_packages sub: run pacman -Sy
     _info "Verifying package installation..."
     set -l missing_pkgs (command pacman -T -- $pkgs_to_install 2>/dev/null)
     set -l _pt_rc $status
-    # pacman -T exit: 0=all installed, 127=some missing (names on stdout), other=fatal.
-    # Both 0 and 127 are valid non-fatal results; missing_pkgs count below detects 127 case.
+    # pacman -T exit: 0=all installed, 127=some missing (names on stdout, valid non-fatal — detected via missing_pkgs count below), other=fatal.
     if test $_pt_rc -ne 0; and test $_pt_rc -ne 127
         _err "pacman -T failed (rc=$_pt_rc) — cannot verify install state"
         set -g INSTALL_HAD_ERRORS true
@@ -4738,8 +4735,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
-# First-match-wins; most-specific paths first, `*.service` catchall last.
-# Patterns use fish `string match` glob (no -r): `*` spans `/` separators, so `*/dir/*` matches any-depth.
+# First-match-wins (most-specific paths first, `*.service` catchall last); fish `string match` glob (no -r) — `*` spans `/`, so `*/dir/*` matches any-depth.
 set -g _RY_POST_HOOKS "/boot/*|boot" "/efi/*|boot" "/etc/mkinitcpio.conf|boot" "/etc/sdboot-manage.conf|boot" "/etc/kernel/cmdline|boot" "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/iwd/main.conf|nm" "*/NetworkManager/conf.d/*|nm" "*/sysctl.d/*|sysctl" "*/environment.d/*|envd" "/etc/drirc|drirc" "*/tmpfiles.d/*|tmpfiles" "*.service|service"
 
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"

@@ -1,6 +1,21 @@
 ry-install ChangeLog
 ====================
 
+v7.0.16 - 2026-05-16
+--------------------
+
+  * `set -g KVER (uname -r)` (L200) → `(command uname -r)` — gap in the v7.0.7 bare-system-cmd sweep (which prefixed 68 invocations across `date`/`systemctl`/`id`/`env`/`findmnt`/`tput`/`getent`/`nmcli`/`modinfo`/`swapon`/`pacman`/`curl`/`ping`/`pgrep`/`bootctl`/`ip`/`zramctl`/`kill` etc.); `uname` was the only system command remaining without `command` prefix and the only invocation in the entire script (L200; the 2 mentions at L204 + L209 are inside error-message strings). Risk closed: a function or alias shadowing `uname` (defined in fish config or sourced post-bootstrap) would have silently mis-set `KVER`, propagating to `KVER_PARTS`/`KVER_MAJOR`/`KVER_MINOR`/`KVER_PATCH` and every downstream kernel-version comparison (initramfs probes, AUR mt7925-dkms version guard, sdboot-manage entry filtering). Audit confirmed no further bare invocations: full sweep across `uname`/`free`/`uptime`/`zcat`/`hostnamectl`/`dmesg`/`journalctl`/`localectl`/`timedatectl`/`ls`/`cd`/`pwd`/`type` returned only this single site. No behaviour change in any environment where `uname` is not shadowed. Line count unchanged (5100); +1 char net.
+
+v7.0.15 - 2026-05-16
+--------------------
+
+  * Source-style sweep: four two-line `#` rationale blocks collapsed to one line each so the script now contains zero multi-line comment blocks (the shebang + version banner on L1-L2 remain as the documented script-header exception). Collapsed sites: `_acquire_lock_fresh` lock-sentinel ordering rationale (was L324-L325), `_chk_token_in` `\b` regex word-boundary assumption (was L1568-L1569), `_ip_run_and_verify` `pacman -T` exit-code semantics 0/127/other (was L3790-L3791), `_RY_POST_HOOKS` glob first-match-wins + `*` spans `/` rationale (was L4741-L4742). Verbatim semantic content preserved; only newlines + leading `#` re-indent removed. No behaviour change. 5104 -> 5100 lines.
+
+v7.0.14 - 2026-05-16
+--------------------
+
+  * Script header (L2) version sync: `# ry-install v7.0.12 (2026-05-16)` → `# ry-install v7.0.14 (2026-05-16)`. The `$VERSION` global on L7 advanced through v7.0.13 while the inline `# ry-install v…` comment on L2 was not bumped in lockstep — recreating the v6.5.2 regression pattern (where the same desync first surfaced) and breaking the convention that `grep -m1 '^# ry-install v' ry-install.fish` returns the authoritative version string for tooling that does not source the script. Both lines now agree at 7.0.14 and the README version badge is moved in step. No behaviour change; line count unchanged (5104).
+
 v7.0.13 - 2026-05-16
 --------------------
 

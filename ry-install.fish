@@ -4,7 +4,7 @@ if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.0.12"
+set -g VERSION "7.0.13"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -321,8 +321,10 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     if not command mkdir -- "$LOCK_DIR" 2>/dev/null
         return 2
     end
-    command chmod -- 700 "$LOCK_DIR" 2>/dev/null
+    # Sentinel must precede chmod: cleanup gate at _dc_kill_children keys on _RY_LOCK_DIR_OWNED,
+    # so a signal arriving between mkdir success and the sentinel would leak LOCK_DIR.
     set -g _RY_LOCK_DIR_OWNED true
+    command chmod -- 700 "$LOCK_DIR" 2>/dev/null
     set -l _pid_tmp (command mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
     if test -z "$_pid_tmp"; or not printf '%s\n' "$fish_pid" >"$_pid_tmp" 2>/dev/null
         test -n "$_pid_tmp"; and command rm -f -- "$_pid_tmp" 2>/dev/null
@@ -433,12 +435,13 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _KCONFIG_DATA _KCONFIG_LOADED _RY_SKIP_IWD _RY_ESP_PATH _RY_BOOT_PATH
     set --erase _RY_ESP_TRIED _RY_BOOT_TRIED
     set --erase _RY_SYSTEMD_VER _RY_SYSTEMD_VER_TRIED _RY_DEPLOYED_SERVICES
-    set --erase _RY_BOOT_COUNT _CPU_PATH
+    set --erase _RY_BOOT_COUNT _RY_BOOT_ENUM_OK _CPU_PATH
     set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
     set --erase _PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_PACMAN_REVERT_ATTEMPTED
     set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
     set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
+    set --erase _RY_READSYM_RESULT
 end
 function _dc_kill_children --description "_do_cleanup sub. Release lock"
     if set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED
@@ -1562,6 +1565,8 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     end
 end
 function _chk_token_in --argument-names line token label --description "Verify a whole-word token is present in a config line"
+    # \b regex anchors at word/non-word boundary; assumes token starts and ends with word chars.
+    # Current callers (MKINITCPIO_MODULES, MKINITCPIO_HOOKS members) all comply.
     set -l _re (string escape --style=regex -- "$token")
     if string match -qr "\\b$_re\\b" -- "$line"
         _ok "  $label: present"
@@ -2500,9 +2505,12 @@ function _verify_static_checksum --description "Verify embedded content hash mat
     _echo
 end
 function _vs_read_symmetry_selftest --description "Preflight: detect read-symmetry regressions in _installed_bytes (asymmetric trailing newline)"
+    # Idempotent: result cached in _RY_READSYM_RESULT (0=ok, 1=fail); subsequent calls short-circuit.
+    set -q _RY_READSYM_RESULT; and return $_RY_READSYM_RESULT
     set -l _tmp (_mktemp_or_null -p (_tmp_dir) ry-readsym.XXXXXX)
     if test -z "$_tmp"; or test "$_tmp" = /dev/null
         _log "READ_SYMMETRY_SKIP: mktemp returned no path"
+        set -g _RY_READSYM_RESULT 0
         return 0
     end
     _track_tmpfile "$_tmp"
@@ -2514,10 +2522,12 @@ function _vs_read_symmetry_selftest --description "Preflight: detect read-symmet
     _rm_tmp "$_tmp" false
     if test "$_disk_bytes" = 12; and test "$_read_len" = 12
         _log "READ_SYMMETRY_OK: disk=12 read=12"
+        set -g _RY_READSYM_RESULT 0
         return 0
     end
     _fail "  read-symmetry self-test: disk=$_disk_bytes read=$_read_len (expected both=12) — verifier logic is broken; results UNRELIABLE"
     _log "VERIFY_LOGIC_BUG: read-symmetry self-test failed disk=$_disk_bytes read=$_read_len fish="(fish --version 2>/dev/null | string match -rg 'version (\S+)')
+    set -g _RY_READSYM_RESULT 1
     return 1
 end
 function _ry_verify_static --description "Verify installed configs match embedded checksums"
@@ -3777,6 +3787,8 @@ function _ip_run_and_verify --description "_install_packages sub: run pacman -Sy
     _info "Verifying package installation..."
     set -l missing_pkgs (command pacman -T -- $pkgs_to_install 2>/dev/null)
     set -l _pt_rc $status
+    # pacman -T exit: 0=all installed, 127=some missing (names on stdout), other=fatal.
+    # Both 0 and 127 are valid non-fatal results; missing_pkgs count below detects 127 case.
     if test $_pt_rc -ne 0; and test $_pt_rc -ne 127
         _err "pacman -T failed (rc=$_pt_rc) — cannot verify install state"
         set -g INSTALL_HAD_ERRORS true
@@ -4399,7 +4411,15 @@ function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, 
     echo "$_p"
 end
 function _enum_boot_entries --argument-names esp --description "Enumerate \$esp/loader/entries/*.conf"
+    set -g _RY_BOOT_ENUM_OK true
     set -l _basenames (sudo -n find "$esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | string split0)
+    set -l _ps $pipestatus
+    if not _pipe_all_ok $_ps
+        set -g _RY_BOOT_ENUM_OK false
+        set -g _RY_BOOT_COUNT 0
+        functions -q _log; and _log "BOOT_ENUM_FAIL: esp=$esp pipestatus=$_ps (sudo lapse or read error)"
+        return 0
+    end
     set -g _RY_BOOT_COUNT (count $_basenames)
 end
 function _pbs_check_boot_files --argument-names boot glob label --description "_preflight_boot_sanity sub: enumerate \$glob in \$boot root"
@@ -4530,14 +4550,18 @@ function _irb_sdboot_apply --description "Run sdboot-manage gen + update"
 end
 function _irb_verify_entries --argument-names esp --description "Re-enumerate boot entries post-rebuild"
     _enum_boot_entries "$esp"
-    set -l entry_count $_RY_BOOT_COUNT
-    if test "$entry_count" -gt 0
-        _ok "Boot entries: $entry_count found in $esp/loader/entries/"
+    if test "$_RY_BOOT_ENUM_OK" = false
+        _warn "Boot entries: cannot enumerate $esp/loader/entries (sudo lapsed or read error)"
     else
-        _err "No boot entries found in $esp/loader/entries/"
-        _info "  System may not boot! Check /etc/sdboot-manage.conf LINUX_OPTIONS"
-        _info "  Try: sudo sdboot-manage gen --verbose"
-        set -g INSTALL_HAD_ERRORS true
+        set -l entry_count $_RY_BOOT_COUNT
+        if test "$entry_count" -gt 0
+            _ok "Boot entries: $entry_count found in $esp/loader/entries/"
+        else
+            _err "No boot entries found in $esp/loader/entries/"
+            _info "  System may not boot! Check /etc/sdboot-manage.conf LINUX_OPTIONS"
+            _info "  Try: sudo sdboot-manage gen --verbose"
+            set -g INSTALL_HAD_ERRORS true
+        end
     end
     _boot_initrd_size_scan "$esp"
 end
@@ -4715,6 +4739,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
 end
 
 # First-match-wins; most-specific paths first, `*.service` catchall last.
+# Patterns use fish `string match` glob (no -r): `*` spans `/` separators, so `*/dir/*` matches any-depth.
 set -g _RY_POST_HOOKS "/boot/*|boot" "/efi/*|boot" "/etc/mkinitcpio.conf|boot" "/etc/sdboot-manage.conf|boot" "/etc/kernel/cmdline|boot" "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/iwd/main.conf|nm" "*/NetworkManager/conf.d/*|nm" "*/sysctl.d/*|sysctl" "*/environment.d/*|envd" "/etc/drirc|drirc" "*/tmpfiles.d/*|tmpfiles" "*.service|service"
 
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"

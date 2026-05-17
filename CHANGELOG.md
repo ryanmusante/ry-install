@@ -1,6 +1,11 @@
 ry-install ChangeLog
 ====================
 
+v7.0.13 - 2026-05-16
+--------------------
+
+  * `_enum_boot_entries` (L4401) gains pipestatus capture after the `sudo -n find … | string split0` pipeline + new `_RY_BOOT_ENUM_OK` sentinel: on sudo-credential lapse or read error the function now sets `_RY_BOOT_ENUM_OK=false` + `_RY_BOOT_COUNT=0` and logs `BOOT_ENUM_FAIL: esp=<path> pipestatus=<vec>` rather than silently returning count=0; caller `_irb_verify_entries` (L4533) branches on the sentinel to emit `_warn "cannot enumerate $esp/loader/entries (sudo lapsed or read error)"` (enum failed) vs the existing `_err "No boot entries found in $esp/loader/entries/"` + `INSTALL_HAD_ERRORS=true` (zero entries on a successfully-enumerated dir) — closes a HIGH-severity false-negative path where a credential-cache lapse during finalize was misreported as a missing-entry bootloader fault, polluting `INSTALL_HAD_ERRORS` and the JSONL footer. `_acquire_lock_fresh` (L320-326): `_RY_LOCK_DIR_OWNED` sentinel hoisted above the `chmod 700` so a SIGINT arriving in the sub-ms window between `mkdir` success and the original sentinel set no longer leaks `LOCK_DIR` (cleanup gate at `_dc_kill_children` keys on `_RY_LOCK_DIR_OWNED`). `_vs_read_symmetry_selftest`: result memoized in `_RY_READSYM_RESULT` global; repeat calls in the same session short-circuit to the cached rc rather than re-running the 12-byte tmpfile probe (preserves the `_fail` counter bump on first failure). `_dc_erase_globals` updated to clear `_RY_BOOT_ENUM_OK` + `_RY_READSYM_RESULT` alongside the existing 24 globals. Inline comments added at `_ip_run_and_verify` (`pacman -T` exit codes: 0=all installed, 127=some missing with names on stdout, other=fatal — both 0 and 127 are valid non-fatal results per `src/pacman/deptest.c` since alpm changed missing-deps rc from 1→127 to disambiguate from generic-error rc=1), `_chk_token_in` (`\b…\b` regex assumes word-char tokens; current callers — `MKINITCPIO_MODULES` and `MKINITCPIO_HOOKS` members — all comply), and `_RY_POST_HOOKS` (fish `string match` glob `*` spans `/` separators — intentional for the `*/dir/*` patterns to match any-depth paths). 5079 -> 5104 lines.
+
 v7.0.12 - 2026-05-16
 --------------------
 

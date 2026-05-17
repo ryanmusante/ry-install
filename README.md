@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.3.1-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.3.2-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -635,7 +635,7 @@ for PipeWire RT scheduling.
 
 | Property | Value |
 |---|---|
-| Path | `~/ry-install/logs/YYYY-MM-DD/MODE-TIMESTAMP-PID.jsonl` |
+| Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl` |
 | Format | NDJSON, one file per run, no auto-rotation |
 | Prune | `find ~/ry-install/logs -mtime +30 -delete` |
 | Event `header` | Run metadata (`version`, `mode`, `argv`, etc.) |

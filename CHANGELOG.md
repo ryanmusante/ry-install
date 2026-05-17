@@ -1,6 +1,13 @@
 ry-install ChangeLog
 ====================
 
+v7.3.2 - 2026-05-17
+-------------------
+
+  * `_ry_check_deps`: systemd `< 250` `_warn` → `_err` + `return 1` — README §Prerequisites listed systemd ≥ 250 among preflight gates that "fail loudly"; script was warn-only. Hard-fail now matches the documented contract (propagates via `_install_preflight` for-loop → `EXIT_PREFLIGHT`).
+  * README §Logs: log path `MODE-TIMESTAMP-PID.jsonl` → `MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl` — matches `-h` help text and actual `TIMESTAMP` construction (script L157: `+%Y%m%d-%H%M%S%z`-`$fish_pid`).
+  * VERSION 7.3.1 → 7.3.2. 5133 → 5136 L.
+
 v7.3.1 - 2026-05-17
 -------------------
 

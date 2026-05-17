@@ -1,14 +1,14 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.2.1-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.2.2-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 ![license](https://img.shields.io/badge/license-MIT-green.svg)
 
-> Self-contained CachyOS configuration manager. Single Fish script, 13
-> embedded configs, no required external dependencies (paru required
-> for AUR: `mkinitcpio-firmware`, `mt76-mt7925-dkms`).
+> Single Fish script for CachyOS — 12 embedded configs, no required
+> external deps. paru required for AUR (`mkinitcpio-firmware`,
+> `mt76-mt7925-dkms`).
 
 **Target:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware](#hardware).
 
@@ -40,8 +40,7 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-> [!TIP]
-> If you cannot set the executable bit: `fish ry-install.fish`.
+If you cannot set the executable bit: `fish ry-install.fish`.
 
 **Post-install:**
 1. Reboot — required for kernel cmdline, initramfs, NM backend switch.
@@ -50,17 +49,14 @@ chmod +x ry-install.fish
 
 Typical duration: **3–8 minutes**.
 
-> [!NOTE]
-> Over WiFi, the NM backend switch (wpa_supplicant → iwd) is deferred
-> to next reboot. On ethernet:
-> `sudo systemctl restart NetworkManager` applies it immediately.
-
 > [!IMPORTANT]
-> Initramfs rebuild aborts when on-disk package state or boot-critical
-> configs (`/etc/mkinitcpio.conf`, `/etc/kernel/cmdline`,
-> `/boot/loader/loader.conf`, `/etc/sdboot-manage.conf`) are
-> inconsistent with embedded content. Override after manual
-> remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
+> Over WiFi, the NM backend switch (wpa_supplicant → iwd) is deferred
+> to next reboot — on ethernet, `sudo systemctl restart NetworkManager`
+> applies it immediately. Initramfs rebuild aborts when on-disk package
+> state or boot-critical configs (`/etc/mkinitcpio.conf`,
+> `/etc/kernel/cmdline`, `/boot/loader/loader.conf`,
+> `/etc/sdboot-manage.conf`) are inconsistent with embedded content.
+> Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ## Scope
 
@@ -77,6 +73,7 @@ Typical duration: **3–8 minutes**.
 | Fish | ≥ 3.6 |
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | Free space | 2 GB `/`, 200 MB `/boot` |
+| Before `-Syu` | Read [CachyOS](https://wiki.cachyos.org) + [Arch news](https://archlinux.org/news/) |
 
 Additional preflight gates (systemd ≥ 250, unrestricted sudo, GNU
 coreutils, hardware match) are enforced and fail loudly. The ext4
@@ -88,9 +85,6 @@ only the literal text differs.
 sudo -v                          # warm sudo cache
 df -h / /boot                    # verify space
 ```
-
-Check [CachyOS](https://wiki.cachyos.org) and
-[Arch news](https://archlinux.org/news/) before any `pacman -Syu`.
 
 ## Hardware
 
@@ -107,13 +101,16 @@ Check [CachyOS](https://wiki.cachyos.org) and
 > silicon. Override at your own risk:
 > `RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish`.
 
-> [!IMPORTANT]
-> BIOS prerequisite: set **UMA Frame Buffer Size** to `Auto` or
-> `512 MB` (not a fixed 16 GB carveout). The Strix Halo APU uses UMA
-> with shared system memory; a large fixed carveout wastes RAM that
-> would otherwise be available to the OS and is dynamically backed
-> when the GPU needs it. `--verify-runtime` warns when
-> `mem_info_vram_total` exceeds 512 MB.
+<details>
+<summary><b>BIOS prerequisite — UMA Frame Buffer Size</b></summary>
+
+Set **UMA Frame Buffer Size** to `Auto` or `512 MB` (not a fixed 16 GB
+carveout). The Strix Halo APU uses UMA with shared system memory; a
+large fixed carveout wastes RAM that would otherwise be available to
+the OS and is dynamically backed when the GPU needs it.
+`--verify-runtime` warns when `mem_info_vram_total` exceeds 512 MB.
+
+</details>
 
 Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 [Mesa gfx1151](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151).
@@ -128,9 +125,8 @@ Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 | `--verify-runtime` | Check live system state (after reboot) |
 | `--check` | Silent idempotency probe (0=clean, 3=preflight, 10=drift) |
 | `--install-file <path>` | Re-deploy a single managed file (absolute path) |
+| `--` | End of options (positionals after `--` are rejected) |
 | `-h, --help` / `-v, --version` | Help / version |
-
-Positional arguments after `--` are rejected.
 
 ## Install Flow
 
@@ -138,64 +134,374 @@ Positional arguments after `--` are rejected.
 |---|---|---|
 | 1 | Preflight | Validate prerequisites, acquire lock, validate runtime |
 | 2 | Packages | `pacman -Syu --needed`; AUR via paru |
-| 3 | Configuration | Deploy 13 embedded config files (atomic) |
+| 3 | Configuration | Deploy 12 embedded config files (atomic) |
 | 4 | Services | `daemon-reload`; enable; mask 12 desktop/power units |
 | 5 | Boot | Rebuild initramfs, update systemd-boot entries |
-| 6 | Finalize | Cache cleanup, NM restart (deferred on WiFi) |
+| 6 | Finalize | Cache cleanup; NM restart (deferred when WiFi is active route) |
 
 ## Configuration
 
-All values are embedded in the script and deployed to the paths in
-[Managed Files](#managed-files). To retune, edit the `set -g` profile
-globals near the top of `ry-install.fish` (`LOADER_*`, `SDBOOT_*`,
-`KERNEL_PARAMS`, `MKINITCPIO_*`, `SYSCTL_VALUES`, `ENV_VARS`, `PKGS_*`,
-`AUR_PKGS`, `MASK`, `EXPECTED_SERVICES`). The script is the source of
-truth — `--verify-static` matches installed files against embedded
+Every value below is embedded in `ry-install.fish` and deployed to the
+paths in [Managed Files](#managed-files). To retune, edit the `set -g`
+profile globals near the top of the script. The script is the source
+of truth — `--verify-static` matches installed files against embedded
 content byte-for-byte.
 
 <details>
-<summary><b>Profile highlights</b></summary>
+<summary><b>Kernel cmdline</b> — 15 params (<code>KERNEL_PARAMS</code>)</summary>
 
-| Domain | Key setting |
+| Param | Value |
 |---|---|
-| Kernel cmdline | `amd_pstate=active`, `amdgpu.cwsr_enable=0`, `iommu=pt`, `split_lock_detect=off`, `tsc=reliable`, `zswap.enabled=0` (15 params total) |
-| Bootloader | systemd-boot, `default=@saved`, `timeout=0` |
-| Initramfs | `MODULES=(amdgpu)`, systemd HOOKS, `COMPRESSION=zstd` |
-| Network | NetworkManager + iwd; resolved (DoT + DNSSEC + mDNS) |
-| Sysctl | BBR+fq, `tcp_fastopen=3`, 10 GbE buffers (16 tunables) |
-| fstab | `noatime,lazytime,commit=10` on ext4 (idempotent rewrite) |
-| Env | `PROTON_USE_NTSYNC=1`, `RADV_PERFTEST=sam,nircache`, `RADV_EXPERIMENTAL=transfer_queue`, `MESA_SHADER_CACHE_MAX_SIZE=4G` (11 vars) |
+| `iommu` | `pt` |
+| `amd_pstate` | `active` |
+| `amdgpu.cwsr_enable` | `0` |
+| `amdgpu.ppfeaturemask` | `0xfffd3fff` |
+| `loglevel` | `3` |
+| `module_blacklist` | `pcspkr` |
+| `nowatchdog` | (flag) |
+| `pcie_aspm.policy` | `performance` |
+| `quiet` | (flag) |
+| `rd.systemd.show_status` | `auto` |
+| `rd.udev.log_level` | `3` |
+| `split_lock_detect` | `off` |
+| `tsc` | `reliable` |
+| `usbcore.autosuspend` | `-1` |
+| `zswap.enabled` | `0` |
 
-Read the script for exact values.
+Deployed to `/etc/kernel/cmdline` (single line: `rw root=UUID=<uuid>
+<params>`) and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS="<params>"`).
 
 </details>
 
 <details>
-<summary><b>Packages</b></summary>
+<summary><b>Bootloader</b> — 8 keys (loader.conf + sdboot-manage.conf)</summary>
 
-Default: `pacman -Syu --needed` per Arch's
-[no-partial-upgrade policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported).
+`/boot/loader/loader.conf`:
 
-| Action | Count |
+| Key | Value |
 |---|---|
-| Install (`PKGS_ADD`) | 15 |
-| Remove (`PKGS_DEL`) | 8 |
-| AUR (`AUR_PKGS`) | 2 |
+| `default` | `@saved` |
+| `timeout` | `0` |
+| `console-mode` | `keep` |
+| `editor` | `no` |
+
+`/etc/sdboot-manage.conf`:
+
+| Key | Value |
+|---|---|
+| `LINUX_OPTIONS` | (mirrors `KERNEL_PARAMS`) |
+| `LINUX_FALLBACK_OPTIONS` | `quiet` |
+| `DEFAULT_ENTRY` | `manual` |
+| `REMOVE_EXISTING` | `yes` |
+| `OVERWRITE_EXISTING` | `yes` |
+| `REMOVE_OBSOLETE` | `yes` |
+
+</details>
+
+<details>
+<summary><b>Initramfs</b> — <code>/etc/mkinitcpio.conf</code></summary>
+
+| Field | Value |
+|---|---|
+| `MODULES` | `(amdgpu)` |
+| `BINARIES` | `()` |
+| `FILES` | `()` |
+| `HOOKS` | `(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)` |
+| `COMPRESSION` | `zstd` |
+| `COMPRESSION_OPTIONS` | `(-1 -T0)` |
+
+11 hooks total; ordering verified by `_ry_validate_mkinitcpio_hooks`
+(systemd before autodetect; microcode after autodetect; block before
+filesystems; fsck last). Existence-only validation runs post-pacman.
+
+</details>
+
+<details>
+<summary><b>systemd-resolved</b> — 4 keys (<code>99-cachyos-resolved.conf</code>)</summary>
+
+| Key | Value |
+|---|---|
+| `MulticastDNS` | `resolve` |
+| `LLMNR` | `no` |
+| `DNSOverTLS` | `opportunistic` |
+| `DNSSEC` | `allow-downgrade` |
+
+</details>
+
+<details>
+<summary><b>systemd-logind</b> — 9 keys (<code>99-cachyos-logind.conf</code>)</summary>
+
+All set to `=ignore` (desktop power-handling deferred to userspace):
+
+| Key | Notes |
+|---|---|
+| `HandlePowerKey` | |
+| `HandlePowerKeyLongPress` | |
+| `HandleSuspendKey` | |
+| `HandleSuspendKeyLongPress` | |
+| `HandleHibernateKey` | |
+| `HandleHibernateKeyLongPress` | |
+| `HandleRebootKey` | |
+| `HandleRebootKeyLongPress` | |
+| `HandleSecureAttentionKey` | emitted only when systemd ≥ 257 |
+
+</details>
+
+<details>
+<summary><b>iwd</b> — 3 keys (<code>/etc/iwd/main.conf</code>)</summary>
+
+| Section / Key | Value |
+|---|---|
+| `[General] EnableNetworkConfiguration` | `false` |
+| `[DriverQuirks]` | `PowerSaveDisable=*` |
+| `[Network] NameResolvingService` | `systemd` |
+
+Skipped when `iwd` package not installed (memoized via `_RY_SKIP_IWD`).
+
+</details>
+
+<details>
+<summary><b>NetworkManager</b> — 3 keys (<code>99-cachyos-nm.conf</code>)</summary>
+
+| Section / Key | Value |
+|---|---|
+| `[device] wifi.backend` | `iwd` |
+| `[connection] wifi.powersave` | `2` |
+| `[logging] level` | `WARN` |
+
+Skipped when `iwd` package not installed.
+
+</details>
+
+<details>
+<summary><b>cpupower-service</b> — 1 key (<code>/etc/default/cpupower-service.conf</code>)</summary>
+
+| Key | Value |
+|---|---|
+| `governor` | `'performance'` |
+
+Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
+Under `amd_pstate=active`, `governor=performance` routes to EPP=performance internally.
+
+</details>
+
+<details>
+<summary><b>sysctl</b> — 16 tunables (<code>/etc/sysctl.d/99-cachyos-sysctl.conf</code>)</summary>
+
+| Key | Value |
+|---|---|
+| `net.core.default_qdisc` | `fq` |
+| `net.core.netdev_max_backlog` | `16384` |
+| `net.core.rmem_max` | `134217728` |
+| `net.core.wmem_max` | `134217728` |
+| `net.ipv4.tcp_congestion_control` | `bbr` |
+| `net.ipv4.tcp_fastopen` | `3` |
+| `net.ipv4.tcp_mtu_probing` | `1` |
+| `net.ipv4.tcp_notsent_lowat` | `131072` |
+| `net.ipv4.tcp_rmem` | `4096 87380 134217728` |
+| `net.ipv4.tcp_slow_start_after_idle` | `0` |
+| `net.ipv4.tcp_wmem` | `4096 65536 134217728` |
+| `vm.max_map_count` | `2147483642` |
+| `vm.watermark_boost_factor` | `0` |
+| `fs.protected_fifos` | `2` |
+| `fs.protected_regular` | `2` |
+| `vm.compaction_proactiveness` | `0` |
+
+Priority 99 — loaded after CachyOS vendor `70-cachyos-settings.conf`;
+overrides `net.core.netdev_max_backlog 4096 → 16384`.
+
+</details>
+
+<details>
+<summary><b>tmpfiles</b> — 1 entry (<code>/etc/tmpfiles.d/99-cachyos-thp.conf</code>)</summary>
+
+| Field | Value |
+|---|---|
+| Type | `w` |
+| Path | `/sys/kernel/mm/transparent_hugepage/shrink_underused` |
+| Mode / UID / GID / Age | `- - - -` |
+| Argument | `0` |
+
+`systemd-tmpfiles-setup.service` writes this on every boot; applied
+immediately during install and on `--install-file` re-deploy via
+`systemd-tmpfiles --create`.
+
+</details>
+
+<details>
+<summary><b>fstab</b> — ext4 mount options (idempotent rewrite)</summary>
+
+| Option | Effect |
+|---|---|
+| `noatime` | Disable atime updates |
+| `lazytime` | Defer in-memory atime/mtime writeback |
+| `commit=10` | Flush journal every 10s (default 5) |
+
+Idempotent `awk` rewrite: comments, non-ext4 lines, digits-only
+options-column (malformed), and already-conformant entries pass
+through unchanged. Strips conflicting tokens (`atime`, `relatime`,
+`strictatime`, `defaults`, existing `commit=*`) before adding ours.
+`findmnt --verify` gates the atomic `mv`. No automatic backup —
+snapshot `/etc/fstab` before first run.
+
+</details>
+
+<details>
+<summary><b>Env vars</b> — 11 keys (<code>~/.config/environment.d/10-environment.conf</code>)</summary>
+
+| Key | Value |
+|---|---|
+| `DXVK_LOG_LEVEL` | `none` |
+| `DXVK_LOG_PATH` | `none` |
+| `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
+| `PROTON_ENABLE_WAYLAND` | `1` |
+| `PROTON_LOCAL_SHADER_CACHE` | `1` |
+| `PROTON_USE_NTSYNC` | `1` |
+| `RADV_EXPERIMENTAL` | `transfer_queue` |
+| `RADV_PERFTEST` | `sam,nircache` |
+| `VKD3D_DEBUG` | `none` |
+| `VKD3D_SHADER_DEBUG` | `none` |
+| `WINEDEBUG` | `-all` |
+
+Loaded by `systemd --user` (COSMIC, Flatpak, D-Bus activated apps).
+Active systemd-user services retain old env until restarted; log out
+and back in to apply.
+
+</details>
+
+<details>
+<summary><b>Packages — install</b> — 15 (<code>PKGS_ADD</code>)</summary>
+
+| Package | Purpose |
+|---|---|
+| `nvme-cli` | NVMe device management |
+| `cachyos-gaming-meta` | CachyOS gaming meta-pkg |
+| `cachyos-gaming-applications` | CachyOS gaming apps |
+| `mesa` | Mesa Vulkan + GL |
+| `lib32-mesa` | 32-bit Mesa (Steam/Wine) |
+| `fd` | rust find |
+| `sd` | rust sed |
+| `dust` | rust du |
+| `procs` | rust ps |
+| `bottom` | rust top |
+| `htop` | classic top |
+| `git-delta` | git diff viewer |
+| `lm_sensors` | hwmon |
+| `realtime-privileges` | PipeWire RT scheduling group |
+| `cpupower` | cpufreq governor management |
+
+Default install path: `pacman -Syu --needed --noconfirm`.
+
+</details>
+
+<details>
+<summary><b>Packages — remove</b> — 8 (<code>PKGS_DEL</code>)</summary>
+
+| Package | Reason |
+|---|---|
+| `plymouth` | Boot splash — incompatible with `quiet` + `loglevel=3` |
+| `cachyos-plymouth-bootanimation` | Plymouth dep |
+| `cachyos-plymouth-theme` | Plymouth dep |
+| `octopi` | Pacman GUI — CLI workflow |
+| `micro` | Text editor — replaced by user choice |
+| `cachyos-micro-settings` | micro dep |
+| `btop` | Replaced by `bottom` |
+| `bolt` | Thunderbolt manager — not used |
+
+Skipped when an installed package outside the set rdeps on it. Cascade
+via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (requires `pacman-contrib` for
+`pactree`).
+
+</details>
+
+<details>
+<summary><b>Packages — AUR</b> — 2 (<code>AUR_PKGS</code>)</summary>
+
+| Package | Purpose |
+|---|---|
+| `mkinitcpio-firmware` | Firmware blobs not in `linux-firmware` |
+| `mt76-mt7925-dkms` | MediaTek MT7925 WiFi DKMS (panic fix) |
+
+Installed via `paru -S --needed --noconfirm --skipreview --cleanafter`.
+`--removemake` deliberately omitted: DKMS rebuilds against running
+kernel and needs makedeps. `--skipreview` suppresses interactive key
+import — on `invalid or corrupted package (PGP signature)`, pre-import
+the key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually.
+Post-install `modinfo mt7925e` cross-check verifies DKMS build
+succeeded (paru `rc=0` alone is not definitive).
+
+</details>
+
+<details>
+<summary><b>Vulkan dependencies</b> — 3 (<code>EXPECTED_VULKAN_PKGS</code>)</summary>
+
+| Package | Notes |
+|---|---|
+| `vulkan-radeon` | RADV driver |
+| `lib32-vulkan-radeon` | 32-bit RADV (Steam/Wine) |
+| `lib32-mesa` | 32-bit Mesa |
+
+`--verify-runtime` fails if any are missing (DXVK/VKD3D-Proton
+requires this set).
+
+</details>
+
+<details>
+<summary><b>Masked units</b> — 12 (<code>MASK</code>)</summary>
+
+| Unit | Reason |
+|---|---|
+| `ananicy-cpp.service` | CPU nice daemon — managed via cgroups instead |
+| `avahi-daemon.service` | mDNS via systemd-resolved instead |
+| `avahi-daemon.socket` | socket counterpart of above |
+| `power-profiles-daemon.service` | conflicts with amd_pstate + cpupower |
+| `lvm2-monitor.service` | no LVM on this profile |
+| `NetworkManager-wait-online.service` | adds boot delay |
+| `ufw.service` | firewall not in this profile (rules flushed pre-mask) |
+| `sleep.target` | suspend disabled (workstation) |
+| `suspend.target` | suspend disabled |
+| `hibernate.target` | hibernate disabled |
+| `hybrid-sleep.target` | hybrid-sleep disabled |
+| `suspend-then-hibernate.target` | s2h disabled |
+
+Pre-mask `ufw --force disable` flushes live netfilter rules
+(`systemctl mask` alone does not).
+
+</details>
+
+<details>
+<summary><b>Enabled units</b> — 3 (<code>EXPECTED_SERVICES</code>)</summary>
+
+| Unit | Notes |
+|---|---|
+| `fstrim.timer` | weekly SSD TRIM |
+| `NetworkManager.service` | also enabled by its pacman scriptlet (deduped via `_RY_PKG_MANAGED_SERVICES`) |
+| `cpupower.service` | oneshot — accepts `active` or `exited` |
+
+`NetworkManager-dispatcher.service` is checked but not force-enabled
+(`enabled` or `static`+(`active`\|`inactive`) accepted as on-demand).
+
+</details>
+
+<details>
+<summary><b>Package caveats</b></summary>
 
 | Caveat | Detail |
 |---|---|
-| Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` switches to `pacman -Sy --needed` (refresh + install only, no upgrade). Retry path uses `-Syy` without `-u`. Violates Arch policy. |
+| Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` switches to `pacman -Sy --needed` (refresh + install only, no upgrade). Retry path uses `-Syy` without `-u`. Violates [Arch's no-partial-upgrade policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported). |
 | AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` deliberately omitted: DKMS packages rebuild against the running kernel and need makedeps. |
 | PGP failures | `--skipreview` suppresses interactive key import. On `invalid or corrupted package (PGP signature)`: pre-import key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually. |
 | Reverse deps | `PKGS_DEL` removal skipped when an installed package outside the set rdeps on it. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (requires `pacman-contrib` for `pactree`). |
+| db lock | `_install_packages` and `_csp_remove_pkgs` check `/var/lib/pacman/db.lck` before + after; aborts cleanly on contention. |
+| `.pacnew` handling | Auto-redeployed at managed destinations and `rm`'d; `.pacsave` surfaced as warning for operator review. |
 
 </details>
 
 ## Managed Files
 
-12 files deployed via atomic writes (tmp → symlink check → chmod → `mv -T`).
-System files install `0644`, the user file `0600`. The two `iwd`
-destinations are skipped when `iwd` is not installed.
+12 files deployed via atomic writes (tmp → symlink check → chmod →
+`mv -T`). System files install `0644`, the user file `0600`. The two
+`iwd` destinations are skipped when `iwd` is not installed.
 
 <details>
 <summary><b>Destinations</b></summary>
@@ -214,12 +520,6 @@ destinations are skipped when `iwd` is not installed.
 | System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
 | System | `/etc/tmpfiles.d/99-cachyos-thp.conf` |
 | User | `~/.config/environment.d/10-environment.conf` |
-
-`99-cachyos-thp.conf` writes `0` to
-`/sys/kernel/mm/transparent_hugepage/shrink_underused` on every boot
-via `systemd-tmpfiles-setup.service`; applied immediately during
-install and on `--install-file` re-deploy via
-`systemd-tmpfiles --create`.
 
 </details>
 
@@ -291,9 +591,14 @@ jq 'select(.event == "footer")' ~/ry-install/logs/**/*.jsonl
 ## Uninstall
 
 No automated uninstaller. Use [Managed Files](#managed-files) as the
-rollback source-of-truth: unmask units, `rm` deployed paths, restore
-`/etc/fstab` from your snapshot, optionally reverse package changes,
-then `mkinitcpio -P && sdboot-manage gen` and reboot.
+rollback source-of-truth:
+
+1. `systemctl unmask` the 12 masked units.
+2. `rm` deployed paths from the Managed Files list.
+3. Restore `/etc/fstab` from your pre-install snapshot.
+4. Optionally reverse package changes (`pacman -S <PKGS_DEL>`, `pacman -Rns <PKGS_ADD>`).
+5. `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`.
+6. Reboot.
 
 ## Known Issues
 

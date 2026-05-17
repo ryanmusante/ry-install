@@ -1,6 +1,15 @@
 ry-install ChangeLog
 ====================
 
+v7.2.2 - 2026-05-17
+-------------------
+
+  * `README.md`: `Configuration` section restructured. `Profile highlights` collapsible (incomplete sample table, mobile-truncated per screenshot evidence) + `Packages` collapsible removed; replaced with 19 per-domain complete collapsibles — every embedded value from script surfaced (kernel cmdline 15, bootloader 8, initramfs 4, systemd-resolved 4, systemd-logind 9, iwd 3, NetworkManager 3, cpupower 1, sysctl 16, tmpfiles 1, fstab opts, env 11, PKGS_ADD 15, PKGS_DEL 8, AUR 2, Vulkan deps 3, masked 12, enabled 3, caveats). 2-col tables fit narrow viewports.
+  * `README.md`: count drift `13` → `12` embedded configs (tagline + Install Flow phase 3) — matched `_RY_MANAGED_FILE_COUNT=12` since v7.2.1.
+  * `README.md`: Quick Start 3 stacked admonitions (TIP/NOTE/IMPORTANT) → 1 inline + 1 merged IMPORTANT. Hardware BIOS-prereq IMPORTANT → `<details>` collapsible.
+  * `README.md`: news-check orphan paragraph folded into Prerequisites table; `--` positional-rejection orphan into Usage table; Uninstall prose → 6-step numbered list.
+  * Script unchanged from v7.2.1 (version header + `$VERSION` global bumped only). 5129 L unchanged.
+
 v7.2.1 - 2026-05-17
 -------------------
 

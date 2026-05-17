@@ -1,105 +1,112 @@
 ry-install ChangeLog
 ====================
 
+v7.2.6 - 2026-05-17
+-------------------
+
+  * README: Configuration section split into Phase 2 / Phase 3 / Phase 4 H3 subsections matching install-flow order.
+  * README: Vulkan deps block — vulkan-radeon / lib32-vulkan-radeon installed by chwd on AMD profiles.
+  * VERSION 7.2.5 → 7.2.6. 5139 L unchanged.
+
+v7.2.5 - 2026-05-17
+-------------------
+
+  * `_ry_show_help` EXIT CODES: rc=1 description adds old-kernel warn path.
+  * `_dc_kill_children` description: parent-PID reap (pkill -P), not process-group.
+  * README Install Flow phase 2: add updatedb + pkgfile --update cache refresh.
+  * README Initramfs: 9 ordering invariants → 11 hook invariants.
+  * README Vulkan deps: chwd documented as transitive source of vulkan-radeon / lib32-vulkan-radeon. 5139 L unchanged.
+
 v7.2.4 - 2026-05-17
 -------------------
 
-  * `_vre_fstab`: `noatime:substr`/`lazytime:substr`/`commit=10:csv` 3-tuple spec → single csv-bounded `(^|,)tok(,|$)` regex for all 3 tokens. Old `lazytime:substr` false-matched `nolazytime` (the disable opt), silently reporting `lazytime present` when actually disabled; `noatime:substr` was safe but now symmetric. Loop refactored: 14 L → 9 L.
-  * `_ir_validate_counts`: +`_RY_POST_HOOKS:14` + `_RY_BOOT_CRITICAL_DSTS:4` invariants (13 → 15). Catches drift if a managed destination is added without a corresponding post-hook entry or if the boot-critical denylist gains/loses an entry.
-  * `_mr_copy_size_verify`: +`cmp -s` byte-content verify after size-equal check. Defence-in-depth: equal byte count is necessary but not sufficient. cmp guarded by `command -q` (graceful skip if absent — coreutils ships it, but kept defensive).
-  * `_dc_erase_globals`: +`_RY_BOOT_TAINTED` for symmetry with other process-local state flags (`_RY_HOLDS_LOCK`, `_RY_PACMAN_REVERT_ATTEMPTED`, etc.); functionally a no-op across runs since each run is a fresh process but closes the audit asymmetry.
-  * `_dc_kill_children` description: `Release lock` → `Release lock + terminate child PGID` (matched the body's `pkill -TERM -P` + `pkill -KILL -P` after grace period).
-  * `_verify_static_syntax`: `_verify_unit_syntax "$unit" (basename $unit)` 2-arg call → 3-arg with explicit `system` scope; function already handled empty arg via auto-detect, this is intent-explicit.
-  * `_ip_snapshot_mkinitcpio`: dropped redundant `sudo -n chmod 600 "$_snap"`; mktemp creates with 0600, and the revert path uses `chmod --reference=/etc/mkinitcpio.conf` on the *destination* — snapshot mode is irrelevant to final perms.
-  * `README.md`: `Bootloader` summary header `8 keys (loader.conf + sdboot-manage.conf)` → `10 keys (4 loader.conf + 6 sdboot-manage.conf)`. The 4 + 6 breakdown was already visible in the detail tables; only the header undercounted.
-  * `README.md`: `Initramfs` ordering blurb expanded — 4 named invariants → all 9 enforced (8 `BEFORE→AFTER` pairs + `fsck` last). Matches what `_vmh_order_checks` actually validates.
-  * `README.md`: `Install Flow` row 4 (`Services`) description gains `fstab ext4 opts` + `PKGS_DEL removal` — both happen between `_install_system_files` and `_install_configure_services` but were undocumented in the flow table.
-  * 5138 → 5139 L.
+  * `_vre_fstab`: noatime/lazytime/commit=10 unified to `(^|,)tok(,|$)`. Fixes `lazytime` substr false-match on `nolazytime`. 14 → 9 L.
+  * `_ir_validate_counts`: +`_RY_POST_HOOKS:14` +`_RY_BOOT_CRITICAL_DSTS:4` (13 → 15 invariants).
+  * `_mr_copy_size_verify`: +`cmp -s` byte-content verify after size match.
+  * `_dc_erase_globals`: +`_RY_BOOT_TAINTED` for symmetry.
+  * `_dc_kill_children` description: matches `pkill -TERM -P` + `pkill -KILL -P` body.
+  * `_verify_static_syntax`: explicit `system` scope arg.
+  * `_ip_snapshot_mkinitcpio`: drop redundant `chmod 600`.
+  * README Bootloader: 8 keys → 10 keys (4 loader.conf + 6 sdboot-manage.conf).
+  * README Initramfs: 4 → 9 ordering invariants enumerated.
+  * README Install Flow phase 4: +fstab ext4 opts +`PKGS_DEL` removal. 5138 → 5139 L.
 
 v7.2.3 - 2026-05-17
 -------------------
 
-  * `_vmh_order_checks`: +2 pair rules (`systemd:autodetect`, `autodetect:microcode`) + new `fsck`-last-position check. README ordering invariants now enforced by validator (was: only `block:filesystems` overlapped).
-  * `_msg_print` color branch: `echo " $msg"` → `printf ' %s\n' "$msg"` — completes the v7.1.2 printf migration (last bare-echo site in the level-message family; closes the `-n`/`-e`/`-E` flag-interpretation path).
-  * `_vrs_boot_perf`: 2x `"$target""s target"` adjacent-quote concat → `"$target"s target` conventional form (cosmetic).
-  * 5129 → 5138 L.
+  * `_vmh_order_checks`: +2 pair rules (`systemd:autodetect`, `autodetect:microcode`) + `fsck`-last check.
+  * `_msg_print` color branch: bare echo → printf.
+  * `_vrs_boot_perf`: adjacent-quote concat cleanup. 5129 → 5138 L.
 
 v7.2.2 - 2026-05-17
 -------------------
 
-  * `README.md`: `Configuration` section restructured. `Profile highlights` collapsible (incomplete sample table, mobile-truncated per screenshot evidence) + `Packages` collapsible removed; replaced with 19 per-domain complete collapsibles — every embedded value from script surfaced (kernel cmdline 15, bootloader 8, initramfs 4, systemd-resolved 4, systemd-logind 9, iwd 3, NetworkManager 3, cpupower 1, sysctl 16, tmpfiles 1, fstab opts, env 11, PKGS_ADD 15, PKGS_DEL 8, AUR 2, Vulkan deps 3, masked 12, enabled 3, caveats). 2-col tables fit narrow viewports.
-  * `README.md`: count drift `13` → `12` embedded configs (tagline + Install Flow phase 3) — matched `_RY_MANAGED_FILE_COUNT=12` since v7.2.1.
-  * `README.md`: Quick Start 3 stacked admonitions (TIP/NOTE/IMPORTANT) → 1 inline + 1 merged IMPORTANT. Hardware BIOS-prereq IMPORTANT → `<details>` collapsible.
-  * `README.md`: news-check orphan paragraph folded into Prerequisites table; `--` positional-rejection orphan into Usage table; Uninstall prose → 6-step numbered list.
-  * Script unchanged from v7.2.1 (version header + `$VERSION` global bumped only). 5129 L unchanged.
+  * README Configuration: 2 collapsibles → 19 per-domain collapsibles (kernel cmdline 15, bootloader 8, initramfs 4, resolved 4, logind 9, iwd 3, NM 3, cpupower 1, sysctl 16, tmpfiles 1, fstab, env 11, PKGS_ADD 15, PKGS_DEL 8, AUR 2, Vulkan 3, masked 12, enabled 3, caveats).
+  * README: 13 → 12 embedded configs (tagline + Install Flow phase 3).
+  * README Quick Start: 3 admonitions → 1 inline + 1 IMPORTANT. Hardware BIOS-prereq → `<details>`.
+  * README: news-check + `--` orphan paragraphs folded into tables. Uninstall → 6-step list. 5129 L unchanged.
 
 v7.2.1 - 2026-05-17
 -------------------
 
-  * `cpupower-epp.service` dropped from managed destinations. `SERVICE_DESTINATIONS` is now empty; `_RY_MANAGED_FILE_COUNT` 13 → 12. EXPECTED_SERVICES 4 → 3 (cpupower-epp.service removed).
-  * Removed: `_content__etc_systemd_system_cpupower-epp.service`, `_vrsv_chk_cpupower` (EPP-state helper). `_vrsv_sys_units` 6-unit batch → 5-unit batch.
-  * `_verify_static_services`: `── Service files ──` header + loop now gated on `count $SERVICE_DESTINATIONS`; stale `scaling_governor`-in-ExecStart WARN block removed.
-  * `_verify_static_syntax`: `── systemd units ──` block gated on `count $SERVICE_DESTINATIONS`.
-  * `_install_system_files`: service deploy block (info + log + loop + failure dispatch) gated on `count $SERVICE_DESTINATIONS` — section silenced when no managed unit files.
-  * `_post_service` comment: stale `(cpupower-epp)` parenthetical removed. 5185 → 5129 L.
+  * `cpupower-epp.service` dropped. `SERVICE_DESTINATIONS` empty. `_RY_MANAGED_FILE_COUNT` 13 → 12. `EXPECTED_SERVICES` 4 → 3.
+  * Removed: `_content__etc_systemd_system_cpupower-epp.service`, `_vrsv_chk_cpupower`. `_vrsv_sys_units` 6 → 5.
+  * `_verify_static_services`, `_verify_static_syntax`, `_install_system_files`: service blocks gated on `count $SERVICE_DESTINATIONS`. 5185 → 5129 L.
 
 v7.2.0 - 2026-05-17
 -------------------
 
-  * `/etc/drirc` dropped from managed destinations (RADV `radv_enable_unified_heap_on_apu` no longer enforced).
-  * `/etc/default/cpupower-service.conf` added as managed destination; content: `governor='performance'`.
-  * PKGS_ADD +`cpupower` (14 → 15). EXPECTED_SERVICES +`cpupower.service` (3 → 4).
-  * `_RY_POST_HOOKS`: `/etc/drirc|drirc` → `/etc/default/cpupower-service.conf|cpupower`. New `_post_cpupower` handler restarts `cpupower.service` on re-deploy.
-  * `_vrk_cpu_state`: `scaling_governor` expectation `powersave` → `performance` (cpupower.service routes `governor='performance'` to EPP=performance under amd_pstate=active).
-  * `_vrsv_sys_units`: 5-unit batch → 6-unit batch (+`cpupower.service`). New `_vrsv_chk_cpupower_governor` accepts oneshot active|exited + enabled.
-  * `_verify_static_system`: drop `_vss_drirc_sysctl`; rename helper to `_vss_sysctl`; add `cpupower-service.conf` content grep.
-  * `_rvc_dispatch`: drop `*/drirc` XML case; add `*/default/cpupower-service.conf` to the no-validation set (shell-style key=value, embedded content controlled).
+  * `/etc/drirc` dropped from managed destinations.
+  * `/etc/default/cpupower-service.conf` added — `governor='performance'`.
+  * `PKGS_ADD` +`cpupower` (14 → 15). `EXPECTED_SERVICES` +`cpupower.service` (3 → 4).
+  * `_RY_POST_HOOKS`: drirc → cpupower-service. New `_post_cpupower` handler.
+  * `_vrk_cpu_state`: scaling_governor expectation powersave → performance.
+  * `_vrsv_sys_units`: 5 → 6 batch (+cpupower.service). New `_vrsv_chk_cpupower_governor`.
+  * `_verify_static_system`: drop `_vss_drirc_sysctl`; add cpupower-service.conf grep.
+  * `_rvc_dispatch`: drop drirc XML; add cpupower-service.conf no-validation case.
   * Removed: `_content__etc_drirc`, `_grep_xml_tag`, `_post_drirc`. 5181 → 5185 L.
 
 v7.1.2 - 2026-05-17
 -------------------
 
-  * `_msg_print` no-color/no-tty branch: `echo "[$level] $msg"` → `printf '[%s] %s\n'` — completes the v6.2.12 emit-fn printf migration (last bare-echo site in the level-message family).
-  * `_vs_read_symmetry_selftest`: log token `fish=` resolves from in-process `$FISH_VERSION` instead of `(command fish --version | string match)` — drops one fork on the cold-path. 5181 L unchanged.
+  * `_msg_print` no-color/no-tty: echo → printf.
+  * `_vs_read_symmetry_selftest`: `fish=` from `$FISH_VERSION` (drops one fork). 5181 L unchanged.
 
 v7.1.1 - 2026-05-17
 -------------------
 
-  * `_ry_apply_wireless_regdom` write-failure no longer fatal: rc=1 (sudo lapse, tee error) stays a soft `_warn`; only rc=`$EXIT_USAGE` (invalid CC) aborts preflight.
-  * `_install_preflight`: capture `$status` from `_ry_apply_wireless_regdom`; set `_PROG_FINALIZED_SKIP=true` before the `EXIT_USAGE` return so the progress bar finalises as `Aborted`.
-  * `_ry_apply_wireless_regdom`: tee stderr → tmpfile; first line logged on failure as `REGDOM_SET_FAIL: ... err=<msg>`.
-  * `_ry_apply_wireless_regdom`: drop `command sudo -n` → bare `sudo -n` (121-site convention; v7.0.7 sweep deliberately excluded `sudo`).
-  * `_ry_apply_wireless_regdom`: `string trim` before `string upper` — `"  us  "` accepted instead of regex-rejected.
-  * `_ry_check_wireless_regdom`: WARN hint anchor `Environment variables` → `Runtime variables` (target section name).
-  * `_vrkg_vram`: `math` → `math --scale=0` for explicit integer division on `mem_info_vram_total`.
-  * `_acquire_lock`: two `command cat "$LOCK_FILE"` sites gain `--` separator.
-  * Inline rationale at `_csp_filter_rdeps` cmd-sub append and pre-bootstrap fractional-sleep probe. 5168 → 5181 L.
+  * `_ry_apply_wireless_regdom`: rc=1 → soft `_warn`; only `EXIT_USAGE` aborts preflight.
+  * `_install_preflight`: capture `_ry_apply_wireless_regdom` status; `_PROG_FINALIZED_SKIP=true` before USAGE return.
+  * `_ry_apply_wireless_regdom`: tee stderr → tmpfile; first line logged as `REGDOM_SET_FAIL`.
+  * `_ry_apply_wireless_regdom`: bare `sudo -n`; `string trim` before `string upper`.
+  * `_ry_check_wireless_regdom`: hint anchor `Environment variables` → `Runtime variables`.
+  * `_vrkg_vram`: `math` → `math --scale=0`.
+  * `_acquire_lock`: two `command cat` sites gain `--` separator. 5168 → 5181 L.
 
 v7.1.0 - 2026-05-17
 -------------------
 
-  * `_ry_apply_wireless_regdom` (new): opt-in `RY_INSTALL_WIRELESS_REGDOM=<CC>` writes `WIRELESS_REGDOM=<CC>` to `/etc/conf.d/wireless-regdom`; validates `^[A-Z]{2}$`, invalid value returns `$EXIT_USAGE`. Wired into `_install_preflight` before `_ry_check_wireless_regdom`.
-  * `_csp_filter_rdeps` + `_configure_services_pkg_remove`: per-pkg `WARN` pair demoted to `INFO`; aggregate `WARN` + `PKG_REMOVE_SKIPS:` log token at phase end. `_RY_PKG_REMOVE_SKIPS` added to `_dc_erase_globals`.
-  * `_if_nm_restart`: 3-line `WARN` → 1 `WARN` + 1 `INFO`.
-  * `_post_nm`: 2-line `WARN` (wifi-active) → 1 `WARN` + 1 `INFO`.
-  * `_install_aur_packages`: pre-paru `AUR_NOISE_NOTE:` documents benign `$srcdir/`, `command failed`, and DKMS `BUILD_EXCLUSIVE` tokens.
-  * `_ry_check_wireless_regdom`: WARN advertises new `RY_INSTALL_WIRELESS_REGDOM` env var.
-  * `_vrkg_vram`: WARN points to `README → Hardware → UMA Frame Buffer Size`.
-  * `README.md`: new `Strix Halo ACP audio` Known Issues block; env-var row for `RY_INSTALL_WIRELESS_REGDOM`. 5127 → 5168 L.
+  * `_ry_apply_wireless_regdom` (new): `RY_INSTALL_WIRELESS_REGDOM=<CC>` writes `WIRELESS_REGDOM=<CC>` to `/etc/conf.d/wireless-regdom`. Validates `^[A-Z]{2}$`.
+  * `_csp_filter_rdeps` + `_configure_services_pkg_remove`: per-pkg WARN demoted to INFO; aggregate WARN + `PKG_REMOVE_SKIPS` at phase end.
+  * `_if_nm_restart`: 3 WARN → 1 WARN + 1 INFO.
+  * `_post_nm`: 2 WARN → 1 WARN + 1 INFO.
+  * `_install_aur_packages`: `AUR_NOISE_NOTE` documents benign tokens.
+  * `_vrkg_vram`: WARN points to README → Hardware → UMA.
+  * README: new Strix Halo ACP audio Known Issues; env-var row for `RY_INSTALL_WIRELESS_REGDOM`. 5127 → 5168 L.
 
 v7.0.20 - 2026-05-17
 --------------------
 
   * `_ry_show_help` `-V` description clarified.
-  * `_run` `TIMEOUT_TERM`/`TIMEOUT_KILL` log strings: quote-break tidied (cosmetic).
-  * `_verify_static_checksum`: `_gen_rc` checked before `_installed_bytes` — skips one `sudo -n cat` per file on generator failure.
+  * `_run` `TIMEOUT_TERM`/`TIMEOUT_KILL` log strings tidied.
+  * `_verify_static_checksum`: `_gen_rc` before `_installed_bytes`.
 
 v7.0.19 - 2026-05-17
 --------------------
 
-  * `_vrkg_rebar_sam` lspci regex `256M|512M|[0-9]G` → `512M|[0-9]G`.
-  * `_RY_DMESG_BAR` grep `resize|rebar|large|above.4g` → `resize|rebar|large`.
-  * `_vs_read_symmetry_selftest`: bare `fish --version` → `command fish --version`. 5127 L unchanged.
+  * `_vrkg_rebar_sam`: lspci regex 256M removed.
+  * `_RY_DMESG_BAR`: drop `above.4g` from grep.
+  * `_vs_read_symmetry_selftest`: bare `fish` → `command fish`. 5127 L unchanged.
 
 v7.0.18 - 2026-05-17
 --------------------
@@ -110,12 +117,12 @@ v7.0.17 - 2026-05-17
 --------------------
 
   * `_vrkg_rebar_sam`: `lspci` → `command lspci`.
-  * `_MY_UID` hoisted below early-exit flag loop.
+  * `_MY_UID` hoist below early-exit loop.
   * `_dc_sweep_filesystem`: `functions -q _tmp_dir; or return 0` guard.
   * `_vmh_order_checks`: empty-hooks chain → explicit `if/end`.
-  * `_install_aur_packages`: `_RY_AUR_PARTIAL` true only when `0 < failed < count`.
+  * `_install_aur_packages`: `_RY_AUR_PARTIAL` only when `0 < failed < count`.
   * `_post_service`: `systemctl try-restart` post-`enable --now`.
-  * `_post_nm`: `systemctl try-restart iwd.service` for `*/iwd/main.conf`. 5100 → 5113 L.
+  * `_post_nm`: `try-restart iwd.service` for iwd main.conf. 5100 → 5113 L.
 
 v7.0.16 - 2026-05-16
 --------------------
@@ -125,20 +132,19 @@ v7.0.16 - 2026-05-16
 v7.0.15 - 2026-05-16
 --------------------
 
-  * Four two-line `#` rationale blocks → one line each. Shebang + version banner exempted. 5104 → 5100 L.
+  * 4 two-line `#` rationale blocks → one line each. 5104 → 5100 L.
 
 v7.0.14 - 2026-05-16
 --------------------
 
-  * L2 header version sync. README badge bumped. 5104 L unchanged.
+  * L2 header version sync. README badge bump. 5104 L unchanged.
 
 v7.0.13 - 2026-05-16
 --------------------
 
-  * `_enum_boot_entries`: pipestatus + `_RY_BOOT_ENUM_OK` sentinel — sudo lapse branches `_warn`.
-  * `_acquire_lock_fresh`: `_RY_LOCK_DIR_OWNED` hoisted above `chmod 700` — closes sub-ms SIGINT leak.
-  * `_vs_read_symmetry_selftest`: result memoised in `_RY_READSYM_RESULT`.
-  * Inline doc comments at `_ip_run_and_verify`, `_chk_token_in`, `_RY_POST_HOOKS`. 5079 → 5104 L.
+  * `_enum_boot_entries`: pipestatus + `_RY_BOOT_ENUM_OK` sentinel.
+  * `_acquire_lock_fresh`: `_RY_LOCK_DIR_OWNED` hoist above `chmod 700`.
+  * `_vs_read_symmetry_selftest`: result memoised in `_RY_READSYM_RESULT`. 5079 → 5104 L.
 
 v7.0.12 - 2026-05-16
 --------------------
@@ -151,12 +157,12 @@ v7.0.11 - 2026-05-16
 
   * `_ry_check_deps`: +`date(1)`.
   * `_log_section`: description corrected.
-  * `_ry_do_check`: `_log_section "CHECK START"`/`"CHECK END"` at all 8 return paths. 5064 → 5075 L.
+  * `_ry_do_check`: `_log_section` at all 8 return paths. 5064 → 5075 L.
 
 v7.0.10 - 2026-05-16
 --------------------
 
-  * `_vre_fstab`: malformed-line filter → `_RY_AWK_EXT4_MALFORMED_FILTER`; regex tightened to whitespace/comma bounds. 5063 → 5064 L.
+  * `_vre_fstab`: malformed-line filter → `_RY_AWK_EXT4_MALFORMED_FILTER`. 5063 → 5064 L.
 
 v7.0.9 - 2026-05-16
 -------------------
@@ -168,52 +174,52 @@ v7.0.9 - 2026-05-16
 v7.0.8 - 2026-05-16
 -------------------
 
-  * README `<details>` sections use tables for mobile rendering. Anchor link corrected. 5060 L unchanged.
+  * README `<details>` use tables for mobile rendering. 5060 L unchanged.
 
 v7.0.7 - 2026-05-16
 -------------------
 
-  * 68 bare system-cmd invocations gain `command` prefix across `date`, `dirname`, `basename`, `systemctl`, `id`, `env`, `findmnt`, `systemd-analyze`, `tput`, `getent`, `nmcli`, `modinfo`, `swapon`, `pacman`, `curl`, `ping`, `pgrep`, `bootctl`, `ip`, `zramctl`, `kill`. 5060 L unchanged.
+  * 68 bare system-cmd invocations gain `command` prefix (date, dirname, basename, systemctl, id, env, findmnt, systemd-analyze, tput, getent, nmcli, modinfo, swapon, pacman, curl, ping, pgrep, bootctl, ip, zramctl, kill). 5060 L unchanged.
 
 v7.0.6 - 2026-05-16
 -------------------
 
   * `HandleSecureAttentionKey` systemd-version gate `-lt 256` → `-lt 257`.
-  * `_aur_verify_mt7925`: hoist `(pacman -Q | awk)` out of quoted `_warn`.
-  * `_install_rebuild_boot`: hoist `_resolve_boot_path` to one fn-entry call.
-  * `_is_wifi_active_route` `'br*'` → `'br[0-9]*' 'br-*'`.
+  * `_aur_verify_mt7925`: hoist `pacman -Q | awk` out of `_warn`.
+  * `_install_rebuild_boot`: hoist `_resolve_boot_path` to one call.
+  * `_is_wifi_active_route`: `'br*'` → `'br[0-9]*' 'br-*'`.
   * `_awf_finalize_mv`: sudo-lapse returns literal `1`. 5054 → 5060 L.
 
 v7.0.5 - 2026-05-16
 -------------------
 
-  * `_RY_POST_HOOKS`: `*/tmpfiles.d/*|tmpfiles` + `_post_tmpfiles` handler — fixes `--install-file thp.conf` re-deploy gap.
-  * `_ensure_sudo_cached`: interactive retry redirects stderr. 5041 → 5054 L.
+  * `_RY_POST_HOOKS`: +`*/tmpfiles.d/*|tmpfiles` + `_post_tmpfiles`.
+  * `_ensure_sudo_cached`: retry stderr redirect. 5041 → 5054 L.
 
 v7.0.4 - 2026-05-16
 -------------------
 
   * `_ry_check_wireless_regdom`: regex requires 2-letter ISO 3166-1.
   * `_post_hook_for_target`: `string split -r -m1 '|'`.
-  * `_unit_state`: drop redundant `| string split \n`. 5041 L unchanged.
+  * `_unit_state`: drop redundant `string split \n`. 5041 L unchanged.
 
 v7.0 - 2026-05-15
 -----------------
 
   * NM 1.56.0 compat: drop `wifi.iwd.autoconnect=false`.
-  * MASK +`avahi-daemon.{service,socket}` (10 → 12). New `_csm_disable_ufw_rules` flushes netfilter pre-mask.
-  * PKGS_ADD +`realtime-privileges` (13 → 14). PKGS_DEL +`bolt` (7 → 8).
-  * New `_ry_check_wireless_regdom` + `_vrk_audio_state` probes.
-  * ENV_VARS: `RADV_PERFTEST=transfer_queue` → `RADV_EXPERIMENTAL=transfer_queue` (Mesa ≥ 26.1.0).
+  * `MASK` +`avahi-daemon.{service,socket}` (10 → 12). New `_csm_disable_ufw_rules`.
+  * `PKGS_ADD` +`realtime-privileges` (13 → 14). `PKGS_DEL` +`bolt` (7 → 8).
+  * New `_ry_check_wireless_regdom` + `_vrk_audio_state`.
+  * `ENV_VARS`: `RADV_PERFTEST=transfer_queue` → `RADV_EXPERIMENTAL=transfer_queue`.
   * `_ok`/`_fail`/`_warn`/`_info`/`_err`/`_fail_silent`: explicit `; return 0`.
   * `_vsb_mkinitcpio`: amdgpu probe `*amdgpu*` → `\bamdgpu\b`.
-  * `_ry_check_deps`: upfront GNU-coreutils `df` probe.
+  * `_ry_check_deps`: GNU-coreutils `df` probe.
   * 117 inter-fn blank lines collapsed. `_ir_validate_counts` invariants synced. 5092 → 5041 L.
 
 v6.5.18 - 2026-05-15
 --------------------
 
-  * `_rvc_dispatch`: `*/tmpfiles.d/*` case + `_grep_tmpfiles_entry` validator — fixes v6.5.14 regression. 5081 → 5092 L.
+  * `_rvc_dispatch`: `*/tmpfiles.d/*` case + `_grep_tmpfiles_entry`. 5081 → 5092 L.
 
 v6.5.17 - 2026-05-15
 --------------------
@@ -224,17 +230,17 @@ v6.5.16 - 2026-05-15
 --------------------
 
   * `_msg_print`: argv mutation removed.
-  * Single-line rationale at four dynamic-dispatch sites. 5075 → 5081 L.
+  * Single-line rationale at 4 dynamic-dispatch sites. 5075 → 5081 L.
 
 v6.5.15 - 2026-05-16
 --------------------
 
-  * Single-line rationale at three regression-prone sites (`_installed_bytes`, `_vs_read_symmetry_selftest`, `_aur_verify_mt7925`). 5072 → 5075 L.
+  * Single-line rationale at 3 regression-prone sites. 5072 → 5075 L.
 
 v6.5.14 - 2026-05-16
 --------------------
 
-  * `_installed_bytes`: terminal `printf` collapsed — fixes false MISMATCH + duplicate writes.
+  * `_installed_bytes`: terminal `printf` collapsed.
   * New `/etc/tmpfiles.d/99-cachyos-thp.conf` managed dest (12 → 13).
   * `_aur_verify_mt7925`: assert pacman + modinfo resolve. 5005 → 5072 L.
 
@@ -246,7 +252,7 @@ v6.5.13 - 2026-05-15
 v6.5.12 - 2026-05-15
 --------------------
 
-  * Log-dir mode probe extended to all three managed paths.
+  * Log-dir mode probe extended to 3 managed paths.
   * `_awf_finalize_mv`: sudo-lapse returns `$EXIT_FAIL`.
   * Unknown-MODE fallback via `_msg_print --force`.
 
@@ -266,28 +272,28 @@ v6.5.9 - 2026-05-15
 -------------------
 
   * `_verify_unit_syntax`: log joins multi-line stderr.
-  * `_vrs_installed_file_perms`: emits `perm_vfat_skipped` count.
+  * `_vrs_installed_file_perms`: emit `perm_vfat_skipped` count.
 
 v6.5.8 - 2026-05-15
 -------------------
 
-  * Top-level dispatcher pre-header `_warn` replaced with direct `echo >&2`.
+  * Top-level dispatcher pre-header `_warn` → direct `echo >&2`.
 
 v6.5.7 - 2026-05-14
 -------------------
 
   * `KERNEL_PARAMS` metachar regex source `\\` → `\\\\`.
-  * 93 `string match -qr` patterns swept clean.
+  * 93 `string match -qr` patterns sweep.
 
 v6.5.6 - 2026-05-14
 -------------------
 
-  * `_msg`: drop `VERIFY_MODE` gate so counters track install + install-file modes.
+  * `_msg`: drop `VERIFY_MODE` gate.
 
 v6.5.5 - 2026-05-14
 -------------------
 
-  * `_chk_grep` stage 2: `grep -wF` (was `-q`, SIGPIPE-killed on files > pipe buffer).
+  * `_chk_grep` stage 2: `grep -wF`.
 
 v6.5.4 - 2026-05-14
 -------------------
@@ -317,7 +323,7 @@ v6.5.1 - 2026-05-14
 v6.5 - 2026-05-14
 -----------------
 
-  * `_dc_sweep_tmpfiles`: spurious-`TMPFILE_STUCK` fix.
+  * `_dc_sweep_tmpfiles`: spurious `TMPFILE_STUCK` fix.
   * `_verify_static_services`: multi-ExecStart guard.
   * 14 head/tail sites use `command` prefix.
 
@@ -336,7 +342,7 @@ v6.3 - 2026-05-14
 v6.2.13 - 2026-05-14
 --------------------
 
-  * `_run` split into `_run`/`_run_redact_cmd`/`_run_effective_timeout`.
+  * `_run` split into `_run` / `_run_redact_cmd` / `_run_effective_timeout`.
 
 v6.2.12 - 2026-05-14
 --------------------
@@ -422,7 +428,7 @@ v6.2.0 - 2026-05-12
 v6.1.0 - 2026-05-12
 -------------------
 
-  * User-bus detection via inline `XDG_RUNTIME_DIR/bus` + `systemctl --user is-system-running`, replacing systemd-keepalive workaround.
+  * User-bus detection via inline `XDG_RUNTIME_DIR/bus` + `systemctl --user is-system-running`.
 
 v6.0.0 - 2026-05-12
 -------------------

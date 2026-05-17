@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.2.4 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.2.6 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.2.4"
+set -g VERSION "7.2.6"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -35,7 +35,7 @@ function _ry_show_help --description "Display usage information and available su
         "  -h, --help        Show this help" \
         "  -v, --version     Show version" \
         "EXIT CODES:" \
-        "  0 ok · 1 verify-FAIL or install-warn · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
+        "  0 ok · 1 verify-FAIL, install-warn, or old-kernel warn · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
         "  129/130/131/143 signal (HUP/INT/QUIT/TERM) · 134/138/140 signal (ABRT/USR1/USR2)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
@@ -448,7 +448,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
     set --erase _RY_READSYM_RESULT _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED
 end
-function _dc_kill_children --description "_do_cleanup sub. Release lock + terminate child PGID"
+function _dc_kill_children --description "_do_cleanup sub. Release lock + reap child PIDs (pkill -P, then SIGKILL after grace)"
     if set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED
         set -q LOCK_DIR; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
     end

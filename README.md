@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.2.4-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.2.6-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -133,7 +133,7 @@ Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 | # | Phase | Action |
 |---|---|---|
 | 1 | Preflight | Validate prerequisites, acquire lock, validate runtime |
-| 2 | Packages | `pacman -Syu --needed`; AUR via paru |
+| 2 | Packages | `pacman -Syu --needed`; AUR via paru; `updatedb` + `pkgfile --update` cache refresh |
 | 3 | Configuration | Deploy 12 embedded config files (atomic) |
 | 4 | Services | fstab ext4 opts; `PKGS_DEL` removal; `daemon-reload`; enable; mask 12 desktop/power units |
 | 5 | Boot | Rebuild initramfs, update systemd-boot entries |
@@ -146,6 +146,99 @@ paths in [Managed Files](#managed-files). To retune, edit the `set -g`
 profile globals near the top of the script. The script is the source
 of truth — `--verify-static` matches installed files against embedded
 content byte-for-byte.
+
+### Phase 2 — Packages
+
+`pacman -Syu --needed` for `PKGS_ADD`, then `paru` for `AUR_PKGS`
+(`_install_packages` / `_install_aur_packages`). `PKGS_DEL` removal
+runs later in [Phase 4 — Services](#phase-4--services)
+(`_configure_services_pkg_remove`), grouped with systemd-state
+mutations. `EXPECTED_VULKAN_PKGS` is verify-only — checked, not installed.
+
+<details>
+<summary><b>Packages — install</b> — 15 (<code>PKGS_ADD</code>)</summary>
+
+| Package | Purpose |
+|---|---|
+| `nvme-cli` | NVMe device management |
+| `cachyos-gaming-meta` | CachyOS gaming meta-pkg |
+| `cachyos-gaming-applications` | CachyOS gaming apps |
+| `mesa` | Mesa Vulkan + GL |
+| `lib32-mesa` | 32-bit Mesa (Steam/Wine) |
+| `fd` | rust find |
+| `sd` | rust sed |
+| `dust` | rust du |
+| `procs` | rust ps |
+| `bottom` | rust top |
+| `htop` | classic top |
+| `git-delta` | git diff viewer |
+| `lm_sensors` | hwmon |
+| `realtime-privileges` | PipeWire RT scheduling group |
+| `cpupower` | cpufreq governor management |
+
+Default install path: `pacman -Syu --needed --noconfirm`.
+
+</details>
+
+<details>
+<summary><b>Packages — AUR</b> — 2 (<code>AUR_PKGS</code>)</summary>
+
+| Package | Purpose |
+|---|---|
+| `mkinitcpio-firmware` | Firmware blobs not in `linux-firmware` |
+| `mt76-mt7925-dkms` | MediaTek MT7925 WiFi DKMS (panic fix) |
+
+Installed via `paru -S --needed --noconfirm --skipreview --cleanafter`.
+`--removemake` deliberately omitted: DKMS rebuilds against running
+kernel and needs makedeps. `--skipreview` suppresses interactive key
+import — on `invalid or corrupted package (PGP signature)`, pre-import
+the key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually.
+Post-install `modinfo mt7925e` cross-check verifies DKMS build
+succeeded (paru `rc=0` alone is not definitive).
+
+</details>
+
+<details>
+<summary><b>Vulkan dependencies</b> — 3 (<code>EXPECTED_VULKAN_PKGS</code>)</summary>
+
+| Package | Notes |
+|---|---|
+| `vulkan-radeon` | RADV driver |
+| `lib32-vulkan-radeon` | 32-bit RADV (Steam/Wine) |
+| `lib32-mesa` | 32-bit Mesa |
+
+`--verify-runtime` fails if any are missing (DXVK/VKD3D-Proton
+requires this set). Not in `PKGS_ADD`: `vulkan-radeon` and
+`lib32-vulkan-radeon` are installed by `chwd` (CachyOS hardware
+detection) during OS install on AMD GPU profiles. `lib32-mesa` is
+the only direct `PKGS_ADD` member of this set (also chwd-installed;
+the `PKGS_ADD` entry is idempotent via `--needed`).
+
+</details>
+
+<details>
+<summary><b>Package caveats</b></summary>
+
+| Caveat | Detail |
+|---|---|
+| Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` switches to `pacman -Sy --needed` (refresh + install only, no upgrade). Retry path uses `-Syy` without `-u`. Violates [Arch's no-partial-upgrade policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported). |
+| AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` deliberately omitted: DKMS packages rebuild against the running kernel and need makedeps. |
+| PGP failures | `--skipreview` suppresses interactive key import. On `invalid or corrupted package (PGP signature)`: pre-import key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually. |
+| Reverse deps | `PKGS_DEL` removal skipped when an installed package outside the set rdeps on it. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (requires `pacman-contrib` for `pactree`). |
+| db lock | `_install_packages` and `_csp_remove_pkgs` check `/var/lib/pacman/db.lck` before + after; aborts cleanly on contention. |
+| `.pacnew` handling | Auto-redeployed at managed destinations and `rm`'d; `.pacsave` surfaced as warning for operator review. |
+
+</details>
+
+### Phase 3 — Configuration files
+
+11 system + 1 user config file deployed via atomic writes by
+`_install_system_files` (tmp → symlink check → chmod → `mv -T`).
+Destinations enumerated in [Managed Files](#managed-files).
+Boot-critical files (`/boot/loader/loader.conf`, `/etc/kernel/cmdline`,
+`/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`) are deployed here
+but take effect after [Phase 5 (Boot)](#install-flow) rebuilds initramfs
+and bootloader entries.
 
 <details>
 <summary><b>Kernel cmdline</b> — 15 params (<code>KERNEL_PARAMS</code>)</summary>
@@ -210,10 +303,10 @@ Deployed to `/etc/kernel/cmdline` (single line: `rw root=UUID=<uuid>
 | `COMPRESSION` | `zstd` |
 | `COMPRESSION_OPTIONS` | `(-1 -T0)` |
 
-11 hooks total. `_vmh_order_checks` enforces 9 ordering invariants:
+11 hooks total. `_vmh_order_checks` enforces 11 hook invariants:
 `systemd`→`autodetect`, `autodetect`→`microcode`, `autodetect`→`modconf`,
 `systemd`→`sd-vconsole`, `systemd`→`keyboard`, `keyboard`→`sd-vconsole`,
-`modconf`→`kms`, `block`→`filesystems`, and `fsck` last. Existence-only
+`modconf`→`kms`, `block`→`filesystems`, `fsck` last, `base` first, and no duplicates. Existence-only
 validation also runs post-pacman.
 
 </details>
@@ -331,24 +424,6 @@ immediately during install and on `--install-file` re-deploy via
 </details>
 
 <details>
-<summary><b>fstab</b> — ext4 mount options (idempotent rewrite)</summary>
-
-| Option | Effect |
-|---|---|
-| `noatime` | Disable atime updates |
-| `lazytime` | Defer in-memory atime/mtime writeback |
-| `commit=10` | Flush journal every 10s (default 5) |
-
-Idempotent `awk` rewrite: comments, non-ext4 lines, digits-only
-options-column (malformed), and already-conformant entries pass
-through unchanged. Strips conflicting tokens (`atime`, `relatime`,
-`strictatime`, `defaults`, existing `commit=*`) before adding ours.
-`findmnt --verify` gates the atomic `mv`. No automatic backup —
-snapshot `/etc/fstab` before first run.
-
-</details>
-
-<details>
 <summary><b>Env vars</b> — 11 keys (<code>~/.config/environment.d/10-environment.conf</code>)</summary>
 
 | Key | Value |
@@ -371,28 +446,27 @@ and back in to apply.
 
 </details>
 
+### Phase 4 — Services
+
+fstab rewrite (`_install_fstab_opts`), then mask deferred-power
+units, remove `PKGS_DEL`, and enable runtime units
+(`_install_configure_services`).
+
 <details>
-<summary><b>Packages — install</b> — 15 (<code>PKGS_ADD</code>)</summary>
+<summary><b>fstab</b> — ext4 mount options (idempotent rewrite)</summary>
 
-| Package | Purpose |
+| Option | Effect |
 |---|---|
-| `nvme-cli` | NVMe device management |
-| `cachyos-gaming-meta` | CachyOS gaming meta-pkg |
-| `cachyos-gaming-applications` | CachyOS gaming apps |
-| `mesa` | Mesa Vulkan + GL |
-| `lib32-mesa` | 32-bit Mesa (Steam/Wine) |
-| `fd` | rust find |
-| `sd` | rust sed |
-| `dust` | rust du |
-| `procs` | rust ps |
-| `bottom` | rust top |
-| `htop` | classic top |
-| `git-delta` | git diff viewer |
-| `lm_sensors` | hwmon |
-| `realtime-privileges` | PipeWire RT scheduling group |
-| `cpupower` | cpufreq governor management |
+| `noatime` | Disable atime updates |
+| `lazytime` | Defer in-memory atime/mtime writeback |
+| `commit=10` | Flush journal every 10s (default 5) |
 
-Default install path: `pacman -Syu --needed --noconfirm`.
+Idempotent `awk` rewrite: comments, non-ext4 lines, digits-only
+options-column (malformed), and already-conformant entries pass
+through unchanged. Strips conflicting tokens (`atime`, `relatime`,
+`strictatime`, `defaults`, existing `commit=*`) before adding ours.
+`findmnt --verify` gates the atomic `mv`. No automatic backup —
+snapshot `/etc/fstab` before first run.
 
 </details>
 
@@ -413,38 +487,6 @@ Default install path: `pacman -Syu --needed --noconfirm`.
 Skipped when an installed package outside the set rdeps on it. Cascade
 via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (requires `pacman-contrib` for
 `pactree`).
-
-</details>
-
-<details>
-<summary><b>Packages — AUR</b> — 2 (<code>AUR_PKGS</code>)</summary>
-
-| Package | Purpose |
-|---|---|
-| `mkinitcpio-firmware` | Firmware blobs not in `linux-firmware` |
-| `mt76-mt7925-dkms` | MediaTek MT7925 WiFi DKMS (panic fix) |
-
-Installed via `paru -S --needed --noconfirm --skipreview --cleanafter`.
-`--removemake` deliberately omitted: DKMS rebuilds against running
-kernel and needs makedeps. `--skipreview` suppresses interactive key
-import — on `invalid or corrupted package (PGP signature)`, pre-import
-the key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually.
-Post-install `modinfo mt7925e` cross-check verifies DKMS build
-succeeded (paru `rc=0` alone is not definitive).
-
-</details>
-
-<details>
-<summary><b>Vulkan dependencies</b> — 3 (<code>EXPECTED_VULKAN_PKGS</code>)</summary>
-
-| Package | Notes |
-|---|---|
-| `vulkan-radeon` | RADV driver |
-| `lib32-vulkan-radeon` | 32-bit RADV (Steam/Wine) |
-| `lib32-mesa` | 32-bit Mesa |
-
-`--verify-runtime` fails if any are missing (DXVK/VKD3D-Proton
-requires this set).
 
 </details>
 
@@ -482,20 +524,6 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 
 `NetworkManager-dispatcher.service` is checked but not force-enabled
 (`enabled` or `static`+(`active`\|`inactive`) accepted as on-demand).
-
-</details>
-
-<details>
-<summary><b>Package caveats</b></summary>
-
-| Caveat | Detail |
-|---|---|
-| Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` switches to `pacman -Sy --needed` (refresh + install only, no upgrade). Retry path uses `-Syy` without `-u`. Violates [Arch's no-partial-upgrade policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported). |
-| AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` deliberately omitted: DKMS packages rebuild against the running kernel and need makedeps. |
-| PGP failures | `--skipreview` suppresses interactive key import. On `invalid or corrupted package (PGP signature)`: pre-import key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually. |
-| Reverse deps | `PKGS_DEL` removal skipped when an installed package outside the set rdeps on it. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (requires `pacman-contrib` for `pactree`). |
-| db lock | `_install_packages` and `_csp_remove_pkgs` check `/var/lib/pacman/db.lck` before + after; aborts cleanly on contention. |
-| `.pacnew` handling | Auto-redeployed at managed destinations and `rm`'d; `.pacsave` surfaced as warning for operator review. |
 
 </details>
 

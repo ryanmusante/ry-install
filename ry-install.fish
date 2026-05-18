@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.3.2 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.3.5 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.3.2"
+set -g VERSION "7.3.5"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -27,7 +27,8 @@ function _ry_show_help --description "Display usage information and available su
         "VERIFICATION:" \
         "  --verify-static   Check config files match expected content" \
         "  --verify-runtime  Check live system state (run after reboot)" \
-        "  --check           Silent idempotency probe (0=clean 3=preflight 10=drift)" \
+        "  --check           Silent idempotency probe (0=clean 3=preflight 10=drift). Requires functional sudo + systemctl;" \
+        "                    ERR_NO_DATA from systemctl probes is treated as preflight (rc=3), masking any drift detection" \
         "UTILITIES:" \
         "  --install-file <path>  Re-deploy a single managed file" \
         "OPTIONS:" \
@@ -36,7 +37,8 @@ function _ry_show_help --description "Display usage information and available su
         "  -v, --version     Show version" \
         "EXIT CODES:" \
         "  0 ok · 1 verify-FAIL, install-warn, or old-kernel warn · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
-        "  129/130/131/143 signal (HUP/INT/QUIT/TERM) · 134/138/140 signal (ABRT/USR1/USR2)" \
+        "  Signal-induced runs: process \$status may not match signal (fish 3.x --on-signal limitation);" \
+        "  canonical code recorded in JSONL footer.exit_code (130 INT / 143 TERM / 129 HUP / 131 QUIT / 134 ABRT / 138 USR1 / 140 USR2)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
         "  RY_INITRD_WARN_MB=<MB>  Initramfs size warning threshold. Default 100." \
@@ -177,11 +179,16 @@ command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
     _ry_exit $EXIT_PREFLIGHT
 end
 umask $_prev_mkdir_umask
-command chmod -- 700 "$_RY_HOME_DIR" "$_RY_HOME_DIR/logs" "$LOG_DIR" 2>/dev/null
 for _ld_path in "$_RY_HOME_DIR" "$_RY_HOME_DIR/logs" "$LOG_DIR"
-    set -l _ld_mode (command stat -c '%a' -- "$_ld_path" 2>/dev/null)
-    if test "$_ld_mode" != 700
-        echo "[ERR] Log dir mode is $_ld_mode (expected 700): $_ld_path" >&2
+    set -l _pre (command stat -c '%a' -- "$_ld_path" 2>/dev/null)
+    command chmod -- 700 "$_ld_path" 2>/dev/null
+    set -l _post (command stat -c '%a' -- "$_ld_path" 2>/dev/null)
+    if test -n "$_pre"; and test "$_pre" != "$_post"
+        not set -q _RY_PERM_FIX_NOTICES; and set -g _RY_PERM_FIX_NOTICES
+        set -ga _RY_PERM_FIX_NOTICES "LOG_DIR_PERM_FIX: $_ld_path $_pre→$_post"
+    end
+    if test "$_post" != 700
+        echo "[ERR] Log dir mode is $_post (expected 700): $_ld_path" >&2
         _ry_exit $EXIT_PREFLIGHT
     end
 end
@@ -360,7 +367,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     test $_fresh_rc -eq 0; and return 0
     test $_fresh_rc -ne 2; and return 1
     set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
-    if string match -qr '^\d+$' -- "$_stale_pid"; and not command kill -0 "$_stale_pid" 2>/dev/null
+    if string match -qr '^[1-9]\d*$' -- "$_stale_pid"; and not command kill -0 "$_stale_pid" 2>/dev/null
         functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID not running, reclaiming)"
         command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
         _acquire_lock_fresh
@@ -1148,9 +1155,10 @@ function _fail_silent; _msg_nocount FAIL $argv; return 0; end
 function _info; _msg INFO $argv; return 0; end
 function _warn; _msg WARN $argv; return 0; end
 function _err; _msg ERR $argv; return 0; end
-function _err_loud --description "Fatal-preflight err: always emits [ERR] to stderr regardless of QUIET"
+function _err_loud --description "Fatal-preflight err: stderr regardless of QUIET, except MODE=check (silent-probe contract)"
     set -l msg (string join -- " " $argv)
     _log "ERR: $msg"
+    test "$MODE" = check; and return 0
     _msg_print --force ERR $argv
 end
 function _echo --description "Print a plain message without level prefix"
@@ -1597,7 +1605,11 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
     for _host in archlinux.org cloudflare.com
         set _idx (math $_idx + 1)
         if command curl -sfI --connect-timeout 3 --max-time 5 "https://$_host" >/dev/null 2>&1
-            test $_idx -eq 1; and _ok "Network connectivity: OK"; or _ok "Network connectivity: OK (fallback host)"
+            if test $_idx -eq 1
+                _ok "Network connectivity: OK"
+            else
+                _ok "Network connectivity: OK (fallback host)"
+            end
             return 0
         end
     end
@@ -2648,26 +2660,15 @@ function _ry_do_check --description "Silent idempotency probe"
     set -g _RY_CHECK_DRIFT 0
     set -g _RY_CHECK_FILES_CHECKED 0
     set -l _rc 0
-    _check_phase_files
-    set _rc $status
-    if test $_rc -ne 0
-        set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
-        _log_section "CHECK END"
-        return $_rc
-    end
-    _check_phase_cmdline
-    set _rc $status
-    if test $_rc -ne 0
-        set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
-        _log_section "CHECK END"
-        return $_rc
-    end
-    _check_phase_units
-    set _rc $status
-    if test $_rc -ne 0
-        set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
-        _log_section "CHECK END"
-        return $_rc
+    # Dynamic dispatch: phase fn name resolved at iteration; preserves per-phase rc + drift-erase semantics.
+    for _phase in _check_phase_files _check_phase_cmdline _check_phase_units
+        $_phase
+        set _rc $status
+        if test $_rc -ne 0
+            set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
+            _log_section "CHECK END"
+            return $_rc
+        end
     end
     set -l _drift $_RY_CHECK_DRIFT
     set -l _checked $_RY_CHECK_FILES_CHECKED
@@ -4390,7 +4391,7 @@ function _bootctl_dir --argument-names flag logtag fallnote --description "bootc
 end
 function _resolve_esp --description "Resolve EFI system partition path (cached; empty result also cached)"
     if set -q _RY_ESP_TRIED
-        echo "$_RY_ESP_PATH"
+        printf '%s' "$_RY_ESP_PATH"
         return 0
     end
     set -l _p (_bootctl_dir -p ESP_BOOTCTL_PIPE_FAIL "falling through to findmnt")
@@ -4419,11 +4420,11 @@ function _resolve_esp --description "Resolve EFI system partition path (cached; 
     end
     set -g _RY_ESP_PATH "$_p"
     set -g _RY_ESP_TRIED true
-    echo "$_p"
+    printf '%s' "$_p"
 end
 function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, else ESP) per BLS (cached; empty result also cached)"
     if set -q _RY_BOOT_TRIED
-        echo "$_RY_BOOT_PATH"
+        printf '%s' "$_RY_BOOT_PATH"
         return 0
     end
     set -l _p (_bootctl_dir -x BOOT_BOOTCTL_PIPE_FAIL "falling through to ESP")
@@ -4432,7 +4433,7 @@ function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, 
     end
     set -g _RY_BOOT_PATH "$_p"
     set -g _RY_BOOT_TRIED true
-    echo "$_p"
+    printf '%s' "$_p"
 end
 function _enum_boot_entries --argument-names esp --description "Enumerate \$esp/loader/entries/*.conf"
     set -g _RY_BOOT_ENUM_OK true
@@ -4598,7 +4599,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         return $EXIT_BOOT_CRIT
     end
     if test "$_RY_BOOT_TAINTED" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
-        _err "Refusing initramfs rebuild — package or boot-critical config state may be inconsistent"
+        _err "Refusing initramfs rebuild — an earlier phase of THIS run tainted package or boot-critical config state"
         _err "  (mkinitcpio.conf, kernel cmdline, loader, sdboot-manage, or pacman/AUR install failed)"
         _err "  Resolve manually then re-run, OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
         return $EXIT_BOOT_CRIT
@@ -4875,7 +4876,7 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
         return $EXIT_BOOT_CRIT
     end
     if test "$_RY_BOOT_TAINTED" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
-        _err "Refusing initramfs rebuild — boot-critical state is tainted (prior aborted install?)"
+        _err "Refusing initramfs rebuild — _RY_BOOT_TAINTED=true (intra-process flag; means a deploy step in THIS run tainted state, or flag was set externally via env)"
         _err "  Re-run unattended install OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
         _log "POST_BOOT_REFUSED: _RY_BOOT_TAINTED=true target=$target"
         return $EXIT_BOOT_CRIT
@@ -5100,6 +5101,12 @@ if test $status -eq 0
     set -g _RY_HEADER_WRITTEN true
 else
     set -g _RY_LOG_WRITE_FAIL true
+end
+if set -q _RY_PERM_FIX_NOTICES
+    for _n in $_RY_PERM_FIX_NOTICES
+        _log "$_n"
+    end
+    set --erase _RY_PERM_FIX_NOTICES _n
 end
 _init_runtime
 switch $MODE

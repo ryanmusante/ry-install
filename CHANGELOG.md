@@ -1,6 +1,26 @@
 ry-install ChangeLog
 ====================
 
+v7.3.5 - 2026-05-17
+-------------------
+
+  * `_err_loud`: log-only when `MODE=check` — preserves "Silent idempotency probe" contract for `--check` while keeping forensics intact in JSONL. Restores silence on hardware-mismatch fatal preflight at L765-767 (and 10 other `_err_loud` sites under `_init_runtime`).
+  * `_ry_show_help` EXIT CODES: reword signal-exit-code line to reflect fish 3.x `--on-signal` handler limitation (parent `$status` may show 0 instead of 130/143/etc). Canonical code remains in JSONL `footer.exit_code`.
+  * `_ry_show_help` `--check`: annotate with "requires functional sudo + systemctl; ERR_NO_DATA from systemctl probes is treated as preflight" — matches `_cpu_chk_expected` / `_check_phase_units` semantics.
+  * `_ry_do_check`: collapse 3× identical rc-handling blocks via for-loop over phase fn names. 51 → 40 L (within ≤50 L preference).
+  * `_install_rebuild_boot` / `_post_boot`: clarify boot-taint message — "intra-process flag" replaces "(prior aborted install?)".
+  * `_ry_check_network`: replace `test ...; and X; or Y` at L1600 with explicit `if/else` (removes dependency on `_ok`-returns-0 invariant for branch selection). Two other `test ...; and ...; or ...` sites (L130 TMPDIR cascade, L403 `begin/end` OR-chain) intentionally retained — different idioms.
+  * `_resolve_esp` / `_resolve_boot_path`: 4 sites (`echo "$_p"` at L4422/L4435 fresh-return + `echo "$_RY_ESP_PATH"`/`echo "$_RY_BOOT_PATH"` at L4393/L4426 cached-return) → `printf '%s'` for command-substitution symmetry with `_bootctl_dir` at L4389.
+  * `_acquire_lock`: stale-pid regex `^\d+$` → `^[1-9]\d*$` to reject `pid=0` / leading-zero values (`kill -0 0` = process-group signal; would falsely succeed without this guard).
+  * Bootstrap: merge L180 chmod with L181-188 perm-verify into single-pass loop; record `LOG_DIR_PERM_FIX` notices in deferred-log buffer when `chmod 700` auto-corrects pre-existing wrong perms on `~/ry-install` dirs; flush before `_init_runtime` once `_log` is callable and header is on disk.
+  * `VERSION` 7.3.3 → 7.3.5. 5136 → 5143 L (+7 L).
+
+v7.3.3 - 2026-05-17
+-------------------
+
+  * README Phase 4: Install-Flow table row and `_install_configure_services` prose realigned to script execution order — `systemd-resolved` restart + THP `systemd-tmpfiles --create` were missing; mask/enable order was inverted.
+  * VERSION 7.3.2 → 7.3.3. 5136 L unchanged.
+
 v7.3.2 - 2026-05-17
 -------------------
 

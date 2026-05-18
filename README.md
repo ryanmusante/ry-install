@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.3.2-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.3.5-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -135,7 +135,7 @@ Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 | 1 | Preflight | Validate prerequisites, acquire lock, validate runtime |
 | 2 | Packages | `pacman -Syu --needed`; AUR via paru; `updatedb` + `pkgfile --update` cache refresh |
 | 3 | Configuration | Deploy 12 embedded config files (atomic) |
-| 4 | Services | fstab ext4 opts; `PKGS_DEL` removal; `daemon-reload`; enable; mask 12 desktop/power units |
+| 4 | Services | fstab ext4 opts; `systemd-resolved` restart; THP tmpfiles apply; `PKGS_DEL` removal; mask 12 desktop/power units; `daemon-reload` + enable runtime units |
 | 5 | Boot | Rebuild initramfs, update systemd-boot entries |
 | 6 | Finalize | Cache cleanup; NM restart (deferred when WiFi is active route) |
 
@@ -459,9 +459,10 @@ and back in to apply.
 
 ### Phase 4 — Services
 
-fstab rewrite (`_install_fstab_opts`), then mask deferred-power
-units, remove `PKGS_DEL`, and enable runtime units
-(`_install_configure_services`).
+fstab rewrite (`_install_fstab_opts`), then `_install_configure_services`:
+`systemd-resolved` restart (re-applies `99-cachyos-resolved.conf`),
+`systemd-tmpfiles --create` for THP, `PKGS_DEL` removal, mask 12
+desktop/power units, then `daemon-reload` + enable runtime units.
 
 <details>
 <summary><b>fstab</b> — ext4 mount options (idempotent rewrite)</summary>

@@ -1,14 +1,16 @@
 #!/usr/bin/env fish
-# ry-install v7.3.5 (2026-05-17) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.3.7 (2026-05-18) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.3.5"
+set -g VERSION "7.3.7"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
+# EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
+set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PROFILE_NAME gtr9_pro
 set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"
@@ -288,11 +290,11 @@ function _verify_unit_syntax --argument-names unit_path label intended_scope --d
     end
     set -l _err_out (command systemd-analyze $user_flag verify "$unit_path" 2>&1)
     if test $status -eq 0
-        test -n "$_err_out"; and _log "VERIFY_UNIT_WARN: ($label) "(printf '%s\n' $_err_out | command head -n 5 | string join '; ')
+        test -n "$_err_out"; and _log "VERIFY_UNIT_WARN: ($label) "(printf '%s\n' $_err_out | command head -n 5 | string join -- '; ')
         _ok "  $label: syntax OK"
         return 0
     end
-    _log "VERIFY_UNIT_ERR: ($label) "(printf '%s\n' $_err_out | command head -n 5 | string join '; ')
+    _log "VERIFY_UNIT_ERR: ($label) "(printf '%s\n' $_err_out | command head -n 5 | string join -- '; ')
     _fail "  $label: INVALID SYNTAX"
     return 1
 end
@@ -1393,7 +1395,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     if test -z "$_run_dir"; or not test -d "$_run_dir"
         _log "RUN_ABORT: mktemp -d failed — refusing to execute without stderr capture"
         _err "_run: cannot allocate tmpdir for stdout/stderr capture — aborting command"
-        return 251
+        return $EXIT_RUN_TMPFAIL
     end
     set -l stderr_tmp "$_run_dir/stderr"
     set -l stdout_tmp "$_run_dir/stdout"
@@ -3699,7 +3701,7 @@ function _ip_snapshot_mkinitcpio --description "Snapshot /etc/mkinitcpio.conf fo
         _log "MKINITCPIO_BACKUP_FAIL: cp"
         return 0
     end
-    # mktemp creates with 0600 mode; explicit chmod was redundant. The revert path uses chmod --reference=/etc/mkinitcpio.conf on the *destination*, so snapshot mode is irrelevant to final perms.
+    # mktemp inherits 0600; revert chmods --reference=destination, so snapshot mode is moot.
     set -g _RY_MKI_BACKUP_FILE "$_snap"
     set -g _RY_MKI_HAD_ORIG true
 end
@@ -3999,7 +4001,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
 end
 function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk script for ext4 mount-opt rewrite"
     # Idempotent rewrite: comments / non-ext4 / digits-only $4 / already-conformant ext4 lines pass through unchanged; only non-conformant ext4 entries are rewritten in-place.
-    string join \n \
+    string join -- \n \
         'BEGIN { OFS = " " }' \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
         '$3 != "ext4" { print; next }' \
@@ -4779,6 +4781,7 @@ function _post_hook_for_target --argument-names target --description "Return pos
     return 1
 end
 function _idf_match_dst --argument-names target --description "Match \$target against managed destinations"
+    # _idx aligns canon-list to source-list (precompute preserves order; drift refused at preflight by _ir_validate_counts).
     set -l _idx 1
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         if test "$target" = "$dst"; or test "$target" = "$_RY_CANON_SYSTEM_DSTS[$_idx]"
@@ -5003,7 +5006,7 @@ if test $_argparse_rc -ne 0
     if test "$_ap_errfile" = /dev/null
         set _ap_msg "(argparse error message unavailable: tmpfile alloc failed)"
     else if test -s "$_ap_errfile"
-        set _ap_msg (command head -n 3 -- "$_ap_errfile" 2>/dev/null | string join '; ' | string trim --)
+        set _ap_msg (command head -n 3 -- "$_ap_errfile" 2>/dev/null | string join -- '; ' | string trim --)
     end
     test -n "$_ap_msg"; or set _ap_msg "Invalid arguments: $_ORIG_ARGV"
     echo "[ERR] $_ap_msg" >&2
@@ -5093,7 +5096,7 @@ set -l _argv_in (status filename) $_ORIG_ARGV
 for _r in $_argv_in
     set -a _argv_parts '"'(_json_str "$_r")'"'
 end
-set -l _argv_json '['(string join ',' $_argv_parts)']'
+set -l _argv_json '['(string join -- ',' $_argv_parts)']'
 set -l _verbose_json false
 test "$QUIET" = false; and set _verbose_json true
 printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' (command date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null

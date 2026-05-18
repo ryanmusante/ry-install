@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.3.7-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.3.8-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -72,7 +72,7 @@ Typical duration: **3–8 minutes**.
 | CachyOS | systemd-boot, ext4 root |
 | Fish | ≥ 3.6 |
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
-| Free space | 2 GB `/`, 200 MB `/boot` |
+| Free space | 2 GiB `/`, 200 MiB `/boot` |
 | Before `-Syu` | Read [CachyOS](https://wiki.cachyos.org) + [Arch news](https://archlinux.org/news/) |
 
 Additional preflight gates (systemd ≥ 250, unrestricted sudo, GNU

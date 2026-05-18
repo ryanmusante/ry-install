@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.3.7 (2026-05-18) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.3.8 (2026-05-18) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.3.7"
+set -g VERSION "7.3.8"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -668,20 +668,21 @@ end
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
     set -g _ROOT_UUID (command findmnt -no UUID / 2>/dev/null)
+    set -l _reason "findmnt failed"
     if test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -- "$_ROOT_UUID"
-        _err_loud "Root UUID has invalid shape (got: $_ROOT_UUID) — refusing to cache"
+        set _reason "invalid UUID shape (got: $_ROOT_UUID)"
         set --erase _ROOT_UUID
     end
     test -n "$_ROOT_UUID"; and return 0
     switch "$MODE"
         case check
-            _log "ROOT_UUID_UNAVAILABLE: findmnt failed (silent for --check)"
+            _log "ROOT_UUID_UNAVAILABLE: $_reason (silent for --check)"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         case install install-file verify-static verify-runtime
-            _err_loud "Cannot detect root UUID (findmnt failed) — /etc/kernel/cmdline cannot be generated"
+            _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         case '*'
-            _log "ROOT_UUID_UNAVAILABLE: mode=$MODE — non-fatal for this mode"
+            _log "ROOT_UUID_UNAVAILABLE: mode=$MODE reason=$_reason — non-fatal for this mode"
     end
 end
 function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend / canonical-dst caches"
@@ -803,10 +804,23 @@ function _content__etc_kernel_cmdline
     printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
 end
 function _content__etc_sdboot-manage.conf
-    printf '%s\n' "# sdboot-manage configuration — changes require: sudo sdboot-manage gen && sudo sdboot-manage update" "LINUX_OPTIONS=\""(string join -- " " $KERNEL_PARAMS)"\"" "LINUX_FALLBACK_OPTIONS=\"quiet\"" "DEFAULT_ENTRY=\"$SDBOOT_DEFAULT_ENTRY\"" "REMOVE_EXISTING=\"$SDBOOT_REMOVE_EXISTING\"" "OVERWRITE_EXISTING=\"$SDBOOT_OVERWRITE\"" "REMOVE_OBSOLETE=\"$SDBOOT_REMOVE_OBSOLETE\""
+    printf '%s\n' \
+        "# sdboot-manage configuration — changes require: sudo sdboot-manage gen && sudo sdboot-manage update" \
+        "LINUX_OPTIONS=\""(string join -- " " $KERNEL_PARAMS)"\"" \
+        "LINUX_FALLBACK_OPTIONS=\"quiet\"" \
+        "DEFAULT_ENTRY=\"$SDBOOT_DEFAULT_ENTRY\"" \
+        "REMOVE_EXISTING=\"$SDBOOT_REMOVE_EXISTING\"" \
+        "OVERWRITE_EXISTING=\"$SDBOOT_OVERWRITE\"" \
+        "REMOVE_OBSOLETE=\"$SDBOOT_REMOVE_OBSOLETE\""
 end
 function _content__etc_mkinitcpio.conf
-    printf '%s\n' "# mkinitcpio configuration — changes require: sudo mkinitcpio -P && sudo sdboot-manage update" "MODULES=("(string join -- " " $MKINITCPIO_MODULES)")" "BINARIES=()" "FILES=()" "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")" "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
+    printf '%s\n' \
+        "# mkinitcpio configuration — changes require: sudo mkinitcpio -P && sudo sdboot-manage update" \
+        "MODULES=("(string join -- " " $MKINITCPIO_MODULES)")" \
+        "BINARIES=()" \
+        "FILES=()" \
+        "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")" \
+        "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"
         printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"
     end
@@ -1648,8 +1662,8 @@ function _check_avail --argument-names path divisor unit crit warn --description
 end
 function _ry_check_disk_space --description "Verify sufficient free disk space for installation"
     _log DISK_CHECK_START
-    _check_avail / 1073741824 GB $ROOT_AVAIL_CRIT $ROOT_AVAIL_WARN; or return 1
-    _check_avail /boot 1048576 MB $BOOT_SPACE_CRIT $BOOT_SPACE_WARN; or return 1
+    _check_avail / 1073741824 GiB $ROOT_AVAIL_CRIT $ROOT_AVAIL_WARN; or return 1
+    _check_avail /boot 1048576 MiB $BOOT_SPACE_CRIT $BOOT_SPACE_WARN; or return 1
     return 0
 end
 function _kver_below --argument-names major minor patch want_major want_minor want_patch --description "True iff (major.minor.patch) < (want_major.want_minor.want_patch). Integer args"
@@ -2772,8 +2786,8 @@ function _vrkg_rebar_sam --description "_vrk_gpu_state sub: ReBAR/SAM status via
         _info "  lspci not available for ReBAR check"
         return 0
     end
-    # ReBAR signal: BAR strictly >256 MB. 256 MB is the no-ReBAR cap on AMD GPUs; only 512 MB or GB-range entries indicate ReBAR/SAM is active.
-    set -l bar_size (command lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*512M|Region.*Memory.*[0-9]G' | command head -n 1)
+    # ReBAR signal: BAR strictly >256 MB. AMD GPUs cap at 256 MB without ReBAR; match any G-suffix or M-values ≥500 (covers 512/1024/2048/4096/8192M and 1G+).
+    set -l bar_size (command lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*[0-9]+G\b|Region.*Memory.*([5-9][0-9]{2}|[0-9]{4,})M\b' | command head -n 1)
     if test -n "$bar_size"
         _ok "  ReBAR/SAM: large BAR detected"
         _info "  $bar_size"
@@ -3869,7 +3883,10 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
     end
     set -l _had_fail false
     set -g _RY_AUR_PARTIAL false
-    _log "AUR_NOISE_NOTE: paru/makepkg stderr/stdout may contain benign tokens — 'WARNING: Using existing \$srcdir/ tree' (cache reuse), 'error: command failed to execute correctly' (retried sub-step), 'BUILD_EXCLUSIVE directives ... do not match this kernel' (DKMS rejects build for an alternate kernel; mainline ships in-tree mt7925e). Authoritative success signal: MT7925_VERIFY_OK from _aur_verify_mt7925."
+    _log "AUR_NOISE_NOTE: paru/makepkg stderr/stdout may contain benign tokens; authoritative success signal is MT7925_VERIFY_OK from _aur_verify_mt7925"
+    _log "AUR_NOISE_NOTE_TOKEN: 'WARNING: Using existing \$srcdir/ tree' (cache reuse)"
+    _log "AUR_NOISE_NOTE_TOKEN: 'error: command failed to execute correctly' (retried sub-step)"
+    _log "AUR_NOISE_NOTE_TOKEN: 'BUILD_EXCLUSIVE directives ... do not match this kernel' (DKMS rejects build for an alternate kernel; mainline ships in-tree mt7925e)"
     if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- $AUR_PKGS
         if test (count $AUR_PKGS) -le 1
             _warn "AUR install failed: $AUR_PKGS"
@@ -4768,7 +4785,21 @@ function _ry_do_install --description "Full installation: preflight, packages, c
 end
 
 # First-match-wins (most-specific paths first, `*.service` catchall last); fish `string match` glob (no -r) — `*` spans `/`, so `*/dir/*` matches any-depth.
-set -g _RY_POST_HOOKS "/boot/*|boot" "/efi/*|boot" "/etc/mkinitcpio.conf|boot" "/etc/sdboot-manage.conf|boot" "/etc/kernel/cmdline|boot" "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/iwd/main.conf|nm" "*/NetworkManager/conf.d/*|nm" "*/sysctl.d/*|sysctl" "*/environment.d/*|envd" "/etc/default/cpupower-service.conf|cpupower" "*/tmpfiles.d/*|tmpfiles" "*.service|service"
+set -g _RY_POST_HOOKS \
+    "/boot/*|boot" \
+    "/efi/*|boot" \
+    "/etc/mkinitcpio.conf|boot" \
+    "/etc/sdboot-manage.conf|boot" \
+    "/etc/kernel/cmdline|boot" \
+    "*/resolved.conf.d/*|resolved" \
+    "*/logind.conf.d/*|logind" \
+    "*/iwd/main.conf|nm" \
+    "*/NetworkManager/conf.d/*|nm" \
+    "*/sysctl.d/*|sysctl" \
+    "*/environment.d/*|envd" \
+    "/etc/default/cpupower-service.conf|cpupower" \
+    "*/tmpfiles.d/*|tmpfiles" \
+    "*.service|service"
 
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"
     for _entry in $_RY_POST_HOOKS

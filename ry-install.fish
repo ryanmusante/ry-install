@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.10 (2026-05-19) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.11 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.10"
+set -g VERSION "7.4.11"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -265,7 +265,7 @@ function _resolve_systemd_ver --description "Cache systemd major version into _R
     set -g _RY_SYSTEMD_VER_TRIED true
     return 0
 end
-function _unit_state --argument-names unit --description "Return Load/Active/UnitFile state as 3-element list"; command systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null; end
+function _unit_state --argument-names unit --description "Return LoadState/ActiveState/UnitFileState as 3-line list (fewer on systemctl error)"; command systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null; end
 function _unit_state_padded --argument-names unit --description "Return _unit_state values"
     set -l _v (_unit_state "$unit")
     if test (count $_v) -lt 3
@@ -797,12 +797,12 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
         if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman/paru would parse as flag, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _content__boot_loader_loader.conf; printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"; end
-function _content__etc_kernel_cmdline
+function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"; printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"; end
+function _content__etc_kernel_cmdline --description "Generate content for /etc/kernel/cmdline"
     test -z "$_ROOT_UUID"; and return $EXIT_GEN_NOUUID
     printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
 end
-function _content__etc_sdboot-manage.conf
+function _content__etc_sdboot-manage.conf --description "Generate content for /etc/sdboot-manage.conf"
     printf '%s\n' \
         "# sdboot-manage configuration — changes require: sudo sdboot-manage gen && sudo sdboot-manage update" \
         "LINUX_OPTIONS=\""(string join -- " " $KERNEL_PARAMS)"\"" \
@@ -812,7 +812,7 @@ function _content__etc_sdboot-manage.conf
         "OVERWRITE_EXISTING=\"$SDBOOT_OVERWRITE\"" \
         "REMOVE_OBSOLETE=\"$SDBOOT_REMOVE_OBSOLETE\""
 end
-function _content__etc_mkinitcpio.conf
+function _content__etc_mkinitcpio.conf --description "Generate content for /etc/mkinitcpio.conf"
     printf '%s\n' \
         "# mkinitcpio configuration — changes require: sudo mkinitcpio -P && sudo sdboot-manage update" \
         "MODULES=("(string join -- " " $MKINITCPIO_MODULES)")" \
@@ -824,8 +824,8 @@ function _content__etc_mkinitcpio.conf
         printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"
     end
 end
-function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf; printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=no" "DNSOverTLS=opportunistic" "DNSSEC=allow-downgrade"; end
-function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf
+function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"; printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=no" "DNSOverTLS=opportunistic" "DNSSEC=allow-downgrade"; end
+function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
     printf '%s\n' "[Login]"
     _resolve_systemd_ver
@@ -836,22 +836,22 @@ function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf
         printf '%s\n' "$key=ignore"
     end
 end
-function _content__etc_iwd_main.conf
+function _content__etc_iwd_main.conf --description "Generate content for /etc/iwd/main.conf"
     printf '%s\n' "# iwd configuration - minimal config for NetworkManager backend" "[General]" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "" "[DriverQuirks]"
     for quirk in $IWD_DRIVER_QUIRKS
         printf '%s\n' "$quirk"
     end
     printf '%s\n' "" "[Network]" "NameResolvingService=$IWD_DNS_SERVICE"
 end
-function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf; printf '%s\n' "# NetworkManager configuration - iwd backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"; end
-function _content_HOME_.config_environment.d_10-environment.conf
+function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (iwd backend)"; printf '%s\n' "# NetworkManager configuration - iwd backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"; end
+function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (COSMIC, Flatpak, D-Bus activated apps)"
     for var in $ENV_VARS
         printf '%s\n' "$var"
     end
 end
-function _content__etc_default_cpupower-service.conf; printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='performance'"; end
-function _content__etc_sysctl.d_99-cachyos-sysctl.conf
+function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"; printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='performance'"; end
+function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Generate content for sysctl drop-in"
     printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf; overrides net.core.netdev_max_backlog 4096 → 16384)"
     set -l _printed 0
     for entry in $SYSCTL_VALUES
@@ -870,7 +870,7 @@ function _content__etc_sysctl.d_99-cachyos-sysctl.conf
         return $EXIT_GEN_SYSCTL
     end
 end
-function _content__etc_tmpfiles.d_99-cachyos-thp.conf
+function _content__etc_tmpfiles.d_99-cachyos-thp.conf --description "Generate content for THP tmpfiles drop-in"
     # systemd-tmpfiles writes runtime sysfs tunables on every boot
     printf '%s\n' "# THP shrink_underused: keep huge pages intact on high-RAM workstations (128 GB profile)" "w /sys/kernel/mm/transparent_hugepage/shrink_underused - - - - 0"
 end
@@ -1142,13 +1142,13 @@ function _msg_nocount --argument-names level --description "Like _msg but skips 
 end
 
 # Invariant: _ok/_fail/_warn/_info/_err always return 0 (callers chain via `; and`/`; or`).
-function _ok; _msg OK $argv; return 0; end
-function _fail; _msg FAIL $argv; return 0; end
-function _fail_silent; _msg_nocount FAIL $argv; return 0; end
-function _info; _msg INFO $argv; return 0; end
-function _warn; _msg WARN $argv; return 0; end
+function _ok --description "Emit OK-level message and increment VERIFY_OK"; _msg OK $argv; return 0; end
+function _fail --description "Emit FAIL-level message and increment VERIFY_FAIL"; _msg FAIL $argv; return 0; end
+function _fail_silent --description "Emit FAIL-level message without incrementing VERIFY_FAIL"; _msg_nocount FAIL $argv; return 0; end
+function _info --description "Emit INFO-level message (no counter)"; _msg INFO $argv; return 0; end
+function _warn --description "Emit WARN-level message and increment VERIFY_WARN"; _msg WARN $argv; return 0; end
 # _err force-prints when _RY_LOUD_ERR set so preflight bail reasons reach stderr in default QUIET install mode (--check stays silent).
-function _err
+function _err --description "Emit ERR-level message (force-prints to stderr when _RY_LOUD_ERR=true)"
     if set -q _RY_LOUD_ERR; and test "$_RY_LOUD_ERR" = true; and test "$MODE" != check
         _log "ERR: "(string join -- " " $argv)
         set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
@@ -3969,8 +3969,8 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
         _log "PACTREE_PROBE_FAIL: pkg=$pkg pactree_rc=$_ps[1] (timeout, missing pkg, or db error)"
         return 0
     end
-    # Stages 2-4 are fish `string` subcommands; rc=1 means "no changes/matches" (normal), only rc≥2 is a real error.
-    if test "$_ps[2]" -ge 2 2>/dev/null; or test "$_ps[3]" -ge 2 2>/dev/null; or test "$_ps[4]" -ge 2 2>/dev/null
+    # Stages 2-4 are fish `string` subcommands; rc=1 means "no changes/matches" (normal), only rc≥2 is a real error. Pipe is always 4-stage so $_ps always has 4 numeric elements.
+    if test "$_ps[2]" -ge 2; or test "$_ps[3]" -ge 2; or test "$_ps[4]" -ge 2
         set -l _ps_str (string join , -- $_ps)
         _warn "  $pkg: pactree pipe failure (pipestatus=$_ps_str) — skipping for safety"
         _log "PACTREE_PIPE_FAIL: pkg=$pkg pipestatus=$_ps_str"

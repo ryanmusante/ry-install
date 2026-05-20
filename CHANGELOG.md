@@ -1,22 +1,23 @@
 ry-install ChangeLog
 ====================
 
+v7.4.10 - v7.4.11 - 2026-05-20
+------------------------------
+
+- `_unit_state`: description clarifies returns <3 lines on systemctl error.
+- `_csp_filter_rdeps`: drop redundant `2>/dev/null` on `_ps[2..4]` numeric tests (fish `string` always returns integer rc; pipe is always 4-stage).
+- `--description` coverage: 18 single-line helpers (`_ok`/`_fail`/`_fail_silent`/`_info`/`_warn`/`_err` + 12 `_content_*` generators) gain `--description` for 100% coverage.
+
 v7.4.9 - v7.4.10 - 2026-05-19
 -----------------------------
 
-- `_installed_bytes` (sudo + non-sudo branches): check only stage 1 (`cat` rc) — `string collect` rc=1 on empty input is normal, not an error.
-- `_vsb_entries`: check only stage 1 (`find` rc); empty entries dir now correctly routes to `_fail "NONE in entries/"` with `sdboot-manage gen` recovery hint.
-- `_vrs_nm_perms`: check only stage 1; zero NM connection files no longer false-warn "cannot enumerate" on iwd-only systems.
-- `_enum_boot_entries`: check only stage 1; empty entries dir no longer logs spurious BOOT_ENUM_FAIL with sudo-lapse cause.
-- `_pbs_check_boot_files`: check only stage 1; zero kernel/initramfs files now route to "No X found" instead of misleading "Cannot enumerate (sudo lapsed)".
-- `_pbs_check_entries`: same — empty entries dir routes to "No boot loader entries" diagnostic.
-- `_boot_initrd_size_scan`: check only stage 1; zero initramfs files no longer false-warn.
-- Remove `_pipe_all_ok` helper (dead code; all callers now use stage-1-specific checks per fish `string` rc semantics).
+- Stage-1-rc semantics across 7 callers (`_installed_bytes`, `_vsb_entries`, `_vrs_nm_perms`, `_enum_boot_entries`, `_pbs_check_boot_files`, `_pbs_check_entries`, `_boot_initrd_size_scan`): check only stage 1 of pipes ending in fish `string` builtins — `string collect`/`string split0` rc=1 on empty input is normal, not an error. Empty enumeration now routes to "NONE found" diagnostics instead of misleading "Cannot enumerate (sudo lapsed)".
+- Remove `_pipe_all_ok` helper (dead after stage-1-specific call-site rewrites).
 
 v7.4.8 - v7.4.9 - 2026-05-19
 ----------------------------
 
-- `_do_cleanup`: run `_dc_kill_children` before `_dc_erase_globals` so lock-release gate vars `_RY_HOLDS_LOCK` / `_RY_LOCK_DIR_OWNED` are still set when `$LOCK_DIR` is removed. Fixes orphaned `~/.local/share/ry-install/.lock/` after every clean exit (regression from cleanup-decomposition refactor).
+- `_do_cleanup`: run `_dc_kill_children` before `_dc_erase_globals` so lock-release gate vars `_RY_HOLDS_LOCK` / `_RY_LOCK_DIR_OWNED` remain set when `$LOCK_DIR` is removed. Fixes orphaned `~/.local/share/ry-install/.lock/` after clean exit.
 
 v7.4.7 - v7.4.8 - 2026-05-19
 ----------------------------
@@ -35,10 +36,10 @@ v7.4.6 - v7.4.7 - 2026-05-20
 v7.4.5 - v7.4.6 - 2026-05-20
 ----------------------------
 
-- `_ip_probe_sudo_policy`: removed; strict NOPASSWD: ALL preflight gate no longer enforced.
-- New `_ry_sudo_cache_banner`: install-mode stderr warning that sudo cache can lapse mid-run, with mitigation options (timestamp_timeout extend, parallel `sudo -v` keepalive, NOPASSWD drop-in).
-- `_dc_sweep_filesystem`: drop `ry-sudo-l-err.*` tmpfile glob (dead after policy probe removal).
-- README: replace strict sudo-policy preflight requirement with `[!WARNING]` cache-lapse callout under Prerequisites.
+- `_ip_probe_sudo_policy`: removed; strict NOPASSWD: ALL preflight gate dropped.
+- New `_ry_sudo_cache_banner`: install-mode stderr warning that sudo cache can lapse mid-run, listing mitigations.
+- `_dc_sweep_filesystem`: drop `ry-sudo-l-err.*` tmpfile glob.
+- README: replace strict sudo-policy preflight with `[!WARNING]` cache-lapse callout.
 
 v7.4.4 - v7.4.5 - 2026-05-20
 ----------------------------
@@ -54,27 +55,27 @@ v7.4.3 - v7.4.4 - 2026-05-20
 v7.4.2 - v7.4.3 - 2026-05-20
 ----------------------------
 
-- `_ip_probe_sudo_policy`: regex requires `NOPASSWD:` explicitly; plain `(user) ALL` rejected.
-- `_install_aur_packages`: early-exit logic was inverted (masked by `AUR_PKGS:2` invariant); replaced with `test (count) -gt 0; or return 0`.
-- `_acquire_lock`: close `kill -0` / `/proc/$pid/comm` race — re-test `kill -0` when comm reads empty.
-- `_dir_group_or_world_writable`: reject modes shorter than 3 chars post-strip; drop redundant `math 2>/dev/null`.
-- README: sudo-policy line uses `(user) NOPASSWD: ALL` (no brackets).
+- `_ip_probe_sudo_policy`: regex requires `NOPASSWD:` explicitly.
+- `_install_aur_packages`: invert inverted early-exit; use `(count) -gt 0; or return 0`.
+- `_acquire_lock`: close `kill -0` / `/proc/$pid/comm` race.
+- `_dir_group_or_world_writable`: reject modes <3 chars post-strip; drop redundant `math 2>/dev/null`.
+- README: sudo-policy line uses `(user) NOPASSWD: ALL`.
 
 v7.4.1 - v7.4.2 - 2026-05-19
 ----------------------------
 
-- `_ip_probe_sudo_policy`: ALL-grant regex gains end-anchor; skip lines with `,\s*!` negation.
+- `_ip_probe_sudo_policy`: ALL-grant regex gains end-anchor; skip `,\s*!` negations.
 - `_ensure_sudo_cached`: add `RY_INSTALL_NO_INTERACTIVE_SUDO=1` opt-out.
-- `_csp_filter_rdeps`: pipestatus checked on all 4 pipe stages (was pactree-only).
+- `_csp_filter_rdeps`: pipestatus checked on all 4 pipe stages.
 - `_acquire_lock`: PID-recycle check via `/proc/$_stale_pid/comm`.
 - `_acquire_lock_fresh`: `umask 0077` around `mkdir`.
-- `_dc_kill_children`: SIGKILL grace widened `$_RY_SLEEP_FRAC` → 0.5s.
+- `_dc_kill_children`: SIGKILL grace widened to 0.5s.
 - `_cleanup_tmpfiles`: two-step `sudo -n true` gate before `sudo find`.
 - `_log`: empty-`LOG_FILE` early-return.
-- `_cleanup`: 7×`--on-signal` consolidated on one fn; `_cleanup_other` removed.
+- `_cleanup`: 7×`--on-signal` consolidated on one fn.
 - `_ry_install_file`: sudo `mkdir -m 0755`.
-- Cosmetic: redundant `2>/dev/null` removed from `_vrk_*` dmesg cap and `_dir_group_or_world_writable` numeric tests.
-- README: `RY_INSTALL_NO_INTERACTIVE_SUDO` documented; sudo-policy preflight note added.
+- Cosmetic: redundant `2>/dev/null` removed from `_vrk_*` and `_dir_group_or_world_writable`.
+- README: `RY_INSTALL_NO_INTERACTIVE_SUDO` documented.
 
 v7.4.0 - v7.4.1 - 2026-05-20
 ----------------------------

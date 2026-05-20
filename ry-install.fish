@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.7 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.8 (2026-05-19) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.7"
+set -g VERSION "7.4.8"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -850,7 +850,7 @@ function _content_HOME_.config_environment.d_10-environment.conf
         printf '%s\n' "$var"
     end
 end
-function _content__etc_default_cpupower-service.conf; printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "governor='performance'"; end
+function _content__etc_default_cpupower-service.conf; printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='performance'"; end
 function _content__etc_sysctl.d_99-cachyos-sysctl.conf
     printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf; overrides net.core.netdev_max_backlog 4096 → 16384)"
     set -l _printed 0
@@ -2234,7 +2234,7 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _echo "── NetworkManager ──"
     _vss_nm $_skip_iwd
     _echo "── cpupower-service.conf ──"
-    _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "governor='performance'" "governor=performance"
+    _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "GOVERNOR='performance'" "GOVERNOR=performance"
     _vss_sysctl
 end
 function _verify_static_user --description "Verify environment.d ENV_VARS"
@@ -3975,11 +3975,11 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
         _log "PACTREE_PROBE_FAIL: pkg=$pkg pactree_rc=$_ps[1] (timeout, missing pkg, or db error)"
         return 0
     end
-    # Defence-in-depth: pactree returned 0 but verify no string-op stage failed. Latent on well-formed pactree output; cheap.
-    if not _pipe_all_ok $_ps
+    # Stages 2-4 are fish `string` subcommands; rc=1 means "no changes/matches" (normal), only rc≥2 is a real error — so _pipe_all_ok would false-flag these.
+    if test "$_ps[2]" -ge 2 2>/dev/null; or test "$_ps[3]" -ge 2 2>/dev/null; or test "$_ps[4]" -ge 2 2>/dev/null
         set -l _ps_str (string join , -- $_ps)
-        _warn "  $pkg: pactree pipe partial failure (pipestatus=$_ps_str) — skipping for safety"
-        _log "PACTREE_PIPE_PARTIAL: pkg=$pkg pipestatus=$_ps_str"
+        _warn "  $pkg: pactree pipe failure (pipestatus=$_ps_str) — skipping for safety"
+        _log "PACTREE_PIPE_FAIL: pkg=$pkg pipestatus=$_ps_str"
         return 0
     end
     set -l _rdeps

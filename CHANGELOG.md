@@ -1,6 +1,14 @@
 ry-install ChangeLog
 ====================
 
+v7.4.7 - v7.4.8 - 2026-05-19
+----------------------------
+
+- `_content__etc_default_cpupower-service.conf`: rename key `governor` → `GOVERNOR` for upstream cpupower env-script compatibility.
+- `_verify_static_system`: update `_chk_grep` pattern to `GOVERNOR='performance'`.
+- `_csp_filter_rdeps`: accept fish `string` rc=1 on stages 2-4 (no-op); only rc≥2 fails. Rename log token `PACTREE_PIPE_PARTIAL` → `PACTREE_PIPE_FAIL`.
+- README: document cpupower-service.conf key as `GOVERNOR`.
+
 v7.4.6 - v7.4.7 - 2026-05-20
 ----------------------------
 

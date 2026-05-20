@@ -1,6 +1,17 @@
 ry-install ChangeLog
 ====================
 
+v7.4.20 - v7.4.21 - 2026-05-20
+------------------------------
+
+- `_install_preflight`: extracts `_ip_record_regdom` for the regdom phase-record block; function 57 → 47 lines (within ≤50 target).
+- `_install_aur_packages`: extracts `_iap_per_pkg_retry` for the post-batch-failure per-package retry loop and `_iap_record_result` for final phase-record dispatch; function 66 → 44 lines.
+- `_install_rebuild_boot`: extracts `_irb_taint_gate` for the mkinitcpio-revert + `_RY_BOOT_TAINTED` early-exit gates; function 60 → 49 lines.
+- `_rdi_run_phases`: extracts `_rrp_optional_indexer` for `updatedb` / `pkgfile --update` paired blocks; function 60 → 47 lines.
+- `_verify_static_services`: 9-way `or test "$_enabled_state" = <state>` chain (359-char line) collapsed to `contains -- "$_enabled_state" enabled enabled-runtime alias static linked linked-runtime indirect generated transient`; semantics preserved.
+- `_ry_check_wireless_regdom` / `_ry_apply_wireless_regdom`: defensive double-quotes around `$_conf` in 5 `test -f` / `grep` / `tee` / `chmod` sites; fish does not word-split, but matches the script-wide convention for paths.
+- README: `Run Summary` heading added to the `Contents` TOC between `Install Flow` and `Configuration`; the `#run-summary` anchor was orphaned from v7.4.11 introduction.
+
 v7.4.19 - v7.4.20 - 2026-05-20
 ------------------------------
 

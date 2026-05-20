@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.20 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.21 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.20"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.21"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -3278,13 +3278,13 @@ end
 function _ry_check_wireless_regdom --description "Warn if WIRELESS_REGDOM unset or invalid — set-wireless-regdom skips iw reg set otherwise, leaving cfg80211 in world domain"
     # cfg80211 udev rule pipes /etc/conf.d/wireless-regdom through set-wireless-regdom on boot.
     set -l _conf /etc/conf.d/wireless-regdom
-    if not test -f $_conf
+    if not test -f "$_conf"
         _warn "  Wireless regulatory domain unset (no $_conf) — cfg80211 will use restrictive defaults"
         _info "    Fix: echo 'WIRELESS_REGDOM=\"<CC>\"' | sudo tee $_conf  (e.g., US, GB, DE)"
         _log "REGDOM_MISSING: $_conf absent"
         return 0
     end
-    if not command grep -qE '^[[:space:]]*WIRELESS_REGDOM="?[A-Z]{2}"?[[:space:]]*$' $_conf 2>/dev/null
+    if not command grep -qE '^[[:space:]]*WIRELESS_REGDOM="?[A-Z]{2}"?[[:space:]]*$' "$_conf" 2>/dev/null
         _warn "  $_conf present but WIRELESS_REGDOM not set to a valid 2-letter ISO 3166-1 code — set-wireless-regdom will skip iw reg set"
         _info "    Fix: echo 'WIRELESS_REGDOM=\"<CC>\"' | sudo tee $_conf"
         _info "    Or set RY_INSTALL_WIRELESS_REGDOM=<CC> on the next install run (e.g. US, GB, DE) — see README → Runtime variables"
@@ -3303,7 +3303,7 @@ function _ry_apply_wireless_regdom --description "Apply RY_INSTALL_WIRELESS_REGD
         return $EXIT_USAGE
     end
     set -l _conf /etc/conf.d/wireless-regdom
-    if test -f $_conf; and command grep -qE '^[[:space:]]*WIRELESS_REGDOM="?'$_cc'"?[[:space:]]*$' $_conf 2>/dev/null
+    if test -f "$_conf"; and command grep -qE '^[[:space:]]*WIRELESS_REGDOM="?'$_cc'"?[[:space:]]*$' "$_conf" 2>/dev/null
         _ok "  WIRELESS_REGDOM=$_cc (already present in $_conf)"
         _log "REGDOM_SET_NOOP: cc=$_cc file=$_conf"
         return 0
@@ -3312,9 +3312,9 @@ function _ry_apply_wireless_regdom --description "Apply RY_INSTALL_WIRELESS_REGD
     set -l _err_tmp (_mktemp_or_null -p (_tmp_dir) ry-regdom-err.XXXXXX)
     _track_tmpfile "$_err_tmp"
     _log "RUN: sudo -n tee -- $_conf (stdin: WIRELESS_REGDOM=$_cc)"
-    if printf '%s\n' "$_payload" | sudo -n tee -- $_conf >/dev/null 2>"$_err_tmp"
+    if printf '%s\n' "$_payload" | sudo -n tee -- "$_conf" >/dev/null 2>"$_err_tmp"
         # tee inherits invoking user's umask via root; explicit chmod normalizes to 0644 (other /etc/conf.d/* convention).
-        sudo -n chmod 0644 -- $_conf 2>/dev/null
+        sudo -n chmod 0644 -- "$_conf" 2>/dev/null
         _ok "  WIRELESS_REGDOM=$_cc → $_conf"
         _log "REGDOM_SET: cc=$_cc file=$_conf"
         _rm_tmp "$_err_tmp" false
@@ -3330,6 +3330,17 @@ end
 function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_ERR, mark progress skip"
     set --erase _RY_LOUD_ERR
     set -g _PROG_FINALIZED_SKIP true
+end
+function _ip_record_regdom --argument-names _ar_rc --description "_install_preflight sub. Record wireless-regdom phase result"
+    if set -q RY_INSTALL_WIRELESS_REGDOM; and test -n "$RY_INSTALL_WIRELESS_REGDOM"
+        if test $_ar_rc -eq 0
+            _phase_record "Preflight: wireless regdom" PASS "WIRELESS_REGDOM=$RY_INSTALL_WIRELESS_REGDOM"
+        else
+            _phase_record "Preflight: wireless regdom" WARN "apply failed (see JSONL)"
+        end
+    else
+        _phase_record "Preflight: wireless regdom" "--" "RY_INSTALL_WIRELESS_REGDOM unset"
+    end
 end
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
@@ -3367,15 +3378,7 @@ function _install_preflight --description "Run all preflight checks before insta
     _ry_apply_wireless_regdom
     set -l _ar_rc $status
     if test $_ar_rc -eq $EXIT_USAGE; _phase_record "Preflight: wireless regdom" FAIL "invalid RY_INSTALL_WIRELESS_REGDOM"; _ip_bail_prep; return $EXIT_USAGE; end
-    if set -q RY_INSTALL_WIRELESS_REGDOM; and test -n "$RY_INSTALL_WIRELESS_REGDOM"
-        if test $_ar_rc -eq 0
-            _phase_record "Preflight: wireless regdom" PASS "WIRELESS_REGDOM=$RY_INSTALL_WIRELESS_REGDOM"
-        else
-            _phase_record "Preflight: wireless regdom" WARN "apply failed (see JSONL)"
-        end
-    else
-        _phase_record "Preflight: wireless regdom" "--" "RY_INSTALL_WIRELESS_REGDOM unset"
-    end
+    _ip_record_regdom $_ar_rc
     _ry_check_wireless_regdom
     _echo
     if not _ry_validate_configs
@@ -3626,6 +3629,31 @@ function _install_packages --description "Install managed packages via pacman -S
     end
     return 0
 end
+function _iap_per_pkg_retry --description "_install_aur_packages sub. Re-attempt AUR install one package at a time; returns failed count via _RY_IAP_RETRY_FAILED"
+    set -g _RY_IAP_RETRY_FAILED 0
+    for pkg in $AUR_PKGS
+        if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- "$pkg"
+            _warn "AUR install failed: $pkg"
+            set -g INSTALL_HAD_ERRORS true
+            set -g _RY_IAP_RETRY_FAILED (math $_RY_IAP_RETRY_FAILED + 1)
+        end
+    end
+    # Partial = some-but-not-all failed; total per-pkg failure is full failure, not "partial".
+    test $_RY_IAP_RETRY_FAILED -gt 0; and test $_RY_IAP_RETRY_FAILED -lt (count $AUR_PKGS); and set -g _RY_AUR_PARTIAL true
+end
+function _iap_record_result --description "_install_aur_packages sub. Record final phase result for the run-summary matrix"
+    set -l _total (count $AUR_PKGS)
+    if contains -- mt76-mt7925-dkms $AUR_PKGS
+        if command -q modinfo; and command modinfo mt7925e >/dev/null 2>&1
+            _phase_record "Packages: AUR (paru)" PASS "$_total/$_total (mt7925e module verified)"
+        else
+            set -g INSTALL_HAD_ERRORS true
+            _phase_record "Packages: AUR (paru)" WARN "$_total/$_total (mt76-mt7925-dkms installed but mt7925e module unbuilt — see JSONL)"
+        end
+    else
+        _phase_record "Packages: AUR (paru)" PASS "$_total/$_total"
+    end
+end
 function _install_aur_packages --description "Install AUR packages via paru (no --removemake for DKMS)"
     if test (count $AUR_PKGS) -le 0
         _phase_record "Packages: AUR (paru)" "--" "AUR_PKGS empty"
@@ -3652,16 +3680,9 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
             set _retry_failed 1
         else
             _warn "AUR batch install failed — retrying per-package to identify failures"
-            for pkg in $AUR_PKGS
-                if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- "$pkg"
-                    _warn "AUR install failed: $pkg"
-                    set -g INSTALL_HAD_ERRORS true
-                    set _had_fail true
-                    set _retry_failed (math $_retry_failed + 1)
-                end
-            end
-            # Partial = some-but-not-all failed; total per-pkg failure is full failure, not "partial".
-            test $_retry_failed -gt 0; and test $_retry_failed -lt (count $AUR_PKGS); and set -g _RY_AUR_PARTIAL true
+            _iap_per_pkg_retry
+            set _had_fail true
+            set _retry_failed $_RY_IAP_RETRY_FAILED
         end
     end
     if test "$_had_fail" = true
@@ -3679,17 +3700,7 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
         return 1
     end
     _aur_verify_mt7925
-    set -l _total (count $AUR_PKGS)
-    if contains -- mt76-mt7925-dkms $AUR_PKGS
-        if command -q modinfo; and command modinfo mt7925e >/dev/null 2>&1
-            _phase_record "Packages: AUR (paru)" PASS "$_total/$_total (mt7925e module verified)"
-        else
-            set -g INSTALL_HAD_ERRORS true
-            _phase_record "Packages: AUR (paru)" WARN "$_total/$_total (mt76-mt7925-dkms installed but mt7925e module unbuilt — see JSONL)"
-        end
-    else
-        _phase_record "Packages: AUR (paru)" PASS "$_total/$_total"
-    end
+    _iap_record_result
     return 0
 end
 function _aur_verify_mt7925 --description "Post-AUR check: mt76-mt7925-dkms pkg installed AND mt7925e module built (paru rc=0 alone is not definitive)"
@@ -4106,7 +4117,7 @@ function _cse_batch_enable --description "Batch enable system units"
         else
             set -l _enabled_state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
             # Accept-list per systemctl(1): states that run on boot. Excluded: masked, disabled, bad, empty.
-            if test "$_enabled_state" = enabled; or test "$_enabled_state" = enabled-runtime; or test "$_enabled_state" = alias; or test "$_enabled_state" = static; or test "$_enabled_state" = linked; or test "$_enabled_state" = linked-runtime; or test "$_enabled_state" = indirect; or test "$_enabled_state" = generated; or test "$_enabled_state" = transient
+            if contains -- "$_enabled_state" enabled enabled-runtime alias static linked linked-runtime indirect generated transient
                 _warn "Enabled but failed to start: $_unit (will activate on next boot if config is fixed)"
                 _warn "  Diagnose: systemctl status $_unit; journalctl -u $_unit -b"
                 _log "ENABLE_OK_START_FAIL: unit=$_unit is-enabled=$_enabled_state"
@@ -4337,14 +4348,12 @@ function _irb_verify_entries --argument-names esp --description "Re-enumerate bo
     end
     _boot_initrd_size_scan "$esp"
 end
-function _install_rebuild_boot --description "Regenerate initramfs and bootloader entries"
-    _progress Boot
+function _irb_taint_gate --description "_install_rebuild_boot sub. Verify mkinitcpio.conf is consistent and boot state is not tainted; returns non-zero with _phase_record + _irb_skip_post_mki on bail"
     if test "$_RY_BOOT_TAINTED" = true; and test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
         # Surface override: fires silently otherwise; post-mortem cannot distinguish forced vs clean run.
         _warn "Boot-rebuild forced by RY_INSTALL_FORCE_BOOT_REBUILD=1 — _RY_BOOT_TAINTED gate bypassed"
         _log "BOOT_TAINTED_OVERRIDE: RY_INSTALL_FORCE_BOOT_REBUILD=1 bypassed taint flag in _install_rebuild_boot"
     end
-    test "$SYSTEM_UPGRADED" = true; and _ok "System upgraded during package installation"
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
         _err "Refusing initramfs rebuild — mkinitcpio.conf revert failed (boot state inconsistent)"
         _err "  Manual recovery required; RY_INSTALL_FORCE_BOOT_REBUILD does NOT bypass this gate"
@@ -4360,6 +4369,14 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
         _irb_skip_post_mki
         return $EXIT_BOOT_CRIT
     end
+    return 0
+end
+function _install_rebuild_boot --description "Regenerate initramfs and bootloader entries"
+    _progress Boot
+    _irb_taint_gate
+    set -l _tg_rc $status
+    test $_tg_rc -ne 0; and return $_tg_rc
+    test "$SYSTEM_UPGRADED" = true; and _ok "System upgraded during package installation"
     if not _run sudo -n mkinitcpio -P
         _err "Mkinitcpio failed"
         _err "CRITICAL: Boot rebuild failed — aborting remaining steps"
@@ -4469,6 +4486,18 @@ function _install_finalize --description "Run post-install verification, cleanup
     test "$INSTALL_HAD_ERRORS" = true; and return 1
     return 0
 end
+function _rrp_optional_indexer --argument-names cmd label flag --description "_rdi_run_phases sub. Run an optional indexer (updatedb / pkgfile) and record phase"
+    if not command -q $cmd
+        _phase_record "Packages: $label" "--" "not installed"
+        return 0
+    end
+    if _run sudo -n $cmd $flag
+        _phase_record "Packages: $label" PASS "ok"
+    else
+        _warn "$label failed"
+        _phase_record "Packages: $label" WARN "failed (non-fatal)"
+    end
+end
 function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
     not _install_packages; and set -g INSTALL_HAD_ERRORS true
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
@@ -4487,26 +4516,8 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
         not _install_aur_packages; and set -g INSTALL_HAD_ERRORS true
     end
     set --erase _RY_SKIP_IWD # AUR may have transitively installed iwd; re-probe.
-    if command -q updatedb
-        if _run sudo -n updatedb
-            _phase_record "Packages: updatedb" PASS "ok"
-        else
-            _warn "Updatedb failed"
-            _phase_record "Packages: updatedb" WARN "failed (non-fatal)"
-        end
-    else
-        _phase_record "Packages: updatedb" "--" "not installed"
-    end
-    if command -q pkgfile
-        if _run sudo -n pkgfile --update
-            _phase_record "Packages: pkgfile --update" PASS "ok"
-        else
-            _warn "Pkgfile update failed"
-            _phase_record "Packages: pkgfile --update" WARN "failed (non-fatal)"
-        end
-    else
-        _phase_record "Packages: pkgfile --update" "--" "not installed"
-    end
+    _rrp_optional_indexer updatedb updatedb ""
+    _rrp_optional_indexer pkgfile "pkgfile --update" --update
     set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0
     if _install_system_files
         _phase_record "Configs: system file deployment" PASS "$_RY_DEPLOY_CHANGED_COUNT deployed, $_RY_DEPLOY_IDEMPOTENT_COUNT idempotent"

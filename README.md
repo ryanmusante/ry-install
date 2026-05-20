@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.4.14-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.17-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -60,10 +60,9 @@ Typical duration: **3–8 minutes**.
 
 ## Scope
 
-| Status | Items |
-|---|---|
-| In | Kernel cmdline, initramfs, systemd units, network stack, sysctl, gaming env vars; pacman + paru install/remove; mask 12 desktop/power units; single-user `systemd --user` units. Boot: systemd-boot with BLS Type #1 entries via `sdboot-manage`. |
-| Out | Dotfiles, shells, editors, secrets, backups, multi-user provisioning, non-CachyOS distros, laptops, UKI. |
+**In:** kernel cmdline, initramfs, systemd units (system + user), network stack, sysctl, gaming env vars, pacman/paru install+remove, systemd-boot BLS entries via `sdboot-manage`.
+
+**Out:** dotfiles, shells, editors, secrets, backups, multi-user, non-CachyOS distros, laptops, UKI.
 
 ## Prerequisites
 
@@ -107,10 +106,10 @@ df -h / /boot                    # verify space
 <details>
 <summary><b>BIOS prerequisite — UMA Frame Buffer Size</b></summary>
 
-Set **UMA Frame Buffer Size** to `Auto` or `512 MB` (not a fixed 16 GB
-carveout). The Strix Halo APU uses UMA with shared system memory; a
-large fixed carveout wastes RAM that would otherwise be available to
-the OS and is dynamically backed when the GPU needs it.
+| Setting | Value | Note |
+|---|---|---|
+| UMA Frame Buffer Size | `Auto` or `512 MB` | Strix Halo APU uses UMA with shared system memory; large fixed carveout wastes RAM dynamically backed when GPU needs it |
+
 `--verify-runtime` warns when `mem_info_vram_total` exceeds 512 MB.
 
 </details>
@@ -148,7 +147,7 @@ After the install completes, a box-drawn matrix prints to stderr summarizing eve
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                       ry-install v7.4.14 — RUN SUMMARY                       ║
+║                       ry-install v7.4.17 — RUN SUMMARY                       ║
 ╠════════════════════════════════════╦════════╦════════════════════════════════╣
 ║ CHECK                              ║ RESULT ║ EVIDENCE                       ║
 ╠════════════════════════════════════╬════════╬════════════════════════════════╣
@@ -168,19 +167,19 @@ After the install completes, a box-drawn matrix prints to stderr summarizing eve
 
 | Result | Semantics |
 |---|---|
-| `PASS`  | Step ran and succeeded |
-| `WARN`  | Step ran with a non-fatal anomaly (kernel-stability floor, ntsync gap, size threshold, partial AUR, etc.) |
-| `FAIL`  | Step ran and failed (sets `INSTALL_HAD_ERRORS=true`) |
-| `DEFER` | Step intentionally deferred to next boot (NM-over-wifi, kernel cmdline) |
-| `SKIP`  | Step not run by design (tool absent, no user-bus, boot-critical bail, opt-in disabled) |
-| `--` / `N/A` | Step not applicable (env var not set, conditional path, optional tool absent) |
+| `PASS`  | Ran and succeeded |
+| `WARN`  | Ran with a non-fatal anomaly |
+| `FAIL`  | Ran and failed (sets `INSTALL_HAD_ERRORS=true`) |
+| `DEFER` | Intentionally deferred to next boot |
+| `SKIP`  | Not run by design (tool absent, boot-critical bail, opt-in disabled) |
+| `--` / `N/A` | Not applicable |
 
 | Verdict | Trigger |
 |---|---|
 | `PASS`               | `0 FAIL · 0 WARN` |
 | `PASS-WITH-WARNINGS` | `0 FAIL · ≥1 WARN` |
 | `FAIL`               | `≥1 FAIL` (without boot-critical) |
-| `FAIL-BOOT-CRITICAL` | Boot rebuild cascade aborted (`EXIT_BOOT_CRIT`); script prints **DO NOT REBOOT** and recovery steps instead of the normal reboot advisory |
+| `FAIL-BOOT-CRITICAL` | Boot rebuild cascade aborted (`EXIT_BOOT_CRIT`); prints **DO NOT REBOOT** + recovery steps |
 
 Set `RY_INSTALL_NO_MATRIX=1` to suppress the matrix (the JSONL log still records every `PHASE_RESULT` event regardless).
 
@@ -212,7 +211,7 @@ runs later in [Phase 4 — Services](#phase-4--services)
 mutations. `EXPECTED_VULKAN_PKGS` is verify-only — checked, not installed.
 
 <details>
-<summary><b>Packages — install</b> — 15 (<code>PKGS_ADD</code>)</summary>
+<summary><b>Packages — install</b> — 15</summary>
 
 | Package | Purpose |
 |---|---|
@@ -237,7 +236,7 @@ Default install path: `pacman -Syu --needed --noconfirm`.
 </details>
 
 <details>
-<summary><b>Packages — AUR</b> — 2 (<code>AUR_PKGS</code>)</summary>
+<summary><b>Packages — AUR</b> — 2</summary>
 
 | Package | Purpose |
 |---|---|
@@ -251,7 +250,7 @@ for `paru` flags and PGP-failure handling.
 </details>
 
 <details>
-<summary><b>Vulkan dependencies</b> — 3 (<code>EXPECTED_VULKAN_PKGS</code>)</summary>
+<summary><b>Vulkan dependencies</b> — 3</summary>
 
 | Package | Notes |
 |---|---|
@@ -271,12 +270,12 @@ dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
 
 | Caveat | Detail |
 |---|---|
-| Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` switches to `pacman -Sy --needed` (refresh + install only, no upgrade). Retry path uses `-Syy` without `-u`. Violates [Arch's no-partial-upgrade policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported). |
-| AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` deliberately omitted: DKMS packages rebuild against the running kernel and need makedeps. |
-| PGP failures | `--skipreview` suppresses interactive key import. On `invalid or corrupted package (PGP signature)`: pre-import key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually. |
-| Reverse deps | `PKGS_DEL` removal skipped when an installed package outside the set rdeps on it. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (requires `pacman-contrib` for `pactree`). |
-| db lock | `_install_packages` and `_csp_remove_pkgs` check `/var/lib/pacman/db.lck` before + after; aborts cleanly on contention. |
-| `.pacnew` handling | Auto-redeployed at managed destinations and `rm`'d; `.pacsave` surfaced as warning for operator review. |
+| Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` → `pacman -Sy --needed` (no `-u`). Violates [Arch policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported). |
+| AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` omitted — DKMS needs makedeps. |
+| PGP failures | Pre-import key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually. |
+| Reverse deps | `PKGS_DEL` removal skipped when an outside package rdeps on it. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`). |
+| db lock | `/var/lib/pacman/db.lck` checked before + after; aborts cleanly on contention. |
+| `.pacnew` | Auto-redeployed at managed destinations and `rm`'d; `.pacsave` surfaced as warning. |
 
 </details>
 
@@ -291,7 +290,7 @@ but take effect after [Phase 5 — Boot](#phase-5--boot) rebuilds initramfs
 and bootloader entries.
 
 <details>
-<summary><b>Kernel cmdline</b> — 15 params (<code>KERNEL_PARAMS</code>)</summary>
+<summary><b>Kernel cmdline</b> — 15 params</summary>
 
 | Param | Value |
 |---|---|
@@ -311,33 +310,25 @@ and bootloader entries.
 | `usbcore.autosuspend` | `-1` |
 | `zswap.enabled` | `0` |
 
-Deployed to `/etc/kernel/cmdline` (single line: `rw root=UUID=<uuid>
-<params>`) and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS="<params>"`).
+Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`).
 
 </details>
 
 <details>
-<summary><b>Bootloader</b> — 10 keys (4 loader.conf + 6 sdboot-manage.conf)</summary>
+<summary><b>Bootloader</b> — 10 keys</summary>
 
-`/boot/loader/loader.conf`:
-
-| Key | Value |
-|---|---|
-| `default` | `@saved` |
-| `timeout` | `0` |
-| `console-mode` | `keep` |
-| `editor` | `no` |
-
-`/etc/sdboot-manage.conf`:
-
-| Key | Value |
-|---|---|
-| `LINUX_OPTIONS` | (mirrors `KERNEL_PARAMS`) |
-| `LINUX_FALLBACK_OPTIONS` | `quiet` |
-| `DEFAULT_ENTRY` | `manual` |
-| `REMOVE_EXISTING` | `yes` |
-| `OVERWRITE_EXISTING` | `yes` |
-| `REMOVE_OBSOLETE` | `yes` |
+| File | Key | Value |
+|---|---|---|
+| `loader.conf` | `default` | `@saved` |
+| `loader.conf` | `timeout` | `0` |
+| `loader.conf` | `console-mode` | `keep` |
+| `loader.conf` | `editor` | `no` |
+| `sdboot-manage.conf` | `LINUX_OPTIONS` | mirrors `KERNEL_PARAMS` |
+| `sdboot-manage.conf` | `LINUX_FALLBACK_OPTIONS` | `quiet` |
+| `sdboot-manage.conf` | `DEFAULT_ENTRY` | `manual` |
+| `sdboot-manage.conf` | `REMOVE_EXISTING` | `yes` |
+| `sdboot-manage.conf` | `OVERWRITE_EXISTING` | `yes` |
+| `sdboot-manage.conf` | `REMOVE_OBSOLETE` | `yes` |
 
 </details>
 
@@ -353,14 +344,12 @@ Deployed to `/etc/kernel/cmdline` (single line: `rw root=UUID=<uuid>
 | `COMPRESSION` | `zstd` |
 | `COMPRESSION_OPTIONS` | `(-1 -T0)` |
 
-11 ordering invariants enforced by `_vmh_order_checks`
-(including `base` first, `fsck` last, no duplicates). Existence-only
-validation also runs post-pacman.
+11 ordering invariants enforced by `_vmh_order_checks` (`base` first, `fsck` last, no duplicates). Existence-only validation also runs post-pacman.
 
 </details>
 
 <details>
-<summary><b>systemd-resolved</b> — 4 keys (<code>99-cachyos-resolved.conf</code>)</summary>
+<summary><b>systemd-resolved</b> — 4 keys</summary>
 
 | Key | Value |
 |---|---|
@@ -372,26 +361,22 @@ validation also runs post-pacman.
 </details>
 
 <details>
-<summary><b>systemd-logind</b> — 9 keys (<code>99-cachyos-logind.conf</code>)</summary>
+<summary><b>systemd-logind</b> — 9 keys</summary>
 
 All set to `=ignore` (desktop power-handling deferred to userspace):
 
-| Key | Notes |
+| Key | Note |
 |---|---|
-| `HandlePowerKey` | |
-| `HandlePowerKeyLongPress` | |
-| `HandleSuspendKey` | |
-| `HandleSuspendKeyLongPress` | |
-| `HandleHibernateKey` | |
-| `HandleHibernateKeyLongPress` | |
-| `HandleRebootKey` | |
-| `HandleRebootKeyLongPress` | |
-| `HandleSecureAttentionKey` | emitted only when systemd ≥ 257 |
+| `HandlePowerKey` / `HandlePowerKeyLongPress` | |
+| `HandleSuspendKey` / `HandleSuspendKeyLongPress` | |
+| `HandleHibernateKey` / `HandleHibernateKeyLongPress` | |
+| `HandleRebootKey` / `HandleRebootKeyLongPress` | |
+| `HandleSecureAttentionKey` | systemd ≥ 257 |
 
 </details>
 
 <details>
-<summary><b>iwd</b> — 3 keys (<code>/etc/iwd/main.conf</code>)</summary>
+<summary><b>iwd</b> — 3 keys</summary>
 
 | Section / Key | Value |
 |---|---|
@@ -404,7 +389,7 @@ Skipped when `iwd` package not installed (memoized via `_RY_SKIP_IWD`).
 </details>
 
 <details>
-<summary><b>NetworkManager</b> — 3 keys (<code>99-cachyos-nm.conf</code>)</summary>
+<summary><b>NetworkManager</b> — 3 keys</summary>
 
 | Section / Key | Value |
 |---|---|
@@ -417,7 +402,7 @@ Skipped when `iwd` package not installed.
 </details>
 
 <details>
-<summary><b>cpupower-service</b> — 1 key (<code>/etc/default/cpupower-service.conf</code>)</summary>
+<summary><b>cpupower-service</b> — 1 key</summary>
 
 | Key | Value |
 |---|---|
@@ -428,7 +413,7 @@ Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
 </details>
 
 <details>
-<summary><b>sysctl</b> — 16 tunables (<code>/etc/sysctl.d/99-cachyos-sysctl.conf</code>)</summary>
+<summary><b>sysctl</b> — 16 tunables</summary>
 
 | Key | Value |
 |---|---|
@@ -454,7 +439,7 @@ Priority 99 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
 </details>
 
 <details>
-<summary><b>tmpfiles</b> — 1 entry (<code>/etc/tmpfiles.d/99-cachyos-thp.conf</code>)</summary>
+<summary><b>tmpfiles</b> — 1 entry</summary>
 
 | Field | Value |
 |---|---|
@@ -463,13 +448,12 @@ Priority 99 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
 | Mode / UID / GID / Age | `- - - -` |
 | Argument | `0` |
 
-`systemd-tmpfiles-setup.service` writes this on every boot; applied
-immediately during install and on `--install-file` re-deploy.
+`systemd-tmpfiles-setup.service` writes this on every boot; applied immediately during install and on `--install-file` re-deploy.
 
 </details>
 
 <details>
-<summary><b>Env vars</b> — 11 keys (<code>~/.config/environment.d/10-environment.conf</code>)</summary>
+<summary><b>Env vars</b> — 11 keys</summary>
 
 | Key | Value |
 |---|---|
@@ -485,8 +469,7 @@ immediately during install and on `--install-file` re-deploy.
 | `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |
 
-Loaded by `systemd --user` (COSMIC, Flatpak, D-Bus activated apps).
-Log out and back in to apply.
+Loaded by `systemd --user`. Log out and back in to apply.
 
 </details>
 
@@ -498,7 +481,7 @@ fstab rewrite (`_install_fstab_opts`), then `_install_configure_services`:
 desktop/power units, then `daemon-reload` + enable runtime units.
 
 <details>
-<summary><b>fstab</b> — ext4 mount options (idempotent rewrite)</summary>
+<summary><b>fstab</b> — ext4 mount options</summary>
 
 | Option | Effect |
 |---|---|
@@ -506,24 +489,18 @@ desktop/power units, then `daemon-reload` + enable runtime units.
 | `lazytime` | Defer in-memory atime/mtime writeback |
 | `commit=10` | Flush journal every 10s (default 5) |
 
-Idempotent ext4 rewrite — strips conflicting `atime`, `relatime`,
-`strictatime`, `defaults`, existing `commit=*` tokens before applying.
-`findmnt --verify` gates the atomic `mv`. **No automatic backup —
-snapshot `/etc/fstab` before first run.**
+Idempotent ext4 rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `defaults`, existing `commit=*` tokens. `findmnt --verify` gates the atomic `mv`. **No automatic backup — snapshot `/etc/fstab` before first run.**
 
 </details>
 
 <details>
-<summary><b>Packages — remove</b> — 8 (<code>PKGS_DEL</code>)</summary>
+<summary><b>Packages — remove</b> — 8</summary>
 
 | Package | Reason |
 |---|---|
-| `plymouth` | Boot splash — incompatible with `quiet` + `loglevel=3` |
-| `cachyos-plymouth-bootanimation` | Plymouth dep |
-| `cachyos-plymouth-theme` | Plymouth dep |
+| `plymouth` (+ `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`) | Boot splash — incompatible with `quiet` + `loglevel=3` |
 | `octopi` | Pacman GUI — CLI workflow |
-| `micro` | Text editor — replaced by user choice |
-| `cachyos-micro-settings` | micro dep |
+| `micro` (+ `cachyos-micro-settings`) | Text editor — replaced by user choice |
 | `btop` | Replaced by `bottom` |
 | `bolt` | Thunderbolt manager — not used |
 
@@ -534,22 +511,17 @@ via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (requires `pacman-contrib` for
 </details>
 
 <details>
-<summary><b>Masked units</b> — 12 (<code>MASK</code>)</summary>
+<summary><b>Masked units</b> — 12</summary>
 
 | Unit | Reason |
 |---|---|
 | `ananicy-cpp.service` | CPU nice daemon — managed via cgroups instead |
-| `avahi-daemon.service` | mDNS via systemd-resolved instead |
-| `avahi-daemon.socket` | socket counterpart of above |
+| `avahi-daemon.service` (+ `.socket`) | mDNS via systemd-resolved instead |
 | `power-profiles-daemon.service` | conflicts with amd_pstate + cpupower |
 | `lvm2-monitor.service` | no LVM on this profile |
 | `NetworkManager-wait-online.service` | adds boot delay |
 | `ufw.service` | firewall not in this profile (rules flushed pre-mask) |
-| `sleep.target` | suspend disabled (workstation) |
-| `suspend.target` | suspend disabled |
-| `hibernate.target` | hibernate disabled |
-| `hybrid-sleep.target` | hybrid-sleep disabled |
-| `suspend-then-hibernate.target` | s2h disabled |
+| `sleep.target` / `suspend.target` / `hibernate.target` / `hybrid-sleep.target` / `suspend-then-hibernate.target` | suspend / hibernate disabled (workstation) |
 
 Pre-mask `ufw --force disable` flushes live netfilter rules
 (`systemctl mask` alone does not).
@@ -557,7 +529,7 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 </details>
 
 <details>
-<summary><b>Enabled units</b> — 3 (<code>EXPECTED_SERVICES</code>)</summary>
+<summary><b>Enabled units</b> — 3</summary>
 
 | Unit | Notes |
 |---|---|
@@ -592,20 +564,20 @@ when WiFi is the active route. Writes the JSONL log footer.
 <details>
 <summary><b>Destinations</b></summary>
 
-| Scope | Path |
+| Path | Perm |
 |---|---|
-| System | `/boot/loader/loader.conf` |
-| System | `/etc/kernel/cmdline` |
-| System | `/etc/sdboot-manage.conf` |
-| System | `/etc/mkinitcpio.conf` |
-| System | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` |
-| System | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
-| System | `/etc/iwd/main.conf` |
-| System | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` |
-| System | `/etc/default/cpupower-service.conf` |
-| System | `/etc/sysctl.d/99-cachyos-sysctl.conf` |
-| System | `/etc/tmpfiles.d/99-cachyos-thp.conf` |
-| User | `~/.config/environment.d/10-environment.conf` |
+| `/boot/loader/loader.conf` | `0644` |
+| `/etc/kernel/cmdline` | `0644` |
+| `/etc/sdboot-manage.conf` | `0644` |
+| `/etc/mkinitcpio.conf` | `0644` |
+| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | `0644` |
+| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | `0644` |
+| `/etc/iwd/main.conf` | `0644` |
+| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `0644` |
+| `/etc/default/cpupower-service.conf` | `0644` |
+| `/etc/sysctl.d/99-cachyos-sysctl.conf` | `0644` |
+| `/etc/tmpfiles.d/99-cachyos-thp.conf` | `0644` |
+| `~/.config/environment.d/10-environment.conf` | `0600` |
 
 </details>
 
@@ -644,16 +616,16 @@ when WiFi is the active route. Writes the JSONL log footer.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `RY_RUN_TIMEOUT` | `3600` | Per-`_run` wall-clock cap (s); `0` disables. Package / boot / pkg-db ops bypass the cap |
+| `RY_RUN_TIMEOUT` | `3600` | `_run` wall-clock cap (s); `0` disables. Pkg / boot ops bypass |
 | `RY_INITRD_WARN_MB` | `100` | Initramfs size warning threshold (MB) |
 | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | `=1` → `pacman -Sy --needed` (install-only) |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses torn-package gate |
-| `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | `=1` cascades reverse deps into removal set |
+| `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | `=1` cascades rdeps into removal set |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses `EXPECTED_CPU_MATCH` hard-fail |
-| `RY_INSTALL_WIRELESS_REGDOM` | unset | `=<CC>` writes `WIRELESS_REGDOM=<CC>` to `/etc/conf.d/wireless-regdom` (2-letter ISO 3166-1; e.g. `US`, `GB`, `DE`) |
-| `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses interactive `sudo -v` fallback (strict-unattended: cron, ansible, systemd unit) |
-| `RY_INSTALL_NO_MATRIX` | unset | `=1` suppresses post-install run-summary matrix (JSONL log unaffected) |
-| `NO_COLOR` | unset | Suppress ANSI color (any value, per [no-color.org](https://no-color.org/)) |
+| `RY_INSTALL_WIRELESS_REGDOM` | unset | `=<CC>` writes `WIRELESS_REGDOM=<CC>` (2-letter ISO 3166-1) |
+| `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses interactive `sudo -v` fallback |
+| `RY_INSTALL_NO_MATRIX` | unset | `=1` suppresses run-summary matrix (JSONL unaffected) |
+| `NO_COLOR` | unset | Suppress ANSI color ([no-color.org](https://no-color.org/)) |
 
 </details>
 
@@ -665,10 +637,8 @@ when WiFi is the active route. Writes the JSONL log footer.
 | Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl` |
 | Format | NDJSON, one file per run, no auto-rotation |
 | Prune | `find ~/ry-install/logs -mtime +30 -delete` |
-| Event `header` | Run metadata (`version`, `mode`, `argv`, etc.) |
-| Event `log` | `{"ts":…,"data":STR}` |
-| Event `footer` | `{…,"exit_code":N,"pass":N,"fail":N,"warn":N,"gen_fail":N}` |
-| Footer marker | `interrupted` (signal), `cleanup_exit` (normal `fish_exit`), `bail` (preflight failure after header) |
+| Events | `header` (run metadata), `log` (`{ts, data}`), `footer` (`{exit_code, pass, fail, warn, gen_fail}`) |
+| Footer marker | `interrupted` (signal), `cleanup_exit` (normal `fish_exit`), `bail` (preflight fail after header) |
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl
@@ -717,7 +687,7 @@ rollback source-of-truth:
 
 | Issue | Workaround |
 |---|---|
-| `platform acp_asoc_acp70.0: warning: No matching ASoC machine driver found` (dmesg, once per boot); internal analog ACP path not routed | Pending upstream ASoC machine driver. HDMI (`snd_hda_intel`) and USB audio paths unaffected. |
+| `platform acp_asoc_acp70.0: warning: No matching ASoC machine driver found` (dmesg, once per boot) — internal analog ACP path not routed | Pending upstream ASoC driver. HDMI (`snd_hda_intel`) and USB audio paths unaffected |
 
 </details>
 

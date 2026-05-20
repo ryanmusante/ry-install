@@ -1,6 +1,22 @@
 ry-install ChangeLog
 ====================
 
+v7.4.16 - v7.4.17 - 2026-05-20
+------------------------------
+
+- Script: trim 5204 → 5040 lines (-164, 3.15%) by collapsing 76 adjacent `set -l/-g` runs to semicolon-chained one-liners. Targets: top-level EXIT codes + boot/network/sysctl global blocks; `_rdi_render_matrix` width constants + 6-bucket counter inits + 6-case switch + verdict cascade + footer-string locals; `_progress_init` globals; sysctl-verify loop locals; 36 automated ≥3-set safe collapses (no line continuations, joined ≤180ch); 28 conservative 2-set merges (no command substitutions either side, joined ≤140ch). Structural invariants preserved: 256 functions, 276 `end`, 75 `_phase_record` occurrences, 4 `_RY_BOOT_CRIT_HIT` sites, all dispatch + cleanup symmetry intact. `fish --no-execute` rc=0.
+- README: restore tables inside all 29 collapsibles (every `<details>` now opens to a markdown table). `Kernel cmdline` / `sysctl` / `Initramfs` / `tmpfiles` / `Env vars` reverted from code blocks; `Bootloader` consolidated to single 3-col `File|Key|Value` table; `systemd-resolved` / `systemd-logind` / `iwd` / `NetworkManager` / `cpupower-service` / `fstab` reverted from inline prose; `Destinations` reverted from bullet list to `Path|Perm`; `BIOS prerequisite` + `Strix Halo ACP audio` (previously prose) now `Setting|Value|Note` / `Issue|Workaround` tables. Table content trimmed of redundant detail.
+
+v7.4.15 - v7.4.16 - 2026-05-20
+------------------------------
+
+- README: trim 16 tables to vital information. Enumerative `Key | Value` tables for Kernel cmdline / Bootloader / Initramfs / systemd-resolved / iwd / NetworkManager / cpupower-service / sysctl / tmpfiles / Env vars / fstab collapsed to compact code blocks or inline `key=value` lists (script is source of truth via `--verify-static`). `systemd-logind` 9 `=ignore` rows → single inline list. `Packages — remove` Plymouth/micro dep groups collapsed. `Masked units` 5 power-target rows merged. `Destinations` repeated `System` column dropped; `User` permission inlined. `Result` / `Verdict` / `Caveats` / `Runtime variables` / `Logs` rows trimmed of redundant detail. `Strix Halo ACP audio` 1-row table → prose. Version badge synced (was stale at 7.4.14). Script unchanged.
+
+v7.4.14 - v7.4.15 - 2026-05-20
+------------------------------
+
+- README: strip parentheticals from 17 `<summary>` headers (Phase 2/3/Service/Operate sections). Variable-name / file-path / breakdown suffixes (e.g. `(PKGS_ADD)`, `(99-cachyos-nm.conf)`, `(4 loader.conf + 6 sdboot-manage.conf)`) moved out of collapsible titles; counts (`— 15`, `— 10 keys`) retained. Script unchanged — content audit clean (0 CRIT/HIGH/MED, 2 LOW false-positives, all v7.4.14 CHANGELOG claims verified against implementation).
+
 v7.4.13 - v7.4.14 - 2026-05-20
 ------------------------------
 

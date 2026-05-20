@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.3.8-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.2-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -75,10 +75,15 @@ Typical duration: **3–8 minutes**.
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | Before `-Syu` | Read [CachyOS](https://wiki.cachyos.org) + [Arch news](https://archlinux.org/news/) |
 
-Additional preflight gates (systemd ≥ 250, unrestricted sudo, GNU
-coreutils, hardware match) are enforced and fail loudly. The ext4
-`/etc/fstab` rewrite is idempotent and mount-semantics-preserving —
-only the literal text differs.
+Additional preflight gates (systemd ≥ 250, unrestricted sudo via
+`sudo -l` parsing, GNU coreutils ≥ 8.x with
+`timeout --foreground/--kill-after`, hardware match) are enforced and
+fail loudly. The sudo-policy probe rejects `requiretty`,
+`tty_tickets`, and `timestamp_timeout=0` Defaults; it also requires at
+least one strict `(user) [NOPASSWD:] ALL` grant with no trailing
+`, !cmd` negation (an ALL-grant that excludes specific commands is
+treated as restricted). The ext4 `/etc/fstab` rewrite is idempotent
+and mount-semantics-preserving — only the literal text differs.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -122,7 +127,7 @@ Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 | (no args) | Full unattended install |
 | `-V, --verbose` | Show output for install / check |
 | `--verify-static` | Check config files match embedded content |
-| `--verify-runtime` | Check live system state (after reboot) |
+| `--verify-runtime` | Check live system state (after reboot); continues with UUID-independent probes when root UUID is unresolvable |
 | `--check` | Silent idempotency probe (0=clean, 3=preflight, 10=drift) |
 | `--install-file <path>` | Re-deploy a single managed file (absolute path) |
 | `--` | End of options (positionals after `--` are rejected) |
@@ -597,6 +602,7 @@ for PipeWire RT scheduling.
 | mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert on `pacman -Syu` failure or signal |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + chmod 0700; auto-reclaims dead-PID lock |
+| Preflight visibility | Critical preflight failures (sudo missing, deps missing, disk full, network unreachable, config validation) emit to stderr in default install mode without `-V`; `--check` remains silent per contract |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal |
 
 <details>
@@ -627,6 +633,7 @@ for PipeWire RT scheduling.
 | `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | `=1` cascades reverse deps into removal set |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses `EXPECTED_CPU_MATCH` hard-fail |
 | `RY_INSTALL_WIRELESS_REGDOM` | unset | `=<CC>` writes `WIRELESS_REGDOM=<CC>` to `/etc/conf.d/wireless-regdom` (2-letter ISO 3166-1; e.g. `US`, `GB`, `DE`) |
+| `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses the interactive `sudo -v` fallback in `_ensure_sudo_cached`. Required for strict-unattended runs (cron, ansible, systemd unit) where a TTY may be present but no password should be prompted |
 | `NO_COLOR` | unset | Suppress ANSI color (any value, per [no-color.org](https://no-color.org/)) |
 
 </details>

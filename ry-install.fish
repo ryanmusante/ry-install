@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.6 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.7 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.6"
+set -g VERSION "7.4.7"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -3351,21 +3351,9 @@ function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache m
     _log "SUDO_CACHE_BANNER: emitted (install-mode preflight)"
     printf '%s\n' \
         "" \
-        "[WARN] ════════════════════════════════════════════════════════════════════" \
-        "[WARN] SUDO CACHE LAPSE WARNING" \
-        "[WARN]" \
-        "[WARN] Install runs unattended for 3-8 min (longer with AUR DKMS rebuilds)." \
-        "[WARN] Sudo's default timestamp_timeout is 15 min; the cache CAN lapse" \
-        "[WARN] mid-run, failing subsequent sudo -n calls and leaving boot state" \
-        "[WARN] inconsistent (pacman partial, mkinitcpio rebuild skipped)." \
-        "[WARN]" \
-        "[WARN] Mitigations (any one):" \
-        "[WARN]   - Defaults timestamp_timeout=60 in /etc/sudoers (1 hr cache)" \
-        "[WARN]   - sudo -v in a parallel shell loop (refresh the cache)" \
-        "[WARN]   - NOPASSWD: ALL drop-in for the install user (no cache dependency)" \
-        "[WARN]" \
-        "[WARN] Recovery: re-run ry-install — idempotent atomic writes resume safely." \
-        "[WARN] ════════════════════════════════════════════════════════════════════" \
+        "[WARN] Sudo cache may lapse during 3-8 min install. Mitigations:" \
+        "[WARN]   Defaults timestamp_timeout=60 in /etc/sudoers, sudo -v keepalive in parallel shell," \
+        "[WARN]   or NOPASSWD: ALL drop-in. Recovery: re-run ry-install (idempotent)." \
         "" >&2
 end
 function _ry_check_wireless_regdom --description "Warn if WIRELESS_REGDOM unset or invalid — set-wireless-regdom skips iw reg set otherwise, leaving cfg80211 in world domain"

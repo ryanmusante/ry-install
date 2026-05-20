@@ -1,6 +1,12 @@
 ry-install ChangeLog
 ====================
 
+v7.4.6 - v7.4.7 - 2026-05-20
+----------------------------
+
+- `_ry_sudo_cache_banner`: trim from 17 lines to 3 (vital info only — risk, mitigations, recovery).
+- README: collapse `[!WARNING]` callout to single sentence.
+
 v7.4.5 - v7.4.6 - 2026-05-20
 ----------------------------
 

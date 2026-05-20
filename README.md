@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.4.6-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.7-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -81,15 +81,7 @@ credential (`sudo -v`). The ext4 `/etc/fstab` rewrite is idempotent and
 mount-semantics-preserving.
 
 > [!WARNING]
-> **Sudo cache lapse mid-install.** ry-install runs unattended for 3-8 min
-> (longer with AUR DKMS rebuilds). Sudo's default `timestamp_timeout` is
-> 15 min; the cache can lapse mid-run, failing subsequent `sudo -n` calls
-> and leaving boot state inconsistent (pacman partial, mkinitcpio rebuild
-> skipped). Mitigations (any one): `Defaults timestamp_timeout=60` in
-> `/etc/sudoers`, a `sudo -v` keepalive in a parallel shell, or a
-> `NOPASSWD: ALL` drop-in for the install user. The same warning prints
-> to stderr at install time. Recovery: re-run ry-install — idempotent
-> atomic writes resume safely.
+> Sudo cache may lapse during the 3-8 min install. Mitigations: `Defaults timestamp_timeout=60` in `/etc/sudoers`, a `sudo -v` keepalive in a parallel shell, or a `NOPASSWD: ALL` drop-in. Recovery: re-run ry-install (idempotent).
 
 ```fish
 ./ry-install.fish --check        # idempotency probe

@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.5 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.6 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.5"
+set -g VERSION "7.4.6"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -452,7 +452,6 @@ function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for l
         'ry-sudo-err.*' \
         'ry-run.*' \
         'ry-val-unit.*' \
-        'ry-sudo-l-err.*' \
         'ry-argparse-err.*' \
         'ry-fstab-tee-err.*' \
         'ry-fstab-awk-err.*'
@@ -3347,40 +3346,27 @@ function _has_user_bus_active --description "True iff user systemd manager is re
     test -n "$_user_state"; and test "$_user_state" != offline; and return 0
     return 1
 end
-function _ip_probe_sudo_policy --description "Probe sudo -l: reject incompatible Defaults"
-    set -l _sudo_l_err (_mktemp_or_null -p (_tmp_dir) ry-sudo-l-err.XXXXXX)
-    _track_tmpfile "$_sudo_l_err"
-    set -l _sudo_l_out (command env LC_ALL=C sudo -n -l 2>"$_sudo_l_err")
-    set -l _sudo_l_rc $status
-    if test $_sudo_l_rc -ne 0
-        set -l _reason ""
-        test -s "$_sudo_l_err"; and set _reason (command head -n 1 -- "$_sudo_l_err" 2>/dev/null | string trim --)
-        _log "SUDO_LIST_NO_CRED: rc=$_sudo_l_rc reason='$_reason'"
-        _rm_tmp "$_sudo_l_err" false
-        _err "Unattended install requires cached sudo credential (sudo -l rc=$_sudo_l_rc)"
-        return $EXIT_PREFLIGHT
-    end
-    set -l _sudo_lines $_sudo_l_out
-    set -l sudo_all 0
-    for _sl in $_sudo_lines
-        if string match -qr -- '\bDefaults\b.*(?<![\w!])(requiretty|tty_tickets|timestamp_timeout=0)\b' "$_sl"
-            _err "Sudoers contains incompatible Defaults: $_sl"
-            _rm_tmp "$_sudo_l_err" false
-            return $EXIT_PREFLIGHT
-        end
-        string match -qr -- '(\bNOEXEC\b|!SETENV\b|\bLOG_OUTPUT\b)' "$_sl"; and continue
-        # Reject lines with comma-separated negation tokens (`, !/usr/bin/cmd`) — those restrict the ALL grant and would mid-flight fail an unattended install when an excluded command is invoked.
-        string match -qr -- ',\s*!' "$_sl"; and continue
-        # Strict: require NOPASSWD on the ALL grant — cached `sudo -v` credentials expire mid-install (default 15-min timestamp_timeout vs 3-8-min install + longer AUR DKMS builds), so plain `(user) ALL` would fail at `sudo -n` once the cache lapses; end-anchor on ALL rejects trailing restrictions.
-        string match -qr -- '\(\s*[^)]+\s*\)\s+NOPASSWD:\s*ALL\s*$' "$_sl"; and set sudo_all (math $sudo_all + 1)
-    end
-    if test "$sudo_all" -eq 0
-        _rm_tmp "$_sudo_l_err" false
-        _err "Sudo policy does not grant unrestricted NOPASSWD: ALL (sudo -l: no '(user) NOPASSWD: ALL' line, or only restricted commands)"
-        return $EXIT_PREFLIGHT
-    end
-    _rm_tmp "$_sudo_l_err" false
-    return 0
+function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache may lapse mid-run"
+    set -q _RY_OUTPUT_BROKEN; and return 0
+    _log "SUDO_CACHE_BANNER: emitted (install-mode preflight)"
+    printf '%s\n' \
+        "" \
+        "[WARN] ════════════════════════════════════════════════════════════════════" \
+        "[WARN] SUDO CACHE LAPSE WARNING" \
+        "[WARN]" \
+        "[WARN] Install runs unattended for 3-8 min (longer with AUR DKMS rebuilds)." \
+        "[WARN] Sudo's default timestamp_timeout is 15 min; the cache CAN lapse" \
+        "[WARN] mid-run, failing subsequent sudo -n calls and leaving boot state" \
+        "[WARN] inconsistent (pacman partial, mkinitcpio rebuild skipped)." \
+        "[WARN]" \
+        "[WARN] Mitigations (any one):" \
+        "[WARN]   - Defaults timestamp_timeout=60 in /etc/sudoers (1 hr cache)" \
+        "[WARN]   - sudo -v in a parallel shell loop (refresh the cache)" \
+        "[WARN]   - NOPASSWD: ALL drop-in for the install user (no cache dependency)" \
+        "[WARN]" \
+        "[WARN] Recovery: re-run ry-install — idempotent atomic writes resume safely." \
+        "[WARN] ════════════════════════════════════════════════════════════════════" \
+        "" >&2
 end
 function _ry_check_wireless_regdom --description "Warn if WIRELESS_REGDOM unset or invalid — set-wireless-regdom skips iw reg set otherwise, leaving cfg80211 in world domain"
     # cfg80211 udev rule pipes /etc/conf.d/wireless-regdom through set-wireless-regdom on boot.
@@ -3434,9 +3420,10 @@ function _ry_apply_wireless_regdom --description "Apply RY_INSTALL_WIRELESS_REGD
 end
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
+    _ry_sudo_cache_banner
     # Force critical preflight errors to stderr in default QUIET install mode (cleared on success or before each bail return).
     set -g _RY_LOUD_ERR true
-    for _chk in _ensure_sudo_cached _ip_probe_sudo_policy _ry_check_deps _ry_check_disk_space
+    for _chk in _ensure_sudo_cached _ry_check_deps _ry_check_disk_space
         $_chk; and continue
         set --erase _RY_LOUD_ERR
         set -g _PROG_FINALIZED_SKIP true

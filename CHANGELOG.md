@@ -1,6 +1,14 @@
 ry-install ChangeLog
 ====================
 
+v7.4.5 - v7.4.6 - 2026-05-20
+----------------------------
+
+- `_ip_probe_sudo_policy`: removed; strict NOPASSWD: ALL preflight gate no longer enforced.
+- New `_ry_sudo_cache_banner`: install-mode stderr warning that sudo cache can lapse mid-run, with mitigation options (timestamp_timeout extend, parallel `sudo -v` keepalive, NOPASSWD drop-in).
+- `_dc_sweep_filesystem`: drop `ry-sudo-l-err.*` tmpfile glob (dead after policy probe removal).
+- README: replace strict sudo-policy preflight requirement with `[!WARNING]` cache-lapse callout under Prerequisites.
+
 v7.4.4 - v7.4.5 - 2026-05-20
 ----------------------------
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.17 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.18 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.17"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.18"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -4531,7 +4531,8 @@ function _rdi_render_matrix --description "Render install phase matrix as box-dr
     end
     set -q _RY_OUTPUT_BROKEN; and return 0
     set -l _w_check 34; set -l _w_result 6; set -l _w_evidence 30
-    set -l _inner (math "$_w_check + $_w_result + $_w_evidence + 6")
+    # _inner = sum of 3 col widths + 6 padding spaces (2 per cell) + 2 inner ║ separators = w+8
+    set -l _inner (math "$_w_check + $_w_result + $_w_evidence + 8")
     set -l _bar_top (string repeat -n $_inner '═')
     set -l _sep_check (string repeat -n (math "$_w_check + 2") '═')
     set -l _sep_result (string repeat -n (math "$_w_result + 2") '═')

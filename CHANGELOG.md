@@ -1,6 +1,13 @@
 ry-install ChangeLog
 ====================
 
+v7.4.17 - v7.4.18 - 2026-05-20
+------------------------------
+
+- `_rdi_render_matrix`: `_inner = w_check + w_result + w_evidence + 6` → `+ 8`. Original math omitted the 2 inner `║` separators, producing 78-char top/bottom/mid bars and footer rows against 80-char cross-separator and data rows. Fixed: all matrix rows now uniformly 80 chars wide, matching the README sample. One-character change; no behavioral impact beyond cosmetic alignment.
+- CHANGELOG: dates for `v7.4.7`/`v7.4.8`/`v7.4.9`/`v7.4.10` and `v7.4.2` normalized to `2026-05-20`. Previously interleaved `2026-05-19` entries between `2026-05-20` neighbors broke monotonic descending order (impossible if read as commit-bump timestamps). All `v7.4.x` entries now uniformly dated `2026-05-20` (the session-finalization date); `v7.4.0` and earlier untouched.
+- `fish --no-execute` rc=0. Structural invariants preserved: 256 functions, 276 `end`, 75 `_phase_record` sites, 4 `_RY_BOOT_CRIT_HIT` refs, 5040+1 lines (one comment line added documenting the `+ 8` derivation).
+
 v7.4.16 - v7.4.17 - 2026-05-20
 ------------------------------
 
@@ -53,18 +60,18 @@ v7.4.10 - v7.4.11 - 2026-05-20
 - `_csp_filter_rdeps`: drop redundant `2>/dev/null` on `_ps[2..4]` numeric tests (fish `string` always returns integer rc; pipe is always 4-stage).
 - `--description` coverage: 18 single-line helpers (`_ok`/`_fail`/`_fail_silent`/`_info`/`_warn`/`_err` + 12 `_content_*` generators) gain `--description` for 100% coverage.
 
-v7.4.9 - v7.4.10 - 2026-05-19
+v7.4.9 - v7.4.10 - 2026-05-20
 -----------------------------
 
 - Stage-1-rc semantics across 7 callers (`_installed_bytes`, `_vsb_entries`, `_vrs_nm_perms`, `_enum_boot_entries`, `_pbs_check_boot_files`, `_pbs_check_entries`, `_boot_initrd_size_scan`): check only stage 1 of pipes ending in fish `string` builtins — `string collect`/`string split0` rc=1 on empty input is normal, not an error. Empty enumeration now routes to "NONE found" diagnostics instead of misleading "Cannot enumerate (sudo lapsed)".
 - Remove `_pipe_all_ok` helper (dead after stage-1-specific call-site rewrites).
 
-v7.4.8 - v7.4.9 - 2026-05-19
+v7.4.8 - v7.4.9 - 2026-05-20
 ----------------------------
 
 - `_do_cleanup`: run `_dc_kill_children` before `_dc_erase_globals` so lock-release gate vars `_RY_HOLDS_LOCK` / `_RY_LOCK_DIR_OWNED` remain set when `$LOCK_DIR` is removed. Fixes orphaned `~/.local/share/ry-install/.lock/` after clean exit.
 
-v7.4.7 - v7.4.8 - 2026-05-19
+v7.4.7 - v7.4.8 - 2026-05-20
 ----------------------------
 
 - `_content__etc_default_cpupower-service.conf`: rename key `governor` → `GOVERNOR` for upstream cpupower env-script compatibility.
@@ -106,7 +113,7 @@ v7.4.2 - v7.4.3 - 2026-05-20
 - `_dir_group_or_world_writable`: reject modes <3 chars post-strip; drop redundant `math 2>/dev/null`.
 - README: sudo-policy line uses `(user) NOPASSWD: ALL`.
 
-v7.4.1 - v7.4.2 - 2026-05-19
+v7.4.1 - v7.4.2 - 2026-05-20
 ----------------------------
 
 - `_ip_probe_sudo_policy`: ALL-grant regex gains end-anchor; skip `,\s*!` negations.

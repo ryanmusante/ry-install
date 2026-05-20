@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.11 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.14 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.11"
+set -g VERSION "7.4.14"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -50,6 +50,7 @@ function _ry_show_help --description "Display usage information and available su
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
         "  RY_INSTALL_WIRELESS_REGDOM=<CC>  Write WIRELESS_REGDOM=<CC> to /etc/conf.d/wireless-regdom (opt-in)." \
         "  RY_INSTALL_NO_INTERACTIVE_SUDO=1  Refuse interactive sudo -v fallback (strict unattended; cron/ansible/systemd unit)." \
+        "  RY_INSTALL_NO_MATRIX=1  Suppress post-install run-summary matrix (JSONL log unaffected)." \
         "  NO_COLOR  Suppress ANSI color (any value, per no-color.org)." \
         "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl" \
         ""
@@ -206,6 +207,10 @@ set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" /etc/kernel/cmdline "/e
 set -g _TRACKED_TMPFILES
 set -g _SYS_TMP_DIRS
 set -g _USR_TMP_DIRS
+set -g _RY_PHASE_RESULTS
+# _RY_DEPLOY_CHANGED_COUNT/_IDEMPOTENT_COUNT track _ry_install_file outcomes for run-summary matrix; reset to 0 in _rdi_run_phases before _install_system_files so the "Configs" matrix evidence reflects only that phase (not pre-deploys from _install_packages).
+set -g _RY_DEPLOY_CHANGED_COUNT 0
+set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0
 set -g _PROFILE_USES_WIFI_BACKEND false
 # NF-inverted pair: well-formed (>=4 cols) vs malformed (<4); MALFORMED uses word/comma bounds to skip LABEL=ext4_root substring hits (v7.0.10).
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
@@ -475,6 +480,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
     set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
     set --erase _RY_READSYM_RESULT _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED
+    set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
 end
 function _dc_kill_children --description "_do_cleanup sub. Release lock + reap child PIDs (pkill -P, then SIGKILL after grace)"
     if set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED
@@ -1147,6 +1153,14 @@ function _fail --description "Emit FAIL-level message and increment VERIFY_FAIL"
 function _fail_silent --description "Emit FAIL-level message without incrementing VERIFY_FAIL"; _msg_nocount FAIL $argv; return 0; end
 function _info --description "Emit INFO-level message (no counter)"; _msg INFO $argv; return 0; end
 function _warn --description "Emit WARN-level message and increment VERIFY_WARN"; _msg WARN $argv; return 0; end
+# _phase_record appends to install run-summary matrix; delimiter U+2502 cannot appear in evidence text. Logged to JSONL regardless of QUIET.
+function _phase_record --argument-names check result evidence --description "Append a row to the install summary matrix and JSONL"
+    # Defensive: strip embedded newlines (break matrix rows) and U+2502 (delimiter collision).
+    set -l _e (string replace -ra '[\n\r│]' ' ' -- "$evidence")
+    set -l _c (string replace -ra '[\n\r│]' ' ' -- "$check")
+    set -ga _RY_PHASE_RESULTS "$_c│$result│$_e"
+    _log "PHASE_RESULT: check='$_c' result=$result evidence='$_e'"
+end
 # _err force-prints when _RY_LOUD_ERR set so preflight bail reasons reach stderr in default QUIET install mode (--check stays silent).
 function _err --description "Emit ERR-level message (force-prints to stderr when _RY_LOUD_ERR=true)"
     if set -q _RY_LOUD_ERR; and test "$_RY_LOUD_ERR" = true; and test "$MODE" != check
@@ -1640,31 +1654,40 @@ function _ry_check_kernel_version --description "Verify running kernel version m
     if _kver_below $major $minor $kver_patch 6 14 0
         _warn "Kernel $kver < 6.14: ntsync and gfx1151 fixes unavailable"
         _info "  Upgrade kernel before or during install (pacman -Syu)"
-        return 1
+        return 2  # hard fail
     end
+    # rc=1 → soft warn (caller records WARN, no INSTALL_HAD_ERRORS elevation); rc=2 → hard fail.
+    set -l _warns 0
     if _kver_below $major $minor $kver_patch 6 18 4
         _warn "Kernel $kver below README stability floor 6.18.4 (gfx1151)"
         _info "  Recommend upgrading: sudo pacman -Syu linux-cachyos"
+        set _warns (math $_warns + 1)
     end
     set -l _ns (_ntsync_state)
     switch $_ns
         case unavailable
             _warn "Kernel $kver: ntsync not available (expected builtin or module)"
+            set _warns (math $_warns + 1)
         case loaded_nodev
             _warn "Kernel $kver: ntsync module loaded but /dev/ntsync missing"
+            set _warns (math $_warns + 1)
         case missing
             _warn "Kernel $kver: ntsync module not loaded (kernel ≥6.14 supports it; check MODULES list)"
+            set _warns (math $_warns + 1)
         case builtin loaded
             _ok "Kernel $kver: ntsync $_ns"
         case '*'
             _warn "Kernel $kver: ntsync unknown state '$_ns'"
+            set _warns (math $_warns + 1)
     end
     if test "$major" -eq 6; and test "$minor" -eq 19
         if test "$kver_patch" = 0
             _warn "Kernel 6.19.0: black screen regression on Strix Halo (CachyOS #23042)"
             _warn "  Recommend: downgrade to 6.18.x or upgrade to 6.19.1+"
+            set _warns (math $_warns + 1)
         end
     end
+    test $_warns -gt 0; and return 1  # soft warn
     return 0
 end
 function _mkinitcpio_hook_exists --argument-names hook --description "True iff hook file exists in any mkinitcpio install/hooks dir"
@@ -2009,11 +2032,17 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     if test $_gen_rc -eq 0
         set -l _cur_bytes (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
         set -l _read_rc $pipestatus[1]
-        if test $_read_rc -eq 0; and test "$_new_bytes" = "$_cur_bytes"; _ok "→ $dst (unchanged)"; return 0; end
+        if test $_read_rc -eq 0; and test "$_new_bytes" = "$_cur_bytes"
+            set -g _RY_DEPLOY_IDEMPOTENT_COUNT (math $_RY_DEPLOY_IDEMPOTENT_COUNT + 1)
+            _ok "→ $dst (unchanged)"
+            return 0
+        end
         test $_read_rc -eq 2; and _log "SKIP_PROBE_SUDO_LAPSED: dst=$dst — re-deploying"
     end
     _atomic_write_file "$dst" "$perms" "$use_sudo"
-    return $status
+    set -l _aw_rc $status
+    test $_aw_rc -eq 0; and set -g _RY_DEPLOY_CHANGED_COUNT (math $_RY_DEPLOY_CHANGED_COUNT + 1)
+    return $_aw_rc
 end
 function _vsb_loader --description "_verify_static_boot sub: /boot/loader/loader.conf key/value verification"
     _echo "── loader.conf ──"
@@ -3400,35 +3429,66 @@ function _ry_apply_wireless_regdom --description "Apply RY_INSTALL_WIRELESS_REGD
     _log "REGDOM_SET_FAIL: cc=$_cc file=$_conf$_err_msg"
     return 1
 end
+function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_ERR, mark progress skip"
+    set --erase _RY_LOUD_ERR
+    set -g _PROG_FINALIZED_SKIP true
+end
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
     _ry_sudo_cache_banner
     # Force critical preflight errors to stderr in default QUIET install mode (cleared on success or before each bail return).
     set -g _RY_LOUD_ERR true
+    set -l _chk_labels "Preflight: sudo credential cache" "Preflight: dependency check" "Preflight: disk space"
+    set -l _i 1
     for _chk in _ensure_sudo_cached _ry_check_deps _ry_check_disk_space
-        $_chk; and continue
-        set --erase _RY_LOUD_ERR
-        set -g _PROG_FINALIZED_SKIP true
+        if $_chk
+            _phase_record $_chk_labels[$_i] PASS "ok"
+            set _i (math $_i + 1)
+            continue
+        end
+        _phase_record $_chk_labels[$_i] FAIL "see JSONL log"
+        _ip_bail_prep
         return $EXIT_PREFLIGHT
     end
     if not _ry_check_network
+        _phase_record "Preflight: network reachability" FAIL "archlinux.org, cloudflare.com, 1.1.1.1 unreachable"
         _err "Network required for package installation — aborting"
-        set --erase _RY_LOUD_ERR
-        set -g _PROG_FINALIZED_SKIP true
+        _ip_bail_prep
         return $EXIT_PREFLIGHT
     end
-    not _ry_check_kernel_version; and set -g INSTALL_HAD_ERRORS true
+    _phase_record "Preflight: network reachability" PASS "ok"
+    _ry_check_kernel_version
+    set -l _kv_rc $status
+    switch $_kv_rc
+        case 0
+            _phase_record "Preflight: kernel version" PASS "$KVER"
+        case 1
+            _phase_record "Preflight: kernel version" WARN "$KVER (below recommended)"
+        case '*'
+            _phase_record "Preflight: kernel version" WARN "$KVER (below required)"
+            set -g INSTALL_HAD_ERRORS true
+    end
     _ry_apply_wireless_regdom
     set -l _ar_rc $status
-    if test $_ar_rc -eq $EXIT_USAGE; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; return $EXIT_USAGE; end
+    if test $_ar_rc -eq $EXIT_USAGE; _phase_record "Preflight: wireless regdom" FAIL "invalid RY_INSTALL_WIRELESS_REGDOM"; _ip_bail_prep; return $EXIT_USAGE; end
+    if set -q RY_INSTALL_WIRELESS_REGDOM; and test -n "$RY_INSTALL_WIRELESS_REGDOM"
+        if test $_ar_rc -eq 0
+            _phase_record "Preflight: wireless regdom" PASS "WIRELESS_REGDOM=$RY_INSTALL_WIRELESS_REGDOM"
+        else
+            _phase_record "Preflight: wireless regdom" WARN "apply failed (see JSONL)"
+        end
+    else
+        _phase_record "Preflight: wireless regdom" "--" "RY_INSTALL_WIRELESS_REGDOM unset"
+    end
     _ry_check_wireless_regdom
     _echo
     if not _ry_validate_configs
+        _phase_record "Preflight: config validation" FAIL "see JSONL log"
         _err "Configuration validation failed - aborting"
-        set --erase _RY_LOUD_ERR
-        set -g _PROG_FINALIZED_SKIP true
+        _ip_bail_prep
         return $EXIT_PREFLIGHT
     end
+    _phase_record "Preflight: config validation" PASS "$_RY_MANAGED_FILE_COUNT/$_RY_MANAGED_FILE_COUNT destinations"
     # Preflight passed — restore default QUIET for install phases.
     set --erase _RY_LOUD_ERR
 end
@@ -3663,6 +3723,7 @@ function _install_packages --description "Install managed packages via pacman -S
         set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
         set -g INSTALL_HAD_ERRORS true
         set -g _RY_BOOT_TAINTED true
+        _phase_record "Packages: pacman -Syu" FAIL "mkinitcpio.conf pre-deploy failed"
         return 1
     end
     if test (count $pkgs_to_install) -gt 0
@@ -3671,19 +3732,32 @@ function _install_packages --description "Install managed packages via pacman -S
     _ip_scan_pacnew
     set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
     set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
-    test "$_fn_err" = true; and return 1
+    if test "$_fn_err" = true
+        _phase_record "Packages: pacman -Syu" FAIL "see JSONL log"
+        return 1
+    end
+    if test "$SYSTEM_UPGRADED" = true
+        _phase_record "Packages: pacman -Syu" PASS "system upgraded"
+    else
+        _phase_record "Packages: pacman -Syu" PASS "partial-upgrade mode (RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1)"
+    end
     return 0
 end
 function _install_aur_packages --description "Install AUR packages via paru (no --removemake for DKMS)"
-    test (count $AUR_PKGS) -gt 0; or return 0
+    if test (count $AUR_PKGS) -le 0
+        _phase_record "Packages: AUR (paru)" "--" "AUR_PKGS empty"
+        return 0
+    end
     if not command -q paru
         _err "paru not found — cannot install AUR packages: $AUR_PKGS"
         _err "  Install paru: sudo pacman -S --needed paru"
         _err "  AUR_PKGS may include WiFi DKMS (mt76-mt7925-dkms) — runtime, not boot-critical"
         set -g INSTALL_HAD_ERRORS true
+        _phase_record "Packages: AUR (paru)" FAIL "paru not installed"
         return 1
     end
     set -l _had_fail false
+    set -l _retry_failed 0
     set -g _RY_AUR_PARTIAL false
     _log "AUR_NOISE_NOTE: paru/makepkg stderr/stdout may contain benign tokens; authoritative success signal is MT7925_VERIFY_OK from _aur_verify_mt7925"
     _log "AUR_NOISE_NOTE_TOKEN: 'WARNING: Using existing \$srcdir/ tree' (cache reuse)"
@@ -3694,9 +3768,9 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
             _warn "AUR install failed: $AUR_PKGS"
             set -g INSTALL_HAD_ERRORS true
             set _had_fail true
+            set _retry_failed 1
         else
             _warn "AUR batch install failed — retrying per-package to identify failures"
-            set -l _retry_failed 0
             for pkg in $AUR_PKGS
                 if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- "$pkg"
                     _warn "AUR install failed: $pkg"
@@ -3714,9 +3788,22 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
         _info "  Inspect the stderr event in the JSONL log; if it mentions 'invalid or corrupted package (PGP signature)',"
         _info "  pre-import the maintainer key: gpg --recv-keys <KEYID>, then re-run install."
         _info "  Alternatively, install the affected package manually: paru -S <pkg> (without --skipreview)."
+        set -l _total (count $AUR_PKGS)
+        if test "$_RY_AUR_PARTIAL" = true
+            set -l _ok_count (math $_total - $_retry_failed)
+            _phase_record "Packages: AUR (paru)" WARN "$_ok_count/$_total (partial — see JSONL)"
+        else
+            _phase_record "Packages: AUR (paru)" FAIL "0/$_total (all failed)"
+        end
         return 1
     end
     _aur_verify_mt7925
+    set -l _total (count $AUR_PKGS)
+    if contains -- mt76-mt7925-dkms $AUR_PKGS; and command -q modinfo; and command modinfo mt7925e >/dev/null 2>&1
+        _phase_record "Packages: AUR (paru)" PASS "$_total/$_total (mt7925e module verified)"
+    else
+        _phase_record "Packages: AUR (paru)" PASS "$_total/$_total"
+    end
     return 0
 end
 function _aur_verify_mt7925 --description "Post-AUR check: mt76-mt7925-dkms pkg installed AND mt7925e module built (paru rc=0 alone is not definitive)"
@@ -4325,6 +4412,11 @@ function _boot_initrd_size_scan --argument-names esp --description "Post-rebuild
     end
     return 0
 end
+function _irb_skip_post_mki --description "Record SKIP rows for sdboot-gen, sdboot-update, post-rebuild sanity"
+    _phase_record "Boot: sdboot-manage gen" SKIP "aborted"
+    _phase_record "Boot: sdboot-manage update" SKIP "aborted"
+    _phase_record "Boot: post-rebuild sanity" SKIP "aborted"
+end
 function _irb_sdboot_apply --description "Run sdboot-manage gen + update"
     if set -q _RY_ESP_FALLBACK; and test "$_RY_ESP_FALLBACK" = true
         set -l _boot_fs (command findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
@@ -4332,19 +4424,26 @@ function _irb_sdboot_apply --description "Run sdboot-manage gen + update"
             _err "Refusing sdboot-manage: ESP autodetect fell back to /boot but /boot is not vfat (fstype=$_boot_fs)"
             _err "  ry-install targets systemd-boot. Detected non-systemd-boot bootloader — aborting."
             _log "SDBOOT_APPLY_REFUSED: esp_fallback=true boot_fstype=$_boot_fs"
+            _phase_record "Boot: sdboot-manage gen" FAIL "ESP fallback to /boot not vfat (fstype=$_boot_fs)"
+            _phase_record "Boot: sdboot-manage update" SKIP "aborted"
             return $EXIT_BOOT_CRIT
         end
     end
     if not _run sudo -n sdboot-manage gen
         _err "Sdboot-manage gen failed"
         _err "CRITICAL: Bootloader update failed — aborting remaining steps"
+        _phase_record "Boot: sdboot-manage gen" FAIL "rc=non-zero"
+        _phase_record "Boot: sdboot-manage update" SKIP "aborted"
         return $EXIT_BOOT_CRIT
     end
+    _phase_record "Boot: sdboot-manage gen" PASS "rc=0"
     if not _run sudo -n sdboot-manage update
         _err "Sdboot-manage update failed (bootctl EFI binary refresh)"
         _err "CRITICAL: Bootloader binary update failed — aborting remaining steps"
+        _phase_record "Boot: sdboot-manage update" FAIL "rc=non-zero"
         return $EXIT_BOOT_CRIT
     end
+    _phase_record "Boot: sdboot-manage update" PASS "rc=0"
     return 0
 end
 function _irb_verify_entries --argument-names esp --description "Re-enumerate boot entries post-rebuild"
@@ -4370,61 +4469,104 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
         _err "Refusing initramfs rebuild — mkinitcpio.conf revert failed (boot state inconsistent)"
         _err "  Manual recovery required; RY_INSTALL_FORCE_BOOT_REBUILD does NOT bypass this gate"
+        _phase_record "Boot: mkinitcpio -P" SKIP "mkinitcpio.conf revert failed"
+        _irb_skip_post_mki
         return $EXIT_BOOT_CRIT
     end
     if test "$_RY_BOOT_TAINTED" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
         _err "Refusing initramfs rebuild — an earlier phase of THIS run tainted package or boot-critical config state"
         _err "  (mkinitcpio.conf, kernel cmdline, loader, sdboot-manage, or pacman/AUR install failed)"
         _err "  Resolve manually then re-run, OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
+        _phase_record "Boot: mkinitcpio -P" SKIP "_RY_BOOT_TAINTED=true"
+        _irb_skip_post_mki
         return $EXIT_BOOT_CRIT
     end
     if not _run sudo -n mkinitcpio -P
         _err "Mkinitcpio failed"
         _err "CRITICAL: Boot rebuild failed — aborting remaining steps"
+        _phase_record "Boot: mkinitcpio -P" FAIL "rc=non-zero"
+        _irb_skip_post_mki
         return $EXIT_BOOT_CRIT
     end
+    _phase_record "Boot: mkinitcpio -P" PASS "rc=0"
     set -l _boot (_resolve_boot_path)
     if test "$SDBOOT_REMOVE_EXISTING" = yes; and test -z "$_boot"
         _err "Cannot resolve \$BOOT path — refusing boot-wipe gate"
         _err "CRITICAL: bootctl/findmnt failed AND /boot missing — aborting remaining steps"
+        _phase_record "Boot: sdboot-manage gen" FAIL "\$BOOT unresolvable"
+        _phase_record "Boot: sdboot-manage update" SKIP "aborted"
+        _phase_record "Boot: post-rebuild sanity" SKIP "aborted"
         return $EXIT_BOOT_CRIT
     end
-    _irb_sdboot_apply; or return $status
+    _irb_sdboot_apply
+    set -l _sb_rc $status
+    if test $_sb_rc -ne 0
+        _phase_record "Boot: post-rebuild sanity" SKIP "aborted"
+        return $_sb_rc
+    end
     if test -z "$_boot"
         _err "Cannot resolve \$BOOT path post-sdboot-apply — entry verification skipped"
         set -g INSTALL_HAD_ERRORS true
     else
         _irb_verify_entries "$_boot"
     end
-    if not _preflight_boot_sanity; _err "CRITICAL: Boot sanity failed — aborting remaining steps"; return $EXIT_BOOT_CRIT; end
+    if not _preflight_boot_sanity
+        _err "CRITICAL: Boot sanity failed — aborting remaining steps"
+        _phase_record "Boot: post-rebuild sanity" FAIL "see JSONL log"
+        return $EXIT_BOOT_CRIT
+    end
+    _phase_record "Boot: post-rebuild sanity" PASS "vmlinuz+initramfs+entries OK"
     return 0
 end
 function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk2 -ruk0"
-    if not set -q SYSTEM_UPGRADED; or test "$SYSTEM_UPGRADED" != true; _log "PACMAN_CACHE_TRIM_SKIP: SYSTEM_UPGRADED=false (idempotent re-run)"; return 0; end
+    if not set -q SYSTEM_UPGRADED; or test "$SYSTEM_UPGRADED" != true
+        _log "PACMAN_CACHE_TRIM_SKIP: SYSTEM_UPGRADED=false (idempotent re-run)"
+        _phase_record "Finalize: pacman cache trim" SKIP "no upgrade this run"
+        return 0
+    end
     if command -q paccache
-        not _run sudo -n paccache -rk2 -ruk0; and _warn "Paccache cache trim failed"
+        if _run sudo -n paccache -rk2 -ruk0
+            _phase_record "Finalize: pacman cache trim" PASS "paccache -rk2"
+        else
+            _warn "Paccache cache trim failed"
+            _phase_record "Finalize: pacman cache trim" WARN "paccache failed"
+        end
     else
-        not _run sudo -n pacman -Sc --noconfirm; and _warn "Pacman cache clear failed"
+        if _run sudo -n pacman -Sc --noconfirm
+            _phase_record "Finalize: pacman cache trim" PASS "pacman -Sc"
+        else
+            _warn "Pacman cache clear failed"
+            _phase_record "Finalize: pacman cache trim" WARN "pacman -Sc failed"
+        end
     end
     return 0
 end
 function _if_nm_restart --description "Restart NetworkManager when iwd backend switch is in effect"
-    if test "$_PROFILE_USES_WIFI_BACKEND" = false; _info "iwd/NetworkManager not managed — skipping NM restart"; return 0; end
+    if test "$_PROFILE_USES_WIFI_BACKEND" = false
+        _info "iwd/NetworkManager not managed — skipping NM restart"
+        _phase_record "Finalize: NetworkManager restart" SKIP "iwd backend not active"
+        return 0
+    end
     if not command -q pacman; or not command pacman -Qi iwd >/dev/null 2>&1
         _warn "iwd configs deployed but iwd package is not installed"
         set -g INSTALL_HAD_ERRORS true
+        _phase_record "Finalize: NetworkManager restart" WARN "iwd package not installed"
         return 0
     end
     if _is_wifi_active_route
         _warn "NetworkManager restart deferred — WiFi is the active route; iwd backend switch takes effect on reboot."
         _info "  Or, after switching to ethernet: sudo systemctl restart NetworkManager"
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=finalize_backend_switch"
+        _phase_record "Finalize: NetworkManager restart" DEFER "over WiFi — applies on reboot"
         return 0
     end
     _info "iwd will restart with NetworkManager (D-Bus disconnect expected)"
     if not _run sudo -n systemctl restart NetworkManager
         _warn "NetworkManager restart failed (will recover on reboot)"
         _log "NM_RESTART_FAILED: context=finalize_backend_switch"
+        _phase_record "Finalize: NetworkManager restart" WARN "restart failed (will recover on reboot)"
+    else
+        _phase_record "Finalize: NetworkManager restart" PASS "restarted"
     end
     command sleep $NM_RESTART_DELAY 2>/dev/null; or _warn "Sleep interrupted during NM restart settle window"
     return 0
@@ -4432,10 +4574,16 @@ end
 function _install_finalize --description "Run post-install verification, cleanup, and summary"
     _progress Finalize
     if _has_user_bus_active
-        not _run systemctl --user daemon-reload; and _warn "Systemctl --user daemon-reload failed"
+        if _run systemctl --user daemon-reload
+            _phase_record "Finalize: systemctl --user reload" PASS "user-bus active"
+        else
+            _warn "Systemctl --user daemon-reload failed"
+            _phase_record "Finalize: systemctl --user reload" WARN "daemon-reload failed"
+        end
     else
         _info "Skipping systemctl --user daemon-reload (no active user-bus — log in graphically or enable-linger)"
         _log "USER_DAEMON_RELOAD_SKIP: no active user-bus"
+        _phase_record "Finalize: systemctl --user reload" SKIP "no active user-bus"
     end
     _if_trim_pacman_cache
     _if_nm_restart
@@ -4444,25 +4592,160 @@ function _install_finalize --description "Run post-install verification, cleanup
 end
 function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
     not _install_packages; and set -g INSTALL_HAD_ERRORS true
-    if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true; _err "Aborting remaining phases: mkinitcpio.conf revert failed (boot state inconsistent)"; return 0; end
+    if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
+        _phase_record "Packages: AUR (paru)" SKIP "mkinitcpio.conf revert failed — aborting"
+        _phase_record "Configs: system file deployment" SKIP "aborted"
+        _phase_record "Configs: /etc/fstab opts" SKIP "aborted"
+        _phase_record "Services: configuration" SKIP "aborted"
+        _err "Aborting remaining phases: mkinitcpio.conf revert failed (boot state inconsistent)"
+        return 0
+    end
     if set -q _RY_PACMAN_REVERT_ATTEMPTED; and test "$_RY_PACMAN_REVERT_ATTEMPTED" = true
         _warn "Skipping AUR phase: pacman -Syu was rolled back (avoiding install against inconsistent mkinitcpio state)"
         _log "AUR_SKIP_AFTER_REVERT: pacman rolled back; AUR phase bypassed"
+        _phase_record "Packages: AUR (paru)" SKIP "pacman rolled back"
     else
         not _install_aur_packages; and set -g INSTALL_HAD_ERRORS true
     end
     set --erase _RY_SKIP_IWD # AUR may have transitively installed iwd; re-probe.
-    command -q updatedb; and begin
-        _run sudo -n updatedb; or _warn "Updatedb failed"
+    if command -q updatedb
+        if _run sudo -n updatedb
+            _phase_record "Packages: updatedb" PASS "ok"
+        else
+            _warn "Updatedb failed"
+            _phase_record "Packages: updatedb" WARN "failed (non-fatal)"
+        end
+    else
+        _phase_record "Packages: updatedb" "--" "not installed"
     end
-    command -q pkgfile; and begin
-        _run sudo -n pkgfile --update; or _warn "Pkgfile update failed"
+    if command -q pkgfile
+        if _run sudo -n pkgfile --update
+            _phase_record "Packages: pkgfile --update" PASS "ok"
+        else
+            _warn "Pkgfile update failed"
+            _phase_record "Packages: pkgfile --update" WARN "failed (non-fatal)"
+        end
+    else
+        _phase_record "Packages: pkgfile --update" "--" "not installed"
     end
-    not _install_system_files; and set -g INSTALL_HAD_ERRORS true
-    not _install_fstab_opts; and set -g INSTALL_HAD_ERRORS true
-    not _install_configure_services; and set -g INSTALL_HAD_ERRORS true
+    set -g _RY_DEPLOY_CHANGED_COUNT 0
+    set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0
+    if _install_system_files
+        _phase_record "Configs: system file deployment" PASS "$_RY_DEPLOY_CHANGED_COUNT deployed, $_RY_DEPLOY_IDEMPOTENT_COUNT idempotent"
+    else
+        set -g INSTALL_HAD_ERRORS true
+        _phase_record "Configs: system file deployment" FAIL "$_RY_DEPLOY_CHANGED_COUNT deployed, $_RY_DEPLOY_IDEMPOTENT_COUNT idempotent, see JSONL"
+    end
+    if _install_fstab_opts
+        _phase_record "Configs: /etc/fstab opts" PASS "noatime,lazytime,commit=10"
+    else
+        set -g INSTALL_HAD_ERRORS true
+        _phase_record "Configs: /etc/fstab opts" FAIL "see JSONL log"
+    end
+    if _install_configure_services
+        _phase_record "Services: configuration" PASS "mask + enable ok"
+    else
+        set -g INSTALL_HAD_ERRORS true
+        _phase_record "Services: configuration" FAIL "see JSONL log"
+    end
     test "$INSTALL_HAD_ERRORS" = true; and return 1
     return 0
+end
+function _rdi_elapsed --description "Format wall-clock elapsed since _PROG_START as 'Nm Ms'"
+    set -q _PROG_START; or begin; printf '%s' "?"; return 0; end
+    set -l _now (_progress_now)
+    set -l _secs (math $_now - $_PROG_START)
+    if test $_secs -lt 60
+        printf '%ds' $_secs
+    else
+        set -l _m (math "floor($_secs / 60)")
+        set -l _s (math "$_secs - $_m * 60")
+        printf '%dm %ds' $_m $_s
+    end
+end
+function _rdi_render_matrix --description "Render install phase matrix as box-drawn Unicode table"
+    test (count $_RY_PHASE_RESULTS) -eq 0; and return 0
+    if set -q RY_INSTALL_NO_MATRIX; and test "$RY_INSTALL_NO_MATRIX" = 1
+        _log "MATRIX_RENDER_SKIP: RY_INSTALL_NO_MATRIX=1"
+        return 0
+    end
+    set -q _RY_OUTPUT_BROKEN; and return 0
+    set -l _w_check 34
+    set -l _w_result 6
+    set -l _w_evidence 30
+    set -l _inner (math "$_w_check + $_w_result + $_w_evidence + 6")
+    set -l _bar_top (string repeat -n $_inner '═')
+    set -l _sep_check (string repeat -n (math "$_w_check + 2") '═')
+    set -l _sep_result (string repeat -n (math "$_w_result + 2") '═')
+    set -l _sep_evidence (string repeat -n (math "$_w_evidence + 2") '═')
+    set -l _title "ry-install v$VERSION — RUN SUMMARY"
+    # Center title within $_inner cols; (inner - len) // 2 spaces of left pad
+    set -l _title_len (string length -- $_title)
+    set -l _title_lpad (math -s0 "max(0, ($_inner - $_title_len) / 2)")
+    set -l _title_padded $_title
+    test $_title_lpad -gt 0; and set _title_padded (string repeat -n $_title_lpad ' ')$_title
+    set _title_padded (string pad -r -w $_inner -- $_title_padded)
+    printf '╔%s╗\n' $_bar_top >&2
+    printf '║%s║\n' $_title_padded >&2
+    printf '╠%s╦%s╦%s╣\n' $_sep_check $_sep_result $_sep_evidence >&2
+    printf '║ %s ║ %s ║ %s ║\n' \
+        (string pad -r -w $_w_check -- CHECK) \
+        (string pad -r -w $_w_result -- RESULT) \
+        (string pad -r -w $_w_evidence -- EVIDENCE) >&2
+    printf '╠%s╬%s╬%s╣\n' $_sep_check $_sep_result $_sep_evidence >&2
+    set -l _pass 0
+    set -l _warn 0
+    set -l _fail 0
+    set -l _defer 0
+    set -l _skip 0
+    set -l _na 0
+    for _row in $_RY_PHASE_RESULTS
+        set -l _parts (string split '│' -- $_row)
+        set -l _chk (string sub -l $_w_check -- $_parts[1])
+        set -l _res $_parts[2]
+        set -l _evd (string sub -l $_w_evidence -- $_parts[3])
+        # Center the result label by computing equal padding
+        set -l _res_len (string length -- $_res)
+        set -l _res_lpad (math -s0 "max(0, ($_w_result - $_res_len) / 2)")
+        set -l _res_padded $_res
+        test $_res_lpad -gt 0; and set _res_padded (string repeat -n $_res_lpad ' ')$_res
+        set _res_padded (string pad -r -w $_w_result -- $_res_padded)
+        printf '║ %s ║ %s ║ %s ║\n' \
+            (string pad -r -w $_w_check -- $_chk) \
+            $_res_padded \
+            (string pad -r -w $_w_evidence -- $_evd) >&2
+        switch $_parts[2]
+            case PASS
+                set _pass (math $_pass + 1)
+            case WARN
+                set _warn (math $_warn + 1)
+            case FAIL
+                set _fail (math $_fail + 1)
+            case DEFER
+                set _defer (math $_defer + 1)
+            case SKIP
+                set _skip (math $_skip + 1)
+            case '*'
+                set _na (math $_na + 1)
+        end
+    end
+    printf '╠%s╣\n' $_bar_top >&2
+    set -l _verdict PASS
+    test $_warn -gt 0; and set _verdict PASS-WITH-WARNINGS
+    test $_fail -gt 0; and set _verdict FAIL
+    set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true; and set _verdict FAIL-BOOT-CRITICAL
+    set -l _totals "Totals : $_pass PASS · $_warn WARN · $_fail FAIL · $_defer DEFER · $_skip SKIP · $_na N/A"
+    set -l _elapsed "Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_verdict"
+    set -l _log_line "Log    : $LOG_FILE"
+    set -l _next_msg "Next   : reboot · ./ry-install.fish --verify-static · --verify-runtime"
+    test "$_verdict" != PASS; and set _next_msg "Next   : review FAIL/WARN above · re-run install (idempotent)"
+    set -l _pad_inner (math "$_inner - 2")
+    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_totals) >&2
+    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_elapsed) >&2
+    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- (string sub -l $_pad_inner -- $_log_line)) >&2
+    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_next_msg) >&2
+    printf '╚%s╝\n' $_bar_top >&2
+    _log "MATRIX_RENDERED: rows="(count $_RY_PHASE_RESULTS)" pass=$_pass warn=$_warn fail=$_fail defer=$_defer skip=$_skip na=$_na verdict=$_verdict"
 end
 function _rdi_summary --description "Print final install summary"
     if test "$INSTALL_HAD_ERRORS" = true
@@ -4471,7 +4754,17 @@ function _rdi_summary --description "Print final install summary"
     else
         _echo "INSTALLATION COMPLETE"
     end
+    _rdi_render_matrix
     set -q _RY_AUR_PARTIAL; and test "$_RY_AUR_PARTIAL" = true; and _warn "AUR phase completed with partial success — some packages failed (see JSONL log)"
+    if set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true
+        _err "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
+        _info "Recovery steps:"
+        _info "  1. Inspect: ls -la /boot/vmlinuz-* /boot/initramfs-*.img; sudo bootctl list"
+        _info "  2. Rebuild: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update"
+        _info "  3. Re-run ry-install (idempotent) — only reboot once verdict is PASS or PASS-WITH-WARNINGS"
+        _info "JSONL log captures the exact failure: $LOG_FILE"
+        return 0
+    end
     _info "Manual steps required:"
     _info "  1. Run 'rehash' or start new shell (updates command paths)"
     _info "  2. REBOOT to apply kernel cmdline and module changes"
@@ -4499,6 +4792,9 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _install_preflight
     set -l _pre_rc $status
     if test $_pre_rc -ne 0
+        _progress_done
+        _rdi_render_matrix
+        _log_section "INSTALLATION END"
         test $_pre_rc -eq $EXIT_USAGE; and return $EXIT_USAGE
         return $EXIT_PREFLIGHT
     end
@@ -4510,6 +4806,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
         _err "Boot-critical failure — skipping finalization"
         _err "Fix boot issue first: sudo mkinitcpio -P && sudo sdboot-manage gen"
         set -g _PROG_FINALIZED_SKIP true
+        set -g _RY_BOOT_CRIT_HIT true
         _progress Finalize skip
     else
         not _install_finalize; and set -g INSTALL_HAD_ERRORS true

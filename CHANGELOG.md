@@ -1,6 +1,35 @@
 ry-install ChangeLog
 ====================
 
+v7.4.13 - v7.4.14 - 2026-05-20
+------------------------------
+
+- `_rdi_summary`: gate REBOOT advisory on `_RY_BOOT_CRIT_HIT`; print `DO NOT REBOOT` + recovery on `FAIL-BOOT-CRITICAL`.
+- `_install_rebuild_boot`: record `Boot: post-rebuild sanity` SKIP on `_irb_sdboot_apply` non-zero return (was missing — 5 other boot-bail paths recorded it).
+- `_rdi_render_matrix`: totals line gains `N/A` bucket; matrix row count now matches sum across all 6 buckets.
+- `_ry_check_kernel_version`: rc=0/1/2 (ok/soft-warn/hard-fail); caller switches on rc — only hard floor `<6.14` elevates `INSTALL_HAD_ERRORS`. Stability-floor / ntsync / 6.19.0 warnings now record matrix `WARN` without elevating to `FAIL`.
+- `_install_preflight`: regdom `test;and;or` chain refactored to `if/else` (v7.3.5 consistency).
+- New `_irb_skip_post_mki` helper consolidates 3-row boot SKIP cascade (was 3 inline blocks × 3 sites).
+- New `_ip_bail_prep` helper consolidates 3-row preflight bail sequence (was 4 inline blocks × 3 sites).
+- README: matrix sample updated; `FAIL-BOOT-CRITICAL` row notes DO-NOT-REBOOT advisory.
+
+v7.4.12 - v7.4.13 - 2026-05-20
+------------------------------
+
+- Run-summary matrix now renders on preflight bail (`EXIT_PREFLIGHT` / `EXIT_USAGE`); previously visible only on success/boot-critical paths.
+- Verdict `FAIL-BOOT-CRITICAL` now keyed on dedicated `_RY_BOOT_CRIT_HIT` flag (was overloaded `_PROG_FINALIZED_SKIP`, which fired spuriously on preflight bails).
+- `_phase_record`: strip embedded newlines and `U+2502` (field delimiter) from `check`/`evidence` args; prevents matrix row corruption from future call sites with freeform text.
+- Stale comment on `_RY_DEPLOY_*_COUNT` reset behavior corrected.
+
+v7.4.11 - v7.4.12 - 2026-05-20
+------------------------------
+
+- Run-summary matrix: install completion now prints box-drawn Unicode matrix to stderr (`CHECK`/`RESULT`/`EVIDENCE` columns + totals + verdict + log path). Result states: `PASS`, `WARN`, `FAIL`, `DEFER`, `SKIP`, `--`. Verdicts: `PASS`, `PASS-WITH-WARNINGS`, `FAIL`, `FAIL-BOOT-CRITICAL`. `RY_INSTALL_NO_MATRIX=1` opts out (JSONL log unaffected).
+- New `_phase_record` helper appends rows to `_RY_PHASE_RESULTS` and JSONL.
+- New `_rdi_render_matrix` (renderer) + `_rdi_elapsed` (M m S s formatter).
+- `_ry_install_file`: track changed-vs-idempotent deploys via `_RY_DEPLOY_CHANGED_COUNT` / `_RY_DEPLOY_IDEMPOTENT_COUNT`.
+- Phase instrumentation: `_install_preflight`, `_install_packages`, `_install_aur_packages`, `_rdi_run_phases`, `_install_rebuild_boot`, `_irb_sdboot_apply`, `_install_finalize`, `_if_trim_pacman_cache`, `_if_nm_restart` — each records a matrix row on PASS/WARN/FAIL/DEFER/SKIP boundaries.
+
 v7.4.10 - v7.4.11 - 2026-05-20
 ------------------------------
 

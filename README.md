@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.4.11-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.13-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -141,6 +141,48 @@ Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 | 4 | Services | fstab ext4 opts; `systemd-resolved` restart; THP tmpfiles apply; `PKGS_DEL` removal; mask 12 desktop/power units; `daemon-reload` + enable runtime units |
 | 5 | Boot | Rebuild initramfs, update systemd-boot entries |
 | 6 | Finalize | Cache cleanup; NM restart (deferred when WiFi is active route) |
+
+## Run Summary
+
+After the install completes, a box-drawn matrix prints to stderr summarizing every phase:
+
+```
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                       ry-install v7.4.14 — RUN SUMMARY                       ║
+╠════════════════════════════════════╦════════╦════════════════════════════════╣
+║ CHECK                              ║ RESULT ║ EVIDENCE                       ║
+╠════════════════════════════════════╬════════╬════════════════════════════════╣
+║ Preflight: sudo credential cache   ║  PASS  ║ ok                             ║
+║ Preflight: kernel version          ║  PASS  ║ 6.18.4                         ║
+║ Preflight: wireless regdom         ║   --   ║ RY_INSTALL_WIRELESS_REGDOM uns ║
+║ Packages: pacman -Syu              ║  PASS  ║ system upgraded                ║
+║ Packages: AUR (paru)               ║  PASS  ║ 2/2 (mt7925e module verified)  ║
+║ Configs: system file deployment    ║  PASS  ║ 11 deployed, 1 idempotent      ║
+║ Boot: post-rebuild sanity          ║  PASS  ║ vmlinuz+initramfs+entries OK   ║
+║ Finalize: NetworkManager restart   ║ DEFER  ║ over WiFi — applies on reboot  ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║ Totals : 19 PASS · 0 WARN · 0 FAIL · 1 DEFER · 0 SKIP · 1 N/A                ║
+║ Elapsed: 4m 23s   ·   Verdict: PASS                                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+```
+
+| Result | Semantics |
+|---|---|
+| `PASS`  | Step ran and succeeded |
+| `WARN`  | Step ran with a non-fatal anomaly (kernel-stability floor, ntsync gap, size threshold, partial AUR, etc.) |
+| `FAIL`  | Step ran and failed (sets `INSTALL_HAD_ERRORS=true`) |
+| `DEFER` | Step intentionally deferred to next boot (NM-over-wifi, kernel cmdline) |
+| `SKIP`  | Step not run by design (tool absent, no user-bus, boot-critical bail, opt-in disabled) |
+| `--` / `N/A` | Step not applicable (env var not set, conditional path, optional tool absent) |
+
+| Verdict | Trigger |
+|---|---|
+| `PASS`               | `0 FAIL · 0 WARN` |
+| `PASS-WITH-WARNINGS` | `0 FAIL · ≥1 WARN` |
+| `FAIL`               | `≥1 FAIL` (without boot-critical) |
+| `FAIL-BOOT-CRITICAL` | Boot rebuild cascade aborted (`EXIT_BOOT_CRIT`); script prints **DO NOT REBOOT** and recovery steps instead of the normal reboot advisory |
+
+Set `RY_INSTALL_NO_MATRIX=1` to suppress the matrix (the JSONL log still records every `PHASE_RESULT` event regardless).
 
 ## Configuration
 
@@ -610,6 +652,7 @@ when WiFi is the active route. Writes the JSONL log footer.
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses `EXPECTED_CPU_MATCH` hard-fail |
 | `RY_INSTALL_WIRELESS_REGDOM` | unset | `=<CC>` writes `WIRELESS_REGDOM=<CC>` to `/etc/conf.d/wireless-regdom` (2-letter ISO 3166-1; e.g. `US`, `GB`, `DE`) |
 | `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses interactive `sudo -v` fallback (strict-unattended: cron, ansible, systemd unit) |
+| `RY_INSTALL_NO_MATRIX` | unset | `=1` suppresses post-install run-summary matrix (JSONL log unaffected) |
 | `NO_COLOR` | unset | Suppress ANSI color (any value, per [no-color.org](https://no-color.org/)) |
 
 </details>

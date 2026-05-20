@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.21 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.22 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.21"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.22"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -111,7 +111,7 @@ if test $_fish_ok -eq 0
     echo "[ERR] fish 3.6+ required (found: $fish_ver)" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
-# Prepend canonical system paths first; defends sudo/pacman/mkinitcpio/sdboot-manage/findmnt against PATH-injection and ~/bin shadowing. User $PATH preserved as suffix fallback.
+# Canonical system paths first; defends sudo/pacman/findmnt against PATH-injection; user PATH retained as suffix.
 set -l _ry_path_new
 for _ry_p in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin $PATH
     contains -- $_ry_p $_ry_path_new; or set -a _ry_path_new $_ry_p
@@ -122,7 +122,7 @@ if set -q TMPDIR; and test -n "$TMPDIR"; and not string match -q -- '/*' "$TMPDI
     echo "[WARN] TMPDIR is not an absolute path ($TMPDIR) — falling back to /tmp" >&2
     set -gx TMPDIR /tmp
 end
-# Override env when TMPDIR points at a non-existent dir; otherwise _tmp_dir leaks the bad path and every downstream mktemp -p fails with EXIT_RUN_TMPFAIL cascade.
+# Override TMPDIR if non-existent; otherwise downstream mktemp -p cascades to EXIT_RUN_TMPFAIL.
 if set -q TMPDIR; and test -n "$TMPDIR"; and not test -d "$TMPDIR"
     echo "[WARN] TMPDIR does not exist ($TMPDIR) — falling back to /tmp" >&2
     set -gx TMPDIR /tmp
@@ -194,12 +194,12 @@ set --erase _ld_path
 set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS false
 
 set -g _RY_BOOT_TAINTED false
-# Deploy failure on any of these 4 sets _RY_BOOT_TAINTED — blocks initramfs rebuild unless RY_INSTALL_FORCE_BOOT_REBUILD=1.
+# Deploy failure on any of these 4 sets _RY_BOOT_TAINTED; blocks rebuild unless RY_INSTALL_FORCE_BOOT_REBUILD=1.
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" /etc/kernel/cmdline "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
-# _RY_DEPLOY_CHANGED_COUNT/_IDEMPOTENT_COUNT track _ry_install_file outcomes for run-summary matrix; reset to 0 in _rdi_run_phases before _install_system_files so the "Configs" matrix evidence reflects only that phase (not pre-deploys from _install_packages).
+# Reset to 0 in _rdi_run_phases before _install_system_files so "Configs" matrix evidence excludes pre-deploys.
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _PROFILE_USES_WIFI_BACKEND false
-# NF-inverted pair: well-formed (>=4 cols) vs malformed (<4); MALFORMED uses word/comma bounds to skip LABEL=ext4_root substring hits (v7.0.10).
+# NF-inverted pair: malformed branch uses word/comma bounds to skip LABEL=ext4_root substrings.
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 set -g NM_RESTART_DELAY 3; set -g _PROG_BAR_WIDTH 40
@@ -326,7 +326,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     set -l _mk_rc $status
     umask $_prev_umask
     test $_mk_rc -ne 0; and return 2
-    # Sentinel must precede chmod; cleanup gate _dc_kill_children keys on _RY_LOCK_DIR_OWNED — signal between mkdir success and sentinel would leak LOCK_DIR.
+    # Sentinel must precede chmod; signal between mkdir and sentinel would leak LOCK_DIR via _dc_kill_children gate.
     set -g _RY_LOCK_DIR_OWNED true
     command chmod -- 700 "$LOCK_DIR" 2>/dev/null
     set -l _pid_tmp (command mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
@@ -365,7 +365,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
             set _can_reclaim true
             functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID not running, reclaiming)"
         else
-            # PID alive — verify it's a fish process; Linux recycles PIDs and original ry-install may have died with PID inherited by an unrelated process.
+            # PID alive — verify it's fish; Linux recycles PIDs after parent death.
             set -l _stale_comm (command cat -- "/proc/$_stale_pid/comm" 2>/dev/null | string trim --)
             if test -n "$_stale_comm"; and test "$_stale_comm" != fish
                 set _can_reclaim true
@@ -533,7 +533,7 @@ function _cleanup_pipe --on-signal PIPE --description "Signal handler: mark stde
 end
 function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensure cleanup runs on fish_exit"
     set -l _exit_status $status
-    # Exit-code priority: explicit normal-path code (set at L48xx before exit) → bail sentinel from _ry_exit → $status fallback.
+    # Priority: explicit normal-path → _ry_exit bail sentinel → $status.
     if set -q _INTENDED_EXIT_CODE
         set _exit_status $_INTENDED_EXIT_CODE
     else if set -q _RY_INSTALL_LAST_EXIT
@@ -669,7 +669,7 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
             _err_loud "Cannot detect root UUID ($_reason) — exact /etc/kernel/cmdline byte-equality cannot be verified"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         case verify-runtime
-            # verify-runtime reads /proc/cmdline only; root UUID missing → skip cross-check, continue with UUID-independent probes.
+            # verify-runtime reads /proc/cmdline only; UUID missing → skip cross-check, continue.
             _log "ROOT_UUID_UNAVAILABLE: mode=verify-runtime reason=$_reason — root=UUID cross-check skipped, other runtime probes proceed"
         case '*'
             _log "ROOT_UUID_UNAVAILABLE: mode=$MODE reason=$_reason — non-fatal for this mode"
@@ -755,7 +755,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     _ir_validate_keys
     _ir_precompute_caches
     for _kp in $KERNEL_PARAMS
-        # Reject whitespace + shell metachars (would corrupt /etc/kernel/cmdline parsing or LINUX_OPTIONS quote-escaping in sdboot-manage.conf, v6.5.7); `\\\\` in single-quoted fish = `\\` in string = single literal backslash inside the regex char class.
+        # Reject whitespace/shell metachars; would corrupt cmdline or LINUX_OPTIONS quote-escaping (v6.5.7).
         if string match -qr -- '[\s"`$;\\\\]' "$_kp"; _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _pn in $PKGS_ADD $PKGS_DEL $AUR_PKGS
@@ -853,7 +853,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before re
             _err "Sudo credential not cached and RY_INSTALL_NO_INTERACTIVE_SUDO=1 — refusing interactive sudo -v"
             _log "SUDO_CACHE_NONINTERACTIVE_FORCED: RY_INSTALL_NO_INTERACTIVE_SUDO=1"
         else if isatty 0; and isatty 2
-            # 2>"$_sudo_err" truncates the file via '>', replacing stale non-interactive stderr so the failure-reason readback reports the interactive attempt; interactive prompt may appear here — set RY_INSTALL_NO_INTERACTIVE_SUDO=1 for strict-unattended runs (cron, ansible, systemd unit).
+            # Truncate stale stderr (interactive readback); RY_INSTALL_NO_INTERACTIVE_SUDO=1 for strict-unattended runs.
             sudo -v 2>"$_sudo_err"
             set _rc $status
         else
@@ -964,7 +964,7 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
     end
 end
 function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"
-    # Covers all SYSTEM_DESTINATIONS + SERVICE_DESTINATIONS roots; extend if new destinations land outside /etc or /boot.
+    # Extend if new destinations land outside /etc or /boot.
     string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"
 end
 function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse)"
@@ -984,7 +984,7 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
         set -l _ps $pipestatus
         test "$_ps[1]" -eq 0; or return 1
     end
-    # bare printf — adding `| string collect --no-trim-newlines --allow-empty` causes outer command-sub at callers to inject a phantom \n (breaks symmetry with _ry_content_bytes)
+    # bare printf: pipe into string collect would inject phantom \n at callers (asymmetric vs _ry_content_bytes).
     printf '%s' "$_bytes"
     return 0
 end
@@ -1022,7 +1022,7 @@ end
 function _log_section --argument-names name --description "Emit a section boundary marker line via _log"; _log "=== $name ==="; end
 function _log --description "Append a timestamped JSONL line to LOG_FILE"
     set -q _RY_LOG_WRITE_FAIL; and test "$_RY_LOG_WRITE_FAIL" = true; and return 0
-    # Pre-bootstrap guard: skip when LOG_FILE not yet set (e.g. callable pre-bootstrap via functions -q before L199 init).
+    # Pre-bootstrap guard: skip when LOG_FILE not yet set (callable via functions -q before L199 init).
     test -n "$LOG_FILE"; or return 0
     # Skip lazy-create after _pre_dispatch_log_cleanup; prevents orphan preflight-*.jsonl on argparse-error paths.
     set -q _RY_LOG_SUPPRESS_CREATE; and test "$_RY_LOG_SUPPRESS_CREATE" = true; and not test -f "$LOG_FILE"; and return 0
@@ -1108,7 +1108,7 @@ function _fail --description "Emit FAIL-level message and increment VERIFY_FAIL"
 function _fail_silent --description "Emit FAIL-level message without incrementing VERIFY_FAIL"; _msg_nocount FAIL $argv; return 0; end
 function _info --description "Emit INFO-level message (no counter)"; _msg INFO $argv; return 0; end
 function _warn --description "Emit WARN-level message and increment VERIFY_WARN"; _msg WARN $argv; return 0; end
-# _phase_record appends to install run-summary matrix; delimiter U+2502 cannot appear in evidence text. Logged to JSONL regardless of QUIET.
+# Appends to run-summary matrix; U+2502 reserved as delimiter. JSONL-logged regardless of QUIET.
 function _phase_record --argument-names check result evidence --description "Append a row to the install summary matrix and JSONL"
     # Defensive: strip embedded newlines (break matrix rows) and U+2502 (delimiter collision).
     set -l _e (string replace -ra '[\n\r│]' ' ' -- "$evidence")
@@ -1116,7 +1116,7 @@ function _phase_record --argument-names check result evidence --description "App
     set -ga _RY_PHASE_RESULTS "$_c│$result│$_e"
     _log "PHASE_RESULT: check='$_c' result=$result evidence='$_e'"
 end
-# _err force-prints when _RY_LOUD_ERR set so preflight bail reasons reach stderr in default QUIET install mode (--check stays silent).
+# _RY_LOUD_ERR force-prints err to stderr in QUIET install mode (--check stays silent).
 function _err --description "Emit ERR-level message (force-prints to stderr when _RY_LOUD_ERR=true)"
     if set -q _RY_LOUD_ERR; and test "$_RY_LOUD_ERR" = true; and test "$MODE" != check
         _log "ERR: "(string join -- " " $argv)
@@ -1184,7 +1184,7 @@ function _progress_now --description "Monotonic seconds (cached uptime or epoch)
     command date +%s
 end
 function _progress_init --description "Open scroll region; draw initial bar"
-    # 6-phase list must stay in sync with README "Install Flow" table; phase skip in log = corresponding _install_* sub returned early.
+    # 6-phase list must match README "Install Flow"; phase skip = _install_* sub returned early.
     set -g _PROG_STEPS Preflight Packages Configuration Services Boot Finalize
     set -g _PROG_CUR 0; set -g _PROG_TOTAL (count $_PROG_STEPS)
     set -g _PROG_START (_progress_now); set -g _PROG_STEP_START $_PROG_START
@@ -1352,7 +1352,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     end
     set -l stderr_tmp "$_run_dir/stderr"; set -l stdout_tmp "$_run_dir/stdout"; set -l _run_timeout (_run_effective_timeout $argv)
     if test -n "$_run_timeout"
-        # --kill-after=10 sends SIGKILL 10s after SIGTERM if child doesn't exit; rc=124 (TERM caught), rc=137 (KILL after grace) — see TIMEOUT_TERM/TIMEOUT_KILL log events below.
+        # --kill-after=10: SIGKILL 10s after SIGTERM if hung; rc=124 (TERM) / rc=137 (KILL).
         command timeout --foreground --kill-after=10 "$_run_timeout" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     else
         command $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
@@ -1489,7 +1489,7 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     end
 end
 function _chk_token_in --argument-names line token label --description "Verify a whole-word token is present in a config line"
-    # \b anchors at word/non-word boundary, assumes token has word-char start+end — callers (MKINITCPIO_MODULES, MKINITCPIO_HOOKS) all comply.
+    # \b word boundary; assumes word-char start/end (MKINITCPIO_MODULES/HOOKS callers comply).
     set -l _re (string escape --style=regex -- "$token")
     if string match -qr "\\b$_re\\b" -- "$line"
         _ok "  $label: present"
@@ -1664,7 +1664,7 @@ function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: ord
             set -a _seen_hooks "$hook"
         end
     end
-    # Pair format: "BEFORE:AFTER" — hook on the right MUST appear after hook on the left in MKINITCPIO_HOOKS (initramfs build order).
+    # Pair "BEFORE:AFTER": right hook must come after left in MKINITCPIO_HOOKS (build order).
     set -l order_checks "systemd:autodetect" "autodetect:microcode" "autodetect:modconf" "systemd:sd-vconsole" "systemd:keyboard" "keyboard:sd-vconsole" "modconf:kms" "block:filesystems"
     for check in $order_checks
         set -l _sp (string split ':' -- "$check"); set -l hook_before $_sp[1]; set -l hook_after $_sp[2]; set -l idx_a 0; set -l idx_b 0
@@ -2359,7 +2359,7 @@ function _vs_read_symmetry_selftest --description "Preflight: detect read-symmet
         return 0
     end
     _track_tmpfile "$_tmp"
-    # canonical 12-byte payload: 2 lines of 5 chars + 2 trailing newlines — exercises the exact path that historically dropped/added a \n
+    # 12-byte payload: 2×5-char lines + 2 newlines; exercises the historic \n drop/add path.
     printf '%s\n' line1 line2 > "$_tmp"
     set -l _disk_bytes (command stat -c %s -- "$_tmp" 2>/dev/null)
     set -l _read (_installed_bytes "$_tmp" | string collect --no-trim-newlines --allow-empty)
@@ -2597,7 +2597,7 @@ function _vrkg_rebar_sam --description "_vrk_gpu_state sub: ReBAR/SAM status via
         return 0
     end
     if not command -q lspci; _info "  lspci not available for ReBAR check"; return 0; end
-    # ReBAR signal: BAR strictly >256 MB. AMD GPUs cap at 256 MB without ReBAR; match any G-suffix or M-values ≥500 (covers 512/1024/2048/4096/8192M and 1G+).
+    # ReBAR signal: BAR >256 MB (AMD pre-ReBAR cap); match G-suffix or M-values ≥500.
     set -l bar_size (command lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*[0-9]+G\b|Region.*Memory.*([5-9][0-9]{2}|[0-9]{4,})M\b' | command head -n 1)
     if test -n "$bar_size"
         _ok "  ReBAR/SAM: large BAR detected"
@@ -2657,7 +2657,7 @@ function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (h
         set -l _p (string split ':' -- "$pair"); set -l pname $_p[1]; set -l expected $_p[2]; set -l ppath /sys/module/amdgpu/parameters/$pname
         test -f "$ppath"; or continue
         set -l sysfs_val (string trim -- (command cat -- "$ppath" 2>/dev/null)); set -l sysfs_val_dec "$sysfs_val"; set -l expected_dec "$expected"
-        # Normalize both sides to decimal: amdgpu sysfs returns hex on some kernels, decimal on others; string compare alone would false-mismatch.
+        # Normalize to decimal: amdgpu sysfs returns hex on some kernels, decimal on others.
         string match -qr '^0x[0-9a-fA-F]+$' -- "$sysfs_val"; and set sysfs_val_dec (printf '%d' "$sysfs_val" 2>/dev/null; or echo "$sysfs_val")
         string match -qr '^0x[0-9a-fA-F]+$' -- "$expected"; and set expected_dec (printf '%d' "$expected" 2>/dev/null; or echo "$expected")
         if test "$sysfs_val_dec" = "$expected_dec"
@@ -2744,13 +2744,13 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null | string split \n)
         set -l _full_count (count $_full)
-        # Extract markers from FULL buffer before truncation; early-boot events scroll out of 5000-line head on long-uptime systems.
+        # Extract markers from FULL buffer first; early-boot events scroll past 5000-line head on long-uptime.
         if test (count $_full) -gt 0
             set -g _RY_DMESG_PREEMPT (printf '%s\n' $_full | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
             set -g _RY_DMESG_BAR (printf '%s\n' $_full | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large' | command head -n 1)
             set -g _RY_DMESG_TSC (printf '%s\n' $_full | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
         end
-        # Cap to 5000 lines to bound fish list memory + downstream grep cost on _RY_DMESG_CACHE (e.g. ACP audio check in _vrk_audio_state). Markers already extracted above.
+        # Cap to 5000 lines: bound fish list memory + grep cost downstream. Markers pre-extracted.
         set -g _RY_DMESG_CACHE $_full[1..5000]
         test "$_full_count" -gt 5000; and _log "DMESG_CAPPED: kept=5000 of $_full_count lines (markers pre-extracted from full buffer)"
     end
@@ -3019,7 +3019,7 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
     set -l _fstab_ok true
     for _fl in $_fstab_ext4
         set -l _opts (printf '%s\n' "$_fl" | command awk '{ print $4 }')
-        # All three options: comma/end-boundary required. `lazytime:substr` would false-match `nolazytime` (the disable opt); `noatime:substr` is safe today but kept symmetric.
+        # Comma/end-boundary required: `lazytime:substr` would false-match `nolazytime`; noatime kept symmetric.
         for _tok in noatime lazytime commit=10
             set -l _re (string escape --style=regex -- "$_tok")
             if not string match -qr '(^|,)'$_re'(,|$)' -- "$_opts"
@@ -3230,7 +3230,7 @@ end
 function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit"
     test (string length -- "$mode") -gt 3; and set mode (string sub -s 2 -- "$mode")
     not string match -qr '^[0-7]+$' -- "$mode"; and return 1
-    # Reject malformed modes shorter than 3 chars post-strip (guards against `string sub` returning empty which would feed `math` an unparseable expression and emit "Argument is not a number: ''" via downstream numeric `test`); stat -c %a guarantees ≥3 digits for any file — defence-in-depth.
+    # Reject modes <3 chars post-strip; stat -c %a guarantees ≥3 digits (defence-in-depth).
     test (string length -- "$mode") -eq 3; or return 1
     set -l group_w (string sub -s 2 -l 1 -- "$mode")
     set -l other_w (string sub -s 3 -l 1 -- "$mode")
@@ -3313,7 +3313,7 @@ function _ry_apply_wireless_regdom --description "Apply RY_INSTALL_WIRELESS_REGD
     _track_tmpfile "$_err_tmp"
     _log "RUN: sudo -n tee -- $_conf (stdin: WIRELESS_REGDOM=$_cc)"
     if printf '%s\n' "$_payload" | sudo -n tee -- "$_conf" >/dev/null 2>"$_err_tmp"
-        # tee inherits invoking user's umask via root; explicit chmod normalizes to 0644 (other /etc/conf.d/* convention).
+        # tee inherits root umask; explicit chmod 0644 normalizes (matches /etc/conf.d/* convention).
         sudo -n chmod 0644 -- "$_conf" 2>/dev/null
         _ok "  WIRELESS_REGDOM=$_cc → $_conf"
         _log "REGDOM_SET: cc=$_cc file=$_conf"
@@ -3345,7 +3345,7 @@ end
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
     _ry_sudo_cache_banner
-    # Force critical preflight errors to stderr in default QUIET install mode (cleared on success or before each bail return).
+    # Force preflight errors to stderr in QUIET install mode; cleared on success/bail.
     set -g _RY_LOUD_ERR true; set -l _chk_labels "Preflight: sudo credential cache" "Preflight: dependency check" "Preflight: disk space"; set -l _i 1
     for _chk in _ensure_sudo_cached _ry_check_deps _ry_check_disk_space
         if $_chk
@@ -3404,7 +3404,7 @@ function _mr_copy_size_verify --argument-names backup_file _mki_tmp --descriptio
         _log "MKINITCPIO_REVERT_FAIL: cp size mismatch src=$_src_size dst=$_dst_size"
         return 1
     end
-    # Defence-in-depth: size-equal is necessary but not sufficient; cmp confirms byte-content identity (cheap on a small conf file).
+    # Defence-in-depth: cmp confirms byte-content (size-equal alone insufficient).
     if command -q cmp; and not sudo -n cmp -s -- "$backup_file" "$_mki_tmp" 2>/dev/null
         _err "  /etc/mkinitcpio.conf revert failed at cmp — same-size content drift between backup and tmp"
         _log "MKINITCPIO_REVERT_FAIL: cmp content mismatch (size=$_src_size)"
@@ -3574,7 +3574,7 @@ function _ip_run_and_verify --description "_install_packages sub: run pacman -Sy
     _info "Verifying package installation..."
     set -l missing_pkgs (command pacman -T -- $pkgs_to_install 2>/dev/null)
     set -l _pt_rc $status
-    # pacman -T exit: 0=all installed, 127=some missing (names on stdout, valid non-fatal — detected via missing_pkgs count below), other=fatal.
+    # pacman -T: 0=all installed, 127=some missing (non-fatal, names on stdout), other=fatal.
     if test $_pt_rc -ne 0; and test $_pt_rc -ne 127
         _err "pacman -T failed (rc=$_pt_rc) — cannot verify install state"
         set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
@@ -3713,7 +3713,7 @@ function _aur_verify_mt7925 --description "Post-AUR check: mt76-mt7925-dkms pkg 
         return 0
     end
     if not command -q modinfo; _log "MT7925_VERIFY_SKIP: modinfo not found"; return 0; end
-    # pacman -Qi confirms the pkg entered the db; modinfo confirms the DKMS build produced a loadable .ko — the two probe distinct failure modes
+    # pacman -Qi confirms db entry; modinfo confirms DKMS build produced loadable .ko (distinct failure modes).
     if command modinfo mt7925e >/dev/null 2>&1
         _ok "  mt76-mt7925-dkms verified (mt7925e modinfo found)"
         _log "MT7925_VERIFY_OK: pkg installed and mt7925e module discoverable"
@@ -3791,7 +3791,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
     end
 end
 function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk script for ext4 mount-opt rewrite"
-    # Idempotent rewrite: comments / non-ext4 / digits-only $4 / already-conformant ext4 lines pass through unchanged; only non-conformant ext4 entries are rewritten in-place.
+    # Idempotent: comments / non-ext4 / digits-only $4 / conformant ext4 pass through; only non-conformant rewritten.
     string join -- \n \
         'BEGIN { OFS = " " }' \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
@@ -3942,7 +3942,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
     set -l _t (_run_resolve_timeout)
     test -z "$_t"; and set _t 60
     test "$_t" -gt 60; and set _t 60
-    # Pipe chain: trim ws → strip version constraints `[=<>]…` → filter self ($pkg) + empty lines. Output is bare rdep package names, one per line.
+    # Pipe: trim → strip `[=<>]…` version constraints → filter self+empty. Output: bare rdep names.
     set -l _rdeps_raw (command timeout "$_t" pactree -ru "$pkg" 2>/dev/null | string trim -- | string replace -r '[=<>].*$' '' | string match -rv -- "^($_pkg_re|)\$")
     set -l _ps $pipestatus
     if test "$_ps[1]" -ne 0
@@ -3950,7 +3950,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
         _log "PACTREE_PROBE_FAIL: pkg=$pkg pactree_rc=$_ps[1] (timeout, missing pkg, or db error)"
         return 0
     end
-    # Stages 2-4 are fish `string` subcommands; rc=1 means "no changes/matches" (normal), only rc≥2 is a real error. Pipe is always 4-stage so $_ps always has 4 numeric elements.
+    # Stages 2-4 are `string` subcommands; rc=1 = no-match (normal), only ≥2 is error. 4-stage pipe → $_ps[1..4].
     if test "$_ps[2]" -ge 2; or test "$_ps[3]" -ge 2; or test "$_ps[4]" -ge 2
         set -l _ps_str (string join , -- $_ps)
         _warn "  $pkg: pactree pipe failure (pipestatus=$_ps_str) — skipping for safety"
@@ -3970,7 +3970,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
             return 0
         end
         _info "  $pkg: skipped (reverse deps: $_rdeps)"
-        # fish-specific: command substitutions run in the parent shell, so this `set -a` propagates to the caller's loop (unlike POSIX shells).
+        # fish-specific: command subs run in parent shell; `set -a` propagates to caller's loop.
         set -a _RY_PKG_REMOVE_SKIPS "$pkg"
         return 0
     end
@@ -4282,7 +4282,7 @@ function _boot_initrd_size_scan --argument-names esp --description "Post-rebuild
     set -l _initrd_list (sudo -n find "$esp" -maxdepth 1 -type f -name 'initramfs-*.img' -print0 2>/dev/null | string split0)
     set -l _il_ps $pipestatus
     if test "$_il_ps[1]" -ne 0; _warn "Cannot enumerate initramfs-*.img for size check (sudo lapsed or read error)"; return 0; end
-    # Compare in bytes to avoid floor-to-MB precision loss (100.9MB initrd would otherwise silently pass a 100MB threshold).
+    # Compare in bytes: avoids floor-to-MB precision loss (100.9MB would pass 100MB threshold).
     set -l _threshold_b (math "$INITRD_WARN_MB * 1048576")
     for initrd in $_initrd_list
         set -l size_b (sudo -n stat -c '%s' -- "$initrd" 2>/dev/null)
@@ -4699,7 +4699,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
-# First-match-wins (most-specific paths first, `*.service` catchall last); fish `string match` glob (no -r) — `*` spans `/`, so `*/dir/*` matches any-depth.
+# First-match-wins (specific first, `*.service` catchall last); fish glob `*` spans `/`.
 set -g _RY_POST_HOOKS \
     "/boot/*|boot" \
     "/efi/*|boot" \
@@ -4727,7 +4727,7 @@ function _post_hook_for_target --argument-names target --description "Return pos
     return 1
 end
 function _idf_match_dst --argument-names target --description "Match \$target against managed destinations"
-    # _idx aligns canon-list to source-list (precompute preserves order; drift refused at preflight by _ir_validate_counts).
+    # _idx aligns canon-list to source-list (order preserved; drift refused by _ir_validate_counts).
     set -l _idx 1
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         if test "$target" = "$dst"; or test "$target" = "$_RY_CANON_SYSTEM_DSTS[$_idx]"
@@ -4851,7 +4851,7 @@ function _post_service --argument-names target --description "Post-hook: daemon-
         _warn "Failed to enable $_bn (system)"
         set _rc 1
     end
-    # try-restart picks up changed ExecStart on re-deploy for non-oneshot units; oneshot+RemainAfterExit re-runs idempotently.
+    # try-restart picks up ExecStart change for non-oneshot; oneshot+RemainAfterExit re-runs idempotently.
     _run sudo -n systemctl try-restart -- "$_bn"; or _log "POST_SERVICE_TRY_RESTART: rc=non-zero unit=$_bn"
     return $_rc
 end
@@ -4919,7 +4919,7 @@ function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/d
     command rmdir -- "$LOG_DIR" 2>/dev/null
     command rmdir -- (command dirname -- "$LOG_DIR") 2>/dev/null
     command rmdir -- "$_RY_HOME_DIR" 2>/dev/null
-    # Suppress subsequent _log lazy-create; otherwise cleanup-time _log recreates the just-removed file as a 90-byte orphan on argparse-error paths.
+    # Suppress _log lazy-create; otherwise cleanup recreates just-removed file as 90-byte orphan on argparse error.
     set -g _RY_LOG_SUPPRESS_CREATE true
 end
 function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: log/dir cleanup, then exit"
@@ -4999,7 +4999,7 @@ if test "$MODE" != check; and begin
     set -g QUIET false
 end
 set -l mode_label $MODE
-# Rename preflight-*.jsonl → MODE-*.jsonl now that MODE is known; no-op when no pre-dispatch _log fired (happy path). Orphan recreation by post-cleanup _log is plugged by _RY_LOG_SUPPRESS_CREATE.
+# Rename preflight-*.jsonl → MODE-*.jsonl once MODE is known; orphan recreation plugged by _RY_LOG_SUPPRESS_CREATE.
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"; set -l old_log "$LOG_FILE"; set -l _log_rename_ok true
 if test -f "$old_log"; and test "$old_log" != "$new_log"
     if not command mv -- "$old_log" "$new_log" 2>/dev/null

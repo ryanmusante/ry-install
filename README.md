@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.4.18-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.20-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -147,7 +147,7 @@ After the install completes, a box-drawn matrix prints to stderr summarizing eve
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                       ry-install v7.4.18 — RUN SUMMARY                       ║
+║                       ry-install v7.4.20 — RUN SUMMARY                       ║
 ╠════════════════════════════════════╦════════╦════════════════════════════════╣
 ║ CHECK                              ║ RESULT ║ EVIDENCE                       ║
 ╠════════════════════════════════════╬════════╬════════════════════════════════╣
@@ -195,7 +195,7 @@ byte-for-byte.
 ### Phase 1 — Preflight
 
 Validates fish ≥ 3.6, kernel ≥ 6.14, systemd ≥ 250, GNU coreutils,
-free space, unrestricted sudo, and `EXPECTED_CPU_MATCH` hardware
+free space, cached sudo credential, and `EXPECTED_CPU_MATCH` hardware
 fingerprint (`_install_preflight`). Acquires the instance lock
 (atomic `mkdir` + `chmod 0700`; auto-reclaims dead PIDs). Runs
 `_ir_validate_counts` — refuses to deploy on count drift in any

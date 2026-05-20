@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.18 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.20 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.18"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.20"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -122,6 +122,11 @@ if set -q TMPDIR; and test -n "$TMPDIR"; and not string match -q -- '/*' "$TMPDI
     echo "[WARN] TMPDIR is not an absolute path ($TMPDIR) — falling back to /tmp" >&2
     set -gx TMPDIR /tmp
 end
+# Override env when TMPDIR points at a non-existent dir; otherwise _tmp_dir leaks the bad path and every downstream mktemp -p fails with EXIT_RUN_TMPFAIL cascade.
+if set -q TMPDIR; and test -n "$TMPDIR"; and not test -d "$TMPDIR"
+    echo "[WARN] TMPDIR does not exist ($TMPDIR) — falling back to /tmp" >&2
+    set -gx TMPDIR /tmp
+end
 set -l _ry_tmpprobe_dir (set -q TMPDIR; and test -n "$TMPDIR"; and test -d "$TMPDIR"; and printf '%s' "$TMPDIR"; or printf '%s' /tmp)
 if not test -w "$_ry_tmpprobe_dir"
     if test "$_ry_tmpprobe_dir" != /tmp; and test -w /tmp
@@ -149,9 +154,6 @@ if not command -q date
     echo "[ERR] GNU coreutils date(1) required (used for timestamps in DATE_LABEL, TIMESTAMP, JSONL ts fields)" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
-set -g _RY_SLEEP_FRAC 1
-# GNU coreutils sleep accepts fractional seconds; non-GNU builds reject and stay on 1s.
-command sleep 0.05 2>/dev/null; and set -g _RY_SLEEP_FRAC 0.1
 set -g DATE_LABEL (command date '+%Y-%m-%d')
 set -g TIMESTAMP (command date '+%Y%m%d-%H%M%S%z')"-"$fish_pid
 if test -z "$HOME"; or not test -d "$HOME"
@@ -459,6 +461,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
     set --erase _RY_READSYM_RESULT _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
+    set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
 end
 function _dc_kill_children --description "_do_cleanup sub. Release lock + reap child PIDs (pkill -P, then SIGKILL after grace)"
     if set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED
@@ -466,7 +469,7 @@ function _dc_kill_children --description "_do_cleanup sub. Release lock + reap c
     end
     if command -q pkill
         command pkill -TERM -P "$fish_pid" 2>/dev/null
-        # 0.5s grace: gives pacman/paru and atomic ops a chance to flush; $_RY_SLEEP_FRAC may be 0.1s on GNU coreutils which is too tight for atomic-mv-class ops.
+        # 0.5s grace: gives pacman/paru and atomic ops a chance to flush before SIGKILL.
         command sleep 0.5 2>/dev/null; or command sleep 1 2>/dev/null
         command pkill -KILL -P "$fish_pid" 2>/dev/null
     end
@@ -945,8 +948,8 @@ function _mktemp_or_null --description "mktemp wrapper; emits path on stdout, /d
     echo "$_tf"
     return 0
 end
-function _tmp_dir --description "Return \$TMPDIR if set, else /tmp"
-    if set -q TMPDIR; and test -n "$TMPDIR"
+function _tmp_dir --description "Return \$TMPDIR if set+exists, else /tmp"
+    if set -q TMPDIR; and test -n "$TMPDIR"; and test -d "$TMPDIR"
         printf '%s' "$TMPDIR"
     else
         printf '%s' /tmp
@@ -961,7 +964,8 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
     end
 end
 function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"
-    string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"; or string match -q '/efi/*' -- "$dst"; or string match -q '/usr/*' -- "$dst"; or string match -q '/var/*' -- "$dst"; or string match -q '/srv/*' -- "$dst"; or string match -q '/opt/*' -- "$dst"
+    # Covers all SYSTEM_DESTINATIONS + SERVICE_DESTINATIONS roots; extend if new destinations land outside /etc or /boot.
+    string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"
 end
 function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse)"
     set -l _bytes
@@ -2231,7 +2235,7 @@ function _vsp_pacman_conf --description "Inspect IgnorePkg / ParallelDownloads i
     if test -n "$parallel"
         _ok "  $parallel"
     else
-        _info "  ParallelDownloads not set (default: 1)"
+        _info "  ParallelDownloads not set (sequential downloads — uncomment in /etc/pacman.conf to enable)"
     end
 end
 function _verify_static_packages --description "Verify PKGS_ADD, AUR_PKGS, PKGS_DEL, pacman.conf"
@@ -2842,7 +2846,9 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state
     else
         _warn "  WiFi interface: NOT DETECTED"
     end
-    if command pgrep -x iwd >/dev/null
+    if not command -q pgrep
+        _warn "  iwd process: pgrep not installed — cannot determine"
+    else if command pgrep -x iwd >/dev/null
         _ok "  iwd process: running"
     else
         _fail "  iwd process: NOT running"
@@ -3307,6 +3313,8 @@ function _ry_apply_wireless_regdom --description "Apply RY_INSTALL_WIRELESS_REGD
     _track_tmpfile "$_err_tmp"
     _log "RUN: sudo -n tee -- $_conf (stdin: WIRELESS_REGDOM=$_cc)"
     if printf '%s\n' "$_payload" | sudo -n tee -- $_conf >/dev/null 2>"$_err_tmp"
+        # tee inherits invoking user's umask via root; explicit chmod normalizes to 0644 (other /etc/conf.d/* convention).
+        sudo -n chmod 0644 -- $_conf 2>/dev/null
         _ok "  WIRELESS_REGDOM=$_cc → $_conf"
         _log "REGDOM_SET: cc=$_cc file=$_conf"
         _rm_tmp "$_err_tmp" false
@@ -3353,7 +3361,7 @@ function _install_preflight --description "Run all preflight checks before insta
         case 1
             _phase_record "Preflight: kernel version" WARN "$KVER (below recommended)"
         case '*'
-            _phase_record "Preflight: kernel version" WARN "$KVER (below required)"
+            _phase_record "Preflight: kernel version" FAIL "$KVER (below required)"
             set -g INSTALL_HAD_ERRORS true
     end
     _ry_apply_wireless_regdom
@@ -3672,8 +3680,13 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
     end
     _aur_verify_mt7925
     set -l _total (count $AUR_PKGS)
-    if contains -- mt76-mt7925-dkms $AUR_PKGS; and command -q modinfo; and command modinfo mt7925e >/dev/null 2>&1
-        _phase_record "Packages: AUR (paru)" PASS "$_total/$_total (mt7925e module verified)"
+    if contains -- mt76-mt7925-dkms $AUR_PKGS
+        if command -q modinfo; and command modinfo mt7925e >/dev/null 2>&1
+            _phase_record "Packages: AUR (paru)" PASS "$_total/$_total (mt7925e module verified)"
+        else
+            set -g INSTALL_HAD_ERRORS true
+            _phase_record "Packages: AUR (paru)" WARN "$_total/$_total (mt76-mt7925-dkms installed but mt7925e module unbuilt — see JSONL)"
+        end
     else
         _phase_record "Packages: AUR (paru)" PASS "$_total/$_total"
     end
@@ -3946,7 +3959,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
             return 0
         end
         _info "  $pkg: skipped (reverse deps: $_rdeps)"
-        # Fish cmd-substitutions share parent shell state; this `set -a` propagates to the caller's loop.
+        # fish-specific: command substitutions run in the parent shell, so this `set -a` propagates to the caller's loop (unlike POSIX shells).
         set -a _RY_PKG_REMOVE_SKIPS "$pkg"
         return 0
     end
@@ -4326,6 +4339,11 @@ function _irb_verify_entries --argument-names esp --description "Re-enumerate bo
 end
 function _install_rebuild_boot --description "Regenerate initramfs and bootloader entries"
     _progress Boot
+    if test "$_RY_BOOT_TAINTED" = true; and test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
+        # Surface override: fires silently otherwise; post-mortem cannot distinguish forced vs clean run.
+        _warn "Boot-rebuild forced by RY_INSTALL_FORCE_BOOT_REBUILD=1 — _RY_BOOT_TAINTED gate bypassed"
+        _log "BOOT_TAINTED_OVERRIDE: RY_INSTALL_FORCE_BOOT_REBUILD=1 bypassed taint flag in _install_rebuild_boot"
+    end
     test "$SYSTEM_UPGRADED" = true; and _ok "System upgraded during package installation"
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
         _err "Refusing initramfs rebuild — mkinitcpio.conf revert failed (boot state inconsistent)"
@@ -4523,6 +4541,64 @@ function _rdi_elapsed --description "Format wall-clock elapsed since _PROG_START
         printf '%dm %ds' $_m $_s
     end
 end
+function _rdi_matrix_header --description "_rdi_render_matrix sub. Emit top bar, title, column header, separator"
+    set -l _bar_top $argv[1]; set -l _sep_c $argv[2]; set -l _sep_r $argv[3]; set -l _sep_e $argv[4]
+    set -l _inner $argv[5]; set -l _w_c $argv[6]; set -l _w_r $argv[7]; set -l _w_e $argv[8]
+    set -l _title "ry-install v$VERSION — RUN SUMMARY"
+    # Center title within $_inner cols; (inner - len) // 2 spaces of left pad
+    set -l _title_lpad (math -s0 "max(0, ($_inner - "(string length -- $_title)") / 2)")
+    set -l _title_padded $_title
+    test $_title_lpad -gt 0; and set _title_padded (string repeat -n $_title_lpad ' ')$_title
+    set _title_padded (string pad -r -w $_inner -- $_title_padded)
+    printf '╔%s╗\n' $_bar_top >&2
+    printf '║%s║\n' $_title_padded >&2
+    printf '╠%s╦%s╦%s╣\n' $_sep_c $_sep_r $_sep_e >&2
+    printf '║ %s ║ %s ║ %s ║\n' (string pad -r -w $_w_c -- CHECK) (string pad -r -w $_w_r -- RESULT) (string pad -r -w $_w_e -- EVIDENCE) >&2
+    printf '╠%s╬%s╬%s╣\n' $_sep_c $_sep_r $_sep_e >&2
+end
+function _rdi_matrix_rows --description "_rdi_render_matrix sub. Emit data rows; tally buckets via _RY_MTX_* globals"
+    set -l _w_c $argv[1]; set -l _w_r $argv[2]; set -l _w_e $argv[3]
+    set -g _RY_MTX_PASS 0; set -g _RY_MTX_WARN 0; set -g _RY_MTX_FAIL 0
+    set -g _RY_MTX_DEFER 0; set -g _RY_MTX_SKIP 0; set -g _RY_MTX_NA 0
+    for _row in $_RY_PHASE_RESULTS
+        set -l _parts (string split '│' -- $_row)
+        set -l _chk (string sub -l $_w_c -- $_parts[1]); set -l _res $_parts[2]; set -l _evd (string sub -l $_w_e -- $_parts[3])
+        set -l _res_lpad (math -s0 "max(0, ($_w_r - "(string length -- $_res)") / 2)")
+        set -l _res_padded $_res
+        test $_res_lpad -gt 0; and set _res_padded (string repeat -n $_res_lpad ' ')$_res
+        set _res_padded (string pad -r -w $_w_r -- $_res_padded)
+        printf '║ %s ║ %s ║ %s ║\n' (string pad -r -w $_w_c -- $_chk) $_res_padded (string pad -r -w $_w_e -- $_evd) >&2
+        switch $_parts[2]
+            case PASS;  set -g _RY_MTX_PASS  (math $_RY_MTX_PASS + 1)
+            case WARN;  set -g _RY_MTX_WARN  (math $_RY_MTX_WARN + 1)
+            case FAIL;  set -g _RY_MTX_FAIL  (math $_RY_MTX_FAIL + 1)
+            case DEFER; set -g _RY_MTX_DEFER (math $_RY_MTX_DEFER + 1)
+            case SKIP;  set -g _RY_MTX_SKIP  (math $_RY_MTX_SKIP + 1)
+            case '*';   set -g _RY_MTX_NA    (math $_RY_MTX_NA + 1)
+        end
+    end
+end
+function _rdi_matrix_footer --description "_rdi_render_matrix sub. Emit verdict-bearing footer rows + bottom bar"
+    set -l _bar_top $argv[1]; set -l _inner $argv[2]
+    set -l _verdict PASS
+    test $_RY_MTX_WARN -gt 0; and set _verdict PASS-WITH-WARNINGS
+    test $_RY_MTX_FAIL -gt 0; and set _verdict FAIL
+    set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true; and set _verdict FAIL-BOOT-CRITICAL
+    set -l _totals "Totals : $_RY_MTX_PASS PASS · $_RY_MTX_WARN WARN · $_RY_MTX_FAIL FAIL · $_RY_MTX_DEFER DEFER · $_RY_MTX_SKIP SKIP · $_RY_MTX_NA N/A"
+    set -l _elapsed "Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_verdict"
+    set -l _log_line "Log    : $LOG_FILE"
+    set -l _next_msg "Next   : reboot · ./ry-install.fish --verify-static · --verify-runtime"
+    test "$_verdict" != PASS; and set _next_msg "Next   : review FAIL/WARN above · re-run install (idempotent)"
+    set -l _pad_inner (math "$_inner - 2")
+    printf '╠%s╣\n' $_bar_top >&2
+    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_totals) >&2
+    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_elapsed) >&2
+    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- (string sub -l $_pad_inner -- $_log_line)) >&2
+    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_next_msg) >&2
+    printf '╚%s╝\n' $_bar_top >&2
+    _log "MATRIX_RENDERED: rows="(count $_RY_PHASE_RESULTS)" pass=$_RY_MTX_PASS warn=$_RY_MTX_WARN fail=$_RY_MTX_FAIL defer=$_RY_MTX_DEFER skip=$_RY_MTX_SKIP na=$_RY_MTX_NA verdict=$_verdict"
+    set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
+end
 function _rdi_render_matrix --description "Render install phase matrix as box-drawn Unicode table"
     test (count $_RY_PHASE_RESULTS) -eq 0; and return 0
     if set -q RY_INSTALL_NO_MATRIX; and test "$RY_INSTALL_NO_MATRIX" = 1
@@ -4534,61 +4610,12 @@ function _rdi_render_matrix --description "Render install phase matrix as box-dr
     # _inner = sum of 3 col widths + 6 padding spaces (2 per cell) + 2 inner ║ separators = w+8
     set -l _inner (math "$_w_check + $_w_result + $_w_evidence + 8")
     set -l _bar_top (string repeat -n $_inner '═')
-    set -l _sep_check (string repeat -n (math "$_w_check + 2") '═')
-    set -l _sep_result (string repeat -n (math "$_w_result + 2") '═')
-    set -l _sep_evidence (string repeat -n (math "$_w_evidence + 2") '═')
-    set -l _title "ry-install v$VERSION — RUN SUMMARY"
-    # Center title within $_inner cols; (inner - len) // 2 spaces of left pad
-    set -l _title_len (string length -- $_title)
-    set -l _title_lpad (math -s0 "max(0, ($_inner - $_title_len) / 2)"); set -l _title_padded $_title
-    test $_title_lpad -gt 0; and set _title_padded (string repeat -n $_title_lpad ' ')$_title
-    set _title_padded (string pad -r -w $_inner -- $_title_padded)
-    printf '╔%s╗\n' $_bar_top >&2
-    printf '║%s║\n' $_title_padded >&2
-    printf '╠%s╦%s╦%s╣\n' $_sep_check $_sep_result $_sep_evidence >&2
-    printf '║ %s ║ %s ║ %s ║\n' \
-        (string pad -r -w $_w_check -- CHECK) \
-        (string pad -r -w $_w_result -- RESULT) \
-        (string pad -r -w $_w_evidence -- EVIDENCE) >&2
-    printf '╠%s╬%s╬%s╣\n' $_sep_check $_sep_result $_sep_evidence >&2
-    set -l _pass 0; set -l _warn 0; set -l _fail 0; set -l _defer 0; set -l _skip 0; set -l _na 0
-    for _row in $_RY_PHASE_RESULTS
-        set -l _parts (string split '│' -- $_row)
-        set -l _chk (string sub -l $_w_check -- $_parts[1]); set -l _res $_parts[2]; set -l _evd (string sub -l $_w_evidence -- $_parts[3])
-        # Center the result label by computing equal padding
-        set -l _res_len (string length -- $_res)
-        set -l _res_lpad (math -s0 "max(0, ($_w_result - $_res_len) / 2)"); set -l _res_padded $_res
-        test $_res_lpad -gt 0; and set _res_padded (string repeat -n $_res_lpad ' ')$_res
-        set _res_padded (string pad -r -w $_w_result -- $_res_padded)
-        printf '║ %s ║ %s ║ %s ║\n' \
-            (string pad -r -w $_w_check -- $_chk) \
-            $_res_padded \
-            (string pad -r -w $_w_evidence -- $_evd) >&2
-        switch $_parts[2]
-            case PASS;  set _pass  (math $_pass + 1)
-            case WARN;  set _warn  (math $_warn + 1)
-            case FAIL;  set _fail  (math $_fail + 1)
-            case DEFER; set _defer (math $_defer + 1)
-            case SKIP;  set _skip  (math $_skip + 1)
-            case '*';   set _na    (math $_na + 1)
-        end
-    end
-    printf '╠%s╣\n' $_bar_top >&2
-    set -l _verdict PASS
-    test $_warn -gt 0; and set _verdict PASS-WITH-WARNINGS
-    test $_fail -gt 0; and set _verdict FAIL
-    set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true; and set _verdict FAIL-BOOT-CRITICAL
-    set -l _totals "Totals : $_pass PASS · $_warn WARN · $_fail FAIL · $_defer DEFER · $_skip SKIP · $_na N/A"
-    set -l _elapsed "Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_verdict"
-    set -l _log_line "Log    : $LOG_FILE"; set -l _next_msg "Next   : reboot · ./ry-install.fish --verify-static · --verify-runtime"
-    test "$_verdict" != PASS; and set _next_msg "Next   : review FAIL/WARN above · re-run install (idempotent)"
-    set -l _pad_inner (math "$_inner - 2")
-    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_totals) >&2
-    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_elapsed) >&2
-    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- (string sub -l $_pad_inner -- $_log_line)) >&2
-    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_next_msg) >&2
-    printf '╚%s╝\n' $_bar_top >&2
-    _log "MATRIX_RENDERED: rows="(count $_RY_PHASE_RESULTS)" pass=$_pass warn=$_warn fail=$_fail defer=$_defer skip=$_skip na=$_na verdict=$_verdict"
+    set -l _sep_c (string repeat -n (math "$_w_check + 2") '═')
+    set -l _sep_r (string repeat -n (math "$_w_result + 2") '═')
+    set -l _sep_e (string repeat -n (math "$_w_evidence + 2") '═')
+    _rdi_matrix_header $_bar_top $_sep_c $_sep_r $_sep_e $_inner $_w_check $_w_result $_w_evidence
+    _rdi_matrix_rows $_w_check $_w_result $_w_evidence
+    _rdi_matrix_footer $_bar_top $_inner
 end
 function _rdi_summary --description "Print final install summary"
     if test "$INSTALL_HAD_ERRORS" = true
@@ -4778,6 +4805,10 @@ function _pb_rebuild_cascade --argument-names target --description "_post_boot s
 end
 function _post_boot --argument-names target --description "Post-hook: rebuild boot entries (mkinitcpio + sdboot-manage)"
     _echo
+    if test "$_RY_BOOT_TAINTED" = true; and test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
+        _warn "  Boot-rebuild forced by RY_INSTALL_FORCE_BOOT_REBUILD=1 — _RY_BOOT_TAINTED gate bypassed"
+        _log "BOOT_TAINTED_OVERRIDE: RY_INSTALL_FORCE_BOOT_REBUILD=1 bypassed taint flag in _post_boot target=$target"
+    end
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
         _err "Refusing initramfs rebuild — mkinitcpio.conf revert failed (boot state inconsistent)"
         _log "POST_BOOT_REFUSED: _RY_MKI_REVERT_FAILED=true target=$target"

@@ -1,146 +1,124 @@
 ry-install ChangeLog
 ====================
 
+v7.4.19 - v7.4.20 - 2026-05-20
+------------------------------
+
+- Bootstrap: `TMPDIR` pointing at a non-existent directory now overrides to `/tmp` with a stderr warning. Previously the env var leaked through `_tmp_dir`, causing every downstream `mktemp -p` to fail and every `_run` to return `EXIT_RUN_TMPFAIL` with no root-cause surface.
+- `_tmp_dir`: gains a `test -d "$TMPDIR"` defence-in-depth so a non-existent path can never leak even if the bootstrap probe is bypassed.
+- `_ry_apply_wireless_regdom`: explicit `chmod 0644` after `sudo -n tee` writes `/etc/conf.d/wireless-regdom`, normalising mode against root's umask.
+- `_install_aur_packages`: when `mt76-mt7925-dkms` is in `AUR_PKGS` but `modinfo mt7925e` fails post-build, phase result is now `WARN` (sets `INSTALL_HAD_ERRORS`) instead of silent `PASS`.
+- `_install_rebuild_boot` / `_post_boot`: emit a JSONL `BOOT_TAINTED_OVERRIDE` log + stderr warn when `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate. Post-mortem can now distinguish forced from clean runs.
+- `_rdi_render_matrix` split into `_rdi_matrix_header` / `_rdi_matrix_rows` / `_rdi_matrix_footer`; each ≤50 lines. Output byte-identical to the previous monolithic renderer.
+- `_is_system_dst`: trimmed to `/etc/*` and `/boot/*` (the only managed-destination roots); dead branches `/efi`, `/usr`, `/var`, `/srv`, `/opt` removed.
+- `_RY_SLEEP_FRAC`: removed (set on bootstrap, never consumed in any sleep call).
+- `_dc_erase_globals`: erases `_RY_MTX_*` matrix tally globals as part of cleanup symmetry.
+
+v7.4.18 - v7.4.19 - 2026-05-20
+------------------------------
+
+- `_install_preflight`: `_ry_check_kernel_version` rc=2 (hard floor `<6.14`) now records matrix `FAIL` instead of `WARN`. Soft-warn rc=1 (stability floor, ntsync, 6.19.0) remains `WARN`.
+- `_vrsv_wifi`: gate `pgrep -x iwd` probe on `command -q pgrep`; warn when procps-ng is absent instead of false `FAIL`.
+- `_vsp_pacman_conf`: reword "ParallelDownloads not set (default: 1)" → "(sequential downloads — uncomment in /etc/pacman.conf to enable)".
+- README: Phase 1 — "unrestricted sudo" → "cached sudo credential" (stale phrasing from pre-v7.4.6 strict `NOPASSWD: ALL` gate).
+
 v7.4.17 - v7.4.18 - 2026-05-20
 ------------------------------
 
-- `_rdi_render_matrix`: `_inner = w_check + w_result + w_evidence + 6` → `+ 8`. Original math omitted the 2 inner `║` separators, producing 78-char top/bottom/mid bars and footer rows against 80-char cross-separator and data rows. Fixed: all matrix rows now uniformly 80 chars wide, matching the README sample. One-character change; no behavioral impact beyond cosmetic alignment.
-- CHANGELOG: dates for `v7.4.7`/`v7.4.8`/`v7.4.9`/`v7.4.10` and `v7.4.2` normalized to `2026-05-20`. Previously interleaved `2026-05-19` entries between `2026-05-20` neighbors broke monotonic descending order (impossible if read as commit-bump timestamps). All `v7.4.x` entries now uniformly dated `2026-05-20` (the session-finalization date); `v7.4.0` and earlier untouched.
-- `fish --no-execute` rc=0. Structural invariants preserved: 256 functions, 276 `end`, 75 `_phase_record` sites, 4 `_RY_BOOT_CRIT_HIT` refs, 5040+1 lines (one comment line added documenting the `+ 8` derivation).
+- `_rdi_render_matrix`: `_inner = w + 6` → `w + 8`. Previously the top/bottom/mid bars and footer rows were 78 chars against 80-char data rows; all rows are now uniformly 80 wide.
+- CHANGELOG: `v7.4.x` entry dates normalised to monotonic `2026-05-20`.
 
 v7.4.16 - v7.4.17 - 2026-05-20
 ------------------------------
 
-- Script: trim 5204 → 5040 lines (-164, 3.15%) by collapsing 76 adjacent `set -l/-g` runs to semicolon-chained one-liners. Targets: top-level EXIT codes + boot/network/sysctl global blocks; `_rdi_render_matrix` width constants + 6-bucket counter inits + 6-case switch + verdict cascade + footer-string locals; `_progress_init` globals; sysctl-verify loop locals; 36 automated ≥3-set safe collapses (no line continuations, joined ≤180ch); 28 conservative 2-set merges (no command substitutions either side, joined ≤140ch). Structural invariants preserved: 256 functions, 276 `end`, 75 `_phase_record` occurrences, 4 `_RY_BOOT_CRIT_HIT` sites, all dispatch + cleanup symmetry intact. `fish --no-execute` rc=0.
-- README: restore tables inside all 29 collapsibles (every `<details>` now opens to a markdown table). `Kernel cmdline` / `sysctl` / `Initramfs` / `tmpfiles` / `Env vars` reverted from code blocks; `Bootloader` consolidated to single 3-col `File|Key|Value` table; `systemd-resolved` / `systemd-logind` / `iwd` / `NetworkManager` / `cpupower-service` / `fstab` reverted from inline prose; `Destinations` reverted from bullet list to `Path|Perm`; `BIOS prerequisite` + `Strix Halo ACP audio` (previously prose) now `Setting|Value|Note` / `Issue|Workaround` tables. Table content trimmed of redundant detail.
+- Script: 76 adjacent `set -l/-g` runs collapsed to semicolon-chained one-liners (5204 → 5040 lines).
+- README: every `<details>` opens to a markdown table; prose-only collapsibles converted back to tables.
 
 v7.4.15 - v7.4.16 - 2026-05-20
 ------------------------------
 
-- README: trim 16 tables to vital information. Enumerative `Key | Value` tables for Kernel cmdline / Bootloader / Initramfs / systemd-resolved / iwd / NetworkManager / cpupower-service / sysctl / tmpfiles / Env vars / fstab collapsed to compact code blocks or inline `key=value` lists (script is source of truth via `--verify-static`). `systemd-logind` 9 `=ignore` rows → single inline list. `Packages — remove` Plymouth/micro dep groups collapsed. `Masked units` 5 power-target rows merged. `Destinations` repeated `System` column dropped; `User` permission inlined. `Result` / `Verdict` / `Caveats` / `Runtime variables` / `Logs` rows trimmed of redundant detail. `Strix Halo ACP audio` 1-row table → prose. Version badge synced (was stale at 7.4.14). Script unchanged.
+- README: 16 enumerative tables trimmed; script remains source of truth via `--verify-static`.
 
 v7.4.14 - v7.4.15 - 2026-05-20
 ------------------------------
 
-- README: strip parentheticals from 17 `<summary>` headers (Phase 2/3/Service/Operate sections). Variable-name / file-path / breakdown suffixes (e.g. `(PKGS_ADD)`, `(99-cachyos-nm.conf)`, `(4 loader.conf + 6 sdboot-manage.conf)`) moved out of collapsible titles; counts (`— 15`, `— 10 keys`) retained. Script unchanged — content audit clean (0 CRIT/HIGH/MED, 2 LOW false-positives, all v7.4.14 CHANGELOG claims verified against implementation).
+- README: 17 `<summary>` headers stripped of parenthetical suffixes; counts retained.
 
 v7.4.13 - v7.4.14 - 2026-05-20
 ------------------------------
 
 - `_rdi_summary`: gate REBOOT advisory on `_RY_BOOT_CRIT_HIT`; print `DO NOT REBOOT` + recovery on `FAIL-BOOT-CRITICAL`.
-- `_install_rebuild_boot`: record `Boot: post-rebuild sanity` SKIP on `_irb_sdboot_apply` non-zero return (was missing — 5 other boot-bail paths recorded it).
-- `_rdi_render_matrix`: totals line gains `N/A` bucket; matrix row count now matches sum across all 6 buckets.
-- `_ry_check_kernel_version`: rc=0/1/2 (ok/soft-warn/hard-fail); caller switches on rc — only hard floor `<6.14` elevates `INSTALL_HAD_ERRORS`. Stability-floor / ntsync / 6.19.0 warnings now record matrix `WARN` without elevating to `FAIL`.
-- `_install_preflight`: regdom `test;and;or` chain refactored to `if/else` (v7.3.5 consistency).
-- New `_irb_skip_post_mki` helper consolidates 3-row boot SKIP cascade (was 3 inline blocks × 3 sites).
-- New `_ip_bail_prep` helper consolidates 3-row preflight bail sequence (was 4 inline blocks × 3 sites).
-- README: matrix sample updated; `FAIL-BOOT-CRITICAL` row notes DO-NOT-REBOOT advisory.
+- `_install_rebuild_boot`: record `Boot: post-rebuild sanity` SKIP on `_irb_sdboot_apply` non-zero return.
+- `_rdi_render_matrix`: totals line gains `N/A` bucket.
+- `_ry_check_kernel_version`: rc=0/1/2 (ok/soft-warn/hard-fail); only hard floor `<6.14` elevates `INSTALL_HAD_ERRORS`.
+- `_install_preflight`: regdom `test;and;or` chain refactored to `if/else`.
+- New `_irb_skip_post_mki` and `_ip_bail_prep` helpers consolidate inline SKIP/bail cascades.
 
 v7.4.12 - v7.4.13 - 2026-05-20
 ------------------------------
 
-- Run-summary matrix now renders on preflight bail (`EXIT_PREFLIGHT` / `EXIT_USAGE`); previously visible only on success/boot-critical paths.
-- Verdict `FAIL-BOOT-CRITICAL` now keyed on dedicated `_RY_BOOT_CRIT_HIT` flag (was overloaded `_PROG_FINALIZED_SKIP`, which fired spuriously on preflight bails).
-- `_phase_record`: strip embedded newlines and `U+2502` (field delimiter) from `check`/`evidence` args; prevents matrix row corruption from future call sites with freeform text.
-- Stale comment on `_RY_DEPLOY_*_COUNT` reset behavior corrected.
+- Run-summary matrix renders on preflight bail (`EXIT_PREFLIGHT` / `EXIT_USAGE`).
+- Verdict `FAIL-BOOT-CRITICAL` keyed on dedicated `_RY_BOOT_CRIT_HIT` (was overloaded `_PROG_FINALIZED_SKIP`).
+- `_phase_record`: strip embedded newlines and `U+2502` field delimiter from arguments.
 
 v7.4.11 - v7.4.12 - 2026-05-20
 ------------------------------
 
-- Run-summary matrix: install completion now prints box-drawn Unicode matrix to stderr (`CHECK`/`RESULT`/`EVIDENCE` columns + totals + verdict + log path). Result states: `PASS`, `WARN`, `FAIL`, `DEFER`, `SKIP`, `--`. Verdicts: `PASS`, `PASS-WITH-WARNINGS`, `FAIL`, `FAIL-BOOT-CRITICAL`. `RY_INSTALL_NO_MATRIX=1` opts out (JSONL log unaffected).
+- Run-summary matrix: install completion prints box-drawn Unicode matrix to stderr (CHECK / RESULT / EVIDENCE + totals + verdict). `RY_INSTALL_NO_MATRIX=1` opts out.
 - New `_phase_record` helper appends rows to `_RY_PHASE_RESULTS` and JSONL.
-- New `_rdi_render_matrix` (renderer) + `_rdi_elapsed` (M m S s formatter).
-- `_ry_install_file`: track changed-vs-idempotent deploys via `_RY_DEPLOY_CHANGED_COUNT` / `_RY_DEPLOY_IDEMPOTENT_COUNT`.
-- Phase instrumentation: `_install_preflight`, `_install_packages`, `_install_aur_packages`, `_rdi_run_phases`, `_install_rebuild_boot`, `_irb_sdboot_apply`, `_install_finalize`, `_if_trim_pacman_cache`, `_if_nm_restart` — each records a matrix row on PASS/WARN/FAIL/DEFER/SKIP boundaries.
+- New `_rdi_render_matrix` renderer and `_rdi_elapsed` formatter.
+- `_ry_install_file`: track changed-vs-idempotent deploys.
+- Phase instrumentation across preflight / packages / AUR / configs / fstab / services / boot / finalize.
 
 v7.4.10 - v7.4.11 - 2026-05-20
 ------------------------------
 
-- `_unit_state`: description clarifies returns <3 lines on systemctl error.
-- `_csp_filter_rdeps`: drop redundant `2>/dev/null` on `_ps[2..4]` numeric tests (fish `string` always returns integer rc; pipe is always 4-stage).
-- `--description` coverage: 18 single-line helpers (`_ok`/`_fail`/`_fail_silent`/`_info`/`_warn`/`_err` + 12 `_content_*` generators) gain `--description` for 100% coverage.
+- `_csp_filter_rdeps`: drop redundant `2>/dev/null` on numeric `pipestatus` tests.
+- `--description` coverage: 18 single-line helpers gain `--description` for 100% coverage.
 
 v7.4.9 - v7.4.10 - 2026-05-20
 -----------------------------
 
-- Stage-1-rc semantics across 7 callers (`_installed_bytes`, `_vsb_entries`, `_vrs_nm_perms`, `_enum_boot_entries`, `_pbs_check_boot_files`, `_pbs_check_entries`, `_boot_initrd_size_scan`): check only stage 1 of pipes ending in fish `string` builtins — `string collect`/`string split0` rc=1 on empty input is normal, not an error. Empty enumeration now routes to "NONE found" diagnostics instead of misleading "Cannot enumerate (sudo lapsed)".
-- Remove `_pipe_all_ok` helper (dead after stage-1-specific call-site rewrites).
-
-v7.4.8 - v7.4.9 - 2026-05-20
-----------------------------
-
-- `_do_cleanup`: run `_dc_kill_children` before `_dc_erase_globals` so lock-release gate vars `_RY_HOLDS_LOCK` / `_RY_LOCK_DIR_OWNED` remain set when `$LOCK_DIR` is removed. Fixes orphaned `~/.local/share/ry-install/.lock/` after clean exit.
+- Stage-1-rc semantics: 7 callers check only pipe stage 1 — fish `string` builtins rc=1 on empty input is normal. Empty enumeration now routes to "NONE found" diagnostics.
 
 v7.4.7 - v7.4.8 - 2026-05-20
 ----------------------------
 
-- `_content__etc_default_cpupower-service.conf`: rename key `governor` → `GOVERNOR` for upstream cpupower env-script compatibility.
-- `_verify_static_system`: update `_chk_grep` pattern to `GOVERNOR='performance'`.
-- `_csp_filter_rdeps`: accept fish `string` rc=1 on stages 2-4 (no-op); only rc≥2 fails. Rename log token `PACTREE_PIPE_PARTIAL` → `PACTREE_PIPE_FAIL`.
-- README: document cpupower-service.conf key as `GOVERNOR`.
+- `_content__etc_default_cpupower-service.conf`: key `governor` → `GOVERNOR` for upstream env-script compatibility.
+- `_csp_filter_rdeps`: accept fish `string` rc=1 on stages 2-4 (no-op).
 
 v7.4.6 - v7.4.7 - 2026-05-20
 ----------------------------
 
-- `_ry_sudo_cache_banner`: trim from 17 lines to 3 (vital info only — risk, mitigations, recovery).
-- README: collapse `[!WARNING]` callout to single sentence.
+- `_ry_sudo_cache_banner`: trim to 3 lines (risk, mitigations, recovery).
 
 v7.4.5 - v7.4.6 - 2026-05-20
 ----------------------------
 
-- `_ip_probe_sudo_policy`: removed; strict NOPASSWD: ALL preflight gate dropped.
-- New `_ry_sudo_cache_banner`: install-mode stderr warning that sudo cache can lapse mid-run, listing mitigations.
-- `_dc_sweep_filesystem`: drop `ry-sudo-l-err.*` tmpfile glob.
-- README: replace strict sudo-policy preflight with `[!WARNING]` cache-lapse callout.
+- Strict `NOPASSWD: ALL` preflight gate dropped; replaced with `_ry_sudo_cache_banner` install-mode warning.
 
 v7.4.4 - v7.4.5 - 2026-05-20
 ----------------------------
 
-- Inline comments: collapse 7 multi-line blocks to single-line form; shebang + version header retained.
+- Inline comments collapsed from multi-line to single-line form.
 
-v7.4.3 - v7.4.4 - 2026-05-20
+v7.4.0 - v7.4.3 - 2026-05-20
 ----------------------------
 
-- README: 17-site trim — drop internal rationale, collapse verbose table cells, deduplicate AUR prose against Package caveats.
-- CHANGELOG: rewrite to one-bullet-per-change format.
-
-v7.4.2 - v7.4.3 - 2026-05-20
-----------------------------
-
-- `_ip_probe_sudo_policy`: regex requires `NOPASSWD:` explicitly.
-- `_install_aur_packages`: invert inverted early-exit; use `(count) -gt 0; or return 0`.
-- `_acquire_lock`: close `kill -0` / `/proc/$pid/comm` race.
-- `_dir_group_or_world_writable`: reject modes <3 chars post-strip; drop redundant `math 2>/dev/null`.
-- README: sudo-policy line uses `(user) NOPASSWD: ALL`.
-
-v7.4.1 - v7.4.2 - 2026-05-20
-----------------------------
-
-- `_ip_probe_sudo_policy`: ALL-grant regex gains end-anchor; skip `,\s*!` negations.
-- `_ensure_sudo_cached`: add `RY_INSTALL_NO_INTERACTIVE_SUDO=1` opt-out.
-- `_csp_filter_rdeps`: pipestatus checked on all 4 pipe stages.
-- `_acquire_lock`: PID-recycle check via `/proc/$_stale_pid/comm`.
+- Fish-version preflight: flat sentinel replaces nested `begin ... end`.
+- Preflight rejects `timeout(1)` lacking `--foreground/--kill-after` (busybox, uutils).
+- `_acquire_lock`: PID-recycle race closed via `/proc/$pid/comm`.
 - `_acquire_lock_fresh`: `umask 0077` around `mkdir`.
+- `_ensure_sudo_cached`: `RY_INSTALL_NO_INTERACTIVE_SUDO=1` opt-out.
+- `_csp_filter_rdeps`: pipestatus checked across all 4 pipe stages.
 - `_dc_kill_children`: SIGKILL grace widened to 0.5s.
 - `_cleanup_tmpfiles`: two-step `sudo -n true` gate before `sudo find`.
-- `_log`: empty-`LOG_FILE` early-return.
-- `_cleanup`: 7×`--on-signal` consolidated on one fn.
-- `_ry_install_file`: sudo `mkdir -m 0755`.
-- Cosmetic: redundant `2>/dev/null` removed from `_vrk_*` and `_dir_group_or_world_writable`.
-- README: `RY_INSTALL_NO_INTERACTIVE_SUDO` documented.
-
-v7.4.0 - v7.4.1 - 2026-05-20
-----------------------------
-
-- Fish-version preflight: flat `_fish_ok` sentinel replaces nested `begin ... end`.
-- New preflight: rejects `timeout(1)` lacking `--foreground/--kill-after` (busybox, uutils).
-- `_vrs_boot_perf`: `(count $_tm) -gt 0` guard replaces fragile `[-1]` negative-index.
 
 v7.3.9 - v7.4.0 - 2026-05-19
 ----------------------------
 
 - `_RY_LOUD_ERR`: critical preflight failures reach stderr in default QUIET install mode; `--check` stays silent.
-- `_ir_resolve_root_uuid`: 4-way mode dispatch (`install`/`install-file` hard-fail, `verify-static` hard-fails, `verify-runtime` logs + continues, `check` silent).
+- `_ir_resolve_root_uuid`: 4-way mode dispatch.
 - `_RY_LOG_SUPPRESS_CREATE`: no more orphan `preflight-*.jsonl` on argparse-error paths.
 - `_cse_batch_enable`: accept-list adds `linked`, `linked-runtime`, `indirect`, `generated`, `transient`.
 - `_chk_perms`: strip leading setuid/setgid/sticky digit.
@@ -148,94 +126,34 @@ v7.3.9 - v7.4.0 - 2026-05-19
 - `_boot_initrd_size_scan`: byte comparison removes off-by-1MB silent pass.
 - `_verify_runtime_kparams`: pre-extract preempt/BAR/TSC from full dmesg before 5000-line cap.
 
-v7.3.8 - v7.3.9 - 2026-05-18
-----------------------------
+v7.3.0 - v7.3.9 - 2026-05-17 to 2026-05-18
+------------------------------------------
 
 - Short-circuit chain collapse: 9 single-statement bodies, 16 three-line + 95 four-line if-end blocks (5177 → 4842 lines).
-- Invariants preserved: 253 functions, 12 managed destinations, all array counts.
-
-v7.3.7 - v7.3.8 - 2026-05-18
-----------------------------
-
-- `_ir_resolve_root_uuid`: `_reason` string distinguishes "findmnt failed" from "invalid UUID shape".
-- `_ry_check_disk_space`: labels switch from `GB`/`MB` to `GiB`/`MiB`.
+- `_ir_resolve_root_uuid`: `_reason` distinguishes "findmnt failed" from "invalid UUID shape".
+- `_ry_check_disk_space`: labels switch to `GiB`/`MiB`.
 - `_vrkg_rebar_sam`: lspci regex broadens to any G-suffix or M-values ≥ 500.
-- README + CHANGELOG re-styled; four composite statements split across continuations.
-
-v7.3.5 - v7.3.6 - 2026-05-17
-----------------------------
-
-- `_err_loud`: log-only when `MODE=check` (silence contract preserved).
-- `_ry_show_help`: clarifies fish 3.x `--on-signal` limitation; notes `--check` requirements.
-- `_ry_do_check`: three rc-blocks collapse to phase-fn-name loop.
-- `_ry_check_network`: `test;and;or` replaced with explicit `if/else`.
-- `_acquire_lock`: stale-pid regex tightens `^\d+$` → `^[1-9]\d*$`.
-- `_run`: tmpdir-alloc sentinel promoted from magic 251 to `EXIT_RUN_TMPFAIL`.
-
-v7.3.0 - v7.3.3 - 2026-05-17
-----------------------------
-
+- `_err_loud`: log-only when `MODE=check` (silence contract).
 - `_ry_check_deps`: systemd `<250` hard-fail preflight gate.
+- `_run`: tmpdir-alloc sentinel promoted from magic 251 to `EXIT_RUN_TMPFAIL`.
 - Log filename format: `MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl`.
 
-v7.2.4 - v7.2.6 - 2026-05-17
-----------------------------
-
-- `_vre_fstab`: noatime/lazytime/commit=10 token tests unified under `(^|,)tok(,|$)`.
-- `_ir_validate_counts`: adds `_RY_POST_HOOKS:14` and `_RY_BOOT_CRITICAL_DSTS:4`.
-- `_mr_copy_size_verify`: adds `cmp -s` after size match.
-- README: bootloader section 8 → 10 keys; initramfs invariants 4 → 9 → 11.
-
-v7.2.1 - v7.2.3 - 2026-05-17
-----------------------------
-
-- `_vmh_order_checks`: adds systemd:autodetect, autodetect:microcode pair rules and fsck-last invariant.
-- `cpupower-epp.service` dropped; `SERVICE_DESTINATIONS` empty.
-- `_RY_MANAGED_FILE_COUNT`: 13 → 12.
-- `EXPECTED_SERVICES`: 4 → 3.
-- README: Configuration expands 2 → 19 per-domain collapsibles.
-
-v7.1.0 - v7.2.0 - 2026-05-17
+v7.2.0 - v7.2.6 - 2026-05-17
 ----------------------------
 
 - New `_ry_apply_wireless_regdom` driven by `RY_INSTALL_WIRELESS_REGDOM`.
-- `_install_aur_packages`: documents benign tokens via `AUR_NOISE_NOTE`.
-- `/etc/drirc` dropped; `/etc/default/cpupower-service.conf` added.
-- `PKGS_ADD` gains `cpupower` (14 → 15).
-- `EXPECTED_SERVICES` gains `cpupower.service`.
+- `/etc/default/cpupower-service.conf` added; `/etc/drirc` dropped.
+- `PKGS_ADD` gains `cpupower`; `EXPECTED_SERVICES` gains `cpupower.service`.
 - `_vrk_cpu_state`: scaling_governor `powersave` → `performance`.
-- README: Strix Halo ACP audio known-issue + REGDOM env-var row.
+- `_vmh_order_checks`: adds systemd:autodetect, autodetect:microcode pair rules and fsck-last invariant.
+- `cpupower-epp.service` dropped; `SERVICE_DESTINATIONS` empty.
+- `_RY_MANAGED_FILE_COUNT`: 13 → 12; `EXPECTED_SERVICES`: 4 → 3.
+- `_vre_fstab`: noatime/lazytime/commit=10 token tests unified under `(^|,)tok(,|$)`.
+- `_ir_validate_counts`: adds `_RY_POST_HOOKS:14` and `_RY_BOOT_CRITICAL_DSTS:4`.
+- `_mr_copy_size_verify`: adds `cmp -s` after size match.
 
-v7.0.17 - v7.0.20 - 2026-05-17
-------------------------------
-
-- `_vrkg_rebar_sam`: lspci gains `command` prefix; drops 256M match.
-- `_RY_DMESG_BAR`: drops `above.4g`.
-- `_MY_UID`: hoists below early-exit loop.
-- `_install_aur_packages`: sets `_RY_AUR_PARTIAL` only when `0 < failed < count`.
-- `_post_service`: adds `systemctl try-restart` after `enable --now`.
-- `_post_nm`: adds `try-restart iwd.service` when `iwd/main.conf` is the target.
-
-v7.0.11 - v7.0.16 - 2026-05-16
-------------------------------
-
-- `KVER`: switches to `(command uname -r)`.
-- `_enum_boot_entries`: pipestatus capture + `_RY_BOOT_ENUM_OK`.
-- `_acquire_lock_fresh`: `_RY_LOCK_DIR_OWNED` hoists above `chmod 700`.
-- `_vs_read_symmetry_selftest`: memoised via `_RY_READSYM_RESULT`.
-- Pre-bootstrap `command -q date` check.
-- `_ry_check_deps`: adds `date(1)`.
-
-v7.0.7 - v7.0.10 - 2026-05-16
------------------------------
-
-- `_vre_fstab`: malformed-line filter becomes `_RY_AWK_EXT4_MALFORMED_FILTER`.
-- `_vrkm_blacklist`: normalises hyphen → underscore before `lsmod` compare.
-- Sixty-eight bare system-command invocations gain a `command` prefix.
-- README: `<details>` blocks switch to tables for mobile rendering.
-
-v7.0 - v7.0.6 - 2026-05-15 to 2026-05-16
-----------------------------------------
+v7.0.0 - v7.1.0 - 2026-05-15 to 2026-05-17
+------------------------------------------
 
 - NetworkManager 1.56.0 compat: drop `wifi.iwd.autoconnect=false`.
 - `MASK` gains `avahi-daemon.service` and `.socket` (10 → 12).
@@ -246,50 +164,36 @@ v7.0 - v7.0.6 - 2026-05-15 to 2026-05-16
 - `_vsb_mkinitcpio`: amdgpu probe `*amdgpu*` → `\bamdgpu\b`.
 - `_ry_check_deps`: GNU-coreutils `df` probe.
 - `HandleSecureAttentionKey` gate: `<256` → `<257`.
+- `_vrkm_blacklist`: normalises hyphen → underscore before `lsmod` compare.
+- Sixty-eight bare system-command invocations gain a `command` prefix.
+- README: `<details>` blocks switch to tables for mobile rendering.
 
-v6.5.13 - v6.5.18 - 2026-05-15
-------------------------------
+v6.5.0 - v6.5.18 - 2026-05-14 to 2026-05-15
+-------------------------------------------
 
 - `_rvc_dispatch`: adds `*/tmpfiles.d/*` case and `_grep_tmpfiles_entry`.
-- New `/etc/tmpfiles.d/99-cachyos-thp.conf` managed destination (12 → 13).
+- New `/etc/tmpfiles.d/99-cachyos-thp.conf` managed destination.
 - `_aur_verify_mt7925`: asserts both `pacman` and `modinfo` resolve.
-- `_installed_bytes`: terminal `printf` collapsed.
-- README tables trimmed.
-
-v6.5.8 - v6.5.12 - 2026-05-15
------------------------------
-
 - Log-dir mode probe extended to three managed paths.
 - `_awf_finalize_mv`: sudo-lapse returns `$EXIT_FAIL`.
 - `_ry_exit`: bail path writes the JSONL footer.
 - `_cleanup_pipe`: SIGPIPE log gated on `_RY_HEADER_WRITTEN`.
-- `_vrs_installed_file_perms`: emits `perm_vfat_skipped` count.
-
-v6.5 - v6.5.7 - 2026-05-14
---------------------------
-
 - `_dc_sweep_tmpfiles`: spurious `TMPFILE_STUCK` fix.
 - `_verify_static_services`: multi-`ExecStart` guard.
 - `_err_loud`: deduplicated via `_msg_print --force`.
 - `_vsb_entries`: distinguishes lapsed-sudo from empty entries dir.
 - `_ry_check_deps`: adds 10 coreutils.
-- `_chk_grep`: stage-2 switches to `grep -wF`.
 - `KERNEL_PARAMS`: metachar regex backslash escaping tightened.
 
-v6.2.9 - v6.2.13 - 2026-05-13 to 2026-05-14
+v6.2.0 - v6.2.13 - 2026-05-12 to 2026-05-14
 -------------------------------------------
 
 - HOME field-6 captured via `awk -F:` (GECOS-tolerant).
 - `_ry_check_deps`: adds `mv`, `grep`.
-- `pacman -Qq` and `-T` status captured.
 - JSONL header written before `_init_runtime`.
 - `LOCK_DIR`: gains `chmod 700`.
 - Emit functions use `printf` (flag-injection guard).
 - `_run` split into `_run`, `_run_redact_cmd`, `_run_effective_timeout`.
-
-v6.2.4 - v6.2.8 - 2026-05-13
-----------------------------
-
 - `_run`: timeout-bypass for `pacman`, `paru`, `mkinitcpio`, `sdboot-manage`, `paccache`.
 - Tmpfile-path redaction under `$TMPDIR`.
 - `_ip_pacman_invoke`: `-Syyu` retry gated on `RY_INSTALL_ALLOW_PARTIAL_UPGRADE`.
@@ -298,11 +202,6 @@ v6.2.4 - v6.2.8 - 2026-05-13
 - `_atomic_write_file`: post-write symlink re-check (TOCTOU).
 - `_fstab_atomic_replace`: `findmnt --verify` hard-fail.
 - User destinations install with `0600`.
-- Capture cap raised from 100 to 500.
-
-v6.2.0 - v6.2.3 - 2026-05-12 to 2026-05-13
-------------------------------------------
-
 - `--install-file`: single-file redeploy with per-target post-hook dispatch.
 - argparse `--exclusive` mode group.
 - Atomic `mkdir` + pid-file lock.

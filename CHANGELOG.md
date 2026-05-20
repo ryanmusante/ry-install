@@ -1,6 +1,11 @@
 ry-install ChangeLog
 ====================
 
+v7.4.4 - v7.4.5 - 2026-05-20
+----------------------------
+
+- Inline comments: collapse 7 multi-line blocks to single-line form; shebang + version header retained.
+
 v7.4.3 - v7.4.4 - 2026-05-20
 ----------------------------
 

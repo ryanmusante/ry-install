@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.4 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.5 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.4"
+set -g VERSION "7.4.5"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -380,8 +380,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
             set _can_reclaim true
             functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID not running, reclaiming)"
         else
-            # PID alive — verify it's actually a fish process. Linux recycles PIDs aggressively;
-            # original ry-install may have died and PID inherited by an unrelated process.
+            # PID alive — verify it's a fish process; Linux recycles PIDs and original ry-install may have died with PID inherited by an unrelated process.
             set -l _stale_comm (command cat -- "/proc/$_stale_pid/comm" 2>/dev/null | string trim --)
             if test -n "$_stale_comm"; and test "$_stale_comm" != fish
                 set _can_reclaim true
@@ -484,8 +483,7 @@ function _dc_kill_children --description "_do_cleanup sub. Release lock + reap c
     end
     if command -q pkill
         command pkill -TERM -P "$fish_pid" 2>/dev/null
-        # 0.5s grace — gives pacman/paru and atomic ops a chance to flush.
-        # $_RY_SLEEP_FRAC may be 0.1s on GNU coreutils which is too tight for atomic-mv-class ops.
+        # 0.5s grace: gives pacman/paru and atomic ops a chance to flush; $_RY_SLEEP_FRAC may be 0.1s on GNU coreutils which is too tight for atomic-mv-class ops.
         command sleep 0.5 2>/dev/null; or command sleep 1 2>/dev/null
         command pkill -KILL -P "$fish_pid" 2>/dev/null
     end
@@ -793,8 +791,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     _ir_validate_keys
     _ir_precompute_caches
     for _kp in $KERNEL_PARAMS
-        # Reject whitespace + shell metachars: would corrupt /etc/kernel/cmdline parsing or LINUX_OPTIONS quote-escaping in sdboot-manage.conf (v6.5.7).
-        # `\\\\` in single-quoted fish = `\\` in string = single literal backslash inside the regex char class.
+        # Reject whitespace + shell metachars (would corrupt /etc/kernel/cmdline parsing or LINUX_OPTIONS quote-escaping in sdboot-manage.conf, v6.5.7); `\\\\` in single-quoted fish = `\\` in string = single literal backslash inside the regex char class.
         if string match -qr -- '[\s"`$;\\\\]' "$_kp"; _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _pn in $PKGS_ADD $PKGS_DEL $AUR_PKGS
@@ -894,8 +891,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before re
             _err "Sudo credential not cached and RY_INSTALL_NO_INTERACTIVE_SUDO=1 — refusing interactive sudo -v"
             _log "SUDO_CACHE_NONINTERACTIVE_FORCED: RY_INSTALL_NO_INTERACTIVE_SUDO=1"
         else if isatty 0; and isatty 2
-            # 2>"$_sudo_err" truncates the file via '>', replacing stale non-interactive stderr so the failure-reason readback below reports the interactive attempt.
-            # NOTE: Interactive prompt may appear here — set RY_INSTALL_NO_INTERACTIVE_SUDO=1 for strict-unattended runs (cron, ansible, systemd unit).
+            # 2>"$_sudo_err" truncates the file via '>', replacing stale non-interactive stderr so the failure-reason readback reports the interactive attempt; interactive prompt may appear here — set RY_INSTALL_NO_INTERACTIVE_SUDO=1 for strict-unattended runs (cron, ansible, systemd unit).
             sudo -v 2>"$_sudo_err"
             set _rc $status
         else
@@ -3316,9 +3312,7 @@ end
 function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit"
     test (string length -- "$mode") -gt 3; and set mode (string sub -s 2 -- "$mode")
     not string match -qr '^[0-7]+$' -- "$mode"; and return 1
-    # Reject malformed modes shorter than 3 chars (post-strip); guards against `string sub` returning empty
-    # which would feed `math` an unparseable expression and emit "Argument is not a number: ''" via the
-    # downstream numeric `test`. stat -c %a guarantees ≥3 digits for any file, so this is defence-in-depth.
+    # Reject malformed modes shorter than 3 chars post-strip (guards against `string sub` returning empty which would feed `math` an unparseable expression and emit "Argument is not a number: ''" via downstream numeric `test`); stat -c %a guarantees ≥3 digits for any file — defence-in-depth.
     test (string length -- "$mode") -eq 3; or return 1
     set -l group_w (string sub -s 2 -l 1 -- "$mode")
     set -l other_w (string sub -s 3 -l 1 -- "$mode")
@@ -3375,13 +3369,9 @@ function _ip_probe_sudo_policy --description "Probe sudo -l: reject incompatible
             return $EXIT_PREFLIGHT
         end
         string match -qr -- '(\bNOEXEC\b|!SETENV\b|\bLOG_OUTPUT\b)' "$_sl"; and continue
-        # Reject lines with comma-separated negation tokens (`, !/usr/bin/cmd`) — those restrict the ALL grant
-        # and would mid-flight fail an unattended install when an excluded command is invoked.
+        # Reject lines with comma-separated negation tokens (`, !/usr/bin/cmd`) — those restrict the ALL grant and would mid-flight fail an unattended install when an excluded command is invoked.
         string match -qr -- ',\s*!' "$_sl"; and continue
-        # Strict: require NOPASSWD on the ALL grant. Cached `sudo -v` credentials expire mid-install
-        # (default 15-min timestamp_timeout vs 3–8-min install + longer AUR DKMS builds), so plain
-        # `(user) ALL` would fail at `sudo -n` once the cache lapses. End-anchor on ALL rejects
-        # trailing restrictions.
+        # Strict: require NOPASSWD on the ALL grant — cached `sudo -v` credentials expire mid-install (default 15-min timestamp_timeout vs 3-8-min install + longer AUR DKMS builds), so plain `(user) ALL` would fail at `sudo -n` once the cache lapses; end-anchor on ALL rejects trailing restrictions.
         string match -qr -- '\(\s*[^)]+\s*\)\s+NOPASSWD:\s*ALL\s*$' "$_sl"; and set sudo_all (math $sudo_all + 1)
     end
     if test "$sudo_all" -eq 0

@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.8 (2026-05-19) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.10 (2026-05-19) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.8"
+set -g VERSION "7.4.10"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -487,12 +487,12 @@ function _dc_kill_children --description "_do_cleanup sub. Release lock + reap c
         command pkill -KILL -P "$fish_pid" 2>/dev/null
     end
 end
-function _do_cleanup --description "Master cleanup: orchestrate revert → tmpfiles → fs sweep → globals → children"
+function _do_cleanup --description "Master cleanup: orchestrate revert → tmpfiles → fs sweep → children → globals"
     _dc_mki_revert
     _dc_sweep_tmpfiles
     _dc_sweep_filesystem
-    _dc_erase_globals
     _dc_kill_children
+    _dc_erase_globals
 end
 
 set -g VERIFY_OK 0
@@ -986,12 +986,6 @@ function _mktemp_or_null --description "mktemp wrapper; emits path on stdout, /d
     echo "$_tf"
     return 0
 end
-function _pipe_all_ok --description "True iff every stage of \$pipestatus (passed as argv) returned 0"
-    for _s in $argv
-        test "$_s" -eq 0 2>/dev/null; or return 1
-    end
-    return 0
-end
 function _tmp_dir --description "Return \$TMPDIR if set, else /tmp"
     if set -q TMPDIR; and test -n "$TMPDIR"
         printf '%s' "$TMPDIR"
@@ -1017,7 +1011,7 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
         sudo -n test -r "$dst" 2>/dev/null; or return 1
         set _bytes (sudo -n cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines)
         set -l _ps $pipestatus
-        if not _pipe_all_ok $_ps
+        if test "$_ps[1]" -ne 0
             sudo -n true 2>/dev/null; or return 2
             return 1
         end
@@ -1025,7 +1019,7 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
         test -r "$dst"; or return 1
         set _bytes (command cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines)
         set -l _ps $pipestatus
-        _pipe_all_ok $_ps; or return 1
+        test "$_ps[1]" -eq 0; or return 1
     end
     # bare printf — adding `| string collect --no-trim-newlines --allow-empty` causes outer command-sub at callers to inject a phantom \n (breaks symmetry with _ry_content_bytes)
     printf '%s' "$_bytes"
@@ -2125,7 +2119,7 @@ function _vsb_entries --description "_verify_static_boot sub: \$BOOT entries enu
         set _entries_dir_probed true
         set -l _entries (sudo -n find "$_boot/loader/entries" -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0)
         set -l _ps $pipestatus
-        _pipe_all_ok $_ps; or set _entries_pipe_ok false
+        test "$_ps[1]" -eq 0; or set _entries_pipe_ok false
         set entry_count (count $_entries)
     else if not sudo -n true 2>/dev/null
         _warn "  Boot entries: sudo cache lapsed — cannot enumerate $_boot/loader/entries"
@@ -3142,7 +3136,7 @@ function _vrs_nm_perms --description "Runtime session check: NetworkManager syst
     if not test -d "$nm_conn_dir"; _info "  NetworkManager connections: directory not found"; return 0; end
     set -l conn_files (sudo -n find "$nm_conn_dir" -maxdepth 1 -name '*.nmconnection' -type f -print0 2>/dev/null | string split0)
     set -l _conn_ps $pipestatus
-    if not _pipe_all_ok $_conn_ps; _warn "  NetworkManager connections: cannot enumerate (sudo lapse or read error)"; return 0; end
+    if test "$_conn_ps[1]" -ne 0; _warn "  NetworkManager connections: cannot enumerate (sudo lapse or read error)"; return 0; end
     if test (count $conn_files) -gt 0
         set -l bad_perms 0
         for conn_file in $conn_files
@@ -3975,7 +3969,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
         _log "PACTREE_PROBE_FAIL: pkg=$pkg pactree_rc=$_ps[1] (timeout, missing pkg, or db error)"
         return 0
     end
-    # Stages 2-4 are fish `string` subcommands; rc=1 means "no changes/matches" (normal), only rc≥2 is a real error — so _pipe_all_ok would false-flag these.
+    # Stages 2-4 are fish `string` subcommands; rc=1 means "no changes/matches" (normal), only rc≥2 is a real error.
     if test "$_ps[2]" -ge 2 2>/dev/null; or test "$_ps[3]" -ge 2 2>/dev/null; or test "$_ps[4]" -ge 2 2>/dev/null
         set -l _ps_str (string join , -- $_ps)
         _warn "  $pkg: pactree pipe failure (pipestatus=$_ps_str) — skipping for safety"
@@ -4229,7 +4223,7 @@ function _enum_boot_entries --argument-names esp --description "Enumerate \$esp/
     set -g _RY_BOOT_ENUM_OK true
     set -l _basenames (sudo -n find "$esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | string split0)
     set -l _ps $pipestatus
-    if not _pipe_all_ok $_ps
+    if test "$_ps[1]" -ne 0
         set -g _RY_BOOT_ENUM_OK false
         set -g _RY_BOOT_COUNT 0
         functions -q _log; and _log "BOOT_ENUM_FAIL: esp=$esp pipestatus=$_ps (sudo lapse or read error)"
@@ -4241,7 +4235,7 @@ function _pbs_check_boot_files --argument-names boot glob label --description "_
     set -l errors 0
     set -l files (sudo -n find "$boot" -maxdepth 1 -name "$glob" -type f -print0 2>/dev/null | string split0)
     set -l _ps $pipestatus
-    if not _pipe_all_ok $_ps
+    if test "$_ps[1]" -ne 0
         _err "Cannot enumerate $boot/ for $glob (sudo lapsed or read error)"
         set errors (math $errors + 1)
     else if test (count $files) -eq 0
@@ -4272,7 +4266,7 @@ function _pbs_check_entries --argument-names boot --description "Enumerate \$BOO
     set -l errors 0
     set -l confs (sudo -n find "$boot/loader/entries" -maxdepth 1 -name '*.conf' -type f -print0 2>/dev/null | string split0)
     set -l _cf_ps $pipestatus
-    if not _pipe_all_ok $_cf_ps
+    if test "$_cf_ps[1]" -ne 0
         _err "Cannot enumerate $boot/loader/entries (sudo lapsed or read error)"
         set errors (math $errors + 1)
         echo $errors
@@ -4315,7 +4309,7 @@ end
 function _boot_initrd_size_scan --argument-names esp --description "Post-rebuild initramfs size sanity check"
     set -l _initrd_list (sudo -n find "$esp" -maxdepth 1 -type f -name 'initramfs-*.img' -print0 2>/dev/null | string split0)
     set -l _il_ps $pipestatus
-    if not _pipe_all_ok $_il_ps; _warn "Cannot enumerate initramfs-*.img for size check (sudo lapsed or read error)"; return 0; end
+    if test "$_il_ps[1]" -ne 0; _warn "Cannot enumerate initramfs-*.img for size check (sudo lapsed or read error)"; return 0; end
     # Compare in bytes to avoid floor-to-MB precision loss (100.9MB initrd would otherwise silently pass a 100MB threshold).
     set -l _threshold_b (math "$INITRD_WARN_MB * 1048576")
     for initrd in $_initrd_list

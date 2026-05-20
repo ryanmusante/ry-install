@@ -1,6 +1,23 @@
 ry-install ChangeLog
 ====================
 
+v7.4.9 - v7.4.10 - 2026-05-19
+-----------------------------
+
+- `_installed_bytes` (sudo + non-sudo branches): check only stage 1 (`cat` rc) — `string collect` rc=1 on empty input is normal, not an error.
+- `_vsb_entries`: check only stage 1 (`find` rc); empty entries dir now correctly routes to `_fail "NONE in entries/"` with `sdboot-manage gen` recovery hint.
+- `_vrs_nm_perms`: check only stage 1; zero NM connection files no longer false-warn "cannot enumerate" on iwd-only systems.
+- `_enum_boot_entries`: check only stage 1; empty entries dir no longer logs spurious BOOT_ENUM_FAIL with sudo-lapse cause.
+- `_pbs_check_boot_files`: check only stage 1; zero kernel/initramfs files now route to "No X found" instead of misleading "Cannot enumerate (sudo lapsed)".
+- `_pbs_check_entries`: same — empty entries dir routes to "No boot loader entries" diagnostic.
+- `_boot_initrd_size_scan`: check only stage 1; zero initramfs files no longer false-warn.
+- Remove `_pipe_all_ok` helper (dead code; all callers now use stage-1-specific checks per fish `string` rc semantics).
+
+v7.4.8 - v7.4.9 - 2026-05-19
+----------------------------
+
+- `_do_cleanup`: run `_dc_kill_children` before `_dc_erase_globals` so lock-release gate vars `_RY_HOLDS_LOCK` / `_RY_LOCK_DIR_OWNED` are still set when `$LOCK_DIR` is removed. Fixes orphaned `~/.local/share/ry-install/.lock/` after every clean exit (regression from cleanup-decomposition refactor).
+
 v7.4.7 - v7.4.8 - 2026-05-19
 ----------------------------
 

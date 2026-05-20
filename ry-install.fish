@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.2 (2026-05-19) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.4 (2026-05-20) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.2"
+set -g VERSION "7.4.4"
 set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3
 set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
@@ -386,6 +386,10 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
             if test -n "$_stale_comm"; and test "$_stale_comm" != fish
                 set _can_reclaim true
                 functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid comm='$_stale_comm' (not fish — PID recycled, reclaiming)"
+            else if test -z "$_stale_comm"; and not command kill -0 "$_stale_pid" 2>/dev/null
+                # Race: proc died between initial kill -0 success and /proc/$pid/comm read.
+                set _can_reclaim true
+                functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID died during comm read, reclaiming)"
             end
         end
     end
@@ -3312,10 +3316,14 @@ end
 function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit"
     test (string length -- "$mode") -gt 3; and set mode (string sub -s 2 -- "$mode")
     not string match -qr '^[0-7]+$' -- "$mode"; and return 1
+    # Reject malformed modes shorter than 3 chars (post-strip); guards against `string sub` returning empty
+    # which would feed `math` an unparseable expression and emit "Argument is not a number: ''" via the
+    # downstream numeric `test`. stat -c %a guarantees ≥3 digits for any file, so this is defence-in-depth.
+    test (string length -- "$mode") -eq 3; or return 1
     set -l group_w (string sub -s 2 -l 1 -- "$mode")
     set -l other_w (string sub -s 3 -l 1 -- "$mode")
-    set -l group_has_w (math "floor($group_w / 2) % 2" 2>/dev/null)
-    set -l other_has_w (math "floor($other_w / 2) % 2" 2>/dev/null)
+    set -l group_has_w (math "floor($group_w / 2) % 2")
+    set -l other_has_w (math "floor($other_w / 2) % 2")
     test "$group_has_w" -eq 1; and return 0
     test "$other_has_w" -eq 1; and return 0
     return 1
@@ -3370,12 +3378,15 @@ function _ip_probe_sudo_policy --description "Probe sudo -l: reject incompatible
         # Reject lines with comma-separated negation tokens (`, !/usr/bin/cmd`) — those restrict the ALL grant
         # and would mid-flight fail an unattended install when an excluded command is invoked.
         string match -qr -- ',\s*!' "$_sl"; and continue
-        # Strict end-anchor: only count lines that grant unrestricted ALL with no trailing restrictions.
-        string match -qr -- '\(\s*[^)]+\s*\)\s+(NOPASSWD:\s*)?ALL\s*$' "$_sl"; and set sudo_all (math $sudo_all + 1)
+        # Strict: require NOPASSWD on the ALL grant. Cached `sudo -v` credentials expire mid-install
+        # (default 15-min timestamp_timeout vs 3–8-min install + longer AUR DKMS builds), so plain
+        # `(user) ALL` would fail at `sudo -n` once the cache lapses. End-anchor on ALL rejects
+        # trailing restrictions.
+        string match -qr -- '\(\s*[^)]+\s*\)\s+NOPASSWD:\s*ALL\s*$' "$_sl"; and set sudo_all (math $sudo_all + 1)
     end
     if test "$sudo_all" -eq 0
         _rm_tmp "$_sudo_l_err" false
-        _err "Sudo policy does not grant unrestricted ALL (sudo -l listed restricted commands only)"
+        _err "Sudo policy does not grant unrestricted NOPASSWD: ALL (sudo -l: no '(user) NOPASSWD: ALL' line, or only restricted commands)"
         return $EXIT_PREFLIGHT
     end
     _rm_tmp "$_sudo_l_err" false
@@ -3705,7 +3716,7 @@ function _install_packages --description "Install managed packages via pacman -S
     return 0
 end
 function _install_aur_packages --description "Install AUR packages via paru (no --removemake for DKMS)"
-    set -q AUR_PKGS; or test (count $AUR_PKGS) -eq 0; or return 0
+    test (count $AUR_PKGS) -gt 0; or return 0
     if not command -q paru
         _err "paru not found — cannot install AUR packages: $AUR_PKGS"
         _err "  Install paru: sudo pacman -S --needed paru"

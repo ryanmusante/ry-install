@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.4.2-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.4-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -75,15 +75,12 @@ Typical duration: **3–8 minutes**.
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | Before `-Syu` | Read [CachyOS](https://wiki.cachyos.org) + [Arch news](https://archlinux.org/news/) |
 
-Additional preflight gates (systemd ≥ 250, unrestricted sudo via
-`sudo -l` parsing, GNU coreutils ≥ 8.x with
-`timeout --foreground/--kill-after`, hardware match) are enforced and
-fail loudly. The sudo-policy probe rejects `requiretty`,
-`tty_tickets`, and `timestamp_timeout=0` Defaults; it also requires at
-least one strict `(user) [NOPASSWD:] ALL` grant with no trailing
-`, !cmd` negation (an ALL-grant that excludes specific commands is
-treated as restricted). The ext4 `/etc/fstab` rewrite is idempotent
-and mount-semantics-preserving — only the literal text differs.
+Additional preflight gates: systemd ≥ 250, GNU coreutils ≥ 8.x
+(`timeout --foreground/--kill-after`), hardware match, and unrestricted
+sudo via `sudo -l` — at least one `(user) NOPASSWD: ALL` grant with no
+trailing `, !cmd` negation (`requiretty` / `tty_tickets` /
+`timestamp_timeout=0` Defaults are rejected). The ext4 `/etc/fstab`
+rewrite is idempotent and mount-semantics-preserving.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -127,7 +124,7 @@ Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 | (no args) | Full unattended install |
 | `-V, --verbose` | Show output for install / check |
 | `--verify-static` | Check config files match embedded content |
-| `--verify-runtime` | Check live system state (after reboot); continues with UUID-independent probes when root UUID is unresolvable |
+| `--verify-runtime` | Check live system state (after reboot) |
 | `--check` | Silent idempotency probe (0=clean, 3=preflight, 10=drift) |
 | `--install-file <path>` | Re-deploy a single managed file (absolute path) |
 | `--` | End of options (positionals after `--` are rejected) |
@@ -204,13 +201,9 @@ Default install path: `pacman -Syu --needed --noconfirm`.
 | `mkinitcpio-firmware` | Firmware blobs not in `linux-firmware` |
 | `mt76-mt7925-dkms` | MediaTek MT7925 WiFi DKMS (panic fix) |
 
-Installed via `paru -S --needed --noconfirm --skipreview --cleanafter`.
-`--removemake` deliberately omitted: DKMS rebuilds against running
-kernel and needs makedeps. `--skipreview` suppresses interactive key
-import — on `invalid or corrupted package (PGP signature)`, pre-import
-the key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually.
 Post-install `modinfo mt7925e` cross-check verifies DKMS build
-succeeded (paru `rc=0` alone is not definitive).
+succeeded (paru `rc=0` alone is not definitive). See Package caveats
+for `paru` flags and PGP-failure handling.
 
 </details>
 
@@ -224,11 +217,9 @@ succeeded (paru `rc=0` alone is not definitive).
 | `lib32-mesa` | 32-bit Mesa |
 
 `--verify-runtime` fails if any are missing (DXVK/VKD3D-Proton
-requires this set). Not in `PKGS_ADD`: `vulkan-radeon` and
-`lib32-vulkan-radeon` are installed by `chwd` (CachyOS hardware
-detection) during OS install on AMD GPU profiles. `lib32-mesa` is
-the only direct `PKGS_ADD` member of this set (also chwd-installed;
-the `PKGS_ADD` entry is idempotent via `--needed`).
+dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
+`chwd` on AMD GPU profiles; `lib32-mesa` is in `PKGS_ADD`
+(idempotent via `--needed`).
 
 </details>
 
@@ -319,10 +310,8 @@ Deployed to `/etc/kernel/cmdline` (single line: `rw root=UUID=<uuid>
 | `COMPRESSION` | `zstd` |
 | `COMPRESSION_OPTIONS` | `(-1 -T0)` |
 
-11 hooks total. `_vmh_order_checks` enforces 11 hook invariants:
-`systemd`→`autodetect`, `autodetect`→`microcode`, `autodetect`→`modconf`,
-`systemd`→`sd-vconsole`, `systemd`→`keyboard`, `keyboard`→`sd-vconsole`,
-`modconf`→`kms`, `block`→`filesystems`, `fsck` last, `base` first, and no duplicates. Existence-only
+11 ordering invariants enforced by `_vmh_order_checks`
+(including `base` first, `fsck` last, no duplicates). Existence-only
 validation also runs post-pacman.
 
 </details>
@@ -392,7 +381,6 @@ Skipped when `iwd` package not installed.
 | `governor` | `'performance'` |
 
 Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
-Under `amd_pstate=active`, `governor=performance` routes to EPP=performance internally.
 
 </details>
 
@@ -418,8 +406,7 @@ Under `amd_pstate=active`, `governor=performance` routes to EPP=performance inte
 | `fs.protected_regular` | `2` |
 | `vm.compaction_proactiveness` | `0` |
 
-Priority 99 — loaded after CachyOS vendor `70-cachyos-settings.conf`;
-overrides `net.core.netdev_max_backlog 4096 → 16384`.
+Priority 99 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
 
 </details>
 
@@ -434,8 +421,7 @@ overrides `net.core.netdev_max_backlog 4096 → 16384`.
 | Argument | `0` |
 
 `systemd-tmpfiles-setup.service` writes this on every boot; applied
-immediately during install and on `--install-file` re-deploy via
-`systemd-tmpfiles --create`.
+immediately during install and on `--install-file` re-deploy.
 
 </details>
 
@@ -457,8 +443,7 @@ immediately during install and on `--install-file` re-deploy via
 | `WINEDEBUG` | `-all` |
 
 Loaded by `systemd --user` (COSMIC, Flatpak, D-Bus activated apps).
-Active systemd-user services retain old env until restarted; log out
-and back in to apply.
+Log out and back in to apply.
 
 </details>
 
@@ -478,12 +463,10 @@ desktop/power units, then `daemon-reload` + enable runtime units.
 | `lazytime` | Defer in-memory atime/mtime writeback |
 | `commit=10` | Flush journal every 10s (default 5) |
 
-Idempotent `awk` rewrite: comments, non-ext4 lines, digits-only
-options-column (malformed), and already-conformant entries pass
-through unchanged. Strips conflicting tokens (`atime`, `relatime`,
-`strictatime`, `defaults`, existing `commit=*`) before adding ours.
-`findmnt --verify` gates the atomic `mv`. No automatic backup —
-snapshot `/etc/fstab` before first run.
+Idempotent ext4 rewrite — strips conflicting `atime`, `relatime`,
+`strictatime`, `defaults`, existing `commit=*` tokens before applying.
+`findmnt --verify` gates the atomic `mv`. **No automatic backup —
+snapshot `/etc/fstab` before first run.**
 
 </details>
 
@@ -539,8 +522,7 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 | `NetworkManager.service` | also enabled by its pacman scriptlet (deduped via `_RY_PKG_MANAGED_SERVICES`) |
 | `cpupower.service` | oneshot — accepts `active` or `exited` |
 
-`NetworkManager-dispatcher.service` is checked but not force-enabled
-(`enabled` or `static`+(`active`\|`inactive`) accepted as on-demand).
+`NetworkManager-dispatcher.service` is checked but not force-enabled.
 
 </details>
 
@@ -548,22 +530,15 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 
 Rebuilds initramfs (`mkinitcpio -P`) and bootloader entries
 (`sdboot-manage gen` + `sdboot-manage update`) from the Phase 3
-config files (`/etc/mkinitcpio.conf`, `/etc/kernel/cmdline`,
-`/boot/loader/loader.conf`, `/etc/sdboot-manage.conf`). Pre-deploy
-snapshot of `mkinitcpio.conf` enables byte-exact revert on
-`pacman -Syu` failure or signal. Skipped when on-disk package state
-or boot-critical configs are inconsistent with embedded content;
-failed revert is an unconditional gate. Override after manual
+config files. Skipped when on-disk package state or boot-critical
+configs are inconsistent with embedded content. Override after manual
 remediation with `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ### Phase 6 — Finalize
 
 Pacman cache cleanup (`paccache`). NetworkManager restart to apply
 the wpa_supplicant → iwd backend switch — deferred to next reboot
-when WiFi is the active route. Writes the JSONL log footer with
-pass / fail / warn / gen_fail counters. Surfaces post-install
-manual steps: `rehash`, reboot, and `realtime`-group membership
-for PipeWire RT scheduling.
+when WiFi is the active route. Writes the JSONL log footer.
 
 ## Managed Files
 
@@ -602,7 +577,7 @@ for PipeWire RT scheduling.
 | mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert on `pacman -Syu` failure or signal |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + chmod 0700; auto-reclaims dead-PID lock |
-| Preflight visibility | Critical preflight failures (sudo missing, deps missing, disk full, network unreachable, config validation) emit to stderr in default install mode without `-V`; `--check` remains silent per contract |
+| Preflight visibility | Failures emit to stderr in default install mode; `--check` stays silent |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal |
 
 <details>
@@ -633,7 +608,7 @@ for PipeWire RT scheduling.
 | `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | `=1` cascades reverse deps into removal set |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses `EXPECTED_CPU_MATCH` hard-fail |
 | `RY_INSTALL_WIRELESS_REGDOM` | unset | `=<CC>` writes `WIRELESS_REGDOM=<CC>` to `/etc/conf.d/wireless-regdom` (2-letter ISO 3166-1; e.g. `US`, `GB`, `DE`) |
-| `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses the interactive `sudo -v` fallback in `_ensure_sudo_cached`. Required for strict-unattended runs (cron, ansible, systemd unit) where a TTY may be present but no password should be prompted |
+| `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses interactive `sudo -v` fallback (strict-unattended: cron, ansible, systemd unit) |
 | `NO_COLOR` | unset | Suppress ANSI color (any value, per [no-color.org](https://no-color.org/)) |
 
 </details>
@@ -698,7 +673,7 @@ rollback source-of-truth:
 
 | Issue | Workaround |
 |---|---|
-| `platform acp_asoc_acp70.0: warning: No matching ASoC machine driver found` (dmesg, once per boot); internal analog ACP path not routed | Pending upstream ASoC machine driver. HDMI (`snd_hda_intel`) and USB audio paths unaffected. `--verify-runtime` surfaces this as INFO + `ACP_NO_MACHINE_DRIVER` log token. |
+| `platform acp_asoc_acp70.0: warning: No matching ASoC machine driver found` (dmesg, once per boot); internal analog ACP path not routed | Pending upstream ASoC machine driver. HDMI (`snd_hda_intel`) and USB audio paths unaffected. |
 
 </details>
 

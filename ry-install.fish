@@ -1656,7 +1656,6 @@ function _ry_check_kernel_version --description "Verify running kernel version m
         _info "  Upgrade kernel before or during install (pacman -Syu)"
         return 2  # hard fail
     end
-    # rc=1 → soft warn (caller records WARN, no INSTALL_HAD_ERRORS elevation); rc=2 → hard fail.
     set -l _warns 0
     if _kver_below $major $minor $kver_patch 6 18 4
         _warn "Kernel $kver below README stability floor 6.18.4 (gfx1151)"

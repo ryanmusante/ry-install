@@ -12,6 +12,21 @@ reformatted from bullet list to kernel.org prose style. README badge bumped.
 No functional change: script byte-equivalence preserved across all
 deployment, verification, and rollback paths.
 
+Post-release re-audit against fish-audit-prompt v7.4.23 (454 checks across
+15 phases) confirmed 0 functional defects. All 15 count invariants match,
+all 30 retired tokens absent, all positive-presence sentinels ≥1, runtime
+exit-code contract upheld (deprecated flags + exclusive combos rc=2,
+op-modes silent on stdout, SIGPIPE inversion #229 yields pipestatus=0).
+Six prior INFO observations re-classified on double-check: three were
+transcription errors in the audit summary (_ry_exit body is 16 LOC not
+107; _chk_grep -wF provides word-boundary semantics distinct from -q
+quiet flag; fish_indent --check rc=1 expected per audit-prompt #372
+covering 76+ intentional semicolon-chained `set` runs); the remaining
+three are by-design (default_qdisc=fq pairs with bbr,
+netdev_max_backlog=16384 documented as vendor override at L820, NO_COLOR
+axis inconclusive only under non-tty audit harness). No source changes
+warranted; ry-install.fish remains byte-equivalent to the v7.4.22 release.
+
 v7.4.20 - v7.4.21 - 2026-05-20
 ------------------------------
 

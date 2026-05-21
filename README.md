@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.4.25-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.28-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -81,7 +81,10 @@ credential (`sudo -v`). The ext4 `/etc/fstab` rewrite is idempotent and
 mount-semantics-preserving.
 
 > [!WARNING]
-> Sudo cache may lapse during the 3-8 min install. Mitigations: `Defaults timestamp_timeout=60` in `/etc/sudoers`, a `sudo -v` keepalive in a parallel shell, or a `NOPASSWD: ALL` drop-in. Recovery: re-run ry-install (idempotent).
+> Sudo cache may lapse during the 3–8 min install. Mitigations:
+> `Defaults timestamp_timeout=60` in `/etc/sudoers`, a `sudo -v`
+> keepalive in a parallel shell, or a `NOPASSWD: ALL` drop-in.
+> Recovery: re-run ry-install (idempotent).
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -148,7 +151,7 @@ After the install completes, a box-drawn matrix prints to stderr summarizing eve
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                       ry-install v7.4.25 — RUN SUMMARY                       ║
+║                       ry-install v7.4.28 — RUN SUMMARY                       ║
 ╠════════════════════════════════════╦════════╦════════════════════════════════╣
 ║ CHECK                              ║ RESULT ║ EVIDENCE                       ║
 ╠════════════════════════════════════╬════════╬════════════════════════════════╣
@@ -382,7 +385,7 @@ All set to `=ignore` (desktop power-handling deferred to userspace):
 | Section / Key | Value |
 |---|---|
 | `[General] EnableNetworkConfiguration` | `false` |
-| `[DriverQuirks]` | `PowerSaveDisable=*` |
+| `[DriverQuirks] PowerSaveDisable` | `*` |
 | `[Network] NameResolvingService` | `systemd` |
 
 Skipped when `iwd` package not installed (memoized via `_RY_SKIP_IWD`).

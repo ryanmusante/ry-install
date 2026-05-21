@@ -1,35 +1,29 @@
 ry-install ChangeLog
 ====================
 
-v7.4.22 - v7.4.25 - 2026-05-21
+v7.4.22 - v7.4.28 - 2026-05-21
 ------------------------------
 
 README style sync. `Fish` → `fish` at header byline and Prerequisites
-table; `Pacman` → `pacman` in Phase 6 prose and `octopi` reason cell
-(matches script-wide lowercase convention for shell-binary names).
+table; `Pacman` → `pacman` in Phase 6 prose and `octopi` reason cell.
 Install Flow Phase 3 cell `Configuration` → `Configuration files` to
-match the body heading. Package caveats table (6 rows) stripped of
-trailing sentence period to match cross-table norm. `<summary>` count
-suffixes normalised: 6 bare-count blocks gain unit suffix
-(`Packages — install` — 15 pkgs, `Packages — AUR` — 2 pkgs,
-`Vulkan dependencies` — 3 pkgs, `Packages — remove` — 8 pkgs,
-`Masked units` — 12 units, `Enabled units` — 3 units), aligning
-with the 10 descriptive-suffix neighbours. `Vulkan dependencies`
-table column 2 header `Notes` → `Purpose` to parallel the
-`Packages — install` and `Packages — AUR` sibling blocks. README
-version badge and run-summary example matrix bumped to v7.4.25.
-Fish syntax clean (--no-execute rc=0), 264 functions resolve, 15
-count invariants hold. No functional change; script byte-equivalent
-across deploy, verify, rollback paths.
+match the body heading. Package caveats table stripped of trailing
+sentence period. `<summary>` count suffixes normalised: 6 bare-count
+blocks gain unit suffix, aligning with the 10 descriptive-suffix
+neighbours. `Vulkan dependencies` column header `Notes` → `Purpose`.
+`iwd` table row 2 reformatted from `[DriverQuirks] | PowerSaveDisable
+=*` to `[DriverQuirks] PowerSaveDisable | *`, restoring the
+"Section Key | Value" column pattern. `[!WARNING]` sudo-cache
+blockquote wrapped at ~70 columns; `3-8 min` → `3–8 min` (en-dash).
+README version badge and run-summary example matrix bumped to v7.4.28.
+No functional change.
 
 v7.4.21 - v7.4.22 - 2026-05-20
 ------------------------------
 
 Inline comments trimmed to single concise lines focused on the "why"
-(42 hotspots, ≤120 chars). Fish syntax clean (--no-execute rc=0), 264
-functions resolve, 15 count invariants hold. CHANGELOG reformatted to
-kernel.org prose style. README badge bumped. No functional change;
-script byte-equivalent across deploy, verify, rollback paths.
+(42 hotspots, ≤120 chars). CHANGELOG reformatted to kernel.org prose
+style. README badge bumped. No functional change.
 
 v7.4.20 - v7.4.21 - 2026-05-20
 ------------------------------

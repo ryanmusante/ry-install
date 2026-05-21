@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.4.28-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.30-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -54,9 +54,13 @@ Typical duration: **3–8 minutes**.
 > Over WiFi, the NM backend switch (wpa_supplicant → iwd) is deferred
 > to next reboot — on ethernet, `sudo systemctl restart NetworkManager`
 > applies it immediately. Initramfs rebuild aborts when on-disk package
-> state or boot-critical configs (`/etc/mkinitcpio.conf`,
-> `/etc/kernel/cmdline`, `/boot/loader/loader.conf`,
-> `/etc/sdboot-manage.conf`) are inconsistent with embedded content.
+> state or boot-critical configs are inconsistent with embedded content:
+>
+> - `/boot/loader/loader.conf`
+> - `/etc/kernel/cmdline`
+> - `/etc/sdboot-manage.conf`
+> - `/etc/mkinitcpio.conf`
+>
 > Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ## Scope
@@ -151,7 +155,7 @@ After the install completes, a box-drawn matrix prints to stderr summarizing eve
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                       ry-install v7.4.28 — RUN SUMMARY                       ║
+║                       ry-install v7.4.30 — RUN SUMMARY                       ║
 ╠════════════════════════════════════╦════════╦════════════════════════════════╣
 ║ CHECK                              ║ RESULT ║ EVIDENCE                       ║
 ╠════════════════════════════════════╬════════╬════════════════════════════════╣
@@ -198,19 +202,26 @@ byte-for-byte.
 
 ### Phase 1 — Preflight
 
-Validates fish ≥ 3.6, kernel ≥ 6.14, systemd ≥ 250, GNU coreutils,
-free space, cached sudo credential, and `EXPECTED_CPU_MATCH` hardware
-fingerprint (`_install_preflight`). Acquires the instance lock
-(atomic `mkdir` + `chmod 0700`; auto-reclaims dead PIDs). Runs
-`_ir_validate_counts` — refuses to deploy on count drift in any
-`set -g` array (15 invariants). Override the hardware gate with
-`RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
+Three sequential operations:
+
+1. Validate prerequisites (`_install_preflight`) — fish ≥ 3.6,
+   kernel ≥ 6.14, systemd ≥ 250, GNU coreutils, free space, cached
+   sudo credential, `EXPECTED_CPU_MATCH` hardware fingerprint
+2. Acquire instance lock — atomic `mkdir` + `chmod 0700`;
+   auto-reclaims dead PIDs
+3. Validate array counts (`_ir_validate_counts`) — refuses to deploy
+   on drift in any `set -g` array (15 invariants)
+
+Override the hardware gate with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
 
 ### Phase 2 — Packages
 
-`pacman -Syu --needed` for `PKGS_ADD`, then `paru` for `AUR_PKGS`
-(`_install_packages` / `_install_aur_packages`). `PKGS_DEL` removal
-runs later in [Phase 4 — Services](#phase-4--services)
+Two sequential operations:
+
+1. `pacman -Syu --needed` for `PKGS_ADD` (`_install_packages`)
+2. `paru` for `AUR_PKGS` (`_install_aur_packages`)
+
+`PKGS_DEL` removal runs later in [Phase 4 — Services](#phase-4--services)
 (`_configure_services_pkg_remove`), grouped with systemd-state
 mutations. `EXPECTED_VULKAN_PKGS` is verify-only — checked, not installed.
 
@@ -270,7 +281,7 @@ dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
 </details>
 
 <details>
-<summary><b>Package caveats</b></summary>
+<summary><b>Package caveats</b> — 6 notes</summary>
 
 | Caveat | Detail |
 |---|---|
@@ -285,13 +296,23 @@ dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
 
 ### Phase 3 — Configuration files
 
-11 system + 1 user config file deployed via atomic writes by
-`_install_system_files` (tmp → symlink check → chmod → `mv -T`).
+11 system + 1 user config file deployed via atomic writes
+(`_install_system_files`). Four-step sequence per file:
+
+1. Write to tmp file
+2. Symlink check at destination
+3. `chmod` to target mode
+4. `mv -T` to destination
+
 Destinations enumerated in [Managed Files](#managed-files).
-Boot-critical files (`/boot/loader/loader.conf`, `/etc/kernel/cmdline`,
-`/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`) are deployed here
-but take effect after [Phase 5 — Boot](#phase-5--boot) rebuilds initramfs
-and bootloader entries.
+Boot-critical files are deployed here but take effect after
+[Phase 5 — Boot](#phase-5--boot) rebuilds initramfs and bootloader
+entries:
+
+- `/boot/loader/loader.conf`
+- `/etc/kernel/cmdline`
+- `/etc/sdboot-manage.conf`
+- `/etc/mkinitcpio.conf`
 
 <details>
 <summary><b>Kernel cmdline</b> — 15 params</summary>
@@ -337,7 +358,7 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 </details>
 
 <details>
-<summary><b>Initramfs</b> — <code>/etc/mkinitcpio.conf</code></summary>
+<summary><b>Initramfs</b> — 6 fields</summary>
 
 | Field | Value |
 |---|---|
@@ -479,13 +500,18 @@ Loaded by `systemd --user`. Log out and back in to apply.
 
 ### Phase 4 — Services
 
-fstab rewrite (`_install_fstab_opts`), then `_install_configure_services`:
-`systemd-resolved` restart (re-applies `99-cachyos-resolved.conf`),
-`systemd-tmpfiles --create` for THP, `PKGS_DEL` removal, mask 12
-desktop/power units, then `daemon-reload` + enable runtime units.
+Six sequential operations (`_install_fstab_opts` then
+`_install_configure_services`):
+
+1. fstab rewrite
+2. `systemd-resolved` restart (re-applies `99-cachyos-resolved.conf`)
+3. `systemd-tmpfiles --create` for THP
+4. `PKGS_DEL` removal
+5. Mask 12 desktop/power units
+6. `daemon-reload` + enable runtime units
 
 <details>
-<summary><b>fstab</b> — ext4 mount options</summary>
+<summary><b>fstab</b> — 3 options</summary>
 
 | Option | Effect |
 |---|---|
@@ -547,17 +573,24 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 
 ### Phase 5 — Boot
 
-Rebuilds initramfs (`mkinitcpio -P`) and bootloader entries
-(`sdboot-manage gen` + `sdboot-manage update`) from the Phase 3
-config files. Skipped when on-disk package state or boot-critical
-configs are inconsistent with embedded content. Override after manual
-remediation with `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
+Three sequential operations from the Phase 3 config files:
+
+1. `mkinitcpio -P` (initramfs rebuild)
+2. `sdboot-manage gen` (bootloader entries)
+3. `sdboot-manage update` (bootloader entries)
+
+Skipped when on-disk package state or boot-critical configs are
+inconsistent with embedded content. Override after manual remediation
+with `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ### Phase 6 — Finalize
 
-pacman cache cleanup (`paccache`). NetworkManager restart to apply
-the wpa_supplicant → iwd backend switch — deferred to next reboot
-when WiFi is the active route. Writes the JSONL log footer.
+Three sequential operations:
+
+1. pacman cache cleanup (`paccache`)
+2. NetworkManager restart to apply the wpa_supplicant → iwd backend
+   switch — deferred to next reboot when WiFi is the active route
+3. Write JSONL log footer
 
 ## Managed Files
 
@@ -566,7 +599,7 @@ when WiFi is the active route. Writes the JSONL log footer.
 `iwd` destinations are skipped when `iwd` is not installed.
 
 <details>
-<summary><b>Destinations</b></summary>
+<summary><b>Destinations</b> — 12 paths</summary>
 
 | Path | Perm |
 |---|---|
@@ -600,7 +633,7 @@ when WiFi is the active route. Writes the JSONL log footer.
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal |
 
 <details>
-<summary><b>Exit codes</b></summary>
+<summary><b>Exit codes</b> — 8 codes</summary>
 
 | Code | Meaning |
 |---|---|
@@ -616,7 +649,7 @@ when WiFi is the active route. Writes the JSONL log footer.
 </details>
 
 <details>
-<summary><b>Runtime variables</b></summary>
+<summary><b>Runtime variables</b> — 10 vars</summary>
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -634,7 +667,7 @@ when WiFi is the active route. Writes the JSONL log footer.
 </details>
 
 <details>
-<summary><b>Logs</b></summary>
+<summary><b>Logs</b> — 5 properties</summary>
 
 | Property | Value |
 |---|---|

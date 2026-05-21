@@ -1,6 +1,33 @@
 ry-install ChangeLog
 ====================
 
+v7.4.29 - v7.4.30 - 2026-05-21
+------------------------------
+
+README style sync. All six Phase prose blocks restructured to a
+uniform "N sequential operations" intro followed by an ordered list
+of steps, matching the pattern previously isolated to Phase 4:
+Phase 1 (3 ops), Phase 2 (2 ops), Phase 3 (4 atomic-write sub-steps
+plus the existing boot-critical bullet list), Phase 4 (6 ops),
+Phase 5 (3 ops), Phase 6 (3 ops). Tail prose (overrides, deferred
+work, post-phase notes) preserved verbatim. README version badge and
+run-summary example matrix bumped to v7.4.30. No functional change.
+
+v7.4.28 - v7.4.29 - 2026-05-21
+------------------------------
+
+README style sync. Six `<summary>` blocks switched from descriptive
+labels to the "count + unit" suffix shared by the ten conforming
+blocks: `Initramfs` (6 fields), `Package caveats` (6 notes), `fstab`
+(3 options), `Destinations` (12 paths), `Exit codes` (8 codes),
+`Runtime variables` (10 vars), `Logs` (5 properties). Known Issues
+subblocks and the BIOS prerequisite label left intact (subblocks are
+redundant with parent header; BIOS label is descriptive by design).
+Two prose sites with four inline boot-critical paths restructured to
+bulleted lists under the prose: the `[!IMPORTANT]` callout and
+Phase 3 — Configuration files. README version badge and run-summary
+example matrix bumped to v7.4.29. No functional change.
+
 v7.4.22 - v7.4.28 - 2026-05-21
 ------------------------------
 

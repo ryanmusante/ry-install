@@ -71,8 +71,8 @@ v7.4.16 - v7.4.17 - 2026-05-20
 ------------------------------
 
 76 adjacent `set -l` / `set -g` runs collapsed to semicolon-chained
-one-liners (5204 → 5040 LOC). README: every <details> block opens to
-a markdown table; prose-only collapsibles converted to tables.
+one-liners (5204 → 5040 LOC). README: every `<details>` block opens
+to a markdown table; prose-only collapsibles converted to tables.
 
 v7.4.15 - v7.4.16 - 2026-05-20
 ------------------------------
@@ -83,7 +83,7 @@ truth via --verify-static.
 v7.4.14 - v7.4.15 - 2026-05-20
 ------------------------------
 
-README: 17 <summary> headers stripped of parenthetical suffixes;
+README: 17 `<summary>` headers stripped of parenthetical suffixes;
 counts retained.
 
 v7.4.13 - v7.4.14 - 2026-05-20
@@ -222,7 +222,7 @@ _vsb_mkinitcpio amdgpu probe tightened `*amdgpu*` → `\bamdgpu\b`.
 _ry_check_deps adds GNU-coreutils df probe. HandleSecureAttentionKey
 gate <256 → <257. _vrkm_blacklist normalises hyphen → underscore
 before lsmod compare. 68 bare system commands gain `command` prefix.
-README: <details> blocks switch to tables for mobile rendering.
+README: `<details>` blocks switch to tables for mobile rendering.
 
 v6.5.0 - v6.5.18 - 2026-05-14 to 2026-05-15
 -------------------------------------------

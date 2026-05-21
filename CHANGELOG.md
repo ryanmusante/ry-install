@@ -1,6 +1,27 @@
 ry-install ChangeLog
 ====================
 
+v7.4.22 - v7.4.23 - 2026-05-21
+------------------------------
+
+Audit-fix release. README style consistency pass: `Fish` → `fish` at
+header byline and Prerequisites table (matches 16 other lowercase
+uses, per fishshell.com canonical). `Pacman` → `pacman` in Phase 6
+prose (matches 14 other lowercase uses, per archlinux.org canonical).
+Install Flow Phase 3 cell `Configuration` → `Configuration files`
+to match the body heading (`### Phase 3 — Configuration files`).
+Package caveats table (6 cells, lines 274-279) stripped of trailing
+sentence period to align with cross-table norm (cf. Runtime
+variables `RY_RUN_TIMEOUT` cell and ACP audio dmesg cell — both
+multi-sentence, neither uses terminal period). README version badge
+and run-summary example matrix bumped to v7.4.23. CHANGELOG
+backfilled with `v7.4.3 - v7.4.4` and `v7.4.8 - v7.4.9` no-op
+release markers (continuity audit; both were internal refactor
+rollups absorbed into adjacent entries). Fish syntax clean
+(--no-execute rc=0), 264 functions resolve, 15 count invariants
+hold. No functional change; script byte-equivalent across deploy,
+verify, rollback paths.
+
 v7.4.21 - v7.4.22 - 2026-05-20
 ------------------------------
 
@@ -131,6 +152,13 @@ Stage-1-rc semantics tightened: 7 callers check only pipe stage 1 —
 fish `string` builtins rc=1 on empty input is normal. Empty
 enumeration routes to "NONE found" diagnostics.
 
+v7.4.8 - v7.4.9 - 2026-05-20
+----------------------------
+
+Internal refactor consolidation. Stage-1-rc preparation folded
+forward into v7.4.10's pipestatus tightening (see
+`v7.4.9 - v7.4.10`). No user-visible change.
+
 v7.4.7 - v7.4.8 - 2026-05-20
 ----------------------------
 
@@ -154,6 +182,13 @@ v7.4.4 - v7.4.5 - 2026-05-20
 ----------------------------
 
 Inline comments collapsed from multi-line to single-line form.
+
+v7.4.3 - v7.4.4 - 2026-05-20
+----------------------------
+
+Internal refactor consolidation. Comment-collapse preparation folded
+forward into v7.4.5's single-line conversion pass (see
+`v7.4.4 - v7.4.5`). No user-visible change.
 
 v7.4.0 - v7.4.3 - 2026-05-20
 ----------------------------

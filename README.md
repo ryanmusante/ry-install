@@ -1,12 +1,12 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.4.22-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.23-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 ![license](https://img.shields.io/badge/license-MIT-green.svg)
 
-> Single Fish script for CachyOS — 12 embedded configs, no required
+> Single fish script for CachyOS — 12 embedded configs, no required
 > external deps. paru required for AUR (`mkinitcpio-firmware`,
 > `mt76-mt7925-dkms`).
 
@@ -70,7 +70,7 @@ Typical duration: **3–8 minutes**.
 | Requirement | Minimum |
 |---|---|
 | CachyOS | systemd-boot, ext4 root |
-| Fish | ≥ 3.6 |
+| fish | ≥ 3.6 |
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | Before `-Syu` | Read [CachyOS](https://wiki.cachyos.org) + [Arch news](https://archlinux.org/news/) |
@@ -137,7 +137,7 @@ Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 |---|---|---|
 | 1 | Preflight | Validate prerequisites, acquire lock, validate runtime |
 | 2 | Packages | `pacman -Syu --needed`; AUR via paru; `updatedb` + `pkgfile --update` cache refresh |
-| 3 | Configuration | Deploy 12 embedded config files (atomic) |
+| 3 | Configuration files | Deploy 12 embedded config files (atomic) |
 | 4 | Services | fstab ext4 opts; `systemd-resolved` restart; THP tmpfiles apply; `PKGS_DEL` removal; mask 12 desktop/power units; `daemon-reload` + enable runtime units |
 | 5 | Boot | Rebuild initramfs, update systemd-boot entries |
 | 6 | Finalize | Cache cleanup; NM restart (deferred when WiFi is active route) |
@@ -148,7 +148,7 @@ After the install completes, a box-drawn matrix prints to stderr summarizing eve
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                       ry-install v7.4.22 — RUN SUMMARY                       ║
+║                       ry-install v7.4.23 — RUN SUMMARY                       ║
 ╠════════════════════════════════════╦════════╦════════════════════════════════╣
 ║ CHECK                              ║ RESULT ║ EVIDENCE                       ║
 ╠════════════════════════════════════╬════════╬════════════════════════════════╣
@@ -271,12 +271,12 @@ dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
 
 | Caveat | Detail |
 |---|---|
-| Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` → `pacman -Sy --needed` (no `-u`). Violates [Arch policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported). |
-| AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` omitted — DKMS needs makedeps. |
-| PGP failures | Pre-import key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually. |
-| Reverse deps | `PKGS_DEL` removal skipped when an outside package rdeps on it. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`). |
-| db lock | `/var/lib/pacman/db.lck` checked before + after; aborts cleanly on contention. |
-| `.pacnew` | Auto-redeployed at managed destinations and `rm`'d; `.pacsave` surfaced as warning. |
+| Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` → `pacman -Sy --needed` (no `-u`). Violates [Arch policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported) |
+| AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` omitted — DKMS needs makedeps |
+| PGP failures | Pre-import key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually |
+| Reverse deps | `PKGS_DEL` removal skipped when an outside package rdeps on it. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`) |
+| db lock | `/var/lib/pacman/db.lck` checked before + after; aborts cleanly on contention |
+| `.pacnew` | Auto-redeployed at managed destinations and `rm`'d; `.pacsave` surfaced as warning |
 
 </details>
 
@@ -552,7 +552,7 @@ remediation with `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ### Phase 6 — Finalize
 
-Pacman cache cleanup (`paccache`). NetworkManager restart to apply
+pacman cache cleanup (`paccache`). NetworkManager restart to apply
 the wpa_supplicant → iwd backend switch — deferred to next reboot
 when WiFi is the active route. Writes the JSONL log footer.
 

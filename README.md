@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.4.23-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.25-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -148,7 +148,7 @@ After the install completes, a box-drawn matrix prints to stderr summarizing eve
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                       ry-install v7.4.23 — RUN SUMMARY                       ║
+║                       ry-install v7.4.25 — RUN SUMMARY                       ║
 ╠════════════════════════════════════╦════════╦════════════════════════════════╣
 ║ CHECK                              ║ RESULT ║ EVIDENCE                       ║
 ╠════════════════════════════════════╬════════╬════════════════════════════════╣
@@ -212,7 +212,7 @@ runs later in [Phase 4 — Services](#phase-4--services)
 mutations. `EXPECTED_VULKAN_PKGS` is verify-only — checked, not installed.
 
 <details>
-<summary><b>Packages — install</b> — 15</summary>
+<summary><b>Packages — install</b> — 15 pkgs</summary>
 
 | Package | Purpose |
 |---|---|
@@ -237,7 +237,7 @@ Default install path: `pacman -Syu --needed --noconfirm`.
 </details>
 
 <details>
-<summary><b>Packages — AUR</b> — 2</summary>
+<summary><b>Packages — AUR</b> — 2 pkgs</summary>
 
 | Package | Purpose |
 |---|---|
@@ -251,9 +251,9 @@ for `paru` flags and PGP-failure handling.
 </details>
 
 <details>
-<summary><b>Vulkan dependencies</b> — 3</summary>
+<summary><b>Vulkan dependencies</b> — 3 pkgs</summary>
 
-| Package | Notes |
+| Package | Purpose |
 |---|---|
 | `vulkan-radeon` | RADV driver |
 | `lib32-vulkan-radeon` | 32-bit RADV (Steam/Wine) |
@@ -495,12 +495,12 @@ Idempotent ext4 rewrite — strips conflicting `atime`, `relatime`, `strictatime
 </details>
 
 <details>
-<summary><b>Packages — remove</b> — 8</summary>
+<summary><b>Packages — remove</b> — 8 pkgs</summary>
 
 | Package | Reason |
 |---|---|
 | `plymouth` (+ `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`) | Boot splash — incompatible with `quiet` + `loglevel=3` |
-| `octopi` | Pacman GUI — CLI workflow |
+| `octopi` | pacman GUI — CLI workflow |
 | `micro` (+ `cachyos-micro-settings`) | Text editor — replaced by user choice |
 | `btop` | Replaced by `bottom` |
 | `bolt` | Thunderbolt manager — not used |
@@ -512,7 +512,7 @@ via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (requires `pacman-contrib` for
 </details>
 
 <details>
-<summary><b>Masked units</b> — 12</summary>
+<summary><b>Masked units</b> — 12 units</summary>
 
 | Unit | Reason |
 |---|---|
@@ -530,7 +530,7 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 </details>
 
 <details>
-<summary><b>Enabled units</b> — 3</summary>
+<summary><b>Enabled units</b> — 3 units</summary>
 
 | Unit | Notes |
 |---|---|

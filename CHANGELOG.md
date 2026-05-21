@@ -1,6 +1,22 @@
 ry-install ChangeLog
 ====================
 
+v7.4.30 - v7.4.31 - 2026-05-21
+------------------------------
+
+README redundancy cleanup. Three repeated content sites collapsed to
+single canonical references: (1) the four-path boot-critical bullet
+list in Phase 3 dropped in favour of the existing Managed Files
+Destinations table link; (2) the atomic-write step sequence in the
+Managed Files prose dropped in favour of the Phase 3 ordered-list
+canonical, with an inline link added; (3) the trailing
+`RY_INSTALL_PKG_REMOVE_CASCADE` paragraph under the Phase 4
+Packages-remove block dropped in favour of the Package caveats
+Reverse-deps table row. The `[!IMPORTANT]` callout's boot-critical
+file list retained — its warning-context purpose justifies the
+duplicate listing. README version badge and run-summary example
+matrix bumped to v7.4.31. No functional change.
+
 v7.4.29 - v7.4.30 - 2026-05-21
 ------------------------------
 

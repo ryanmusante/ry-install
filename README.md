@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.4.30-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.31-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -155,7 +155,7 @@ After the install completes, a box-drawn matrix prints to stderr summarizing eve
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                       ry-install v7.4.30 — RUN SUMMARY                       ║
+║                       ry-install v7.4.31 — RUN SUMMARY                       ║
 ╠════════════════════════════════════╦════════╦════════════════════════════════╣
 ║ CHECK                              ║ RESULT ║ EVIDENCE                       ║
 ╠════════════════════════════════════╬════════╬════════════════════════════════╣
@@ -304,15 +304,10 @@ dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
 3. `chmod` to target mode
 4. `mv -T` to destination
 
-Destinations enumerated in [Managed Files](#managed-files).
-Boot-critical files are deployed here but take effect after
+Destinations enumerated in [Managed Files](#managed-files); the four
+boot-critical paths in that table take effect only after
 [Phase 5 — Boot](#phase-5--boot) rebuilds initramfs and bootloader
-entries:
-
-- `/boot/loader/loader.conf`
-- `/etc/kernel/cmdline`
-- `/etc/sdboot-manage.conf`
-- `/etc/mkinitcpio.conf`
+entries.
 
 <details>
 <summary><b>Kernel cmdline</b> — 15 params</summary>
@@ -534,10 +529,6 @@ Idempotent ext4 rewrite — strips conflicting `atime`, `relatime`, `strictatime
 | `btop` | Replaced by `bottom` |
 | `bolt` | Thunderbolt manager — not used |
 
-Skipped when an installed package outside the set rdeps on it. Cascade
-via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (requires `pacman-contrib` for
-`pactree`).
-
 </details>
 
 <details>
@@ -594,9 +585,10 @@ Three sequential operations:
 
 ## Managed Files
 
-12 files deployed via atomic writes (tmp → symlink check → chmod →
-`mv -T`). System files install `0644`, the user file `0600`. The two
-`iwd` destinations are skipped when `iwd` is not installed.
+12 files deployed via the [Phase 3](#phase-3--configuration-files)
+atomic-write sequence. System files install `0644`, the user file
+`0600`. The two `iwd` destinations are skipped when `iwd` is not
+installed.
 
 <details>
 <summary><b>Destinations</b> — 12 paths</summary>

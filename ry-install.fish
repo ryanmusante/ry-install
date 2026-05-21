@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.4.31 (2026-05-21) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.32 (2026-05-21) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace 2>/dev/null | string match -q '*from sourcing*'
     echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2
     exit 1
 end
-set -g VERSION "7.4.31"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.32"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -762,7 +762,14 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
         if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman/paru would parse as flag, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"; printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"; end
+function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
+    printf '%s\n' \
+        "# systemd-boot loader configuration" \
+        "default $LOADER_DEFAULT" \
+        "timeout $LOADER_TIMEOUT" \
+        "console-mode $LOADER_CONSOLE_MODE" \
+        "editor $LOADER_EDITOR"
+end
 function _content__etc_kernel_cmdline --description "Generate content for /etc/kernel/cmdline"
     test -z "$_ROOT_UUID"; and return $EXIT_GEN_NOUUID
     printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
@@ -789,7 +796,15 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
         printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"
     end
 end
-function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"; printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=no" "DNSOverTLS=opportunistic" "DNSSEC=allow-downgrade"; end
+function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
+    printf '%s\n' \
+        "# systemd-resolved configuration" \
+        "[Resolve]" \
+        "MulticastDNS=$RESOLVED_MDNS" \
+        "LLMNR=no" \
+        "DNSOverTLS=opportunistic" \
+        "DNSSEC=allow-downgrade"
+end
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
     printf '%s\n' "[Login]"
@@ -808,14 +823,29 @@ function _content__etc_iwd_main.conf --description "Generate content for /etc/iw
     end
     printf '%s\n' "" "[Network]" "NameResolvingService=$IWD_DNS_SERVICE"
 end
-function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (iwd backend)"; printf '%s\n' "# NetworkManager configuration - iwd backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"; end
+function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (iwd backend)"
+    printf '%s\n' \
+        "# NetworkManager configuration - iwd backend" \
+        "[device]" \
+        "wifi.backend=$NM_WIFI_BACKEND" \
+        "" \
+        "[connection]" \
+        "wifi.powersave=$NM_WIFI_POWERSAVE" \
+        "" \
+        "[logging]" \
+        "level=$NM_LOG_LEVEL"
+end
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (COSMIC, Flatpak, D-Bus activated apps)"
     for var in $ENV_VARS
         printf '%s\n' "$var"
     end
 end
-function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"; printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='performance'"; end
+function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
+    printf '%s\n' \
+        "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" \
+        "GOVERNOR='performance'"
+end
 function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Generate content for sysctl drop-in"
     printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf; overrides net.core.netdev_max_backlog 4096 → 16384)"
     set -l _printed 0

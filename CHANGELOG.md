@@ -1,6 +1,20 @@
 ry-install ChangeLog
 ====================
 
+v7.4.31 - v7.4.32 - 2026-05-21
+------------------------------
+
+Source-style cleanup. Four single-line content generators
+(`_content__boot_loader_loader.conf`,
+`_content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf`,
+`_content__etc_NetworkManager_conf.d_99-cachyos-nm.conf`,
+`_content__etc_default_cpupower-service.conf`) expanded from
+semicolon-joined single-line form to the multi-line `printf '%s\n' \`
+style used elsewhere in the file. Output byte-identical; idempotent
+re-deploys remain no-ops; embedded-vs-installed checksum unchanged.
+README version badge and run-summary example matrix bumped to v7.4.32.
+No functional change.
+
 v7.4.30 - v7.4.31 - 2026-05-21
 ------------------------------
 

@@ -14,15 +14,8 @@
 
 ---
 
-## Highlights
-
-- **Idempotent** — atomic writes, byte-exact verify, repeated runs are no-ops
-- **Self-contained** — single 4500-line fish script, no helper libs
-- **Hardware-locked** — refuses to deploy on non-Strix-Halo silicon
-
 ## Contents
 
-- [Highlights](#highlights)
 - [Quick Start](#quick-start)
 - [Scope](#scope)
 - [Prerequisites](#prerequisites)
@@ -200,16 +193,9 @@ Set `RY_INSTALL_NO_MATRIX=1` to suppress the matrix (the JSONL log still records
 
 ## Configuration
 
-Every value embedded in `ry-install.fish` is documented below, grouped
-by install-flow phase. Phases 1, 5, and 6 deploy no embedded data and
-are described in prose. To retune, edit the `set -g` profile globals
-near the top of the script. The script is the source of truth —
-`--verify-static` matches installed files against embedded content
-byte-for-byte.
+`--verify-static` compares installed files against embedded content byte-for-byte; the script is the source of truth. Every embedded value is documented below by phase. Edit the `set -g` globals near the top of `ry-install.fish` to retune. (Phases 1, 5, 6 deploy no embedded data.)
 
 ### Phase 1 — Preflight
-
-Three sequential operations:
 
 1. Validate prerequisites (`_install_preflight`) — fish ≥ 3.6,
    kernel ≥ 6.14, systemd ≥ 250, GNU coreutils, free space, cached
@@ -222,8 +208,6 @@ Three sequential operations:
 Override the hardware gate with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
 
 ### Phase 2 — Packages
-
-Two sequential operations:
 
 1. `pacman -Syu --needed` for `PKGS_ADD` (`_install_packages`)
 2. `paru` for `AUR_PKGS` (`_install_aur_packages`)
@@ -301,7 +285,7 @@ dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
 
 </details>
 
-### Phase 3 — Configuration files
+### Phase 3 — Configuration Files
 
 11 system + 1 user config file deployed via atomic writes
 (`_install_system_files`). Four-step sequence per file:
@@ -502,10 +486,7 @@ Loaded by `systemd --user`. Log out and back in to apply.
 
 ### Phase 4 — Services
 
-Six sequential operations (`_install_fstab_opts` then
-`_install_configure_services`):
-
-1. fstab rewrite
+1. fstab rewrite (`_install_fstab_opts`)
 2. `systemd-resolved` restart (re-applies `99-cachyos-resolved.conf`)
 3. `systemd-tmpfiles --create` for THP
 4. `PKGS_DEL` removal
@@ -571,8 +552,6 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 
 ### Phase 5 — Boot
 
-Three sequential operations from the Phase 3 config files:
-
 1. `mkinitcpio -P` (initramfs rebuild)
 2. `sdboot-manage gen` (bootloader entries)
 3. `sdboot-manage update` (bootloader entries)
@@ -582,8 +561,6 @@ inconsistent with embedded content. Override after manual remediation
 with `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ### Phase 6 — Finalize
-
-Three sequential operations:
 
 1. pacman cache cleanup (`paccache`)
 2. NetworkManager restart to apply the wpa_supplicant → iwd backend
@@ -773,5 +750,3 @@ rollback source-of-truth:
 ## License
 
 MIT © 2026 Ryan Musante · `SPDX-License-Identifier: MIT`
-
-See [CHANGELOG.md](CHANGELOG.md) for release history.

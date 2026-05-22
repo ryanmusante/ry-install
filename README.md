@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.4.36-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.38-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -155,7 +155,7 @@ After the install completes, a box-drawn matrix prints to stderr summarizing eve
 
 ```
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                       ry-install v7.4.36 — RUN SUMMARY                       ║
+║                       ry-install v7.4.38 — RUN SUMMARY                       ║
 ╠════════════════════════════════════╦════════╦════════════════════════════════╣
 ║ CHECK                              ║ RESULT ║ EVIDENCE                       ║
 ╠════════════════════════════════════╬════════╬════════════════════════════════╣

@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.4.36 (2026-05-22) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.38 (2026-05-22) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.36"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.38"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -104,7 +104,8 @@ set --erase _ry_path_new _ry_p
 if set -q TMPDIR; and test -n "$TMPDIR"; and not string match -q -- '/*' "$TMPDIR"; echo "[WARN] TMPDIR is not an absolute path ($TMPDIR) — falling back to /tmp" >&2; set -gx TMPDIR /tmp; end
 # Override TMPDIR if non-existent; otherwise downstream mktemp -p cascades to EXIT_RUN_TMPFAIL.
 if set -q TMPDIR; and test -n "$TMPDIR"; and not test -d "$TMPDIR"; echo "[WARN] TMPDIR does not exist ($TMPDIR) — falling back to /tmp" >&2; set -gx TMPDIR /tmp; end
-set -l _ry_tmpprobe_dir (set -q TMPDIR; and test -n "$TMPDIR"; and test -d "$TMPDIR"; and printf '%s' "$TMPDIR"; or printf '%s' /tmp)
+set -l _ry_tmpprobe_dir /tmp
+if set -q TMPDIR; and test -n "$TMPDIR"; and test -d "$TMPDIR"; set _ry_tmpprobe_dir "$TMPDIR"; end
 if not test -w "$_ry_tmpprobe_dir"
     if test "$_ry_tmpprobe_dir" != /tmp; and test -w /tmp
         echo "[WARN] TMPDIR not writable ($_ry_tmpprobe_dir) — falling back to /tmp" >&2
@@ -744,7 +745,8 @@ end
 function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"
     set -l fn "_content_"(_tmpfile_key "$dst")
     functions -q $fn; or return $EXIT_GEN_NOFN
-    $fn # Dynamic dispatch: function name built from destination path via _tmpfile_key.
+    # Dynamic dispatch: function name built from destination path via _tmpfile_key.
+    $fn
 end
 function _ensure_sudo_cached --description "Cache sudo credential once before repeated sudo -n calls"
     if not command -q sudo; _err "Sudo credential cache failed: sudo not found"; return 1; end
@@ -931,7 +933,8 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
 end
 function _msg_print --argument-names level --description "Internal: leveled message to stderr"
     set -l _force false
-    set -l _msg_start 2 # _msg_start indexes msg-part-1 in argv; --force shifts past the sentinel without mutating argv.
+    # _msg_start indexes msg-part-1 in argv; --force shifts past the sentinel without mutating argv.
+    set -l _msg_start 2
     if test "$level" = --force; set _force true; set level $argv[2]; set _msg_start 3; end
     set -l msg (string join -- " " $argv[$_msg_start..])
     test -z "$msg"; and return 0
@@ -1162,7 +1165,8 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     if test "$QUIET" = false
         for _l in $_redacted; printf '%s\n' "$_l" >&2; end
     else if test "$label_tag" = STDERR; and test $ret -ne 0
-        for _l in $_redacted[1..5] # QUIET bypass: surface ≤5 stderr lines on rc≠0.
+        # QUIET bypass: surface ≤5 stderr lines on rc≠0.
+        for _l in $_redacted[1..5]
             printf '%s\n' "$_l" >&2
         end
     end
@@ -1421,7 +1425,8 @@ function _ry_check_kernel_version --description "Verify running kernel version m
     if _kver_below $major $minor $kver_patch 6 14 0
         _warn "Kernel $kver < 6.14: ntsync and gfx1151 fixes unavailable"
         _info "  Upgrade kernel before or during install (pacman -Syu)"
-        return 2  # hard fail
+        # hard fail
+        return 2
     end
     set -l _warns 0
     if _kver_below $major $minor $kver_patch 6 18 4; _warn "Kernel $kver below README stability floor 6.18.4 (gfx1151)"; _info "  Recommend upgrading: sudo pacman -Syu linux-cachyos"; set _warns (math $_warns + 1); end
@@ -1445,7 +1450,8 @@ function _ry_check_kernel_version --description "Verify running kernel version m
     if test "$major" -eq 6; and test "$minor" -eq 19
         if test "$kver_patch" = 0; _warn "Kernel 6.19.0: black screen regression on Strix Halo (CachyOS #23042)"; _warn "  Recommend: downgrade to 6.18.x or upgrade to 6.19.1+"; set _warns (math $_warns + 1); end
     end
-    test $_warns -gt 0; and return 1  # soft warn
+    # soft warn
+    test $_warns -gt 0; and return 1
     return 0
 end
 function _mkinitcpio_hook_exists --argument-names hook --description "True iff hook file exists in any mkinitcpio install/hooks dir"
@@ -2493,6 +2499,7 @@ function _vrsv_chk_resolved --argument-names rec_str --description "Check system
 end
 function _vrsv_chk_nm_dispatcher --argument-names rec_str --description "Check NM-dispatcher: enabled or static + (active|inactive) acceptable (on-demand)"
     set -l rec (string split ':' -- "$rec_str")
+    if test "$rec[1]" = not-found; _warn "  NetworkManager-dispatcher: not installed"; return 0; end
     if test "$rec[3]" != enabled; and test "$rec[3]" != static; _fail "  NetworkManager-dispatcher: $rec[3] (expected: enabled or static)"; return 0; end
     if test "$rec[2]" = active; or test "$rec[2]" = inactive
         _ok "  NetworkManager-dispatcher: $rec[3] ($rec[2])"
@@ -4007,7 +4014,8 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
     else
         not _install_aur_packages; and set -g INSTALL_HAD_ERRORS true
     end
-    set --erase _RY_SKIP_IWD # AUR may have transitively installed iwd; re-probe.
+    # AUR may have transitively installed iwd; re-probe.
+    set --erase _RY_SKIP_IWD
     _rrp_optional_indexer updatedb updatedb ""
     _rrp_optional_indexer pkgfile "pkgfile --update" --update
     set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0
@@ -4164,7 +4172,8 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _install_preflight
     set -l _pre_rc $status
     if test $_pre_rc -ne 0; _progress_done; _rdi_render_matrix; _log_section "INSTALLATION END"; test $_pre_rc -eq $EXIT_USAGE; and return $EXIT_USAGE; return $EXIT_PREFLIGHT; end
-    _rdi_run_phases # rc discarded; phase failures tracked via INSTALL_HAD_ERRORS.
+    # rc discarded; phase failures tracked via INSTALL_HAD_ERRORS.
+    _rdi_run_phases
     _install_rebuild_boot
     set -l _boot_rc $status
     test $_boot_rc -ne 0; and set -g INSTALL_HAD_ERRORS true
@@ -4224,7 +4233,8 @@ function _idf_match_dst --argument-names target --description "Match \$target ag
 end
 function _idf_dispatch_hook --argument-names target tag --description "Dispatch a post-hook tag to its _post_<tag> handler"
     if test -z "$tag"; or not functions -q "_post_$tag"; _err "Internal: unknown post-hook tag '$tag' (target=$target)"; return 1; end
-    _post_$tag "$target" # Dynamic dispatch: handler resolved from _RY_POST_HOOKS table tag.
+    # Dynamic dispatch: handler resolved from _RY_POST_HOOKS table tag.
+    _post_$tag "$target"
 end
 function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"
     _log_section "INSTALL-FILE START"
@@ -4412,9 +4422,9 @@ if set -q _flag_install_file
     end
 end
 if test (count $argv) -gt 0; echo "[ERR] Unexpected positional argument: $argv[1]" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
-if test "$MODE" != check; and begin
-        set -q _flag_verbose; or test "$MODE" != install
-    end
+if test "$MODE" = check
+    # silent-probe contract: --check stays QUIET regardless of -V
+else if set -q _flag_verbose; or test "$MODE" != install
     set -g QUIET false
 end
 set -l mode_label $MODE

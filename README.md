@@ -147,31 +147,11 @@ Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 | 3 | Configuration files | Deploy 12 embedded config files (atomic) |
 | 4 | Services | fstab ext4 opts; `systemd-resolved` restart; THP tmpfiles apply; `PKGS_DEL` removal; mask 12 desktop/power units; `daemon-reload` + enable runtime units |
 | 5 | Boot | Rebuild initramfs, update systemd-boot entries |
-| 6 | Finalize | Cache cleanup; NM restart (deferred when WiFi is active route) |
+| 6 | Finalize | `systemctl --user daemon-reload`; pacman cache cleanup; NM restart (deferred when WiFi is active route); write JSONL footer |
 
 ## Run Summary
 
-After the install completes, a box-drawn matrix prints to stderr summarizing every phase:
-
-```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                       ry-install v7.4.38 — RUN SUMMARY                       ║
-╠════════════════════════════════════╦════════╦════════════════════════════════╣
-║ CHECK                              ║ RESULT ║ EVIDENCE                       ║
-╠════════════════════════════════════╬════════╬════════════════════════════════╣
-║ Preflight: sudo credential cache   ║  PASS  ║ ok                             ║
-║ Preflight: kernel version          ║  PASS  ║ 6.18.4                         ║
-║ Preflight: wireless regdom         ║   --   ║ RY_INSTALL_WIRELESS_REGDOM uns ║
-║ Packages: pacman -Syu              ║  PASS  ║ system upgraded                ║
-║ Packages: AUR (paru)               ║  PASS  ║ 2/2 (mt7925e module verified)  ║
-║ Configs: system file deployment    ║  PASS  ║ 11 deployed, 1 idempotent      ║
-║ Boot: post-rebuild sanity          ║  PASS  ║ vmlinuz+initramfs+entries OK   ║
-║ Finalize: NetworkManager restart   ║ DEFER  ║ over WiFi — applies on reboot  ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║ Totals : 19 PASS · 0 WARN · 0 FAIL · 1 DEFER · 0 SKIP · 1 N/A                ║
-║ Elapsed: 4m 23s   ·   Verdict: PASS                                          ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-```
+After the install completes, a box-drawn matrix prints to stderr with one row per phase check (CHECK / RESULT / EVIDENCE), followed by totals (`PASS · WARN · FAIL · DEFER · SKIP · N/A`), elapsed wall-clock, and a single-word verdict.
 
 | Result | Semantics |
 |---|---|
@@ -197,20 +177,20 @@ Set `RY_INSTALL_NO_MATRIX=1` to suppress the matrix (the JSONL log still records
 
 ### Phase 1 — Preflight
 
-1. Validate prerequisites (`_install_preflight`) — fish ≥ 3.6,
-   kernel ≥ 6.14, systemd ≥ 250, GNU coreutils, free space, cached
-   sudo credential, `EXPECTED_CPU_MATCH` hardware fingerprint
-2. Acquire instance lock — atomic `mkdir` + `chmod 0700`;
-   auto-reclaims dead PIDs
-3. Validate array counts (`_ir_validate_counts`) — refuses to deploy
-   on drift in any `set -g` array (15 invariants)
+| Step | Action |
+|---|---|
+| Validate prerequisites (`_install_preflight`) | fish ≥ 3.6, kernel ≥ 6.14, systemd ≥ 250, GNU coreutils, free space, cached sudo credential, `EXPECTED_CPU_MATCH` hardware fingerprint |
+| Acquire instance lock | atomic `mkdir` + `chmod 0700`; auto-reclaims dead PIDs |
+| Validate array counts (`_ir_validate_counts`) | refuses to deploy on drift in any `set -g` array (15 invariants) |
 
 Override the hardware gate with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
 
 ### Phase 2 — Packages
 
-1. `pacman -Syu --needed` for `PKGS_ADD` (`_install_packages`)
-2. `paru` for `AUR_PKGS` (`_install_aur_packages`)
+| Step | Action |
+|---|---|
+| `_install_packages` | `pacman -Syu --needed` for `PKGS_ADD` |
+| `_install_aur_packages` | `paru` for `AUR_PKGS` |
 
 `PKGS_DEL` removal runs later in [Phase 4 — Services](#phase-4--services)
 (`_configure_services_pkg_remove`), grouped with systemd-state
@@ -290,10 +270,12 @@ dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
 11 system + 1 user config file deployed via atomic writes
 (`_install_system_files`). Four-step sequence per file:
 
-1. Write to tmp file
-2. Symlink check at destination
-3. `chmod` to target mode
-4. `mv -T` to destination
+| # | Step |
+|---|---|
+| 1 | Render to tmp file (in destination's parent dir) |
+| 2 | Symlink probe on tmp file (pre-render and post-render) |
+| 3 | `chmod` to target mode |
+| 4 | `mv -T` to destination |
 
 Destinations enumerated in [Managed Files](#managed-files); the four
 boot-critical paths in that table take effect only after
@@ -486,12 +468,14 @@ Loaded by `systemd --user`. Log out and back in to apply.
 
 ### Phase 4 — Services
 
-1. fstab rewrite (`_install_fstab_opts`)
-2. `systemd-resolved` restart (re-applies `99-cachyos-resolved.conf`)
-3. `systemd-tmpfiles --create` for THP
-4. `PKGS_DEL` removal
-5. Mask 12 desktop/power units
-6. `daemon-reload` + enable runtime units
+| # | Step |
+|---|---|
+| 1 | fstab rewrite (`_install_fstab_opts`) |
+| 2 | `systemd-resolved` restart (re-applies `99-cachyos-resolved.conf`) |
+| 3 | `systemd-tmpfiles --create` for THP |
+| 4 | `PKGS_DEL` removal |
+| 5 | Mask 12 desktop/power units |
+| 6 | `daemon-reload` + enable runtime units |
 
 <details>
 <summary><b>fstab</b> — 3 options</summary>
@@ -552,9 +536,11 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 
 ### Phase 5 — Boot
 
-1. `mkinitcpio -P` (initramfs rebuild)
-2. `sdboot-manage gen` (bootloader entries)
-3. `sdboot-manage update` (bootloader entries)
+| # | Step |
+|---|---|
+| 1 | `mkinitcpio -P` (initramfs rebuild) |
+| 2 | `sdboot-manage gen` (bootloader entries) |
+| 3 | `sdboot-manage update` (bootloader entries) |
 
 Skipped when on-disk package state or boot-critical configs are
 inconsistent with embedded content. Override after manual remediation
@@ -562,10 +548,12 @@ with `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ### Phase 6 — Finalize
 
-1. pacman cache cleanup (`paccache`)
-2. NetworkManager restart to apply the wpa_supplicant → iwd backend
-   switch — deferred to next reboot when WiFi is the active route
-3. Write JSONL log footer
+| # | Step |
+|---|---|
+| 1 | `systemctl --user daemon-reload` (skipped when no active user-bus) |
+| 2 | pacman cache cleanup (`paccache`) |
+| 3 | NetworkManager restart to apply the wpa_supplicant → iwd backend switch — deferred to next reboot when WiFi is the active route |
+| 4 | Write JSONL log footer |
 
 ## Managed Files
 
@@ -598,13 +586,13 @@ installed.
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → symlink check → chmod → `mv -T`; symlinked parent rejected |
+| Atomic writes | tmp (in dst parent) → symlink probe (pre + post-render) → chmod → `mv -T` |
 | Permissions | system 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600 |
-| fstab | Idempotent ext4 rewrite; `findmnt --verify` hard-fail. **No backup — snapshot first** |
+| fstab | Idempotent ext4 rewrite; `findmnt --verify` hard-fail; rejects when `/etc/fstab` itself is a symlink. **No backup — snapshot first** |
 | Boot rebuild gate | `mkinitcpio -P` skipped on package or boot-config failure; failed revert is an unconditional gate (FORCE does not bypass) |
-| mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert on `pacman -Syu` failure or signal |
+| mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert on `pacman -Syu` failure or signal (cp + size + `cmp -s`) |
 | Root detection | Refuses to run as root; sudo invoked internally |
-| Instance lock | Atomic mkdir + chmod 0700; auto-reclaims dead-PID lock |
+| Instance lock | Atomic mkdir + chmod 0700; auto-reclaims dead-PID lock; verifies `/proc/$pid/comm` is `fish` |
 | Preflight visibility | Failures emit to stderr in default install mode; `--check` stays silent |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal |
 

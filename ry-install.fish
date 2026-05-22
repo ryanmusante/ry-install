@@ -666,7 +666,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     _ir_validate_keys
     _ir_precompute_caches
     for _kp in $KERNEL_PARAMS
-        # Reject whitespace/shell metachars; would corrupt cmdline or LINUX_OPTIONS quote-escaping (v6.5.7).
+        # Reject whitespace/shell metachars; would corrupt cmdline or LINUX_OPTIONS quote-escaping.
         if string match -qr -- '[\s"`$;\\\\]' "$_kp"; _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _pn in $PKGS_ADD $PKGS_DEL $AUR_PKGS

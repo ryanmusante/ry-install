@@ -47,7 +47,7 @@ If you cannot set the executable bit: `fish ry-install.fish`.
 Typical duration: **3–8 minutes**.
 
 > [!IMPORTANT]
-> Initramfs rebuild aborts when on-disk package state or boot-critical
+> Initramfs rebuild is skipped when on-disk package state or boot-critical
 > configs are inconsistent with embedded content.
 >
 > Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
@@ -117,7 +117,7 @@ Preflight requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP_HA
 | 3 | Configuration files | Deploy 12 embedded config files (atomic) |
 | 4 | Services | fstab ext4 opts; `systemd-resolved` restart; THP tmpfiles apply; `PKGS_DEL` removal; mask 12 desktop/power units; `daemon-reload` + enable runtime units |
 | 5 | Boot | Rebuild initramfs, update systemd-boot entries |
-| 6 | Finalize | `systemctl --user daemon-reload`; pacman cache cleanup; NM restart (deferred when WiFi is active route); write JSONL footer |
+| 6 | Finalize | `systemctl --user daemon-reload`; pacman cache cleanup; NM restart (deferred to next reboot when WiFi is the active route); write JSONL footer |
 
 ## Run Summary
 
@@ -152,8 +152,6 @@ Set `RY_INSTALL_NO_MATRIX=1` to suppress the matrix (the JSONL log still records
 | Validate prerequisites (`_install_preflight`) | fish ≥ 3.6, kernel ≥ 6.14, systemd ≥ 250, GNU coreutils, free space, cached sudo credential, `EXPECTED_CPU_MATCH` hardware fingerprint |
 | Acquire instance lock | atomic `mkdir` + `chmod 0700`; auto-reclaims dead PIDs |
 | Validate array counts (`_ir_validate_counts`) | refuses to deploy on drift in any `set -g` array (15 invariants) |
-
-Override the hardware gate with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
 
 ### Phase 2 — Packages
 
@@ -358,8 +356,6 @@ Skipped when `iwd` package not installed (memoized via `_RY_SKIP_IWD`).
 | `[connection] wifi.powersave` | `2` |
 | `[logging] level` | `WARN` |
 
-Skipped when `iwd` package not installed.
-
 </details>
 
 <details>
@@ -549,7 +545,7 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 |---|---|
 | Atomic writes | tmp (in dst parent) → symlink probe (pre + post-render) → chmod → `mv -T` |
 | Permissions | system 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600 |
-| fstab | Idempotent ext4 rewrite; `findmnt --verify` hard-fail; rejects when `/etc/fstab` itself is a symlink. **No backup — snapshot first** |
+| fstab | See [Phase 4 — fstab](#phase-4--services); rejects when `/etc/fstab` itself is a symlink |
 | Boot rebuild gate | `mkinitcpio -P` skipped on package or boot-config failure; failed revert is an unconditional gate (FORCE does not bypass) |
 | mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert on `pacman -Syu` failure or signal (cp + size + `cmp -s`) |
 | Root detection | Refuses to run as root; sudo invoked internally |

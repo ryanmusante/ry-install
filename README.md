@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.40-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.41-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -611,7 +611,7 @@ installed.
 | Format | NDJSON, one file per run, no auto-rotation |
 | Prune | `find ~/ry-install/logs -mtime +30 -delete` |
 | Events | `header` (run metadata), `log` (`{ts, data}`), `footer` (`{exit_code, pass, fail, warn, gen_fail}`) |
-| Footer marker | `interrupted` (signal), `cleanup_exit` (normal `fish_exit`), `bail` (preflight fail after header) |
+| Footer marker | `bail` (preflight fail after header), `interrupted` (signal). Normal exit emits a footer with no marker |
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl

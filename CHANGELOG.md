@@ -1,6 +1,18 @@
 ry-install ChangeLog
 ====================
 
+v7.4.40 - v7.4.41 - 2026-05-22
+------------------------------
+
+- README Logs table: correct Footer-marker row. Drop
+  `cleanup_exit (normal fish_exit)` claim; the explicit
+  `_write_footer` at main-script tail fires before the
+  `fish_exit` handler's marked write and the
+  `_FOOTER_WRITTEN` idempotency guard blocks the second
+  call. Normal-exit footers carry no extra marker;
+  `bail` and `interrupted` remain accurate.
+- Header byline version-sync to `$VERSION`.
+
 v7.4.39 - v7.4.40 - 2026-05-22
 ------------------------------
 

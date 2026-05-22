@@ -1,6 +1,35 @@
 ry-install ChangeLog
 ====================
 
+v7.4.39 - v7.4.40 - 2026-05-22
+------------------------------
+
+- README safe-trim pass (740 → 684 lines).
+- Drop header blockquote (paru/AUR note migrated to Prerequisites
+  table); blockquote content duplicated `-h` output and Prerequisites
+  table contents.
+- Drop WiFi-defer sentence from [!IMPORTANT] block (duplicates Install
+  Flow phase 6 row); boot-critical path list + `RY_INSTALL_FORCE_BOOT_
+  REBUILD` override retained.
+- Prerequisites: fold "Additional preflight gates" prose into table
+  (add `systemd`, `GNU coreutils`, `Hardware`, `sudo cache`, `paru`
+  rows); fstab note removed (covered in Safety & Reliability).
+- Hardware: compress [!IMPORTANT] blockquote to one-line note
+  referencing `RY_INSTALL_SKIP_HARDWARE_CHECK`; inline `<details>` UMA
+  Frame Buffer Size table to single line; drop Mesa gfx1151 tracker
+  link (duplicates References).
+- Run Summary: compress 1-line intro paragraph to denser prose; Result
+  semantics table and Verdict triggers table retained.
+- Logs: drop second `jq` one-liner (footer-only filter is trivial
+  extension of first); Path/Format/Prune/Events/Footer-marker property
+  table retained.
+- Known Issues: flatten 5 `<details>` blocks (GPU/MT7925/ACP/NM-iwd/
+  Other) into single 3-column table (`Category` | `Issue` |
+  `Workaround`); all 11 issue/workaround pairs preserved.
+- References: inline 5 link bullets into single prose line with `·`
+  separators.
+- Header byline version-sync to `$VERSION`.
+
 v7.4.38 - v7.4.39 - 2026-05-22
 ------------------------------
 

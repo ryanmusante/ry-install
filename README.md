@@ -2,15 +2,11 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.39-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.40-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 ![license](https://img.shields.io/badge/license-MIT-green.svg)
-
-> Single fish script for CachyOS — 12 embedded configs, no required
-> external deps. paru required for AUR (`mkinitcpio-firmware`,
-> `mt76-mt7925-dkms`).
 
 ---
 
@@ -51,10 +47,8 @@ If you cannot set the executable bit: `fish ry-install.fish`.
 Typical duration: **3–8 minutes**.
 
 > [!IMPORTANT]
-> Over WiFi, the NM backend switch (wpa_supplicant → iwd) is deferred
-> to next reboot — on ethernet, `sudo systemctl restart NetworkManager`
-> applies it immediately. Initramfs rebuild aborts when on-disk package
-> state or boot-critical configs are inconsistent with embedded content:
+> Initramfs rebuild aborts when on-disk package state or boot-critical
+> configs are inconsistent with embedded content:
 >
 > - `/boot/loader/loader.conf`
 > - `/etc/kernel/cmdline`
@@ -76,13 +70,13 @@ Typical duration: **3–8 minutes**.
 | CachyOS | systemd-boot, ext4 root |
 | fish | ≥ 3.6 |
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
+| systemd | ≥ 250 |
+| GNU coreutils | ≥ 8.x (`timeout --foreground/--kill-after`) |
+| Hardware | `EXPECTED_CPU_MATCH` default `Ryzen AI Max` |
+| sudo cache | Cached credential (`sudo -v`) |
+| paru | Required for AUR (`mkinitcpio-firmware`, `mt76-mt7925-dkms`) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | Before `-Syu` | Read [CachyOS](https://wiki.cachyos.org) + [Arch news](https://archlinux.org/news/) |
-
-Additional preflight gates: systemd ≥ 250, GNU coreutils ≥ 8.x
-(`timeout --foreground/--kill-after`), hardware match, and a cached sudo
-credential (`sudo -v`). The ext4 `/etc/fstab` rewrite is idempotent and
-mount-semantics-preserving.
 
 > [!WARNING]
 > Sudo cache may lapse during the 3–8 min install. Mitigations:
@@ -104,26 +98,11 @@ df -h / /boot                    # verify space
 | GPU | Radeon 8060S (RDNA 3.5) |
 | RAM | 128 GB LPDDR5x-8000 |
 
-> [!IMPORTANT]
-> Preflight refuses to deploy on hardware not matching
-> `EXPECTED_CPU_MATCH` (default `Ryzen AI Max`): the amdgpu modules and
-> gfx1151 cmdline are profile-specific and break initramfs on other
-> silicon. Override at your own risk:
-> `RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish`.
+Preflight requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (amdgpu modules + gfx1151 cmdline are profile-specific and break initramfs on other silicon).
 
-<details>
-<summary><b>BIOS prerequisite — UMA Frame Buffer Size</b></summary>
+BIOS: set UMA Frame Buffer Size to `Auto` or `512 MB` (Strix Halo uses UMA with shared system memory). `--verify-runtime` warns if `mem_info_vram_total` exceeds 512 MB.
 
-| Setting | Value | Note |
-|---|---|---|
-| UMA Frame Buffer Size | `Auto` or `512 MB` | Strix Halo APU uses UMA with shared system memory; large fixed carveout wastes RAM dynamically backed when GPU needs it |
-
-`--verify-runtime` warns when `mem_info_vram_total` exceeds 512 MB.
-
-</details>
-
-Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
-[Mesa gfx1151](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151).
+Tracker: [kernel bugzilla](https://bugzilla.kernel.org).
 
 ## Usage
 
@@ -151,7 +130,7 @@ Trackers: [kernel bugzilla](https://bugzilla.kernel.org),
 
 ## Run Summary
 
-After the install completes, a box-drawn matrix prints to stderr with one row per phase check (CHECK / RESULT / EVIDENCE), followed by totals (`PASS · WARN · FAIL · DEFER · SKIP · N/A`), elapsed wall-clock, and a single-word verdict.
+Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + totals (`PASS · WARN · FAIL · DEFER · SKIP · N/A`) + elapsed wall-clock + single-word verdict.
 
 | Result | Semantics |
 |---|---|
@@ -643,7 +622,6 @@ installed.
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl
-jq 'select(.event == "footer")' ~/ry-install/logs/**/*.jsonl
 ```
 
 </details>
@@ -662,56 +640,19 @@ rollback source-of-truth:
 
 ## Known Issues
 
-<details>
-<summary><b>Strix Halo GPU</b></summary>
-
-| Issue | Workaround |
-|---|---|
-| CWSR hang | `amdgpu.cwsr_enable=0` (already set) |
-| MES page faults | Pin `linux-firmware` ≤ `20250808-1` or use `amdgpu-dkms-firmware` |
-| ROCm VRAM allocation | Fixed in kernel 6.16+ |
-
-</details>
-
-<details>
-<summary><b>MediaTek MT7925 WiFi</b></summary>
-
-| Issue | Workaround |
-|---|---|
-| Kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
-| TX power 3 dBm / random deauth | None (cosmetic / upstream) |
-
-</details>
-
-<details>
-<summary><b>Strix Halo ACP audio</b></summary>
-
-| Issue | Workaround |
-|---|---|
-| `platform acp_asoc_acp70.0: warning: No matching ASoC machine driver found` (dmesg, once per boot) — internal analog ACP path not routed | Pending upstream ASoC driver. HDMI (`snd_hda_intel`) and USB audio paths unaffected |
-
-</details>
-
-<details>
-<summary><b>NetworkManager + iwd</b></summary>
-
-| Issue | Workaround |
-|---|---|
-| Boot connectivity failure (intermittent) | `nmcli radio wifi off && nmcli radio wifi on` |
-| WPA2/3 Enterprise GUI broken | Use CLI or wpa_supplicant |
-
-</details>
-
-<details>
-<summary><b>Other</b></summary>
-
-| Issue | Workaround |
-|---|---|
-| Stale instance lock | Auto-reclaimed if PID is dead; manual `rm -rf ~/ry-install/.lock` only if `pgrep -af ry-install` is empty |
-| `systemctl --user` skipped | Absent user-bus yields a skip-info; enable with `loginctl enable-linger $USER` |
-| AUR PGP signature failure | `gpg --recv-keys <KEYID>` then re-run, or `paru -S <pkg>` without `--skipreview` |
-
-</details>
+| Category | Issue | Workaround |
+|---|---|---|
+| Strix Halo GPU | CWSR hang | `amdgpu.cwsr_enable=0` (already set) |
+| Strix Halo GPU | MES page faults | Pin `linux-firmware` ≤ `20250808-1` or use `amdgpu-dkms-firmware` |
+| Strix Halo GPU | ROCm VRAM allocation | Fixed in kernel 6.16+ |
+| MediaTek MT7925 | Kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
+| MediaTek MT7925 | TX power 3 dBm / random deauth | None (cosmetic / upstream) |
+| Strix Halo ACP | `acp_asoc_acp70.0: No matching ASoC machine driver` (dmesg, once/boot) — internal analog ACP not routed | Pending upstream ASoC driver; HDMI (`snd_hda_intel`) and USB audio unaffected |
+| NetworkManager + iwd | Boot connectivity failure (intermittent) | `nmcli radio wifi off && nmcli radio wifi on` |
+| NetworkManager + iwd | WPA2/3 Enterprise GUI broken | Use CLI or wpa_supplicant |
+| Other | Stale instance lock | Auto-reclaimed if PID is dead; manual `rm -rf ~/ry-install/.lock` only if `pgrep -af ry-install` is empty |
+| Other | `systemctl --user` skipped | Absent user-bus yields a skip-info; enable with `loginctl enable-linger $USER` |
+| Other | AUR PGP signature failure | `gpg --recv-keys <KEYID>` then re-run, or `paru -S <pkg>` without `--skipreview` |
 
 ## Troubleshooting
 
@@ -729,11 +670,7 @@ rollback source-of-truth:
 
 ## References
 
-- [NM + iwd](https://wiki.archlinux.org/title/NetworkManager#Using_iwd_as_the_Wi-Fi_backend)
-- [MT7925](https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek)
-- [gfx1151 issues](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151)
-- [ppfeaturemask](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter)
-- [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes)
+[NM + iwd](https://wiki.archlinux.org/title/NetworkManager#Using_iwd_as_the_Wi-Fi_backend) · [MT7925](https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek) · [gfx1151 issues](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) · [ppfeaturemask](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter) · [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes)
 
 ## License
 

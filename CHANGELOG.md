@@ -1,6 +1,19 @@
 ry-install ChangeLog
 ====================
 
+v7.4.41 - v7.4.42 - 2026-05-22
+------------------------------
+
+- README Configuration: collapse three low-density tables
+  to denser forms. systemd-logind table (9 keys, 8 with
+  empty Note column) becomes a list; cpupower-service
+  1-row table inlines to a `GOVERNOR='performance'`
+  prose line; tmpfiles 4-field table inlines to the
+  actual `w /sys/kernel/mm/transparent_hugepage/shrink_
+  underused - - - - 0` line. Substantive content
+  preserved; visual noise removed.
+- Header byline version-sync to `$VERSION`.
+
 v7.4.40 - v7.4.41 - 2026-05-22
 ------------------------------
 

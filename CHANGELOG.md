@@ -1,6 +1,16 @@
 ry-install ChangeLog
 ====================
 
+v7.4.42 - v7.4.43 - 2026-05-22
+------------------------------
+
+- README Configuration: cpupower-service and tmpfiles
+  blocks reformatted to match systemd-logind shape —
+  prose lead-in line followed by bullet list of the
+  key(s). Unifies presentation across the three
+  single-entry / context-only Configuration sub-blocks.
+- Header byline version-sync to `$VERSION`.
+
 v7.4.41 - v7.4.42 - 2026-05-22
 ------------------------------
 

@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.42-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.43-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -367,7 +367,9 @@ Skipped when `iwd` package not installed.
 <details>
 <summary><b>cpupower-service</b> — 1 key</summary>
 
-`GOVERNOR='performance'` — sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
+Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`):
+
+- `GOVERNOR='performance'`
 
 </details>
 
@@ -400,9 +402,9 @@ Priority 99 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
 <details>
 <summary><b>tmpfiles</b> — 1 entry</summary>
 
-`w /sys/kernel/mm/transparent_hugepage/shrink_underused - - - - 0`
+Applied immediately on install and on `--install-file` re-deploy; re-applied every boot by `systemd-tmpfiles-setup.service`:
 
-`systemd-tmpfiles-setup.service` writes this on every boot; applied immediately during install and on `--install-file` re-deploy.
+- `w /sys/kernel/mm/transparent_hugepage/shrink_underused - - - - 0`
 
 </details>
 

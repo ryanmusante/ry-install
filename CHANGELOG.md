@@ -1,39 +1,30 @@
 ry-install ChangeLog
 ====================
 
+v7.4.43 - v7.4.44 - 2026-05-22
+------------------------------
+
+- Hardware: drop orphan kernel-bugzilla tracker line (References already covers gfx1151).
+- Managed Files: clarify "iwd-gated destinations" — both `iwd/main.conf` and NetworkManager drop-in skip when iwd is absent.
+- CHANGELOG: tighten recent bullets to single-line form.
+- Header byline version-sync to `$VERSION`.
+
 v7.4.42 - v7.4.43 - 2026-05-22
 ------------------------------
 
-- README Configuration: cpupower-service and tmpfiles
-  blocks reformatted to match systemd-logind shape —
-  prose lead-in line followed by bullet list of the
-  key(s). Unifies presentation across the three
-  single-entry / context-only Configuration sub-blocks.
+- README Configuration: align cpupower-service and tmpfiles blocks to systemd-logind shape (prose lead + bullet).
 - Header byline version-sync to `$VERSION`.
 
 v7.4.41 - v7.4.42 - 2026-05-22
 ------------------------------
 
-- README Configuration: collapse three low-density tables
-  to denser forms. systemd-logind table (9 keys, 8 with
-  empty Note column) becomes a list; cpupower-service
-  1-row table inlines to a `GOVERNOR='performance'`
-  prose line; tmpfiles 4-field table inlines to the
-  actual `w /sys/kernel/mm/transparent_hugepage/shrink_
-  underused - - - - 0` line. Substantive content
-  preserved; visual noise removed.
+- README Configuration: collapse three low-density tables to denser forms (systemd-logind → list; cpupower-service + tmpfiles → inline).
 - Header byline version-sync to `$VERSION`.
 
 v7.4.40 - v7.4.41 - 2026-05-22
 ------------------------------
 
-- README Logs table: correct Footer-marker row. Drop
-  `cleanup_exit (normal fish_exit)` claim; the explicit
-  `_write_footer` at main-script tail fires before the
-  `fish_exit` handler's marked write and the
-  `_FOOTER_WRITTEN` idempotency guard blocks the second
-  call. Normal-exit footers carry no extra marker;
-  `bail` and `interrupted` remain accurate.
+- README Logs: drop incorrect `cleanup_exit` claim from Footer-marker row. Normal-exit footers carry no marker; `bail` (preflight) and `interrupted` (signal) remain accurate.
 - Header byline version-sync to `$VERSION`.
 
 v7.4.39 - v7.4.40 - 2026-05-22

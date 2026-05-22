@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.43-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.44-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -94,8 +94,6 @@ df -h / /boot                    # verify space
 | RAM | 128 GB LPDDR5x-8000 |
 
 Preflight requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (amdgpu modules + gfx1151 cmdline are profile-specific and break initramfs on other silicon).
-
-Tracker: [kernel bugzilla](https://bugzilla.kernel.org).
 
 ## Usage
 
@@ -522,8 +520,8 @@ with `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 12 files deployed via the [Phase 3](#phase-3--configuration-files)
 atomic-write sequence. System files install `0644`, the user file
-`0600`. The two `iwd` destinations are skipped when `iwd` is not
-installed.
+`0600`. The two iwd-gated destinations (`/etc/iwd/main.conf` and the
+NetworkManager drop-in) are skipped when `iwd` is not installed.
 
 <details>
 <summary><b>Destinations</b> — 12 paths</summary>

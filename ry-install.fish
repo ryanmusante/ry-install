@@ -430,7 +430,7 @@ function _teardown --argument-names mode --description "Unified cleanup: progres
             _write_footer "$argv[2]" interrupted
             _do_cleanup
         case exit
-            _write_footer "$argv[2]" cleanup_exit
+            _write_footer "$argv[2]" ""
             _do_cleanup
         case '*'
             _err "_teardown: unknown mode '$mode'"
@@ -2089,7 +2089,6 @@ function _verify_static_checksum --description "Verify embedded content hash mat
     _echo
 end
 function _vs_read_symmetry_selftest --description "Preflight: detect read-symmetry regressions in _installed_bytes (asymmetric trailing newline)"
-    # Idempotent: cached in _RY_READSYM_RESULT (0=ok, 1=fail).
     set -q _RY_READSYM_RESULT; and return $_RY_READSYM_RESULT
     set -l _tmp (_mktemp_or_null -p (_tmp_dir) ry-readsym.XXXXXX)
     if test -z "$_tmp"; or test "$_tmp" = /dev/null; _log "READ_SYMMETRY_SKIP: mktemp returned no path"; set -g _RY_READSYM_RESULT 0; return 0; end
@@ -4064,7 +4063,7 @@ function _rdi_matrix_header --description "_rdi_render_matrix sub. Emit top bar,
     set -l _bar_top $argv[1]; set -l _sep_c $argv[2]; set -l _sep_r $argv[3]; set -l _sep_e $argv[4]
     set -l _inner $argv[5]; set -l _w_c $argv[6]; set -l _w_r $argv[7]; set -l _w_e $argv[8]
     set -l _title "ry-install v$VERSION — RUN SUMMARY"
-    # Center title within $_inner cols; (inner - len) // 2 spaces of left pad
+    # Center title within $_inner cols.
     set -l _title_lpad (math -s0 "max(0, ($_inner - "(string length -- $_title)") / 2)")
     set -l _title_padded $_title
     test $_title_lpad -gt 0; and set _title_padded (string repeat -n $_title_lpad ' ')$_title
@@ -4125,7 +4124,6 @@ function _rdi_render_matrix --description "Render install phase matrix as box-dr
     if set -q RY_INSTALL_NO_MATRIX; and test "$RY_INSTALL_NO_MATRIX" = 1; _log "MATRIX_RENDER_SKIP: RY_INSTALL_NO_MATRIX=1"; return 0; end
     set -q _RY_OUTPUT_BROKEN; and return 0
     set -l _w_check 34; set -l _w_result 6; set -l _w_evidence 30
-    # _inner = sum of 3 col widths + 6 padding spaces (2 per cell) + 2 inner ║ separators = w+8
     set -l _inner (math "$_w_check + $_w_result + $_w_evidence + 8")
     set -l _bar_top (string repeat -n $_inner '═')
     set -l _sep_c (string repeat -n (math "$_w_check + 2") '═')
@@ -4156,7 +4154,6 @@ function _rdi_summary --description "Print final install summary"
     _info "Manual steps required:"
     _info "  1. Run 'rehash' or start new shell (updates command paths)"
     _info "  2. REBOOT to apply kernel cmdline and module changes"
-    # realtime-privileges: 'realtime' group; changes need re-login.
     if command -q pacman; and command pacman -Qq realtime-privileges >/dev/null 2>&1
         set -l _uname (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}')
         if test -n "$_uname"; and not command id -nG -- "$_uname" 2>/dev/null | string match -qr '\brealtime\b'
@@ -4391,7 +4388,10 @@ function _early_usage_exit --description "Print usage error to stderr, remove pr
     _pre_dispatch_exit $EXIT_USAGE
 end
 
-set -g MODE install; set -g INSTALL_FILE_TARGET ""; set -l _ORIG_ARGV $argv; set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) ry-argparse-err.XXXXXX)
+set -g MODE install
+set -g INSTALL_FILE_TARGET ""
+set -l _ORIG_ARGV $argv
+set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) ry-argparse-err.XXXXXX)
 _track_tmpfile "$_ap_errfile"
 argparse --name=(status basename) \
     --exclusive=verify-static,verify-runtime,check,install-file \

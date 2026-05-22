@@ -45,7 +45,7 @@ v7.4.37 - v7.4.38 - 2026-05-22
 - README Phase 3: tmp file in destination's parent dir; symlink probe pre + post render.
 - README Safety table: atomic-writes match implementation; fstab notes symlink refusal; mkinitcpio rollback notes `cp + size + cmp -s`; instance-lock notes `/proc/$pid/comm = fish`.
 
-v7.4.36 - v7.4.37 - 2026-05-21
+v7.4.36 - v7.4.37 - 2026-05-22
 ------------------------------
 
 - `_vrsv_chk_nm_dispatcher`: short-circuit on `not-found` (`_warn` + return 0); aligns with sibling `_vrsv_chk_*` helpers.
@@ -68,7 +68,7 @@ v7.4.33 - v7.4.34 - 2026-05-21
 ------------------------------
 
 - LOC reduction 5113 → 4468: ~200 multi-line blocks collapsed to `; and` chain form (skipped on blocks with trailing `#` comments).
-- Function count unchanged (255 multi-line + 9 single-line); largest still `_ry_show_help` at 39 LOC.
+- Function count unchanged (256 multi-line + 8 single-line); largest still `_ry_show_help` at 39 LOC.
 
 v7.4.32 - v7.4.33 - 2026-05-21
 ------------------------------

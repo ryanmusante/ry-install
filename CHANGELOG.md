@@ -1,6 +1,50 @@
 ry-install ChangeLog
 ====================
 
+v7.4.35 - v7.4.36 - 2026-05-22
+------------------------------
+
+Three stray `\;` tokens removed from inline `for` lists. fish parses
+`\;` as a literal `;` element of the for-list, not as a separator:
+L1741 (_vsb_loader, loader.conf) and L1913 (_verify_static_system,
+resolved.conf.d) each caused `_chk_grep` to look for a literal ";"
+in the config file, fail, increment VERIFY_FAIL, and flip the
+`--verify-static` verdict from PASS to FAIL on a correct
+installation. L1350 (_ry_check_deps optional-tools probe) appended
+a literal ";" to `_opt_missing`, surfacing as
+"Expected tools not found (from base packages): ;" in the _warn
+output. Origin: the v7.4.33 → v7.4.34 LOC-collapse pass; the tokens
+were visual separators the collapse turned into list elements. All
+three sites now use plain whitespace between entries.
+
+RY_INITRD_WARN_MB validation no longer silently falls back. Previous
+form (single-line `set -q; and string match; and set`) discarded
+invalid values without notice. New form mirrors the L1136
+RY_RUN_TIMEOUT pattern: on regex mismatch the message is queued in
+`_RY_DEFERRED_WARNS` (necessary because `_warn` and `_log` are not
+yet defined at L567), then flushed alongside `_RY_PERM_FIX_NOTICES`
+once both functions are live. Valid input behavior unchanged.
+
+Malformed sysctl entries now surface to the user, not just the
+JSONL log. `_content__etc_sysctl.d_99-cachyos-sysctl.conf` collects
+skipped entries in `_RY_SYSCTL_BAD_ENTRIES`; the EXIT_GEN_SYSCTL
+branch of the dispatcher (formerly emitting only
+"Content generator assertion failed (output count mismatch): $dst")
+now appends the malformed entry list when populated.
+
+Matrix render gains defensive truncation diagnostics. `_rdi_matrix_-
+rows` emits `MATRIX_TRUNCATED` to JSONL when a CHECK label or
+EVIDENCE string exceeds its column width before `string sub` clips
+it. No current `_phase_record` call hits the threshold (longest
+label is 33 chars vs the 34-char CHECK column); guard exists for
+future labels and locale-driven width drift.
+
+fish --no-execute syntax PASS; --help/--version/--bogus/--check
+behaviour unchanged (rc=0/0/2/3); --verify-static verdict on a
+correct system transitions rc=1 → rc=0. 4476 → 4490 LOC (+14 from
+the four diagnostic additions; semantically narrow). JSONL header
+version field reports 7.4.36.
+
 v7.4.34 - v7.4.35 - 2026-05-22
 ------------------------------
 

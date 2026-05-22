@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.4.35 (2026-05-22) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.36 (2026-05-22) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.35"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.36"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -564,7 +564,11 @@ set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5
 set -g BOOT_TIME_TARGET 15; set -g INITRD_WARN_MB 100
-set -q RY_INITRD_WARN_MB; and string match -qr '^[1-9][0-9]*$' -- "$RY_INITRD_WARN_MB"; and set -g INITRD_WARN_MB $RY_INITRD_WARN_MB
+if set -q RY_INITRD_WARN_MB; and test -n "$RY_INITRD_WARN_MB"
+    if string match -qr '^[1-9][0-9]*$' -- "$RY_INITRD_WARN_MB"; set -g INITRD_WARN_MB $RY_INITRD_WARN_MB
+    else; not set -q _RY_DEFERRED_WARNS; and set -g _RY_DEFERRED_WARNS; set -ga _RY_DEFERRED_WARNS "RY_INITRD_WARN_MB='$RY_INITRD_WARN_MB' is invalid (expected positive integer) — using default $INITRD_WARN_MB MB"
+    end
+end
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
     set -g _ROOT_UUID (command findmnt -no UUID / 2>/dev/null)
@@ -724,9 +728,9 @@ function _content__etc_default_cpupower-service.conf --description "Generate con
 end
 function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Generate content for sysctl drop-in"
     printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf; overrides net.core.netdev_max_backlog 4096 → 16384)"
-    set -l _printed 0
+    set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
     for entry in $SYSCTL_VALUES
-        if not string match -qr '^\s*\S[^=]*=\s*\S' -- "$entry"; functions -q _log; and _log "SYSCTL_SKIP_MALFORMED: '$entry' (require non-empty key=value)"; continue; end
+        if not string match -qr '^\s*\S[^=]*=\s*\S' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; functions -q _log; and _log "SYSCTL_SKIP_MALFORMED: '$entry' (require non-empty key=value)"; continue; end
         set -l parts (string split -m1 '=' -- "$entry"); set -l key (string trim -- "$parts[1]"); set -l val (string trim -- "$parts[2]")
         printf '%s = %s\n' "$key" "$val"
         set _printed (math $_printed + 1)
@@ -1347,7 +1351,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     _resolve_systemd_ver
     if test -n "$_RY_SYSTEMD_VER"; and test "$_RY_SYSTEMD_VER" -lt 250; _err "Systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
     set -l _opt_missing
-    for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput \; swapon zramctl lsmod modprobe pkill nmcli ping realpath ip; command -q $cmd; or set -a _opt_missing $cmd; end
+    for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
     if test (count $AUR_PKGS) -gt 0; and not command -q paru; _warn "paru not found — AUR phase will fail (AUR_PKGS=$AUR_PKGS)"; _info "  Install paru: sudo pacman -S --needed paru"; end
     _log DEPS_CHECK_OK
@@ -1658,7 +1662,11 @@ function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description 
             case $EXIT_GEN_NOUUID
                 _err "Content generator missing prerequisite global (e.g. _ROOT_UUID): $dst"
             case $EXIT_GEN_SYSCTL
-                _err "Content generator assertion failed (output count mismatch): $dst"
+                if set -q _RY_SYSCTL_BAD_ENTRIES; and test (count $_RY_SYSCTL_BAD_ENTRIES) -gt 0
+                    _err "Content generator assertion failed (output count mismatch): $dst — malformed entries: "(string join ', ' -- $_RY_SYSCTL_BAD_ENTRIES)
+                else
+                    _err "Content generator assertion failed (output count mismatch): $dst"
+                end
             case '*'
                 _err "Content generator failed for $dst (rc=$_ps[1])"
         end
@@ -1738,7 +1746,7 @@ end
 function _vsb_loader --description "_verify_static_boot sub: /boot/loader/loader.conf key/value verification"
     _echo "── loader.conf ──"
     _chk_file /boot/loader/loader.conf; or return 0
-    for kv in "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" \; "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"; _chk_grep /boot/loader/loader.conf "$kv"; end
+    for kv in "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"; _chk_grep /boot/loader/loader.conf "$kv"; end
 end
 function _vsb_sdboot --description "_verify_static_boot sub: sdboot-manage.conf LINUX_OPTIONS + key checks"
     _echo "── sdboot-manage.conf ──"
@@ -1910,7 +1918,7 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _vss_ntsync_modules
     _echo "── resolved ──"
     if _chk_file /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
-        for kv in "MulticastDNS=$RESOLVED_MDNS" "DNSOverTLS=opportunistic" \; "DNSSEC=allow-downgrade" "LLMNR=no"; _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "$kv"; end
+        for kv in "MulticastDNS=$RESOLVED_MDNS" "DNSOverTLS=opportunistic" "DNSSEC=allow-downgrade" "LLMNR=no"; _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "$kv"; end
     end
     _echo "── logind.conf ──"
     _vss_logind
@@ -4057,6 +4065,8 @@ function _rdi_matrix_rows --description "_rdi_render_matrix sub. Emit data rows;
     set -g _RY_MTX_DEFER 0; set -g _RY_MTX_SKIP 0; set -g _RY_MTX_NA 0
     for _row in $_RY_PHASE_RESULTS
         set -l _parts (string split '│' -- $_row)
+        test (string length -- $_parts[1]) -gt $_w_c; and functions -q _log; and _log "MATRIX_TRUNCATED: check label "(string length -- $_parts[1])" > $_w_c chars: $_parts[1]"
+        test (string length -- $_parts[3]) -gt $_w_e; and functions -q _log; and _log "MATRIX_TRUNCATED: evidence "(string length -- $_parts[3])" > $_w_e chars: $_parts[3]"
         set -l _chk (string sub -l $_w_c -- $_parts[1]); set -l _res $_parts[2]; set -l _evd (string sub -l $_w_e -- $_parts[3])
         set -l _res_lpad (math -s0 "max(0, ($_w_r - "(string length -- $_res)") / 2)")
         set -l _res_padded $_res
@@ -4440,6 +4450,10 @@ end
 if set -q _RY_PERM_FIX_NOTICES
     for _n in $_RY_PERM_FIX_NOTICES; _log "$_n"; end
     set --erase _RY_PERM_FIX_NOTICES _n
+end
+if set -q _RY_DEFERRED_WARNS
+    for _w in $_RY_DEFERRED_WARNS; _warn "$_w"; _log "DEFERRED_WARN: $_w"; end
+    set --erase _RY_DEFERRED_WARNS _w
 end
 _init_runtime
 switch $MODE

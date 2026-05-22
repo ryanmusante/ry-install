@@ -1,5 +1,7 @@
 # ry-install
 
+**CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
+
 [![version](https://img.shields.io/badge/version-7.4.38-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
@@ -10,12 +12,17 @@
 > external deps. paru required for AUR (`mkinitcpio-firmware`,
 > `mt76-mt7925-dkms`).
 
-**Target:** Beelink GTR9 Pro (Strix Halo APU). See [Hardware](#hardware).
-
 ---
+
+## Highlights
+
+- **Idempotent** — atomic writes, byte-exact verify, repeated runs are no-ops
+- **Self-contained** — single 4500-line fish script, no helper libs
+- **Hardware-locked** — refuses to deploy on non-Strix-Halo silicon
 
 ## Contents
 
+- [Highlights](#highlights)
 - [Quick Start](#quick-start)
 - [Scope](#scope)
 - [Prerequisites](#prerequisites)
@@ -765,4 +772,6 @@ rollback source-of-truth:
 
 ## License
 
-MIT © 2026 Ryan Musante
+MIT © 2026 Ryan Musante · `SPDX-License-Identifier: MIT`
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.

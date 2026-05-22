@@ -1,6 +1,29 @@
 ry-install ChangeLog
 ====================
 
+v7.4.38 - v7.4.39 - 2026-05-22
+------------------------------
+
+- Comment density reduction: collapse verbose multi-clause inline
+  comments to single concise WHY lines; delete obvious-from-context
+  annotations (`# hard fail`, `# soft warn`, tmpfiles sysfs restate,
+  `# Preflight passed — restore default QUIET`).
+- Split four lines exceeding 220 chars to continuation form:
+  `_unit_state` body, `_post_sysctl` warn+info chain, header JSONL
+  `printf`, pacman db-lock `_err` string.
+- `_post_cpupower`: split single-line restart-warn into `_warn` +
+  `_info` pair (parenthetical promoted to info line).
+- `_init_runtime`: lift KERNEL_PARAMS metachar regex into a `set -l`
+  and split inline if-chain into a multi-line block.
+- `_check_phase_cmdline`: emit `CHECK_PREFLIGHT: /proc/cmdline empty
+  or unreadable` to JSONL when read returns empty (previously silent
+  drift).
+- `_install_aur_packages`: collapse four `AUR_NOISE_NOTE_TOKEN` `_log`
+  calls into a single joined-string log via `string join`.
+- `_post_boot`: shorten `_RY_BOOT_TAINTED=true` rejection message
+  parenthetical.
+- Header byline version-sync to `$VERSION`.
+
 v7.4.37 - v7.4.38 - 2026-05-22
 ------------------------------
 

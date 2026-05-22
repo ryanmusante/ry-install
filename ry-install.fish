@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.4.38 (2026-05-22) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.39 (2026-05-22) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.38"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.39"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -65,7 +65,7 @@ set --erase _early_arg
 set -g _MY_UID (command id -u)
 
 function _ry_erase_handlers --description "Erase signal/exit handler functions"; functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null; end
-# Callable pre-bootstrap: _log/_write_footer/_do_cleanup invocations are `functions -q`-guarded.
+# Pre-bootstrap callers must `functions -q`-guard _log/_write_footer/_do_cleanup.
 function _ry_exit --argument-names code --description "Set bail sentinel and exit"
     test -z "$code"; and set code 0
     if set -q _RY_INSTALL_BAILING; and test "$_RY_INSTALL_BAILING" = true; set -g _RY_INSTALL_LAST_EXIT $code; exit $code; end
@@ -202,7 +202,9 @@ function _resolve_systemd_ver --description "Cache systemd major version into _R
     set -g _RY_SYSTEMD_VER_TRIED true
     return 0
 end
-function _unit_state --argument-names unit --description "Return LoadState/ActiveState/UnitFileState as 3-line list (fewer on systemctl error)"; command systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null; end
+function _unit_state --argument-names unit --description "Return LoadState/ActiveState/UnitFileState as 3-line list (fewer on systemctl error)"
+    command systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null
+end
 function _unit_state_padded --argument-names unit --description "Return _unit_state values"
     set -l _v (_unit_state "$unit")
     if test (count $_v) -lt 3
@@ -665,9 +667,12 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     _ir_validate_counts
     _ir_validate_keys
     _ir_precompute_caches
+    set -l _kp_metachar_re '[\s"`$;\\\\]'
     for _kp in $KERNEL_PARAMS
-        # Reject whitespace/shell metachars; would corrupt cmdline or LINUX_OPTIONS quote-escaping.
-        if string match -qr -- '[\s"`$;\\\\]' "$_kp"; _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if string match -qr -- "$_kp_metachar_re" "$_kp"
+            _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"
+            _pre_dispatch_exit $EXIT_PREFLIGHT
+        end
     end
     for _pn in $PKGS_ADD $PKGS_DEL $AUR_PKGS
         if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman/paru would parse as flag, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -739,7 +744,6 @@ function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Generate c
     if test $_printed -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
 end
 function _content__etc_tmpfiles.d_99-cachyos-thp.conf --description "Generate content for THP tmpfiles drop-in"
-    # systemd-tmpfiles writes runtime sysfs tunables on every boot
     printf '%s\n' "# THP shrink_underused: keep huge pages intact on high-RAM workstations (128 GB profile)" "w /sys/kernel/mm/transparent_hugepage/shrink_underused - - - - 0"
 end
 function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"
@@ -906,7 +910,7 @@ function _json_str --description "Escape a string for safe JSON embedding (RFC 8
     set s (string replace -a -- \t '\\t' "$s" | string collect)
     set s (string replace -a -- \b '\\b' "$s" | string collect)
     set s (string replace -a -- \f '\\f' "$s" | string collect)
-    # 00 (NUL) omitted: fish strings cannot carry NUL — truncated at variable boundary, never reaches this function.
+    # NUL omitted: fish strings cannot carry NUL — truncated at variable boundary.
     for _hex in 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f; set s (string replace -a -- (printf '\x'$_hex) '\u00'$_hex "$s" | string collect); end
     printf '%s' "$s" | string collect --allow-empty
 end
@@ -1053,7 +1057,7 @@ function _progress_now --description "Monotonic seconds (cached uptime or epoch)
     command date +%s
 end
 function _progress_init --description "Open scroll region; draw initial bar"
-    # 6-phase list must match README "Install Flow"; phase skip = _install_* sub returned early.
+    # 6-phase list must match README "Install Flow".
     set -g _PROG_STEPS Preflight Packages Configuration Services Boot Finalize
     set -g _PROG_CUR 0; set -g _PROG_TOTAL (count $_PROG_STEPS)
     set -g _PROG_START (_progress_now); set -g _PROG_STEP_START $_PROG_START
@@ -1147,10 +1151,11 @@ function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable 
     end
     echo $_RY_RUN_TIMEOUT_DEFAULT
 end
-function _run_emit_stream --argument-names label_tag tmpfile ret cap --description "_run sub. Capture stream, log, emit per QUIET/rc. Splits cap into head + 100 tail so final-line diagnostics (AUR build errors, pacman conflicts) are preserved."
+# Splits cap into head + 100 tail so final-line diagnostics (AUR build errors, pacman conflicts) survive truncation.
+function _run_emit_stream --argument-names label_tag tmpfile ret cap --description "_run sub. Capture stream, log, emit per QUIET/rc."
     test -s "$tmpfile"; or return 0
     set -l _total (command wc -l <"$tmpfile" 2>/dev/null | string trim --)
-    # wc -l misses unterminated final line; add 1 when tail byte is non-empty.
+    # wc -l misses final no-NL line; add 1 when tail byte is non-empty.
     set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
     test -n "$_last_byte"; and string match -qr '^\d+$' -- "$_total"; and set _total (math $_total + 1)
     set -l _redacted; set -l _head_cap (math "max(1, $cap - 100)"); set -l _tail_cap 100; set -l _need_tail false
@@ -1425,7 +1430,6 @@ function _ry_check_kernel_version --description "Verify running kernel version m
     if _kver_below $major $minor $kver_patch 6 14 0
         _warn "Kernel $kver < 6.14: ntsync and gfx1151 fixes unavailable"
         _info "  Upgrade kernel before or during install (pacman -Syu)"
-        # hard fail
         return 2
     end
     set -l _warns 0
@@ -1450,7 +1454,6 @@ function _ry_check_kernel_version --description "Verify running kernel version m
     if test "$major" -eq 6; and test "$minor" -eq 19
         if test "$kver_patch" = 0; _warn "Kernel 6.19.0: black screen regression on Strix Halo (CachyOS #23042)"; _warn "  Recommend: downgrade to 6.18.x or upgrade to 6.19.1+"; set _warns (math $_warns + 1); end
     end
-    # soft warn
     test $_warns -gt 0; and return 1
     return 0
 end
@@ -2086,12 +2089,12 @@ function _verify_static_checksum --description "Verify embedded content hash mat
     _echo
 end
 function _vs_read_symmetry_selftest --description "Preflight: detect read-symmetry regressions in _installed_bytes (asymmetric trailing newline)"
-    # Idempotent: result cached in _RY_READSYM_RESULT (0=ok, 1=fail); subsequent calls short-circuit.
+    # Idempotent: cached in _RY_READSYM_RESULT (0=ok, 1=fail).
     set -q _RY_READSYM_RESULT; and return $_RY_READSYM_RESULT
     set -l _tmp (_mktemp_or_null -p (_tmp_dir) ry-readsym.XXXXXX)
     if test -z "$_tmp"; or test "$_tmp" = /dev/null; _log "READ_SYMMETRY_SKIP: mktemp returned no path"; set -g _RY_READSYM_RESULT 0; return 0; end
     _track_tmpfile "$_tmp"
-    # 12-byte payload: 2×5-char lines + 2 newlines; exercises the historic \n drop/add path.
+    # 12-byte probe: 2×5-char lines + 2 NL; exercises \n drop/add path.
     printf '%s\n' line1 line2 > "$_tmp"
     set -l _disk_bytes (command stat -c %s -- "$_tmp" 2>/dev/null)
     set -l _read (_installed_bytes "$_tmp" | string collect --no-trim-newlines --allow-empty)
@@ -2151,7 +2154,7 @@ function _check_phase_files --description "--check phase: file content hash comp
 end
 function _check_phase_cmdline --description "--check phase: cmdline contains KERNEL_PARAMS + rw"
     set -l _cmdline (command cat -- /proc/cmdline 2>/dev/null)
-    if test -z "$_cmdline"; set -g _RY_CHECK_DRIFT 1; return 0; end
+    if test -z "$_cmdline"; _log "CHECK_PREFLIGHT: /proc/cmdline empty or unreadable"; set -g _RY_CHECK_DRIFT 1; return 0; end
     for _p in $KERNEL_PARAMS; set -l _p_re (string escape --style=regex -- "$_p"); string match -qr -- "(^|\s)$_p_re(\s|\$)" "$_cmdline"; or set -g _RY_CHECK_DRIFT 1; end
     string match -qr -- '(^|\s)rw(\s|$)' "$_cmdline"; or set -g _RY_CHECK_DRIFT 1
     return 0
@@ -2450,7 +2453,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
             set -g _RY_DMESG_BAR (printf '%s\n' $_full | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large' | command head -n 1)
             set -g _RY_DMESG_TSC (printf '%s\n' $_full | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
         end
-        # Cap to 5000 lines: bound fish list memory + grep cost downstream. Markers pre-extracted.
+        # 5000-line cap bounds fish list memory; markers pre-extracted.
         set -g _RY_DMESG_CACHE $_full[1..5000]
         test "$_full_count" -gt 5000; and _log "DMESG_CAPPED: kept=5000 of $_full_count lines (markers pre-extracted from full buffer)"
     end
@@ -3015,7 +3018,7 @@ end
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
     _ry_sudo_cache_banner
-    # Force preflight errors to stderr in QUIET install mode; cleared on success/bail.
+    # Force preflight errors to stderr in QUIET install; cleared on success/bail.
     set -g _RY_LOUD_ERR true; set -l _chk_labels "Preflight: sudo credential cache" "Preflight: dependency check" "Preflight: disk space"; set -l _i 1
     for _chk in _ensure_sudo_cached _ry_check_deps _ry_check_disk_space
         if $_chk; _phase_record $_chk_labels[$_i] PASS "ok"; set _i (math $_i + 1); continue; end
@@ -3049,7 +3052,6 @@ function _install_preflight --description "Run all preflight checks before insta
     _echo
     if not _ry_validate_configs; _phase_record "Preflight: config validation" FAIL "see JSONL log"; _err "Configuration validation failed - aborting"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
     _phase_record "Preflight: config validation" PASS "$_RY_MANAGED_FILE_COUNT/$_RY_MANAGED_FILE_COUNT destinations"
-    # Preflight passed — restore default QUIET for install phases.
     set --erase _RY_LOUD_ERR
 end
 function _mr_copy_size_verify --argument-names backup_file _mki_tmp --description "_mkinitcpio_revert sub: cp + byte-exact size + content verify"
@@ -3127,7 +3129,7 @@ function _ip_snapshot_mkinitcpio --description "Snapshot /etc/mkinitcpio.conf fo
         _log "MKINITCPIO_BACKUP_FAIL: cp"
         return 0
     end
-    # mktemp inherits 0600; revert chmods --reference=destination, so snapshot mode is moot.
+    # Snapshot mode moot: revert chmods --reference=destination.
     set -g _RY_MKI_BACKUP_FILE "$_snap"; set -g _RY_MKI_HAD_ORIG true
 end
 function _ip_pacman_invoke --description "Run pacman -Syu (or -Sy via RY_INSTALL_ALLOW_PARTIAL_UPGRADE)"
@@ -3145,7 +3147,11 @@ function _ip_pacman_invoke --description "Run pacman -Syu (or -Sy via RY_INSTALL
         set _pacman_retry -Syyu --needed --noconfirm
         _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
     end
-    if test -f /var/lib/pacman/db.lck; _err "Pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run; skipping package install"; return 1; end
+    if test -f /var/lib/pacman/db.lck
+        _err "Pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or stale lock from a crashed run"
+        _err "  Skipping package install — remove the lock file manually if no pacman process is active"
+        return 1
+    end
     if not _run sudo -n pacman $_pacman_first -- $argv
         _warn "Package installation failed — retrying with forced db re-sync (handles transient mirror staleness; will not resolve pkg conflicts — see JSONL log for first-pass stderr)..."
         if not _run sudo -n pacman $_pacman_retry -- $argv
@@ -3260,7 +3266,7 @@ function _iap_per_pkg_retry --description "_install_aur_packages sub. Re-attempt
     for pkg in $AUR_PKGS
         if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- "$pkg"; _warn "AUR install failed: $pkg"; set -g INSTALL_HAD_ERRORS true; set -g _RY_IAP_RETRY_FAILED (math $_RY_IAP_RETRY_FAILED + 1); end
     end
-    # Partial = some-but-not-all failed; total per-pkg failure is full failure, not "partial".
+    # Partial = some-but-not-all failed; total per-pkg failure is full failure.
     test $_RY_IAP_RETRY_FAILED -gt 0; and test $_RY_IAP_RETRY_FAILED -lt (count $AUR_PKGS); and set -g _RY_AUR_PARTIAL true
 end
 function _iap_record_result --description "_install_aur_packages sub. Record final phase result for the run-summary matrix"
@@ -3288,9 +3294,11 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
     end
     set -l _had_fail false; set -l _retry_failed 0; set -g _RY_AUR_PARTIAL false
     _log "AUR_NOISE_NOTE: paru/makepkg stderr/stdout may contain benign tokens; authoritative success signal is MT7925_VERIFY_OK from _aur_verify_mt7925"
-    _log "AUR_NOISE_NOTE_TOKEN: 'WARNING: Using existing \$srcdir/ tree' (cache reuse)"
-    _log "AUR_NOISE_NOTE_TOKEN: 'error: command failed to execute correctly' (retried sub-step)"
-    _log "AUR_NOISE_NOTE_TOKEN: 'BUILD_EXCLUSIVE directives ... do not match this kernel' (DKMS rejects build for an alternate kernel; mainline ships in-tree mt7925e)"
+    set -l _aur_noise_tokens \
+        "'WARNING: Using existing \$srcdir/ tree' (cache reuse)" \
+        "'error: command failed to execute correctly' (retried sub-step)" \
+        "'BUILD_EXCLUSIVE directives ... do not match this kernel' (DKMS rejects alt kernel; mainline ships mt7925e in-tree)"
+    _log "AUR_NOISE_NOTE_TOKENS: "(string join -- ' | ' $_aur_noise_tokens)
     if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- $AUR_PKGS
         if test (count $AUR_PKGS) -le 1
             _warn "AUR install failed: $AUR_PKGS"
@@ -3863,7 +3871,7 @@ function _irb_verify_entries --argument-names esp --description "Re-enumerate bo
 end
 function _irb_taint_gate --description "_install_rebuild_boot sub. Verify mkinitcpio.conf is consistent and boot state is not tainted; returns non-zero with _phase_record + _irb_skip_post_mki on bail"
     if test "$_RY_BOOT_TAINTED" = true; and test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
-        # Surface override: fires silently otherwise; post-mortem cannot distinguish forced vs clean run.
+        # Surface override: post-mortem cannot distinguish forced vs clean otherwise.
         _warn "Boot-rebuild forced by RY_INSTALL_FORCE_BOOT_REBUILD=1 — _RY_BOOT_TAINTED gate bypassed"
         _log "BOOT_TAINTED_OVERRIDE: RY_INSTALL_FORCE_BOOT_REBUILD=1 bypassed taint flag in _install_rebuild_boot"
     end
@@ -4148,7 +4156,7 @@ function _rdi_summary --description "Print final install summary"
     _info "Manual steps required:"
     _info "  1. Run 'rehash' or start new shell (updates command paths)"
     _info "  2. REBOOT to apply kernel cmdline and module changes"
-    # realtime-privileges grants RT scheduling via the 'realtime' group; group changes need re-login.
+    # realtime-privileges: 'realtime' group; changes need re-login.
     if command -q pacman; and command pacman -Qq realtime-privileges >/dev/null 2>&1
         set -l _uname (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}')
         if test -n "$_uname"; and not command id -nG -- "$_uname" 2>/dev/null | string match -qr '\brealtime\b'
@@ -4233,7 +4241,7 @@ function _idf_match_dst --argument-names target --description "Match \$target ag
 end
 function _idf_dispatch_hook --argument-names target tag --description "Dispatch a post-hook tag to its _post_<tag> handler"
     if test -z "$tag"; or not functions -q "_post_$tag"; _err "Internal: unknown post-hook tag '$tag' (target=$target)"; return 1; end
-    # Dynamic dispatch: handler resolved from _RY_POST_HOOKS table tag.
+    # Dynamic dispatch via _post_$tag.
     _post_$tag "$target"
 end
 function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"
@@ -4285,7 +4293,7 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
         return $EXIT_BOOT_CRIT
     end
     if test "$_RY_BOOT_TAINTED" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
-        _err "Refusing initramfs rebuild — _RY_BOOT_TAINTED=true (intra-process flag; means a deploy step in THIS run tainted state, or flag was set externally via env)"
+        _err "Refusing initramfs rebuild — _RY_BOOT_TAINTED=true (intra-process flag from prior deploy step or env)"
         _err "  Re-run unattended install OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
         _log "POST_BOOT_REFUSED: _RY_BOOT_TAINTED=true target=$target"
         return $EXIT_BOOT_CRIT
@@ -4331,8 +4339,15 @@ function _post_nm --argument-names target --description "Post-hook: restart Netw
 end
 function _post_sysctl --argument-names target --description "Post-hook: apply sysctl tunables"
     _echo
-    if not command -q sysctl; _warn "sysctl(8) not found — tunables will apply on next reboot via systemd-sysctl.service"; _info "  Install procps-ng for immediate apply: sudo pacman -S --needed procps-ng"; return 0; end
-    if not _run sudo -n sysctl --system; _warn "sysctl --system failed — tunables not applied until reboot"; _info "  Retry: sudo sysctl --system"; end
+    if not command -q sysctl
+        _warn "sysctl(8) not found — tunables will apply on next reboot via systemd-sysctl.service"
+        _info "  Install procps-ng for immediate apply: sudo pacman -S --needed procps-ng"
+        return 0
+    end
+    if not _run sudo -n sysctl --system
+        _warn "sysctl --system failed — tunables not applied until reboot"
+        _info "  Retry: sudo sysctl --system"
+    end
     return 0
 end
 function _post_tmpfiles --argument-names target --description "Post-hook: apply tmpfiles.d entry immediately (avoid reboot dependency)"
@@ -4348,7 +4363,10 @@ function _post_envd --argument-names target --description "Post-hook: notify ses
 end
 function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change"
     _echo
-    _run sudo -n systemctl restart cpupower.service; or _warn "cpupower.service restart failed (governor change applies on next boot; under amd_pstate=active, governor=performance routes to EPP=performance internally)"
+    if not _run sudo -n systemctl restart cpupower.service
+        _warn "cpupower.service restart failed — governor change applies on next boot"
+        _info "  Under amd_pstate=active, governor=performance routes to EPP=performance internally"
+    end
     return 0
 end
 function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/dir (no exit; for caller-managed return paths)"
@@ -4359,7 +4377,7 @@ function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/d
     command rmdir -- "$LOG_DIR" 2>/dev/null
     command rmdir -- (command dirname -- "$LOG_DIR") 2>/dev/null
     command rmdir -- "$_RY_HOME_DIR" 2>/dev/null
-    # Suppress _log lazy-create; otherwise cleanup recreates just-removed file as 90-byte orphan on argparse error.
+    # Suppress _log lazy-create; prevents orphan 90-byte log on argparse error.
     set -g _RY_LOG_SUPPRESS_CREATE true
 end
 function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: log/dir cleanup, then exit"
@@ -4423,7 +4441,7 @@ if set -q _flag_install_file
 end
 if test (count $argv) -gt 0; echo "[ERR] Unexpected positional argument: $argv[1]" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
 if test "$MODE" = check
-    # silent-probe contract: --check stays QUIET regardless of -V
+    # --check ignores -V (silent-probe contract).
 else if set -q _flag_verbose; or test "$MODE" != install
     set -g QUIET false
 end
@@ -4451,7 +4469,8 @@ for _r in $_argv_in; set -a _argv_parts '"'(_json_str "$_r")'"'; end
 set -l _argv_json '['(string join -- ',' $_argv_parts)']'
 set -l _verbose_json false
 test "$QUIET" = false; and set _verbose_json true
-printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' (command date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null
+set -l _hdr_fmt '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n'
+printf "$_hdr_fmt" (command date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null
 if test $status -eq 0
     set -g _RY_HEADER_WRITTEN true
 else

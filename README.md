@@ -48,12 +48,7 @@ Typical duration: **3–8 minutes**.
 
 > [!IMPORTANT]
 > Initramfs rebuild aborts when on-disk package state or boot-critical
-> configs are inconsistent with embedded content:
->
-> - `/boot/loader/loader.conf`
-> - `/etc/kernel/cmdline`
-> - `/etc/sdboot-manage.conf`
-> - `/etc/mkinitcpio.conf`
+> configs are inconsistent with embedded content.
 >
 > Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
@@ -99,8 +94,6 @@ df -h / /boot                    # verify space
 | RAM | 128 GB LPDDR5x-8000 |
 
 Preflight requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (amdgpu modules + gfx1151 cmdline are profile-specific and break initramfs on other silicon).
-
-BIOS: set UMA Frame Buffer Size to `Auto` or `512 MB` (Strix Halo uses UMA with shared system memory). `--verify-runtime` warns if `mem_info_vram_total` exceeds 512 MB.
 
 Tracker: [kernel bugzilla](https://bugzilla.kernel.org).
 

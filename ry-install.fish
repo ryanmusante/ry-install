@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.4.56 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.57 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.56"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.57"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -170,7 +170,7 @@ set -g _RY_BOOT_TAINTED false
 # Deploy failure on any of these 4 sets _RY_BOOT_TAINTED; blocks rebuild unless RY_INSTALL_FORCE_BOOT_REBUILD=1.
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" /etc/kernel/cmdline "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
-# Reset to 0 in _rdi_run_phases before _install_system_files so "Configs" matrix evidence excludes pre-deploys; _PROFILE_USES_WIFI_BACKEND is recomputed in _init_runtime (pre-init default below).
+# Reset in _rdi_run_phases before _install_system_files; _PROFILE_USES_WIFI_BACKEND recomputed in _init_runtime.
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _PROFILE_USES_WIFI_BACKEND false
 # NF-inverted pair: malformed branch uses word/comma bounds to skip LABEL=ext4_root substrings.
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
@@ -759,7 +759,7 @@ function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --descriptio
     printf '%s\n' "[Login]"
     _resolve_systemd_ver
     for key in $LOGIND_IGNORE_KEYS
-        # HandleSecureAttentionKey introduced in systemd 257; emitting on older systemd produces "unknown key" warnings on every logind reload.
+        # HSAK requires systemd ≥257; emitting on older versions warns on every logind reload.
         if test "$key" = HandleSecureAttentionKey
             if test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257
                 continue
@@ -2002,7 +2002,7 @@ function _vss_logind --description "_verify_static_system sub: logind.conf.d key
     _chk_file /etc/systemd/logind.conf.d/99-cachyos-logind.conf; or return 0
     _resolve_systemd_ver
     for key in $LOGIND_IGNORE_KEYS
-        # Skip HandleSecureAttentionKey on systemd <257 (or when version unknown): emitting on older systemd produces "unknown key" warnings every logind reload.
+        # HSAK requires systemd ≥257; emitting on older versions warns on every logind reload.
         if test "$key" = HandleSecureAttentionKey
             if test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257
                 continue

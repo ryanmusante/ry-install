@@ -1,6 +1,19 @@
 ry-install ChangeLog
 ====================
 
+v7.4.58 - v7.4.59 - 2026-05-23
+------------------------------
+
+- `_idf_dispatch_hook`: drop redundant WHAT comment on `_post_$tag` dispatch.
+- `_rdi_matrix_header`: drop redundant WHAT comment on title centering math.
+- `KVER_MINOR` parse: trim suffix-strip rationale.
+- `_phase_record`: trim newline/U+2502 sanitization rationale.
+- `_install_preflight` 3-check loop: trim `_i` advance rationale.
+- `_cse_collect_units` accept-list: trim systemctl(1) state-list rationale.
+- `_boot_initrd_size_scan`: trim byte-compare rationale.
+- Net: −2 LOC; 7 comment edits, zero behavioral or contract changes.
+- README badge + script header: `7.4.58` → `7.4.59`.
+
 v7.4.57 - v7.4.58 - 2026-05-23
 ------------------------------
 

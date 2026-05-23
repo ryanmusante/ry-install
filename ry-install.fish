@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.4.58 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.59 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.58"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.59"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -178,7 +178,7 @@ set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])e
 set -g NM_RESTART_DELAY 3; set -g _PROG_BAR_WIDTH 40
 set -g KVER (command uname -r); set -g KVER_PARTS (string split '.' -- "$KVER"); set -g KVER_MAJOR $KVER_PARTS[1]
 if not string match -qr '^\d+$' -- "$KVER_MAJOR"; echo "[ERR] Cannot parse kernel major version from uname -r: $KVER" >&2; _ry_exit $EXIT_PREFLIGHT; end
-# Strip non-digit suffix (e.g. `-cachyos1`, `-rc1`, `-arch1`) so version comparisons see integers, not strings.
+# Strip non-digit suffix (-cachyos1/-rc1/-arch1); int compare on minor.
 set -g KVER_MINOR (string replace -r '[^0-9].*' '' -- "$KVER_PARTS[2]")
 if test -z "$KVER_MINOR"; or not string match -qr '^\d+$' -- "$KVER_MINOR"; echo "[ERR] Cannot parse kernel minor version from uname -r: $KVER" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
@@ -1053,7 +1053,7 @@ function _info --description "Emit INFO-level message (no counter)"; _msg INFO $
 function _warn --description "Emit WARN-level message and increment VERIFY_WARN"; _msg WARN $argv; return 0; end
 # Appends to run-summary matrix; U+2502 reserved as delimiter. JSONL-logged regardless of QUIET.
 function _phase_record --argument-names check result evidence --description "Append a row to the install summary matrix and JSONL"
-    # Defensive: strip embedded newlines (break matrix rows) and U+2502 (delimiter collision).
+    # Strip \n (breaks matrix rows) and U+2502 (delimiter).
     set -l _e (string replace -ra '[\n\r│]' ' ' -- "$evidence")
     set -l _c (string replace -ra '[\n\r│]' ' ' -- "$check")
     set -ga _RY_PHASE_RESULTS "$_c│$result│$_e"
@@ -3167,7 +3167,7 @@ function _install_preflight --description "Run all preflight checks before insta
     # Force preflight errors to stderr in QUIET install; cleared on success/bail.
     set -g _RY_LOUD_ERR true; set -l _chk_labels "Preflight: sudo credential cache" "Preflight: dependency check" "Preflight: disk space"; set -l _i 1
     for _chk in _ensure_sudo_cached _ry_check_deps _ry_check_disk_space
-        # _i advances only on PASS branch; FAIL returns immediately so the index never drifts past the labels list.
+        # _i advances on PASS only; FAIL returns, keeping _i aligned.
         if $_chk; _phase_record $_chk_labels[$_i] PASS "ok"; set _i (math $_i + 1); continue; end
         _phase_record $_chk_labels[$_i] FAIL "see JSONL log"
         _ip_bail_prep
@@ -3847,7 +3847,7 @@ function _cse_batch_enable --description "Batch enable system units"
             _ok "Enabled: $_unit"
         else
             set -l _enabled_state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
-            # Accept-list per systemctl(1): states that run on boot. Excluded: masked, disabled, bad, empty.
+            # Per systemctl(1): boot-running states. Excludes masked/disabled/bad/empty.
             if contains -- "$_enabled_state" enabled enabled-runtime alias static linked linked-runtime indirect generated transient
                 _warn "Enabled but failed to start: $_unit (will activate on next boot if config is fixed)"
                 _warn "  Diagnose: systemctl status $_unit; journalctl -u $_unit -b"
@@ -3989,7 +3989,7 @@ function _boot_initrd_size_scan --argument-names esp --description "Post-rebuild
     set -l _initrd_list (sudo -n find "$esp" -maxdepth 1 -type f -name 'initramfs-*.img' -print0 2>/dev/null | string split0)
     set -l _il_ps $pipestatus
     if test "$_il_ps[1]" -ne 0; _warn "Cannot enumerate initramfs-*.img for size check (sudo lapsed or read error)"; return 0; end
-    # Compare in bytes: avoids floor-to-MB precision loss (100.9MB would pass 100MB threshold).
+    # Byte compare: MB floor would pass 100.9MB through 100.
     set -l _threshold_b (math "$INITRD_WARN_MB * 1048576")
     for initrd in $_initrd_list
         set -l size_b (sudo -n stat -c '%s' -- "$initrd" 2>/dev/null)
@@ -4258,7 +4258,6 @@ function _rdi_matrix_header --description "_rdi_render_matrix sub. Emit top bar,
     set -l _bar_top $argv[1]; set -l _sep_c $argv[2]; set -l _sep_r $argv[3]; set -l _sep_e $argv[4]
     set -l _inner $argv[5]; set -l _w_c $argv[6]; set -l _w_r $argv[7]; set -l _w_e $argv[8]
     set -l _title "ry-install v$VERSION — RUN SUMMARY"
-    # Center title within $_inner cols.
     set -l _title_lpad (math -s0 "max(0, ($_inner - "(string length -- $_title)") / 2)")
     set -l _title_padded $_title
     test $_title_lpad -gt 0; and set _title_padded (string repeat -n $_title_lpad ' ')$_title
@@ -4437,7 +4436,6 @@ function _idf_match_dst --argument-names target --description "Match \$target ag
 end
 function _idf_dispatch_hook --argument-names target tag --description "Dispatch a post-hook tag to its _post_<tag> handler"
     if test -z "$tag"; or not functions -q "_post_$tag"; _err "Internal: unknown post-hook tag '$tag' (target=$target)"; return 1; end
-    # Dynamic dispatch via _post_$tag.
     _post_$tag "$target"
 end
 function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"

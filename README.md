@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.51-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.56-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -146,20 +146,28 @@ Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JS
 
 ### Phase 1 — Preflight
 
-| # | Step | Action |
+<details>
+<summary><b>Preflight steps</b> — 10 steps</summary>
+
+| # | Step | Detail |
 |---|---|---|
-| 1 | Bootstrap (top-level) | fish ≥ 3.6, GNU coreutils (`timeout --foreground/--kill-after`, `stat`, `date`), root-guard, PATH hardening, `TMPDIR`/`HOME`/`LOG_DIR` setup |
-| 2 | Runtime init invariants (`_init_runtime`) | root UUID, `EXPECTED_CPU_MATCH` hardware fingerprint, array counts (15 invariants), `_tmpfile_key` collision, `KERNEL_PARAMS` metachar guard, package-name dash guard, tmpdir/WiFi-backend/canonical-dst cache precompute |
-| 3 | Acquire instance lock | atomic `mkdir` + `chmod 0700`; auto-reclaims dead PIDs |
-| 4 | Sudo credential cache (`_ensure_sudo_cached`) | cached `sudo -v`; interactive fallback unless `RY_INSTALL_NO_INTERACTIVE_SUDO=1` |
-| 5 | Dependency check (`_ry_check_deps`) | required binaries, `df --output` GNU-coreutils probe, systemd ≥ 250 |
-| 6 | Disk space (`_ry_check_disk_space`) | 2 GiB `/`, 200 MiB `/boot` |
-| 7 | Network reachability (`_ry_check_network`) | archlinux.org, cloudflare.com (HTTPS), 1.1.1.1 (ICMP fallback) |
-| 8 | Kernel version (`_ry_check_kernel_version`) | ≥ 6.14 hard floor (FAIL), ≥ 6.18.4 recommended (WARN), ntsync state probe |
-| 9 | Wireless regdom (`_ry_apply_wireless_regdom`) | opt-in via `RY_INSTALL_WIRELESS_REGDOM=<CC>` |
-| 10 | Config validation (`_ry_validate_configs`) | per-destination format validators (unit syntax, kv, kparam, sysctl, INI, tmpfiles) |
+| 1 | Bootstrap | fish ≥ 3.6, GNU coreutils (`timeout --foreground/--kill-after`), PATH hardening, TMPDIR/HOME/LOG_DIR setup |
+| 2 | `_init_runtime` | root UUID, `EXPECTED_CPU_MATCH`, 15 array-count invariants, `_tmpfile_key` collision, `KERNEL_PARAMS` metachar guard, package-name dash guard |
+| 3 | Acquire instance lock | atomic `mkdir` 0700, auto-reclaims dead PIDs |
+| 4 | Sudo credential cache | `RY_INSTALL_NO_INTERACTIVE_SUDO=1` refuses interactive fallback |
+| 5 | `_ry_check_deps` | `df --output`, systemd ≥ 250, paru ≥ 2.0.0 |
+| 6 | `_ry_check_disk_space` | 2 GiB `/`, 200 MiB `/boot` |
+| 7 | `_ry_check_network` | archlinux.org, cloudflare.com (HTTPS), 1.1.1.1 (ICMP fallback) |
+| 8 | `_ry_check_kernel_version` | ≥ 6.14 FAIL, ≥ 6.18.4 WARN, ntsync probe |
+| 9 | Wireless regdom | `_ry_apply_wireless_regdom` + `_ry_check_wireless_regdom`; opt-in apply via `RY_INSTALL_WIRELESS_REGDOM=<CC>` |
+| 10 | `_ry_validate_configs` | per-destination format validators |
+
+</details>
 
 ### Phase 2 — Packages
+
+<details>
+<summary><b>Phase steps</b> — 4 steps</summary>
 
 | # | Step | Action |
 |---|---|---|
@@ -168,62 +176,57 @@ Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JS
 | 3 | `updatedb` | optional indexer (run when `mlocate` installed) |
 | 4 | `pkgfile --update` | optional indexer (run when `pkgfile` installed) |
 
+</details>
+
 `PKGS_DEL` removal runs later in [Phase 4 — Services](#phase-4--services)
 (`_configure_services_pkg_remove`), grouped with systemd-state
 mutations. `EXPECTED_VULKAN_PKGS` is verify-only — checked, not installed.
 
 <details>
-<summary><b>Packages — install</b> — 15 pkgs</summary>
+<summary><b>Packages — install</b> — 15 pkgs (<code>pacman -Syu --needed --noconfirm</code>)</summary>
 
 | Package | Purpose |
 |---|---|
-| `nvme-cli` | NVMe device management |
-| `cachyos-gaming-meta` | CachyOS gaming meta-pkg |
-| `cachyos-gaming-applications` | CachyOS gaming apps |
-| `mesa` | Mesa Vulkan + GL |
-| `lib32-mesa` | 32-bit Mesa (Steam/Wine) |
+| `nvme-cli` | NVMe |
+| `cachyos-gaming-meta` | gaming meta |
+| `cachyos-gaming-applications` | gaming apps |
+| `mesa` | Vulkan + GL |
+| `lib32-mesa` | 32-bit Mesa |
 | `fd` | rust find |
 | `sd` | rust sed |
 | `dust` | rust du |
 | `procs` | rust ps |
 | `bottom` | rust top |
 | `htop` | classic top |
-| `git-delta` | git diff viewer |
+| `git-delta` | git diff |
 | `lm_sensors` | hwmon |
-| `realtime-privileges` | PipeWire RT scheduling group |
-| `cpupower` | cpufreq governor management |
-
-Default install path: `pacman -Syu --needed --noconfirm`.
+| `realtime-privileges` | PipeWire RT |
+| `cpupower` | cpufreq governor |
 
 </details>
 
 <details>
-<summary><b>Packages — AUR</b> — 2 pkgs</summary>
+<summary><b>Packages — AUR</b> — 2 pkgs (paru)</summary>
 
 | Package | Purpose |
 |---|---|
-| `mkinitcpio-firmware` | Firmware blobs not in `linux-firmware` |
-| `mt76-mt7925-dkms` | MediaTek MT7925 WiFi DKMS (panic fix) |
+| `mkinitcpio-firmware` | firmware blobs not in `linux-firmware` |
+| `mt76-mt7925-dkms` | MT7925 WiFi (panic fix) |
 
-Post-install `modinfo mt7925e` cross-check verifies DKMS build
-succeeded (paru `rc=0` alone is not definitive). See Package caveats
-for `paru` flags and PGP-failure handling.
+Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alone is not definitive).
 
 </details>
 
 <details>
-<summary><b>Vulkan dependencies</b> — 3 pkgs</summary>
+<summary><b>Vulkan dependencies</b> — 3 pkgs (verify-only)</summary>
 
-| Package | Purpose |
+| Package | Source |
 |---|---|
-| `vulkan-radeon` | RADV driver |
-| `lib32-vulkan-radeon` | 32-bit RADV (Steam/Wine) |
-| `lib32-mesa` | 32-bit Mesa |
+| `vulkan-radeon` | `chwd` |
+| `lib32-vulkan-radeon` | `chwd` |
+| `lib32-mesa` | `PKGS_ADD` |
 
-`--verify-runtime` fails if any are missing (DXVK/VKD3D-Proton
-dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
-`chwd` on AMD GPU profiles; `lib32-mesa` is in `PKGS_ADD`
-(idempotent via `--needed`).
+`--verify-runtime` fails on any missing.
 
 </details>
 
@@ -235,7 +238,7 @@ dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
 | Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` → `pacman -Sy --needed` (no `-u`). Violates [Arch policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported) |
 | AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` omitted — DKMS needs makedeps |
 | PGP failures | Pre-import key (`gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys <KEYID>`) or `paru -S <pkg>` manually |
-| Reverse deps | `PKGS_DEL` removal skipped when an outside package rdeps on it. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`) |
+| Reverse deps | `PKGS_DEL` removal skipped when an outside package rdeps on it. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`). The KDE/Plasma rdeps `breeze-plymouth`, `plymouth-kcm` (hold `plymouth`) and `plasma-thunderbolt` (holds `bolt`) are already enumerated in `PKGS_DEL`, so cascade is rarely needed in practice |
 | db lock | `/var/lib/pacman/db.lck` checked before + after; aborts cleanly on contention |
 | `.pacnew` | Auto-redeployed at managed destinations and `rm`'d; `.pacsave` surfaced as warning |
 
@@ -244,7 +247,10 @@ dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
 ### Phase 3 — Configuration Files
 
 11 system + 1 user config file deployed via atomic writes
-(`_install_system_files`). Four-step sequence per file:
+(`_install_system_files`).
+
+<details>
+<summary><b>Atomic-write sequence</b> — 4 steps</summary>
 
 | # | Step |
 |---|---|
@@ -253,13 +259,15 @@ dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
 | 3 | `chmod` to target mode |
 | 4 | `mv -T` to destination |
 
+</details>
+
 Destinations enumerated in [Managed Files](#managed-files); the four
 boot-critical paths in that table take effect only after
 [Phase 5 — Boot](#phase-5--boot) rebuilds initramfs and bootloader
 entries.
 
 <details>
-<summary><b>Kernel cmdline</b> — 15 params</summary>
+<summary><b>Kernel cmdline</b> — 15 params (deployed as <code>rw root=UUID=&lt;runtime UUID&gt; …</code>)</summary>
 
 | Param | Value |
 |---|---|
@@ -279,10 +287,7 @@ entries.
 | `usbcore.autosuspend` | `-1` |
 | `zswap.enabled` | `0` |
 
-Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`).
-
-> Deployed cmdline starts with `rw root=UUID=<runtime UUID>` (computed from
-> the `/` mount at preflight) followed by the 15 parameters above.
+Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`). UUID prefix computed from the `/` mount at preflight.
 
 </details>
 
@@ -333,15 +338,19 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 </details>
 
 <details>
-<summary><b>systemd-logind</b> — 9 keys</summary>
+<summary><b>systemd-logind</b> — 9 keys (all <code>=ignore</code>; power-handling deferred to userspace)</summary>
 
-All set to `=ignore` (desktop power-handling deferred to userspace):
-
-- `HandlePowerKey` / `HandlePowerKeyLongPress`
-- `HandleSuspendKey` / `HandleSuspendKeyLongPress`
-- `HandleHibernateKey` / `HandleHibernateKeyLongPress`
-- `HandleRebootKey` / `HandleRebootKeyLongPress`
-- `HandleSecureAttentionKey` (systemd ≥ 257)
+| Key | Value |
+|---|---|
+| `HandlePowerKey` | `ignore` |
+| `HandlePowerKeyLongPress` | `ignore` |
+| `HandleSuspendKey` | `ignore` |
+| `HandleSuspendKeyLongPress` | `ignore` |
+| `HandleHibernateKey` | `ignore` |
+| `HandleHibernateKeyLongPress` | `ignore` |
+| `HandleRebootKey` | `ignore` |
+| `HandleRebootKeyLongPress` | `ignore` |
+| `HandleSecureAttentionKey` | `ignore` (systemd ≥ 257) |
 
 </details>
 
@@ -370,9 +379,11 @@ All set to `=ignore` (desktop power-handling deferred to userspace):
 <details>
 <summary><b>cpupower-service</b> — 1 key</summary>
 
-Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`):
+| Key | Value |
+|---|---|
+| `GOVERNOR` | `'performance'` |
 
-- `GOVERNOR='performance'`
+Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
 
 </details>
 
@@ -405,9 +416,11 @@ Priority 99 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
 <details>
 <summary><b>tmpfiles</b> — 1 entry</summary>
 
-Applied immediately on install and on `--install-file` re-deploy; re-applied every boot by `systemd-tmpfiles-setup.service`:
+| Type | Path | Mode |
+|---|---|---|
+| `w` | `/sys/kernel/mm/transparent_hugepage/shrink_underused` | `0` |
 
-- `w /sys/kernel/mm/transparent_hugepage/shrink_underused - - - - 0`
+Applied immediately on install and on `--install-file` re-deploy; re-applied every boot by `systemd-tmpfiles-setup.service`.
 
 </details>
 
@@ -438,6 +451,9 @@ running keep their inherited env until restarted.
 
 ### Phase 4 — Services
 
+<details>
+<summary><b>Phase steps</b> — 6 steps</summary>
+
 | # | Step |
 |---|---|
 | 1 | fstab rewrite (`_install_fstab_opts`) |
@@ -447,34 +463,44 @@ running keep their inherited env until restarted.
 | 5 | Mask 12 desktop/power units |
 | 6 | `daemon-reload` + enable runtime units |
 
+</details>
+
 > The fstab rewrite normalizes the field separator to a single space for the
 > rewritten ext4 entries (`OFS = " "` in the awk script). All other lines
 > (comments, non-ext4 entries) preserve their original whitespace via awk
 > passthrough.
 
 <details>
-<summary><b>fstab</b> — 3 options</summary>
+<summary><b>fstab</b> — 3 ext4 mount options</summary>
 
 | Option | Effect |
 |---|---|
-| `noatime` | Disable atime updates |
-| `lazytime` | Defer in-memory atime/mtime writeback |
-| `commit=10` | Flush journal every 10s (default 5) |
+| `noatime` | disable atime updates |
+| `lazytime` | defer atime/mtime writeback |
+| `commit=10` | journal flush every 10s |
 
-Idempotent ext4 rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `defaults`, existing `commit=*` tokens. `findmnt --verify` gates the atomic `mv`. **No automatic backup — snapshot `/etc/fstab` before first run.**
+Idempotent rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `defaults`, existing `commit=*`. `findmnt --verify` gates the atomic `mv`. **No automatic backup — snapshot `/etc/fstab` before first run.**
 
 </details>
 
 <details>
-<summary><b>Packages — remove</b> — 8 pkgs</summary>
+<summary><b>Packages — remove</b> — 11 pkgs</summary>
 
-| Package | Reason |
+| Package | Category |
 |---|---|
-| `plymouth` (+ `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`) | Boot splash — incompatible with `quiet` + `loglevel=3` |
-| `octopi` | pacman GUI — CLI workflow |
-| `micro` (+ `cachyos-micro-settings`) | Text editor — replaced by user choice |
-| `btop` | Replaced by `bottom` |
-| `bolt` | Thunderbolt manager — not used |
+| `plymouth` | boot splash |
+| `cachyos-plymouth-bootanimation` | boot splash |
+| `cachyos-plymouth-theme` | boot splash |
+| `breeze-plymouth` | boot splash (Plasma rdep) |
+| `plymouth-kcm` | boot splash (Plasma rdep) |
+| `bolt` | Thunderbolt manager |
+| `plasma-thunderbolt` | Thunderbolt (Plasma rdep) |
+| `octopi` | pacman GUI |
+| `micro` | text editor |
+| `cachyos-micro-settings` | text editor |
+| `btop` | replaced by `bottom` |
+
+Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-plymouth`, `plymouth-kcm`, `plasma-thunderbolt`) enumerated so `pacman -R` does not refuse on rdep-hold.
 
 </details>
 
@@ -483,16 +509,18 @@ Idempotent ext4 rewrite — strips conflicting `atime`, `relatime`, `strictatime
 
 | Unit | Reason |
 |---|---|
-| `ananicy-cpp.service` | CPU nice daemon — managed via cgroups instead |
-| `avahi-daemon.service` (+ `.socket`) | mDNS via systemd-resolved instead |
+| `sleep.target` | suspend / hibernate disabled |
+| `suspend.target` | suspend / hibernate disabled |
+| `hibernate.target` | suspend / hibernate disabled |
+| `hybrid-sleep.target` | suspend / hibernate disabled |
+| `suspend-then-hibernate.target` | suspend / hibernate disabled |
+| `ananicy-cpp.service` | cgroups used instead |
+| `avahi-daemon.service` | systemd-resolved mDNS |
+| `avahi-daemon.socket` | systemd-resolved mDNS |
 | `power-profiles-daemon.service` | conflicts with amd_pstate + cpupower |
-| `lvm2-monitor.service` | no LVM on this profile |
-| `NetworkManager-wait-online.service` | adds boot delay |
-| `ufw.service` | firewall not in this profile (rules flushed pre-mask) |
-| `sleep.target` / `suspend.target` / `hibernate.target` / `hybrid-sleep.target` / `suspend-then-hibernate.target` | suspend / hibernate disabled (workstation) |
-
-Pre-mask `ufw --force disable` flushes live netfilter rules
-(`systemctl mask` alone does not).
+| `lvm2-monitor.service` | no LVM |
+| `NetworkManager-wait-online.service` | boot delay |
+| `ufw.service` | rules flushed pre-mask via `ufw --force disable` |
 
 </details>
 
@@ -511,6 +539,9 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 
 ### Phase 5 — Boot
 
+<details>
+<summary><b>Boot steps</b> — 4 steps</summary>
+
 | # | Step |
 |---|---|
 | 1 | `mkinitcpio -P` (initramfs rebuild) |
@@ -518,11 +549,16 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 | 3 | `sdboot-manage update` (bootloader entries) |
 | 4 | Post-rebuild sanity (`vmlinuz-*` + `initramfs-*.img` + loader-entry kernel-path verify; emits **DO NOT REBOOT** on failure) |
 
+</details>
+
 Skipped when on-disk package state or boot-critical configs are
 inconsistent with embedded content. Override after manual remediation
 with `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ### Phase 6 — Finalize
+
+<details>
+<summary><b>Finalize steps</b> — 4 steps</summary>
 
 | # | Step |
 |---|---|
@@ -530,6 +566,8 @@ with `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 | 2 | pacman cache cleanup (`paccache`) |
 | 3 | NetworkManager restart to apply the wpa_supplicant → iwd backend switch — deferred to next reboot when WiFi is the active route |
 | 4 | Write JSONL log footer |
+
+</details>
 
 ## Managed Files
 
@@ -539,22 +577,25 @@ atomic-write sequence. System files install `0644`, the user file
 NetworkManager drop-in) are skipped when `iwd` is not installed.
 
 <details>
-<summary><b>Destinations</b> — 12 paths</summary>
+<summary><b>Destinations</b> — 12 paths (system <code>0644</code>, user <code>0600</code>)</summary>
 
-| Path | Perm |
-|---|---|
-| `/boot/loader/loader.conf` | `0644` |
-| `/etc/kernel/cmdline` | `0644` |
-| `/etc/sdboot-manage.conf` | `0644` |
-| `/etc/mkinitcpio.conf` | `0644` |
-| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | `0644` |
-| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | `0644` |
-| `/etc/iwd/main.conf` | `0644` |
-| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `0644` |
-| `/etc/default/cpupower-service.conf` | `0644` |
-| `/etc/sysctl.d/99-cachyos-sysctl.conf` | `0644` |
-| `/etc/tmpfiles.d/99-cachyos-thp.conf` | `0644` |
-| `~/.config/environment.d/10-environment.conf` | `0600` |
+System (`0644`):
+
+- `/boot/loader/loader.conf`
+- `/etc/kernel/cmdline`
+- `/etc/sdboot-manage.conf`
+- `/etc/mkinitcpio.conf`
+- `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`
+- `/etc/systemd/logind.conf.d/99-cachyos-logind.conf`
+- `/etc/iwd/main.conf` *(skipped when iwd absent)*
+- `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` *(skipped when iwd absent)*
+- `/etc/default/cpupower-service.conf`
+- `/etc/sysctl.d/99-cachyos-sysctl.conf`
+- `/etc/tmpfiles.d/99-cachyos-thp.conf`
+
+User (`0600`):
+
+- `~/.config/environment.d/10-environment.conf`
 
 </details>
 
@@ -562,14 +603,14 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp (in dst parent) → symlink probe (pre + post-render) → chmod → `mv -T` |
-| Permissions | system 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600 |
-| fstab | See [Phase 4 — fstab](#phase-4--services); rejects when `/etc/fstab` itself is a symlink |
-| Boot rebuild gate | `mkinitcpio -P` skipped on package or boot-config failure. Post-revert failure (the `mkinitcpio.conf` revert itself failed) is unconditionally refused; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses only the taint flag, not the revert-failed flag |
-| mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert on `pacman -Syu` failure or signal (cp + size + `cmp -s`) |
+| Atomic writes | tmp in dst parent → pre+post-render symlink probe → chmod → `mv -T` |
+| Permissions | system `0644` · user `0600` · `~/ry-install/` `0700` |
+| fstab | `findmnt --verify` gate; rejects when `/etc/fstab` is a symlink |
+| Boot rebuild gate | Skipped on package/boot-config failure. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint flag only — not the revert-failed flag |
+| mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert (cp + size + `cmp -s`) on `pacman -Syu` failure or signal |
 | Root detection | Refuses to run as root; sudo invoked internally |
-| Instance lock | Atomic mkdir + chmod 0700; auto-reclaims dead-PID lock; verifies `/proc/$pid/comm` is `fish` |
-| Preflight visibility | Failures emit to stderr in default install mode; `--check` stays silent |
+| Instance lock | Atomic mkdir `0700`; auto-reclaims dead-PID lock; verifies `/proc/$pid/comm = fish` |
+| Preflight visibility | Failures emit to stderr in install mode; `--check` stays silent |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal |
 
 <details>
@@ -593,7 +634,7 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `RY_RUN_TIMEOUT` | `3600` | `_run` wall-clock cap (s); `0` disables. Pkg / boot / db-indexer ops bypass |
+| `RY_RUN_TIMEOUT` | `3600` | `_run` wall-clock cap (s); `0` disables. Pkg/boot/db-indexer ops bypass |
 | `RY_INITRD_WARN_MB` | `100` | Initramfs size warning threshold (MB) |
 | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | `=1` → `pacman -Sy --needed` (install-only) |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses torn-package gate |
@@ -603,6 +644,8 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 | `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses interactive `sudo -v` fallback |
 | `RY_INSTALL_NO_MATRIX` | unset | any non-empty value suppresses run-summary matrix (JSONL unaffected) |
 | `NO_COLOR` | unset | Suppress ANSI color ([no-color.org](https://no-color.org/)) |
+
+Persist `RY_INSTALL_WIRELESS_REGDOM` in `~/.config/fish/conf.d/ry-install-env.fish` (`set -gx RY_INSTALL_WIRELESS_REGDOM US`); a stale `/etc/conf.d/wireless-regdom` with no valid value silently disables `iw reg set` on every boot.
 
 </details>
 
@@ -614,10 +657,10 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 | Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` |
 | Format | NDJSON, one file per run, no auto-rotation |
 | Prune | `find ~/ry-install/logs -mtime +30 -print -delete` |
-| Events | `header` (run metadata), `log` (`{data}`), `footer` (`{mode, exit_code, pass, fail, warn, gen_fail}`). All events carry `ts` + `event`. |
-| Footer marker | `bail` (preflight fail after header), `interrupted` (signal). Normal exit emits a footer with no marker |
-| `ERR_NO_DATA` | Service-state probes returning fewer than 3 fields emit `ERR_NO_DATA` in the corresponding `LoadState`/`ActiveState`/`UnitFileState` slot. Surfaced both in the matrix evidence column and in JSONL events. |
-| `gen_fail` | Content-generator failures (a `_content__*` function returned non-zero) are tracked separately as `gen_fail` and surface in the verify summary line. They flip the verify exit code to `1` even when no checksum `FAIL`s are observed. |
+| Events | `header`, `log` (`{data}`), `footer` (`{mode, exit_code, pass, fail, warn, gen_fail}`). All carry `ts` + `event` |
+| Footer marker | `bail` (preflight fail after header), `interrupted` (signal). Normal exit: no marker |
+| `ERR_NO_DATA` | systemctl probes returning <3 fields emit `ERR_NO_DATA` in `LoadState`/`ActiveState`/`UnitFileState` |
+| `gen_fail` | `_content__*` non-zero returns; flips verify exit to `1` even with no checksum FAILs |
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl

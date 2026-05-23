@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.4.51 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.56 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.51"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.56"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -593,7 +593,7 @@ set -g SYSCTL_VALUES \
     "vm.compaction_proactiveness=0"
 
 set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges cpupower
-set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme octopi micro cachyos-micro-settings btop bolt
+set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm octopi micro cachyos-micro-settings btop bolt plasma-thunderbolt
 set -g AUR_PKGS mkinitcpio-firmware mt76-mt7925-dkms
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
@@ -671,7 +671,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         ENV_VARS:11 \
         SYSCTL_VALUES:16 \
         PKGS_ADD:15 \
-        PKGS_DEL:8 \
+        PKGS_DEL:11 \
         AUR_PKGS:2 \
         MASK:12 \
         EXPECTED_VULKAN_PKGS:3 \
@@ -2160,58 +2160,52 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
         for unit in $SERVICE_DESTINATIONS; test -f "$unit"; and _verify_unit_syntax "$unit" (command basename -- "$unit") system; end
     end
 end
+function _vsc_check_one --argument-names dst --description "_verify_static_checksum sub. Compare one destination's expected vs installed bytes"
+    if _should_skip_iwd "$dst"; _info "  $dst: SKIP (iwd not installed)"; _log "VERIFY_STATIC_SKIP_IWD: dst=$dst"; return 0; end
+    set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
+    set -l _gen_rc $pipestatus[1]; set -l _gen_collect_rc $pipestatus[2]
+    if test $_gen_rc -ne 0; _fail_silent "  $dst: generator failed (rc=$_gen_rc)"; set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc"; return 0; end
+    if test $_gen_collect_rc -ne 0
+        _fail_silent "  $dst: string collect failed (rc=$_gen_collect_rc)"
+        set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
+        _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=gen rc=$_gen_collect_rc"
+        return 0
+    end
+    set -l actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
+    set -l _ib_rc $pipestatus[1]; set -l _ib_collect_rc $pipestatus[2]
+    if test $_ib_collect_rc -ne 0
+        _fail "  $dst: string collect failed (rc=$_ib_collect_rc)"
+        set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
+        _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=ib rc=$_ib_collect_rc"
+        return 0
+    end
+    switch $_ib_rc
+        case 1
+            _fail "  $dst: cannot read"; _log "VERIFY_STATIC_READ_FAIL: dst=$dst"; return 0
+        case 2
+            _fail "  $dst: sudo lapse during read"; _log "VERIFY_STATIC_SUDO_LAPSE: dst=$dst"; return 0
+        case 0
+        case '*'
+            _fail "  $dst: unexpected read rc=$_ib_rc"; _log "VERIFY_STATIC_READ_UNEXPECTED: dst=$dst rc=$_ib_rc"; return 0
+    end
+    if test "$expected" = "$actual"
+        _ok "  $dst: match"
+    else
+        _fail "  $dst: MISMATCH"
+        set -l _exp_sha (printf '%s' "$expected" | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
+        set -l _act_sha (printf '%s' "$actual" | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
+        test -z "$_exp_sha"; and set _exp_sha ERR
+        test -z "$_act_sha"; and set _act_sha ERR
+        _log "VERIFY_STATIC_MISMATCH: dst=$dst expected_content_sha=$_exp_sha actual_content_sha=$_act_sha expected_bytes="(string length -- "$expected")" actual_bytes="(string length -- "$actual")
+    end
+    return 0
+end
 function _verify_static_checksum --description "Verify embedded content hash matches installed file SHA256"
     _echo "CHECKSUM VERIFICATION"
     _echo
     _echo "── embedded vs installed ──"
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
-        if _should_skip_iwd "$dst"
-            _info "  $dst: SKIP (iwd not installed)"
-            _log "VERIFY_STATIC_SKIP_IWD: dst=$dst"
-            continue
-        end
-        set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
-        set -l _gen_rc $pipestatus[1]; set -l _gen_collect_rc $pipestatus[2]
-        if test $_gen_rc -ne 0; _fail_silent "  $dst: generator failed (rc=$_gen_rc)"; set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc"; continue; end
-        if test $_gen_collect_rc -ne 0
-            _fail_silent "  $dst: string collect failed (rc=$_gen_collect_rc)"
-            set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
-            _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=gen rc=$_gen_collect_rc"
-            continue
-        end
-        set -l actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
-        set -l _ib_rc $pipestatus[1]; set -l _ib_collect_rc $pipestatus[2]
-        if test $_ib_collect_rc -ne 0
-            _fail "  $dst: string collect failed (rc=$_ib_collect_rc)"
-            set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
-            _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=ib rc=$_ib_collect_rc"
-            continue
-        end
-        switch $_ib_rc
-            case 1
-                _fail "  $dst: cannot read"
-                _log "VERIFY_STATIC_READ_FAIL: dst=$dst"
-                continue
-            case 2
-                _fail "  $dst: sudo lapse during read"
-                _log "VERIFY_STATIC_SUDO_LAPSE: dst=$dst"
-                continue
-            case 0
-            case '*'
-                _fail "  $dst: unexpected read rc=$_ib_rc"
-                _log "VERIFY_STATIC_READ_UNEXPECTED: dst=$dst rc=$_ib_rc"
-                continue
-        end
-        if test "$expected" = "$actual"
-            _ok "  $dst: match"
-        else
-            _fail "  $dst: MISMATCH"
-            set -l _exp_sha (printf '%s' "$expected" | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
-            set -l _act_sha (printf '%s' "$actual" | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
-            test -z "$_exp_sha"; and set _exp_sha ERR
-            test -z "$_act_sha"; and set _act_sha ERR
-            _log "VERIFY_STATIC_MISMATCH: dst=$dst expected_content_sha=$_exp_sha actual_content_sha=$_act_sha expected_bytes="(string length -- "$expected")" actual_bytes="(string length -- "$actual")
-        end
+        _vsc_check_one "$dst"
     end
     _echo
 end
@@ -4195,7 +4189,8 @@ function _install_finalize --description "Run post-install verification, cleanup
 end
 
 # ── PHASE DISPATCH (_rdi_run_phases) + RUN-SUMMARY MATRIX RENDERER ────────────────────────────────
-function _rrp_optional_indexer --argument-names cmd label flag --description "_rdi_run_phases sub. Run an optional indexer (updatedb / pkgfile) and record phase"
+function _rrp_optional_indexer --argument-names cmd label --description "_rdi_run_phases sub. Run an optional indexer (updatedb / pkgfile) and record phase"
+    set -l flag $argv[3..-1]
     if not command -q $cmd; _phase_record "Packages: $label" "--" "not installed"; return 0; end
     if _run sudo -n $cmd $flag
         _phase_record "Packages: $label" PASS "ok"
@@ -4223,7 +4218,7 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
     end
     # AUR may have transitively installed iwd; re-probe.
     set --erase _RY_SKIP_IWD
-    _rrp_optional_indexer updatedb updatedb ""
+    _rrp_optional_indexer updatedb updatedb
     _rrp_optional_indexer pkgfile "pkgfile --update" --update
     set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0
     if _install_system_files

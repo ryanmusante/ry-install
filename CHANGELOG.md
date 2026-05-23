@@ -1,6 +1,145 @@
 ry-install ChangeLog
 ====================
 
+v7.4.55 - v7.4.56 - 2026-05-23
+------------------------------
+
+- README Configuration section: wrap the 6 previously-bare per-phase
+  Step tables in `<details>` collapsibles so every table in the
+  Configuration section is collapsible-to-table uniformly. Affected:
+  - `Phase 1 — Preflight` → `<summary><b>Preflight steps</b> — 10 steps</summary>`
+  - `Phase 2 — Packages` → `<summary><b>Phase steps</b> — 4 steps</summary>`
+  - `Phase 3 — Configuration Files` → `<summary><b>Atomic-write sequence</b> — 4 steps</summary>`
+  - `Phase 4 — Services` → `<summary><b>Phase steps</b> — 6 steps</summary>`
+  - `Phase 5 — Boot` → `<summary><b>Boot steps</b> — 4 steps</summary>`
+  - `Phase 6 — Finalize` → `<summary><b>Finalize steps</b> — 4 steps</summary>`
+  Phase intro prose (e.g. Phase 3 "11 system + 1 user config file
+  deployed via atomic writes") kept outside the collapsible so the
+  context lead stays visible. Phase 4's "fstab rewrite normalizes the
+  field separator" blockquote also kept outside. Configuration section
+  now has 25 collapsibles total (6 new + 19 existing), all
+  collapsible-to-table.
+- Script: no functional changes. Version bump only.
+
+v7.4.54 - v7.4.55 - 2026-05-23
+------------------------------
+
+- README Configuration section: convert all 9 non-table collapsibles to
+  uniform Markdown tables. Affected:
+  - Phase 2: `Packages — install` (inline `·` list → 15-row `Package |
+    Purpose` table), `Packages — AUR` (→ 2-row table with terse purpose),
+    `Vulkan dependencies` (→ 3-row `Package | Source` table).
+  - Phase 3: `Kernel cmdline` (code block → 15-row `Param | Value` table
+    matching pre-v7.4.54 form), `systemd-logind` (bullets → 9-row
+    `Key | Value` table; all values `ignore`), `cpupower-service` (bullet
+    → 1-row `Key | Value` table), `tmpfiles` (bullet → 1-row
+    `Type | Path | Mode` table).
+  - Phase 4: `fstab` (inline `·` list → 3-row `Option | Effect` table),
+    `Packages — remove` (grouped bullets → 11-row `Package | Category`
+    table), `Masked units` (grouped bullets → 12-row `Unit | Reason`
+    table).
+  - Already-table collapsibles untouched: `Package caveats`,
+    `Bootloader`, `Initramfs`, `systemd-resolved`, `iwd`,
+    `NetworkManager`, `sysctl`, `Env vars`, `Enabled units`.
+  All array counts in `<summary>` tags still match script invariants
+  (15/2/3/15/9/1/1/3/11/12). Every package, parameter, key, unit, and
+  path preserved.
+- Script: no functional changes. Version bump only.
+
+v7.4.53 - v7.4.54 - 2026-05-23
+------------------------------
+
+- README: trim verbose tables to vital information only. Net 678 → 623
+  lines (−55, −8.1%). Table-row count 319 → 241 (−78, −24.4%). No
+  semantic loss: every value, count, path, key, command, version-floor,
+  and discriminative detail preserved. Trimmed surfaces:
+  - Phase 1 preflight: dropped restated function-name parentheticals;
+    Action col now carries only the criteria/constants.
+  - Packages — install (15 pkgs): table → inline `·`-separated list.
+    Purpose col removed (each package name is self-documenting; install
+    command preserved in summary).
+  - Packages — AUR / Vulkan: same inline-list collapse.
+  - Kernel cmdline (15 params): table → compact 4-line code block.
+    Deployed-prefix note kept inline.
+  - Packages — remove (11 pkgs): table → grouped inline lists (boot
+    splash · Thunderbolt · replaced/unused). Plasma-rdep rationale kept
+    as one trailing sentence.
+  - Masked units (12): table → grouped inline lists (suspend targets ·
+    replaced/unused). `ufw disable` rationale kept inline.
+  - fstab options: 3-row table → inline `·`-separated list + rewrite
+    rules.
+  - Managed Files destinations (12 paths): table → bulleted list with
+    perm rule stated once in summary (system 0644, user 0600).
+  - Safety & Reliability: condensed Detail cells; kept all flags/gates.
+  - Runtime variables: `RY_INSTALL_WIRELESS_REGDOM` persist recipe moved
+    to trailing paragraph (kept verbatim).
+  - Logs: `ERR_NO_DATA` and `gen_fail` cells condensed to one sentence
+    each; semantics preserved.
+- Script: no functional changes. Version bump only (header banner +
+  `VERSION` literal). LOC unchanged at 4771.
+
+v7.4.52 - v7.4.53 - 2026-05-23
+------------------------------
+
+- `_verify_static_checksum`: extract per-destination loop body into
+  `_vsc_check_one` helper (function split mirrors v7.4.5→22 ≤50-LOC
+  pattern: `_install_preflight` → `_ip_record_regdom`,
+  `_install_aur_packages` → `_iap_per_pkg_retry`, etc.).
+  `_verify_static_checksum` body collapses from 55 LOC to 9 LOC;
+  `_vsc_check_one` is 40 LOC; behaviour byte-identical (continue → return 0
+  inside the new helper, all _phase_record / _log / _fail_silent /
+  VERIFY_GEN_FAIL / VERIFY_FAIL bumps preserved). Net LOC 4777 → 4771.
+- README Phase 1 row 9: enumerate `_ry_check_wireless_regdom` alongside
+  `_ry_apply_wireless_regdom` — the check runs unconditionally after apply
+  and warns when `/etc/conf.d/wireless-regdom` is missing or contains no
+  valid 2-letter ISO 3166-1 code, since `set-wireless-regdom` silently
+  skips `iw reg set` in that case (cfg80211 stays in `world` domain on
+  every boot). Step count remains 10 — verify is the second half of step
+  9, not an 11th step.
+- CHANGELOG: this entry is the audit-fix bundle for v7.4.52 (no behaviour
+  changes; documentation accuracy + function-size discipline only).
+  Cumulative LOC since v7.4.34 baseline: 4468 → 4771 (+303 across
+  v7.4.34→53).
+- README badge: `7.4.52` → `7.4.53`.
+
+v7.4.51 - v7.4.52 - 2026-05-23
+------------------------------
+
+- `_rrp_optional_indexer`: `flag` no longer a named third argument; helper now
+  captures the optional flag via `set -l flag $argv[3..-1]`. Fish list
+  expansion of an empty list emits nothing, so `sudo -n updatedb ""` (which
+  mlocate/plocate rejects with "unexpected operand on command line") is no
+  longer produced. Caller at the `updatedb` site drops the trailing `""`; the
+  `pkgfile --update` caller is unchanged and remains a regression guard for
+  non-empty flag propagation.
+- `PKGS_DEL`: append `breeze-plymouth`, `plymouth-kcm`, `plasma-thunderbolt`
+  to enumerate the Plasma-side hard reverse-dependents that previously held
+  `plymouth` and `bolt` and caused `pacman -R` to refuse removal. Sources:
+  `extra/breeze-plymouth` PKGBUILD `depends=(glibc plymouth)`,
+  `extra/plymouth-kcm` PKGBUILD `depends=(… plymouth …)`,
+  `extra/plasma-thunderbolt` package page `depends: bolt …`. With these
+  enumerated, the rdep-skip path (`_csp_filter_rdeps`) no longer triggers
+  for `plymouth` / `bolt` on a stock CachyOS-KDE profile, and the
+  `verify-static` still-installed check passes without operator opt-in to
+  `RY_INSTALL_PKG_REMOVE_CASCADE=1`.
+- Self-consistency: `_install_preflight` count-drift assertion `PKGS_DEL:8`
+  bumped to `PKGS_DEL:11` to match the expanded list (script refuses to
+  deploy on mismatch — README/script desync guard).
+- README Configuration "Reverse deps" cell: note that `breeze-plymouth`,
+  `plymouth-kcm`, and `plasma-thunderbolt` are now enumerated in `PKGS_DEL`
+  so cascade is rarely needed in practice; cascade env-var semantics
+  unchanged.
+- README Packages-remove summary: count `8 pkgs` → `11 pkgs`; `plymouth` row
+  parenthetical extended with `breeze-plymouth` + `plymouth-kcm`; `bolt`
+  row parenthetical extended with `plasma-thunderbolt`. Each addition
+  annotated with its source PKGBUILD `depends=` relationship.
+- README Runtime variables `RY_INSTALL_WIRELESS_REGDOM` row: extended with
+  persistent-config recipe in `~/.config/fish/conf.d/ry-install-env.fish`
+  (`set -gx RY_INSTALL_WIRELESS_REGDOM US`), since a stale
+  `/etc/conf.d/wireless-regdom` with no valid value silently disables
+  `iw reg set` on every boot.
+- README badge: `7.4.51` → `7.4.52`.
+
 v7.4.50 - v7.4.51 - 2026-05-23
 ------------------------------
 

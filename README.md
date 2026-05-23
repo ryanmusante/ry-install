@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.47-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.48-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -71,7 +71,9 @@ Typical duration: **3–8 minutes**.
 > Sudo cache may lapse during the 3–8 min install. Mitigations:
 > `Defaults timestamp_timeout=60` in `/etc/sudoers`, a `sudo -v`
 > keepalive in a parallel shell, or a `NOPASSWD: ALL` drop-in.
-> Recovery: re-run ry-install (idempotent).
+> Recovery: re-run ry-install (idempotent). Boot-taint flags reset between
+> runs (per-process), so a fresh invocation observes a clean revert state
+> even if the prior run aborted on a boot-critical failure.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -133,7 +135,9 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 | `FAIL`               | `≥1 FAIL` (without boot-critical) |
 | `FAIL-BOOT-CRITICAL` | Boot rebuild cascade aborted (`EXIT_BOOT_CRIT`); prints **DO NOT REBOOT** + recovery steps |
 
-Set `RY_INSTALL_NO_MATRIX=1` to suppress the matrix (the JSONL log still records every `PHASE_RESULT` event regardless).
+> `DEFER`, `SKIP`, and `N/A` buckets are informational; they do not affect the verdict computation.
+
+Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JSONL log still records every `PHASE_RESULT` event regardless).
 
 ## Configuration
 
@@ -160,6 +164,8 @@ Set `RY_INSTALL_NO_MATRIX=1` to suppress the matrix (the JSONL log still records
 |---|---|---|
 | 1 | `_install_packages` | `pacman -Syu --needed` for `PKGS_ADD` |
 | 2 | `_install_aur_packages` | `paru` for `AUR_PKGS` |
+| 3 | `updatedb` | optional indexer (run when `mlocate` installed) |
+| 4 | `pkgfile --update` | optional indexer (run when `pkgfile` installed) |
 
 `PKGS_DEL` removal runs later in [Phase 4 — Services](#phase-4--services)
 (`_configure_services_pkg_remove`), grouped with systemd-state
@@ -273,6 +279,9 @@ entries.
 | `zswap.enabled` | `0` |
 
 Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`).
+
+> Deployed cmdline starts with `rw root=UUID=<runtime UUID>` (computed from
+> the `/` mount at preflight) followed by the 15 parameters above.
 
 </details>
 
@@ -418,7 +427,11 @@ Applied immediately on install and on `--install-file` re-deploy; re-applied eve
 | `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |
 
-Loaded by `systemd --user`. Log out and back in to apply.
+Loaded by `systemd --user`. Log out and back in to apply, OR run
+`systemctl --user import-environment` (and restart active user units)
+for a live apply without re-login. Note: `import-environment` only
+refreshes the systemd `--user` manager env; child processes already
+running keep their inherited env until restarted.
 
 </details>
 
@@ -432,6 +445,11 @@ Loaded by `systemd --user`. Log out and back in to apply.
 | 4 | `PKGS_DEL` removal |
 | 5 | Mask 12 desktop/power units |
 | 6 | `daemon-reload` + enable runtime units |
+
+> The fstab rewrite normalizes the field separator to a single space for the
+> rewritten ext4 entries (`OFS = " "` in the awk script). All other lines
+> (comments, non-ext4 entries) preserve their original whitespace via awk
+> passthrough.
 
 <details>
 <summary><b>fstab</b> — 3 options</summary>
@@ -546,7 +564,7 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 | Atomic writes | tmp (in dst parent) → symlink probe (pre + post-render) → chmod → `mv -T` |
 | Permissions | system 0644 · user 0600 · `~/ry-install/` 0700 · logs 0600 |
 | fstab | See [Phase 4 — fstab](#phase-4--services); rejects when `/etc/fstab` itself is a symlink |
-| Boot rebuild gate | `mkinitcpio -P` skipped on package or boot-config failure; failed revert is an unconditional gate (FORCE does not bypass) |
+| Boot rebuild gate | `mkinitcpio -P` skipped on package or boot-config failure. Post-revert failure (the `mkinitcpio.conf` revert itself failed) is unconditionally refused; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses only the taint flag, not the revert-failed flag |
 | mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert on `pacman -Syu` failure or signal (cp + size + `cmp -s`) |
 | Root detection | Refuses to run as root; sudo invoked internally |
 | Instance lock | Atomic mkdir + chmod 0700; auto-reclaims dead-PID lock; verifies `/proc/$pid/comm` is `fish` |
@@ -582,7 +600,7 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses `EXPECTED_CPU_MATCH` hard-fail |
 | `RY_INSTALL_WIRELESS_REGDOM` | unset | `=<CC>` writes `WIRELESS_REGDOM=<CC>` (2-letter ISO 3166-1) |
 | `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses interactive `sudo -v` fallback |
-| `RY_INSTALL_NO_MATRIX` | unset | `=1` suppresses run-summary matrix (JSONL unaffected) |
+| `RY_INSTALL_NO_MATRIX` | unset | any non-empty value suppresses run-summary matrix (JSONL unaffected) |
 | `NO_COLOR` | unset | Suppress ANSI color ([no-color.org](https://no-color.org/)) |
 
 </details>
@@ -592,11 +610,13 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 
 | Property | Value |
 |---|---|
-| Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl` |
+| Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` |
 | Format | NDJSON, one file per run, no auto-rotation |
 | Prune | `find ~/ry-install/logs -mtime +30 -delete` |
 | Events | `header` (run metadata), `log` (`{ts, data}`), `footer` (`{exit_code, pass, fail, warn, gen_fail}`) |
 | Footer marker | `bail` (preflight fail after header), `interrupted` (signal). Normal exit emits a footer with no marker |
+| `ERR_NO_DATA` | Service-state probes returning fewer than 3 fields emit `ERR_NO_DATA` in the corresponding `LoadState`/`ActiveState`/`UnitFileState` slot. Surfaced both in the matrix evidence column and in JSONL events. |
+| `gen_fail` | Content-generator failures (a `_content__*` function returned non-zero) are tracked separately as `gen_fail` and surface in the verify summary line. They flip the verify exit code to `1` even when no checksum `FAIL`s are observed. |
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl
@@ -645,10 +665,12 @@ rollback source-of-truth:
 | `.ry-install.*` orphan in `/etc` or `/boot/loader` | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, then re-run |
 | `set-wireless-regdom` leaves cfg80211 in `world` domain | `echo 'WIRELESS_REGDOM="<CC>"' \| sudo tee /etc/conf.d/wireless-regdom` (e.g., `US`, `GB`, `DE`) |
 | PipeWire `nice-level Permission denied` | `sudo gpasswd -a $USER realtime` then re-login (requires `realtime-privileges`, added by `PKGS_ADD`) |
+| Kernel 6.19.0 + Strix Halo black screen | Downgrade to 6.18.x or upgrade to 6.19.1+ ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
+| iwd config edits not taking effect | `iwd` re-reads `/etc/iwd/main.conf` only at daemon start. Run `sudo systemctl try-restart iwd.service` to pick up changes (ry-install does this automatically for managed-file edits). |
 
 ## References
 
-[NM + iwd](https://wiki.archlinux.org/title/NetworkManager#Using_iwd_as_the_Wi-Fi_backend) · [MT7925](https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek) · [gfx1151 issues](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) · [ppfeaturemask](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter) · [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes)
+[NM + iwd](https://wiki.archlinux.org/title/NetworkManager#Using_iwd_as_the_Wi-Fi_backend) · [MT7925](https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek) · [gfx1151 issues](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) · [ppfeaturemask](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter) · [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes) · [CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042) (kernel 6.19.0 black screen)
 
 ## License
 

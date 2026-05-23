@@ -1,6 +1,60 @@
 ry-install ChangeLog
 ====================
 
+v7.4.47 - v7.4.48 - 2026-05-23
+------------------------------
+
+- `_ry_check_kernel_version`: kernel <6.14 now emits `_err` (was `_warn`) to match matrix FAIL + exit 1 contract.
+- `_acquire_lock_fresh`: sentinel `_RY_LOCK_DIR_OWNED` set before `mkdir` (erased on failure) to close signal-arrival race vs `_dc_kill_children` gate.
+- Named return codes `RC_KVER_OK`, `RC_KVER_WARN`, `RC_KVER_FAIL` replace literal 0/1/2 in `_ry_check_kernel_version` body and Phase 1 dispatch switch.
+- `_install_finalize`: systemctl --user daemon-reload failure now sets `INSTALL_HAD_ERRORS=true` (was silent WARN-only).
+- `_configure_services_resolved_restart`: emit `_phase_record` on both branches; set `INSTALL_HAD_ERRORS` on restart failure; collapse single-line `if` to multi-line.
+- `_configure_services_thp_apply`: emit `_phase_record` on both apply and fail branches.
+- `_cse_collect_units`: daemon-reload failure emits `_phase_record` and sets `INSTALL_HAD_ERRORS`.
+- Log rename: add `cp -p` + `rm` fallback when `mv` fails; preserves preflight JSONL content under final filename.
+- `_post_service`: propagate `systemctl try-restart` rc to `$_rc` (was logged-and-dropped).
+- `_post_resolved`, `_post_sysctl`, `_post_tmpfiles`, `_post_cpupower`: return 1 on operational failure (were silent-pass).
+- `_post_nm`: aggregate iwd try-restart + NetworkManager restart rcs into `$_post_nm_rc`.
+- `_mkinitcpio_revert`, mkinitcpio snapshot, `_fstab_atomic_replace`: tmpfile creation moved from `/etc` to `/run/ry-install` (root-owned 0700, cleared on reboot).
+- `_far_awk_rewrite`: consolidate to single sudo-awk pipeline; remove split-privilege awk-then-tee branch.
+- `_far_build_awk_script`: skip empty tokens in option rewrite (`if (o == "") continue`); malformed `opt1,,opt2` no longer survives.
+- `_vs_read_symmetry_selftest`: emit WARN + `_phase_record` SKIP + bump `VERIFY_WARN` when mktemp returns no path (was silent pass).
+- `_verify_static_services`: refactor masked-unit parse to use `_unit_state_padded` for shape symmetry with other unit-state consumers.
+- README Logs section documents `ERR_NO_DATA` sentinel, `gen_fail` rc-flip semantics, and `±ZZZZ` timezone-sign in log path.
+- README Troubleshooting + References: add kernel 6.19.0 black-screen note (CachyOS #23042) and iwd `main.conf`-startup-only caveat.
+- `RY_INSTALL_NO_MATRIX` accepts any non-empty value (no-color.org convention); README env-vars table updated.
+- `--check` with `-V`/`--verbose` logs `CHECK_VERBOSE_IGNORED` to JSONL; silent-probe contract preserved on stdout.
+- README verdict table: footnote that `DEFER`/`SKIP`/`N/A` buckets are informational and do not affect verdict.
+- README boot-rebuild gate wording: distinguish taint flag (FORCE-bypassable) from revert-failed flag (unconditionally refused).
+- CHANGELOG v7.4.44→45 entry: correct step count from "9 preflight steps" to "10".
+- `_verify_static_checksum`: check `pipestatus[2]` (`string collect` rc) at both gen and read stages; surface iwd-skipped destinations as `_info` + JSONL.
+- `_teardown`: numeric-validate `argv[2]` before passing to `_write_footer` printf `%d`.
+- `_ry_check_kernel_version`: 6.19.0 patch test uses `_kver_below` (consistent with other version compares).
+- `_vsb_sdboot` LINUX_OPTIONS regex: replace `\x22` hex escapes with literal `"` inside single-quoted regex.
+- `_csp_filter_rdeps`: split pactree filter regex into separate empty-line + self-pkg filters; widen `_ps` check to 5 stages.
+- realtime group check: replace `\brealtime\b` regex with `id -Gn | string split | contains` for exact-token match.
+- `--install-file`: reject paths containing embedded newline; cap path length at PATH_MAX (4096).
+- `[i] Log file:` end-of-run line now guarded by `not set -q _RY_LOG_WRITE_FAIL`.
+- New `_set_exit` helper: keeps `_RY_EXIT_CODE` and `_INTENDED_EXIT_CODE` in sync; closes signal-arrival race between mode dispatch and `_write_footer`.
+- `_run_resolve_timeout`: return `0` instead of empty string for disable case; align with user-facing `RY_RUN_TIMEOUT=0` semantic; update both call sites.
+- `PACTREE_TIMEOUT_S=60` lifted to top-level constant (decoupled from `RY_RUN_TIMEOUT`).
+- `_ry_check_deps`: add paru minimum-version probe (recommend ≥ 2.0.0).
+- `_awf_render_to_tmp`: capture tee stderr to tracked tmpfile; surface first line on write-to-temp failure (ENOSPC/EIO visibility).
+- `_far_awk_rewrite` size floor: derive 25%-of-input lower bound (with absolute floor 20 bytes); replaces arbitrary literal 20.
+- README: add recovery idempotency caveat (boot-taint per-process), `rw root=UUID=` cmdline prefix note, environment.d `systemctl --user import-environment` alternative, fstab `OFS=" "` normalization note.
+- PATH-dedup loop and `TIMESTAMP` construction refactored for readability (`string join`, multi-line `if not contains`).
+- `_PROFILE_USES_WIFI_BACKEND` pre-init line annotated as recomputed in `_init_runtime`.
+- `_write_footer`: flatten `begin..end` guard to single `test ... ;or return 0`.
+- `_cleanup`: add defensive `case '*'` for unknown signals with `CLEANUP_UNKNOWN_SIGNAL` log entry.
+- Lift canonical 6-phase list to global `_RY_PHASE_NAMES` (consumed by progress + matrix; matches README Install Flow).
+- Lift ntsync autoload path to global `_RY_NTSYNC_MODLOAD_CONF`.
+- Progress bar cursor save/restore: replace DEC-private `\e7`/`\e8` with ANSI standard `\e[s`/`\e[u`.
+- `_vre_zram`: extract device name via `string match -rg`; refactor 5-way state branching from if-elif to `switch`.
+- `_vss_ntsync_modules` case order aligned with `_vre_ntsync` (observed-state-first).
+- `_post_envd`: append `systemctl --user import-environment` live-apply hint.
+- Comment at log-rename `[WARN]` site explains stderr-only is intentional (LOG_FILE mid-rename); sets `_RY_LOG_WRITE_FAIL` for downstream visibility.
+- README Phase 2 sub-table: add `updatedb` and `pkgfile --update` optional-indexer rows.
+
 v7.4.46 - v7.4.47 - 2026-05-23
 ------------------------------
 
@@ -15,7 +69,7 @@ v7.4.45 - v7.4.46 - 2026-05-23
 v7.4.44 - v7.4.45 - 2026-05-23
 ------------------------------
 
-- Phase 1: enumerate all 9 preflight steps in actual runtime order (Bootstrap → `_init_runtime` invariants → lock → sudo cache → deps → disk → network → kernel → wireless regdom → config validation); move `EXPECTED_CPU_MATCH` attribution to `_init_runtime` row.
+- Phase 1: enumerate all 10 preflight steps in actual runtime order (Bootstrap → `_init_runtime` invariants → lock → sudo cache → deps → disk → network → kernel → wireless regdom → config validation); move `EXPECTED_CPU_MATCH` attribution to `_init_runtime` row.
 - Phase 5: add post-rebuild sanity row (vmlinuz + initramfs + loader-entry kernel-path verify).
 - Exit codes row `1`: drop stale "old-kernel warn" phrase; kernel <6.14 is matrix FAIL (per v7.4.5→22 hard-floor flip), kernel WARN paths do not trigger exit 1.
 - Hardware section: clarify CPU check runs in `_init_runtime` on every mode (not install-only preflight).

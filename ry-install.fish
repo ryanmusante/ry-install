@@ -1,20 +1,14 @@
 #!/usr/bin/env fish
-# ry-install v7.4.62 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.64 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.62"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
-# EXIT_GEN_* internal sub-codes → EXIT_FAIL via _awf_render_to_tmp; not process exit.
+set -g VERSION "7.4.64"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
-# EXIT_RUN_TMPFAIL: internal _run sentinel; distinct from timeout 124/137.
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
-# Named rcs for _ry_check_kernel_version; matrix maps to PASS/WARN/FAIL.
 set -g RC_KVER_OK 0; set -g RC_KVER_WARN 1; set -g RC_KVER_FAIL 2
-# pactree timeout cap; decoupled from RY_RUN_TIMEOUT.
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 12
-# 6-phase list; must match README "Install Flow".
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-# ntsync autoload conf path; one site for wine-cachyos restructures.
 set -g _RY_NTSYNC_MODLOAD_CONF /usr/lib/modules-load.d/10-ntsync.conf
 
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -107,8 +101,6 @@ test "$parts[1]" -eq 3; and test "$_fish_minor" -ge 6; and set _fish_ok 1
 if test $_fish_ok -eq 0; echo "[ERR] fish 3.6+ required (found: $fish_ver)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
 # ── PATH HARDENING + TMPDIR + COREUTILS PROBES ────────────────────────────────────────────────────
-
-# System paths first; PATH-injection defence for sudo/pacman/findmnt; user PATH suffixed.
 set -l _ry_path_new
 for _ry_p in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin $PATH
     if not contains -- $_ry_p $_ry_path_new
@@ -118,7 +110,6 @@ end
 set -gx PATH $_ry_path_new
 set --erase _ry_path_new _ry_p
 if set -q TMPDIR; and test -n "$TMPDIR"; and not string match -q -- '/*' "$TMPDIR"; echo "[WARN] TMPDIR is not an absolute path ($TMPDIR) — falling back to /tmp" >&2; set -gx TMPDIR /tmp; end
-# Override TMPDIR if non-existent; otherwise downstream mktemp -p cascades to EXIT_RUN_TMPFAIL.
 if set -q TMPDIR; and test -n "$TMPDIR"; and not test -d "$TMPDIR"; echo "[WARN] TMPDIR does not exist ($TMPDIR) — falling back to /tmp" >&2; set -gx TMPDIR /tmp; end
 set -l _ry_tmpprobe_dir /tmp
 if set -q TMPDIR; and test -n "$TMPDIR"; and test -d "$TMPDIR"; set _ry_tmpprobe_dir "$TMPDIR"; end
@@ -167,18 +158,14 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 
 # ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──────────────────────────────────────
 set -g _RY_BOOT_TAINTED false
-# Deploy failure on any of these 4 sets _RY_BOOT_TAINTED; blocks rebuild unless RY_INSTALL_FORCE_BOOT_REBUILD=1.
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" /etc/kernel/cmdline "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
-# Reset in _rdi_run_phases pre _install_system_files; _PROFILE_USES_WIFI_BACKEND recomputed in _init_runtime.
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _PROFILE_USES_WIFI_BACKEND false
-# NF-inverted pair: malformed branch uses word/comma bounds to skip LABEL=ext4_root substrings.
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 set -g NM_RESTART_DELAY 3; set -g _PROG_BAR_WIDTH 40
 set -g KVER (command uname -r); set -g KVER_PARTS (string split '.' -- "$KVER"); set -g KVER_MAJOR $KVER_PARTS[1]
 if not string match -qr '^\d+$' -- "$KVER_MAJOR"; echo "[ERR] Cannot parse kernel major version from uname -r: $KVER" >&2; _ry_exit $EXIT_PREFLIGHT; end
-# Strip non-digit suffix (-cachyos1/-rc1/-arch1); int compare on minor.
 set -g KVER_MINOR (string replace -r '[^0-9].*' '' -- "$KVER_PARTS[2]")
 if test -z "$KVER_MINOR"; or not string match -qr '^\d+$' -- "$KVER_MINOR"; echo "[ERR] Cannot parse kernel minor version from uname -r: $KVER" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
@@ -923,8 +910,8 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
         test -L "$path"
     end
 end
+# Extend if new destinations land outside /etc or /boot.
 function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"
-    # Extend if new destinations land outside /etc or /boot.
     string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"
 end
 function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse)"
@@ -1051,15 +1038,12 @@ function _fail --description "Emit FAIL-level message and increment VERIFY_FAIL"
 function _fail_silent --description "Emit FAIL-level message without incrementing VERIFY_FAIL"; _msg_nocount FAIL $argv; return 0; end
 function _info --description "Emit INFO-level message (no counter)"; _msg INFO $argv; return 0; end
 function _warn --description "Emit WARN-level message and increment VERIFY_WARN"; _msg WARN $argv; return 0; end
-# Appends to run-summary matrix; U+2502 reserved as delimiter. JSONL-logged regardless of QUIET.
 function _phase_record --argument-names check result evidence --description "Append a row to the install summary matrix and JSONL"
-    # Strip \n (breaks matrix rows) and U+2502 (delimiter).
     set -l _e (string replace -ra '[\n\r│]' ' ' -- "$evidence")
     set -l _c (string replace -ra '[\n\r│]' ' ' -- "$check")
     set -ga _RY_PHASE_RESULTS "$_c│$result│$_e"
     _log "PHASE_RESULT: check='$_c' result=$result evidence='$_e'"
 end
-# _RY_LOUD_ERR force-prints err to stderr in QUIET install mode (--check stays silent).
 function _err --description "Emit ERR-level message (force-prints to stderr when _RY_LOUD_ERR=true)"
     if set -q _RY_LOUD_ERR; and test "$_RY_LOUD_ERR" = true; and test "$MODE" != check
         _log "ERR: "(string join -- " " $argv)
@@ -1121,8 +1105,8 @@ function _progress_now --description "Monotonic seconds (cached uptime or epoch)
     set -g _PROG_CLOCK epoch
     command date +%s
 end
+# _PROG_STEPS lifted to global _RY_PHASE_NAMES — canonical source for both progress + README.
 function _progress_init --description "Open scroll region; draw initial bar"
-    # 6-phase list lifted to global _RY_PHASE_NAMES (canonical source for both progress + README).
     set -g _PROG_STEPS $_RY_PHASE_NAMES
     set -g _PROG_CUR 0; set -g _PROG_TOTAL (count $_PROG_STEPS)
     set -g _PROG_START (_progress_now); set -g _PROG_STEP_START $_PROG_START
@@ -1218,11 +1202,9 @@ function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable 
     end
     echo $_RY_RUN_TIMEOUT_DEFAULT
 end
-# Head + 100 tail: final-line diagnostics (AUR errors, pacman conflicts) survive truncation.
 function _run_emit_stream --argument-names label_tag tmpfile ret cap --description "_run sub. Capture stream, log, emit per QUIET/rc."
     test -s "$tmpfile"; or return 0
     set -l _total (command wc -l <"$tmpfile" 2>/dev/null | string trim --)
-    # wc -l misses final no-NL line; add 1 when tail byte is non-empty.
     set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
     test -n "$_last_byte"; and string match -qr '^\d+$' -- "$_total"; and set _total (math $_total + 1)
     set -l _redacted; set -l _head_cap (math "max(1, $cap - 100)"); set -l _tail_cap 100; set -l _need_tail false
@@ -1407,8 +1389,8 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
             return 1
     end
 end
+# \b word boundary; assumes word-char start/end (MKINITCPIO_MODULES/HOOKS callers comply).
 function _chk_token_in --argument-names line token label --description "Verify a whole-word token is present in a config line"
-    # \b word boundary; assumes word-char start/end (MKINITCPIO_MODULES/HOOKS callers comply).
     set -l _re (string escape --style=regex -- "$token")
     if string match -qr "\\b$_re\\b" -- "$line"
         _ok "  $label: present"
@@ -3092,8 +3074,8 @@ function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache m
 end
 
 # ── WIRELESS REGULATORY DOMAIN (OPT-IN via RY_INSTALL_WIRELESS_REGDOM) ────────────────────────────
+# cfg80211 udev rule pipes /etc/conf.d/wireless-regdom through set-wireless-regdom on boot.
 function _ry_check_wireless_regdom --description "Warn if WIRELESS_REGDOM unset or invalid — set-wireless-regdom skips iw reg set otherwise, leaving cfg80211 in world domain"
-    # cfg80211 udev rule pipes /etc/conf.d/wireless-regdom through set-wireless-regdom on boot.
     set -l _conf /etc/conf.d/wireless-regdom
     if not test -f "$_conf"
         _warn "  Wireless regulatory domain unset (no $_conf) — cfg80211 will use restrictive defaults"
@@ -3563,8 +3545,8 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
         end
     end
 end
+# Idempotent: comments / non-ext4 / digits-only $4 / conformant ext4 pass through.
 function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk script for ext4 mount-opt rewrite"
-    # Idempotent: comments / non-ext4 / digits-only $4 / conformant ext4 pass through.
     string join -- \n \
         'BEGIN { OFS = " " }' \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
@@ -3790,8 +3772,8 @@ function _csm_retry_individual --description "_configure_services_mask sub. Per-
     end
     return $_ret
 end
+# `systemctl mask ufw.service` does not flush live netfilter rules; `ufw disable` does.
 function _csm_disable_ufw_rules --description "Flush ufw rules before mask so kernel-level iptables/nftables rules don't persist post-mask"
-    # `systemctl mask ufw.service` does not flush live netfilter rules; `ufw disable` does.
     contains -- ufw.service $MASK; or return 0
     command -q ufw; or return 0
     set -l _state (command systemctl is-active ufw.service 2>/dev/null | string trim --)
@@ -4395,8 +4377,6 @@ function _ry_do_install --description "Full installation: preflight, packages, c
 end
 
 # ── --INSTALL-FILE: POST-HOOK DISPATCH TABLE + HANDLERS ───────────────────────────────────────────
-
-# First-match-wins (specific first, `*.service` catchall last); fish glob `*` spans `/`.
 set -g _RY_POST_HOOKS \
     "/boot/*|boot" \
     "/efi/*|boot" \
@@ -4420,8 +4400,8 @@ function _post_hook_for_target --argument-names target --description "Return pos
     end
     return 1
 end
+# _idx aligns canon-list to source-list (order preserved; drift refused by _ir_validate_counts).
 function _idf_match_dst --argument-names target --description "Match \$target against managed destinations"
-    # _idx aligns canon-list to source-list (order preserved; drift refused by _ir_validate_counts).
     set -l _idx 1
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         if test "$target" = "$dst"; or test "$target" = "$_RY_CANON_SYSTEM_DSTS[$_idx]"; echo true; return 0; end
@@ -4675,12 +4655,9 @@ else if set -q _flag_verbose; or test "$MODE" != install
 end
 
 set -l mode_label $MODE
-# Rename preflight-*.jsonl → MODE-*.jsonl once MODE known; orphans plugged by _RY_LOG_SUPPRESS_CREATE.
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"; set -l old_log "$LOG_FILE"; set -l _log_rename_ok true
 if test -f "$old_log"; and test "$old_log" != "$new_log"
-    # LOG_FILE mid-rename; _log unsafe. Stderr-only + _RY_LOG_WRITE_FAIL flag.
     if not command mv -- "$old_log" "$new_log" 2>/dev/null
-        # Fallback: copy then unlink old. Preserves preflight content under final filename.
         if command cp -p -- "$old_log" "$new_log" 2>/dev/null
             command rm -f -- "$old_log" 2>/dev/null
             echo "[WARN] Log rename via mv failed; recovered via cp+rm: $old_log -> $new_log" >&2
@@ -4736,7 +4713,6 @@ switch $MODE
 end
 
 set -g _RY_EXIT_CODE 0
-# _set_exit syncs _RY_EXIT_CODE + _INTENDED_EXIT_CODE; closes signal race vs _write_footer.
 function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE and _INTENDED_EXIT_CODE atomically"
     set -g _RY_EXIT_CODE $_code
     set -g _INTENDED_EXIT_CODE $_code

@@ -1,5 +1,9 @@
 ry-install ChangeLog
 
+v7.4.64 - v7.4.65 - 2026-05-23
+
+- Script readability pass: lift 11 single-line WHY comments above function declarations (`_ntsync_state` dispatch-order rationale, `_resolve_systemd_ver` one-shot probe sentinel, `_acquire_lock` mkdir-atomicity primitive, `_cleanup` 128+N signal convention, `_cleanup_pipe` SIGPIPE non-fatal contract, `_cleanup_on_exit` exit-code resolution priority, `_ir_validate_counts` README/script drift gate, `_ir_validate_keys` dispatcher-collision refusal, `_init_runtime` every-mode hardware gate, `_atomic_write_file` same-FS rename invariant, `_ry_install_file` iwd-gated-destination skip); lift the inline `Dynamic dispatch` comment from `_ry_get_file_content` body to above the declaration; insert blank lines between consecutive `function`/`end` boundaries across the script (content generators + sub-helper clusters in verify/install/services/boot/post-hook families) for visual grouping; LOC 4745 → 4967 (+222: 11 lifts + ~211 blank-line separators); zero behavioural change; version bump.
+
 v7.4.63 - v7.4.64 - 2026-05-23
 
 - Lift 7 top-of-function-body comments to immediately above the `function` declaration (`_is_system_dst`, `_progress_init`, `_chk_token_in`, `_ry_check_wireless_regdom`, `_far_build_awk_script`, `_csm_disable_ufw_rules`, `_idf_match_dst`); zero LOC delta; output of all 12 content generators byte-identical (md5 unchanged); function count unchanged; version bump.

@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.4.48 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.50 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.48"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.50"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -40,7 +40,7 @@ function _ry_show_help --description "Display usage information and available su
         "  -v, --version     Show version" \
         "EXIT CODES:" \
         "  0 ok · 1 verify-FAIL, install-error, or kernel <6.14 hard-floor fail · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
-        "  Signal-induced runs: process \$status may not match signal (fish 3.x --on-signal limitation);" \
+        "  Signal-induced runs: process \$status may not match signal (fish --on-signal limitation);" \
         "  canonical code recorded in JSONL footer.exit_code (130 INT / 143 TERM / 129 HUP / 131 QUIT / 134 ABRT / 138 USR1 / 140 USR2)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
@@ -51,9 +51,9 @@ function _ry_show_help --description "Display usage information and available su
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
         "  RY_INSTALL_WIRELESS_REGDOM=<CC>  Write WIRELESS_REGDOM=<CC> to /etc/conf.d/wireless-regdom (opt-in)." \
         "  RY_INSTALL_NO_INTERACTIVE_SUDO=1  Refuse interactive sudo -v fallback (strict unattended; cron/ansible/systemd unit)." \
-        "  RY_INSTALL_NO_MATRIX=1  Suppress post-install run-summary matrix (JSONL log unaffected)." \
+        "  RY_INSTALL_NO_MATRIX (any non-empty)  Suppress post-install run-summary matrix (JSONL log unaffected; no-color.org convention)." \
         "  NO_COLOR  Suppress ANSI color (any value, per no-color.org)." \
-        "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS+ZZZZ-PID.jsonl" \
+        "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl" \
         ""
 end
 
@@ -170,8 +170,7 @@ set -g _RY_BOOT_TAINTED false
 # Deploy failure on any of these 4 sets _RY_BOOT_TAINTED; blocks rebuild unless RY_INSTALL_FORCE_BOOT_REBUILD=1.
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" /etc/kernel/cmdline "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
-# Reset to 0 in _rdi_run_phases before _install_system_files so "Configs" matrix evidence excludes pre-deploys.
-# _PROFILE_USES_WIFI_BACKEND is recomputed in _init_runtime; this is the pre-init default.
+# Reset to 0 in _rdi_run_phases before _install_system_files so "Configs" matrix evidence excludes pre-deploys; _PROFILE_USES_WIFI_BACKEND is recomputed in _init_runtime (pre-init default below).
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _PROFILE_USES_WIFI_BACKEND false
 # NF-inverted pair: malformed branch uses word/comma bounds to skip LABEL=ext4_root substrings.
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
@@ -759,9 +758,13 @@ function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --descriptio
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
     printf '%s\n' "[Login]"
     _resolve_systemd_ver
-    # HandleSecureAttentionKey introduced in systemd 257; emitting on older systemd produces "unknown key" warnings on every logind reload.
     for key in $LOGIND_IGNORE_KEYS
-        if test "$key" = HandleSecureAttentionKey; test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257; and continue; end
+        # HandleSecureAttentionKey introduced in systemd 257; emitting on older systemd produces "unknown key" warnings on every logind reload.
+        if test "$key" = HandleSecureAttentionKey
+            if test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257
+                continue
+            end
+        end
         printf '%s\n' "$key=ignore"
     end
 end
@@ -1999,7 +2002,12 @@ function _vss_logind --description "_verify_static_system sub: logind.conf.d key
     _chk_file /etc/systemd/logind.conf.d/99-cachyos-logind.conf; or return 0
     _resolve_systemd_ver
     for key in $LOGIND_IGNORE_KEYS
-        if test "$key" = HandleSecureAttentionKey; test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257; and continue; end
+        # Skip HandleSecureAttentionKey on systemd <257 (or when version unknown): emitting on older systemd produces "unknown key" warnings every logind reload.
+        if test "$key" = HandleSecureAttentionKey
+            if test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257
+                continue
+            end
+        end
         _chk_grep /etc/systemd/logind.conf.d/99-cachyos-logind.conf "$key=ignore" "$key"
     end
 end
@@ -2165,10 +2173,20 @@ function _verify_static_checksum --description "Verify embedded content hash mat
         set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
         set -l _gen_rc $pipestatus[1]; set -l _gen_collect_rc $pipestatus[2]
         if test $_gen_rc -ne 0; _fail_silent "  $dst: generator failed (rc=$_gen_rc)"; set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc"; continue; end
-        if test $_gen_collect_rc -ne 0; _fail_silent "  $dst: string collect failed (rc=$_gen_collect_rc)"; set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=gen rc=$_gen_collect_rc"; continue; end
+        if test $_gen_collect_rc -ne 0
+            _fail_silent "  $dst: string collect failed (rc=$_gen_collect_rc)"
+            set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
+            _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=gen rc=$_gen_collect_rc"
+            continue
+        end
         set -l actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
         set -l _ib_rc $pipestatus[1]; set -l _ib_collect_rc $pipestatus[2]
-        if test $_ib_collect_rc -ne 0; _fail "  $dst: string collect failed (rc=$_ib_collect_rc)"; set -g VERIFY_FAIL (math $VERIFY_FAIL + 1); _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=ib rc=$_ib_collect_rc"; continue; end
+        if test $_ib_collect_rc -ne 0
+            _fail "  $dst: string collect failed (rc=$_ib_collect_rc)"
+            set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
+            _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=ib rc=$_ib_collect_rc"
+            continue
+        end
         switch $_ib_rc
             case 1
                 _fail "  $dst: cannot read"
@@ -2443,7 +2461,7 @@ function _vrkg_vram --description "_vrk_gpu_state sub: BIOS VRAM carveout via me
         _ok "  VRAM carveout: $_vram_mb MB"
     else
         _warn "  VRAM carveout: $_vram_mb MB (recommended: ≤512 MB for UMA — check BIOS)"
-        _info "    See README → Hardware → UMA Frame Buffer Size"
+        _info "    BIOS setting: UMA Frame Buffer Size (also: iGPU Memory / Shared Video Memory)"
     end
 end
 function _vrk_gpu_state --description "Runtime kparam check: GPU performance level + ReBAR/SAM + VRAM carveout"
@@ -3155,6 +3173,7 @@ function _install_preflight --description "Run all preflight checks before insta
     # Force preflight errors to stderr in QUIET install; cleared on success/bail.
     set -g _RY_LOUD_ERR true; set -l _chk_labels "Preflight: sudo credential cache" "Preflight: dependency check" "Preflight: disk space"; set -l _i 1
     for _chk in _ensure_sudo_cached _ry_check_deps _ry_check_disk_space
+        # _i advances only on PASS branch; FAIL returns immediately so the index never drifts past the labels list.
         if $_chk; _phase_record $_chk_labels[$_i] PASS "ok"; set _i (math $_i + 1); continue; end
         _phase_record $_chk_labels[$_i] FAIL "see JSONL log"
         _ip_bail_prep

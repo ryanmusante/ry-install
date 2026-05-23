@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.48-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.50-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -96,7 +96,7 @@ Runtime init requires CPU matching `Ryzen AI Max` (checked on every mode); overr
 | Flag | Action |
 |---|---|
 | (no args) | Full unattended install |
-| `-V, --verbose` | Show output for install / check |
+| `-V, --verbose` | Show install output (check ignores -V) |
 | `--verify-static` | Check config files match embedded content |
 | `--verify-runtime` | Check live system state (after reboot) |
 | `--check` | Silent idempotency probe (0=clean, 3=preflight, 10=drift) |
@@ -592,7 +592,7 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `RY_RUN_TIMEOUT` | `3600` | `_run` wall-clock cap (s); `0` disables. Pkg / boot ops bypass |
+| `RY_RUN_TIMEOUT` | `3600` | `_run` wall-clock cap (s); `0` disables. Pkg / boot / db-indexer ops bypass |
 | `RY_INITRD_WARN_MB` | `100` | Initramfs size warning threshold (MB) |
 | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | `=1` → `pacman -Sy --needed` (install-only) |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses torn-package gate |
@@ -606,14 +606,14 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 </details>
 
 <details>
-<summary><b>Logs</b> — 5 properties</summary>
+<summary><b>Logs</b> — 7 properties</summary>
 
 | Property | Value |
 |---|---|
 | Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` |
 | Format | NDJSON, one file per run, no auto-rotation |
 | Prune | `find ~/ry-install/logs -mtime +30 -delete` |
-| Events | `header` (run metadata), `log` (`{ts, data}`), `footer` (`{exit_code, pass, fail, warn, gen_fail}`) |
+| Events | `header` (run metadata), `log` (`{data}`), `footer` (`{mode, exit_code, pass, fail, warn, gen_fail}`). All events carry `ts` + `event`. |
 | Footer marker | `bail` (preflight fail after header), `interrupted` (signal). Normal exit emits a footer with no marker |
 | `ERR_NO_DATA` | Service-state probes returning fewer than 3 fields emit `ERR_NO_DATA` in the corresponding `LoadState`/`ActiveState`/`UnitFileState` slot. Surfaced both in the matrix evidence column and in JSONL events. |
 | `gen_fail` | Content-generator failures (a `_content__*` function returned non-zero) are tracked separately as `gen_fail` and surface in the verify summary line. They flip the verify exit code to `1` even when no checksum `FAIL`s are observed. |

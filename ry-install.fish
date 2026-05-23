@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.4.59 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.61 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.59"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.61"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 # EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 # EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
@@ -4352,7 +4352,7 @@ function _rdi_summary --description "Print final install summary"
         set -l _uname (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}')
         if test -n "$_uname"; and not command id -Gn -- "$_uname" 2>/dev/null | string split ' ' | contains -- realtime
             _info "  3. Add user to realtime group for PipeWire RT scheduling:"
-            _info "       sudo gpasswd -a $_uname realtime  (then log out and back in)"
+            _info "       sudo usermod -aG realtime $_uname  (then log out and back in)"
         end
     end
     _info "Post-reboot verification: ./ry-install.fish --verify-static; and ./ry-install.fish --verify-runtime"

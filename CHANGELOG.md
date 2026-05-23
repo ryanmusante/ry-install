@@ -1,6 +1,17 @@
 ry-install ChangeLog
 ====================
 
+v7.4.60 - v7.4.61 - 2026-05-23
+------------------------------
+
+- README Phase 3 tmpfiles table: column header `Mode` → `Argument` (the trailing `0` is the content written to the sysfs node per tmpfiles.d(5), not the file mode); README badge + script header `7.4.60` → `7.4.61`.
+
+v7.4.59 - v7.4.60 - 2026-05-23
+------------------------------
+
+- `_rdi_summary` L4355: realtime group hint `sudo gpasswd -a` → `sudo usermod -aG` (preserves other groups; aligns script with the v7.4.51 README cell change).
+- README badge + script header: `7.4.59` → `7.4.60`.
+
 v7.4.58 - v7.4.59 - 2026-05-23
 ------------------------------
 

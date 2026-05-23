@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.46-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.47-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -141,25 +141,25 @@ Set `RY_INSTALL_NO_MATRIX=1` to suppress the matrix (the JSONL log still records
 
 ### Phase 1 — Preflight
 
-| Step | Action |
-|---|---|
-| Bootstrap (top-level) | fish ≥ 3.6, GNU coreutils (`timeout --foreground/--kill-after`, `stat`, `date`), root-guard, PATH hardening, `TMPDIR`/`HOME`/`LOG_DIR` setup |
-| Runtime init invariants (`_init_runtime`) | root UUID, `EXPECTED_CPU_MATCH` hardware fingerprint, array counts (15 invariants), `_tmpfile_key` collision, `KERNEL_PARAMS` metachar guard, package-name dash guard, tmpdir/WiFi-backend/canonical-dst cache precompute |
-| Acquire instance lock | atomic `mkdir` + `chmod 0700`; auto-reclaims dead PIDs |
-| Sudo credential cache (`_ensure_sudo_cached`) | cached `sudo -v`; interactive fallback unless `RY_INSTALL_NO_INTERACTIVE_SUDO=1` |
-| Dependency check (`_ry_check_deps`) | required binaries, `df --output` GNU-coreutils probe, systemd ≥ 250 |
-| Disk space (`_ry_check_disk_space`) | 2 GiB `/`, 200 MiB `/boot` |
-| Network reachability (`_ry_check_network`) | archlinux.org, cloudflare.com (HTTPS), 1.1.1.1 (ICMP fallback) |
-| Kernel version (`_ry_check_kernel_version`) | ≥ 6.14 hard floor (FAIL), ≥ 6.18.4 recommended (WARN), ntsync state probe |
-| Wireless regdom (`_ry_apply_wireless_regdom`) | opt-in via `RY_INSTALL_WIRELESS_REGDOM=<CC>` |
-| Config validation (`_ry_validate_configs`) | per-destination format validators (unit syntax, kv, kparam, sysctl, INI, tmpfiles) |
+| # | Step | Action |
+|---|---|---|
+| 1 | Bootstrap (top-level) | fish ≥ 3.6, GNU coreutils (`timeout --foreground/--kill-after`, `stat`, `date`), root-guard, PATH hardening, `TMPDIR`/`HOME`/`LOG_DIR` setup |
+| 2 | Runtime init invariants (`_init_runtime`) | root UUID, `EXPECTED_CPU_MATCH` hardware fingerprint, array counts (15 invariants), `_tmpfile_key` collision, `KERNEL_PARAMS` metachar guard, package-name dash guard, tmpdir/WiFi-backend/canonical-dst cache precompute |
+| 3 | Acquire instance lock | atomic `mkdir` + `chmod 0700`; auto-reclaims dead PIDs |
+| 4 | Sudo credential cache (`_ensure_sudo_cached`) | cached `sudo -v`; interactive fallback unless `RY_INSTALL_NO_INTERACTIVE_SUDO=1` |
+| 5 | Dependency check (`_ry_check_deps`) | required binaries, `df --output` GNU-coreutils probe, systemd ≥ 250 |
+| 6 | Disk space (`_ry_check_disk_space`) | 2 GiB `/`, 200 MiB `/boot` |
+| 7 | Network reachability (`_ry_check_network`) | archlinux.org, cloudflare.com (HTTPS), 1.1.1.1 (ICMP fallback) |
+| 8 | Kernel version (`_ry_check_kernel_version`) | ≥ 6.14 hard floor (FAIL), ≥ 6.18.4 recommended (WARN), ntsync state probe |
+| 9 | Wireless regdom (`_ry_apply_wireless_regdom`) | opt-in via `RY_INSTALL_WIRELESS_REGDOM=<CC>` |
+| 10 | Config validation (`_ry_validate_configs`) | per-destination format validators (unit syntax, kv, kparam, sysctl, INI, tmpfiles) |
 
 ### Phase 2 — Packages
 
-| Step | Action |
-|---|---|
-| `_install_packages` | `pacman -Syu --needed` for `PKGS_ADD` |
-| `_install_aur_packages` | `paru` for `AUR_PKGS` |
+| # | Step | Action |
+|---|---|---|
+| 1 | `_install_packages` | `pacman -Syu --needed` for `PKGS_ADD` |
+| 2 | `_install_aur_packages` | `paru` for `AUR_PKGS` |
 
 `PKGS_DEL` removal runs later in [Phase 4 — Services](#phase-4--services)
 (`_configure_services_pkg_remove`), grouped with systemd-state

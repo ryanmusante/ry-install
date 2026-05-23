@@ -1,6 +1,11 @@
 ry-install ChangeLog
 ====================
 
+v7.4.46 - v7.4.47 - 2026-05-23
+------------------------------
+
+- Phase 1 + Phase 2 sub-tables: add leading `#` column (`# | Step | Action`) so step numbering is consistent across all six phase tables (Phases 3-6 already had `# | Step`); parallels the parent Install Flow table `# | Phase | Action`.
+
 v7.4.45 - v7.4.46 - 2026-05-23
 ------------------------------
 

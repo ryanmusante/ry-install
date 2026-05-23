@@ -1,6 +1,23 @@
 ry-install ChangeLog
 ====================
 
+v7.4.50 - v7.4.51 - 2026-05-23
+------------------------------
+
+- Uninstall steps 1-4: prefix system commands with `sudo`.
+- Uninstall step 5 + Known Issues NM+iwd row: bash `&&` → fish `; and`.
+- Quick Start preflight: drop redundant standalone `sudo -v` (`_ensure_sudo_cached` primes internally).
+- Hardware override + Troubleshooting `PKGS_DEL` cells: show env-var with full `./ry-install.fish` invocation.
+- Troubleshooting `set-wireless-regdom` cell: cross-reference `RY_INSTALL_WIRELESS_REGDOM`; manual `tee` kept as fallback.
+- Prerequisites WARNING callout: replace prose with three concrete recipes (`visudo` timeout, fish keepalive loop, drop-in path).
+- Logs prune cell: `find -delete` → `find -print -delete`.
+- Known Issues MES page faults: concrete `paru -S amdgpu-dkms-firmware` / `IgnorePkg` commands.
+- Known Issues ROCm VRAM: append `sudo pacman -Syu linux-cachyos` upgrade command.
+- Troubleshooting kernel 6.19.0 black screen: explicit upgrade + downgrade commands.
+- Package caveats + Known Issues PGP cells: pin `--keyserver hkps://keyserver.ubuntu.com`.
+- Troubleshooting PipeWire row: `gpasswd -a` → `usermod -aG` (preserves other groups).
+- Troubleshooting sudo-expired cell: drop `sudo -v; and ./ry-install.fish` chain; bare `./ry-install.fish` suffices.
+
 v7.4.49 - v7.4.50 - 2026-05-23
 ------------------------------
 

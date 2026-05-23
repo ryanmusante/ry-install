@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.50-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.51-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -69,15 +69,16 @@ Typical duration: **3–8 minutes**.
 
 > [!WARNING]
 > Sudo cache may lapse during the 3–8 min install. Mitigations:
-> `Defaults timestamp_timeout=60` in `/etc/sudoers`, a `sudo -v`
-> keepalive in a parallel shell, or a `NOPASSWD: ALL` drop-in.
+> - `sudo visudo`: add `Defaults timestamp_timeout=60` (60-min cache)
+> - Keepalive in another shell: `while true; sudo -v; sleep 60; end`
+> - Drop-in: `sudo visudo -f /etc/sudoers.d/ry-install` → `<user> ALL=(ALL) NOPASSWD: ALL`
+>
 > Recovery: re-run ry-install (idempotent). Boot-taint flags reset between
 > runs (per-process), so a fresh invocation observes a clean revert state
 > even if the prior run aborted on a boot-critical failure.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
-sudo -v                          # warm sudo cache
 df -h / /boot                    # verify space
 ```
 
@@ -89,7 +90,7 @@ df -h / /boot                    # verify space
 | GPU | Radeon 8060S (RDNA 3.5) |
 | RAM | 128 GB LPDDR5x-8000 |
 
-Runtime init requires CPU matching `Ryzen AI Max` (checked on every mode); override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (amdgpu modules + gfx1151 cmdline are profile-specific and break initramfs on other silicon).
+Runtime init requires CPU matching `Ryzen AI Max` (checked on every mode); override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish` (amdgpu modules + gfx1151 cmdline are profile-specific and break initramfs on other silicon).
 
 ## Usage
 
@@ -233,7 +234,7 @@ dependency). `vulkan-radeon` and `lib32-vulkan-radeon` come from
 |---|---|
 | Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` → `pacman -Sy --needed` (no `-u`). Violates [Arch policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported) |
 | AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` omitted — DKMS needs makedeps |
-| PGP failures | Pre-import key (`gpg --recv-keys <KEYID>`) or `paru -S <pkg>` manually |
+| PGP failures | Pre-import key (`gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys <KEYID>`) or `paru -S <pkg>` manually |
 | Reverse deps | `PKGS_DEL` removal skipped when an outside package rdeps on it. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`) |
 | db lock | `/var/lib/pacman/db.lck` checked before + after; aborts cleanly on contention |
 | `.pacnew` | Auto-redeployed at managed destinations and `rm`'d; `.pacsave` surfaced as warning |
@@ -612,7 +613,7 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 |---|---|
 | Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` |
 | Format | NDJSON, one file per run, no auto-rotation |
-| Prune | `find ~/ry-install/logs -mtime +30 -delete` |
+| Prune | `find ~/ry-install/logs -mtime +30 -print -delete` |
 | Events | `header` (run metadata), `log` (`{data}`), `footer` (`{mode, exit_code, pass, fail, warn, gen_fail}`). All events carry `ts` + `event`. |
 | Footer marker | `bail` (preflight fail after header), `interrupted` (signal). Normal exit emits a footer with no marker |
 | `ERR_NO_DATA` | Service-state probes returning fewer than 3 fields emit `ERR_NO_DATA` in the corresponding `LoadState`/`ActiveState`/`UnitFileState` slot. Surfaced both in the matrix evidence column and in JSONL events. |
@@ -629,11 +630,11 @@ jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/log
 No automated uninstaller. Use [Managed Files](#managed-files) as the
 rollback source-of-truth:
 
-1. `systemctl unmask` the 12 masked units.
-2. `rm` deployed paths from the Managed Files list.
+1. `sudo systemctl unmask` the 12 masked units.
+2. `sudo rm` deployed paths from the Managed Files list.
 3. Restore `/etc/fstab` from your pre-install snapshot.
-4. Optionally reverse package changes (`pacman -S <PKGS_DEL>`, `pacman -Rns <PKGS_ADD>`).
-5. `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`.
+4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`).
+5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
 6. Reboot.
 
 ## Known Issues
@@ -641,16 +642,16 @@ rollback source-of-truth:
 | Category | Issue | Workaround |
 |---|---|---|
 | Strix Halo GPU | CWSR hang | `amdgpu.cwsr_enable=0` (already set) |
-| Strix Halo GPU | MES page faults | Pin `linux-firmware` ≤ `20250808-1` or use `amdgpu-dkms-firmware` |
-| Strix Halo GPU | ROCm VRAM allocation | Fixed in kernel 6.16+ |
+| Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` (AUR alt firmware) OR add `IgnorePkg = linux-firmware` to `/etc/pacman.conf` |
+| Strix Halo GPU | ROCm VRAM allocation | Fixed in kernel 6.16+ (`sudo pacman -Syu linux-cachyos`) |
 | MediaTek MT7925 | Kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
 | MediaTek MT7925 | TX power 3 dBm / random deauth | None (cosmetic / upstream) |
 | Strix Halo ACP | `acp_asoc_acp70.0: No matching ASoC machine driver` (dmesg, once/boot) — internal analog ACP not routed | Pending upstream ASoC driver; HDMI (`snd_hda_intel`) and USB audio unaffected |
-| NetworkManager + iwd | Boot connectivity failure (intermittent) | `nmcli radio wifi off && nmcli radio wifi on` |
+| NetworkManager + iwd | Boot connectivity failure (intermittent) | `nmcli radio wifi off; and nmcli radio wifi on` |
 | NetworkManager + iwd | WPA2/3 Enterprise GUI broken | Use CLI or wpa_supplicant |
 | Other | Stale instance lock | Auto-reclaimed if PID is dead; manual `rm -rf ~/ry-install/.lock` only if `pgrep -af ry-install` is empty |
 | Other | `systemctl --user` skipped | Absent user-bus yields a skip-info; enable with `loginctl enable-linger $USER` |
-| Other | AUR PGP signature failure | `gpg --recv-keys <KEYID>` then re-run, or `paru -S <pkg>` without `--skipreview` |
+| Other | AUR PGP signature failure | `gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys <KEYID>` then re-run, or `paru -S <pkg>` without `--skipreview` |
 
 ## Troubleshooting
 
@@ -659,13 +660,13 @@ rollback source-of-truth:
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
 | Initramfs rebuild refused | Fix root cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
-| Sudo cache expired | `sudo -v; and ./ry-install.fish` |
-| `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1`; inspect first with `pactree -ru <pkg>` |
+| Sudo cache expired | `./ry-install.fish` (script re-primes cache; for long runs see Prerequisites WARNING) |
+| `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1 ./ry-install.fish`; inspect first with `pactree -ru <pkg>` |
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
 | `.ry-install.*` orphan in `/etc` or `/boot/loader` | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, then re-run |
-| `set-wireless-regdom` leaves cfg80211 in `world` domain | `echo 'WIRELESS_REGDOM="<CC>"' \| sudo tee /etc/conf.d/wireless-regdom` (e.g., `US`, `GB`, `DE`) |
-| PipeWire `nice-level Permission denied` | `sudo gpasswd -a $USER realtime` then re-login (requires `realtime-privileges`, added by `PKGS_ADD`) |
-| Kernel 6.19.0 + Strix Halo black screen | Downgrade to 6.18.x or upgrade to 6.19.1+ ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
+| `set-wireless-regdom` leaves cfg80211 in `world` domain | Re-run with `RY_INSTALL_WIRELESS_REGDOM=<CC> ./ry-install.fish` (e.g., `US`, `GB`, `DE`); manual fallback: `echo 'WIRELESS_REGDOM="<CC>"' \| sudo tee /etc/conf.d/wireless-regdom` |
+| PipeWire `nice-level Permission denied` | `sudo usermod -aG realtime $USER` then re-login (requires `realtime-privileges`, added by `PKGS_ADD`) |
+| Kernel 6.19.0 + Strix Halo black screen | Upgrade: `sudo pacman -Syu` (≥6.19.1). Downgrade: `paru -S downgrade; and sudo downgrade linux-cachyos` (to 6.18.x) ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
 | iwd config edits not taking effect | `iwd` re-reads `/etc/iwd/main.conf` only at daemon start. Run `sudo systemctl try-restart iwd.service` to pick up changes (ry-install does this automatically for managed-file edits). |
 
 ## References

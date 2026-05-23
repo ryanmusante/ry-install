@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.57-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.58-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -146,11 +146,6 @@ Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JS
 
 ### Phase 1 — Preflight
 
-10 sequential preflight checks gate installation; failures emit to stderr in install mode and are silent under `--check`.
-
-<details>
-<summary><b>Preflight steps</b> — 10 steps</summary>
-
 | # | Step | Detail |
 |---|---|---|
 | 1 | Bootstrap | fish ≥ 3.6, GNU coreutils (`timeout --foreground/--kill-after`), PATH hardening, TMPDIR/HOME/LOG_DIR setup |
@@ -164,14 +159,7 @@ Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JS
 | 9 | Wireless regdom | `_ry_apply_wireless_regdom` + `_ry_check_wireless_regdom`; opt-in apply via `RY_INSTALL_WIRELESS_REGDOM=<CC>` |
 | 10 | `_ry_validate_configs` | per-destination format validators |
 
-</details>
-
 ### Phase 2 — Packages
-
-`pacman -Syu --needed` installs `PKGS_ADD`, `paru` installs `AUR_PKGS`, then optional `updatedb` + `pkgfile --update` refresh indexers; `PKGS_DEL` removal is deferred to [Phase 4](#phase-4--services) and `EXPECTED_VULKAN_PKGS` is verify-only.
-
-<details>
-<summary><b>Phase steps</b> — 4 steps</summary>
 
 | # | Step | Action |
 |---|---|---|
@@ -179,8 +167,6 @@ Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JS
 | 2 | `_install_aur_packages` | `paru` for `AUR_PKGS` |
 | 3 | `updatedb` | optional indexer (run when `mlocate` installed) |
 | 4 | `pkgfile --update` | optional indexer (run when `pkgfile` installed) |
-
-</details>
 
 <details>
 <summary><b>Packages — install</b> — 15 pkgs (<code>pacman -Syu --needed --noconfirm</code>)</summary>
@@ -246,19 +232,12 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 
 ### Phase 3 — Configuration Files
 
-11 system + 1 user config file deployed via atomic writes (`_install_system_files`); destinations enumerated in [Managed Files](#managed-files), the four boot-critical paths take effect only after [Phase 5](#phase-5--boot) rebuilds initramfs and bootloader entries.
-
-<details>
-<summary><b>Atomic-write sequence</b> — 4 steps</summary>
-
 | # | Step |
 |---|---|
 | 1 | Render to tmp file (in destination's parent dir) |
 | 2 | Symlink probe on tmp file (pre-render and post-render) |
 | 3 | `chmod` to target mode |
 | 4 | `mv -T` to destination |
-
-</details>
 
 <details>
 <summary><b>Kernel cmdline</b> — 15 params (deployed as <code>rw root=UUID=&lt;runtime UUID&gt; …</code>)</summary>
@@ -445,11 +424,6 @@ running keep their inherited env until restarted.
 
 ### Phase 4 — Services
 
-6 service-state mutations in order: fstab rewrite → `systemd-resolved` restart → THP tmpfiles apply → `PKGS_DEL` removal → 12-unit mask → `daemon-reload` + enable runtime units.
-
-<details>
-<summary><b>Phase steps</b> — 6 steps</summary>
-
 | # | Step |
 |---|---|
 | 1 | fstab rewrite (`_install_fstab_opts`) |
@@ -458,8 +432,6 @@ running keep their inherited env until restarted.
 | 4 | `PKGS_DEL` removal |
 | 5 | Mask 12 desktop/power units |
 | 6 | `daemon-reload` + enable runtime units |
-
-</details>
 
 <details>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -530,11 +502,6 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-
 
 ### Phase 5 — Boot
 
-4-step initramfs + bootloader rebuild; skipped when on-disk package state or boot-critical configs are inconsistent with embedded content (override after manual remediation with `RY_INSTALL_FORCE_BOOT_REBUILD=1`).
-
-<details>
-<summary><b>Boot steps</b> — 4 steps</summary>
-
 | # | Step |
 |---|---|
 | 1 | `mkinitcpio -P` (initramfs rebuild) |
@@ -542,14 +509,7 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-
 | 3 | `sdboot-manage update` (bootloader entries) |
 | 4 | Post-rebuild sanity (`vmlinuz-*` + `initramfs-*.img` + loader-entry kernel-path verify; emits **DO NOT REBOOT** on failure) |
 
-</details>
-
 ### Phase 6 — Finalize
-
-4 cleanup steps: `systemctl --user daemon-reload`, pacman cache cleanup, NetworkManager restart (deferred to next reboot when WiFi is the active route), and JSONL footer write.
-
-<details>
-<summary><b>Finalize steps</b> — 4 steps</summary>
 
 | # | Step |
 |---|---|
@@ -557,8 +517,6 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-
 | 2 | pacman cache cleanup (`paccache`) |
 | 3 | NetworkManager restart to apply the wpa_supplicant → iwd backend switch — deferred to next reboot when WiFi is the active route |
 | 4 | Write JSONL log footer |
-
-</details>
 
 ## Managed Files
 

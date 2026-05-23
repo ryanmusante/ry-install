@@ -1,6 +1,16 @@
 ry-install ChangeLog
 ====================
 
+v7.4.57 - v7.4.58 - 2026-05-23
+------------------------------
+
+- README Configuration: revert v7.4.56-7.4.57 single-line phase-intro prose across all six phases (Phase 1 Preflight, Phase 2 Packages, Phase 3 Configuration Files, Phase 4 Services, Phase 5 Boot, Phase 6 Finalize).
+- README Configuration: expand the first `<details>` collapsible in each phase to an always-visible markdown table (Phase 1 Preflight steps, Phase 2 Phase steps, Phase 3 Atomic-write sequence, Phase 4 Phase steps, Phase 5 Boot steps, Phase 6 Finalize steps).
+- Remaining per-phase collapsibles (data tables — packages, kernel cmdline, sysctl, env vars, fstab, masked units, etc.) untouched.
+- All step counts and rows preserved (10/4/4/6/4/4); zero content drift versus script invariants.
+- README badge: `7.4.57` → `7.4.58`.
+- Script: header comment + `VERSION` global `7.4.57` → `7.4.58`. No functional changes.
+
 v7.4.56 - v7.4.57 - 2026-05-23
 ------------------------------
 

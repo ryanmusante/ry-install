@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.61-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.62-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -65,7 +65,6 @@ Typical duration: **3–8 minutes**.
 | sudo cache | Cached credential (`sudo -v`) |
 | paru | Required for AUR (`mkinitcpio-firmware`, `mt76-mt7925-dkms`) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
-| Before `-Syu` | Read [CachyOS](https://wiki.cachyos.org) + [Arch news](https://archlinux.org/news/) |
 
 > [!WARNING]
 > Sudo cache may lapse during the 3–8 min install. Mitigations:
@@ -148,15 +147,15 @@ Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JS
 
 | # | Step | Detail |
 |---|---|---|
-| 1 | Bootstrap | fish ≥ 3.6, GNU coreutils (`timeout --foreground/--kill-after`), PATH hardening, TMPDIR/HOME/LOG_DIR setup |
-| 2 | `_init_runtime` | root UUID, `EXPECTED_CPU_MATCH`, 15 array-count invariants, `_tmpfile_key` collision, `KERNEL_PARAMS` metachar guard, package-name dash guard |
+| 1 | Bootstrap | fish ≥ 3.6, coreutils `timeout`, PATH/TMPDIR/HOME hardening |
+| 2 | `_init_runtime` | root UUID, `EXPECTED_CPU_MATCH`, array invariants, metachar guards |
 | 3 | Acquire instance lock | atomic `mkdir` 0700, auto-reclaims dead PIDs |
 | 4 | Sudo credential cache | `RY_INSTALL_NO_INTERACTIVE_SUDO=1` refuses interactive fallback |
 | 5 | `_ry_check_deps` | `df --output`, systemd ≥ 250, paru ≥ 2.0.0 |
 | 6 | `_ry_check_disk_space` | 2 GiB `/`, 200 MiB `/boot` |
-| 7 | `_ry_check_network` | archlinux.org, cloudflare.com (HTTPS), 1.1.1.1 (ICMP fallback) |
+| 7 | `_ry_check_network` | archlinux.org, cloudflare.com (HTTPS), 1.1.1.1 (ICMP) |
 | 8 | `_ry_check_kernel_version` | ≥ 6.14 FAIL, ≥ 6.18.4 WARN, ntsync probe |
-| 9 | Wireless regdom | `_ry_apply_wireless_regdom` + `_ry_check_wireless_regdom`; opt-in apply via `RY_INSTALL_WIRELESS_REGDOM=<CC>` |
+| 9 | Wireless regdom | opt-in apply via `RY_INSTALL_WIRELESS_REGDOM=<CC>` |
 | 10 | `_ry_validate_configs` | per-destination format validators |
 
 ### Phase 2 — Packages
@@ -217,16 +216,14 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 </details>
 
 <details>
-<summary><b>Package caveats</b> — 6 notes</summary>
+<summary><b>Package caveats</b> — 4 notes</summary>
 
 | Caveat | Detail |
 |---|---|
 | Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` → `pacman -Sy --needed` (no `-u`). Violates [Arch policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported) |
 | AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` omitted — DKMS needs makedeps |
 | PGP failures | Pre-import key (`gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys <KEYID>`) or `paru -S <pkg>` manually |
-| Reverse deps | `PKGS_DEL` removal skipped when an outside package rdeps on it. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`). The KDE/Plasma rdeps `breeze-plymouth`, `plymouth-kcm` (hold `plymouth`) and `plasma-thunderbolt` (holds `bolt`) are already enumerated in `PKGS_DEL`, so cascade is rarely needed in practice |
-| db lock | `/var/lib/pacman/db.lck` checked before + after; aborts cleanly on contention |
-| `.pacnew` | Auto-redeployed at managed destinations and `rm`'d; `.pacsave` surfaced as warning |
+| Reverse deps | `PKGS_DEL` removal skipped on outside rdeps. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`); Plasma rdeps already enumerated |
 
 </details>
 
@@ -552,14 +549,13 @@ User (`0600`):
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp in dst parent → pre+post-render symlink probe → chmod → `mv -T` |
+| Atomic writes | tmp → symlink probe → chmod → `mv -T` |
 | Permissions | system `0644` · user `0600` · `~/ry-install/` `0700` |
-| fstab | `findmnt --verify` gate; rejects when `/etc/fstab` is a symlink |
-| Boot rebuild gate | Skipped on package/boot-config failure. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint flag only — not the revert-failed flag |
-| mkinitcpio rollback | Pre-deploy snapshot; byte-exact revert (cp + size + `cmp -s`) on `pacman -Syu` failure or signal |
-| Root detection | Refuses to run as root; sudo invoked internally |
-| Instance lock | Atomic mkdir `0700`; auto-reclaims dead-PID lock; verifies `/proc/$pid/comm = fish` |
-| Preflight visibility | Failures emit to stderr in install mode; `--check` stays silent |
+| fstab | `findmnt --verify` gate; rejects symlinked `/etc/fstab` |
+| Boot rebuild gate | Skipped on package/boot-config failure. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses taint only |
+| mkinitcpio rollback | Byte-exact revert on `pacman -Syu` failure or signal |
+| Root detection | Refuses root; sudo invoked internally |
+| Instance lock | Atomic mkdir `0700`; reclaims dead-PID lock; verifies `/proc/$pid/comm = fish` |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal |
 
 <details>
@@ -606,10 +602,10 @@ Persist `RY_INSTALL_WIRELESS_REGDOM` in `~/.config/fish/conf.d/ry-install-env.fi
 | Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` |
 | Format | NDJSON, one file per run, no auto-rotation |
 | Prune | `find ~/ry-install/logs -mtime +30 -print -delete` |
-| Events | `header`, `log` (`{data}`), `footer` (`{mode, exit_code, pass, fail, warn, gen_fail}`). All carry `ts` + `event` |
-| Footer marker | `bail` (preflight fail after header), `interrupted` (signal). Normal exit: no marker |
-| `ERR_NO_DATA` | systemctl probes returning <3 fields emit `ERR_NO_DATA` in `LoadState`/`ActiveState`/`UnitFileState` |
-| `gen_fail` | `_content__*` non-zero returns; flips verify exit to `1` even with no checksum FAILs |
+| Events | `header`, `log`, `footer`; all carry `ts` + `event` |
+| Footer marker | `bail` (preflight fail), `interrupted` (signal); normal exit: none |
+| `ERR_NO_DATA` | systemctl probes returning <3 fields emit `ERR_NO_DATA` |
+| `gen_fail` | `_content__*` non-zero returns; flips verify exit to `1` |
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl
@@ -638,12 +634,12 @@ rollback source-of-truth:
 | Strix Halo GPU | ROCm VRAM allocation | Fixed in kernel 6.16+ (`sudo pacman -Syu linux-cachyos`) |
 | MediaTek MT7925 | Kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
 | MediaTek MT7925 | TX power 3 dBm / random deauth | None (cosmetic / upstream) |
-| Strix Halo ACP | `acp_asoc_acp70.0: No matching ASoC machine driver` (dmesg, once/boot) — internal analog ACP not routed | Pending upstream ASoC driver; HDMI (`snd_hda_intel`) and USB audio unaffected |
+| Strix Halo ACP | `No matching ASoC machine driver` (dmesg, once/boot) | Pending upstream; HDMI + USB audio unaffected |
 | NetworkManager + iwd | Boot connectivity failure (intermittent) | `nmcli radio wifi off; and nmcli radio wifi on` |
 | NetworkManager + iwd | WPA2/3 Enterprise GUI broken | Use CLI or wpa_supplicant |
-| Other | Stale instance lock | Auto-reclaimed if PID is dead; manual `rm -rf ~/ry-install/.lock` only if `pgrep -af ry-install` is empty |
-| Other | `systemctl --user` skipped | Absent user-bus yields a skip-info; enable with `loginctl enable-linger $USER` |
-| Other | AUR PGP signature failure | `gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys <KEYID>` then re-run, or `paru -S <pkg>` without `--skipreview` |
+| Other | Stale instance lock | Auto-reclaimed if PID dead; else `rm -rf ~/ry-install/.lock` after `pgrep -af ry-install` empty |
+| Other | `systemctl --user` skipped | Absent user-bus; enable with `loginctl enable-linger $USER` |
+| Other | AUR PGP signature failure | `gpg --recv-keys <KEYID>` then re-run, or `paru -S <pkg>` without `--skipreview` |
 
 ## Troubleshooting
 
@@ -656,10 +652,10 @@ rollback source-of-truth:
 | `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1 ./ry-install.fish`; inspect first with `pactree -ru <pkg>` |
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
 | `.ry-install.*` orphan in `/etc` or `/boot/loader` | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, then re-run |
-| `set-wireless-regdom` leaves cfg80211 in `world` domain | Re-run with `RY_INSTALL_WIRELESS_REGDOM=<CC> ./ry-install.fish` (e.g., `US`, `GB`, `DE`); manual fallback: `echo 'WIRELESS_REGDOM="<CC>"' \| sudo tee /etc/conf.d/wireless-regdom` |
-| PipeWire `nice-level Permission denied` | `sudo usermod -aG realtime $USER` then re-login (requires `realtime-privileges`, added by `PKGS_ADD`) |
-| Kernel 6.19.0 + Strix Halo black screen | Upgrade: `sudo pacman -Syu` (≥6.19.1). Downgrade: `paru -S downgrade; and sudo downgrade linux-cachyos` (to 6.18.x) ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
-| iwd config edits not taking effect | `iwd` re-reads `/etc/iwd/main.conf` only at daemon start. Run `sudo systemctl try-restart iwd.service` to pick up changes (ry-install does this automatically for managed-file edits). |
+| `set-wireless-regdom` leaves cfg80211 in `world` | Re-run with `RY_INSTALL_WIRELESS_REGDOM=<CC>`; fallback: `echo 'WIRELESS_REGDOM="<CC>"' \| sudo tee /etc/conf.d/wireless-regdom` |
+| PipeWire `nice-level Permission denied` | `sudo usermod -aG realtime $USER` then re-login |
+| Kernel 6.19.0 + Strix Halo black screen | `sudo pacman -Syu` (≥6.19.1) or `paru -S downgrade; and sudo downgrade linux-cachyos` ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
+| iwd config edits not taking effect | `sudo systemctl try-restart iwd.service` (ry-install does this for managed-file edits) |
 
 ## References
 

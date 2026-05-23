@@ -1,20 +1,20 @@
 #!/usr/bin/env fish
-# ry-install v7.4.61 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.62 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.61"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
-# EXIT_GEN_* are internal sub-codes — _awf_render_to_tmp converts them to EXIT_FAIL; never the process exit code
+set -g VERSION "7.4.62"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+# EXIT_GEN_* internal sub-codes → EXIT_FAIL via _awf_render_to_tmp; not process exit.
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
-# EXIT_RUN_TMPFAIL is an internal _run sentinel — distinct from timeout codes (124/137); never the process exit code
+# EXIT_RUN_TMPFAIL: internal _run sentinel; distinct from timeout 124/137.
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
-# Named return codes for _ry_check_kernel_version (matrix dispatch maps these to PASS/WARN/FAIL).
+# Named rcs for _ry_check_kernel_version; matrix maps to PASS/WARN/FAIL.
 set -g RC_KVER_OK 0; set -g RC_KVER_WARN 1; set -g RC_KVER_FAIL 2
-# pactree timeout cap — decoupled from RY_RUN_TIMEOUT so users raising RY_RUN_TIMEOUT do not block on pactree.
+# pactree timeout cap; decoupled from RY_RUN_TIMEOUT.
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 12
-# Canonical 6-phase list — must match README "Install Flow"; consumed by progress + matrix renderers.
+# 6-phase list; must match README "Install Flow".
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-# ntsync autoload conf path — lift here so future wine-cachyos restructures touch one site.
+# ntsync autoload conf path; one site for wine-cachyos restructures.
 set -g _RY_NTSYNC_MODLOAD_CONF /usr/lib/modules-load.d/10-ntsync.conf
 
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -108,7 +108,7 @@ if test $_fish_ok -eq 0; echo "[ERR] fish 3.6+ required (found: $fish_ver)" >&2;
 
 # ── PATH HARDENING + TMPDIR + COREUTILS PROBES ────────────────────────────────────────────────────
 
-# Canonical system paths first; defends sudo/pacman/findmnt against PATH-injection; user PATH retained as suffix.
+# System paths first; PATH-injection defence for sudo/pacman/findmnt; user PATH suffixed.
 set -l _ry_path_new
 for _ry_p in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin $PATH
     if not contains -- $_ry_p $_ry_path_new
@@ -170,7 +170,7 @@ set -g _RY_BOOT_TAINTED false
 # Deploy failure on any of these 4 sets _RY_BOOT_TAINTED; blocks rebuild unless RY_INSTALL_FORCE_BOOT_REBUILD=1.
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" /etc/kernel/cmdline "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
-# Reset in _rdi_run_phases before _install_system_files; _PROFILE_USES_WIFI_BACKEND recomputed in _init_runtime.
+# Reset in _rdi_run_phases pre _install_system_files; _PROFILE_USES_WIFI_BACKEND recomputed in _init_runtime.
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _PROFILE_USES_WIFI_BACKEND false
 # NF-inverted pair: malformed branch uses word/comma bounds to skip LABEL=ext4_root substrings.
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
@@ -288,7 +288,7 @@ set -g _CLEANUP_DONE false
 function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     set -l _prev_umask (umask)
     umask 0077
-    # Sentinel set BEFORE mkdir; erased on failure. Closes the signal-arrival race vs _dc_kill_children gate.
+    # Sentinel pre-mkdir, erased on failure; closes signal race vs _dc_kill_children.
     set -g _RY_LOCK_DIR_OWNED true
     command mkdir -- "$LOCK_DIR" 2>/dev/null
     set -l _mk_rc $status
@@ -816,7 +816,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before re
             _err "Sudo credential not cached and RY_INSTALL_NO_INTERACTIVE_SUDO=1 — refusing interactive sudo -v"
             _log "SUDO_CACHE_NONINTERACTIVE_FORCED: RY_INSTALL_NO_INTERACTIVE_SUDO=1"
         else if isatty 0; and isatty 2
-            # Truncate stale stderr (interactive readback); RY_INSTALL_NO_INTERACTIVE_SUDO=1 for strict-unattended runs.
+            # Truncate stale stderr; RY_INSTALL_NO_INTERACTIVE_SUDO=1 for strict-unattended.
             sudo -v 2>"$_sudo_err"
             set _rc $status
         else
@@ -941,7 +941,7 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
         set -l _ps $pipestatus
         test "$_ps[1]" -eq 0; or return 1
     end
-    # bare printf: pipe into string collect would inject phantom \n at callers (asymmetric vs _ry_content_bytes).
+    # Bare printf: pipe→string collect would inject \n (asymmetric vs _ry_content_bytes).
     printf '%s' "$_bytes"
     return 0
 end
@@ -980,7 +980,7 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
     set -q _RY_LOG_WRITE_FAIL; and test "$_RY_LOG_WRITE_FAIL" = true; and return 0
     # Pre-bootstrap guard: skip when LOG_FILE not yet set (callable via functions -q before L199 init).
     test -n "$LOG_FILE"; or return 0
-    # Skip lazy-create after _pre_dispatch_log_cleanup; prevents orphan preflight-*.jsonl on argparse-error paths.
+    # Skip lazy-create after _pre_dispatch_log_cleanup; prevents orphan preflight-*.jsonl.
     set -q _RY_LOG_SUPPRESS_CREATE; and test "$_RY_LOG_SUPPRESS_CREATE" = true; and not test -f "$LOG_FILE"; and return 0
     if not test -f "$LOG_FILE"
         set -l _prev_umask (umask)
@@ -1218,7 +1218,7 @@ function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable 
     end
     echo $_RY_RUN_TIMEOUT_DEFAULT
 end
-# Splits cap into head + 100 tail so final-line diagnostics (AUR build errors, pacman conflicts) survive truncation.
+# Head + 100 tail: final-line diagnostics (AUR errors, pacman conflicts) survive truncation.
 function _run_emit_stream --argument-names label_tag tmpfile ret cap --description "_run sub. Capture stream, log, emit per QUIET/rc."
     test -s "$tmpfile"; or return 0
     set -l _total (command wc -l <"$tmpfile" 2>/dev/null | string trim --)
@@ -1331,7 +1331,7 @@ function _chk_perms --argument-names path expected_perms expected_owner use_sudo
     if test -z "$_po"; _fail "  $path: stat failed (file disappeared or unreadable)"; return 1; end
     set -l _parts (string split ' ' -- "$_po")
     if test (count $_parts) -lt 2; _fail "  $path: stat output malformed (got: '$_po')"; return 1; end
-    # stat -c %a returns 4 digits when sgid/sticky/setuid set; strip leading bit so 2600 compares equal to expected 600.
+    # stat -c %a returns 4 digits when sgid/sticky/setuid set; strip leading bit (2600 → 600).
     set -l _actual_perms $_parts[1]
     if test (string length -- "$_actual_perms") -eq 4; set _actual_perms (string sub -s 2 -- "$_actual_perms"); end
     set -l _bad 0
@@ -1583,7 +1583,7 @@ function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: ord
         for i in (seq (count $hooks)); test "$hooks[$i]" = "$hook_before"; and set idx_a $i; test "$hooks[$i]" = "$hook_after"; and set idx_b $i; end
         if test $idx_a -gt 0; and test $idx_b -gt 0; and test $idx_a -ge $idx_b; _err "Mkinitcpio hook order: '$hook_before' must come before '$hook_after'"; set errors (math $errors + 1); end
     end
-    # fsck must be the final hook — runs after filesystems are mounted; misplacement defeats the early-boot fsck pass.
+    # fsck must be last hook; misplacement defeats early-boot fsck pass.
     set -l _fsck_idx 0
     for i in (seq (count $hooks)); test "$hooks[$i]" = fsck; and set _fsck_idx $i; and break; end
     if test $_fsck_idx -gt 0; and test $_fsck_idx -ne (count $hooks); _err "Mkinitcpio hook order: 'fsck' must be last (found at position $_fsck_idx of "(count $hooks)")"; set errors (math $errors + 1); end
@@ -1977,7 +1977,7 @@ end
 function _vss_ntsync_modules --description "_verify_static_system sub: ntsync state + autoload check"
     _echo "── ntsync state ──"
     set -l _ns (_ntsync_state)
-    # Case order mirrors _vre_ntsync (observed-state-first): loaded → builtin → loaded_nodev → unavailable → missing.
+    # Case order mirrors _vre_ntsync (observed-state-first).
     switch $_ns
         case loaded
             _ok "  ntsync: loaded, /dev/ntsync present"
@@ -2340,7 +2340,7 @@ function _ry_do_check --description "Silent idempotency probe"
     if not command -q sudo; or not sudo -n true 2>/dev/null; _log "CHECK_PREFLIGHT: sudo not cached"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
     if not command -q systemctl; _log "CHECK_PREFLIGHT: systemctl not available"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
     set -g _RY_CHECK_DRIFT 0; set -g _RY_CHECK_FILES_CHECKED 0; set -l _rc 0
-    # Dynamic dispatch: phase fn name resolved at iteration; preserves per-phase rc + drift-erase semantics.
+    # Dynamic dispatch: per-phase rc + drift-erase semantics preserved.
     for _phase in _check_phase_files _check_phase_cmdline _check_phase_units
         $_phase
         set _rc $status
@@ -2850,7 +2850,7 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
     set -l _fstab_ok true
     for _fl in $_fstab_ext4
         set -l _opts (printf '%s\n' "$_fl" | command awk '{ print $4 }')
-        # Comma/end-boundary required: `lazytime:substr` would false-match `nolazytime`; noatime kept symmetric.
+        # Comma/end boundary avoids `lazytime` false-matching `nolazytime`.
         for _tok in noatime lazytime commit=10
             set -l _re (string escape --style=regex -- "$_tok")
             if not string match -qr '(^|,)'$_re'(,|$)' -- "$_opts"; _fail "  ext4 entry missing $_tok: $_fl"; set _fstab_ok false; end
@@ -3495,7 +3495,7 @@ function _aur_verify_mt7925 --description "Post-AUR check: mt76-mt7925-dkms pkg 
         return 0
     end
     if not command -q modinfo; _log "MT7925_VERIFY_SKIP: modinfo not found"; return 0; end
-    # pacman -Qi confirms db entry; modinfo confirms DKMS build produced loadable .ko (distinct failure modes).
+    # pacman -Qi: db entry; modinfo: DKMS .ko loadable (distinct failure modes).
     if command modinfo mt7925e >/dev/null 2>&1
         _ok "  mt76-mt7925-dkms verified (mt7925e modinfo found)"
         _log "MT7925_VERIFY_OK: pkg installed and mt7925e module discoverable"
@@ -3564,7 +3564,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
     end
 end
 function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk script for ext4 mount-opt rewrite"
-    # Idempotent: comments / non-ext4 / digits-only $4 / conformant ext4 pass through; only non-conformant rewritten.
+    # Idempotent: comments / non-ext4 / digits-only $4 / conformant ext4 pass through.
     string join -- \n \
         'BEGIN { OFS = " " }' \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
@@ -3597,7 +3597,7 @@ function _far_awk_rewrite --argument-names tmpfstab --description "awk-rewrite f
     set -l _awk_err (_mktemp_or_null -p (_tmp_dir) ry-fstab-awk-err.XXXXXX)
     _track_tmpfile "$_tee_err"
     _track_tmpfile "$_awk_err"
-    # Single sudo-awk path: awk runs as root (works regardless of fstab readability); tee target is root-owned.
+    # Single sudo-awk path: awk runs as root; tee target is root-owned.
     sudo -n awk "$_awk_script" /etc/fstab 2>"$_awk_err" | sudo -n tee -- "$tmpfstab" >/dev/null 2>"$_tee_err"
     set -l _ps $pipestatus
     if test "$_ps[1]" -ne 0; or test "$_ps[2]" -ne 0
@@ -3711,11 +3711,11 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
     end
     set -l _pkg_re (string escape --style=regex -- "$pkg")
     set -l _t $PACTREE_TIMEOUT_S
-    # Pipe: trim → strip `[=<>]…` version constraints → drop empty → drop self-pkg. Output: bare rdep names.
+    # trim → strip `[=<>]…` version → drop empty → drop self-pkg → bare rdep names.
     set -l _rdeps_raw (command timeout "$_t" pactree -ru "$pkg" 2>/dev/null | string trim -- | string replace -r '[=<>].*$' '' | string match -rv -- '^$' | string match -rv -- "^$_pkg_re\$")
     set -l _ps $pipestatus
     if test "$_ps[1]" -ne 0; _warn "  $pkg: pactree probe failed (rc=$_ps[1]) — skipping for safety"; _log "PACTREE_PROBE_FAIL: pkg=$pkg pactree_rc=$_ps[1] (timeout, missing pkg, or db error)"; return 0; end
-    # Stages 2-5 are `string` subcommands; rc=1 = no-match (normal), only ≥2 is error. 5-stage pipe → $_ps[1..5].
+    # Stages 2-5 are `string` subcmds; rc=1 = no-match (normal), ≥2 = error. 5-stage pipe → $_ps[1..5].
     if test "$_ps[2]" -ge 2; or test "$_ps[3]" -ge 2; or test "$_ps[4]" -ge 2; or test "$_ps[5]" -ge 2
         set -l _ps_str (string join , -- $_ps)
         _warn "  $pkg: pactree pipe failure (pipestatus=$_ps_str) — skipping for safety"
@@ -4675,10 +4675,10 @@ else if set -q _flag_verbose; or test "$MODE" != install
 end
 
 set -l mode_label $MODE
-# Rename preflight-*.jsonl → MODE-*.jsonl once MODE is known; orphan recreation plugged by _RY_LOG_SUPPRESS_CREATE.
+# Rename preflight-*.jsonl → MODE-*.jsonl once MODE known; orphans plugged by _RY_LOG_SUPPRESS_CREATE.
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"; set -l old_log "$LOG_FILE"; set -l _log_rename_ok true
 if test -f "$old_log"; and test "$old_log" != "$new_log"
-    # LOG_FILE is mid-rename here; _log would write to OLD path or fail. Stderr-only + _RY_LOG_WRITE_FAIL flag.
+    # LOG_FILE mid-rename; _log unsafe. Stderr-only + _RY_LOG_WRITE_FAIL flag.
     if not command mv -- "$old_log" "$new_log" 2>/dev/null
         # Fallback: copy then unlink old. Preserves preflight content under final filename.
         if command cp -p -- "$old_log" "$new_log" 2>/dev/null
@@ -4736,7 +4736,7 @@ switch $MODE
 end
 
 set -g _RY_EXIT_CODE 0
-# _set_exit keeps _RY_EXIT_CODE and _INTENDED_EXIT_CODE in sync; closes signal-arrival race vs _write_footer.
+# _set_exit syncs _RY_EXIT_CODE + _INTENDED_EXIT_CODE; closes signal race vs _write_footer.
 function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE and _INTENDED_EXIT_CODE atomically"
     set -g _RY_EXIT_CODE $_code
     set -g _INTENDED_EXIT_CODE $_code

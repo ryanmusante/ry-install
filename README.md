@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.45-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.46-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -45,12 +45,6 @@ If you cannot set the executable bit: `fish ry-install.fish`.
 3. `./ry-install.fish --verify-runtime`
 
 Typical duration: **3–8 minutes**.
-
-> [!IMPORTANT]
-> Initramfs rebuild is skipped when on-disk package state or boot-critical
-> configs are inconsistent with embedded content.
->
-> Override after manual remediation: `RY_INSTALL_FORCE_BOOT_REBUILD=1`.
 
 ## Scope
 
@@ -349,8 +343,6 @@ All set to `=ignore` (desktop power-handling deferred to userspace):
 | `[General] EnableNetworkConfiguration` | `false` |
 | `[DriverQuirks] PowerSaveDisable` | `*` |
 | `[Network] NameResolvingService` | `systemd` |
-
-Skipped when `iwd` package not installed (memoized via `_RY_SKIP_IWD`).
 
 </details>
 

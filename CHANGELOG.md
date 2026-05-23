@@ -1,6 +1,12 @@
 ry-install ChangeLog
 ====================
 
+v7.4.45 - v7.4.46 - 2026-05-23
+------------------------------
+
+- Remove redundant `[!IMPORTANT]` callout from Quick Start (duplicated Phase 5 verbatim); Phase 5 paragraph is the canonical location.
+- Trim iwd `<details>` skip note (covered canonically in Managed Files preamble; internal `_RY_SKIP_IWD` var name is implementation detail).
+
 v7.4.44 - v7.4.45 - 2026-05-23
 ------------------------------
 

@@ -1,6 +1,15 @@
 ry-install ChangeLog
 ====================
 
+v7.4.44 - v7.4.45 - 2026-05-23
+------------------------------
+
+- Phase 1: enumerate all 9 preflight steps in actual runtime order (Bootstrap → `_init_runtime` invariants → lock → sudo cache → deps → disk → network → kernel → wireless regdom → config validation); move `EXPECTED_CPU_MATCH` attribution to `_init_runtime` row.
+- Phase 5: add post-rebuild sanity row (vmlinuz + initramfs + loader-entry kernel-path verify).
+- Exit codes row `1`: drop stale "old-kernel warn" phrase; kernel <6.14 is matrix FAIL (per v7.4.5→22 hard-floor flip), kernel WARN paths do not trigger exit 1.
+- Hardware section: clarify CPU check runs in `_init_runtime` on every mode (not install-only preflight).
+- `_ry_show_help`: align exit-code one-liner with README exit-code row `1` (kernel <6.14 hard-floor fail).
+
 v7.4.40 - v7.4.44 - 2026-05-22
 ------------------------------
 

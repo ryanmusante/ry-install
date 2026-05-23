@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.44-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.45-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -93,7 +93,7 @@ df -h / /boot                    # verify space
 | GPU | Radeon 8060S (RDNA 3.5) |
 | RAM | 128 GB LPDDR5x-8000 |
 
-Preflight requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (amdgpu modules + gfx1151 cmdline are profile-specific and break initramfs on other silicon).
+Runtime init requires CPU matching `Ryzen AI Max` (checked on every mode); override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (amdgpu modules + gfx1151 cmdline are profile-specific and break initramfs on other silicon).
 
 ## Usage
 
@@ -149,9 +149,16 @@ Set `RY_INSTALL_NO_MATRIX=1` to suppress the matrix (the JSONL log still records
 
 | Step | Action |
 |---|---|
-| Validate prerequisites (`_install_preflight`) | fish ≥ 3.6, kernel ≥ 6.14, systemd ≥ 250, GNU coreutils, free space, cached sudo credential, `EXPECTED_CPU_MATCH` hardware fingerprint |
+| Bootstrap (top-level) | fish ≥ 3.6, GNU coreutils (`timeout --foreground/--kill-after`, `stat`, `date`), root-guard, PATH hardening, `TMPDIR`/`HOME`/`LOG_DIR` setup |
+| Runtime init invariants (`_init_runtime`) | root UUID, `EXPECTED_CPU_MATCH` hardware fingerprint, array counts (15 invariants), `_tmpfile_key` collision, `KERNEL_PARAMS` metachar guard, package-name dash guard, tmpdir/WiFi-backend/canonical-dst cache precompute |
 | Acquire instance lock | atomic `mkdir` + `chmod 0700`; auto-reclaims dead PIDs |
-| Validate array counts (`_ir_validate_counts`) | refuses to deploy on drift in any `set -g` array (15 invariants) |
+| Sudo credential cache (`_ensure_sudo_cached`) | cached `sudo -v`; interactive fallback unless `RY_INSTALL_NO_INTERACTIVE_SUDO=1` |
+| Dependency check (`_ry_check_deps`) | required binaries, `df --output` GNU-coreutils probe, systemd ≥ 250 |
+| Disk space (`_ry_check_disk_space`) | 2 GiB `/`, 200 MiB `/boot` |
+| Network reachability (`_ry_check_network`) | archlinux.org, cloudflare.com (HTTPS), 1.1.1.1 (ICMP fallback) |
+| Kernel version (`_ry_check_kernel_version`) | ≥ 6.14 hard floor (FAIL), ≥ 6.18.4 recommended (WARN), ntsync state probe |
+| Wireless regdom (`_ry_apply_wireless_regdom`) | opt-in via `RY_INSTALL_WIRELESS_REGDOM=<CC>` |
+| Config validation (`_ry_validate_configs`) | per-destination format validators (unit syntax, kv, kparam, sysctl, INI, tmpfiles) |
 
 ### Phase 2 — Packages
 
@@ -498,6 +505,7 @@ Pre-mask `ufw --force disable` flushes live netfilter rules
 | 1 | `mkinitcpio -P` (initramfs rebuild) |
 | 2 | `sdboot-manage gen` (bootloader entries) |
 | 3 | `sdboot-manage update` (bootloader entries) |
+| 4 | Post-rebuild sanity (`vmlinuz-*` + `initramfs-*.img` + loader-entry kernel-path verify; emits **DO NOT REBOOT** on failure) |
 
 Skipped when on-disk package state or boot-critical configs are
 inconsistent with embedded content. Override after manual remediation
@@ -559,7 +567,7 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | Verify FAIL count, non-critical install warn, or old-kernel warn |
+| `1` | Verify FAIL count, non-critical install error, or kernel <6.14 hard-floor fail |
 | `2` | Usage error |
 | `3` | Preflight failed |
 | `4` | Boot-critical failure |

@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.7-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.8-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -67,14 +67,7 @@ Typical duration: **3–8 minutes**.
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 
 > [!WARNING]
-> Sudo cache may lapse during the 3–8 min install. Mitigations:
-> - `sudo visudo`: add `Defaults timestamp_timeout=60` (60-min cache)
-> - Keepalive in another shell: `while true; sudo -v; sleep 60; end`
-> - Drop-in: `sudo visudo -f /etc/sudoers.d/ry-install` → scope to specific binaries: `<user> ALL=(ALL) NOPASSWD: /usr/bin/pacman, /usr/bin/paru, /usr/bin/sdboot-manage, /usr/bin/mkinitcpio, /usr/bin/bootctl, /usr/bin/systemctl, /usr/bin/systemd-tmpfiles, /usr/bin/systemd-analyze, /usr/bin/sysctl, /usr/bin/findmnt, /usr/bin/paccache, /usr/bin/ufw, /usr/bin/install, /usr/bin/mv, /usr/bin/cp, /usr/bin/rm, /usr/bin/chmod, /usr/bin/chown, /usr/bin/find, /usr/bin/cat, /usr/bin/tee, /usr/bin/stat, /usr/bin/test, /usr/bin/grep, /usr/bin/awk, /usr/bin/cmp, /usr/bin/mktemp, /usr/bin/dmesg`. The blanket `NOPASSWD: ALL` form is simpler but elevates every command run as this user — prefer the scoped list.
->
-> Interactive sudo fallback requires both stdin and stderr be TTYs; set `RY_INSTALL_NO_INTERACTIVE_SUDO=1` for strict-unattended cron/systemd usage.
->
-> Recovery: re-run ry-install (idempotent). Boot-taint flags reset between runs (per-process), so a fresh invocation observes a clean revert state even if the prior run aborted on a boot-critical failure.
+> Sudo cache may lapse during the 3–8 min install. Mitigations: extend the cache (`Defaults timestamp_timeout=60` via `sudo visudo`), run a keepalive (`while true; sudo -v; sleep 60; end`), or drop a scoped `NOPASSWD` rule at `/etc/sudoers.d/ry-install` covering `pacman, paru, sdboot-manage, mkinitcpio, bootctl, systemctl, ufw, paccache` + the coreutils invoked (`install mv cp rm chmod chown cat tee find stat grep awk cmp mktemp`). Blanket `NOPASSWD: ALL` works but elevates every command run as this user. Interactive fallback requires both stdin and stderr be TTYs — set `RY_INSTALL_NO_INTERACTIVE_SUDO=1` for cron/systemd. Recovery: re-run (idempotent; boot-taint flags reset per-process).
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -89,7 +82,7 @@ df -h / /boot                    # verify space
 | GPU | Radeon 8060S (RDNA 3.5) |
 | RAM | 128 GB LPDDR5x-8000 |
 
-Runtime init requires CPU matching `Ryzen AI Max` (checked on every mode); override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish` (amdgpu modules + gfx1151 cmdline are profile-specific and break initramfs on other silicon).
+Runtime init requires CPU matching `Ryzen AI Max` (every mode); override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (profile is amdgpu/gfx1151-specific — breaks initramfs on other silicon).
 
 ## Usage
 
@@ -108,12 +101,12 @@ Runtime init requires CPU matching `Ryzen AI Max` (checked on every mode); overr
 
 | # | Phase | Action |
 |---|---|---|
-| 1 | Preflight | Validate prerequisites, acquire lock, validate runtime |
-| 2 | Packages | `pacman -Syu --needed`; AUR via paru; `updatedb` + `pkgfile --update` cache refresh |
-| 3 | Configuration | Deploy 12 embedded config files (atomic) |
-| 4 | Services | fstab ext4 opts; `systemd-resolved` restart; THP tmpfiles apply; `PKGS_DEL` removal; mask 12 desktop/power units; `daemon-reload` + enable runtime units |
-| 5 | Boot | Rebuild initramfs, update systemd-boot entries, post-rebuild sanity |
-| 6 | Finalize | `systemctl --user daemon-reload`; pacman cache cleanup; NM restart (deferred to next reboot when WiFi is the active route) |
+| 1 | Preflight | Prereqs + lock + runtime validate |
+| 2 | Packages | `pacman -Syu --needed` + AUR via paru + cache refresh |
+| 3 | Configuration | Deploy 12 embedded files (atomic) |
+| 4 | Services | fstab + resolved + THP + `PKGS_DEL` + mask + enable |
+| 5 | Boot | `mkinitcpio -P` + `sdboot-manage` + sanity |
+| 6 | Finalize | user daemon-reload + paccache + NM restart (deferred on active WiFi) |
 
 ## Run Summary
 
@@ -145,16 +138,16 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 
 | # | Step | Detail |
 |---|---|---|
-| 1 | Bootstrap | fish ≥ 3.6, coreutils `timeout`, PATH/TMPDIR/HOME hardening |
-| 2 | `_init_runtime` | root UUID, `EXPECTED_CPU_MATCH`, array invariants, metachar guards |
-| 3 | Acquire instance lock | atomic `mkdir` 0700, auto-reclaims dead PIDs |
-| 4 | Sudo credential cache | `RY_INSTALL_NO_INTERACTIVE_SUDO=1` refuses interactive fallback |
-| 5 | `_ry_check_deps` | `df --output`, systemd ≥ 250, paru (≥ 2.0.0 recommended) |
-| 6 | `_ry_check_disk_space` | 2 GiB `/`, 200 MiB `/boot` |
-| 7 | `_ry_check_network` | archlinux.org, cloudflare.com (HTTPS), 1.1.1.1 (ICMP) |
-| 8 | `_ry_check_kernel_version` | ≥ 6.14 FAIL, ≥ 6.18.4 WARN, ntsync probe |
-| 9 | Wireless regdom | opt-in apply via `RY_INSTALL_WIRELESS_REGDOM=<CC>` runs first; always-on check then warns on unset/invalid |
-| 10 | `_ry_validate_configs` | per-destination format validators |
+| 1 | Bootstrap | fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME |
+| 2 | `_init_runtime` | root UUID + CPU match + invariants |
+| 3 | Lock | atomic `mkdir` 0700 + dead-PID reclaim |
+| 4 | Sudo cache | `RY_INSTALL_NO_INTERACTIVE_SUDO=1` refuses fallback |
+| 5 | Deps | systemd ≥ 250 + paru ≥ 2.0.0 |
+| 6 | Disk space | 2 GiB `/` + 200 MiB `/boot` |
+| 7 | Network | HTTPS + ICMP probe |
+| 8 | Kernel | ≥ 6.14 FAIL · ≥ 6.18.4 WARN · ntsync |
+| 9 | Wireless regdom | `RY_INSTALL_WIRELESS_REGDOM=<CC>` opt-in apply; always-on warn |
+| 10 | Configs | per-destination format validators |
 
 ### Phase 2 — Packages
 
@@ -168,23 +161,13 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 <details>
 <summary><b>Packages — install</b> — 15 pkgs</summary>
 
-| Package | Purpose |
+| Category | Packages |
 |---|---|
-| `nvme-cli` | NVMe |
-| `cachyos-gaming-meta` | gaming meta |
-| `cachyos-gaming-applications` | gaming apps |
-| `mesa` | Vulkan + GL |
-| `lib32-mesa` | 32-bit Mesa |
-| `fd` | rust find |
-| `sd` | rust sed |
-| `dust` | rust du |
-| `procs` | rust ps |
-| `bottom` | rust top |
-| `htop` | classic top |
-| `git-delta` | git diff |
-| `lm_sensors` | hwmon |
-| `realtime-privileges` | PipeWire RT |
-| `cpupower` | cpufreq governor |
+| sysadmin | `nvme-cli`, `htop`, `git-delta`, `lm_sensors` |
+| gaming | `cachyos-gaming-meta`, `cachyos-gaming-applications` |
+| Vulkan/GL | `mesa`, `lib32-mesa` |
+| rust utilities | `fd`, `sd`, `dust`, `procs`, `bottom` |
+| perf | `realtime-privileges`, `cpupower` |
 
 </details>
 
@@ -441,41 +424,30 @@ Idempotent rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `d
 <details>
 <summary><b>Packages — remove</b> — 11 pkgs</summary>
 
-| Package | Category |
+| Category | Packages |
 |---|---|
-| `plymouth` | boot splash |
-| `cachyos-plymouth-bootanimation` | boot splash |
-| `cachyos-plymouth-theme` | boot splash |
-| `breeze-plymouth` | boot splash (Plasma rdep) |
-| `plymouth-kcm` | boot splash (Plasma rdep) |
-| `octopi` | pacman GUI |
-| `micro` | text editor |
-| `cachyos-micro-settings` | text editor |
-| `btop` | replaced by `bottom` |
-| `bolt` | Thunderbolt manager |
-| `plasma-thunderbolt` | Thunderbolt (Plasma rdep) |
+| boot splash (incl. Plasma rdeps) | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm` |
+| pacman GUI | `octopi` |
+| text editor | `micro`, `cachyos-micro-settings` |
+| superseded | `btop` (by `bottom`) |
+| Thunderbolt (incl. Plasma rdep) | `bolt`, `plasma-thunderbolt` |
 
-Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-plymouth`, `plymouth-kcm`, `plasma-thunderbolt`) enumerated so `pacman -R` does not refuse on rdep-hold.
+Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps enumerated so `pacman -R` does not refuse on rdep-hold.
 
 </details>
 
 <details>
 <summary><b>Masked units</b> — 12 units</summary>
 
-| Unit | Reason |
+| Unit(s) | Reason |
 |---|---|
 | `ananicy-cpp.service` | cgroups used instead |
-| `avahi-daemon.service` | systemd-resolved mDNS |
-| `avahi-daemon.socket` | systemd-resolved mDNS |
+| `avahi-daemon.{service,socket}` | systemd-resolved mDNS |
 | `power-profiles-daemon.service` | conflicts with amd_pstate + cpupower |
 | `lvm2-monitor.service` | no LVM |
 | `NetworkManager-wait-online.service` | boot delay |
 | `ufw.service` | rules flushed pre-mask via `ufw --force disable` |
-| `sleep.target` | suspend / hibernate disabled |
-| `suspend.target` | suspend / hibernate disabled |
-| `hibernate.target` | suspend / hibernate disabled |
-| `hybrid-sleep.target` | suspend / hibernate disabled |
-| `suspend-then-hibernate.target` | suspend / hibernate disabled |
+| `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` | suspend / hibernate disabled |
 
 </details>
 
@@ -621,7 +593,7 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 | Category | Issue | Workaround |
 |---|---|---|
 | Strix Halo GPU | CWSR hang | `amdgpu.cwsr_enable=0` (already set) |
-| Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` (AUR alt firmware) OR pin via `IgnorePkg = linux-firmware` in `/etc/pacman.conf` — note the pin leaves all firmware unpatched against future CVEs until removed |
+| Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` (AUR alt firmware) OR `IgnorePkg=linux-firmware` in `/etc/pacman.conf` — the pin blocks future CVE fixes |
 | Strix Halo GPU | ROCm VRAM allocation | Fixed in kernel 6.16+ (`sudo pacman -Syu linux-cachyos`) |
 | MediaTek MT7925 | Kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
 | MediaTek MT7925 | TX power 3 dBm / random deauth | None (cosmetic / upstream) |
@@ -645,9 +617,9 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 | `.ry-install.*` orphan in `/etc` or `/boot/loader` | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, then re-run |
 | `set-wireless-regdom` leaves cfg80211 in `world` | Re-run with `RY_INSTALL_WIRELESS_REGDOM=<CC>`; fallback: `echo 'WIRELESS_REGDOM="<CC>"' \| sudo tee /etc/conf.d/wireless-regdom` |
 | PipeWire `nice-level Permission denied` | `sudo usermod -aG realtime $USER` then re-login |
-| Kernel 6.19.0 + Strix Halo black screen | `sudo pacman -Syu` (≥6.19.1) or `paru -S downgrade; and sudo downgrade linux-cachyos` ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
+| Kernel 6.19.0 + Strix Halo black screen | `sudo pacman -Syu` (≥6.19.1) ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
 | iwd config edits not taking effect | `sudo systemctl try-restart iwd.service` (ry-install does this for managed-file edits) |
-| MT7925 workaround applied but WiFi still failing | `dkms status mt76-mt7925`; re-run `paru -S mt76-mt7925-dkms` without `--skipreview` to surface build errors; `--verify-runtime` should report `WiFi device: connected` once the module loads |
+| MT7925 workaround applied but WiFi still failing | `dkms status mt76-mt7925`; re-run `paru -S mt76-mt7925-dkms` without `--skipreview` to surface build errors |
 
 ## References
 

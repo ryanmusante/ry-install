@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.1-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.5-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -36,6 +36,8 @@ cd ry-install
 chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
+
+Run as your normal user — root is refused; sudo is invoked internally.
 
 If you cannot set the executable bit: `fish ry-install.fish`.
 
@@ -71,6 +73,9 @@ Typical duration: **3–8 minutes**.
 > - `sudo visudo`: add `Defaults timestamp_timeout=60` (60-min cache)
 > - Keepalive in another shell: `while true; sudo -v; sleep 60; end`
 > - Drop-in: `sudo visudo -f /etc/sudoers.d/ry-install` → `<user> ALL=(ALL) NOPASSWD: ALL`
+>
+> Interactive sudo fallback requires both stdin and stderr be TTYs; set
+> `RY_INSTALL_NO_INTERACTIVE_SUDO=1` for strict-unattended cron/systemd usage.
 >
 > Recovery: re-run ry-install (idempotent). Boot-taint flags reset between
 > runs (per-process), so a fresh invocation observes a clean revert state
@@ -151,7 +156,7 @@ Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JS
 | 2 | `_init_runtime` | root UUID, `EXPECTED_CPU_MATCH`, array invariants, metachar guards |
 | 3 | Acquire instance lock | atomic `mkdir` 0700, auto-reclaims dead PIDs |
 | 4 | Sudo credential cache | `RY_INSTALL_NO_INTERACTIVE_SUDO=1` refuses interactive fallback |
-| 5 | `_ry_check_deps` | `df --output`, systemd ≥ 250, paru ≥ 2.0.0 |
+| 5 | `_ry_check_deps` | `df --output`, systemd ≥ 250, paru (≥ 2.0.0 recommended) |
 | 6 | `_ry_check_disk_space` | 2 GiB `/`, 200 MiB `/boot` |
 | 7 | `_ry_check_network` | archlinux.org, cloudflare.com (HTTPS), 1.1.1.1 (ICMP) |
 | 8 | `_ry_check_kernel_version` | ≥ 6.14 FAIL, ≥ 6.18.4 WARN, ntsync probe |
@@ -232,11 +237,10 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 | # | Step |
 |---|---|
 | 1 | `mktemp` in destination's parent dir (same-FS rename) |
-| 2 | Symlink probe (pre-render) |
-| 3 | Render embedded content into tmp file via `tee` |
-| 4 | Symlink probe (post-write; TOCTOU close) |
-| 5 | `chmod` to target mode |
-| 6 | `mv -T` to destination (atomic, same-FS) |
+| 2 | Render embedded content into tmp file via `tee` |
+| 3 | Symlink probe (post-write; TOCTOU close) |
+| 4 | `chmod` to target mode |
+| 5 | `mv -T` to destination (atomic, same-FS) |
 
 <details>
 <summary><b>Kernel cmdline</b> — 15 params (deployed as <code>rw root=UUID=&lt;runtime UUID&gt; …</code>)</summary>
@@ -441,7 +445,7 @@ running keep their inherited env until restarted.
 | `lazytime` | defer atime/mtime writeback |
 | `commit=10` | journal flush every 10s |
 
-Idempotent rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `defaults`, existing `commit=*`. `findmnt --verify` gates the atomic `mv`. The awk script sets `OFS = " "` so rewritten ext4 entries collapse to single-space-separated fields; comments and non-ext4 entries preserve their original whitespace via awk passthrough. **No automatic backup — snapshot `/etc/fstab` before first run.**
+Idempotent rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `defaults`, existing `commit=*`. `findmnt --verify` gates the atomic `mv`. The awk script sets `OFS = " "` so rewritten ext4 entries collapse to single-space-separated fields; comments and non-ext4 entries preserve their original whitespace via awk passthrough. Malformed ext4 entries (digits-only `$4`, NF<4) are left untouched and surface as WARN. **No automatic backup — snapshot `/etc/fstab` before first run.**
 
 </details>
 
@@ -513,7 +517,7 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-
 | # | Step |
 |---|---|
 | 1 | `systemctl --user daemon-reload` (skipped when no active user-bus) |
-| 2 | pacman cache cleanup (`paccache`) |
+| 2 | pacman cache trim (`paccache -rk2 -ruk0`; keeps 2 installed + 0 uninstalled versions; falls back to `pacman -Sc` when paccache absent; skipped when no upgrade ran this invocation) |
 | 3 | NetworkManager restart to apply the wpa_supplicant → iwd backend switch — deferred to next reboot when WiFi is the active route |
 
 ## Managed Files
@@ -553,7 +557,7 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 | Boot rebuild gate | Skipped on package/boot-config failure. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses taint only |
 | mkinitcpio rollback | Byte-exact revert on `pacman -Syu` failure or signal |
 | Root detection | Refuses root; sudo invoked internally |
-| Instance lock | Atomic mkdir `0700`; reclaims dead-PID lock; verifies `/proc/$pid/comm = fish` |
+| Instance lock | Atomic mkdir `0700`; reclaims dead-PID lock via `kill -0` probe |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal; WINCH non-fatal (progress bar re-anchor) |
 
 <details>
@@ -658,6 +662,7 @@ rollback source-of-truth:
 | PipeWire `nice-level Permission denied` | `sudo usermod -aG realtime $USER` then re-login |
 | Kernel 6.19.0 + Strix Halo black screen | `sudo pacman -Syu` (≥6.19.1) or `paru -S downgrade; and sudo downgrade linux-cachyos` ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
 | iwd config edits not taking effect | `sudo systemctl try-restart iwd.service` (ry-install does this for managed-file edits) |
+| MT7925 workaround applied but WiFi still failing | `dkms status mt76-mt7925`; re-run `paru -S mt76-mt7925-dkms` without `--skipreview` to surface build errors; `--verify-runtime` should report `WiFi device: connected` once the module loads |
 
 ## References
 

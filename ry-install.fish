@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6.1 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.5 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -128,6 +128,7 @@ if not command -q timeout; echo "[ERR] GNU coreutils timeout(1) required (used b
 if not command timeout --foreground --kill-after=1 1 true 2>/dev/null; echo "[ERR] timeout(1) lacks --foreground/--kill-after (need GNU coreutils ≥ 8.x; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command -q stat; echo "[ERR] GNU coreutils stat(1) required (used for mode/owner verification)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command -q date; echo "[ERR] GNU coreutils date(1) required (used for timestamps in DATE_LABEL, TIMESTAMP, JSONL ts fields)" >&2; _ry_exit $EXIT_PREFLIGHT; end
+if not string match -qr '^[+-]\d{4}$' -- (command date '+%z' 2>/dev/null); echo "[ERR] date(1) lacks %z timezone offset support (need GNU coreutils ≥ 8.x; busybox/uutils emit '+0000' without sign)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
 # ── TIMESTAMPS + HOME + LOG_DIR ───────────────────────────────────────────────────────────────────
 set -g DATE_LABEL (command date '+%Y-%m-%d')
@@ -159,7 +160,7 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 
 # ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──────────────────────────────────────
 set -g _RY_BOOT_TAINTED false
-set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" /etc/kernel/cmdline "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
+set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _PROFILE_USES_WIFI_BACKEND false
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
@@ -329,34 +330,11 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     test $_fresh_rc -eq 0; and return 0
     test $_fresh_rc -ne 2; and return 1
     set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
-    set -l _can_reclaim false
-    if string match -qr '^[1-9]\d*$' -- "$_stale_pid"
-        if not command kill -0 "$_stale_pid" 2>/dev/null
-            set _can_reclaim true
-            functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID not running, reclaiming)"
-        else
-            # PID alive — verify it's fish; Linux recycles PIDs after parent death.
-            set -l _stale_comm (command cat -- "/proc/$_stale_pid/comm" 2>/dev/null | string trim --)
-            if test -n "$_stale_comm"; and test "$_stale_comm" != fish
-                set _can_reclaim true
-                functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid comm='$_stale_comm' (not fish — PID recycled, reclaiming)"
-            else if test -z "$_stale_comm"; and not command kill -0 "$_stale_pid" 2>/dev/null
-                # Race: proc died between initial kill -0 success and /proc/$pid/comm read.
-                set _can_reclaim true
-                functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID died during comm read, reclaiming)"
-            end
-        end
-    end
-    if test "$_can_reclaim" = true
+    # Reclaim only if pid is well-formed and process is gone; PID-recycle race left to user (rm -rf ~/ry-install/.lock).
+    if string match -qr '^[1-9]\d*$' -- "$_stale_pid"; and not command kill -0 "$_stale_pid" 2>/dev/null
+        functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID not running, reclaiming)"
         command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
-        _acquire_lock_fresh
-        if test $status -eq 0
-            set -l _owner_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
-            test "$_owner_pid" = "$fish_pid"; and return 0
-            functions -q _log; and _log "LOCK_RECLAIM_RACE: post-reclaim owner_pid='$_owner_pid' != fish_pid=$fish_pid — refusing"
-            set --erase _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
-            return 1
-        end
+        _acquire_lock_fresh; and return 0
     end
     return 1
 end
@@ -431,7 +409,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
     set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
-    set --erase _RY_READSYM_RESULT _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED
+    set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
 end
@@ -442,7 +420,7 @@ function _dc_kill_children --description "_do_cleanup sub. Release lock + reap c
     if command -q pkill
         command pkill -TERM -P "$fish_pid" 2>/dev/null
         # 0.5s grace: gives pacman/paru and atomic ops a chance to flush before SIGKILL.
-        command sleep 0.5 2>/dev/null
+        command sleep 0.5 </dev/null 2>/dev/null
         command pkill -KILL -P "$fish_pid" 2>/dev/null
     end
 end
@@ -533,7 +511,7 @@ end
 # ── EMBEDDED CONFIGURATION: DESTINATIONS, KERNEL PARAMS, PKGS, MASK ───────────────────────────────
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" \
-    /etc/kernel/cmdline \
+    "/etc/kernel/cmdline" \
     "/etc/sdboot-manage.conf" \
     "/etc/mkinitcpio.conf" \
     "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
@@ -1009,8 +987,6 @@ function _should_skip_iwd --argument-names dst --description "True if dst is iwd
     test "$_RY_SKIP_IWD" = true
 end
 
-function _mask_list_effective --description "Effective MASK list"; printf '%s\n' $MASK; end
-# Fast-path: skip escape if no control chars/quote/backslash/DEL.
 function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)"
     set -l s "$argv[1]"
     if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"; printf '%s' "$s" | string collect --allow-empty; return $status; end
@@ -1104,7 +1080,7 @@ end
 # _ok/_fail/_warn/_info/_err always return 0 (callers chain via `; and`/`; or`).
 function _ok --description "Emit OK-level message and increment VERIFY_OK"; _msg OK $argv; return 0; end
 function _fail --description "Emit FAIL-level message and increment VERIFY_FAIL"; _msg FAIL $argv; return 0; end
-function _fail_silent --description "Emit FAIL-level message without incrementing VERIFY_FAIL"; _msg_nocount FAIL $argv; return 0; end
+function _fail_no_count --description "Emit FAIL-level message without incrementing VERIFY_FAIL"; _msg_nocount FAIL $argv; return 0; end
 function _info --description "Emit INFO-level message (no counter)"; _msg INFO $argv; return 0; end
 function _warn --description "Emit WARN-level message and increment VERIFY_WARN"; _msg WARN $argv; return 0; end
 # Strip \n/\r/│: collides with matrix delimiter / breaks row layout.
@@ -1393,8 +1369,8 @@ function _chk_sysfs_eq --argument-names path expected label --description "Read 
     _chk_eq "$label" "$_val" "$expected"
 end
 
-# stat -c %a: 4 digits on sgid/sticky/setuid; strip leading bit before 3-digit compare.
-function _chk_perms --argument-names path expected_perms expected_owner use_sudo --description "Compare file mode+owner; sgid/sticky/setuid bit stripped before compare."
+# 4-digit stat %a (setuid/sgid/sticky) surfaced as drift; managed files must be 0644/0600.
+function _chk_perms --argument-names path expected_perms expected_owner use_sudo --description "Compare file mode+owner; refuses 4-digit modes (setuid/sgid/sticky)."
     set -l _po
     if test "$use_sudo" = true
         set _po (sudo -n stat -c '%a %U:%G' -- "$path" 2>/dev/null)
@@ -1404,9 +1380,11 @@ function _chk_perms --argument-names path expected_perms expected_owner use_sudo
     if test -z "$_po"; _fail "  $path: stat failed (file disappeared or unreadable)"; return 1; end
     set -l _parts (string split ' ' -- "$_po")
     if test (count $_parts) -lt 2; _fail "  $path: stat output malformed (got: '$_po')"; return 1; end
-    # stat -c %a returns 4 digits when sgid/sticky/setuid set; strip leading bit (2600 → 600).
     set -l _actual_perms $_parts[1]
-    if test (string length -- "$_actual_perms") -eq 4; set _actual_perms (string sub -s 2 -- "$_actual_perms"); end
+    if test (string length -- "$_actual_perms") -eq 4
+        _fail "  $path: $_parts[1] $_parts[2] (unexpected setuid/sgid/sticky bit; expected: $expected_perms $expected_owner)"
+        return 1
+    end
     set -l _bad 0
     test "$_actual_perms" != "$expected_perms"; and set _bad 1
     test "$_parts[2]" != "$expected_owner"; and set _bad 1
@@ -1826,7 +1804,6 @@ function _ry_validate_configs --description "Run all embedded config validators"
     _ry_validate_mkinitcpio_hooks; or set errors (math $errors + 1)
     _ry_validate_mkinitcpio_modules
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
-        _should_skip_iwd "$dst"; and continue
         set -l fn "_content_"(_tmpfile_key "$dst")
         if not functions -q $fn; _fail "  $dst: content generator '$fn' not found"; set errors (math $errors + 1); continue; end
         set -l content ($fn)
@@ -1894,20 +1871,11 @@ function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description 
     return 0
 end
 
-function _awf_symlink_check --argument-names dst tmpfile use_sudo phase --description "_atomic_write_file sub: probe tmpfile for symlink"
+function _awf_symlink_check --argument-names dst tmpfile use_sudo --description "_atomic_write_file sub: probe tmpfile for post-write symlink swap"
     _is_symlink "$tmpfile" $use_sudo
     set -l _sym_rc $status
-    if test $_sym_rc -eq 0
-        if test "$phase" = post-write
-            _fail "→ $dst (temp file replaced with symlink during write — aborting)"
-        else
-            _fail "→ $dst (temp file is symlink — aborting)"
-        end
-        return 1
-    else if test $_sym_rc -eq 2
-        _fail "→ $dst (sudo cache lapsed during $phase symlink check — aborting)"
-        return 1
-    end
+    if test $_sym_rc -eq 0; _fail "→ $dst (temp file replaced with symlink during write — aborting)"; return 1; end
+    test $_sym_rc -eq 2; and _fail "→ $dst (sudo cache lapsed during post-write symlink check — aborting)"; and return 1
     return 0
 end
 
@@ -1926,9 +1894,8 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     set -l tmpfile (_as $use_sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
     _track_tmpfile "$tmpfile"
     if test -z "$tmpfile"; _fail "→ $dst (mktemp failed)"; return 1; end
-    if not _awf_symlink_check "$dst" "$tmpfile" $use_sudo pre; _rm_tmp "$tmpfile" $use_sudo; return 1; end
     if not _awf_render_to_tmp "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
-    if not _awf_symlink_check "$dst" "$tmpfile" $use_sudo post-write; _rm_tmp "$tmpfile" $use_sudo; return 1; end
+    if not _awf_symlink_check "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
     _awf_finalize_mv "$dst" "$tmpfile" $use_sudo "$perms"
     set -l _fin_rc $status
     if test $_fin_rc -ne 0; _rm_tmp "$tmpfile" $use_sudo; return $_fin_rc; end
@@ -2251,7 +2218,7 @@ function _verify_static_services --description "Verify SERVICE_DESTINATIONS file
         for svc_file in $SERVICE_DESTINATIONS; _chk_file "$svc_file"; end
     end
     _echo "── Masked services ──"
-    set -l _check_mask (_mask_list_effective)
+    set -l _check_mask $MASK
     set -l _mask_parsed
     for _u in $_check_mask
         set -l _v (_unit_state_padded $_u)
@@ -2294,9 +2261,9 @@ function _vsc_check_one --argument-names dst --description "_verify_static_check
     if _should_skip_iwd "$dst"; _info "  $dst: SKIP (iwd not installed)"; _log "VERIFY_STATIC_SKIP_IWD: dst=$dst"; return 0; end
     set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _gen_rc $pipestatus[1]; set -l _gen_collect_rc $pipestatus[2]
-    if test $_gen_rc -ne 0; _fail_silent "  $dst: generator failed (rc=$_gen_rc)"; set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc"; return 0; end
+    if test $_gen_rc -ne 0; _fail_no_count "  $dst: generator failed (rc=$_gen_rc)"; set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc"; return 0; end
     if test $_gen_collect_rc -ne 0
-        _fail_silent "  $dst: string collect failed (rc=$_gen_collect_rc)"
+        _fail_no_count "  $dst: string collect failed (rc=$_gen_collect_rc)"
         set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
         _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=gen rc=$_gen_collect_rc"
         return 0
@@ -2326,7 +2293,7 @@ function _vsc_check_one --argument-names dst --description "_verify_static_check
         set -l _act_sha (printf '%s' "$actual" | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
         test -z "$_exp_sha"; and set _exp_sha ERR
         test -z "$_act_sha"; and set _act_sha ERR
-        _log "VERIFY_STATIC_MISMATCH: dst=$dst expected_content_sha=$_exp_sha actual_content_sha=$_act_sha expected_bytes="(string length -- "$expected")" actual_bytes="(string length -- "$actual")
+        _log "VERIFY_STATIC_MISMATCH: dst=$dst expected_content_sha=$_exp_sha actual_content_sha=$_act_sha expected_chars="(string length -- "$expected")" actual_chars="(string length -- "$actual")
     end
     return 0
 end
@@ -2341,32 +2308,6 @@ function _verify_static_checksum --description "Verify embedded content hash mat
     _echo
 end
 
-# 12-byte canary: detects trailing-newline regressions in byte-round-trip.
-function _vs_read_symmetry_selftest --description "Preflight: detect read-symmetry regressions in _installed_bytes (asymmetric trailing newline)"
-    set -q _RY_READSYM_RESULT; and return $_RY_READSYM_RESULT
-    set -l _tmp (_mktemp_or_null -p (_tmp_dir) ry-readsym.XXXXXX)
-    if test -z "$_tmp"; or test "$_tmp" = /dev/null
-        _warn "  read-symmetry self-test SKIPPED (mktemp returned no path) — verifier integrity UNCONFIRMED"
-        _log "READ_SYMMETRY_SKIP: mktemp returned no path"
-        _phase_record "Verify: read-symmetry self-test" SKIP "mktemp failed"
-        set -g _RY_READSYM_RESULT 0
-        set -g VERIFY_WARN (math $VERIFY_WARN + 1)
-        return 0
-    end
-    _track_tmpfile "$_tmp"
-    # 12-byte probe: 2×5-char lines + 2 NL; exercises \n drop/add path.
-    printf '%s\n' line1 line2 > "$_tmp"
-    set -l _disk_bytes (command stat -c %s -- "$_tmp" 2>/dev/null)
-    set -l _read (_installed_bytes "$_tmp" | string collect --no-trim-newlines --allow-empty)
-    set -l _read_len (string length -- "$_read")
-    _rm_tmp "$_tmp" false
-    if test "$_disk_bytes" = 12; and test "$_read_len" = 12; _log "READ_SYMMETRY_OK: disk=12 read=12"; set -g _RY_READSYM_RESULT 0; return 0; end
-    _fail "  read-symmetry self-test: disk=$_disk_bytes read=$_read_len (expected both=12) — verifier logic is broken; results UNRELIABLE"
-    _log "VERIFY_LOGIC_BUG: read-symmetry self-test failed disk=$_disk_bytes read=$_read_len fish=$FISH_VERSION"
-    set -g _RY_READSYM_RESULT 1
-    return 1
-end
-
 function _ry_verify_static --description "Verify installed configs match embedded checksums"
     _log_section "STATIC VERIFICATION START"
     _ensure_sudo_cached; or begin
@@ -2374,7 +2315,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
         return $EXIT_PREFLIGHT
     end
     set -g VERIFY_OK 0; set -g VERIFY_FAIL 0; set -g VERIFY_WARN 0; set -g VERIFY_GEN_FAIL 0
-    if not _vs_read_symmetry_selftest; _log_section "STATIC VERIFICATION END"; _verify_summary; return 1; end
     _info "Static verification (config files)..."
     _verify_static_boot
     _verify_static_system
@@ -2454,7 +2394,7 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
         end
     end
     _cpu_chk_expected; or return $status
-    for unit in (_mask_list_effective)
+    for unit in $MASK
         set -l _v (_unit_state_padded $unit)
         if test "$_v[1]" = ERR_NO_DATA; _log "CHECK_PREFLIGHT: cannot determine state for $unit (systemctl error)"; return $EXIT_PREFLIGHT; end
         test "$_v[1]" = not-found; and continue
@@ -3388,23 +3328,16 @@ function _install_preflight --description "Run all preflight checks before insta
 end
 
 # ── MKINITCPIO.CONF: SNAPSHOT + REVERT (cp + size + cmp byte-exact) ───────────────────────────────
-function _mr_copy_size_verify --argument-names backup_file _mki_tmp --description "_mkinitcpio_revert sub: cp + byte-exact size + content verify"
+function _mr_copy_size_verify --argument-names backup_file _mki_tmp --description "_mkinitcpio_revert sub: cp + byte-exact content verify"
     if not sudo -n cp -- "$backup_file" "$_mki_tmp" 2>/dev/null
         _err "  /etc/mkinitcpio.conf revert failed at copy — current conf may reference uninstalled modules"
         _log "MKINITCPIO_REVERT_FAIL: cp $backup_file failed"
         return 1
     end
-    set -l _src_size (sudo -n stat -c '%s' -- "$backup_file" 2>/dev/null)
-    set -l _dst_size (sudo -n stat -c '%s' -- "$_mki_tmp" 2>/dev/null)
-    if test -z "$_src_size"; or test -z "$_dst_size"; or not string match -qr '^[0-9]+$' -- "$_src_size"; or not string match -qr '^[0-9]+$' -- "$_dst_size"; or test "$_src_size" != "$_dst_size"
-        _err "  /etc/mkinitcpio.conf revert failed at size verify (src=$_src_size dst=$_dst_size) — current conf may reference uninstalled modules"
-        _log "MKINITCPIO_REVERT_FAIL: cp size mismatch src=$_src_size dst=$_dst_size"
-        return 1
-    end
-    # Defence-in-depth: cmp confirms byte-content (size-equal alone insufficient).
+    # cmp -s exits non-zero on any byte mismatch (including length); covers size+content in one step.
     if command -q cmp; and not sudo -n cmp -s -- "$backup_file" "$_mki_tmp" 2>/dev/null
-        _err "  /etc/mkinitcpio.conf revert failed at cmp — same-size content drift between backup and tmp"
-        _log "MKINITCPIO_REVERT_FAIL: cmp content mismatch (size=$_src_size)"
+        _err "  /etc/mkinitcpio.conf revert failed at cmp — content mismatch between backup and tmp"
+        _log "MKINITCPIO_REVERT_FAIL: cmp content mismatch"
         return 1
     end
     return 0
@@ -4031,7 +3964,7 @@ end
 
 function _configure_services_mask --description "Apply MASK list; batch-mask with per-unit retry"
     _csm_disable_ufw_rules
-    set -l safe_mask (_mask_list_effective)
+    set -l safe_mask $MASK
     if test (count $safe_mask) -eq 0
         _phase_record "Services: mask units" "--" "MASK list empty"
         return 0
@@ -5026,9 +4959,8 @@ for _r in $_argv_in; set -a _argv_parts '"'(_json_str "$_r")'"'; end
 set -l _argv_json '['(string join -- ',' $_argv_parts)']'
 set -l _verbose_json false
 test "$QUIET" = false; and set _verbose_json true
-# INVARIANT: _hdr_fmt MUST be literal — printf format arg never parameterized.
-set -l _hdr_fmt '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n'
-printf "$_hdr_fmt" (command date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null
+# Literal format string: no variable-as-format-arg surface for future edits.
+printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' (command date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null
 if test $status -eq 0
     set -g _RY_HEADER_WRITTEN true
 else
@@ -5044,6 +4976,11 @@ if set -q _RY_DEFERRED_WARNS
     set --erase _RY_DEFERRED_WARNS _w
 end
 
+set -g _RY_EXIT_CODE 0
+function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE and _INTENDED_EXIT_CODE atomically"
+    set -g _RY_EXIT_CODE $_code
+    set -g _INTENDED_EXIT_CODE $_code
+end
 _init_runtime
 switch $MODE
     case install-file install
@@ -5051,11 +4988,6 @@ switch $MODE
     case '*'
 end
 
-set -g _RY_EXIT_CODE 0
-function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE and _INTENDED_EXIT_CODE atomically"
-    set -g _RY_EXIT_CODE $_code
-    set -g _INTENDED_EXIT_CODE $_code
-end
 switch $MODE
     case verify-static
         _ry_verify_static

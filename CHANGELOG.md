@@ -1,5 +1,21 @@
 ry-install ChangeLog
 
+v7.6.4 - v7.6.5 - 2026-05-24
+
+- `_fail_silent` renamed `_fail_no_count` (description was already accurate; name now matches behaviour — counter-skip not stderr-silent); `_mr_copy_size_verify` drops redundant stat-size compare (`cmp -s` covers length+content in one step); `_awf_symlink_check` collapses to post-write probe only (mktemp -p O_EXCL|O_CREAT precludes a pre-existing symlink at the just-created path); `_atomic_write_file` step list trims to mktemp → render → post-write symlink probe → chmod → mv -T; `_acquire_lock` stale-PID reclaim simplified to `kill -0` only (PID-recycle race rare; recovery is `rm -rf ~/ry-install/.lock`); `_vs_read_symmetry_selftest` removed (preventive canary with no observed regression); `SYSTEM_DESTINATIONS` quotes `/etc/kernel/cmdline` for whitespace consistency; README softens paru version from "≥ 2.0.0" to "(≥ 2.0.0 recommended)" matching `_ry_check_deps` WARN-only semantics; README Safety table updates lock claim to `kill -0` probe; README Phase 3 step list drops pre-render symlink probe.
+
+v7.6.3 - v7.6.4 - 2026-05-24
+
+- `_chk_perms` refuses 4-digit `stat -c %a` modes (surfaces setuid/sgid/sticky drift on managed files instead of stripping the leading bit); `_ry_validate_configs` validates iwd-gated content regardless of `_should_skip_iwd` (preflight catches embedded-content bugs before iwd is later installed); preflight gains GNU `date '+%z'` probe (busybox/uutils emit `+0000` without sign — log path embeds `±ZZZZ`); `_mask_list_effective` inlined at three sites (single-line passthrough removed); `VERIFY_STATIC_MISMATCH` JSONL relabels `_bytes` → `_chars` (fish `string length` is char-based); README adds sudo TTY requirement, root-user caveat in Quick Start, exact `paccache -rk2 -ruk0` flags, fstab malformed-entry skip semantics, MT7925 workaround verification step.
+
+v7.6.2 - v7.6.3 - 2026-05-24
+
+- `_dc_kill_children` `command sleep 0.5` gains `</dev/null` for stdin closure under cron/systemd unit (signal-path symmetry with v7.5→7.6 `_if_nm_restart` sleep fix; defensive — sleep runs in cleanup TERM→KILL grace window only); zero behavioural change.
+
+v7.6.1 - v7.6.2 - 2026-05-24
+
+- JSONL header printf format inlined as literal (eliminates `_hdr_fmt` variable indirection — no format-string-from-variable surface for future edits); `_set_exit` function definition lifted above `_acquire_lock` call site (defence-in-depth ordering — signal handler `_cleanup` still exits via direct path, but `_set_exit` is now defined before any code that could conceivably invoke it); zero behavioural change.
+
 v7.6 - v7.6.1 - 2026-05-24
 
 - `_ntsync_state` `CONFIG_NTSYNC=y` `grep -q` gains `2>/dev/null` for stderr symmetry with sibling `/proc/modules` probe; six >100-char inline comments compressed in-place; byte-identical content-generator output.

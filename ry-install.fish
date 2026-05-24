@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6.8 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.10 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6.8"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.10"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -44,7 +44,6 @@ function _ry_show_help --description "Display usage information and available su
         "  RY_INSTALL_FORCE_BOOT_REBUILD=1  Bypass torn-package gate (recovery)." \
         "  RY_INSTALL_PKG_REMOVE_CASCADE=1  Cascade-remove reverse deps." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
-        "  RY_INSTALL_WIRELESS_REGDOM=<CC>  Write WIRELESS_REGDOM=<CC> to /etc/conf.d/wireless-regdom (opt-in)." \
         "  RY_INSTALL_NO_INTERACTIVE_SUDO=1  Refuse interactive sudo -v fallback (strict unattended; cron/ansible/systemd unit)." \
         "  RY_INSTALL_NO_MATRIX (any non-empty)  Suppress post-install run-summary matrix (JSONL log unaffected; no-color.org convention)." \
         "  NO_COLOR  Suppress ANSI color (any value, per no-color.org)." \
@@ -331,7 +330,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     test $_fresh_rc -eq 0; and return 0
     test $_fresh_rc -ne 2; and return 1
     set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
-    # Reclaim only if pid is well-formed and process is gone; PID-recycle race left to user (rm -rf ~/ry-install/.lock).
+    # Reclaim if pid well-formed + process gone; PID-recycle race left to user.
     if string match -qr '^[1-9]\d*$' -- "$_stale_pid"; and not command kill -0 "$_stale_pid" 2>/dev/null
         functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID not running, reclaiming)"
         if test -L "$LOCK_DIR"; functions -q _log; and _log "LOCK_RECLAIM_REFUSED: $LOCK_DIR is a symlink"; return 1; end
@@ -3225,89 +3224,8 @@ function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache m
         "" >&2
 end
 
-# ── WIRELESS REGULATORY DOMAIN (OPT-IN via RY_INSTALL_WIRELESS_REGDOM; cfg80211 udev rule pipes /etc/conf.d/wireless-regdom through set-wireless-regdom on boot) ──
-function _ry_check_wireless_regdom --description "Warn if WIRELESS_REGDOM unset or invalid — set-wireless-regdom skips iw reg set otherwise, leaving cfg80211 in world domain"
-    set -l _conf /etc/conf.d/wireless-regdom
-    if not test -f "$_conf"
-        _warn "  Wireless regulatory domain unset (no $_conf) — cfg80211 will use restrictive defaults"
-        _info "    Fix: echo 'WIRELESS_REGDOM=\"<CC>\"' | sudo tee $_conf  (e.g., US, GB, DE)"
-        _log "REGDOM_MISSING: $_conf absent"
-        return 0
-    end
-    if not command grep -qE '^[[:space:]]*WIRELESS_REGDOM="?[A-Z]{2}"?[[:space:]]*$' "$_conf" 2>/dev/null
-        _warn "  $_conf present but WIRELESS_REGDOM not set to a valid 2-letter ISO 3166-1 code — set-wireless-regdom will skip iw reg set"
-        _info "    Fix: echo 'WIRELESS_REGDOM=\"<CC>\"' | sudo tee $_conf"
-        _info "    Or set RY_INSTALL_WIRELESS_REGDOM=<CC> on the next install run (e.g. US, GB, DE) — see README → Runtime variables"
-        _log "REGDOM_INVALID: $_conf missing or empty WIRELESS_REGDOM value"
-        return 0
-    end
-    return 0
-end
-
-function _ry_apply_wireless_regdom --description "Apply RY_INSTALL_WIRELESS_REGDOM env var to /etc/conf.d/wireless-regdom (opt-in)"
-    set -q RY_INSTALL_WIRELESS_REGDOM; or return 0
-    test -n "$RY_INSTALL_WIRELESS_REGDOM"; or return 0
-    set -l _cc (string trim -- "$RY_INSTALL_WIRELESS_REGDOM" | string upper --)
-    if not string match -qr -- '^[A-Z]{2}$' "$_cc"
-        _err "RY_INSTALL_WIRELESS_REGDOM='$RY_INSTALL_WIRELESS_REGDOM' invalid — must be a 2-letter ISO 3166-1 code (e.g. US, GB, DE)"
-        _log "REGDOM_ENV_INVALID: value=$RY_INSTALL_WIRELESS_REGDOM"
-        return $EXIT_USAGE
-    end
-    set -l _conf /etc/conf.d/wireless-regdom
-    if test -f "$_conf"; and command grep -qE '^[[:space:]]*WIRELESS_REGDOM="?'$_cc'"?[[:space:]]*$' "$_conf" 2>/dev/null
-        _ok "  WIRELESS_REGDOM=$_cc (already present in $_conf)"
-        _log "REGDOM_SET_NOOP: cc=$_cc file=$_conf"
-        return 0
-    end
-    set -l _dst_dir (command dirname -- "$_conf")
-    if not sudo -n test -d "$_dst_dir" 2>/dev/null
-        if not sudo -n install -d -m 0755 -o root -g root -- "$_dst_dir" 2>/dev/null
-            _warn "  RY_INSTALL_WIRELESS_REGDOM: cannot create $_dst_dir"
-            _log "REGDOM_SET_FAIL: install -d $_dst_dir"
-            return 1
-        end
-    end
-    set -l _tmp (sudo -n mktemp -p "$_dst_dir" .ry-install.regdom.XXXXXX 2>/dev/null)
-    if test -z "$_tmp"; _warn "  RY_INSTALL_WIRELESS_REGDOM: mktemp failed"; _log "REGDOM_SET_FAIL: mktemp"; return 1; end
-    _track_tmpfile "$_tmp"
-    if sudo -n test -L "$_tmp" 2>/dev/null; _rm_tmp "$_tmp" true; _warn "  RY_INSTALL_WIRELESS_REGDOM: tmpfile is symlink, aborting"; _log "REGDOM_SET_FAIL: tmp is symlink"; return 1; end
-    set -l _payload 'WIRELESS_REGDOM="'$_cc'"'
-    set -l _err_tmp (_mktemp_or_null -p (_tmp_dir) ry-regdom-err.XXXXXX)
-    _track_tmpfile "$_err_tmp"
-    _log "RUN: sudo -n tee -- $_tmp (stdin: WIRELESS_REGDOM=$_cc)"
-    if not printf '%s\n' "$_payload" | sudo -n tee -- "$_tmp" >/dev/null 2>"$_err_tmp"
-        set -l _err_msg ""
-        test "$_err_tmp" != /dev/null; and test -s "$_err_tmp"; and set _err_msg " err="(command head -n 1 -- "$_err_tmp" | string trim --)
-        _rm_tmp "$_err_tmp" false
-        _rm_tmp "$_tmp" true
-        _warn "  RY_INSTALL_WIRELESS_REGDOM: failed to write tmpfile"
-        _log "REGDOM_SET_FAIL: cc=$_cc tmp=$_tmp$_err_msg"
-        return 1
-    end
-    _rm_tmp "$_err_tmp" false
-    if not sudo -n chmod 0644 -- "$_tmp" 2>/dev/null; _rm_tmp "$_tmp" true; _warn "  RY_INSTALL_WIRELESS_REGDOM: chmod failed"; _log "REGDOM_SET_FAIL: chmod"; return 1; end
-    if not sudo -n chown root:root -- "$_tmp" 2>/dev/null; _rm_tmp "$_tmp" true; _warn "  RY_INSTALL_WIRELESS_REGDOM: chown failed"; _log "REGDOM_SET_FAIL: chown"; return 1; end
-    if not sudo -n mv -T -- "$_tmp" "$_conf" 2>/dev/null; _rm_tmp "$_tmp" true; _warn "  RY_INSTALL_WIRELESS_REGDOM: atomic mv failed"; _log "REGDOM_SET_FAIL: mv"; return 1; end
-    _untrack_tmpfile "$_tmp"
-    _ok "  WIRELESS_REGDOM=$_cc → $_conf"
-    _log "REGDOM_SET: cc=$_cc file=$_conf"
-    return 0
-end
-
 # ── INSTALL PHASE 1: PREFLIGHT ────────────────────────────────────────────────────────────────────
 function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_ERR, mark progress skip"; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; end
-
-function _ip_record_regdom --argument-names _ar_rc --description "_install_preflight sub. Record wireless-regdom phase result"
-    if set -q RY_INSTALL_WIRELESS_REGDOM; and test -n "$RY_INSTALL_WIRELESS_REGDOM"
-        if test $_ar_rc -eq 0
-            _phase_record "Preflight: wireless regdom" PASS "WIRELESS_REGDOM=$RY_INSTALL_WIRELESS_REGDOM"
-        else
-            _phase_record "Preflight: wireless regdom" WARN "apply failed (see JSONL)"
-        end
-    else
-        _phase_record "Preflight: wireless regdom" "--" "RY_INSTALL_WIRELESS_REGDOM unset"
-    end
-end
 
 # _RY_LOUD_ERR forces preflight errors to stderr in QUIET install; cleared on success/bail.
 function _install_preflight --description "Run all preflight checks before installation"
@@ -3340,11 +3258,6 @@ function _install_preflight --description "Run all preflight checks before insta
             _phase_record "Preflight: kernel version" FAIL "$KVER (below required)"
             set -g INSTALL_HAD_ERRORS true
     end
-    _ry_apply_wireless_regdom
-    set -l _ar_rc $status
-    if test $_ar_rc -eq $EXIT_USAGE; _phase_record "Preflight: wireless regdom" FAIL "invalid RY_INSTALL_WIRELESS_REGDOM"; _ip_bail_prep; return $EXIT_USAGE; end
-    _ip_record_regdom $_ar_rc
-    _ry_check_wireless_regdom
     _echo
     if not _ry_validate_configs; _phase_record "Preflight: config validation" FAIL "see JSONL log"; _err "Configuration validation failed - aborting"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
     _phase_record "Preflight: config validation" PASS "$_RY_MANAGED_FILE_COUNT/$_RY_MANAGED_FILE_COUNT destinations"
@@ -3461,7 +3374,7 @@ function _ip_pacman_invoke --description "Run pacman -Syu (or -Sy via RY_INSTALL
                 _err "Package installation failed after retry"
             end
             if test "$_RY_MKI_HAD_ORIG" = true; and test -n "$_RY_MKI_BACKUP_FILE"
-                # Snapshot kept; caller _install_packages cleans _RY_MKI_BACKUP_FILE after verify returns.
+                # Snapshot retained; _install_packages cleans _RY_MKI_BACKUP_FILE after verify.
                 set -g _RY_PACMAN_REVERT_ATTEMPTED true
                 if not _mkinitcpio_revert "$_RY_MKI_BACKUP_FILE"; set -g _RY_MKI_REVERT_FAILED true; _err "Mkinitcpio revert failed — boot state may be inconsistent; aborting"; end
             end
@@ -4756,7 +4669,7 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
     return 0
 end
 
-# daemon-reload picks up ExecStart change; try-restart re-runs active units (oneshot idempotent). User-scope targets routed to `systemctl --user` (parity with _verify_unit_content scope detection).
+# daemon-reload picks up ExecStart; try-restart re-runs active units (oneshot idempotent); user-scope via systemctl --user.
 function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit (+ try-restart to pick up changed ExecStart)"
     set -l _rc 0
     set -l _bn (command basename -- "$target")

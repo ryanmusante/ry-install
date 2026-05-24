@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.8-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.10-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -67,7 +67,7 @@ Typical duration: **3–8 minutes**.
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 
 > [!WARNING]
-> Sudo cache may lapse during the 3–8 min install. Mitigations: extend the cache (`Defaults timestamp_timeout=60` via `sudo visudo`), run a keepalive (`while true; sudo -v; sleep 60; end`), or drop a scoped `NOPASSWD` rule at `/etc/sudoers.d/ry-install` covering `pacman, paru, sdboot-manage, mkinitcpio, bootctl, systemctl, ufw, paccache` + the coreutils invoked (`install mv cp rm chmod chown cat tee find stat grep awk cmp mktemp`). Blanket `NOPASSWD: ALL` works but elevates every command run as this user. Interactive fallback requires both stdin and stderr be TTYs — set `RY_INSTALL_NO_INTERACTIVE_SUDO=1` for cron/systemd. Recovery: re-run (idempotent; boot-taint flags reset per-process).
+> Sudo cache may lapse during the 3–8 min install. Mitigate via `Defaults timestamp_timeout=60` in `sudo visudo`, a keepalive shell (`while true; sudo -v; sleep 60; end`), or a scoped `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. Interactive fallback needs stdin + stderr to be TTYs — set `RY_INSTALL_NO_INTERACTIVE_SUDO=1` for cron/systemd. Recovery: re-run (idempotent).
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -82,7 +82,7 @@ df -h / /boot                    # verify space
 | GPU | Radeon 8060S (RDNA 3.5) |
 | RAM | 128 GB LPDDR5x-8000 |
 
-Runtime init requires CPU matching `Ryzen AI Max` (every mode); override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (profile is amdgpu/gfx1151-specific — breaks initramfs on other silicon).
+Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (profile is amdgpu/gfx1151-specific).
 
 ## Usage
 
@@ -128,11 +128,11 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 | `FAIL`               | `≥1 FAIL` (without boot-critical) |
 | `FAIL-BOOT-CRITICAL` | Boot rebuild cascade aborted (`EXIT_BOOT_CRIT`); prints **DO NOT REBOOT** + recovery steps |
 
-`DEFER`, `SKIP`, and `N/A` buckets are informational and do not affect the verdict. Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (JSONL log still records every `PHASE_RESULT` event).
+`DEFER`/`SKIP`/`N/A` are informational and don't affect the verdict. Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (JSONL still records every `PHASE_RESULT`).
 
 ## Configuration
 
-`--verify-static` compares installed files against embedded content byte-for-byte; the script is the source of truth. Every embedded value is documented below by phase. Edit the `set -g` globals near the top of `ry-install.fish` to retune. (Phases 1, 5, 6 deploy no embedded data.)
+`--verify-static` compares installed files against embedded content byte-for-byte; the script is the source of truth. Edit `set -g` globals near the top to retune. Phases 1, 5, 6 deploy no embedded data.
 
 ### Phase 1 — Preflight
 
@@ -146,8 +146,7 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 | 6 | Disk space | 2 GiB `/` + 200 MiB `/boot` |
 | 7 | Network | HTTPS + ICMP probe |
 | 8 | Kernel | ≥ 6.14 FAIL · ≥ 6.18.4 WARN · ntsync |
-| 9 | Wireless regdom | `RY_INSTALL_WIRELESS_REGDOM=<CC>` opt-in apply; always-on warn |
-| 10 | Configs | per-destination format validators |
+| 9 | Configs | per-destination format validators |
 
 ### Phase 2 — Packages
 
@@ -203,7 +202,7 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 |---|---|
 | Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` → `pacman -Sy --needed` (no `-u`). Violates [Arch policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported) |
 | AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` omitted — DKMS needs makedeps |
-| PGP failures | Pre-import key (`gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys <KEYID>`) or `paru -S <pkg>` manually. `--skipreview` auto-declines the interactive key-import prompt, so the failure surfaces as `invalid or corrupted package (PGP signature)` in the JSONL stderr event — pre-import the key, then re-run |
+| PGP failures | `--skipreview` auto-declines key import; pre-import via `gpg --recv-keys <KEYID>` or run `paru -S <pkg>` manually |
 | Reverse deps | `PKGS_DEL` removal skipped on outside rdeps. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`); Plasma rdeps already enumerated |
 
 </details>
@@ -393,7 +392,7 @@ Applied immediately on install and on `--install-file` re-deploy; re-applied eve
 | `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |
 
-Loaded by `systemd --user`. Log out and back in to apply, OR run `systemctl --user import-environment` (and restart active user units) for a live apply without re-login. Note: `import-environment` only refreshes the systemd `--user` manager env; child processes already running keep their inherited env until restarted. The user file installs `0600` — values are not exposed to other users on the system.
+Loaded by `systemd --user`. Log out and back in, or `systemctl --user import-environment` (then restart active user units) for live apply; running child processes retain inherited env until restarted. User file installs `0600`.
 
 </details>
 
@@ -417,7 +416,7 @@ Loaded by `systemd --user`. Log out and back in to apply, OR run `systemctl --us
 | `lazytime` | defer atime/mtime writeback |
 | `commit=10` | journal flush every 10s |
 
-Idempotent rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `defaults`, existing `commit=*`. `findmnt --verify` gates the atomic `mv`. The awk script sets `OFS = " "` so rewritten ext4 entries collapse to single-space-separated fields; comments and non-ext4 entries preserve their original whitespace via awk passthrough. Malformed ext4 entries (digits-only `$4`, NF<4) are left untouched and surface as WARN. **No automatic backup — snapshot `/etc/fstab` before first run.**
+Idempotent rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `defaults`, existing `commit=*`. `findmnt --verify` gates the atomic `mv`. Malformed ext4 entries (digits-only `$4`, NF<4) surface as WARN, untouched. **No automatic backup — snapshot `/etc/fstab` before first run.**
 
 </details>
 
@@ -539,7 +538,7 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps enumerate
 </details>
 
 <details>
-<summary><b>Runtime variables</b> — 10 vars</summary>
+<summary><b>Runtime variables</b> — 9 vars</summary>
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -549,12 +548,9 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps enumerate
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses torn-package gate |
 | `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | `=1` cascades rdeps into removal set |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses `EXPECTED_CPU_MATCH` hard-fail |
-| `RY_INSTALL_WIRELESS_REGDOM` | unset | `=<CC>` writes `WIRELESS_REGDOM=<CC>` (2-letter ISO 3166-1) |
 | `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses interactive `sudo -v` fallback |
 | `RY_INSTALL_NO_MATRIX` | unset | any non-empty value suppresses run-summary matrix (JSONL unaffected) |
 | `NO_COLOR` | unset | Suppress ANSI color ([no-color.org](https://no-color.org/)) |
-
-Persist `RY_INSTALL_WIRELESS_REGDOM` in `~/.config/fish/conf.d/ry-install-env.fish` (`set -gx RY_INSTALL_WIRELESS_REGDOM US`); a stale `/etc/conf.d/wireless-regdom` with no valid value silently disables `iw reg set` on every boot.
 
 </details>
 
@@ -593,15 +589,15 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 | Category | Issue | Workaround |
 |---|---|---|
 | Strix Halo GPU | CWSR hang | `amdgpu.cwsr_enable=0` (already set) |
-| Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` (AUR alt firmware) OR `IgnorePkg=linux-firmware` in `/etc/pacman.conf` — the pin blocks future CVE fixes |
+| Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` OR `IgnorePkg=linux-firmware` (pin blocks future CVE fixes) |
 | Strix Halo GPU | ROCm VRAM allocation | Fixed in kernel 6.16+ (`sudo pacman -Syu linux-cachyos`) |
 | MediaTek MT7925 | Kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
 | MediaTek MT7925 | TX power 3 dBm / random deauth | None (cosmetic / upstream) |
 | Strix Halo ACP | `No matching ASoC machine driver` (dmesg, once/boot) | Pending upstream; HDMI + USB audio unaffected |
 | NetworkManager + iwd | Boot connectivity failure (intermittent) | `nmcli radio wifi off; and nmcli radio wifi on` |
 | NetworkManager + iwd | WPA2/3 Enterprise GUI broken | Use CLI or wpa_supplicant |
-| Other | Stale instance lock | Auto-reclaimed if PID dead; else `rm -rf ~/ry-install/.lock` after `pgrep -af ry-install` empty |
-| Other | `systemctl --user` skipped | Absent user-bus; enable with `loginctl enable-linger $USER` |
+| Other | Stale instance lock | Auto-reclaimed if PID dead; else `rm -rf ~/ry-install/.lock` |
+| Other | `systemctl --user` skipped | No user-bus; enable via `loginctl enable-linger $USER` |
 | Other | AUR PGP signature failure | `gpg --recv-keys <KEYID>` then re-run, or `paru -S <pkg>` without `--skipreview` |
 
 ## Troubleshooting
@@ -611,15 +607,14 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
 | Initramfs rebuild refused | Fix root cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
-| Sudo cache expired | `./ry-install.fish` (script re-primes cache; for long runs see Prerequisites WARNING) |
-| `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1 ./ry-install.fish`; inspect first with `pactree -ru <pkg>` |
+| Sudo cache expired | `./ry-install.fish` re-primes cache; see Prerequisites WARNING for long runs |
+| `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1 ./ry-install.fish`; inspect via `pactree -ru <pkg>` |
 | ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
 | `.ry-install.*` orphan in `/etc` or `/boot/loader` | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, then re-run |
-| `set-wireless-regdom` leaves cfg80211 in `world` | Re-run with `RY_INSTALL_WIRELESS_REGDOM=<CC>`; fallback: `echo 'WIRELESS_REGDOM="<CC>"' \| sudo tee /etc/conf.d/wireless-regdom` |
 | PipeWire `nice-level Permission denied` | `sudo usermod -aG realtime $USER` then re-login |
 | Kernel 6.19.0 + Strix Halo black screen | `sudo pacman -Syu` (≥6.19.1) ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
-| iwd config edits not taking effect | `sudo systemctl try-restart iwd.service` (ry-install does this for managed-file edits) |
-| MT7925 workaround applied but WiFi still failing | `dkms status mt76-mt7925`; re-run `paru -S mt76-mt7925-dkms` without `--skipreview` to surface build errors |
+| iwd config edits not taking effect | `sudo systemctl try-restart iwd.service` |
+| MT7925 workaround applied but WiFi still failing | `dkms status mt76-mt7925`; re-run `paru -S mt76-mt7925-dkms` without `--skipreview` |
 
 ## References
 

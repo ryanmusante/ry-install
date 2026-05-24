@@ -1,32 +1,36 @@
 ry-install ChangeLog
 
+v7.4.73 - v7.4.74 - 2026-05-23
+
+- Trim ~75 verbose WHY-comments to compact single-line form; zero behavioural change; byte-identical content-generator output.
+
 v7.4.72 - v7.4.73 - 2026-05-23
 
-- Lift single-line WHY-comments above ~90 function declarations covering signal-handling, cleanup orchestration, JSONL footer, lock acquisition, runtime init, content generators, sudo/sys helpers, progress bar, command runner, kernel-version compare, mkinitcpio hook ordering, atomic file writes, static + runtime verifiers, install phases, AUR build verification, pacman cascade filter, boot path resolution, post-rebuild sanity, matrix renderer, and post-hook handlers; zero behavioural change.
+- Lift single-line WHY-comments above ~90 function declarations; zero behavioural change.
 
 v7.4.71 - v7.4.72 - 2026-05-23
 
-- `_content__etc_default_cpupower-service.conf` parameterize via new `$CPUPOWER_GOVERNOR` global (matches sibling generators; bytes-identical default output); `_check_boot_taint_gate` helper extracted from `_irb_taint_gate` + `_post_boot` (rc 0/1/2 dispatch); `_csp_filter_rdeps` 5-stage pactree string pipe → discrete stages (drop fragile pipestatus[2..5] check; pactree rc stays authoritative); `_idf_match_dst` → `_idf_use_sudo_for_dst` (resolve-and-flag semantics); `_kver_below` drop 3-arg defaults (all callers pass 6); fstab phase row label `Configs: /etc/fstab opts` → `Services: fstab opts` (matches README Phase 4); `_ir_resolve_root_uuid` verify-static error wording clarified to "aborting verify-static"; `_dc_kill_children` sleep 0.5 fallback dropped (GNU coreutils preflight gate); `_phase_record` always-true `functions -q` guards dropped from `_vs_read_symmetry_selftest` + `_vrsv_wifi`; README Phase 1 row 9 wording surfaces apply-then-check order; README Phase 5 summary appends `post-rebuild sanity`; README Exit-codes summary `11 codes` → `12 entries (11 numeric + 128+N signal class)`.
+- `_content__etc_default_cpupower-service.conf` parameterize via `$CPUPOWER_GOVERNOR`; `_check_boot_taint_gate` extracted from `_irb_taint_gate` + `_post_boot`; `_csp_filter_rdeps` 5-stage pactree pipe → discrete stages; `_idf_match_dst` → `_idf_use_sudo_for_dst`; `_kver_below` drop 3-arg defaults; fstab phase row label aligned to README Phase 4; Exit-codes table widened to 12 entries.
 
 v7.4.70 - v7.4.71 - 2026-05-23
 
-- `_mkinitcpio_revert` + `_fstab_atomic_replace` tmpfile parent `/run/ry-install` → `/etc` (same-FS atomic `rename(2)`; cross-FS mv from tmpfs degraded to cp+unlink); `--install-file` path length check char → byte (`printf | wc -c`, PATH_MAX is byte-bound); README Phase 6 step list trimmed (JSONL footer is post-dispatch, written by all modes); inline why-comments above `_csm_filter_units` (per-unit fork) and `_cse_collect_units` (skip predicate); cleanup of new `.ry-install.*` tmpfiles in `/etc` already covered by existing `_SYS_TMP_DIRS` sweep.
+- `_mkinitcpio_revert` + `_fstab_atomic_replace` tmpfile parent `/run/ry-install` → `/etc` (same-FS atomic `rename(2)`); `--install-file` path-length check char → byte (PATH_MAX is byte-bound); README Phase 6 step list trimmed.
 
 v7.4.69 - v7.4.70 - 2026-05-23
 
-- README Phase 1 row 9 documents always-on `_ry_check_wireless_regdom` (warn on unset/invalid) alongside opt-in `_ry_apply_wireless_regdom`; Safety signals row appends `WINCH` (non-fatal; `_progress_on_winch` re-anchors progress bar on terminal resize); zero behavioural change.
+- README Phase 1 row 9 documents always-on `_ry_check_wireless_regdom`; Safety signals row appends `WINCH` (non-fatal progress-bar re-anchor).
 
 v7.4.68 - v7.4.69 - 2026-05-23
 
-- `_verify_static_system` resolved.conf grep list parameterized via `$RESOLVED_LLMNR`/`$RESOLVED_DOT`/`$RESOLVED_DNSSEC`; `_irb_taint_gate` + `_post_boot` `not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1` → `test "$RY_INSTALL_FORCE_BOOT_REBUILD" != 1`; `_ry_check_wireless_regdom` section divider merged with cfg80211 udev note.
+- `_verify_static_system` resolved.conf grep list parameterized via `$RESOLVED_LLMNR`/`$RESOLVED_DOT`/`$RESOLVED_DNSSEC` globals.
 
 v7.4.67 - v7.4.68 - 2026-05-23
 
-- `_content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf` parameterize LLMNR/DOT/DNSSEC via new `RESOLVED_LLMNR`/`RESOLVED_DOT`/`RESOLVED_DNSSEC` globals (matches sibling generators; bytes-identical output); README Phase 3 table 4 → 6 rows (mktemp/probe-pre/render/probe-post/chmod/mv-T mirrors `_atomic_write_file`); README NM-dispatcher note corrected (enabled when present and disabled); `_RY_LOG_WRITE_FAIL` setter at log-rename + header-write fail paths gains `not set -q` guard (style alignment with `_log`/`_write_footer`).
+- `_content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf` parameterize LLMNR/DOT/DNSSEC globals; README Phase 3 table 4 → 6 rows mirroring `_atomic_write_file`; README NM-dispatcher note corrected; `_RY_LOG_WRITE_FAIL` setter gains `not set -q` guard.
 
 v7.4.66 - v7.4.67 - 2026-05-23
 
-- README + script + CHANGELOG version-aligned; CHANGELOG trimmed to kernel.org single-bullet form; zero behavioural change.
+- README + script + CHANGELOG version-aligned; CHANGELOG trimmed to kernel.org single-bullet form.
 
 v7.4.65 - v7.4.66 - 2026-05-23
 
@@ -34,19 +38,19 @@ v7.4.65 - v7.4.66 - 2026-05-23
 
 v7.4.64 - v7.4.65 - 2026-05-23
 
-- Lift 11 single-line WHY comments above function declarations; visual blank-line grouping across function families; LOC 4745 → 4967.
+- Lift 11 single-line WHY comments above function declarations; visual blank-line grouping across function families.
 
 v7.4.63 - v7.4.64 - 2026-05-23
 
-- Lift 7 top-of-body comments above function declarations; zero LOC delta; content-generator output byte-identical.
+- Lift 7 top-of-body comments above function declarations; content-generator output byte-identical.
 
 v7.4.62 - v7.4.63 - 2026-05-23
 
-- Trim file-top narrative comments above 6 set -g blocks; flatten CHANGELOG headings (-24 LOC).
+- Trim file-top narrative comments above 6 `set -g` blocks; flatten CHANGELOG headings.
 
 v7.4.61 - v7.4.62 - 2026-05-23
 
-- README trim verbose table cells (670 → 666 LOC); script trim >100-char comments; CHANGELOG collapse multi-bullet entries.
+- README trim verbose table cells; script trim >100-char comments; CHANGELOG collapse multi-bullet entries.
 
 v7.4.60 - v7.4.61 - 2026-05-23
 
@@ -58,7 +62,7 @@ v7.4.59 - v7.4.60 - 2026-05-23
 
 v7.4.58 - v7.4.59 - 2026-05-23
 
-- Comment trims across 7 sites; -2 LOC.
+- Comment trims across 7 sites.
 
 v7.4.57 - v7.4.58 - 2026-05-23
 
@@ -78,11 +82,11 @@ v7.4.54 - v7.4.55 - 2026-05-23
 
 v7.4.53 - v7.4.54 - 2026-05-23
 
-- README trim 678 → 623 LOC (-8.1%); compact value lists; kernel cmdline → code block.
+- README trim 678 → 623 LOC; compact value lists; kernel cmdline → code block.
 
 v7.4.52 - v7.4.53 - 2026-05-23
 
-- `_verify_static_checksum` extract per-destination loop to `_vsc_check_one` helper (55 → 9 LOC).
+- `_verify_static_checksum` extract per-destination loop to `_vsc_check_one` helper.
 
 v7.4.51 - v7.4.52 - 2026-05-23
 

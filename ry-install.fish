@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.4.74 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.74"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -253,7 +253,6 @@ function _verify_unit_syntax --argument-names unit_path label intended_scope --d
 end
 
 # ── JSONL FOOTER + TMPFILE CLEANUP ────────────────────────────────────────────────────────────────
-# _FOOTER_WRITTEN: one-shot; signal + normal exit both call _write_footer.
 function _write_footer --argument-names exit_code extra_key --description "Append JSONL footer to LOG_FILE"
     set -q _FOOTER_WRITTEN; and return 0
     set -q LOG_FILE; or return 0
@@ -285,7 +284,6 @@ end
 set -g _CLEANUP_DONE false
 
 # ── INSTANCE LOCK: ATOMIC MKDIR + STALE-PID RECLAIM ───────────────────────────────────────────────
-# Sentinel pre-mkdir: signal between mkdir+pid-write still triggers lock removal.
 function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     set -l _prev_umask (umask)
     umask 0077
@@ -634,7 +632,6 @@ end
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ─────────────────────────────
-# Mode dispatch: install/install-file/verify-static abort; verify-runtime/check continue.
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
     set -g _ROOT_UUID (command findmnt -no UUID / 2>/dev/null)
     set -l _reason "findmnt failed"
@@ -846,7 +843,6 @@ function _ry_get_file_content --argument-names dst --description "Generate expec
 end
 
 # ── SUDO CREDENTIAL CACHE + COMMAND ESCALATION ────────────────────────────────────────────────────
-# _RY_SUDO_CACHED one-shot; honours RY_INSTALL_NO_INTERACTIVE_SUDO=1.
 function _ensure_sudo_cached --description "Cache sudo credential once before repeated sudo -n calls"
     if not command -q sudo; _err "Sudo credential cache failed: sudo not found"; return 1; end
     set -l _sudo_err (_mktemp_or_null -p (_tmp_dir) ry-sudo-err.XXXXXX)
@@ -893,7 +889,6 @@ function _as --argument-names use_sudo --description "Prefix command with sudo o
 end
 
 # ── TMPFILE TRACKING + KEY DERIVATION ─────────────────────────────────────────────────────────────
-# HOME→'HOME' literal: user-dst keys stable across users (fn names = global namespace).
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path"
     set -l p $path
     if string match -q -- "$HOME/*" "$p"
@@ -967,7 +962,6 @@ function _tmp_dir --description "Return \$TMPDIR if set+exists, else /tmp"
 end
 
 # ── FILESYSTEM PROBES (symlink, system-dst, byte read) ────────────────────────────────────────────
-# Tri-state rc: symlink(abort) / not(proceed) / sudo-lapse(retry).
 function _is_symlink --argument-names path use_sudo --description "Sudo-aware test -L (rc 0/1/2 = symlink/not/sudo-lapse)"
     if test "$use_sudo" = true
         sudo -n true 2>/dev/null; or return 2
@@ -1003,7 +997,6 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
 end
 
 # ── IWD GATE + MASK LIST + JSON ESCAPE ────────────────────────────────────────────────────────────
-# Memoized per run; _rdi_run_phases erases after AUR (paru may install iwd).
 function _should_skip_iwd --argument-names dst --description "True if dst is iwd-gated AND iwd not installed (memoized)"
     contains -- "$dst" $_RY_IWD_GATED_DSTS; or return 1
     if not set -q _RY_SKIP_IWD
@@ -1171,7 +1164,6 @@ function _verify_summary --description "Print verification pass/fail/warn summar
 end
 
 # ── PROGRESS BAR (PINNED BOTTOM ROW WITH SCROLL REGION) ───────────────────────────────────────────
-# Prefer /proc/uptime (monotonic, NTP-jump-safe); epoch fallback on parse fail.
 function _progress_now --description "Monotonic seconds (cached uptime or epoch)"
     if set -q _PROG_CLOCK; and test "$_PROG_CLOCK" = uptime
         set -l _u (command cat -- /proc/uptime 2>/dev/null | string split ' ')[1]
@@ -1274,7 +1266,6 @@ function _progress_on_winch --on-signal WINCH --description "Re-anchor progress 
 end
 
 # ── COMMAND RUNNER: _run + STDOUT/STDERR CAPTURE + TIMEOUT DISPATCH ───────────────────────────────
-# RY_RUN_TIMEOUT=0 disables; invalid int warns once via _RY_RUN_TIMEOUT_WARNED.
 function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable seconds integer (0 = disabled)"
     if not set -q RY_RUN_TIMEOUT; echo $_RY_RUN_TIMEOUT_DEFAULT; return 0; end
     if test -z "$RY_RUN_TIMEOUT"; echo $_RY_RUN_TIMEOUT_DEFAULT; return 0; end
@@ -1505,7 +1496,6 @@ function _chk_token_in --argument-names line token label --description "Verify a
 end
 
 # ── PREFLIGHT GATES: DEPS + NETWORK + DISK + KERNEL VERSION ───────────────────────────────────────
-# Required tools hard-fail; optional tools warn. systemd ≥250 (unit-file stability).
 function _ry_check_deps --description "Verify required packages are installed"
     _log DEPS_CHECK_START
     set -l missing
@@ -1717,7 +1707,6 @@ function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODU
 end
 
 # ── CONFIG-FORMAT VALIDATORS (UNIT, KV, KPARAM, SYSCTL, INI, TMPFILES) ────────────────────────────
-# Tmpfile uses .service suffix because systemd-analyze keys unit-type off the file extension.
 function _verify_unit_content --argument-names dst --description "Verify systemd unit content via tmpfile+_verify_unit_syntax"
     test (count $argv) -lt 2; and _log "BUG: _verify_unit_content called without content (dst=$dst)"; and return 2
     set -l content $argv[2..-1]
@@ -1850,7 +1839,6 @@ function _ry_validate_configs --description "Run all embedded config validators"
 end
 
 # ── ATOMIC FILE INSTALL: RENDER → SYMLINK CHECK → CHMOD → MV -T ───────────────────────────────────
-# Handles single-line + backslash-continued array forms; warns on duplicate KEY=.
 function _ry_mkinitcpio_array --argument-names key file --description "First non-comment KEY=... line from a conf file"
     test -z "$file"; and set file /etc/mkinitcpio.conf
     set -l _key_re (string escape --style=regex -- "$key")
@@ -2402,7 +2390,6 @@ function _ry_verify_static --description "Verify installed configs match embedde
 end
 
 # ── --CHECK MODE: SILENT IDEMPOTENCY PROBE (0=clean / 3=preflight / 10=drift) ─────────────────────
-# Distinguishes drift (rc=1, continue) from sudo-lapse (rc=2, abort).
 function _check_phase_files --description "--check phase: file content hash compare"
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
         _should_skip_iwd "$dst"; and continue
@@ -2777,7 +2764,6 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
 end
 
 # ── VERIFY-RUNTIME: SERVICES + ENVIRONMENT + FSTAB + SESSION ──────────────────────────────────────
-# Tri-state: active+enabled=ok, active+other=warn, else=fail.
 function _vrsv_chk_active_enabled --argument-names label rec_str --description "Helper: ok if active+enabled, warn if active only, fail otherwise"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found
@@ -3489,7 +3475,6 @@ function _ip_snapshot_mkinitcpio --description "Snapshot /etc/mkinitcpio.conf fo
 end
 
 # ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + VERIFY + PACNEW SCAN) ────────────────────────────────
-# db.lck pre-check; -Syyu retry forces db re-sync; full fail → revert + boot taint.
 function _ip_pacman_invoke --description "Run pacman -Syu (or -Sy via RY_INSTALL_ALLOW_PARTIAL_UPGRADE)"
     set -l _pacman_first; set -l _pacman_retry; set -l _do_upgrade true
     if test "$RY_INSTALL_ALLOW_PARTIAL_UPGRADE" = 1
@@ -3498,7 +3483,7 @@ function _ip_pacman_invoke --description "Run pacman -Syu (or -Sy via RY_INSTALL
         set _do_upgrade false
         _warn "Partial-upgrade mode (RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1) — violates Arch's no-partial-upgrade policy"
         _info "  Refresh DB + install listed pkgs only; dependency-version skew may break shared-library ABI"
-        _info "  Retry (on failure) uses -Syy without -u — already-installed packages are NOT upgraded, only re-fetched on db mismatch"
+        _info "  Retry (on failure) uses -Syy --needed (force full DB re-sync; --needed leaves already-installed pkgs untouched; no -u → no upgrades)"
         _log "PARTIAL_UPGRADE_MODE: RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1"
     else
         set _pacman_first -Syu --needed --noconfirm
@@ -3627,7 +3612,6 @@ function _install_packages --description "Install managed packages via pacman -S
 end
 
 # ── INSTALL PHASE 2 (AUR): PARU + MT7925 BUILD VERIFY ─────────────────────────────────────────────
-# _RY_AUR_PARTIAL on partial only (1≤failed<total); full fail stays FAIL.
 function _iap_per_pkg_retry --description "_install_aur_packages sub. Re-attempt AUR install one package at a time; returns failed count via _RY_IAP_RETRY_FAILED"
     set -g _RY_IAP_RETRY_FAILED 0
     for pkg in $AUR_PKGS
@@ -3981,17 +3965,27 @@ function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on
 end
 
 function _configure_services_pkg_remove --description "Remove PKGS_DEL packages (rdep-aware via pactree)"
-    if not command -q pacman; _warn "pacman not found, skipping PKGS_DEL removal"; return 0; end
+    if not command -q pacman; _warn "pacman not found, skipping PKGS_DEL removal"; _phase_record "Services: PKGS_DEL removal" SKIP "pacman not found"; return 0; end
     set -g _RY_PKG_REMOVE_SKIPS; set -l to_del; set -l _del_installed (command pacman -Qq 2>/dev/null)
     for pkg in $PKGS_DEL
         contains -- "$pkg" $_del_installed; or continue
         for _emit in (_csp_filter_rdeps "$pkg"); test -z "$_emit"; and continue; contains -- "$_emit" $to_del; and continue; set -a to_del "$_emit"; end
     end
-    if test (count $_RY_PKG_REMOVE_SKIPS) -gt 0
+    set -l _skip_count (count $_RY_PKG_REMOVE_SKIPS); set -l _del_count (count $to_del)
+    if test $_skip_count -gt 0
         _warn "  Skipped (reverse deps held by other packages): $_RY_PKG_REMOVE_SKIPS — set RY_INSTALL_PKG_REMOVE_CASCADE=1 to cascade"
         _log "PKG_REMOVE_SKIPS: $_RY_PKG_REMOVE_SKIPS"
     end
-    if test (count $to_del) -gt 0; _log "PKG_REMOVE_REQUESTED: $to_del"; _csp_remove_pkgs $to_del; end
+    if test $_del_count -gt 0; _log "PKG_REMOVE_REQUESTED: $to_del"; _csp_remove_pkgs $to_del; end
+    if test $_del_count -eq 0; and test $_skip_count -eq 0
+        _phase_record "Services: PKGS_DEL removal" "--" "no PKGS_DEL members installed"
+    else if test $_del_count -eq 0
+        _phase_record "Services: PKGS_DEL removal" WARN "$_skip_count skipped (rdep gate)"
+    else if test $_skip_count -gt 0
+        _phase_record "Services: PKGS_DEL removal" WARN "removed $_del_count, $_skip_count rdep-skipped"
+    else
+        _phase_record "Services: PKGS_DEL removal" PASS "removed $_del_count packages"
+    end
     return 0
 end
 
@@ -4038,13 +4032,29 @@ end
 function _configure_services_mask --description "Apply MASK list; batch-mask with per-unit retry"
     _csm_disable_ufw_rules
     set -l safe_mask (_mask_list_effective)
-    test (count $safe_mask) -eq 0; and return 0
+    if test (count $safe_mask) -eq 0
+        _phase_record "Services: mask units" "--" "MASK list empty"
+        return 0
+    end
     set -l _to_mask (_csm_filter_units $safe_mask)
-    test (count $_to_mask) -eq 0; and return 0
-    _run sudo -n systemctl mask -- $_to_mask; and return 0
+    if test (count $_to_mask) -eq 0
+        _phase_record "Services: mask units" PASS "all "(count $safe_mask)" already masked or not installed"
+        return 0
+    end
+    set -l _mask_count (count $_to_mask)
+    if _run sudo -n systemctl mask -- $_to_mask
+        _phase_record "Services: mask units" PASS "masked $_mask_count units"
+        return 0
+    end
     _warn "Batch mask failed — retrying individually to identify failures"
     _csm_retry_individual $_to_mask
-    return $status
+    set -l _rc $status
+    if test $_rc -eq 0
+        _phase_record "Services: mask units" PASS "$_mask_count masked (per-unit retry)"
+    else
+        _phase_record "Services: mask units" FAIL "some masks failed; see JSONL log"
+    end
+    return $_rc
 end
 
 function _cse_collect_units --description "Collect system units to enable"
@@ -4099,14 +4109,31 @@ end
 function _configure_services_enable --description "Daemon-reload, batch-enable system units"
     set -l _ret 0
     set -l _units (_cse_collect_units)
-    _cse_batch_enable $_units; or set _ret 1
+    set -l _enable_count (count $_units)
+    if test $_enable_count -eq 0
+        _phase_record "Services: enable units" "--" "no units to enable"
+        return 0
+    end
+    if _cse_batch_enable $_units
+        _phase_record "Services: enable units" PASS "enabled $_enable_count units"
+    else
+        _phase_record "Services: enable units" FAIL "$_enable_count requested; see JSONL log"
+        set _ret 1
+    end
     return $_ret
 end
 
-function _install_configure_services --description "Enable, start, and configure systemd services"
+function _install_configure_services --description "Enable, start, and configure systemd services (fstab opts + resolved + THP + PKGS_DEL + mask + enable)"
     _progress Services
     _info "Post-installation tasks..."
     set -l _ret 0
+    # Phase 4 step 1: fstab ext4 opts (noatime,lazytime,commit=10)
+    if _install_fstab_opts
+        _phase_record "Services: fstab opts" PASS "noatime,lazytime,commit=10"
+    else
+        _phase_record "Services: fstab opts" FAIL "see JSONL log"
+        set _ret 1
+    end
     _configure_services_resolved_restart
     _configure_services_thp_apply
     _configure_services_pkg_remove
@@ -4116,7 +4143,6 @@ function _install_configure_services --description "Enable, start, and configure
 end
 
 # ── BOOT PATH RESOLUTION (ESP + $BOOT via bootctl / findmnt) ──────────────────────────────────────
-# User-mode bootctl first (skip sudo prompt on world-readable /boot); sudo fallback otherwise.
 function _bootctl_dir --argument-names flag logtag fallnote --description "bootctl path probe (user then sudo); empty on failure"
     command -q bootctl; or return 0
     set -l _p (command bootctl $flag 2>/dev/null | string trim -- | string trim -r -c / --)
@@ -4166,7 +4192,6 @@ function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, 
 end
 
 # ── BOOT SANITY: ENTRIES + KERNEL/INITRAMFS PROBES + SIZE SCAN ────────────────────────────────────
-# find -printf %f\0 + split0 handles entries with embedded spaces (BLS-spec-allowed).
 function _enum_boot_entries --argument-names esp --description "Enumerate \$esp/loader/entries/*.conf"
     set -g _RY_BOOT_ENUM_OK true
     set -l _basenames (sudo -n find "$esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | string split0)
@@ -4431,7 +4456,7 @@ function _if_nm_restart --description "Restart NetworkManager when iwd backend s
     else
         _phase_record "Finalize: NetworkManager restart" PASS "restarted"
     end
-    command sleep $NM_RESTART_DELAY 2>/dev/null; or _warn "Sleep interrupted during NM restart settle window"
+    command sleep $NM_RESTART_DELAY </dev/null 2>/dev/null; or _warn "Sleep interrupted during NM restart settle window"
     return 0
 end
 
@@ -4469,13 +4494,15 @@ function _rrp_optional_indexer --argument-names cmd label --description "_rdi_ru
 end
 
 # Phase dispatch aggregates INSTALL_HAD_ERRORS; mki-revert fail SKIPs remaining phases.
-function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
+function _rdi_run_phases --description "Run pkgs/aur/sys/services phases"
     not _install_packages; and set -g INSTALL_HAD_ERRORS true
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
         _phase_record "Packages: AUR (paru)" SKIP "mkinitcpio.conf revert failed — aborting"
         _phase_record "Configs: system file deployment" SKIP "aborted"
         _phase_record "Services: fstab opts" SKIP "aborted"
-        _phase_record "Services: configuration" SKIP "aborted"
+        _phase_record "Services: PKGS_DEL removal" SKIP "aborted"
+        _phase_record "Services: mask units" SKIP "aborted"
+        _phase_record "Services: enable units" SKIP "aborted"
         _err "Aborting remaining phases: mkinitcpio.conf revert failed (boot state inconsistent)"
         return 0
     end
@@ -4497,18 +4524,7 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/fstab/services phases"
         set -g INSTALL_HAD_ERRORS true
         _phase_record "Configs: system file deployment" FAIL "$_RY_DEPLOY_CHANGED_COUNT deployed, $_RY_DEPLOY_IDEMPOTENT_COUNT idempotent, see JSONL"
     end
-    if _install_fstab_opts
-        _phase_record "Services: fstab opts" PASS "noatime,lazytime,commit=10"
-    else
-        set -g INSTALL_HAD_ERRORS true
-        _phase_record "Services: fstab opts" FAIL "see JSONL log"
-    end
-    if _install_configure_services
-        _phase_record "Services: configuration" PASS "mask + enable ok"
-    else
-        set -g INSTALL_HAD_ERRORS true
-        _phase_record "Services: configuration" FAIL "see JSONL log"
-    end
+    _install_configure_services; or set -g INSTALL_HAD_ERRORS true
     test "$INSTALL_HAD_ERRORS" = true; and return 1
     return 0
 end
@@ -4693,7 +4709,7 @@ set -g _RY_POST_HOOKS \
 # First-match-wins: _RY_POST_HOOKS declaration order = priority (specific patterns first).
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"
     for _entry in $_RY_POST_HOOKS
-        set -l _parts (string split -r -m1 '|' -- $_entry)
+        set -l _parts (string split -m1 '|' -- $_entry)
         if string match -q "$_parts[1]" -- "$target"; echo "$_parts[2]"; return 0; end
     end
     return 1
@@ -4719,7 +4735,7 @@ function _idf_dispatch_hook --argument-names target tag --description "Dispatch 
     _post_$tag "$target"
 end
 
-# Single-file path: validate target is managed → atomic-write → dispatch post-hook (boot/service/resolved/logind/nm/sysctl/envd/cpupower/tmpfiles).
+# Single-file path: validate target is managed → skip-gate iwd → atomic-write → dispatch post-hook (boot/service/resolved/logind/nm/sysctl/envd/cpupower/tmpfiles).
 function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"
     _log_section "INSTALL-FILE START"
     if test -z "$target"
@@ -4732,6 +4748,13 @@ function _ry_do_install_file --argument-names target --description "Install a si
     set -l _use_sudo (_idf_use_sudo_for_dst "$target")
     if test -z "$_use_sudo"; _err "Not a managed file: $target"; _info "Run without path to see managed files"; return $EXIT_USAGE; end
     _echo "── ry-install v$VERSION - Install Single File ──"
+    # iwd-gate pre-check: suppress misleading "Installed" + post-hook dispatch for skipped targets.
+    if _should_skip_iwd "$target"
+        _warn "Skipped: $target (iwd package not installed)"
+        _log "INSTALL_FILE_SKIP_IWD: target=$target"
+        _log_section "INSTALL-FILE END"
+        return 0
+    end
     if test "$_use_sudo" = true; _ensure_sudo_cached; or return $EXIT_PREFLIGHT; end
     if not _ry_install_file "$target" $_use_sudo; _err "Failed to install: $target"; _log_section "INSTALL-FILE END"; return 1; end
     _echo
@@ -4808,6 +4831,12 @@ end
 # iwd reads main.conf at startup only: NM restart alone won't pick up iwd config changes; try-restart iwd first when main.conf is the target.
 function _post_nm --argument-names target --description "Post-hook: restart NetworkManager (+ try-restart iwd when iwd/main.conf changes); deferred when WiFi is active route"
     _echo
+    # Defensive: if iwd is absent, skip restart cascade (iwd backend cannot function anyway).
+    if not command -q pacman; or not command pacman -Qi iwd >/dev/null 2>&1
+        _warn "iwd-related config target but iwd package not installed — NM restart cascade skipped"
+        _log "POST_NM_SKIP_NO_IWD: target=$target"
+        return 0
+    end
     if _is_wifi_active_route
         _warn "NM/iwd config installed but NetworkManager restart deferred — WiFi is the active route."
         _info "  Config change will not take effect until next reboot or manual restart."

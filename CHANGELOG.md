@@ -1,5 +1,13 @@
 ry-install ChangeLog
 
+v7.5 - v7.6 - 2026-05-24
+
+- `_ry_do_install_file` iwd-gate pre-check: skipped target now emits skip-banner and returns 0 without dispatching the post-hook (previously printed false `Installed:` line + fired `_post_nm` cascade); `_post_nm` defensive `pacman -Qi iwd` precheck mirroring `_if_nm_restart`; new run-summary matrix rows for `Services: PKGS_DEL removal`, `Services: mask units`, `Services: enable units`; `_install_fstab_opts` moved into `_install_configure_services` head (matches README Phase 4 step 1 order); aggregate `Services: configuration` row replaced by granular rows; `_post_hook_for_target` drop redundant `-r` from `string split` (single-separator entries); `_if_nm_restart` sleep gets `</dev/null` for stdin closure under cron; partial-upgrade retry comment tightened.
+
+v7.4.74 - v7.5 - 2026-05-24
+
+- Drop 18 trailing WHY-comments adjacent to section dividers; version bump to stable v7.5.
+
 v7.4.73 - v7.4.74 - 2026-05-23
 
 - Trim ~75 verbose WHY-comments to compact single-line form; zero behavioural change; byte-identical content-generator output.

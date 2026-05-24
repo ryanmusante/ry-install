@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.6-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.7-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -70,7 +70,7 @@ Typical duration: **3–8 minutes**.
 > Sudo cache may lapse during the 3–8 min install. Mitigations:
 > - `sudo visudo`: add `Defaults timestamp_timeout=60` (60-min cache)
 > - Keepalive in another shell: `while true; sudo -v; sleep 60; end`
-> - Drop-in: `sudo visudo -f /etc/sudoers.d/ry-install` → `<user> ALL=(ALL) NOPASSWD: ALL`
+> - Drop-in: `sudo visudo -f /etc/sudoers.d/ry-install` → scope to specific binaries: `<user> ALL=(ALL) NOPASSWD: /usr/bin/pacman, /usr/bin/paru, /usr/bin/sdboot-manage, /usr/bin/mkinitcpio, /usr/bin/bootctl, /usr/bin/systemctl, /usr/bin/systemd-tmpfiles, /usr/bin/systemd-analyze, /usr/bin/sysctl, /usr/bin/findmnt, /usr/bin/paccache, /usr/bin/ufw, /usr/bin/install, /usr/bin/mv, /usr/bin/cp, /usr/bin/rm, /usr/bin/chmod, /usr/bin/chown, /usr/bin/find, /usr/bin/cat, /usr/bin/tee, /usr/bin/stat, /usr/bin/test, /usr/bin/grep, /usr/bin/awk, /usr/bin/cmp, /usr/bin/mktemp, /usr/bin/dmesg`. The blanket `NOPASSWD: ALL` form is simpler but elevates every command run as this user — prefer the scoped list.
 >
 > Interactive sudo fallback requires both stdin and stderr be TTYs; set `RY_INSTALL_NO_INTERACTIVE_SUDO=1` for strict-unattended cron/systemd usage.
 >
@@ -220,7 +220,7 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 |---|---|
 | Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` → `pacman -Sy --needed` (no `-u`). Violates [Arch policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported) |
 | AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` omitted — DKMS needs makedeps |
-| PGP failures | Pre-import key (`gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys <KEYID>`) or `paru -S <pkg>` manually |
+| PGP failures | Pre-import key (`gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys <KEYID>`) or `paru -S <pkg>` manually. `--skipreview` auto-declines the interactive key-import prompt, so the failure surfaces as `invalid or corrupted package (PGP signature)` in the JSONL stderr event — pre-import the key, then re-run |
 | Reverse deps | `PKGS_DEL` removal skipped on outside rdeps. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`); Plasma rdeps already enumerated |
 
 </details>
@@ -231,7 +231,7 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 |---|---|
 | 1 | `mktemp` in destination's parent dir (same-FS rename) |
 | 2 | Render embedded content into tmp file via `tee` |
-| 3 | Symlink probe (post-write; TOCTOU close) |
+| 3 | Symlink probe (post-write; narrows TOCTOU window to mktemp→tee) |
 | 4 | `chmod` to target mode |
 | 5 | `mv -T` to destination (atomic, same-FS) |
 
@@ -410,7 +410,7 @@ Applied immediately on install and on `--install-file` re-deploy; re-applied eve
 | `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |
 
-Loaded by `systemd --user`. Log out and back in to apply, OR run `systemctl --user import-environment` (and restart active user units) for a live apply without re-login. Note: `import-environment` only refreshes the systemd `--user` manager env; child processes already running keep their inherited env until restarted.
+Loaded by `systemd --user`. Log out and back in to apply, OR run `systemctl --user import-environment` (and restart active user units) for a live apply without re-login. Note: `import-environment` only refreshes the systemd `--user` manager env; child processes already running keep their inherited env until restarted. The user file installs `0600` — values are not exposed to other users on the system.
 
 </details>
 
@@ -561,7 +561,7 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-
 | `11` | `EXIT_GEN_NOFN` — content generator function missing (internal sentinel) |
 | `12` | `EXIT_GEN_NOUUID` — content generator missing prerequisite global (e.g. `_ROOT_UUID`) |
 | `13` | `EXIT_GEN_SYSCTL` — `_content__etc_sysctl.d_*` output count mismatch / malformed sysctl entry |
-| `128+N` | Signal (`129`=HUP, `130`=INT, `131`=QUIT, `143`=TERM, `134`=ABRT, `138`=USR1, `140`=USR2) |
+| `128+N` | Signal (`129`=HUP, `130`=INT, `131`=QUIT, `143`=TERM, `134`=ABRT, `138`=USR1, `140`=USR2). `137` (KILL) cannot be caught — surfaces only when external `pkill -KILL` or `_run`'s 10s post-TERM grace fires |
 | `251` | `EXIT_RUN_TMPFAIL` — `_run` failed to allocate stdout/stderr capture tmpfiles |
 
 </details>

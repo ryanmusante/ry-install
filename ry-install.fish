@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6.6 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.7 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -295,7 +295,8 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     umask $_prev_umask
     if test $_mk_rc -ne 0
         set --erase _RY_LOCK_DIR_OWNED
-        return 2
+        test -d "$LOCK_DIR"; and return 2
+        return 1
     end
     command chmod -- 700 "$LOCK_DIR" 2>/dev/null
     set -l _pid_tmp (command mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
@@ -333,6 +334,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     # Reclaim only if pid is well-formed and process is gone; PID-recycle race left to user (rm -rf ~/ry-install/.lock).
     if string match -qr '^[1-9]\d*$' -- "$_stale_pid"; and not command kill -0 "$_stale_pid" 2>/dev/null
         functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID not running, reclaiming)"
+        if test -L "$LOCK_DIR"; functions -q _log; and _log "LOCK_RECLAIM_REFUSED: $LOCK_DIR is a symlink"; return 1; end
         command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
         _acquire_lock_fresh; and return 0
     end
@@ -416,7 +418,7 @@ end
 
 # TERM → 0.5s grace → KILL: lets pacman/paru/mkinitcpio flush before forced kill.
 function _dc_kill_children --description "_do_cleanup sub. Release lock + reap child PIDs (pkill -P, then SIGKILL after grace)"
-    if set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED; set -q LOCK_DIR; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null; end
+    if set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED; set -q LOCK_DIR; and not test -L "$LOCK_DIR"; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null; end
     if command -q pkill
         command pkill -TERM -P "$fish_pid" 2>/dev/null
         # 0.5s grace: gives pacman/paru and atomic ops a chance to flush before SIGKILL.
@@ -1098,8 +1100,9 @@ function _warn --description "Emit WARN-level message and increment VERIFY_WARN"
 function _phase_record --argument-names check result evidence --description "Append a row to the install summary matrix and JSONL"
     set -l _e (string replace -ra '[\n\r│]' ' ' -- "$evidence")
     set -l _c (string replace -ra '[\n\r│]' ' ' -- "$check")
-    set -ga _RY_PHASE_RESULTS "$_c│$result│$_e"
-    _log "PHASE_RESULT: check='$_c' result=$result evidence='$_e'"
+    set -l _r (string replace -ra '[\n\r│]' ' ' -- "$result")
+    set -ga _RY_PHASE_RESULTS "$_c│$_r│$_e"
+    _log "PHASE_RESULT: check='$_c' result=$_r evidence='$_e'"
 end
 
 function _err --description "Emit ERR-level message (force-prints to stderr when _RY_LOUD_ERR=true)"
@@ -3256,24 +3259,39 @@ function _ry_apply_wireless_regdom --description "Apply RY_INSTALL_WIRELESS_REGD
         _log "REGDOM_SET_NOOP: cc=$_cc file=$_conf"
         return 0
     end
+    set -l _dst_dir (command dirname -- "$_conf")
+    if not sudo -n test -d "$_dst_dir" 2>/dev/null
+        if not sudo -n install -d -m 0755 -o root -g root -- "$_dst_dir" 2>/dev/null
+            _warn "  RY_INSTALL_WIRELESS_REGDOM: cannot create $_dst_dir"
+            _log "REGDOM_SET_FAIL: install -d $_dst_dir"
+            return 1
+        end
+    end
+    set -l _tmp (sudo -n mktemp -p "$_dst_dir" .ry-install.regdom.XXXXXX 2>/dev/null)
+    if test -z "$_tmp"; _warn "  RY_INSTALL_WIRELESS_REGDOM: mktemp failed"; _log "REGDOM_SET_FAIL: mktemp"; return 1; end
+    _track_tmpfile "$_tmp"
+    if sudo -n test -L "$_tmp" 2>/dev/null; _rm_tmp "$_tmp" true; _warn "  RY_INSTALL_WIRELESS_REGDOM: tmpfile is symlink, aborting"; _log "REGDOM_SET_FAIL: tmp is symlink"; return 1; end
     set -l _payload 'WIRELESS_REGDOM="'$_cc'"'
     set -l _err_tmp (_mktemp_or_null -p (_tmp_dir) ry-regdom-err.XXXXXX)
     _track_tmpfile "$_err_tmp"
-    _log "RUN: sudo -n tee -- $_conf (stdin: WIRELESS_REGDOM=$_cc)"
-    if printf '%s\n' "$_payload" | sudo -n tee -- "$_conf" >/dev/null 2>"$_err_tmp"
-        # tee inherits root umask; chmod 0644 normalizes (matches /etc/conf.d/*).
-        sudo -n chmod 0644 -- "$_conf" 2>/dev/null
-        _ok "  WIRELESS_REGDOM=$_cc → $_conf"
-        _log "REGDOM_SET: cc=$_cc file=$_conf"
+    _log "RUN: sudo -n tee -- $_tmp (stdin: WIRELESS_REGDOM=$_cc)"
+    if not printf '%s\n' "$_payload" | sudo -n tee -- "$_tmp" >/dev/null 2>"$_err_tmp"
+        set -l _err_msg ""
+        test "$_err_tmp" != /dev/null; and test -s "$_err_tmp"; and set _err_msg " err="(command head -n 1 -- "$_err_tmp" | string trim --)
         _rm_tmp "$_err_tmp" false
-        return 0
+        _rm_tmp "$_tmp" true
+        _warn "  RY_INSTALL_WIRELESS_REGDOM: failed to write tmpfile"
+        _log "REGDOM_SET_FAIL: cc=$_cc tmp=$_tmp$_err_msg"
+        return 1
     end
-    set -l _err_msg ""
-    test "$_err_tmp" != /dev/null; and test -s "$_err_tmp"; and set _err_msg " err="(command head -n 1 -- "$_err_tmp" | string trim --)
     _rm_tmp "$_err_tmp" false
-    _warn "  RY_INSTALL_WIRELESS_REGDOM: failed to write $_conf"
-    _log "REGDOM_SET_FAIL: cc=$_cc file=$_conf$_err_msg"
-    return 1
+    if not sudo -n chmod 0644 -- "$_tmp" 2>/dev/null; _rm_tmp "$_tmp" true; _warn "  RY_INSTALL_WIRELESS_REGDOM: chmod failed"; _log "REGDOM_SET_FAIL: chmod"; return 1; end
+    if not sudo -n chown root:root -- "$_tmp" 2>/dev/null; _rm_tmp "$_tmp" true; _warn "  RY_INSTALL_WIRELESS_REGDOM: chown failed"; _log "REGDOM_SET_FAIL: chown"; return 1; end
+    if not sudo -n mv -T -- "$_tmp" "$_conf" 2>/dev/null; _rm_tmp "$_tmp" true; _warn "  RY_INSTALL_WIRELESS_REGDOM: atomic mv failed"; _log "REGDOM_SET_FAIL: mv"; return 1; end
+    _untrack_tmpfile "$_tmp"
+    _ok "  WIRELESS_REGDOM=$_cc → $_conf"
+    _log "REGDOM_SET: cc=$_cc file=$_conf"
+    return 0
 end
 
 # ── INSTALL PHASE 1: PREFLIGHT ────────────────────────────────────────────────────────────────────

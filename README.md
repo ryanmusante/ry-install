@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.5-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.6-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -37,9 +37,7 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-Run as your normal user — root is refused; sudo is invoked internally.
-
-If you cannot set the executable bit: `fish ry-install.fish`.
+Run as your normal user — root is refused; sudo is invoked internally. If you cannot set the executable bit, use `fish ry-install.fish`.
 
 **Post-install:**
 1. Reboot — required for kernel cmdline, initramfs, NM backend switch.
@@ -74,12 +72,9 @@ Typical duration: **3–8 minutes**.
 > - Keepalive in another shell: `while true; sudo -v; sleep 60; end`
 > - Drop-in: `sudo visudo -f /etc/sudoers.d/ry-install` → `<user> ALL=(ALL) NOPASSWD: ALL`
 >
-> Interactive sudo fallback requires both stdin and stderr be TTYs; set
-> `RY_INSTALL_NO_INTERACTIVE_SUDO=1` for strict-unattended cron/systemd usage.
+> Interactive sudo fallback requires both stdin and stderr be TTYs; set `RY_INSTALL_NO_INTERACTIVE_SUDO=1` for strict-unattended cron/systemd usage.
 >
-> Recovery: re-run ry-install (idempotent). Boot-taint flags reset between
-> runs (per-process), so a fresh invocation observes a clean revert state
-> even if the prior run aborted on a boot-critical failure.
+> Recovery: re-run ry-install (idempotent). Boot-taint flags reset between runs (per-process), so a fresh invocation observes a clean revert state even if the prior run aborted on a boot-critical failure.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -140,9 +135,7 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 | `FAIL`               | `≥1 FAIL` (without boot-critical) |
 | `FAIL-BOOT-CRITICAL` | Boot rebuild cascade aborted (`EXIT_BOOT_CRIT`); prints **DO NOT REBOOT** + recovery steps |
 
-> `DEFER`, `SKIP`, and `N/A` buckets are informational; they do not affect the verdict computation.
-
-Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JSONL log still records every `PHASE_RESULT` event regardless).
+`DEFER`, `SKIP`, and `N/A` buckets are informational and do not affect the verdict. Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (JSONL log still records every `PHASE_RESULT` event).
 
 ## Configuration
 
@@ -173,7 +166,7 @@ Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JS
 | 4 | `pkgfile --update` | optional indexer (run when `pkgfile` installed) |
 
 <details>
-<summary><b>Packages — install</b> — 15 pkgs (<code>pacman -Syu --needed --noconfirm</code>)</summary>
+<summary><b>Packages — install</b> — 15 pkgs</summary>
 
 | Package | Purpose |
 |---|---|
@@ -196,7 +189,7 @@ Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JS
 </details>
 
 <details>
-<summary><b>Packages — AUR</b> — 2 pkgs (paru)</summary>
+<summary><b>Packages — AUR</b> — 2 pkgs</summary>
 
 | Package | Purpose |
 |---|---|
@@ -208,7 +201,7 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 </details>
 
 <details>
-<summary><b>Vulkan dependencies</b> — 3 pkgs (verify-only)</summary>
+<summary><b>Vulkan dependencies</b> — 3 pkgs</summary>
 
 | Package | Source |
 |---|---|
@@ -243,7 +236,7 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 | 5 | `mv -T` to destination (atomic, same-FS) |
 
 <details>
-<summary><b>Kernel cmdline</b> — 15 params (deployed as <code>rw root=UUID=&lt;runtime UUID&gt; …</code>)</summary>
+<summary><b>Kernel cmdline</b> — 15 params</summary>
 
 | Param | Value |
 |---|---|
@@ -314,7 +307,7 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 </details>
 
 <details>
-<summary><b>systemd-logind</b> — 9 keys (all <code>=ignore</code>; power-handling deferred to userspace)</summary>
+<summary><b>systemd-logind</b> — 9 keys</summary>
 
 | Key | Value |
 |---|---|
@@ -417,11 +410,7 @@ Applied immediately on install and on `--install-file` re-deploy; re-applied eve
 | `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |
 
-Loaded by `systemd --user`. Log out and back in to apply, OR run
-`systemctl --user import-environment` (and restart active user units)
-for a live apply without re-login. Note: `import-environment` only
-refreshes the systemd `--user` manager env; child processes already
-running keep their inherited env until restarted.
+Loaded by `systemd --user`. Log out and back in to apply, OR run `systemctl --user import-environment` (and restart active user units) for a live apply without re-login. Note: `import-environment` only refreshes the systemd `--user` manager env; child processes already running keep their inherited env until restarted.
 
 </details>
 
@@ -522,13 +511,10 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-
 
 ## Managed Files
 
-12 files deployed via the [Phase 3](#phase-3--configuration-files)
-atomic-write sequence. System files install `0644`, the user file
-`0600`. The two iwd-gated destinations (`/etc/iwd/main.conf` and the
-NetworkManager drop-in) are skipped when `iwd` is not installed.
+12 files deployed via the [Phase 3](#phase-3--configuration-files) atomic-write sequence. System files install `0644`, the user file `0600`. The two iwd-gated destinations (`/etc/iwd/main.conf` and the NetworkManager drop-in) are skipped when `iwd` is not installed.
 
 <details>
-<summary><b>Destinations</b> — 12 paths (system <code>0644</code>, user <code>0600</code>)</summary>
+<summary><b>Destinations</b> — 12 paths</summary>
 
 | Path | Mode |
 |---|---|
@@ -561,7 +547,7 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal; WINCH non-fatal (progress bar re-anchor) |
 
 <details>
-<summary><b>Exit codes</b> — 12 entries (11 numeric + 128+N signal class)</summary>
+<summary><b>Exit codes</b> — 12 entries</summary>
 
 | Code | Meaning |
 |---|---|
@@ -621,8 +607,7 @@ jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/log
 
 ## Uninstall
 
-No automated uninstaller. Use [Managed Files](#managed-files) as the
-rollback source-of-truth:
+No automated uninstaller. Use [Managed Files](#managed-files) as the rollback source-of-truth:
 
 1. `sudo systemctl unmask` the 12 masked units.
 2. `sudo rm` deployed paths from the Managed Files list.
@@ -636,7 +621,7 @@ rollback source-of-truth:
 | Category | Issue | Workaround |
 |---|---|---|
 | Strix Halo GPU | CWSR hang | `amdgpu.cwsr_enable=0` (already set) |
-| Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` (AUR alt firmware) OR add `IgnorePkg = linux-firmware` to `/etc/pacman.conf` |
+| Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` (AUR alt firmware) OR pin via `IgnorePkg = linux-firmware` in `/etc/pacman.conf` — note the pin leaves all firmware unpatched against future CVEs until removed |
 | Strix Halo GPU | ROCm VRAM allocation | Fixed in kernel 6.16+ (`sudo pacman -Syu linux-cachyos`) |
 | MediaTek MT7925 | Kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
 | MediaTek MT7925 | TX power 3 dBm / random deauth | None (cosmetic / upstream) |

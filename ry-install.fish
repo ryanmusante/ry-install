@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6.5 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.6 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -697,7 +697,18 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     _ir_resolve_root_uuid
     if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
         set -l _cpu_model (string match -rg -- '^model name\s*:\s*(.*)$' < /proc/cpuinfo 2>/dev/null)[1]
-        if test -n "$_cpu_model"; and not string match -q -i -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"
+        if test -z "$_cpu_model"
+            # Fail-closed: empty model name means we cannot validate hardware; require explicit override.
+            if test "$RY_INSTALL_SKIP_HARDWARE_CHECK" = 1
+                _warn "Hardware check (override): CPU model unreadable from /proc/cpuinfo — proceeding"
+                _log "HARDWARE_MODEL_UNREADABLE_OVERRIDE: /proc/cpuinfo missing 'model name'"
+            else
+                _err_loud "Hardware check: CPU model unreadable from /proc/cpuinfo (no 'model name' field) — refusing to deploy"
+                _err_loud "  Deploying gfx1151/Strix Halo defaults without CPU validation risks incorrect kernel cmdline + initramfs MODULES."
+                _err_loud "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish"
+                _pre_dispatch_exit $EXIT_PREFLIGHT
+            end
+        else if not string match -q -i -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"
             if test "$RY_INSTALL_SKIP_HARDWARE_CHECK" = 1
                 _warn "Hardware mismatch (override): expected $EXPECTED_CPU_MATCH, detected: $_cpu_model"
                 _log "HARDWARE_MISMATCH_OVERRIDE: expected=$EXPECTED_CPU_MATCH detected=$_cpu_model"
@@ -1625,7 +1636,6 @@ function _vmh_existence_only --description "_ry_validate_mkinitcpio_hooks sub. E
         end
     end
     test $errors -eq 0
-    return $status
 end
 
 # 8 BEFORE:AFTER pairs: upstream mkinitcpio build-order invariants.
@@ -1675,7 +1685,6 @@ function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS 
     string match -qr '^\d+$' -- "$_order_errs"; or set _order_errs 0
     set errors (math $errors + $_order_errs)
     test $errors -eq 0
-    return $status
 end
 
 function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODULES array entries"
@@ -3268,10 +3277,7 @@ function _ry_apply_wireless_regdom --description "Apply RY_INSTALL_WIRELESS_REGD
 end
 
 # ── INSTALL PHASE 1: PREFLIGHT ────────────────────────────────────────────────────────────────────
-function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_ERR, mark progress skip"
-    set --erase _RY_LOUD_ERR
-    set -g _PROG_FINALIZED_SKIP true
-end
+function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_ERR, mark progress skip"; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; end
 
 function _ip_record_regdom --argument-names _ar_rc --description "_install_preflight sub. Record wireless-regdom phase result"
     if set -q RY_INSTALL_WIRELESS_REGDOM; and test -n "$RY_INSTALL_WIRELESS_REGDOM"
@@ -3599,7 +3605,7 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
         end
     end
     if test "$_had_fail" = true
-        _info "  Common cause: AUR maintainer PGP key not in keyring (suppressed by --skipreview)."
+        _info "  Common cause: AUR maintainer PGP key not in keyring; interactive import prompt is auto-declined under --skipreview."
         _info "  Inspect the stderr event in the JSONL log; if it mentions 'invalid or corrupted package (PGP signature)',"
         _info "  pre-import the maintainer key: gpg --recv-keys <KEYID>, then re-run install."
         _info "  Alternatively, install the affected package manually: paru -S <pkg> (without --skipreview)."
@@ -4732,15 +4738,32 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
     return 0
 end
 
-# daemon-reload picks up ExecStart change; try-restart re-runs active units (oneshot idempotent).
+# daemon-reload picks up ExecStart change; try-restart re-runs active units (oneshot idempotent). User-scope targets routed to `systemctl --user` (parity with _verify_unit_content scope detection).
 function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit (+ try-restart to pick up changed ExecStart)"
     set -l _rc 0
     set -l _bn (command basename -- "$target")
+    set -l _is_user false
+    string match -q '*/.config/systemd/user/*' -- "$target"; and set _is_user true
+    if test "$_is_user" = true
+        if not _has_user_bus_active
+            _warn "User-scope service $_bn deployed but no active user-bus — enable on next login or via loginctl enable-linger \$USER"
+            _log "POST_SERVICE_NO_USER_BUS: target=$target"
+            return 0
+        end
+        _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
+        if not _run systemctl --user enable --now -- "$_bn"; _warn "Failed to enable $_bn (user)"; set _rc 1; end
+        if not _run systemctl --user try-restart -- "$_bn"
+            _log "POST_SERVICE_TRY_RESTART: rc=non-zero unit=$_bn scope=user"
+            _warn "try-restart of $_bn (user) failed (ExecStart change applies on next start)"
+            test $_rc -eq 0; and set _rc 1
+        end
+        return $_rc
+    end
     _run sudo -n systemctl daemon-reload; or _warn "Systemctl daemon-reload failed"
     if not _run sudo -n systemctl enable --now -- "$_bn"; _warn "Failed to enable $_bn (system)"; set _rc 1; end
     # try-restart picks up ExecStart for non-oneshot; oneshot+RemainAfterExit re-runs idempotently.
     if not _run sudo -n systemctl try-restart -- "$_bn"
-        _log "POST_SERVICE_TRY_RESTART: rc=non-zero unit=$_bn"
+        _log "POST_SERVICE_TRY_RESTART: rc=non-zero unit=$_bn scope=system"
         _warn "try-restart of $_bn failed (ExecStart change applies on next start)"
         test $_rc -eq 0; and set _rc 1
     end
@@ -4849,10 +4872,7 @@ function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/d
     set -g _RY_LOG_SUPPRESS_CREATE true
 end
 
-function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: log/dir cleanup, then exit"
-    _pre_dispatch_log_cleanup
-    _ry_exit $code
-end
+function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: log/dir cleanup, then exit"; _pre_dispatch_log_cleanup; _ry_exit $code; end
 
 function _early_usage_exit --description "Print usage error to stderr, remove pre-dispatch log, exit EXIT_USAGE"
     echo "[ERR] $argv" >&2
@@ -4977,10 +4997,7 @@ if set -q _RY_DEFERRED_WARNS
 end
 
 set -g _RY_EXIT_CODE 0
-function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE and _INTENDED_EXIT_CODE atomically"
-    set -g _RY_EXIT_CODE $_code
-    set -g _INTENDED_EXIT_CODE $_code
-end
+function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE and _INTENDED_EXIT_CODE atomically"; set -g _RY_EXIT_CODE $_code; set -g _INTENDED_EXIT_CODE $_code; end
 _init_runtime
 switch $MODE
     case install-file install

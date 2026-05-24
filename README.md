@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.67-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.70-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -110,7 +110,7 @@ Runtime init requires CPU matching `Ryzen AI Max` (checked on every mode); overr
 |---|---|---|
 | 1 | Preflight | Validate prerequisites, acquire lock, validate runtime |
 | 2 | Packages | `pacman -Syu --needed`; AUR via paru; `updatedb` + `pkgfile --update` cache refresh |
-| 3 | Configuration files | Deploy 12 embedded config files (atomic) |
+| 3 | Configuration | Deploy 12 embedded config files (atomic) |
 | 4 | Services | fstab ext4 opts; `systemd-resolved` restart; THP tmpfiles apply; `PKGS_DEL` removal; mask 12 desktop/power units; `daemon-reload` + enable runtime units |
 | 5 | Boot | Rebuild initramfs, update systemd-boot entries |
 | 6 | Finalize | `systemctl --user daemon-reload`; pacman cache cleanup; NM restart (deferred to next reboot when WiFi is the active route); write JSONL footer |
@@ -155,7 +155,7 @@ Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JS
 | 6 | `_ry_check_disk_space` | 2 GiB `/`, 200 MiB `/boot` |
 | 7 | `_ry_check_network` | archlinux.org, cloudflare.com (HTTPS), 1.1.1.1 (ICMP) |
 | 8 | `_ry_check_kernel_version` | ≥ 6.14 FAIL, ≥ 6.18.4 WARN, ntsync probe |
-| 9 | Wireless regdom | opt-in apply via `RY_INSTALL_WIRELESS_REGDOM=<CC>` |
+| 9 | Wireless regdom | opt-in apply via `RY_INSTALL_WIRELESS_REGDOM=<CC>`; always-on check warns on unset/invalid |
 | 10 | `_ry_validate_configs` | per-destination format validators |
 
 ### Phase 2 — Packages
@@ -231,10 +231,12 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 
 | # | Step |
 |---|---|
-| 1 | Render to tmp file (in destination's parent dir) |
-| 2 | Symlink probe on tmp file (pre-render and post-render) |
-| 3 | `chmod` to target mode |
-| 4 | `mv -T` to destination |
+| 1 | `mktemp` in destination's parent dir (same-FS rename) |
+| 2 | Symlink probe (pre-render) |
+| 3 | Render embedded content into tmp file via `tee` |
+| 4 | Symlink probe (post-write; TOCTOU close) |
+| 5 | `chmod` to target mode |
+| 6 | `mv -T` to destination (atomic, same-FS) |
 
 <details>
 <summary><b>Kernel cmdline</b> — 15 params (deployed as <code>rw root=UUID=&lt;runtime UUID&gt; …</code>)</summary>
@@ -493,7 +495,7 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-
 | `NetworkManager.service` | also enabled by its pacman scriptlet (deduped via `_RY_PKG_MANAGED_SERVICES`) |
 | `cpupower.service` | oneshot — accepts `active` or `exited` |
 
-`NetworkManager-dispatcher.service` is checked but not force-enabled.
+`NetworkManager-dispatcher.service` is enabled when installed and not already enabled; silently skipped when absent.
 
 </details>
 
@@ -525,23 +527,20 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 <details>
 <summary><b>Destinations</b> — 12 paths (system <code>0644</code>, user <code>0600</code>)</summary>
 
-System (`0644`):
-
-- `/boot/loader/loader.conf`
-- `/etc/kernel/cmdline`
-- `/etc/sdboot-manage.conf`
-- `/etc/mkinitcpio.conf`
-- `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`
-- `/etc/systemd/logind.conf.d/99-cachyos-logind.conf`
-- `/etc/iwd/main.conf` *(skipped when iwd absent)*
-- `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` *(skipped when iwd absent)*
-- `/etc/default/cpupower-service.conf`
-- `/etc/sysctl.d/99-cachyos-sysctl.conf`
-- `/etc/tmpfiles.d/99-cachyos-thp.conf`
-
-User (`0600`):
-
-- `~/.config/environment.d/10-environment.conf`
+| Path | Mode |
+|---|---|
+| `/boot/loader/loader.conf` | `0644` |
+| `/etc/kernel/cmdline` | `0644` |
+| `/etc/sdboot-manage.conf` | `0644` |
+| `/etc/mkinitcpio.conf` | `0644` |
+| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | `0644` |
+| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | `0644` |
+| `/etc/iwd/main.conf` *(skipped when iwd absent)* | `0644` |
+| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` *(skipped when iwd absent)* | `0644` |
+| `/etc/default/cpupower-service.conf` | `0644` |
+| `/etc/sysctl.d/99-cachyos-sysctl.conf` | `0644` |
+| `/etc/tmpfiles.d/99-cachyos-thp.conf` | `0644` |
+| `~/.config/environment.d/10-environment.conf` | `0600` |
 
 </details>
 
@@ -556,7 +555,7 @@ User (`0600`):
 | mkinitcpio rollback | Byte-exact revert on `pacman -Syu` failure or signal |
 | Root detection | Refuses root; sudo invoked internally |
 | Instance lock | Atomic mkdir `0700`; reclaims dead-PID lock; verifies `/proc/$pid/comm = fish` |
-| Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal |
+| Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal; WINCH non-fatal (progress bar re-anchor) |
 
 <details>
 <summary><b>Exit codes</b> — 11 codes</summary>

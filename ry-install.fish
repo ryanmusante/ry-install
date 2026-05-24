@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.4.67 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.70 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.67"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.70"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -565,7 +565,7 @@ set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
-set -g RESOLVED_MDNS resolve
+set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT opportunistic; set -g RESOLVED_DNSSEC allow-downgrade
 set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKey HandleSuspendKeyLongPress HandleHibernateKey HandleHibernateKeyLongPress HandleRebootKey HandleRebootKeyLongPress HandleSecureAttentionKey
 set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
@@ -771,7 +771,7 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
 end
 
 function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
-    printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=no" "DNSOverTLS=opportunistic" "DNSSEC=allow-downgrade"
+    printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
 end
 
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
@@ -2131,7 +2131,7 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _vss_ntsync_modules
     _echo "── resolved ──"
     if _chk_file /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
-        for kv in "MulticastDNS=$RESOLVED_MDNS" "DNSOverTLS=opportunistic" "DNSSEC=allow-downgrade" "LLMNR=no"; _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "$kv"; end
+        for kv in "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"; _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "$kv"; end
     end
     _echo "── logind.conf ──"
     _vss_logind
@@ -3232,8 +3232,7 @@ function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache m
         "" >&2
 end
 
-# ── WIRELESS REGULATORY DOMAIN (OPT-IN via RY_INSTALL_WIRELESS_REGDOM) ────────────────────────────
-# cfg80211 udev rule pipes /etc/conf.d/wireless-regdom through set-wireless-regdom on boot.
+# ── WIRELESS REGULATORY DOMAIN (OPT-IN via RY_INSTALL_WIRELESS_REGDOM; cfg80211 udev rule pipes /etc/conf.d/wireless-regdom through set-wireless-regdom on boot) ──
 function _ry_check_wireless_regdom --description "Warn if WIRELESS_REGDOM unset or invalid — set-wireless-regdom skips iw reg set otherwise, leaving cfg80211 in world domain"
     set -l _conf /etc/conf.d/wireless-regdom
     if not test -f "$_conf"
@@ -4250,7 +4249,7 @@ function _irb_taint_gate --description "_install_rebuild_boot sub. Verify mkinit
         _irb_skip_post_mki
         return $EXIT_BOOT_CRIT
     end
-    if test "$_RY_BOOT_TAINTED" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
+    if test "$_RY_BOOT_TAINTED" = true; and test "$RY_INSTALL_FORCE_BOOT_REBUILD" != 1
         _err "Refusing initramfs rebuild — an earlier phase of THIS run tainted package or boot-critical config state"
         _err "  (mkinitcpio.conf, kernel cmdline, loader, sdboot-manage, or pacman/AUR install failed)"
         _err "  Resolve manually then re-run, OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
@@ -4679,7 +4678,7 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
         _log "POST_BOOT_REFUSED: _RY_MKI_REVERT_FAILED=true target=$target"
         return $EXIT_BOOT_CRIT
     end
-    if test "$_RY_BOOT_TAINTED" = true; and not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
+    if test "$_RY_BOOT_TAINTED" = true; and test "$RY_INSTALL_FORCE_BOOT_REBUILD" != 1
         _err "Refusing initramfs rebuild — _RY_BOOT_TAINTED=true (intra-process flag from prior deploy step or env)"
         _err "  Re-run unattended install OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
         _log "POST_BOOT_REFUSED: _RY_BOOT_TAINTED=true target=$target"
@@ -4886,7 +4885,7 @@ if test -f "$old_log"; and test "$old_log" != "$new_log"
             echo "[WARN] Log rename via mv failed; recovered via cp+rm: $old_log -> $new_log" >&2
         else
             set _log_rename_ok false
-            set -g _RY_LOG_WRITE_FAIL true
+            not set -q _RY_LOG_WRITE_FAIL; and set -g _RY_LOG_WRITE_FAIL true
             echo "[WARN] Log rename failed (mv and cp both): $old_log -> $new_log (keeping old path)" >&2
         end
     end
@@ -4916,7 +4915,7 @@ printf "$_hdr_fmt" (command date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NA
 if test $status -eq 0
     set -g _RY_HEADER_WRITTEN true
 else
-    set -g _RY_LOG_WRITE_FAIL true
+    not set -q _RY_LOG_WRITE_FAIL; and set -g _RY_LOG_WRITE_FAIL true
 end
 
 if set -q _RY_PERM_FIX_NOTICES

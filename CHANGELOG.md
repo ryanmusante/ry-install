@@ -1,5 +1,17 @@
 ry-install ChangeLog
 
+v7.4.69 - v7.4.70 - 2026-05-23
+
+- README Phase 1 row 9 documents always-on `_ry_check_wireless_regdom` (warn on unset/invalid) alongside opt-in `_ry_apply_wireless_regdom`; Safety signals row appends `WINCH` (non-fatal; `_progress_on_winch` re-anchors progress bar on terminal resize); zero behavioural change.
+
+v7.4.68 - v7.4.69 - 2026-05-23
+
+- `_verify_static_system` resolved.conf grep list parameterized via `$RESOLVED_LLMNR`/`$RESOLVED_DOT`/`$RESOLVED_DNSSEC`; `_irb_taint_gate` + `_post_boot` `not test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1` → `test "$RY_INSTALL_FORCE_BOOT_REBUILD" != 1`; `_ry_check_wireless_regdom` section divider merged with cfg80211 udev note.
+
+v7.4.67 - v7.4.68 - 2026-05-23
+
+- `_content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf` parameterize LLMNR/DOT/DNSSEC via new `RESOLVED_LLMNR`/`RESOLVED_DOT`/`RESOLVED_DNSSEC` globals (matches sibling generators; bytes-identical output); README Phase 3 table 4 → 6 rows (mktemp/probe-pre/render/probe-post/chmod/mv-T mirrors `_atomic_write_file`); README NM-dispatcher note corrected (enabled when present and disabled); `_RY_LOG_WRITE_FAIL` setter at log-rename + header-write fail paths gains `not set -q` guard (style alignment with `_log`/`_write_footer`).
+
 v7.4.66 - v7.4.67 - 2026-05-23
 
 - README + script + CHANGELOG version-aligned; CHANGELOG trimmed to kernel.org single-bullet form; zero behavioural change.

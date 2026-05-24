@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.1 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -191,7 +191,7 @@ function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_
             test "$KVER_MAJOR" -eq 6; and test "$KVER_MINOR" -lt 14
         end
         printf '%s\n' unavailable
-    else if _kconfig_cache | command grep -q -- '^CONFIG_NTSYNC=y'
+    else if _kconfig_cache | command grep -q -- '^CONFIG_NTSYNC=y' 2>/dev/null
         printf '%s\n' builtin
     else if test -c /dev/ntsync
         printf '%s\n' loaded
@@ -3504,7 +3504,7 @@ function _ip_pacman_invoke --description "Run pacman -Syu (or -Sy via RY_INSTALL
                 _err "Package installation failed after retry"
             end
             if test "$_RY_MKI_HAD_ORIG" = true; and test -n "$_RY_MKI_BACKUP_FILE"
-                # Snapshot retained for caller frame; _install_packages cleans _RY_MKI_BACKUP_FILE via _rm_tmp after _ip_run_and_verify returns.
+                # Snapshot kept; caller _install_packages cleans _RY_MKI_BACKUP_FILE after verify returns.
                 set -g _RY_PACMAN_REVERT_ATTEMPTED true
                 if not _mkinitcpio_revert "$_RY_MKI_BACKUP_FILE"; set -g _RY_MKI_REVERT_FAILED true; _err "Mkinitcpio revert failed — boot state may be inconsistent; aborting"; end
             end
@@ -4735,7 +4735,7 @@ function _idf_dispatch_hook --argument-names target tag --description "Dispatch 
     _post_$tag "$target"
 end
 
-# Single-file path: validate target is managed → skip-gate iwd → atomic-write → dispatch post-hook (boot/service/resolved/logind/nm/sysctl/envd/cpupower/tmpfiles).
+# Single-file path: validate managed → iwd skip-gate → atomic-write → dispatch post-hook.
 function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"
     _log_section "INSTALL-FILE START"
     if test -z "$target"
@@ -4799,7 +4799,7 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
     return 0
 end
 
-# daemon-reload picks up ExecStart change; try-restart re-runs for active units (oneshot idempotent).
+# daemon-reload picks up ExecStart change; try-restart re-runs active units (oneshot idempotent).
 function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit (+ try-restart to pick up changed ExecStart)"
     set -l _rc 0
     set -l _bn (command basename -- "$target")
@@ -4828,7 +4828,7 @@ function _post_logind --argument-names target --description "Post-hook: notify r
     return 0
 end
 
-# iwd reads main.conf at startup only: NM restart alone won't pick up iwd config changes; try-restart iwd first when main.conf is the target.
+# iwd reads main.conf at startup only; try-restart iwd first when main.conf is the target.
 function _post_nm --argument-names target --description "Post-hook: restart NetworkManager (+ try-restart iwd when iwd/main.conf changes); deferred when WiFi is active route"
     _echo
     # Defensive: if iwd is absent, skip restart cascade (iwd backend cannot function anyway).
@@ -4892,7 +4892,7 @@ function _post_envd --argument-names target --description "Post-hook: notify ses
     return 0
 end
 
-# Restart re-sources /etc/default/cpupower-service.conf; under amd_pstate=active, governor maps internally to EPP value.
+# Restart re-sources cpupower-service.conf; under amd_pstate=active, governor maps to EPP.
 function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change"
     _echo
     if not _run sudo -n systemctl restart cpupower.service
@@ -5026,7 +5026,7 @@ for _r in $_argv_in; set -a _argv_parts '"'(_json_str "$_r")'"'; end
 set -l _argv_json '['(string join -- ',' $_argv_parts)']'
 set -l _verbose_json false
 test "$QUIET" = false; and set _verbose_json true
-# INVARIANT: _hdr_fmt MUST be a literal — printf reads its first arg as format; never parameterize from input.
+# INVARIANT: _hdr_fmt MUST be literal — printf format arg never parameterized.
 set -l _hdr_fmt '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n'
 printf "$_hdr_fmt" (command date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null
 if test $status -eq 0

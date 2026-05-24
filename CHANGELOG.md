@@ -1,5 +1,9 @@
 ry-install ChangeLog
 
+v7.6 - v7.6.1 - 2026-05-24
+
+- `_ntsync_state` `CONFIG_NTSYNC=y` `grep -q` gains `2>/dev/null` for stderr symmetry with sibling `/proc/modules` probe; six >100-char inline comments compressed in-place; byte-identical content-generator output.
+
 v7.5 - v7.6 - 2026-05-24
 
 - `_ry_do_install_file` iwd-gate pre-check: skipped target now emits skip-banner and returns 0 without dispatching the post-hook (previously printed false `Installed:` line + fired `_post_nm` cascade); `_post_nm` defensive `pacman -Qi iwd` precheck mirroring `_if_nm_restart`; new run-summary matrix rows for `Services: PKGS_DEL removal`, `Services: mask units`, `Services: enable units`; `_install_fstab_opts` moved into `_install_configure_services` head (matches README Phase 4 step 1 order); aggregate `Services: configuration` row replaced by granular rows; `_post_hook_for_target` drop redundant `-r` from `string split` (single-separator entries); `_if_nm_restart` sleep gets `</dev/null` for stdin closure under cron; partial-upgrade retry comment tightened.

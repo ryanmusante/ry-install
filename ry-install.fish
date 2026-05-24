@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.4.65 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.4.67 (2026-05-23) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.4.65"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.4.67"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -34,6 +34,7 @@ function _ry_show_help --description "Display usage information and available su
         "  -v, --version     Show version" \
         "EXIT CODES:" \
         "  0 ok · 1 verify-FAIL, install-error, or kernel <6.14 hard-floor fail · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
+        "  11 gen-nofn (content-gen fn missing) · 12 gen-nouuid (prereq global missing) · 13 gen-sysctl (malformed entry) · 251 run-tmpfail (_run tmpfile alloc)" \
         "  Signal-induced runs: process \$status may not match signal (fish --on-signal limitation);" \
         "  canonical code recorded in JSONL footer.exit_code (130 INT / 143 TERM / 129 HUP / 131 QUIT / 134 ABRT / 138 USR1 / 140 USR2)" \
         "ENVIRONMENT (see README.md for detail):" \

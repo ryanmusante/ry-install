@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.65-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.67-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -453,12 +453,12 @@ Idempotent rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `d
 | `cachyos-plymouth-theme` | boot splash |
 | `breeze-plymouth` | boot splash (Plasma rdep) |
 | `plymouth-kcm` | boot splash (Plasma rdep) |
-| `bolt` | Thunderbolt manager |
-| `plasma-thunderbolt` | Thunderbolt (Plasma rdep) |
 | `octopi` | pacman GUI |
 | `micro` | text editor |
 | `cachyos-micro-settings` | text editor |
 | `btop` | replaced by `bottom` |
+| `bolt` | Thunderbolt manager |
+| `plasma-thunderbolt` | Thunderbolt (Plasma rdep) |
 
 Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-plymouth`, `plymouth-kcm`, `plasma-thunderbolt`) enumerated so `pacman -R` does not refuse on rdep-hold.
 
@@ -469,11 +469,6 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-
 
 | Unit | Reason |
 |---|---|
-| `sleep.target` | suspend / hibernate disabled |
-| `suspend.target` | suspend / hibernate disabled |
-| `hibernate.target` | suspend / hibernate disabled |
-| `hybrid-sleep.target` | suspend / hibernate disabled |
-| `suspend-then-hibernate.target` | suspend / hibernate disabled |
 | `ananicy-cpp.service` | cgroups used instead |
 | `avahi-daemon.service` | systemd-resolved mDNS |
 | `avahi-daemon.socket` | systemd-resolved mDNS |
@@ -481,6 +476,11 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-
 | `lvm2-monitor.service` | no LVM |
 | `NetworkManager-wait-online.service` | boot delay |
 | `ufw.service` | rules flushed pre-mask via `ufw --force disable` |
+| `sleep.target` | suspend / hibernate disabled |
+| `suspend.target` | suspend / hibernate disabled |
+| `hibernate.target` | suspend / hibernate disabled |
+| `hybrid-sleep.target` | suspend / hibernate disabled |
+| `suspend-then-hibernate.target` | suspend / hibernate disabled |
 
 </details>
 
@@ -559,7 +559,7 @@ User (`0600`):
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal |
 
 <details>
-<summary><b>Exit codes</b> — 8 codes</summary>
+<summary><b>Exit codes</b> — 11 codes</summary>
 
 | Code | Meaning |
 |---|---|
@@ -570,7 +570,11 @@ User (`0600`):
 | `4` | Boot-critical failure |
 | `5` | Lock failed |
 | `10` | `--check` drift |
+| `11` | `EXIT_GEN_NOFN` — content generator function missing (internal sentinel) |
+| `12` | `EXIT_GEN_NOUUID` — content generator missing prerequisite global (e.g. `_ROOT_UUID`) |
+| `13` | `EXIT_GEN_SYSCTL` — `_content__etc_sysctl.d_*` output count mismatch / malformed sysctl entry |
 | `128+N` | Signal (`129`=HUP, `130`=INT, `131`=QUIT, `143`=TERM, `134`=ABRT, `138`=USR1, `140`=USR2) |
+| `251` | `EXIT_RUN_TMPFAIL` — `_run` failed to allocate stdout/stderr capture tmpfiles |
 
 </details>
 

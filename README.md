@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.4.70-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.4.73-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -112,8 +112,8 @@ Runtime init requires CPU matching `Ryzen AI Max` (checked on every mode); overr
 | 2 | Packages | `pacman -Syu --needed`; AUR via paru; `updatedb` + `pkgfile --update` cache refresh |
 | 3 | Configuration | Deploy 12 embedded config files (atomic) |
 | 4 | Services | fstab ext4 opts; `systemd-resolved` restart; THP tmpfiles apply; `PKGS_DEL` removal; mask 12 desktop/power units; `daemon-reload` + enable runtime units |
-| 5 | Boot | Rebuild initramfs, update systemd-boot entries |
-| 6 | Finalize | `systemctl --user daemon-reload`; pacman cache cleanup; NM restart (deferred to next reboot when WiFi is the active route); write JSONL footer |
+| 5 | Boot | Rebuild initramfs, update systemd-boot entries, post-rebuild sanity |
+| 6 | Finalize | `systemctl --user daemon-reload`; pacman cache cleanup; NM restart (deferred to next reboot when WiFi is the active route) |
 
 ## Run Summary
 
@@ -155,7 +155,7 @@ Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (the JS
 | 6 | `_ry_check_disk_space` | 2 GiB `/`, 200 MiB `/boot` |
 | 7 | `_ry_check_network` | archlinux.org, cloudflare.com (HTTPS), 1.1.1.1 (ICMP) |
 | 8 | `_ry_check_kernel_version` | ≥ 6.14 FAIL, ≥ 6.18.4 WARN, ntsync probe |
-| 9 | Wireless regdom | opt-in apply via `RY_INSTALL_WIRELESS_REGDOM=<CC>`; always-on check warns on unset/invalid |
+| 9 | Wireless regdom | opt-in apply via `RY_INSTALL_WIRELESS_REGDOM=<CC>` runs first; always-on check then warns on unset/invalid |
 | 10 | `_ry_validate_configs` | per-destination format validators |
 
 ### Phase 2 — Packages
@@ -515,7 +515,6 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps (`breeze-
 | 1 | `systemctl --user daemon-reload` (skipped when no active user-bus) |
 | 2 | pacman cache cleanup (`paccache`) |
 | 3 | NetworkManager restart to apply the wpa_supplicant → iwd backend switch — deferred to next reboot when WiFi is the active route |
-| 4 | Write JSONL log footer |
 
 ## Managed Files
 
@@ -558,7 +557,7 @@ NetworkManager drop-in) are skipped when `iwd` is not installed.
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal; WINCH non-fatal (progress bar re-anchor) |
 
 <details>
-<summary><b>Exit codes</b> — 11 codes</summary>
+<summary><b>Exit codes</b> — 12 entries (11 numeric + 128+N signal class)</summary>
 
 | Code | Meaning |
 |---|---|

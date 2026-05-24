@@ -1,5 +1,17 @@
 ry-install ChangeLog
 
+v7.4.72 - v7.4.73 - 2026-05-23
+
+- Lift single-line WHY-comments above ~90 function declarations covering signal-handling, cleanup orchestration, JSONL footer, lock acquisition, runtime init, content generators, sudo/sys helpers, progress bar, command runner, kernel-version compare, mkinitcpio hook ordering, atomic file writes, static + runtime verifiers, install phases, AUR build verification, pacman cascade filter, boot path resolution, post-rebuild sanity, matrix renderer, and post-hook handlers; zero behavioural change.
+
+v7.4.71 - v7.4.72 - 2026-05-23
+
+- `_content__etc_default_cpupower-service.conf` parameterize via new `$CPUPOWER_GOVERNOR` global (matches sibling generators; bytes-identical default output); `_check_boot_taint_gate` helper extracted from `_irb_taint_gate` + `_post_boot` (rc 0/1/2 dispatch); `_csp_filter_rdeps` 5-stage pactree string pipe → discrete stages (drop fragile pipestatus[2..5] check; pactree rc stays authoritative); `_idf_match_dst` → `_idf_use_sudo_for_dst` (resolve-and-flag semantics); `_kver_below` drop 3-arg defaults (all callers pass 6); fstab phase row label `Configs: /etc/fstab opts` → `Services: fstab opts` (matches README Phase 4); `_ir_resolve_root_uuid` verify-static error wording clarified to "aborting verify-static"; `_dc_kill_children` sleep 0.5 fallback dropped (GNU coreutils preflight gate); `_phase_record` always-true `functions -q` guards dropped from `_vs_read_symmetry_selftest` + `_vrsv_wifi`; README Phase 1 row 9 wording surfaces apply-then-check order; README Phase 5 summary appends `post-rebuild sanity`; README Exit-codes summary `11 codes` → `12 entries (11 numeric + 128+N signal class)`.
+
+v7.4.70 - v7.4.71 - 2026-05-23
+
+- `_mkinitcpio_revert` + `_fstab_atomic_replace` tmpfile parent `/run/ry-install` → `/etc` (same-FS atomic `rename(2)`; cross-FS mv from tmpfs degraded to cp+unlink); `--install-file` path length check char → byte (`printf | wc -c`, PATH_MAX is byte-bound); README Phase 6 step list trimmed (JSONL footer is post-dispatch, written by all modes); inline why-comments above `_csm_filter_units` (per-unit fork) and `_cse_collect_units` (skip predicate); cleanup of new `.ry-install.*` tmpfiles in `/etc` already covered by existing `_SYS_TMP_DIRS` sweep.
+
 v7.4.69 - v7.4.70 - 2026-05-23
 
 - README Phase 1 row 9 documents always-on `_ry_check_wireless_regdom` (warn on unset/invalid) alongside opt-in `_ry_apply_wireless_regdom`; Safety signals row appends `WINCH` (non-fatal; `_progress_on_winch` re-anchors progress bar on terminal resize); zero behavioural change.

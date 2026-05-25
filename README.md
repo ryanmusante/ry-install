@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.16-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.17-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -218,14 +218,12 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 | 5 | `mv -T` to destination (atomic, same-FS) |
 
 <details>
-<summary><b>Kernel cmdline</b> — 17 params</summary>
+<summary><b>Kernel cmdline</b> — 15 params</summary>
 
 | Param | Value |
 |---|---|
 | `iommu` | `pt` |
 | `amd_pstate` | `active` |
-| `amdgpu.cwsr_enable` | `0` |
-| `amdgpu.dcdebugmask` | `0x12` |
 | `amdgpu.gpu_recovery` | `1` |
 | `amdgpu.ppfeaturemask` | `0xfffd3fff` |
 | `loglevel` | `3` |
@@ -378,7 +376,7 @@ Applied immediately on install and on `--install-file` re-deploy; re-applied eve
 </details>
 
 <details>
-<summary><b>Env vars</b> — 11 keys</summary>
+<summary><b>Env vars</b> — 10 keys</summary>
 
 | Key | Value |
 |---|---|
@@ -388,7 +386,6 @@ Applied immediately on install and on `--install-file` re-deploy; re-applied eve
 | `PROTON_ENABLE_WAYLAND` | `1` |
 | `PROTON_LOCAL_SHADER_CACHE` | `1` |
 | `PROTON_USE_NTSYNC` | `1` |
-| `RADV_EXPERIMENTAL` | `transfer_queue` |
 | `RADV_PERFTEST` | `sam,nircache` |
 | `VKD3D_DEBUG` | `none` |
 | `VKD3D_SHADER_DEBUG` | `none` |
@@ -590,7 +587,6 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 
 | Category | Issue | Workaround |
 |---|---|---|
-| Strix Halo GPU | CWSR hang | `amdgpu.cwsr_enable=0` (already set) |
 | Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` OR `IgnorePkg=linux-firmware` (pin blocks future CVE fixes) |
 | Strix Halo GPU | ROCm VRAM allocation | Fixed in kernel 6.16+ (`sudo pacman -Syu linux-cachyos`) |
 | MediaTek MT7925 | Kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |

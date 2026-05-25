@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6.16 (2026-05-25) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.17 (2026-05-25) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6.16"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.17"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -533,8 +533,6 @@ set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_R
 set -g KERNEL_PARAMS \
     iommu=pt \
     amd_pstate=active \
-    amdgpu.cwsr_enable=0 \
-    amdgpu.dcdebugmask=0x12 \
     amdgpu.gpu_recovery=1 \
     amdgpu.ppfeaturemask=0xfffd3fff \
     loglevel=3 \
@@ -565,7 +563,6 @@ set -g ENV_VARS \
     "PROTON_ENABLE_WAYLAND=1" \
     "PROTON_LOCAL_SHADER_CACHE=1" \
     "PROTON_USE_NTSYNC=1" \
-    "RADV_EXPERIMENTAL=transfer_queue" \
     "RADV_PERFTEST=sam,nircache" \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
@@ -664,11 +661,11 @@ end
 # Refuse deploy on README/script count drift.
 function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants"
     set -l _expect \
-        KERNEL_PARAMS:17 \
+        KERNEL_PARAMS:15 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:9 \
-        ENV_VARS:11 \
+        ENV_VARS:10 \
         SYSCTL_VALUES:16 \
         PKGS_ADD:15 \
         PKGS_DEL:11 \
@@ -2593,7 +2590,7 @@ end
 # Hex-aware: amdgpu sysfs hex|decimal varies; normalize both to decimal.
 function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (hex-aware compare)"
     test -d /sys/module/amdgpu/parameters; or return 0
-    for pair in "ppfeaturemask:0xfffd3fff" "cwsr_enable:0"
+    for pair in "ppfeaturemask:0xfffd3fff"
         set -l _p (string split ':' -- "$pair"); set -l pname $_p[1]; set -l expected $_p[2]; set -l ppath /sys/module/amdgpu/parameters/$pname
         test -f "$ppath"; or continue
         set -l sysfs_val (string trim -- (command cat -- "$ppath" 2>/dev/null)); set -l sysfs_val_dec "$sysfs_val"; set -l expected_dec "$expected"

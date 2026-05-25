@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6.11 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.13 (2026-05-25) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6.11"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.13"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -409,8 +409,8 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_PACMAN_REVERT_ATTEMPTED
     set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
-    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
-    set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED
+    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC _RY_DMESG_ACP
+    set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
 end
@@ -2672,9 +2672,7 @@ function _vrk_clocksource --description "Runtime kparam check: clocksource (with
 end
 
 function _vrk_audio_state --description "Surface ACP ASoC machine-driver gap on Strix Halo (HDMI/USB audio unaffected)"
-    test (count $_RY_DMESG_CACHE) -eq 0; and return 0
-    # acp_asoc_acp70 once/boot on Strix Halo until upstream ASoC machine driver lands
-    set -l _hit (printf '%s\n' $_RY_DMESG_CACHE | command grep -m1 -E 'acp_asoc_acp7[0-9]\.[0-9]+: warning: No matching ASoC machine driver found')
+    set -l _hit $_RY_DMESG_ACP
     test -z "$_hit"; and return 0
     _echo "── ACP audio state ──"
     _info "  ACP ASoC machine driver missing (Strix Halo) — internal analog audio via ACP not routed"
@@ -2684,7 +2682,7 @@ end
 
 # Pre-extract markers from FULL dmesg; 5000-line cap after (head scrolls off on long uptime).
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource"
-    set -g _RY_DMESG_CACHE; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_BAR; set -g _RY_DMESG_TSC
+    set -g _RY_DMESG_CACHE; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_BAR; set -g _RY_DMESG_TSC; set -g _RY_DMESG_ACP
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null | string split \n)
         set -l _full_count (count $_full)
@@ -2693,6 +2691,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
             set -g _RY_DMESG_PREEMPT (printf '%s\n' $_full | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
             set -g _RY_DMESG_BAR (printf '%s\n' $_full | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large' | command head -n 1)
             set -g _RY_DMESG_TSC (printf '%s\n' $_full | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
+            set -g _RY_DMESG_ACP (printf '%s\n' $_full | command grep -m1 -E 'acp_asoc_acp7[0-9]\.[0-9]+: warning: No matching ASoC machine driver found')
         end
         # 5000-line cap bounds fish list memory; markers pre-extracted.
         set -g _RY_DMESG_CACHE $_full[1..5000]
@@ -2715,7 +2714,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     _vrk_module_state
     _vrk_audio_state
     _vrk_clocksource
-    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
+    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC _RY_DMESG_ACP
 end
 
 # ── VERIFY-RUNTIME: SERVICES + ENVIRONMENT + FSTAB + SESSION ──────────────────────────────────────
@@ -3237,6 +3236,7 @@ function _install_preflight --description "Run all preflight checks before insta
     _ry_sudo_cache_banner
     # Force preflight errors to stderr in QUIET install; cleared on success/bail.
     set -g _RY_LOUD_ERR true; set -l _chk_labels "Preflight: sudo credential cache" "Preflight: dependency check" "Preflight: disk space"; set -l _i 1
+    if test (count $_chk_labels) -ne 3; _err_loud "BUG: _chk_labels size drift (got "(count $_chk_labels)" expected 3)"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
     for _chk in _ensure_sudo_cached _ry_check_deps _ry_check_disk_space
         # _i advances on PASS only; FAIL returns, keeping _i aligned.
         if $_chk; _phase_record $_chk_labels[$_i] PASS "ok"; set _i (math $_i + 1); continue; end
@@ -3821,7 +3821,7 @@ function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on
         set -g INSTALL_HAD_ERRORS true
         return 0
     end
-    if _run sudo -n pacman -Rns --noconfirm -- $argv; _ok "Removed: $argv"; _log "PKG_REMOVE_BATCH_OK: $argv"; return 0; end
+    if _run sudo -n pacman -Rns --noconfirm -- $argv; _ok "Removed: $argv"; _log "PKG_REMOVE_BATCH_OK: $argv"; set -g _RY_PKGS_REMOVED_COUNT (math $_RY_PKGS_REMOVED_COUNT + (count $argv)); return 0; end
     if test -f /var/lib/pacman/db.lck; _err "Pacman database became locked during removal — aborting"; set -g INSTALL_HAD_ERRORS true; _log "PKG_REMOVE_BATCH_FAIL_DBLOCK: $argv"; return 0; end
     _warn "Batch removal failed, trying individually..."
     _log "PKG_REMOVE_BATCH_FAIL: $argv"
@@ -3834,13 +3834,14 @@ function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on
             _log "PKG_REMOVE_FAIL: $pkg"
         else
             _log "PKG_REMOVE_OK: $pkg"
+            set -g _RY_PKGS_REMOVED_COUNT (math $_RY_PKGS_REMOVED_COUNT + 1)
         end
     end
 end
 
 function _configure_services_pkg_remove --description "Remove PKGS_DEL packages (rdep-aware via pactree)"
     if not command -q pacman; _warn "pacman not found, skipping PKGS_DEL removal"; _phase_record "Services: PKGS_DEL removal" SKIP "pacman not found"; return 0; end
-    set -g _RY_PKG_REMOVE_SKIPS; set -l to_del; set -l _del_installed (command pacman -Qq 2>/dev/null)
+    set -g _RY_PKG_REMOVE_SKIPS; set -g _RY_PKGS_REMOVED_COUNT 0; set -l to_del; set -l _del_installed (command pacman -Qq 2>/dev/null)
     for pkg in $PKGS_DEL
         contains -- "$pkg" $_del_installed; or continue
         for _emit in (_csp_filter_rdeps "$pkg"); test -z "$_emit"; and continue; contains -- "$_emit" $to_del; and continue; set -a to_del "$_emit"; end
@@ -4283,21 +4284,26 @@ end
 
 # ── INSTALL PHASE 6: FINALIZE (USER RELOAD + PACCACHE + NM RESTART) ───────────────────────────────
 function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk2 -ruk0"
-    if not set -q SYSTEM_UPGRADED; or test "$SYSTEM_UPGRADED" != true
-        _log "PACMAN_CACHE_TRIM_SKIP: SYSTEM_UPGRADED=false (idempotent re-run)"
-        _phase_record "Finalize: pacman cache trim" SKIP "no upgrade this run"
+    set -l _upgraded false; set -l _removed_n 0
+    set -q SYSTEM_UPGRADED; and test "$SYSTEM_UPGRADED" = true; and set _upgraded true
+    set -q _RY_PKGS_REMOVED_COUNT; and set _removed_n $_RY_PKGS_REMOVED_COUNT
+    if test "$_upgraded" = false; and test "$_removed_n" -eq 0
+        _log "PACMAN_CACHE_TRIM_SKIP: no upgrade and no removals this run"
+        _phase_record "Finalize: pacman cache trim" SKIP "no upgrade or removals this run"
         return 0
     end
+    set -l _reason "upgrade"
+    test "$_upgraded" = false; and set _reason "removals=$_removed_n"
     if command -q paccache
         if _run sudo -n paccache -rk2 -ruk0
-            _phase_record "Finalize: pacman cache trim" PASS "paccache -rk2"
+            _phase_record "Finalize: pacman cache trim" PASS "paccache -rk2 ($_reason)"
         else
             _warn "Paccache cache trim failed"
             _phase_record "Finalize: pacman cache trim" WARN "paccache failed"
         end
     else
         if _run sudo -n pacman -Sc --noconfirm
-            _phase_record "Finalize: pacman cache trim" PASS "pacman -Sc"
+            _phase_record "Finalize: pacman cache trim" PASS "pacman -Sc ($_reason)"
         else
             _warn "Pacman cache clear failed"
             _phase_record "Finalize: pacman cache trim" WARN "pacman -Sc failed"
@@ -4541,7 +4547,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _progress_init
     _install_preflight
     set -l _pre_rc $status
-    if test $_pre_rc -ne 0; _progress_done; _rdi_render_matrix; _log_section "INSTALLATION END"; test $_pre_rc -eq $EXIT_USAGE; and return $EXIT_USAGE; return $EXIT_PREFLIGHT; end
+    if test $_pre_rc -ne 0; _progress_done; _rdi_render_matrix; _log_section "INSTALLATION END"; return $EXIT_PREFLIGHT; end
     # rc discarded; phase failures tracked via INSTALL_HAD_ERRORS.
     _rdi_run_phases
     _install_rebuild_boot

@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.11-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.13-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -67,7 +67,7 @@ Typical duration: **3–8 minutes**.
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 
 > [!WARNING]
-> Sudo cache may lapse during the 3–8 min install. Mitigate via `Defaults timestamp_timeout=60` in `sudo visudo`, a keepalive shell (`while true; sudo -v; sleep 60; end`), or a scoped `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. Interactive fallback needs stdin + stderr to be TTYs — set `RY_INSTALL_NO_INTERACTIVE_SUDO=1` for cron/systemd. Recovery: re-run (idempotent).
+> Sudo cache may lapse during the 3–8 min install. Mitigate via `Defaults timestamp_timeout=60` added to `/etc/sudoers` (edit with `sudo visudo`), a keepalive shell (`while true; sudo -v; sleep 60; end`), or a scoped `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. Interactive fallback needs stdin + stderr to be TTYs — set `RY_INSTALL_NO_INTERACTIVE_SUDO=1` for cron/systemd. Recovery: re-run (idempotent).
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -477,7 +477,7 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps enumerate
 | # | Step |
 |---|---|
 | 1 | `systemctl --user daemon-reload` (skipped when no active user-bus) |
-| 2 | pacman cache trim (`paccache -rk2 -ruk0`; keeps 2 installed + 0 uninstalled versions; falls back to `pacman -Sc` when paccache absent; skipped when no upgrade ran this invocation) |
+| 2 | pacman cache trim (`paccache -rk2 -ruk0`; keeps 2 installed + 0 uninstalled versions; falls back to `pacman -Sc` when paccache absent; runs when an upgrade ran or any `PKGS_DEL` member was removed this invocation) |
 | 3 | NetworkManager restart to apply the wpa_supplicant → iwd backend switch — deferred to next reboot when WiFi is the active route |
 
 ## Managed Files
@@ -561,7 +561,7 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps enumerate
 |---|---|
 | Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` |
 | Format | NDJSON, one file per run, no auto-rotation |
-| Prune | `find ~/ry-install/logs -xdev -mtime +30 -print -delete` |
+| Prune | `find ~/ry-install/logs -xdev -type f -mtime +30 -delete` |
 | Events | `header`, `log`, `footer`; all carry `ts` + `event` |
 | Footer marker | `bail` (preflight fail), `interrupted` (signal); normal exit: none |
 | `ERR_NO_DATA` | systemctl probes returning <3 fields emit `ERR_NO_DATA` |

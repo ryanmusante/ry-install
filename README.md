@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.13-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.15-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -218,13 +218,15 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 | 5 | `mv -T` to destination (atomic, same-FS) |
 
 <details>
-<summary><b>Kernel cmdline</b> — 15 params</summary>
+<summary><b>Kernel cmdline</b> — 17 params</summary>
 
 | Param | Value |
 |---|---|
 | `iommu` | `pt` |
 | `amd_pstate` | `active` |
 | `amdgpu.cwsr_enable` | `0` |
+| `amdgpu.dcdebugmask` | `0x12` |
+| `amdgpu.gpu_recovery` | `1` |
 | `amdgpu.ppfeaturemask` | `0xfffd3fff` |
 | `loglevel` | `3` |
 | `module_blacklist` | `pcspkr` |
@@ -332,7 +334,7 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 | Key | Value |
 |---|---|
-| `GOVERNOR` | `'performance'` |
+| `GOVERNOR` | `'powersave'` |
 
 Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
 

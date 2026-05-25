@@ -1,5 +1,13 @@
 ry-install ChangeLog
 
+v7.6.14 - v7.6.15 - 2026-05-25
+
+- `CPUPOWER_GOVERNOR` changes from `balanced` to `powersave` (`balanced` is not a valid cpufreq governor under `amd_pstate=active`; `powersave` is the kernel-accepted name with EPP routing the energy/performance preference).
+
+v7.6.13 - v7.6.14 - 2026-05-25
+
+- `KERNEL_PARAMS` gains `amdgpu.dcdebugmask=0x12` and `amdgpu.gpu_recovery=1` (count 15→17); `CPUPOWER_GOVERNOR` changes from `performance` to `balanced`; `_ir_validate_counts` `KERNEL_PARAMS` invariant bumped 15→17.
+
 v7.6.12 - v7.6.13 - 2026-05-25
 
 - `_vrk_audio_state` consumes pre-extracted `_RY_DMESG_ACP` so the once/boot ACP machine-driver marker survives the 5000-line dmesg cap; `_if_trim_pacman_cache` also runs on `PKGS_DEL` removals (not only on `pacman -Syu` upgrades).

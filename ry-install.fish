@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6.15 (2026-05-25) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.16 (2026-05-25) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6.15"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.16"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -2575,8 +2575,8 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
         set -l cpu_name (string replace -r '.*/cpu(\d+)/.*' 'cpu$1' -- "$_CPU_PATH")
         _info "  Checking $cpu_name (representative)"
         for check in "scaling_driver:amd-pstate-epp:Scaling driver" \
-            "scaling_governor:performance:Governor" \
-            "energy_performance_preference:performance:EPP"
+            "scaling_governor:powersave:Governor" \
+            "energy_performance_preference:balance_performance:EPP"
             set -l parts (string split ':' -- "$check")
             set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
             _chk_eq "$parts[3]" "$sysfs_val" "$parts[2]"
@@ -4796,7 +4796,7 @@ function _post_cpupower --argument-names target --description "Post-hook: restar
     _echo
     if not _run sudo -n systemctl restart cpupower.service
         _warn "cpupower.service restart failed — governor change applies on next boot"
-        _info "  Under amd_pstate=active, governor=performance routes to EPP=performance internally"
+        _info "  Under amd_pstate=active + governor=powersave, EPP is configurable independently (kernel default: balance_performance)"
         return 1
     end
     return 0

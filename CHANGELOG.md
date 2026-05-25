@@ -1,5 +1,9 @@
 ry-install ChangeLog
 
+v7.6.15 - v7.6.16 - 2026-05-25
+
+- `_vrk_cpu_state` expected `scaling_governor` changes from `performance` to `powersave`; expected `energy_performance_preference` changes from `performance` to `balance_performance` (kernel default under `amd_pstate=active` + governor `powersave`); `_post_cpupower` info string rewritten to reflect that EPP is independently configurable when governor is not `performance`.
+
 v7.6.14 - v7.6.15 - 2026-05-25
 
 - `CPUPOWER_GOVERNOR` changes from `balanced` to `powersave` (`balanced` is not a valid cpufreq governor under `amd_pstate=active`; `powersave` is the kernel-accepted name with EPP routing the energy/performance preference).

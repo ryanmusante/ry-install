@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.10-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.11-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -508,7 +508,7 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps enumerate
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → symlink probe → chmod → `mv -T` |
+| Atomic writes | tmp → render → symlink probe → chmod → `mv -T` |
 | Permissions | system `0644` · user `0600` · `~/ry-install/` `0700` |
 | fstab | `findmnt --verify` gate; rejects symlinked `/etc/fstab` |
 | Boot rebuild gate | Skipped on package/boot-config failure. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses taint only |
@@ -561,7 +561,7 @@ Boot-splash group incompatible with `quiet`+`loglevel=3`. Plasma rdeps enumerate
 |---|---|
 | Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` |
 | Format | NDJSON, one file per run, no auto-rotation |
-| Prune | `find ~/ry-install/logs -mtime +30 -print -delete` |
+| Prune | `find ~/ry-install/logs -xdev -mtime +30 -print -delete` |
 | Events | `header`, `log`, `footer`; all carry `ts` + `event` |
 | Footer marker | `bail` (preflight fail), `interrupted` (signal); normal exit: none |
 | `ERR_NO_DATA` | systemctl probes returning <3 fields emit `ERR_NO_DATA` |

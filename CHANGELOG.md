@@ -1,5 +1,9 @@
 ry-install ChangeLog
 
+v7.6.10 - v7.6.11 - 2026-05-24
+
+- `wc` added to required deps; `_ry_check_deps` paru `--version` unparseable now warns; argparse error stderr ANSI-stripped before display; `--install-file` rejects all C0/DEL control chars (was newline-only); `--install-file` byte-length probe gains explicit numeric guard (fail-closed on `wc -c` parse failure); pre-existing `LOG_FILE` symlink removed before chmod 600; README Atomic-writes row gains `render` step; README log-prune `find` example gains `-xdev`.
+
 v7.6.9 - v7.6.10 - 2026-05-24
 
 - README WARNING + Hardware + Configuration intro + Run Summary + fstab + Env + Known Issues + Troubleshooting prose trimmed; PGP caveat + MES-page-faults + Stale-lock + user-bus rows tightened; stale Runtime-variables count 10 → 9 fixed; 3 verbose script comments trimmed (lock PID-race, mkinitcpio snapshot retention, `_post_service` daemon-reload).

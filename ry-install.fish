@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6.10 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.11 (2026-05-24) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6.10"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.11"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -1492,7 +1492,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     set -l missing
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
         timeout mktemp awk grep curl getent sudo head df mv \
-        tee stat find cp chmod chown sort install cat rm date
+        tee stat find cp chmod chown sort install cat rm date wc
         command -q $cmd; or set -a missing $cmd
     end
     if test (count $missing) -gt 0; _err "missing: $missing"; return 1; end
@@ -1511,6 +1511,10 @@ function _ry_check_deps --description "Verify required packages are installed"
                 _warn "paru $_paru_ver detected — recommend ≥ 2.0.0 (--skipreview semantics may differ)"
                 _log "PARU_VERSION_OLD: detected=$_paru_ver recommended_min=2.0.0"
             end
+        else
+            set -l _paru_raw (command paru --version 2>/dev/null | command head -n 1 | string trim --)
+            _warn "paru version unparseable (got: '$_paru_raw') — cannot verify ≥ 2.0.0; assuming compatible"
+            _log "PARU_VERSION_UNPARSEABLE: raw='$_paru_raw'"
         end
     end
     _log DEPS_CHECK_OK
@@ -4829,7 +4833,7 @@ if test $_argparse_rc -ne 0
     if test "$_ap_errfile" = /dev/null
         set _ap_msg "(argparse error message unavailable: tmpfile alloc failed)"
     else if test -s "$_ap_errfile"
-        set _ap_msg (command head -n 3 -- "$_ap_errfile" 2>/dev/null | string join -- '; ' | string trim --)
+        set _ap_msg (command head -n 3 -- "$_ap_errfile" 2>/dev/null | string replace -ra '\e\[[0-9;]*[a-zA-Z]' '' | string join -- '; ' | string trim --)
     end
     test -n "$_ap_msg"; or set _ap_msg "Invalid arguments: $_ORIG_ARGV"
     echo "[ERR] $_ap_msg" >&2
@@ -4857,9 +4861,10 @@ if set -q _flag_install_file
             _early_usage_exit "--install-file requires absolute path (got: $_if_val)"
         end
     end
-    if string match -q -- \*\n\* "$_if_val"; _early_usage_exit "--install-file path contains newline character — refusing (would break JSONL header)"; end
+    if string match -qr -- '[\x00-\x1f\x7f]' "$_if_val"; _early_usage_exit "--install-file path contains control character — refusing (would break JSONL header / shell quoting)"; end
     set -l _byte_len (printf '%s' "$_if_val" | command wc -c | string trim --)
-    test "$_byte_len" -gt 4096 2>/dev/null; and _early_usage_exit "--install-file path exceeds PATH_MAX (4096 bytes)"
+    if not string match -qr '^\d+$' -- "$_byte_len"; _early_usage_exit "--install-file path byte-length probe failed (wc -c returned '$_byte_len') — refusing"; end
+    test "$_byte_len" -gt 4096; and _early_usage_exit "--install-file path exceeds PATH_MAX (4096 bytes)"
     set -l _canon (command realpath -m -- "$_if_val" 2>/dev/null)
     if test -n "$_canon"
         set -g INSTALL_FILE_TARGET "$_canon"
@@ -4892,6 +4897,7 @@ if test -f "$old_log"; and test "$old_log" != "$new_log"
     end
 end
 test "$_log_rename_ok" = true; and set -g LOG_FILE "$new_log"
+if test -L "$LOG_FILE"; command rm -f -- "$LOG_FILE" 2>/dev/null; echo "[WARN] Pre-existing LOG_FILE was a symlink — removed; will re-create with 0600" >&2; end
 if not test -f "$LOG_FILE"
     set -l _prev_umask (umask)
     umask 0177

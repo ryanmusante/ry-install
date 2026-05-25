@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6.17 (2026-05-25) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.19 (2026-05-25) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6.17"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.19"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -532,6 +532,7 @@ set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_M
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
 set -g KERNEL_PARAMS \
     iommu=pt \
+    8250.nr_uarts=0 \
     amd_pstate=active \
     amdgpu.gpu_recovery=1 \
     amdgpu.ppfeaturemask=0xfffd3fff \
@@ -569,21 +570,10 @@ set -g ENV_VARS \
     "WINEDEBUG=-all"
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
-    "net.core.netdev_max_backlog=16384" \
-    "net.core.rmem_max=134217728" \
-    "net.core.wmem_max=134217728" \
     "net.ipv4.tcp_congestion_control=bbr" \
-    "net.ipv4.tcp_fastopen=3" \
-    "net.ipv4.tcp_mtu_probing=1" \
-    "net.ipv4.tcp_notsent_lowat=131072" \
-    "net.ipv4.tcp_rmem=4096 87380 134217728" \
     "net.ipv4.tcp_slow_start_after_idle=0" \
-    "net.ipv4.tcp_wmem=4096 65536 134217728" \
-    "vm.max_map_count=2147483642" \
-    "vm.watermark_boost_factor=0" \
-    "fs.protected_fifos=2" \
-    "fs.protected_regular=2" \
-    "vm.compaction_proactiveness=0"
+    "vm.compaction_proactiveness=0" \
+    "vm.max_map_count=2147483642"
 
 set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges cpupower
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm octopi micro cachyos-micro-settings btop bolt plasma-thunderbolt
@@ -661,12 +651,12 @@ end
 # Refuse deploy on README/script count drift.
 function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants"
     set -l _expect \
-        KERNEL_PARAMS:15 \
+        KERNEL_PARAMS:16 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:9 \
         ENV_VARS:10 \
-        SYSCTL_VALUES:16 \
+        SYSCTL_VALUES:5 \
         PKGS_ADD:15 \
         PKGS_DEL:11 \
         AUR_PKGS:2 \
@@ -809,7 +799,7 @@ end
 
 # Malformed key=value tracked in _RY_SYSCTL_BAD_ENTRIES; count mismatch → EXIT_GEN_SYSCTL.
 function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Generate content for sysctl drop-in"
-    printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf; overrides net.core.netdev_max_backlog 4096 → 16384)"
+    printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
     for entry in $SYSCTL_VALUES
         if not string match -qr '^\s*\S[^=]*=\s*\S' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; functions -q _log; and _log "SYSCTL_SKIP_MALFORMED: '$entry' (require non-empty key=value)"; continue; end
@@ -2540,27 +2530,10 @@ function _vrkg_rebar_sam --description "_vrk_gpu_state sub: ReBAR/SAM status via
     end
 end
 
-function _vrkg_vram --description "_vrk_gpu_state sub: BIOS VRAM carveout via mem_info_vram_total"
-    _echo "── BIOS VRAM carveout ──"
-    set -l _vram_bytes 0
-    for f in /sys/class/drm/card*/device/mem_info_vram_total
-        if test -f "$f"; set _vram_bytes (command cat -- "$f" 2>/dev/null | string trim --); break; end
-    end
-    if not string match -qr '^\d+$' -- "$_vram_bytes"; or test "$_vram_bytes" -le 0; _info "  VRAM carveout: cannot read mem_info_vram_total"; return 0; end
-    set -l _vram_mb (math --scale=0 "$_vram_bytes / 1048576")
-    if test "$_vram_mb" -le 512
-        _ok "  VRAM carveout: $_vram_mb MB"
-    else
-        _warn "  VRAM carveout: $_vram_mb MB (recommended: ≤512 MB for UMA — check BIOS)"
-        _info "    BIOS setting: UMA Frame Buffer Size (also: iGPU Memory / Shared Video Memory)"
-    end
-end
-
-function _vrk_gpu_state --description "Runtime kparam check: GPU performance level + ReBAR/SAM + VRAM carveout"
+function _vrk_gpu_state --description "Runtime kparam check: GPU performance level + ReBAR/SAM"
     _echo "HARDWARE STATE"
     _vrkg_perf_level
     _vrkg_rebar_sam
-    _vrkg_vram
 end
 
 function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + amd_pstate + boost"

@@ -1,5 +1,13 @@
 ry-install ChangeLog
 
+v7.6.18 - v7.6.19 - 2026-05-25
+
+- `SYSCTL_VALUES` trimmed 16→5 (kept: `default_qdisc=fq`, `tcp_congestion_control=bbr`, `tcp_slow_start_after_idle=0`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`); dropped 9 net.* tunables that duplicate CachyOS vendor defaults or oversize buffers for sub-10G home networks; dropped `vm.watermark_boost_factor=0` (worsens fragmentation), `fs.protected_{fifos,regular}=2` (security hardening, not performance); `_ir_validate_counts` SYSCTL_VALUES invariant synced.
+
+v7.6.17 - v7.6.18 - 2026-05-25
+
+- `KERNEL_PARAMS` gains `8250.nr_uarts=0` (count 15→16; masks phantom ttyS1 device, saves ~4.25s boot); `_vrkg_vram` removed and `_vrk_gpu_state` no longer reports BIOS VRAM carveout (UMA Frame Buffer Size sized at BIOS, not driver concern); `_ir_validate_counts` KERNEL_PARAMS invariant synced.
+
 v7.6.16 - v7.6.17 - 2026-05-25
 
 - `KERNEL_PARAMS` drops `amdgpu.cwsr_enable=0` and `amdgpu.dcdebugmask=0x12` (count 17→15); `ENV_VARS` drops `RADV_EXPERIMENTAL=transfer_queue` (count 11→10); `_vrkm_amdgpu` validator drops `cwsr_enable:0` pair; `_ir_validate_counts` invariants synced; README Known-Issues CWSR row removed.

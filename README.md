@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.17-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.19-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -218,11 +218,12 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 | 5 | `mv -T` to destination (atomic, same-FS) |
 
 <details>
-<summary><b>Kernel cmdline</b> — 15 params</summary>
+<summary><b>Kernel cmdline</b> — 16 params</summary>
 
 | Param | Value |
 |---|---|
 | `iommu` | `pt` |
+| `8250.nr_uarts` | `0` |
 | `amd_pstate` | `active` |
 | `amdgpu.gpu_recovery` | `1` |
 | `amdgpu.ppfeaturemask` | `0xfffd3fff` |
@@ -339,26 +340,15 @@ Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
 </details>
 
 <details>
-<summary><b>sysctl</b> — 16 tunables</summary>
+<summary><b>sysctl</b> — 5 tunables</summary>
 
 | Key | Value |
 |---|---|
 | `net.core.default_qdisc` | `fq` |
-| `net.core.netdev_max_backlog` | `16384` |
-| `net.core.rmem_max` | `134217728` |
-| `net.core.wmem_max` | `134217728` |
 | `net.ipv4.tcp_congestion_control` | `bbr` |
-| `net.ipv4.tcp_fastopen` | `3` |
-| `net.ipv4.tcp_mtu_probing` | `1` |
-| `net.ipv4.tcp_notsent_lowat` | `131072` |
-| `net.ipv4.tcp_rmem` | `4096 87380 134217728` |
 | `net.ipv4.tcp_slow_start_after_idle` | `0` |
-| `net.ipv4.tcp_wmem` | `4096 65536 134217728` |
-| `vm.max_map_count` | `2147483642` |
-| `vm.watermark_boost_factor` | `0` |
-| `fs.protected_fifos` | `2` |
-| `fs.protected_regular` | `2` |
 | `vm.compaction_proactiveness` | `0` |
+| `vm.max_map_count` | `2147483642` |
 
 Priority 99 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
 

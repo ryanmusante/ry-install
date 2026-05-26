@@ -1,5 +1,13 @@
 ry-install ChangeLog
 
+v7.6.20 - v7.6.21 - 2026-05-25
+
+- `KERNEL_PARAMS` drops `mitigations=off` (count 19→18); `ENV_VARS` drops `MESA_DISK_CACHE_SINGLE_FILE=1` (count 12→11); `_ir_validate_counts` invariants synced.
+
+v7.6.19 - v7.6.20 - 2026-05-25
+
+- `KERNEL_PARAMS` gains `mitigations=off`, `preempt=full`, `ttm.pages_limit=4194304` (count 16→19); `ENV_VARS` drops `PROTON_USE_NTSYNC` (default in proton-cachyos), gains `ENABLE_LAYER_MESA_ANTI_LAG=1`, `MESA_DISK_CACHE_SINGLE_FILE=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `RADV_PERFTEST` `sam,nircache`→`gpl,nircache` (count 10→12); `SYSCTL_VALUES` gains `kernel.sched_migration_cost_ns=5000000`, `net.ipv4.tcp_notsent_lowat=16384`, `vm.dirty_background_bytes=67108864`, `vm.dirty_bytes=268435456`, `vm.swappiness=10` (count 5→10); `_ir_validate_counts` invariants synced.
+
 v7.6.18 - v7.6.19 - 2026-05-25
 
 - `SYSCTL_VALUES` trimmed 16→5 (kept: `default_qdisc=fq`, `tcp_congestion_control=bbr`, `tcp_slow_start_after_idle=0`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`); dropped 9 net.* tunables that duplicate CachyOS vendor defaults or oversize buffers for sub-10G home networks; dropped `vm.watermark_boost_factor=0` (worsens fragmentation), `fs.protected_{fifos,regular}=2` (security hardening, not performance); `_ir_validate_counts` SYSCTL_VALUES invariant synced.

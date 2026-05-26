@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.19-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.21-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -218,7 +218,7 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 | 5 | `mv -T` to destination (atomic, same-FS) |
 
 <details>
-<summary><b>Kernel cmdline</b> — 16 params</summary>
+<summary><b>Kernel cmdline</b> — 18 params</summary>
 
 | Param | Value |
 |---|---|
@@ -231,11 +231,13 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 | `module_blacklist` | `pcspkr` |
 | `nowatchdog` | (flag) |
 | `pcie_aspm.policy` | `performance` |
+| `preempt` | `full` |
 | `quiet` | (flag) |
 | `rd.systemd.show_status` | `auto` |
 | `rd.udev.log_level` | `3` |
 | `split_lock_detect` | `off` |
 | `tsc` | `reliable` |
+| `ttm.pages_limit` | `4194304` |
 | `usbcore.autosuspend` | `-1` |
 | `zswap.enabled` | `0` |
 
@@ -340,15 +342,20 @@ Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
 </details>
 
 <details>
-<summary><b>sysctl</b> — 5 tunables</summary>
+<summary><b>sysctl</b> — 10 tunables</summary>
 
 | Key | Value |
 |---|---|
+| `kernel.sched_migration_cost_ns` | `5000000` |
 | `net.core.default_qdisc` | `fq` |
 | `net.ipv4.tcp_congestion_control` | `bbr` |
+| `net.ipv4.tcp_notsent_lowat` | `16384` |
 | `net.ipv4.tcp_slow_start_after_idle` | `0` |
 | `vm.compaction_proactiveness` | `0` |
+| `vm.dirty_background_bytes` | `67108864` |
+| `vm.dirty_bytes` | `268435456` |
 | `vm.max_map_count` | `2147483642` |
+| `vm.swappiness` | `10` |
 
 Priority 99 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
 
@@ -366,17 +373,18 @@ Applied immediately on install and on `--install-file` re-deploy; re-applied eve
 </details>
 
 <details>
-<summary><b>Env vars</b> — 10 keys</summary>
+<summary><b>Env vars</b> — 11 keys</summary>
 
 | Key | Value |
 |---|---|
 | `DXVK_LOG_LEVEL` | `none` |
 | `DXVK_LOG_PATH` | `none` |
+| `ENABLE_LAYER_MESA_ANTI_LAG` | `1` |
 | `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
 | `PROTON_ENABLE_WAYLAND` | `1` |
+| `PROTON_FSR4_RDNA3_UPGRADE` | `1` |
 | `PROTON_LOCAL_SHADER_CACHE` | `1` |
-| `PROTON_USE_NTSYNC` | `1` |
-| `RADV_PERFTEST` | `sam,nircache` |
+| `RADV_PERFTEST` | `gpl,nircache` |
 | `VKD3D_DEBUG` | `none` |
 | `VKD3D_SHADER_DEBUG` | `none` |
 | `WINEDEBUG` | `-all` |

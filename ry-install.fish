@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6.19 (2026-05-25) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.21 (2026-05-25) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6.19"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.21"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -540,11 +540,13 @@ set -g KERNEL_PARAMS \
     module_blacklist=pcspkr \
     nowatchdog \
     pcie_aspm.policy=performance \
+    preempt=full \
     quiet \
     rd.systemd.show_status=auto \
     rd.udev.log_level=3 \
     split_lock_detect=off \
     tsc=reliable \
+    ttm.pages_limit=4194304 \
     usbcore.autosuspend=-1 \
     zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
@@ -560,20 +562,26 @@ set -g CPUPOWER_GOVERNOR powersave
 set -g ENV_VARS \
     "DXVK_LOG_LEVEL=none" \
     "DXVK_LOG_PATH=none" \
+    "ENABLE_LAYER_MESA_ANTI_LAG=1" \
     "MESA_SHADER_CACHE_MAX_SIZE=4G" \
     "PROTON_ENABLE_WAYLAND=1" \
+    "PROTON_FSR4_RDNA3_UPGRADE=1" \
     "PROTON_LOCAL_SHADER_CACHE=1" \
-    "PROTON_USE_NTSYNC=1" \
-    "RADV_PERFTEST=sam,nircache" \
+    "RADV_PERFTEST=gpl,nircache" \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
     "WINEDEBUG=-all"
 set -g SYSCTL_VALUES \
+    "kernel.sched_migration_cost_ns=5000000" \
     "net.core.default_qdisc=fq" \
     "net.ipv4.tcp_congestion_control=bbr" \
+    "net.ipv4.tcp_notsent_lowat=16384" \
     "net.ipv4.tcp_slow_start_after_idle=0" \
     "vm.compaction_proactiveness=0" \
-    "vm.max_map_count=2147483642"
+    "vm.dirty_background_bytes=67108864" \
+    "vm.dirty_bytes=268435456" \
+    "vm.max_map_count=2147483642" \
+    "vm.swappiness=10"
 
 set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges cpupower
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm octopi micro cachyos-micro-settings btop bolt plasma-thunderbolt
@@ -651,12 +659,12 @@ end
 # Refuse deploy on README/script count drift.
 function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants"
     set -l _expect \
-        KERNEL_PARAMS:16 \
+        KERNEL_PARAMS:18 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:9 \
-        ENV_VARS:10 \
-        SYSCTL_VALUES:5 \
+        ENV_VARS:11 \
+        SYSCTL_VALUES:10 \
         PKGS_ADD:15 \
         PKGS_DEL:11 \
         AUR_PKGS:2 \

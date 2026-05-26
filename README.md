@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.28-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.29-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -220,26 +220,14 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 <details>
 <summary><b>Kernel cmdline</b> — 18 params</summary>
 
-| Param | Value |
+| Category | Params |
 |---|---|
-| `8250.nr_uarts` | `0` |
-| `amd_iommu` | `off` |
-| `amd_pstate` | `active` |
-| `amdgpu.cwsr_enable` | `0` |
-| `amdgpu.gpu_recovery` | `1` |
-| `amdgpu.gttsize` | `126976` |
-| `amdgpu.ppfeaturemask` | `0xfffd3fff` |
-| `nowatchdog` | (flag) |
-| `nvme_core.default_ps_max_latency_us` | `0` |
-| `pcie_aspm` | `off` |
-| `preempt` | `full` |
-| `processor.max_cstate` | `1` |
-| `quiet` | (flag) |
-| `split_lock_detect` | `off` |
-| `tsc` | `reliable` |
-| `ttm.pages_limit` | `32505856` |
-| `usbcore.autosuspend` | `-1` |
-| `zswap.enabled` | `0` |
+| CPU | `amd_pstate=active`, `processor.max_cstate=1`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
+| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.gttsize=126976`, `amdgpu.ppfeaturemask=0xfffd3fff`, `ttm.pages_limit=32505856` |
+| IOMMU/PCIe | `amd_iommu=off`, `pcie_aspm=off` |
+| Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
+| USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
+| Boot/log | `quiet` (flag), `nowatchdog` (flag) |
 
 Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`). UUID prefix computed from the `/` mount at preflight.
 
@@ -248,18 +236,18 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 <details>
 <summary><b>Bootloader</b> — 10 keys</summary>
 
-| File | Key | Value |
+| Category | Key | Value |
 |---|---|---|
-| `loader.conf` | `default` | `@saved` |
-| `loader.conf` | `timeout` | `0` |
-| `loader.conf` | `console-mode` | `keep` |
-| `loader.conf` | `editor` | `no` |
-| `sdboot-manage.conf` | `LINUX_OPTIONS` | mirrors `KERNEL_PARAMS` |
-| `sdboot-manage.conf` | `LINUX_FALLBACK_OPTIONS` | `quiet` |
-| `sdboot-manage.conf` | `DEFAULT_ENTRY` | `manual` |
-| `sdboot-manage.conf` | `REMOVE_EXISTING` | `yes` |
-| `sdboot-manage.conf` | `OVERWRITE_EXISTING` | `yes` |
-| `sdboot-manage.conf` | `REMOVE_OBSOLETE` | `yes` |
+| loader.conf — UI | `default` | `@saved` |
+| loader.conf — UI | `timeout` | `0` |
+| loader.conf — UI | `console-mode` | `keep` |
+| loader.conf — UI | `editor` | `no` |
+| sdboot — kernel args | `LINUX_OPTIONS` | mirrors `KERNEL_PARAMS` |
+| sdboot — kernel args | `LINUX_FALLBACK_OPTIONS` | `quiet` |
+| sdboot — entry mgmt | `DEFAULT_ENTRY` | `manual` |
+| sdboot — entry mgmt | `REMOVE_EXISTING` | `yes` |
+| sdboot — entry mgmt | `OVERWRITE_EXISTING` | `yes` |
+| sdboot — entry mgmt | `REMOVE_OBSOLETE` | `yes` |
 
 </details>
 
@@ -373,18 +361,13 @@ Applied immediately on install and on `--install-file` re-deploy; re-applied eve
 <details>
 <summary><b>Env vars</b> — 10 keys</summary>
 
-| Key | Value |
+| Category | Vars |
 |---|---|
-| `DXVK_LOG_LEVEL` | `none` |
-| `DXVK_LOG_PATH` | `none` |
-| `MESA_SHADER_CACHE_MAX_SIZE` | `4G` |
-| `PROTON_ENABLE_WAYLAND` | `1` |
-| `PROTON_FSR4_RDNA3_UPGRADE` | `1` |
-| `PROTON_LOCAL_SHADER_CACHE` | `1` |
-| `RADV_PERFTEST` | `gpl,nircache` |
-| `VKD3D_DEBUG` | `none` |
-| `VKD3D_SHADER_DEBUG` | `none` |
-| `WINEDEBUG` | `-all` |
+| DXVK | `DXVK_LOG_LEVEL=none`, `DXVK_LOG_PATH=none` |
+| VKD3D | `VKD3D_DEBUG=none`, `VKD3D_SHADER_DEBUG=none` |
+| Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
+| Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=4G`, `RADV_PERFTEST=gpl,nircache` |
+| Wine | `WINEDEBUG=-all` |
 
 Loaded by `systemd --user`. Log out and back in, or `systemctl --user import-environment` (then restart active user units) for live apply; running child processes retain inherited env until restarted. User file installs `0600`.
 
@@ -432,15 +415,15 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 <details>
 <summary><b>Masked units</b> — 12 units</summary>
 
-| Unit(s) | Reason |
-|---|---|
-| `ananicy-cpp.service` | cgroups used instead |
-| `avahi-daemon.{service,socket}` | systemd-resolved mDNS |
-| `power-profiles-daemon.service` | conflicts with amd_pstate + cpupower |
-| `lvm2-monitor.service` | no LVM |
-| `NetworkManager-wait-online.service` | boot delay |
-| `ufw.service` | rules flushed pre-mask via `ufw --force disable` |
-| `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` | suspend / hibernate disabled |
+| Category | Unit(s) | Reason |
+|---|---|---|
+| Replaced daemons | `ananicy-cpp.service` | cgroups used instead |
+| Replaced daemons | `avahi-daemon.{service,socket}` | systemd-resolved mDNS |
+| Replaced daemons | `power-profiles-daemon.service` | conflicts with amd_pstate + cpupower |
+| Unused subsys | `lvm2-monitor.service` | no LVM |
+| Unused subsys | `ufw.service` | rules flushed pre-mask via `ufw --force disable` |
+| Boot delays | `NetworkManager-wait-online.service` | boot delay |
+| Power states | `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` | suspend / hibernate disabled |
 
 </details>
 
@@ -514,20 +497,20 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 <details>
 <summary><b>Exit codes</b> — 12 entries</summary>
 
-| Code | Meaning |
-|---|---|
-| `0` | Success |
-| `1` | Verify FAIL count, non-critical install error, or kernel <6.14 hard-floor fail |
-| `2` | Usage error |
-| `3` | Preflight failed |
-| `4` | Boot-critical failure |
-| `5` | Lock failed |
-| `10` | `--check` drift |
-| `11` | `EXIT_GEN_NOFN` — content generator function missing (internal sentinel) |
-| `12` | `EXIT_GEN_NOUUID` — content generator missing prerequisite global (e.g. `_ROOT_UUID`) |
-| `13` | `EXIT_GEN_SYSCTL` — `_content__etc_sysctl.d_*` output count mismatch / malformed sysctl entry |
-| `128+N` | Signal (`129`=HUP, `130`=INT, `131`=QUIT, `143`=TERM, `134`=ABRT, `138`=USR1, `140`=USR2). `137` (KILL) cannot be caught — surfaces only when external `pkill -KILL` or `_run`'s 10s post-TERM grace fires |
-| `251` | `EXIT_RUN_TMPFAIL` — `_run` failed to allocate stdout/stderr capture tmpfiles |
+| Category | Code | Meaning |
+|---|---|---|
+| General | `0` | Success |
+| General | `1` | Verify FAIL count, non-critical install error, or kernel <6.14 hard-floor fail |
+| General | `2` | Usage error |
+| Phase failure | `3` | Preflight failed |
+| Phase failure | `4` | Boot-critical failure |
+| Phase failure | `5` | Lock failed |
+| Drift | `10` | `--check` drift |
+| Generator | `11` | `EXIT_GEN_NOFN` — content generator function missing (internal sentinel) |
+| Generator | `12` | `EXIT_GEN_NOUUID` — content generator missing prerequisite global (e.g. `_ROOT_UUID`) |
+| Generator | `13` | `EXIT_GEN_SYSCTL` — `_content__etc_sysctl.d_*` output count mismatch / malformed sysctl entry |
+| Runtime/sig | `128+N` | Signal (`129`=HUP, `130`=INT, `131`=QUIT, `143`=TERM, `134`=ABRT, `138`=USR1, `140`=USR2). `137` (KILL) cannot be caught — surfaces only when external `pkill -KILL` or `_run`'s 10s post-TERM grace fires |
+| Runtime/sig | `251` | `EXIT_RUN_TMPFAIL` — `_run` failed to allocate stdout/stderr capture tmpfiles |
 
 </details>
 

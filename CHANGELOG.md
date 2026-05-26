@@ -1,5 +1,9 @@
 ry-install ChangeLog
 
+v7.6.28 - v7.6.29 - 2026-05-26
+
+- README: 5 collapsibles regrouped by functional `Category` column (kernel cmdline 6 cats, bootloader 3 cats replacing `File` column, env vars 5 cats, masked units 4 cats, exit codes 5 cats); Destinations unchanged. No script behavior change; KERNEL_PARAMS / ENV_VARS / MASK counts unchanged.
+
 v7.6.27 - v7.6.28 - 2026-05-26
 
 - `KERNEL_PARAMS` net 18 (add `nvme_core.default_ps_max_latency_us=0`, drop `usb4_dma_protection=off`).

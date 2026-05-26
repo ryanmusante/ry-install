@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.6.23 (2026-05-25) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.6.28 (2026-05-26) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.6.23"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.6.28"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -531,19 +531,22 @@ if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
 set -g KERNEL_PARAMS \
-    iommu=pt \
     8250.nr_uarts=0 \
+    amd_iommu=off \
     amd_pstate=active \
+    amdgpu.cwsr_enable=0 \
     amdgpu.gpu_recovery=1 \
+    amdgpu.gttsize=126976 \
     amdgpu.ppfeaturemask=0xfffd3fff \
-    module_blacklist=pcspkr \
     nowatchdog \
-    pcie_aspm.policy=performance \
+    nvme_core.default_ps_max_latency_us=0 \
+    pcie_aspm=off \
     preempt=full \
+    processor.max_cstate=1 \
     quiet \
     split_lock_detect=off \
     tsc=reliable \
-    ttm.pages_limit=4194304 \
+    ttm.pages_limit=32505856 \
     usbcore.autosuspend=-1 \
     zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
@@ -653,7 +656,7 @@ end
 # Refuse deploy on README/script count drift.
 function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants"
     set -l _expect \
-        KERNEL_PARAMS:15 \
+        KERNEL_PARAMS:18 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:9 \
@@ -1322,7 +1325,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     set -l _run_dir (command mktemp -d -p (_tmp_dir) ry-run.XXXXXX 2>/dev/null)
     _track_tmpfile "$_run_dir"
     if test -z "$_run_dir"; or not test -d "$_run_dir"
-        _log "RUN_ABORT: mktemp -d failed — refusing to execute without stderr capture"
+        _log "RUN_ABORT: mktemp -d failed for cmd=$log_cmd — refusing to execute without stderr capture"
         _err "_run: cannot allocate tmpdir for stdout/stderr capture — aborting command"
         return $EXIT_RUN_TMPFAIL
     end
@@ -2603,14 +2606,7 @@ function _vrk_module_state --description "Runtime kparam check: module parameter
     _echo
     _echo "── Module parameters ──"
     _chk_sysfs_eq /sys/module/usbcore/parameters/autosuspend -1 "usbcore.autosuspend"
-    if test -f /sys/module/nvme_core/parameters/default_ps_max_latency_us
-        set -l sysfs_val (command cat -- /sys/module/nvme_core/parameters/default_ps_max_latency_us 2>/dev/null)
-        if test "$sysfs_val" = 0
-            _fail "  nvme_core.default_ps_max_latency_us: 0 (regression — should be unset; re-check /etc/kernel/cmdline)"
-        else
-            _ok "  nvme_core.default_ps_max_latency_us: $sysfs_val (APST enabled)"
-        end
-    end
+    _chk_sysfs_eq /sys/module/nvme_core/parameters/default_ps_max_latency_us 0 "nvme_core.default_ps_max_latency_us"
     _vrkm_amdgpu
     _echo "── Additional module parameters ──"
     _chk_sysfs_match /sys/module/zswap/parameters/enabled '^[N0]$' zswap.enabled

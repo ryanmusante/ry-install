@@ -1,5 +1,32 @@
 ry-install ChangeLog
 
+v7.6.27 - v7.6.28 - 2026-05-26
+
+- `KERNEL_PARAMS` net 18 (add `nvme_core.default_ps_max_latency_us=0`, drop `usb4_dma_protection=off`).
+- `_vrk_module_state` nvme_core check inverted: now PASS when `default_ps_max_latency_us` reads `0` (APST disabled matches boot param); bespoke 8-line block collapsed into single `_chk_sysfs_eq` call to match adjacent style.
+- README kernel cmdline table regenerated.
+
+v7.6.26 - v7.6.27 - 2026-05-26
+
+- `KERNEL_PARAMS` count 19→18; drop `iommu=pt` (inert under `amd_iommu=off`); `_ir_validate_counts` synced.
+- README kernel cmdline table regenerated.
+
+v7.6.25 - v7.6.26 - 2026-05-26
+
+- CHANGELOG: trim v7.6.24, v7.6.25 prose entries to bulleted form (kernel.org style).
+- No functional changes; script + README unchanged from v7.6.25.
+
+v7.6.24 - v7.6.25 - 2026-05-26
+
+- `KERNEL_PARAMS` count 15→19; `_ir_validate_counts` synced.
+  - add: `amd_iommu=off`, `amdgpu.cwsr_enable=0`, `amdgpu.gttsize=126976`, `pcie_aspm=off`, `processor.max_cstate=1`, `ttm.pages_limit=32505856`, `usb4_dma_protection=off`.
+  - drop: `module_blacklist=pcspkr`, `pcie_aspm.policy=performance`, `ttm.pages_limit=4194304`.
+- README kernel cmdline table regenerated.
+
+v7.6.23 - v7.6.24 - 2026-05-26
+
+- `_run`: `RUN_ABORT` JSONL event embeds `cmd=$log_cmd` for single-line post-mortem grep. No behavior change.
+
 v7.6.22 - v7.6.23 - 2026-05-25
 
 - `SYSCTL_VALUES` drops `kernel.sched_migration_cost_ns=5000000` (moved to debugfs in kernel 5.13; renamed `migration_cost_base_ns` under BORE 5.7+; not exposed as sysctl on current CachyOS kernels — produced runtime WARN) and `vm.swappiness=10` (overridden post-sysctl by vendor `cachyos-settings` udev rule `/usr/lib/udev/rules.d/30-zram.rules` setting `SYSCTL{vm.swappiness}="150"` on zram0 init — produced runtime FAIL) (count 10→8); `_ir_validate_counts` invariants synced.

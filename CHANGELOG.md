@@ -1,5 +1,13 @@
 ry-install ChangeLog
 
+v7.6.22 - v7.6.23 - 2026-05-25
+
+- `SYSCTL_VALUES` drops `kernel.sched_migration_cost_ns=5000000` (moved to debugfs in kernel 5.13; renamed `migration_cost_base_ns` under BORE 5.7+; not exposed as sysctl on current CachyOS kernels — produced runtime WARN) and `vm.swappiness=10` (overridden post-sysctl by vendor `cachyos-settings` udev rule `/usr/lib/udev/rules.d/30-zram.rules` setting `SYSCTL{vm.swappiness}="150"` on zram0 init — produced runtime FAIL) (count 10→8); `_ir_validate_counts` invariants synced.
+
+v7.6.21 - v7.6.22 - 2026-05-25
+
+- `KERNEL_PARAMS` drops `loglevel=3`, `rd.systemd.show_status=auto`, `rd.udev.log_level=3` (count 18→15); `ENV_VARS` drops `ENABLE_LAYER_MESA_ANTI_LAG=1` (count 11→10); `_ir_validate_counts` invariants synced; README `quiet`+`loglevel=3` boot-splash prose collapsed to `quiet`.
+
 v7.6.20 - v7.6.21 - 2026-05-25
 
 - `KERNEL_PARAMS` drops `mitigations=off` (count 19→18); `ENV_VARS` drops `MESA_DISK_CACHE_SINGLE_FILE=1` (count 12→11); `_ir_validate_counts` invariants synced.

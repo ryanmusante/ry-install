@@ -1,5 +1,9 @@
 ry-install ChangeLog
 
+v7.6.29 - v7.6.30 - 2026-05-26
+
+- README: 3 collapsibles with ≥10 entries collapsed to 2 columns per format rule (Bootloader 10: Key+Value → Settings; Masked units 12: Unit(s)+Reason → Units with inline reasons; Exit codes 12: Code+Meaning → Codes, semicolon-separated per category). Destinations (12) unchanged per request. No script behavior change.
+
 v7.6.28 - v7.6.29 - 2026-05-26
 
 - README: 5 collapsibles regrouped by functional `Category` column (kernel cmdline 6 cats, bootloader 3 cats replacing `File` column, env vars 5 cats, masked units 4 cats, exit codes 5 cats); Destinations unchanged. No script behavior change; KERNEL_PARAMS / ENV_VARS / MASK counts unchanged.

@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.29-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.6.30-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -236,18 +236,11 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 <details>
 <summary><b>Bootloader</b> — 10 keys</summary>
 
-| Category | Key | Value |
-|---|---|---|
-| loader.conf — UI | `default` | `@saved` |
-| loader.conf — UI | `timeout` | `0` |
-| loader.conf — UI | `console-mode` | `keep` |
-| loader.conf — UI | `editor` | `no` |
-| sdboot — kernel args | `LINUX_OPTIONS` | mirrors `KERNEL_PARAMS` |
-| sdboot — kernel args | `LINUX_FALLBACK_OPTIONS` | `quiet` |
-| sdboot — entry mgmt | `DEFAULT_ENTRY` | `manual` |
-| sdboot — entry mgmt | `REMOVE_EXISTING` | `yes` |
-| sdboot — entry mgmt | `OVERWRITE_EXISTING` | `yes` |
-| sdboot — entry mgmt | `REMOVE_OBSOLETE` | `yes` |
+| Category | Settings |
+|---|---|
+| loader.conf — UI | `default=@saved`, `timeout=0`, `console-mode=keep`, `editor=no` |
+| sdboot — kernel args | `LINUX_OPTIONS` mirrors `KERNEL_PARAMS`, `LINUX_FALLBACK_OPTIONS=quiet` |
+| sdboot — entry mgmt | `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING=yes`, `OVERWRITE_EXISTING=yes`, `REMOVE_OBSOLETE=yes` |
 
 </details>
 
@@ -415,15 +408,12 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 <details>
 <summary><b>Masked units</b> — 12 units</summary>
 
-| Category | Unit(s) | Reason |
-|---|---|---|
-| Replaced daemons | `ananicy-cpp.service` | cgroups used instead |
-| Replaced daemons | `avahi-daemon.{service,socket}` | systemd-resolved mDNS |
-| Replaced daemons | `power-profiles-daemon.service` | conflicts with amd_pstate + cpupower |
-| Unused subsys | `lvm2-monitor.service` | no LVM |
-| Unused subsys | `ufw.service` | rules flushed pre-mask via `ufw --force disable` |
-| Boot delays | `NetworkManager-wait-online.service` | boot delay |
-| Power states | `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` | suspend / hibernate disabled |
+| Category | Units |
+|---|---|
+| Replaced daemons | `ananicy-cpp.service` (cgroups used instead), `avahi-daemon.{service,socket}` (systemd-resolved mDNS), `power-profiles-daemon.service` (conflicts with amd_pstate + cpupower) |
+| Unused subsys | `lvm2-monitor.service` (no LVM), `ufw.service` (rules flushed pre-mask via `ufw --force disable`) |
+| Boot delays | `NetworkManager-wait-online.service` |
+| Power states | `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` (suspend / hibernate disabled) |
 
 </details>
 
@@ -497,20 +487,13 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 <details>
 <summary><b>Exit codes</b> — 12 entries</summary>
 
-| Category | Code | Meaning |
-|---|---|---|
-| General | `0` | Success |
-| General | `1` | Verify FAIL count, non-critical install error, or kernel <6.14 hard-floor fail |
-| General | `2` | Usage error |
-| Phase failure | `3` | Preflight failed |
-| Phase failure | `4` | Boot-critical failure |
-| Phase failure | `5` | Lock failed |
-| Drift | `10` | `--check` drift |
-| Generator | `11` | `EXIT_GEN_NOFN` — content generator function missing (internal sentinel) |
-| Generator | `12` | `EXIT_GEN_NOUUID` — content generator missing prerequisite global (e.g. `_ROOT_UUID`) |
-| Generator | `13` | `EXIT_GEN_SYSCTL` — `_content__etc_sysctl.d_*` output count mismatch / malformed sysctl entry |
-| Runtime/sig | `128+N` | Signal (`129`=HUP, `130`=INT, `131`=QUIT, `143`=TERM, `134`=ABRT, `138`=USR1, `140`=USR2). `137` (KILL) cannot be caught — surfaces only when external `pkill -KILL` or `_run`'s 10s post-TERM grace fires |
-| Runtime/sig | `251` | `EXIT_RUN_TMPFAIL` — `_run` failed to allocate stdout/stderr capture tmpfiles |
+| Category | Codes |
+|---|---|
+| General | `0` Success; `1` Verify FAIL count, non-critical install error, or kernel <6.14 hard-floor fail; `2` Usage error |
+| Phase failure | `3` Preflight failed; `4` Boot-critical failure; `5` Lock failed |
+| Drift | `10` `--check` drift |
+| Generator | `11` `EXIT_GEN_NOFN` — content generator function missing (internal sentinel); `12` `EXIT_GEN_NOUUID` — content generator missing prerequisite global (e.g. `_ROOT_UUID`); `13` `EXIT_GEN_SYSCTL` — `_content__etc_sysctl.d_*` output count mismatch / malformed sysctl entry |
+| Runtime/sig | `128+N` Signal (`129`=HUP, `130`=INT, `131`=QUIT, `143`=TERM, `134`=ABRT, `138`=USR1, `140`=USR2). `137` (KILL) cannot be caught — surfaces only when external `pkill -KILL` or `_run`'s 10s post-TERM grace fires; `251` `EXIT_RUN_TMPFAIL` — `_run` failed to allocate stdout/stderr capture tmpfiles |
 
 </details>
 

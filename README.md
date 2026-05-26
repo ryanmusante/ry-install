@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.6.30-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.7.2-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -391,15 +391,13 @@ Idempotent rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `d
 </details>
 
 <details>
-<summary><b>Packages — remove</b> — 11 pkgs</summary>
+<summary><b>Packages — remove</b> — 8 pkgs</summary>
 
 | Category | Packages |
 |---|---|
 | boot splash (incl. Plasma rdeps) | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm` |
-| pacman GUI | `octopi` |
 | text editor | `micro`, `cachyos-micro-settings` |
-| superseded | `btop` (by `bottom`) |
-| Thunderbolt (incl. Plasma rdep) | `bolt`, `plasma-thunderbolt` |
+| package manager | `shelly` |
 
 Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman -R` does not refuse on rdep-hold.
 

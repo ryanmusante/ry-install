@@ -1,8 +1,24 @@
 ry-install ChangeLog
 
+v7.7.1 - v7.7.2 - 2026-05-26
+
+- README `Packages — remove`: `shelly` recategorized `misc` → `package manager` (per upstream description: "Shelly: A Modern Arch Package Manager").
+- CHANGELOG: v7.6.30 / v7.7.0 / v7.7.1 entries trimmed to kernel.org style.
+
+v7.7.0 - v7.7.1 - 2026-05-26
+
+- `PKGS_DEL` count 11→8; `_ir_validate_counts` synced.
+  - drop: `octopi`, `btop`, `bolt`, `plasma-thunderbolt`.
+  - add: `shelly`.
+- README `Packages — remove` table regenerated.
+
+v7.6.30 - v7.7.0 - 2026-05-26
+
+- Minor bump: no functional or data changes; script ↔ README invariant counts verified in sync.
+
 v7.6.29 - v7.6.30 - 2026-05-26
 
-- README: 3 collapsibles with ≥10 entries collapsed to 2 columns per format rule (Bootloader 10: Key+Value → Settings; Masked units 12: Unit(s)+Reason → Units with inline reasons; Exit codes 12: Code+Meaning → Codes, semicolon-separated per category). Destinations (12) unchanged per request. No script behavior change.
+- README: 3 collapsibles ≥10 entries collapsed to 2-column Category form (Bootloader, Masked units, Exit codes); Destinations unchanged.
 
 v7.6.28 - v7.6.29 - 2026-05-26
 

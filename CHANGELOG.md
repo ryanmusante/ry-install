@@ -1,5 +1,10 @@
 ry-install ChangeLog
 
+v7.7.2 - v7.7.3 - 2026-05-26
+
+- `PKGS_DEL` count 8→7; `_ir_validate_counts` synced. `shelly` removal commented out (trailing `# shelly` on the `set -g PKGS_DEL` line) and converted to manual opt-in.
+- README `Packages — remove` table regenerated; opt-in instructions added.
+
 v7.7.1 - v7.7.2 - 2026-05-26
 
 - README `Packages — remove`: `shelly` recategorized `misc` → `package manager` (per upstream description: "Shelly: A Modern Arch Package Manager").

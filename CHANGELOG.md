@@ -1,5 +1,16 @@
 ry-install ChangeLog
 
+v7.7.3 - v7.8.0 - 2026-05-26
+
+- `ENV_VARS`: drop `gpl` from `RADV_PERFTEST` (default since Mesa 23.1).
+- `PKGS_ADD`: add `lact-git` as opt-in trailing comment (parallel to existing `shelly` on `PKGS_DEL`); count unchanged at 15. Both opt-in notes trimmed to single-line form.
+- `_RY_MANAGED_FILE_COUNT` 12→13; +`/etc/modprobe.d/ry-amdgpu-strixhalo.conf` (ttm `pages_limit` + `page_pool_size` migrated from cmdline per ROCm#5595).
+- `_RY_POST_HOOKS` 14→15; +`_post_modprobe` (`mkinitcpio -P` trigger). Content-generator dispatch 12→13.
+- `KERNEL_PARAMS` count 18→14; drop `amdgpu.gttsize` (deprecated per ROCm#5595), `processor.max_cstate=1` (idle thermal cost on Zen 5 APU), `pcie_aspm=off` (no iGPU benefit on Strix Halo), `ttm.pages_limit` (moved to modprobe.d).
+- `KERNEL_PARAMS`: replace `amd_iommu=off` → `iommu=pt` (reverses v7.6.27 removal-as-inert; restores DMA protection for USB4 + RTL8127).
+- `AUR_PKGS`: add lspci-gated `r8127-dkms` (Realtek RTL8127 10GbE; Beelink BBS#7762); static `AUR_PKGS:N` invariant replaced by `_ir_validate_aur_pkgs_dynamic` (2 or 3). `_ir_validate_counts` synced.
+- README: `Packages`, `Kernel cmdline`, `Environment vars`, `Destinations`, `Known issues`, `AUR` tables regenerated.
+
 v7.7.2 - v7.7.3 - 2026-05-26
 
 - `PKGS_DEL` count 8→7; `_ir_validate_counts` synced. `shelly` removal commented out (trailing `# shelly` on the `set -g PKGS_DEL` line) and converted to manual opt-in.

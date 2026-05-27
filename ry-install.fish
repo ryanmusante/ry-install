@@ -1,13 +1,13 @@
 #!/usr/bin/env fish
-# ry-install v7.7.3 (2026-05-26) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.8.0 (2026-05-26) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.7.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.8.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g RC_KVER_OK 0; set -g RC_KVER_WARN 1; set -g RC_KVER_FAIL 2
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 12
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 13
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONF /usr/lib/modules-load.d/10-ntsync.conf
 
@@ -521,7 +521,8 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/99-cachyos-sysctl.conf" \
-    "/etc/tmpfiles.d/99-cachyos-thp.conf"
+    "/etc/tmpfiles.d/99-cachyos-thp.conf" \
+    "/etc/modprobe.d/ry-amdgpu-strixhalo.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -g SERVICE_DESTINATIONS
 set -g _RY_IWD_GATED_DSTS "/etc/iwd/main.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf"
@@ -532,21 +533,17 @@ set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_M
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
 set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
-    amd_iommu=off \
     amd_pstate=active \
     amdgpu.cwsr_enable=0 \
     amdgpu.gpu_recovery=1 \
-    amdgpu.gttsize=126976 \
     amdgpu.ppfeaturemask=0xfffd3fff \
+    iommu=pt \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
-    pcie_aspm=off \
     preempt=full \
-    processor.max_cstate=1 \
     quiet \
     split_lock_detect=off \
     tsc=reliable \
-    ttm.pages_limit=32505856 \
     usbcore.autosuspend=-1 \
     zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
@@ -566,7 +563,7 @@ set -g ENV_VARS \
     "PROTON_ENABLE_WAYLAND=1" \
     "PROTON_FSR4_RDNA3_UPGRADE=1" \
     "PROTON_LOCAL_SHADER_CACHE=1" \
-    "RADV_PERFTEST=gpl,nircache" \
+    "RADV_PERFTEST=nircache" \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
     "WINEDEBUG=-all"
@@ -580,8 +577,9 @@ set -g SYSCTL_VALUES \
     "vm.dirty_bytes=268435456" \
     "vm.max_map_count=2147483642"
 
-set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges cpupower
-# Opt-in: move `shelly` from the trailing comment into the array below to also remove the CachyOS Shelly package manager.
+# Opt-in: uncomment `lact-git` in PKGS_ADD + bump invariant 15→16 (LACT AMD GPU control).
+set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges cpupower  # lact-git
+# Opt-in: uncomment `shelly` in PKGS_DEL + bump invariant 7→8 (CachyOS Shelly pkg mgr).
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings  # shelly
 set -g AUR_PKGS mkinitcpio-firmware mt76-mt7925-dkms
 set -g _RY_PKG_REMOVE_SKIPS
@@ -657,7 +655,7 @@ end
 # Refuse deploy on README/script count drift.
 function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants"
     set -l _expect \
-        KERNEL_PARAMS:18 \
+        KERNEL_PARAMS:14 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:9 \
@@ -665,16 +663,28 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         SYSCTL_VALUES:8 \
         PKGS_ADD:15 \
         PKGS_DEL:7 \
-        AUR_PKGS:2 \
         MASK:12 \
         EXPECTED_VULKAN_PKGS:3 \
         EXPECTED_SERVICES:3 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:14 \
+        _RY_POST_HOOKS:15 \
         _RY_BOOT_CRITICAL_DSTS:4
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — README/script desync, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+end
+
+# AUR_PKGS count: baseline 2 (mkinitcpio-firmware + mt76-mt7925-dkms); +1 when _ir_detect_rtl8127 appends r8127-dkms. Dynamic check replaces the static AUR_PKGS:N row formerly in _ir_validate_counts.
+function _ir_validate_aur_pkgs_dynamic --description "AUR_PKGS expected count is 2 (no RTL8127) or 3 (RTL8127 present)"
+    set -l _got (count $AUR_PKGS)
+    set -l _want 2
+    if test "$_RY_RTL8127_PRESENT" = true
+        set _want 3
+    end
+    if test "$_got" -ne "$_want"
+        _err_loud "AUR_PKGS count drift: got=$_got expected=$_want (RTL8127_present=$_RY_RTL8127_PRESENT)"
+        _pre_dispatch_exit $EXIT_PREFLIGHT
     end
 end
 
@@ -685,6 +695,18 @@ function _ir_validate_keys --description "Refuse deploy on _tmpfile_key collisio
         set -l _k (_tmpfile_key "$_d")
         if contains -- "$_k" $_seen_keys; _err_loud "Destination key collision: '$_d' produces key '_content_$_k' already in use — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
         set -a _seen_keys "$_k"
+    end
+end
+
+# Realtek RTL8127 (10ec:8127) dual 10GbE controller has open Beelink BBS#7762 (throughput drops under load) — gated install of out-of-tree driver when chip is present.
+function _ir_detect_rtl8127 --description "Detect Realtek RTL8127 on PCIe; gate r8127-dkms inclusion"
+    set -g _RY_RTL8127_PRESENT false
+    set -l _hits (command lspci -n -d 10ec: 2>/dev/null | string match -r '10ec:8127' | count)
+    if test "$_hits" -gt 0
+        set -g _RY_RTL8127_PRESENT true
+        if not contains -- r8127-dkms $AUR_PKGS
+            set -ga AUR_PKGS r8127-dkms
+        end
     end
 end
 
@@ -716,7 +738,9 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
             end
         end
     end
+    _ir_detect_rtl8127
     _ir_validate_counts
+    _ir_validate_aur_pkgs_dynamic
     _ir_validate_keys
     _ir_precompute_caches
     set -l _kp_metachar_re '[\s"`$;\\\\]'
@@ -731,7 +755,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
 end
 
-# ── CONTENT GENERATORS (12; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
+# ── CONTENT GENERATORS (13; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -818,6 +842,14 @@ end
 
 function _content__etc_tmpfiles.d_99-cachyos-thp.conf --description "Generate content for THP tmpfiles drop-in"
     printf '%s\n' "# THP shrink_underused: keep huge pages intact on high-RAM workstations (128 GB profile)" "w /sys/kernel/mm/transparent_hugepage/shrink_underused - - - - 0"
+end
+
+# Strix Halo gfx1151 GTT sizing — kernel ≥ 6.14 deprecates amdgpu.gttsize on cmdline; ttm.pages_limit + page_pool_size only.
+function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)"
+    printf '%s\n' \
+        "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
+        "options ttm pages_limit=32505856" \
+        "options ttm page_pool_size=32505856"
 end
 
 # Dynamic dispatch: fn name = _content_$(_tmpfile_key dst).
@@ -4555,6 +4587,7 @@ set -g _RY_POST_HOOKS \
     "*/environment.d/*|envd" \
     "/etc/default/cpupower-service.conf|cpupower" \
     "*/tmpfiles.d/*|tmpfiles" \
+    "/etc/modprobe.d/*|modprobe" \
     "*.service|service"
 
 # First-match-wins: _RY_POST_HOOKS declaration order = priority (specific patterns first).
@@ -4766,6 +4799,21 @@ function _post_cpupower --argument-names target --description "Post-hook: restar
     if not _run sudo -n systemctl restart cpupower.service
         _warn "cpupower.service restart failed — governor change applies on next boot"
         _info "  Under amd_pstate=active + governor=powersave, EPP is configurable independently (kernel default: balance_performance)"
+        return 1
+    end
+    return 0
+end
+
+# Module options consumed at module load; modprobe.d is captured by initramfs `modconf` hook. mkinitcpio rebuild required so amdgpu loads ttm with correct params from earliest boot.
+function _post_modprobe --argument-names target --description "Post-hook: rebuild initramfs after /etc/modprobe.d/* change"
+    _echo
+    if not command -q mkinitcpio
+        _warn "mkinitcpio(8) not found — module options will apply only after a kernel package install"
+        return 0
+    end
+    if not _run sudo -n mkinitcpio -P
+        _err "mkinitcpio -P failed — module options not in initramfs until next rebuild"
+        _info "  Retry: sudo mkinitcpio -P"
         return 1
     end
     return 0

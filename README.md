@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.7.3-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.8.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -63,7 +63,7 @@ Typical duration: **3–8 minutes**.
 | GNU coreutils | ≥ 8.x (`timeout --foreground/--kill-after`) |
 | Hardware | `EXPECTED_CPU_MATCH` default `Ryzen AI Max` |
 | sudo cache | Cached credential (`sudo -v`) |
-| paru | Required for AUR (`mkinitcpio-firmware`, `mt76-mt7925-dkms`) |
+| paru | Required for AUR (`mkinitcpio-firmware`, `mt76-mt7925-dkms`; +`r8127-dkms` on RTL8127 systems) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 
 > [!WARNING]
@@ -103,7 +103,7 @@ Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP
 |---|---|---|
 | 1 | Preflight | Prereqs + lock + runtime validate |
 | 2 | Packages | `pacman -Syu --needed` + AUR via paru + cache refresh |
-| 3 | Configuration | Deploy 12 embedded files (atomic) |
+| 3 | Configuration | Deploy 13 embedded files (atomic) |
 | 4 | Services | fstab + resolved + THP + `PKGS_DEL` + mask + enable |
 | 5 | Boot | `mkinitcpio -P` + `sdboot-manage` + sanity |
 | 6 | Finalize | user daemon-reload + paccache + NM restart (deferred on active WiFi) |
@@ -168,6 +168,8 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 | rust utilities | `fd`, `sd`, `dust`, `procs`, `bottom` |
 | perf | `realtime-privileges`, `cpupower` |
 
+**Opt-in:** `lact-git` (LACT AMD GPU control) — uncomment in `PKGS_ADD` + bump invariant 15→16.
+
 </details>
 
 <details>
@@ -181,6 +183,7 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alone is not definitive).
 
 </details>
+(see `Known Issues` for the lspci-gated third AUR package `r8127-dkms` on Realtek RTL8127 systems)
 
 <details>
 <summary><b>Vulkan dependencies</b> — 3 pkgs</summary>
@@ -218,13 +221,13 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 | 5 | `mv -T` to destination (atomic, same-FS) |
 
 <details>
-<summary><b>Kernel cmdline</b> — 18 params</summary>
+<summary><b>Kernel cmdline</b> — 14 params</summary>
 
 | Category | Params |
 |---|---|
-| CPU | `amd_pstate=active`, `processor.max_cstate=1`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
-| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.gttsize=126976`, `amdgpu.ppfeaturemask=0xfffd3fff`, `ttm.pages_limit=32505856` |
-| IOMMU/PCIe | `amd_iommu=off`, `pcie_aspm=off` |
+| CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
+| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.ppfeaturemask=0xfffd3fff` |
+| IOMMU/PCIe | `iommu=pt` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
 | Boot/log | `quiet` (flag), `nowatchdog` (flag) |
@@ -359,7 +362,7 @@ Applied immediately on install and on `--install-file` re-deploy; re-applied eve
 | DXVK | `DXVK_LOG_LEVEL=none`, `DXVK_LOG_PATH=none` |
 | VKD3D | `VKD3D_DEBUG=none`, `VKD3D_SHADER_DEBUG=none` |
 | Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
-| Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=4G`, `RADV_PERFTEST=gpl,nircache` |
+| Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=4G`, `RADV_PERFTEST=nircache` |
 | Wine | `WINEDEBUG=-all` |
 
 Loaded by `systemd --user`. Log out and back in, or `systemctl --user import-environment` (then restart active user units) for live apply; running child processes retain inherited env until restarted. User file installs `0600`.
@@ -400,7 +403,7 @@ Idempotent rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `d
 
 Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman -R` does not refuse on rdep-hold.
 
-**Opt-in:** `shelly` (CachyOS modern GUI package manager) is left in place by default. To also remove it, move the `shelly` token from the trailing comment on the `set -g PKGS_DEL` line into the array body and bump the `PKGS_DEL` invariant in `_ir_validate_counts` from `7` to `8`.
+**Opt-in:** `shelly` (CachyOS Shelly pkg mgr) — uncomment in `PKGS_DEL` + bump invariant 7→8.
 
 </details>
 
@@ -448,10 +451,10 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 
 ## Managed Files
 
-12 files deployed via the [Phase 3](#phase-3--configuration-files) atomic-write sequence. System files install `0644`, the user file `0600`. The two iwd-gated destinations (`/etc/iwd/main.conf` and the NetworkManager drop-in) are skipped when `iwd` is not installed.
+13 files deployed via the [Phase 3](#phase-3--configuration-files) atomic-write sequence. System files install `0644`, the user file `0600`. The two iwd-gated destinations (`/etc/iwd/main.conf` and the NetworkManager drop-in) are skipped when `iwd` is not installed.
 
 <details>
-<summary><b>Destinations</b> — 12 paths</summary>
+<summary><b>Destinations</b> — 13 paths</summary>
 
 | Path | Mode |
 |---|---|
@@ -466,6 +469,7 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 | `/etc/default/cpupower-service.conf` | `0644` |
 | `/etc/sysctl.d/99-cachyos-sysctl.conf` | `0644` |
 | `/etc/tmpfiles.d/99-cachyos-thp.conf` | `0644` |
+| `/etc/modprobe.d/ry-amdgpu-strixhalo.conf` | `0644` |
 | `~/.config/environment.d/10-environment.conf` | `0600` |
 
 </details>
@@ -551,6 +555,7 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 | Strix Halo GPU | ROCm VRAM allocation | Fixed in kernel 6.16+ (`sudo pacman -Syu linux-cachyos`) |
 | MediaTek MT7925 | Kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
 | MediaTek MT7925 | TX power 3 dBm / random deauth | None (cosmetic / upstream) |
+| Realtek RTL8127 10GbE | Throughput drops / disconnects under sustained load (Beelink BBS#7762) | `paru -S r8127-dkms` (auto-gated by lspci -d 10ec:8127) |
 | Strix Halo ACP | `No matching ASoC machine driver` (dmesg, once/boot) | Pending upstream; HDMI + USB audio unaffected |
 | NetworkManager + iwd | Boot connectivity failure (intermittent) | `nmcli radio wifi off; and nmcli radio wifi on` |
 | NetworkManager + iwd | WPA2/3 Enterprise GUI broken | Use CLI or wpa_supplicant |

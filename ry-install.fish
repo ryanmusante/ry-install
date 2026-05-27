@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.8.3 (2026-05-27) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.8.4 (2026-05-27) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.8.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.8.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -676,7 +676,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
     end
 end
 
-# AUR_PKGS dynamic count: 2 baseline, 3 with r8127-dkms (RTL8127 chip-gated).
+# AUR_PKGS dynamic: 2 baseline, 3 with chip-gated r8127-dkms.
 function _ir_validate_aur_pkgs_dynamic --description "AUR_PKGS expected count is 2 (no RTL8127) or 3 (RTL8127 present)"
     set -l _got (count $AUR_PKGS)
     set -l _want 2
@@ -699,7 +699,7 @@ function _ir_validate_keys --description "Refuse deploy on _tmpfile_key collisio
     end
 end
 
-# RTL8127 (10ec:8127) 10GbE — Beelink BBS#7762; append r8127-dkms when chip present.
+# RTL8127 (10ec:8127) 10GbE — append r8127-dkms when chip present (Beelink BBS#7762).
 function _ir_detect_rtl8127 --description "Detect Realtek RTL8127 on PCIe; gate r8127-dkms inclusion"
     set -g _RY_RTL8127_PRESENT false
     set -l _hits (command lspci -n -d 10ec: 2>/dev/null | string match -r '10ec:8127' | count)
@@ -717,7 +717,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
         set -l _cpu_model (string match -rg -- '^model name\s*:\s*(.*)$' < /proc/cpuinfo 2>/dev/null)[1]
         if test -z "$_cpu_model"
-            # Fail-closed: empty model name means we cannot validate hardware; require explicit override.
+            # Fail-closed: empty model name → require explicit override.
             if test "$RY_INSTALL_SKIP_HARDWARE_CHECK" = 1
                 _warn "Hardware check (override): CPU model unreadable from /proc/cpuinfo — proceeding"
                 _log "HARDWARE_MODEL_UNREADABLE_OVERRIDE: /proc/cpuinfo missing 'model name'"
@@ -845,7 +845,7 @@ function _content__etc_tmpfiles.d_99-cachyos-thp.conf --description "Generate co
     printf '%s\n' "# THP shrink_underused: keep huge pages intact on high-RAM workstations (128 GB profile)" "w /sys/kernel/mm/transparent_hugepage/shrink_underused - - - - 0"
 end
 
-# Strix Halo gfx1151 GTT sizing — ttm pages_limit + page_pool_size (cmdline deprecated per ROCm#5595).
+# Strix Halo gfx1151 GTT sizing — ttm pages_limit + page_pool_size (ROCm#5595).
 function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)"
     printf '%s\n' \
         "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
@@ -4033,7 +4033,7 @@ function _bootctl_dir --argument-names flag logtag fallnote --description "bootc
     printf '%s' "$_p"
 end
 
-# Fallback: bootctl → findmnt vfat → /boot. _RY_ESP_FALLBACK gates sdboot-apply (refuses non-vfat).
+# Fallback: bootctl → findmnt vfat → /boot. _RY_ESP_FALLBACK gates sdboot-apply on non-vfat.
 function _resolve_esp --description "Resolve EFI system partition path (cached; empty result also cached)"
     if set -q _RY_ESP_TRIED; printf '%s' "$_RY_ESP_PATH"; return 0; end
     set -l _p (_bootctl_dir -p ESP_BOOTCTL_PIPE_FAIL "falling through to findmnt")
@@ -4684,7 +4684,7 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
     return 0
 end
 
-# daemon-reload picks up ExecStart; try-restart re-runs active units (oneshot idempotent); user-scope via systemctl --user.
+# daemon-reload + try-restart: oneshot units re-run idempotently; user-scope via --user.
 function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit (+ try-restart to pick up changed ExecStart)"
     set -l _rc 0
     set -l _bn (command basename -- "$target")
@@ -4805,7 +4805,7 @@ function _post_cpupower --argument-names target --description "Post-hook: restar
     return 0
 end
 
-# modprobe.d is captured by mkinitcpio `modconf` hook — rebuild required for boot-time module load.
+# modprobe.d → mkinitcpio modconf hook — rebuild required for boot-time load.
 function _post_modprobe --argument-names target --description "Post-hook: rebuild initramfs after /etc/modprobe.d/* change"
     _echo
     if not command -q mkinitcpio

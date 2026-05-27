@@ -1,29 +1,30 @@
 ry-install ChangeLog
 
+v7.8.3 - v7.8.4 - 2026-05-27
+
+- Script: trim 7 verbose comments to single concise line.
+- CHANGELOG: trim verbose v7.7.3 → v7.8.0 stanza and 6 historical stanzas (v7.6.16, .17, .18, .19, .22, .28) to kernel.org style.
+
 v7.8.2 - v7.8.3 - 2026-05-27
 
-- README `Packages — remove`: convert grouped `Category | Packages` 2-row table to standard one-row-per-package `Package | Category` form (matches `Packages — AUR` style; 7 rows).
+- README `Packages — remove`: convert to standard `Package | Category` form (7 rows).
 
 v7.8.1 - v7.8.2 - 2026-05-27
 
-- README: remove orphan parenthetical pointer note after `Packages — AUR` collapsible (`r8127-dkms` already documented in `Known Issues`).
-- Script: trim four verbose narrative comments to single concise line each (`_ir_validate_aur_pkgs_dynamic`, `_ir_detect_rtl8127`, `_content__etc_modprobe.d_ry-amdgpu-strixhalo.conf`, `_post_modprobe`).
+- README: remove orphan pointer note after `Packages — AUR` collapsible.
+- Script: trim four narrative comments to single concise line.
 
 v7.8.0 - v7.8.1 - 2026-05-27
 
-- `KERNEL_PARAMS` count 14→15; +`pcie_aspm.policy=performance` (force ASPM policy to performance — disables L0s/L1 entry to mitigate latency cost on 10GbE/NVMe without disabling ASPM entirely, replacing the v7.8.0-dropped `pcie_aspm=off`). `_ir_validate_counts` synced.
-- README `Kernel cmdline` IOMMU/PCIe row regenerated.
+- `KERNEL_PARAMS` 14→15: +`pcie_aspm.policy=performance` (force ASPM policy, retains DMA protection).
 
 v7.7.3 - v7.8.0 - 2026-05-26
 
-- `ENV_VARS`: drop `gpl` from `RADV_PERFTEST` (default since Mesa 23.1).
-- `PKGS_ADD`: add `lact-git` as opt-in trailing comment (parallel to existing `shelly` on `PKGS_DEL`); count unchanged at 15. Both opt-in notes trimmed to single-line form.
-- `_RY_MANAGED_FILE_COUNT` 12→13; +`/etc/modprobe.d/ry-amdgpu-strixhalo.conf` (ttm `pages_limit` + `page_pool_size` migrated from cmdline per ROCm#5595).
-- `_RY_POST_HOOKS` 14→15; +`_post_modprobe` (`mkinitcpio -P` trigger). Content-generator dispatch 12→13.
-- `KERNEL_PARAMS` count 18→14; drop `amdgpu.gttsize` (deprecated per ROCm#5595), `processor.max_cstate=1` (idle thermal cost on Zen 5 APU), `pcie_aspm=off` (no iGPU benefit on Strix Halo), `ttm.pages_limit` (moved to modprobe.d).
-- `KERNEL_PARAMS`: replace `amd_iommu=off` → `iommu=pt` (reverses v7.6.27 removal-as-inert; restores DMA protection for USB4 + RTL8127).
-- `AUR_PKGS`: add lspci-gated `r8127-dkms` (Realtek RTL8127 10GbE; Beelink BBS#7762); static `AUR_PKGS:N` invariant replaced by `_ir_validate_aur_pkgs_dynamic` (2 or 3). `_ir_validate_counts` synced.
-- README: `Packages`, `Kernel cmdline`, `Environment vars`, `Destinations`, `Known issues`, `AUR` tables regenerated.
+- `ENV_VARS`: drop `gpl` from `RADV_PERFTEST` (Mesa 23.1 default).
+- `PKGS_ADD`: add `lact-git` as opt-in trailing comment; both opt-in notes trimmed to single-line form.
+- Managed files 12→13: +`/etc/modprobe.d/ry-amdgpu-strixhalo.conf` (ttm `pages_limit` + `page_pool_size`; ROCm#5595). `_RY_POST_HOOKS` 14→15 (+`_post_modprobe`).
+- `KERNEL_PARAMS` 18→14; drop `amdgpu.gttsize`, `processor.max_cstate=1`, `pcie_aspm=off`, `ttm.pages_limit`; replace `amd_iommu=off` → `iommu=pt`.
+- `AUR_PKGS`: chip-gated `r8127-dkms` (Realtek RTL8127; BBS#7762); static count replaced by `_ir_validate_aur_pkgs_dynamic` (2 or 3).
 
 v7.7.2 - v7.7.3 - 2026-05-26
 
@@ -52,7 +53,7 @@ v7.6.29 - v7.6.30 - 2026-05-26
 
 v7.6.28 - v7.6.29 - 2026-05-26
 
-- README: 5 collapsibles regrouped by functional `Category` column (kernel cmdline 6 cats, bootloader 3 cats replacing `File` column, env vars 5 cats, masked units 4 cats, exit codes 5 cats); Destinations unchanged. No script behavior change; KERNEL_PARAMS / ENV_VARS / MASK counts unchanged.
+- README: 5 collapsibles regrouped by `Category` column (kernel cmdline, bootloader, env vars, masked units, exit codes); counts unchanged.
 
 v7.6.27 - v7.6.28 - 2026-05-26
 
@@ -83,7 +84,7 @@ v7.6.23 - v7.6.24 - 2026-05-26
 
 v7.6.22 - v7.6.23 - 2026-05-25
 
-- `SYSCTL_VALUES` drops `kernel.sched_migration_cost_ns=5000000` (moved to debugfs in kernel 5.13; renamed `migration_cost_base_ns` under BORE 5.7+; not exposed as sysctl on current CachyOS kernels — produced runtime WARN) and `vm.swappiness=10` (overridden post-sysctl by vendor `cachyos-settings` udev rule `/usr/lib/udev/rules.d/30-zram.rules` setting `SYSCTL{vm.swappiness}="150"` on zram0 init — produced runtime FAIL) (count 10→8); `_ir_validate_counts` invariants synced.
+- `SYSCTL_VALUES` 10→8: drop `kernel.sched_migration_cost_ns=5000000` (moved to debugfs in 5.13) and `vm.swappiness=10` (overridden by vendor zram udev rule); `_ir_validate_counts` synced.
 
 v7.6.21 - v7.6.22 - 2026-05-25
 
@@ -95,19 +96,19 @@ v7.6.20 - v7.6.21 - 2026-05-25
 
 v7.6.19 - v7.6.20 - 2026-05-25
 
-- `KERNEL_PARAMS` gains `mitigations=off`, `preempt=full`, `ttm.pages_limit=4194304` (count 16→19); `ENV_VARS` drops `PROTON_USE_NTSYNC` (default in proton-cachyos), gains `ENABLE_LAYER_MESA_ANTI_LAG=1`, `MESA_DISK_CACHE_SINGLE_FILE=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `RADV_PERFTEST` `sam,nircache`→`gpl,nircache` (count 10→12); `SYSCTL_VALUES` gains `kernel.sched_migration_cost_ns=5000000`, `net.ipv4.tcp_notsent_lowat=16384`, `vm.dirty_background_bytes=67108864`, `vm.dirty_bytes=268435456`, `vm.swappiness=10` (count 5→10); `_ir_validate_counts` invariants synced.
+- `KERNEL_PARAMS` 16→19 (+`mitigations=off`, `preempt=full`, `ttm.pages_limit=4194304`); `ENV_VARS` 10→12 (-`PROTON_USE_NTSYNC` default in proton-cachyos; +`ENABLE_LAYER_MESA_ANTI_LAG`, `MESA_DISK_CACHE_SINGLE_FILE`, `PROTON_FSR4_RDNA3_UPGRADE`; `RADV_PERFTEST sam,nircache`→`gpl,nircache`); `SYSCTL_VALUES` 5→10; `_ir_validate_counts` synced.
 
 v7.6.18 - v7.6.19 - 2026-05-25
 
-- `SYSCTL_VALUES` trimmed 16→5 (kept: `default_qdisc=fq`, `tcp_congestion_control=bbr`, `tcp_slow_start_after_idle=0`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`); dropped 9 net.* tunables that duplicate CachyOS vendor defaults or oversize buffers for sub-10G home networks; dropped `vm.watermark_boost_factor=0` (worsens fragmentation), `fs.protected_{fifos,regular}=2` (security hardening, not performance); `_ir_validate_counts` SYSCTL_VALUES invariant synced.
+- `SYSCTL_VALUES` 16→5 (kept: `default_qdisc=fq`, `tcp_congestion_control=bbr`, `tcp_slow_start_after_idle=0`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`); dropped `net.*` duplicating vendor defaults + `vm.watermark_boost_factor=0` + `fs.protected_{fifos,regular}`; `_ir_validate_counts` synced.
 
 v7.6.17 - v7.6.18 - 2026-05-25
 
-- `KERNEL_PARAMS` gains `8250.nr_uarts=0` (count 15→16; masks phantom ttyS1 device, saves ~4.25s boot); `_vrkg_vram` removed and `_vrk_gpu_state` no longer reports BIOS VRAM carveout (UMA Frame Buffer Size sized at BIOS, not driver concern); `_ir_validate_counts` KERNEL_PARAMS invariant synced.
+- `KERNEL_PARAMS` 15→16 (+`8250.nr_uarts=0`; masks phantom ttyS1, saves ~4.25s boot); `_vrkg_vram` removed (BIOS-sized UMA, not driver concern); `_ir_validate_counts` synced.
 
 v7.6.16 - v7.6.17 - 2026-05-25
 
-- `KERNEL_PARAMS` drops `amdgpu.cwsr_enable=0` and `amdgpu.dcdebugmask=0x12` (count 17→15); `ENV_VARS` drops `RADV_EXPERIMENTAL=transfer_queue` (count 11→10); `_vrkm_amdgpu` validator drops `cwsr_enable:0` pair; `_ir_validate_counts` invariants synced; README Known-Issues CWSR row removed.
+- `KERNEL_PARAMS` 17→15 (-`amdgpu.cwsr_enable=0`, `amdgpu.dcdebugmask=0x12`); `ENV_VARS` 11→10 (-`RADV_EXPERIMENTAL=transfer_queue`); `_ir_validate_counts` synced; README CWSR known-issue row removed.
 
 v7.6.15 - v7.6.16 - 2026-05-25
 

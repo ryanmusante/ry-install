@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.8.0 (2026-05-26) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.8.2 (2026-05-27) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.8.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.8.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -540,6 +540,7 @@ set -g KERNEL_PARAMS \
     iommu=pt \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
+    pcie_aspm.policy=performance \
     preempt=full \
     quiet \
     split_lock_detect=off \
@@ -655,7 +656,7 @@ end
 # Refuse deploy on README/script count drift.
 function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants"
     set -l _expect \
-        KERNEL_PARAMS:14 \
+        KERNEL_PARAMS:15 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:9 \
@@ -675,7 +676,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
     end
 end
 
-# AUR_PKGS count: baseline 2 (mkinitcpio-firmware + mt76-mt7925-dkms); +1 when _ir_detect_rtl8127 appends r8127-dkms. Dynamic check replaces the static AUR_PKGS:N row formerly in _ir_validate_counts.
+# AUR_PKGS dynamic count: 2 baseline, 3 with r8127-dkms (RTL8127 chip-gated).
 function _ir_validate_aur_pkgs_dynamic --description "AUR_PKGS expected count is 2 (no RTL8127) or 3 (RTL8127 present)"
     set -l _got (count $AUR_PKGS)
     set -l _want 2
@@ -698,7 +699,7 @@ function _ir_validate_keys --description "Refuse deploy on _tmpfile_key collisio
     end
 end
 
-# Realtek RTL8127 (10ec:8127) dual 10GbE controller has open Beelink BBS#7762 (throughput drops under load) — gated install of out-of-tree driver when chip is present.
+# RTL8127 (10ec:8127) 10GbE — Beelink BBS#7762; append r8127-dkms when chip present.
 function _ir_detect_rtl8127 --description "Detect Realtek RTL8127 on PCIe; gate r8127-dkms inclusion"
     set -g _RY_RTL8127_PRESENT false
     set -l _hits (command lspci -n -d 10ec: 2>/dev/null | string match -r '10ec:8127' | count)
@@ -844,7 +845,7 @@ function _content__etc_tmpfiles.d_99-cachyos-thp.conf --description "Generate co
     printf '%s\n' "# THP shrink_underused: keep huge pages intact on high-RAM workstations (128 GB profile)" "w /sys/kernel/mm/transparent_hugepage/shrink_underused - - - - 0"
 end
 
-# Strix Halo gfx1151 GTT sizing — kernel ≥ 6.14 deprecates amdgpu.gttsize on cmdline; ttm.pages_limit + page_pool_size only.
+# Strix Halo gfx1151 GTT sizing — ttm pages_limit + page_pool_size (cmdline deprecated per ROCm#5595).
 function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)"
     printf '%s\n' \
         "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
@@ -4804,7 +4805,7 @@ function _post_cpupower --argument-names target --description "Post-hook: restar
     return 0
 end
 
-# Module options consumed at module load; modprobe.d is captured by initramfs `modconf` hook. mkinitcpio rebuild required so amdgpu loads ttm with correct params from earliest boot.
+# modprobe.d is captured by mkinitcpio `modconf` hook — rebuild required for boot-time module load.
 function _post_modprobe --argument-names target --description "Post-hook: rebuild initramfs after /etc/modprobe.d/* change"
     _echo
     if not command -q mkinitcpio

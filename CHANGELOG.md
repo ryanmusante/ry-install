@@ -1,5 +1,15 @@
 ry-install ChangeLog
 
+v7.8.1 - v7.8.2 - 2026-05-27
+
+- README: remove orphan parenthetical pointer note after `Packages — AUR` collapsible (`r8127-dkms` already documented in `Known Issues`).
+- Script: trim four verbose narrative comments to single concise line each (`_ir_validate_aur_pkgs_dynamic`, `_ir_detect_rtl8127`, `_content__etc_modprobe.d_ry-amdgpu-strixhalo.conf`, `_post_modprobe`).
+
+v7.8.0 - v7.8.1 - 2026-05-27
+
+- `KERNEL_PARAMS` count 14→15; +`pcie_aspm.policy=performance` (force ASPM policy to performance — disables L0s/L1 entry to mitigate latency cost on 10GbE/NVMe without disabling ASPM entirely, replacing the v7.8.0-dropped `pcie_aspm=off`). `_ir_validate_counts` synced.
+- README `Kernel cmdline` IOMMU/PCIe row regenerated.
+
 v7.7.3 - v7.8.0 - 2026-05-26
 
 - `ENV_VARS`: drop `gpl` from `RADV_PERFTEST` (default since Mesa 23.1).

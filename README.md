@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.8.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.8.2-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -183,7 +183,6 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alone is not definitive).
 
 </details>
-(see `Known Issues` for the lspci-gated third AUR package `r8127-dkms` on Realtek RTL8127 systems)
 
 <details>
 <summary><b>Vulkan dependencies</b> — 3 pkgs</summary>
@@ -221,13 +220,13 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 | 5 | `mv -T` to destination (atomic, same-FS) |
 
 <details>
-<summary><b>Kernel cmdline</b> — 14 params</summary>
+<summary><b>Kernel cmdline</b> — 15 params</summary>
 
 | Category | Params |
 |---|---|
 | CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
 | GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.ppfeaturemask=0xfffd3fff` |
-| IOMMU/PCIe | `iommu=pt` |
+| IOMMU/PCIe | `iommu=pt`, `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
 | Boot/log | `quiet` (flag), `nowatchdog` (flag) |

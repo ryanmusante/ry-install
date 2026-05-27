@@ -1,5 +1,9 @@
 ry-install ChangeLog
 
+v7.8.2 - v7.8.3 - 2026-05-27
+
+- README `Packages — remove`: convert grouped `Category | Packages` 2-row table to standard one-row-per-package `Package | Category` form (matches `Packages — AUR` style; 7 rows).
+
 v7.8.1 - v7.8.2 - 2026-05-27
 
 - README: remove orphan parenthetical pointer note after `Packages — AUR` collapsible (`r8127-dkms` already documented in `Known Issues`).

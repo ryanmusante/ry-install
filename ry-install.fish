@@ -1,13 +1,13 @@
 #!/usr/bin/env fish
-# ry-install v7.9.0 (2026-05-27) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.10.5 (2026-05-28) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.9.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.10.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g RC_KVER_OK 0; set -g RC_KVER_WARN 1; set -g RC_KVER_FAIL 2
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 12
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 13
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONF /usr/lib/modules-load.d/10-ntsync.conf
 
@@ -103,9 +103,7 @@ if test $_fish_ok -eq 0; echo "[ERR] fish 3.6+ required (found: $fish_ver)" >&2;
 # ── PATH HARDENING + TMPDIR + COREUTILS PROBES ────────────────────────────────────────────────────
 set -l _ry_path_new
 for _ry_p in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin $PATH
-    if not contains -- $_ry_p $_ry_path_new
-        set -a _ry_path_new $_ry_p
-    end
+    not contains -- $_ry_p $_ry_path_new; and set -a _ry_path_new $_ry_p
 end
 set -gx PATH $_ry_path_new
 set --erase _ry_path_new _ry_p
@@ -130,8 +128,7 @@ if not command -q date; echo "[ERR] GNU coreutils date(1) required (used for tim
 if not string match -qr '^[+-]\d{4}$' -- (command date '+%z' 2>/dev/null); echo "[ERR] date(1) lacks %z timezone offset support (need GNU coreutils ≥ 8.x; busybox/uutils emit '+0000' without sign)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
 # ── TIMESTAMPS + HOME + LOG_DIR ───────────────────────────────────────────────────────────────────
-set -g DATE_LABEL (command date '+%Y-%m-%d')
-set -g TIMESTAMP (string join '-' (command date '+%Y%m%d-%H%M%S%z') $fish_pid)
+set -g DATE_LABEL (command date '+%Y-%m-%d'); set -g TIMESTAMP (string join '-' (command date '+%Y%m%d-%H%M%S%z') $fish_pid)
 if test -z "$HOME"; or not test -d "$HOME"
     set -g HOME (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $6}')
     if test -z "$HOME"; or not test -d "$HOME"; echo "[ERR] Cannot determine HOME directory" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -203,7 +200,7 @@ function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_
     return 0
 end
 
-# One-shot probe via _RY_SYSTEMD_VER_TRIED sentinel; avoids repeated systemctl --version spawns.
+# Cached via _RY_SYSTEMD_VER_TRIED; avoids repeat systemctl spawns.
 function _resolve_systemd_ver --description "Cache systemd major version into _RY_SYSTEMD_VER"
     set -q _RY_SYSTEMD_VER_TRIED; and return 0
     set -l _v (command systemctl --version 2>/dev/null | command head -n 1 | string match -rg -- '^systemd (\d+)')
@@ -417,7 +414,9 @@ end
 
 # TERM → 0.5s grace → KILL: lets pacman/paru/mkinitcpio flush before forced kill.
 function _dc_kill_children --description "_do_cleanup sub. Release lock + reap child PIDs (pkill -P, then SIGKILL after grace)"
-    if set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED; set -q LOCK_DIR; and not test -L "$LOCK_DIR"; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null; end
+    if begin; set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED; end; and set -q LOCK_DIR; and not test -L "$LOCK_DIR"
+        command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
+    end
     if command -q pkill
         command pkill -TERM -P "$fish_pid" 2>/dev/null
         # 0.5s grace: gives pacman/paru and atomic ops a chance to flush before SIGKILL.
@@ -489,7 +488,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     exit $_sig_exit
 end
 
-# SIGPIPE non-fatal: set sentinel so subsequent stderr/stdout writes are skipped without erroring.
+# SIGPIPE non-fatal: sentinel skips later stdout/stderr writes.
 function _cleanup_pipe --on-signal PIPE --description "Signal handler: mark stderr/stdout broken"
     set -q _RY_OUTPUT_BROKEN; and return 0
     set -g _RY_OUTPUT_BROKEN true
@@ -521,6 +520,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" \
+    "/etc/drirc.d/95-ry-radv-apu.conf" \
     "/etc/modprobe.d/ry-amdgpu-strixhalo.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -g SERVICE_DESTINATIONS
@@ -541,6 +541,7 @@ set -g KERNEL_PARAMS \
     nvme_core.default_ps_max_latency_us=0 \
     pcie_aspm.policy=performance \
     preempt=full \
+    processor.max_cstate=1 \
     quiet \
     split_lock_detect=off \
     tsc=reliable \
@@ -558,7 +559,6 @@ set -g CPUPOWER_GOVERNOR powersave
 
 set -g ENV_VARS \
     "AMD_VULKAN_ICD=RADV" \
-    "DXIL_SPIRV_CONFIG=wmma_rdna3_workaround" \
     "DXVK_LOG_LEVEL=none" \
     "DXVK_LOG_PATH=none" \
     "MESA_SHADER_CACHE_MAX_SIZE=16G" \
@@ -569,14 +569,15 @@ set -g ENV_VARS \
     "VKD3D_SHADER_DEBUG=none" \
     "WINEDEBUG=-all"
 set -g SYSCTL_VALUES \
+    "net.core.busy_poll=50" \
+    "net.core.busy_read=50" \
     "net.core.default_qdisc=fq" \
+    "net.core.netdev_budget=600" \
+    "net.core.netdev_budget_usecs=5000" \
     "net.ipv4.tcp_congestion_control=bbr" \
     "net.ipv4.tcp_notsent_lowat=16384" \
     "net.ipv4.tcp_slow_start_after_idle=0" \
-    "vm.compaction_proactiveness=0" \
-    "vm.dirty_background_bytes=67108864" \
-    "vm.dirty_bytes=268435456" \
-    "vm.max_map_count=2147483642"
+    "vm.compaction_proactiveness=0"
 
 # Opt-in: uncomment `lact-git` in PKGS_ADD + bump invariant 15→16 (LACT AMD GPU control).
 set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges cpupower  # lact-git
@@ -624,7 +625,7 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
             _err_loud "Cannot detect root UUID ($_reason) — aborting verify-static; /etc/kernel/cmdline byte-equality cannot be checked"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         case verify-runtime
-            # verify-runtime reads /proc/cmdline only; UUID missing → skip cross-check, continue.
+            # verify-runtime uses /proc/cmdline; UUID missing → skip cross-check.
             _log "ROOT_UUID_UNAVAILABLE: mode=verify-runtime reason=$_reason — root=UUID cross-check skipped, other runtime probes proceed"
         case '*'
             _log "ROOT_UUID_UNAVAILABLE: mode=$MODE reason=$_reason — non-fatal for this mode"
@@ -656,19 +657,19 @@ end
 # Refuse deploy on README/script count drift.
 function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants"
     set -l _expect \
-        KERNEL_PARAMS:15 \
+        KERNEL_PARAMS:16 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:9 \
-        ENV_VARS:11 \
-        SYSCTL_VALUES:8 \
+        ENV_VARS:10 \
+        SYSCTL_VALUES:9 \
         PKGS_ADD:15 \
         PKGS_DEL:7 \
         MASK:12 \
         EXPECTED_VULKAN_PKGS:3 \
         EXPECTED_SERVICES:3 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:15 \
+        _RY_POST_HOOKS:16 \
         _RY_BOOT_CRITICAL_DSTS:4
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -680,9 +681,7 @@ end
 function _ir_validate_aur_pkgs_dynamic --description "AUR_PKGS expected count is 2 (no RTL8127) or 3 (RTL8127 present)"
     set -l _got (count $AUR_PKGS)
     set -l _want 2
-    if test "$_RY_RTL8127_PRESENT" = true
-        set _want 3
-    end
+    test "$_RY_RTL8127_PRESENT" = true; and set _want 3
     if test "$_got" -ne "$_want"
         _err_loud "AUR_PKGS count drift: got=$_got expected=$_want (RTL8127_present=$_RY_RTL8127_PRESENT)"
         _pre_dispatch_exit $EXIT_PREFLIGHT
@@ -705,9 +704,7 @@ function _ir_detect_rtl8127 --description "Detect Realtek RTL8127 on PCIe; gate 
     set -l _hits (command lspci -n -d 10ec: 2>/dev/null | string match -r '10ec:8127' | count)
     if test "$_hits" -gt 0
         set -g _RY_RTL8127_PRESENT true
-        if not contains -- r8127-dkms $AUR_PKGS
-            set -ga AUR_PKGS r8127-dkms
-        end
+        not contains -- r8127-dkms $AUR_PKGS; and set -ga AUR_PKGS r8127-dkms
     end
 end
 
@@ -756,7 +753,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
 end
 
-# ── CONTENT GENERATORS (12; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
+# ── CONTENT GENERATORS (13; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -793,17 +790,15 @@ function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --descri
     printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
 end
 
-# HandleSecureAttentionKey skipped on systemd <257; otherwise logind reload warns every cycle.
+# HSAK skipped on systemd <257 (else logind warns each reload).
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
     printf '%s\n' "[Login]"
     _resolve_systemd_ver
     for key in $LOGIND_IGNORE_KEYS
-        # HSAK requires systemd ≥257; emitting on older versions warns on every logind reload.
+        # HSAK needs systemd ≥257; older warns each logind reload.
         if test "$key" = HandleSecureAttentionKey
-            if test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257
-                continue
-            end
+            test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257; and continue
         end
         printf '%s\n' "$key=ignore"
     end
@@ -828,7 +823,7 @@ function _content__etc_default_cpupower-service.conf --description "Generate con
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
 end
 
-# Malformed key=value tracked in _RY_SYSCTL_BAD_ENTRIES; count mismatch → EXIT_GEN_SYSCTL.
+# Malformed kv → _RY_SYSCTL_BAD_ENTRIES; count mismatch → EXIT_GEN_SYSCTL.
 function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
     printf '%s\n' "# ry-install sysctl tunables (priority 95 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
@@ -847,6 +842,20 @@ function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Genera
         "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
         "options ttm pages_limit=16777216" \
         "options ttm page_pool_size=16777216"
+end
+
+# gfx1151 unified-heap RADV drirc (Mesa MR!18884; upstream auto-enables RDR2 only).
+function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate content for RADV drirc drop-in (unified heap on APU)"
+    printf '%s\n' \
+        '<?xml version="1.0" standalone="yes"?>' \
+        '<!-- ry-install: RADV unified-heap on APU (managed file, do not edit by hand) -->' \
+        '<driconf>' \
+        '    <device driver="radv">' \
+        '        <application name="Default">' \
+        '            <option name="radv_enable_unified_heap_on_apu" value="true"/>' \
+        '        </application>' \
+        '    </device>' \
+        '</driconf>'
 end
 
 # Dynamic dispatch: fn name = _content_$(_tmpfile_key dst).
@@ -868,7 +877,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before re
             _err "Sudo credential not cached and RY_INSTALL_NO_INTERACTIVE_SUDO=1 — refusing interactive sudo -v"
             _log "SUDO_CACHE_NONINTERACTIVE_FORCED: RY_INSTALL_NO_INTERACTIVE_SUDO=1"
         else if isatty 0; and isatty 2
-            # Truncate stale stderr; RY_INSTALL_NO_INTERACTIVE_SUDO=1 for strict-unattended.
+            # Truncate stale stderr; NO_INTERACTIVE_SUDO=1 = strict unattended.
             sudo -v 2>"$_sudo_err"
             set _rc $status
         else
@@ -1005,7 +1014,7 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
         set -l _ps $pipestatus
         test "$_ps[1]" -eq 0; or return 1
     end
-    # Bare printf: pipe→string collect would inject \n (asymmetric vs _ry_content_bytes).
+    # Bare printf: pipe→string collect injects \n (vs _ry_content_bytes).
     printf '%s' "$_bytes"
     return 0
 end
@@ -1064,7 +1073,7 @@ end
 
 function _msg_print --argument-names level --description "Internal: leveled message to stderr"
     set -l _force false
-    # _msg_start indexes msg-part-1 in argv; --force shifts past the sentinel without mutating argv.
+    # _msg_start indexes msg in argv; --force shifts past sentinel.
     set -l _msg_start 2
     if test "$level" = --force; set _force true; set level $argv[2]; set _msg_start 3; end
     set -l msg (string join -- " " $argv[$_msg_start..])
@@ -1193,7 +1202,7 @@ function _progress_now --description "Monotonic seconds (cached uptime or epoch)
     command date +%s
 end
 
-# _PROG_STEPS lifted to global _RY_PHASE_NAMES — canonical source for both progress + README.
+# _RY_PHASE_NAMES: canonical phase list (progress + README).
 function _progress_init --description "Open scroll region; draw initial bar"
     set -g _PROG_STEPS $_RY_PHASE_NAMES
     set -g _PROG_CUR 0; set -g _PROG_TOTAL (count $_PROG_STEPS)
@@ -1362,7 +1371,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     end
     set -l stderr_tmp "$_run_dir/stderr"; set -l stdout_tmp "$_run_dir/stdout"; set -l _run_timeout (_run_effective_timeout $argv)
     if test "$_run_timeout" -gt 0 2>/dev/null
-        # --kill-after=10: SIGKILL 10s after SIGTERM if hung; rc=124 (TERM) / rc=137 (KILL).
+        # --kill-after=10: SIGKILL 10s post-TERM; rc 124=TERM 137=KILL.
         command timeout --foreground --kill-after=10 "$_run_timeout" $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     else
         command $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
@@ -1569,7 +1578,7 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
     return 1
 end
 
-# Install-mode hard-fail on unparseable df output; verify/check modes warn so probe can complete.
+# Install: hard-fail on bad df output; verify/check only warn.
 function _check_avail --argument-names path divisor unit crit warn --description "Compare available bytes at path against crit/warn thresholds (in scaled units)"
     set -l _b (command env LC_ALL=C df --output=avail -B1 -- "$path" 2>/dev/null | command tail -n 1 | string trim --)
     set -l _v ""
@@ -1599,7 +1608,7 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
     return 0
 end
 
-# Integer compare per component (test -lt/-gt); lexical compare would mis-order "10" < "9".
+# Per-component integer compare; lexical would mis-order 10 < 9.
 function _kver_below --argument-names major minor patch want_major want_minor want_patch --description "True iff (major.minor.patch) < (want_major.want_minor.want_patch). Integer args"
     test "$major" -lt "$want_major"; and return 0
     test "$major" -gt "$want_major"; and return 1
@@ -1683,7 +1692,7 @@ function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: ord
             set -a _seen_hooks "$hook"
         end
     end
-    # Pair "BEFORE:AFTER": right hook must come after left in MKINITCPIO_HOOKS (build order).
+    # Pair BEFORE:AFTER — right hook must follow left in HOOKS order.
     set -l order_checks "systemd:autodetect" "autodetect:microcode" "autodetect:modconf" "systemd:sd-vconsole" "systemd:keyboard" "keyboard:sd-vconsole" "modconf:kms" "block:filesystems"
     for check in $order_checks
         set -l _sp (string split ':' -- "$check"); set -l hook_before $_sp[1]; set -l hook_after $_sp[2]; set -l idx_a 0; set -l idx_b 0
@@ -1816,6 +1825,25 @@ function _grep_tmpfiles_entry --argument-names dst --description 'Validate ≥1 
     return 0
 end
 
+function _grep_drirc_entry --argument-names dst --description 'Validate drirc XML: <driconf> root + ≥1 <option name="…" value="…"/>'
+    test (count $argv) -lt 2; and _log "BUG: _grep_drirc_entry called without content (dst=$dst)"; and return 2
+    string match -qre '<driconf>' -- $argv[2..-1]; or begin; _fail "  $dst: missing <driconf> root element"; return 1; end
+    string match -qre '<option[[:space:]]+name="[^"]+"[[:space:]]+value="[^"]+"[[:space:]]*/>' -- $argv[2..-1]; or begin
+        _fail "  $dst: no <option name=… value=…/> element found"
+        return 1
+    end
+    return 0
+end
+
+function _grep_modprobe_entry --argument-names dst --description 'Validate ≥1 modprobe.d directive line (options/blacklist/install/alias/softdep/remove)'
+    test (count $argv) -lt 2; and _log "BUG: _grep_modprobe_entry called without content (dst=$dst)"; and return 2
+    string match -qre '^[[:space:]]*(options|blacklist|install|remove|alias|softdep)[[:space:]]+\S' -- $argv[2..-1]; or begin
+        _fail "  $dst: no modprobe directive (options/blacklist/install/alias/softdep/remove) found"
+        return 1
+    end
+    return 0
+end
+
 # Per-format validator; mkinitcpio/env/cpupower covered by their own validators.
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family"
     set -l _content $argv[2..-1]
@@ -1828,8 +1856,12 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_kparam "$dst" $_content
         case '*/sysctl.d/*'
             _grep_sysctl_kv "$dst" $_content
+        case '*/drirc.d/*'
+            _grep_drirc_entry "$dst" $_content
         case '*/tmpfiles.d/*'
             _grep_tmpfiles_entry "$dst" $_content
+        case '*/modprobe.d/*'
+            _grep_modprobe_entry "$dst" $_content
         case '*/mkinitcpio.conf' '*/environment.d/*' '*/default/cpupower-service.conf'
             return 0
         case '*'
@@ -1837,7 +1869,7 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
     end
 end
 
-# Last preflight gate before destructive ops; refuses install on any embedded-content syntax error.
+# Last gate before destructive ops; refuses on any content syntax error.
 function _ry_validate_configs --description "Run all embedded config validators"
     _info "Validating configuration syntax..."
     set -l errors 0
@@ -2124,11 +2156,9 @@ function _vss_logind --description "_verify_static_system sub: logind.conf.d key
     _chk_file /etc/systemd/logind.conf.d/99-cachyos-logind.conf; or return 0
     _resolve_systemd_ver
     for key in $LOGIND_IGNORE_KEYS
-        # HSAK requires systemd ≥257; emitting on older versions warns on every logind reload.
+        # HSAK needs systemd ≥257; older warns each logind reload.
         if test "$key" = HandleSecureAttentionKey
-            if test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257
-                continue
-            end
+            test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257; and continue
         end
         _chk_grep /etc/systemd/logind.conf.d/99-cachyos-logind.conf "$key=ignore" "$key"
     end
@@ -2222,7 +2252,7 @@ function _vsp_removed --description "Check PKGS_DEL against installed; warn if s
     end
 end
 
-function _vsp_pacman_conf --description "Inspect IgnorePkg / ParallelDownloads in /etc/pacman.conf"
+function _vsp_pacman_conf --description "Inspect IgnorePkg / ParallelDownloads in /etc/pacman.conf (section-agnostic grep; pacman only honours [options])"
     _echo "── pacman.conf ──"
     if not test -f /etc/pacman.conf; _warn "  /etc/pacman.conf not found"; return 0; end
     set -l ignore_lines (command grep -E -- '^[[:space:]]*IgnorePkg' /etc/pacman.conf 2>/dev/null)
@@ -2555,7 +2585,7 @@ function _vrkg_rebar_sam --description "_vrk_gpu_state sub: ReBAR/SAM status via
         return 0
     end
     if not command -q lspci; _info "  lspci not available for ReBAR check"; return 0; end
-    # ReBAR signal: pre-ReBAR AMD caps BAR at 256M; 500M floor excludes that. Adjust for UMA <8 GB.
+    # Pre-ReBAR AMD caps BAR at 256M; 500M floor excludes it (tune for UMA <8 GB).
     set -l bar_size (command lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*[0-9]+G\b|Region.*Memory.*([5-9][0-9]{2}|[0-9]{4,})M\b' | command head -n 1)
     if test -n "$bar_size"
         _ok "  ReBAR/SAM: large BAR detected"
@@ -2603,7 +2633,7 @@ function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (h
         set -l _p (string split ':' -- "$pair"); set -l pname $_p[1]; set -l expected $_p[2]; set -l ppath /sys/module/amdgpu/parameters/$pname
         test -f "$ppath"; or continue
         set -l sysfs_val (string trim -- (command cat -- "$ppath" 2>/dev/null)); set -l sysfs_val_dec "$sysfs_val"; set -l expected_dec "$expected"
-        # Normalize to decimal: amdgpu sysfs returns hex on some kernels, decimal on others.
+        # Normalize to decimal: amdgpu sysfs is hex or decimal by kernel.
         string match -qr '^0x[0-9a-fA-F]+$' -- "$sysfs_val"; and set sysfs_val_dec (printf '%d' "$sysfs_val" 2>/dev/null; or echo "$sysfs_val")
         string match -qr '^0x[0-9a-fA-F]+$' -- "$expected"; and set expected_dec (printf '%d' "$expected" 2>/dev/null; or echo "$expected")
         if test "$sysfs_val_dec" = "$expected_dec"
@@ -2639,6 +2669,8 @@ function _vrk_module_state --description "Runtime kparam check: module parameter
     _chk_sysfs_eq /sys/module/usbcore/parameters/autosuspend -1 "usbcore.autosuspend"
     _chk_sysfs_eq /sys/module/nvme_core/parameters/default_ps_max_latency_us 0 "nvme_core.default_ps_max_latency_us"
     _vrkm_amdgpu
+    _chk_sysfs_eq /sys/module/ttm/parameters/pages_limit 16777216 ttm.pages_limit
+    _chk_sysfs_eq /sys/module/ttm/parameters/page_pool_size 16777216 ttm.page_pool_size
     _echo "── Additional module parameters ──"
     _chk_sysfs_match /sys/module/zswap/parameters/enabled '^[N0]$' zswap.enabled
     _chk_sysfs_eq /proc/sys/kernel/nmi_watchdog 0 nmi_watchdog
@@ -2681,13 +2713,13 @@ function _vrk_audio_state --description "Surface ACP ASoC machine-driver gap on 
     _log "ACP_NO_MACHINE_DRIVER: $_hit"
 end
 
-# Pre-extract markers from FULL dmesg; 5000-line cap after (head scrolls off on long uptime).
+# Extract markers from full dmesg before 5000-line cap (head scrolls off).
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource"
     set -g _RY_DMESG_CACHE; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_BAR; set -g _RY_DMESG_TSC; set -g _RY_DMESG_ACP
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null | string split \n)
         set -l _full_count (count $_full)
-        # Extract markers from FULL first; early-boot scrolls past 5000-line head on long uptime.
+        # Extract from full first; early boot scrolls past 5000-line head.
         if test (count $_full) -gt 0
             set -g _RY_DMESG_PREEMPT (printf '%s\n' $_full | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
             set -g _RY_DMESG_BAR (printf '%s\n' $_full | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large' | command head -n 1)
@@ -3173,7 +3205,7 @@ end
 function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit"
     test (string length -- "$mode") -gt 3; and set mode (string sub -s 2 -- "$mode")
     not string match -qr '^[0-7]+$' -- "$mode"; and return 1
-    # Reject modes <3 chars post-strip; stat -c %a guarantees ≥3 digits (defence-in-depth).
+    # Reject modes <3 chars; stat -c %a yields ≥3 digits (defence-in-depth).
     test (string length -- "$mode") -eq 3; or return 1
     set -l group_w (string sub -s 2 -l 1 -- "$mode")
     set -l other_w (string sub -s 3 -l 1 -- "$mode")
@@ -3184,7 +3216,7 @@ function _dir_group_or_world_writable --argument-names mode --description "True 
     return 1
 end
 
-# Overlay ifaces walk through to underlying wireless phy; up-state guards stale.
+# Overlay ifaces resolve to wireless phy; rare false positive (bond/bridge over eth + wifi-up) only delays NM restart to reboot.
 function _is_wifi_active_route --description "True if default route exits via wireless interface"
     set -l _def_iface ""
     for _af in -4 -6; set _def_iface (command ip $_af route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}'); test -n "$_def_iface"; and break; end
@@ -3223,7 +3255,7 @@ end
 # ── INSTALL PHASE 1: PREFLIGHT ────────────────────────────────────────────────────────────────────
 function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_ERR, mark progress skip"; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; end
 
-# _RY_LOUD_ERR forces preflight errors to stderr in QUIET install; cleared on success/bail.
+# _RY_LOUD_ERR forces preflight errs to stderr in QUIET; cleared on success/bail.
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
     _ry_sudo_cache_banner
@@ -3268,7 +3300,7 @@ function _mr_copy_size_verify --argument-names backup_file _mki_tmp --descriptio
         _log "MKINITCPIO_REVERT_FAIL: cp $backup_file failed"
         return 1
     end
-    # cmp -s exits non-zero on any byte mismatch (including length); covers size+content in one step.
+    # cmp -s: non-zero on any byte/length mismatch (size+content in one).
     if command -q cmp; and not sudo -n cmp -s -- "$backup_file" "$_mki_tmp" 2>/dev/null
         _err "  /etc/mkinitcpio.conf revert failed at cmp — content mismatch between backup and tmp"
         _log "MKINITCPIO_REVERT_FAIL: cmp content mismatch"
@@ -3304,7 +3336,7 @@ function _mkinitcpio_revert --argument-names backup_file --description "Restore 
         _log "MKINITCPIO_REVERT_FAIL: backup file missing $backup_file"
         return 1
     end
-    # Tmpfile in /etc (dst parent): mv -T same-FS atomic; /run is tmpfs (cross-FS = cp+unlink).
+    # Tmpfile in /etc (dst parent): same-FS mv -T atomic; /run tmpfs = cross-FS.
     set -l _mki_tmp (sudo -n mktemp -p /etc .ry-install.mki.XXXXXX 2>/dev/null)
     _track_tmpfile "$_mki_tmp"
     if test -z "$_mki_tmp"; _err "  /etc/mkinitcpio.conf revert failed at mktemp — current conf may reference uninstalled modules"; _log "MKINITCPIO_REVERT_FAIL: mktemp failed"; return 1; end
@@ -3371,7 +3403,7 @@ function _ip_pacman_invoke --description "Run pacman -Syu (or -Sy via RY_INSTALL
                 _err "Package installation failed after retry"
             end
             if test "$_RY_MKI_HAD_ORIG" = true; and test -n "$_RY_MKI_BACKUP_FILE"
-                # Snapshot retained; _install_packages cleans _RY_MKI_BACKUP_FILE after verify.
+                # Snapshot kept; _install_packages clears backup after verify.
                 set -g _RY_PACMAN_REVERT_ATTEMPTED true
                 if not _mkinitcpio_revert "$_RY_MKI_BACKUP_FILE"; set -g _RY_MKI_REVERT_FAILED true; _err "Mkinitcpio revert failed — boot state may be inconsistent; aborting"; end
             end
@@ -3425,7 +3457,7 @@ function _ip_run_and_verify --description "_install_packages sub: run pacman -Sy
     _info "Verifying package installation..."
     set -l missing_pkgs (command pacman -T -- $pkgs_to_install 2>/dev/null)
     set -l _pt_rc $status
-    # pacman -T: 0=all installed, 127=some missing (non-fatal, names on stdout), other=fatal.
+    # pacman -T rc: 0=all present, 127=some missing (names on stdout), else fatal.
     if test $_pt_rc -ne 0; and test $_pt_rc -ne 127
         _err "pacman -T failed (rc=$_pt_rc) — cannot verify install state"
         set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
@@ -3699,7 +3731,7 @@ end
 
 # Same-FS rename(2) via /etc tmpfile; findmnt --verify gates before commit.
 function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp + awk + verify + mv)"
-    # Tmpfile in /etc (dst parent): mv -T same-FS atomic; /run is tmpfs (cross-FS = cp+unlink).
+    # Tmpfile in /etc (dst parent): same-FS mv -T atomic; /run tmpfs = cross-FS.
     set -l tmpfstab (sudo -n mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null)
     _track_tmpfile "$tmpfstab"
     if test -z "$tmpfstab"; _fail "  /etc/fstab: mktemp failed"; return 1; end
@@ -3762,7 +3794,7 @@ function _configure_services_resolved_restart --description "Restart systemd-res
     return 0
 end
 
-# pactree -ru recursive rdep tree; cascade=1 emits self+rdeps; blocked → _RY_PKG_REMOVE_SKIPS.
+# pactree -ru rdep tree; cascade=1 emits self+rdeps; else → _RY_PKG_REMOVE_SKIPS.
 function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-line: \$pkg + installed rdeps (cascade=1) or nothing (blocked)"
     if not command -q pactree
         if not set -q _RY_PACTREE_MISSING_WARNED
@@ -3788,7 +3820,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
     if test (count $_rdeps) -gt 0
         if test "$RY_INSTALL_PKG_REMOVE_CASCADE" = 1; _warn "  $pkg: cascading removal of reverse dependencies: $_rdeps"; _log "PKG_REMOVE_CASCADE: pkg=$pkg rdeps=$_rdeps"; printf '%s\n' $pkg $_rdeps; return 0; end
         _info "  $pkg: skipped (reverse deps: $_rdeps)"
-        # fish-specific: command subs run in parent shell; `set -a` propagates to caller's loop.
+        # fish: cmd-subs run in parent shell; set -a reaches caller's loop.
         set -a _RY_PKG_REMOVE_SKIPS "$pkg"
         return 0
     end
@@ -3936,7 +3968,7 @@ function _cse_collect_units --description "Collect system units to enable"
     test (count $_enable) -gt 0; and printf '%s\n' $_enable
 end
 
-# Distinguishes enabled-but-start-fail (will activate on fix) from hard fail (missing/disabled).
+# Splits enabled-but-start-fail (recoverable) from hard fail (missing/disabled).
 function _cse_batch_enable --description "Batch enable system units"
     test (count $argv) -eq 0; and return 0
     _run sudo -n systemctl enable --now -- $argv; and return 0
@@ -4009,7 +4041,7 @@ function _bootctl_dir --argument-names flag logtag fallnote --description "bootc
     printf '%s' "$_p"
 end
 
-# Fallback: bootctl → findmnt vfat → /boot. _RY_ESP_FALLBACK gates sdboot-apply on non-vfat.
+# Fallback bootctl → findmnt vfat → /boot; _RY_ESP_FALLBACK gates sdboot on non-vfat.
 function _resolve_esp --description "Resolve EFI system partition path (cached; empty result also cached)"
     if set -q _RY_ESP_TRIED; printf '%s' "$_RY_ESP_PATH"; return 0; end
     set -l _p (_bootctl_dir -p ESP_BOOTCTL_PIPE_FAIL "falling through to findmnt")
@@ -4037,7 +4069,7 @@ function _resolve_esp --description "Resolve EFI system partition path (cached; 
     printf '%s' "$_p"
 end
 
-# BLS spec: $BOOT = XBOOTLDR if mounted, else ESP. bootctl -x reports it; ESP fallback when empty.
+# BLS: $BOOT = XBOOTLDR if mounted else ESP; bootctl -x reports it.
 function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, else ESP) per BLS (cached; empty result also cached)"
     if set -q _RY_BOOT_TRIED; printf '%s' "$_RY_BOOT_PATH"; return 0; end
     set -l _p (_bootctl_dir -x BOOT_BOOTCTL_PIPE_FAIL "falling through to ESP")
@@ -4072,7 +4104,7 @@ function _pbs_check_boot_files --argument-names boot glob label --description "_
     echo $errors
 end
 
-# Refuse loader-entry paths escaping $BOOT (symlink/relative attack + malformed-entry sanity).
+# Refuse loader-entry paths escaping $BOOT (symlink/relative attack).
 function _pbs_entry_has_valid_kernel --argument-names boot conf --description "Probe a loader-entry .conf for a kernel image inside \$BOOT"
     set -l linux_line (sudo -n grep -m1 -E '^[[:space:]]*linux[[:space:]]' -- "$conf" 2>/dev/null | string replace -r '^\s*linux\s+' '' | string trim --)
     test -z "$linux_line"; and return 1
@@ -4564,6 +4596,7 @@ set -g _RY_POST_HOOKS \
     "*/environment.d/*|envd" \
     "/etc/default/cpupower-service.conf|cpupower" \
     "*/tmpfiles.d/*|tmpfiles" \
+    "/etc/drirc.d/*|drirc" \
     "/etc/modprobe.d/*|modprobe" \
     "*.service|service"
 
@@ -4576,7 +4609,7 @@ function _post_hook_for_target --argument-names target --description "Return pos
     return 1
 end
 
-# _idx aligns canon-list to source-list (order preserved; drift refused by _ir_validate_counts).
+# _idx aligns canon-list to source-list; drift refused by _ir_validate_counts.
 function _idf_use_sudo_for_dst --argument-names target --description "Resolve managed-dst membership + emit sudo flag (true=system, false=user, empty=not-managed)"
     set -l _idx 1
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
@@ -4596,7 +4629,7 @@ function _idf_dispatch_hook --argument-names target tag --description "Dispatch 
     _post_$tag "$target"
 end
 
-# Single-file path: validate managed → iwd skip-gate → atomic-write → dispatch post-hook.
+# Single-file: validate → iwd-gate → atomic-write → post-hook.
 function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"
     _log_section "INSTALL-FILE START"
     if test -z "$target"
@@ -4609,7 +4642,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     set -l _use_sudo (_idf_use_sudo_for_dst "$target")
     if test -z "$_use_sudo"; _err "Not a managed file: $target"; _info "Run without path to see managed files"; return $EXIT_USAGE; end
     _echo "── ry-install v$VERSION - Install Single File ──"
-    # iwd-gate pre-check: suppress misleading "Installed" + post-hook dispatch for skipped targets.
+    # iwd-gate: suppress false "Installed" + post-hook for skipped targets.
     if _should_skip_iwd "$target"
         _warn "Skipped: $target (iwd package not installed)"
         _log "INSTALL_FILE_SKIP_IWD: target=$target"
@@ -4683,7 +4716,7 @@ function _post_service --argument-names target --description "Post-hook: daemon-
     end
     _run sudo -n systemctl daemon-reload; or _warn "Systemctl daemon-reload failed"
     if not _run sudo -n systemctl enable --now -- "$_bn"; _warn "Failed to enable $_bn (system)"; set _rc 1; end
-    # try-restart picks up ExecStart for non-oneshot; oneshot+RemainAfterExit re-runs idempotently.
+    # try-restart reloads ExecStart (non-oneshot); oneshot+RAE re-runs idempotent.
     if not _run sudo -n systemctl try-restart -- "$_bn"
         _log "POST_SERVICE_TRY_RESTART: rc=non-zero unit=$_bn scope=system"
         _warn "try-restart of $_bn failed (ExecStart change applies on next start)"
@@ -4709,7 +4742,7 @@ end
 # iwd reads main.conf at startup only; try-restart iwd first when main.conf is the target.
 function _post_nm --argument-names target --description "Post-hook: restart NetworkManager (+ try-restart iwd when iwd/main.conf changes); deferred when WiFi is active route"
     _echo
-    # Defensive: if iwd is absent, skip restart cascade (iwd backend cannot function anyway).
+    # iwd absent → skip restart cascade (backend can't function).
     if not command -q pacman; or not command pacman -Qi iwd >/dev/null 2>&1
         _warn "iwd-related config target but iwd package not installed — NM restart cascade skipped"
         _log "POST_NM_SKIP_NO_IWD: target=$target"
@@ -4762,7 +4795,14 @@ function _post_tmpfiles --argument-names target --description "Post-hook: apply 
     return 0
 end
 
-# environment.d read at session start; import-environment refreshes manager env, not child procs.
+# drirc read by Mesa at process start; no service/signal to reload.
+function _post_drirc --argument-names target --description "Post-hook: notify drirc.d change (Mesa reads at next Vulkan/GL app launch)"
+    _info "drirc.d $target changed — applies at next Vulkan/OpenGL application launch (no service restart needed)"
+    _info "  Verify with: vulkaninfo | grep -i 'memory heap' (after restarting the target app)"
+    return 0
+end
+
+# environment.d read at session start; import-environment skips child procs.
 function _post_envd --argument-names target --description "Post-hook: notify session restart needed for environment.d"
     _info "environment.d $target changed — log out and back in (or restart user session) to apply"
     _info "  OR for live apply: systemctl --user import-environment + restart active user units"
@@ -4819,8 +4859,7 @@ function _early_usage_exit --description "Print usage error to stderr, remove pr
 end
 
 # ── MAIN: ARGPARSE + MODE DISPATCH + LOG HEADER + EXIT ────────────────────────────────────────────
-set -g MODE install
-set -g INSTALL_FILE_TARGET ""
+set -g MODE install; set -g INSTALL_FILE_TARGET ""
 set -l _ORIG_ARGV $argv
 set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) ry-argparse-err.XXXXXX)
 _track_tmpfile "$_ap_errfile"

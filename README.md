@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.9.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.10.5-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -48,6 +48,10 @@ Run as your normal user — root is refused; sudo is invoked internally. If you 
 Typical duration: **3–8 minutes**.
 
 ## Upgrading
+
+Upgrading from **7.10.x**: `DXIL_SPIRV_CONFIG=wmma_rdna3_workaround` was dropped from the user env file (`~/.config/environment.d/10-environment.conf`). Re-run `./ry-install.fish` to redeploy it, then log out and back in (or `systemctl --user import-environment`) to clear the variable from the session.
+
+Upgrading from **7.9.x**: one new managed file (`/etc/drirc.d/95-ry-radv-apu.conf`). No orphans to remove. Re-run `./ry-install.fish` and re-launch Vulkan/OpenGL apps.
 
 Upgrading from **≤ 7.8.x**: two managed files were renamed or dropped in 7.9.0, and their old copies are no longer overwritten. Remove them by hand — a leftover `99-cachyos-sysctl.conf` loads *after* (and so overrides) the new `95-ry-overrides.conf`:
 
@@ -114,7 +118,7 @@ Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP
 |---|---|---|
 | 1 | Preflight | Prereqs + lock + runtime validate |
 | 2 | Packages | `pacman -Syu --needed` + AUR via paru + cache refresh |
-| 3 | Configuration | Deploy 12 embedded files (atomic) |
+| 3 | Configuration | Deploy 13 embedded files (atomic) |
 | 4 | Services | fstab + resolved + `PKGS_DEL` + mask + enable |
 | 5 | Boot | `mkinitcpio -P` + `sdboot-manage` + sanity |
 | 6 | Finalize | user daemon-reload + paccache + NM restart (deferred on active WiFi) |
@@ -231,11 +235,12 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 | 5 | `mv -T` to destination (atomic, same-FS) |
 
 <details>
-<summary><b>Kernel cmdline</b> — 15 params</summary>
+<summary><b>Kernel cmdline</b> — 16 params</summary>
 
 | Category | Params |
 |---|---|
 | CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
+| CPU/idle | `processor.max_cstate=1` |
 | GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.ppfeaturemask=0xfffd7fff` |
 | IOMMU/PCIe | `iommu=pt`, `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
@@ -336,20 +341,21 @@ Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
 </details>
 
 <details>
-<summary><b>sysctl</b> — 8 tunables</summary>
+<summary><b>sysctl</b> — 9 tunables</summary>
 
 | Key | Value |
 |---|---|
+| `net.core.busy_poll` | `50` |
+| `net.core.busy_read` | `50` |
 | `net.core.default_qdisc` | `fq` |
+| `net.core.netdev_budget` | `600` |
+| `net.core.netdev_budget_usecs` | `5000` |
 | `net.ipv4.tcp_congestion_control` | `bbr` |
 | `net.ipv4.tcp_notsent_lowat` | `16384` |
 | `net.ipv4.tcp_slow_start_after_idle` | `0` |
 | `vm.compaction_proactiveness` | `0` |
-| `vm.dirty_background_bytes` | `67108864` |
-| `vm.dirty_bytes` | `268435456` |
-| `vm.max_map_count` | `2147483642` |
 
-Priority 95 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
+Priority 95 — loaded after CachyOS vendor `70-cachyos-settings.conf`. `vm.max_map_count` (1 048 576) is supplied by systemd ≥ 254 (`/usr/lib/sysctl.d/10-map-count.conf`); `vm.dirty_*` revert to kernel ratio defaults (10 % / 20 %).
 
 </details>
 
@@ -366,13 +372,24 @@ Priority 95 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
 </details>
 
 <details>
-<summary><b>Env vars</b> — 11 keys</summary>
+<summary><b>RADV drirc</b> — 1 option</summary>
+
+| Option | Value |
+|---|---|
+| `radv_enable_unified_heap_on_apu` | `true` |
+
+`/etc/drirc.d/95-ry-radv-apu.conf` exposes a single unified VRAM heap for all Vulkan applications on the gfx1151 APU. Mesa upstream auto-enables this only for Red Dead Redemption 2 by process-name match (Mesa MR!18884); this drop-in extends the optimisation to every app. Applied at next Vulkan/OpenGL process launch (no service restart).
+
+</details>
+
+<details>
+<summary><b>Env vars</b> — 10 keys</summary>
 
 | Category | Vars |
 |---|---|
 | DXVK | `DXVK_LOG_LEVEL=none`, `DXVK_LOG_PATH=none` |
 | VKD3D | `VKD3D_DEBUG=none`, `VKD3D_SHADER_DEBUG=none` |
-| Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `DXIL_SPIRV_CONFIG=wmma_rdna3_workaround` |
+| Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
 | Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=16G`, `AMD_VULKAN_ICD=RADV` |
 | Wine | `WINEDEBUG=-all` |
 
@@ -466,10 +483,10 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 
 ## Managed Files
 
-12 files deployed via the [Phase 3](#phase-3--configuration-files) atomic-write sequence. System files install `0644`, the user file `0600`. The two iwd-gated destinations (`/etc/iwd/main.conf` and the NetworkManager drop-in) are skipped when `iwd` is not installed.
+13 files deployed via the [Phase 3](#phase-3--configuration-files) atomic-write sequence. System files install `0644`, the user file `0600`. The two iwd-gated destinations (`/etc/iwd/main.conf` and the NetworkManager drop-in) are skipped when `iwd` is not installed.
 
 <details>
-<summary><b>Destinations</b> — 12 paths</summary>
+<summary><b>Destinations</b> — 13 paths</summary>
 
 | Path | Mode |
 |---|---|
@@ -483,6 +500,7 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` *(skipped when iwd absent)* | `0644` |
 | `/etc/default/cpupower-service.conf` | `0644` |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `0644` |
+| `/etc/drirc.d/95-ry-radv-apu.conf` | `0644` |
 | `/etc/modprobe.d/ry-amdgpu-strixhalo.conf` | `0644` |
 | `~/.config/environment.d/10-environment.conf` | `0600` |
 

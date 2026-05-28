@@ -1,13 +1,13 @@
 #!/usr/bin/env fish
-# ry-install v7.8.5 (2026-05-27) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.9.0 (2026-05-27) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.8.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.9.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g RC_KVER_OK 0; set -g RC_KVER_WARN 1; set -g RC_KVER_FAIL 2
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 13
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 12
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONF /usr/lib/modules-load.d/10-ntsync.conf
 
@@ -520,8 +520,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/iwd/main.conf" \
     "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     "/etc/default/cpupower-service.conf" \
-    "/etc/sysctl.d/99-cachyos-sysctl.conf" \
-    "/etc/tmpfiles.d/99-cachyos-thp.conf" \
+    "/etc/sysctl.d/95-ry-overrides.conf" \
     "/etc/modprobe.d/ry-amdgpu-strixhalo.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -g SERVICE_DESTINATIONS
@@ -536,7 +535,7 @@ set -g KERNEL_PARAMS \
     amd_pstate=active \
     amdgpu.cwsr_enable=0 \
     amdgpu.gpu_recovery=1 \
-    amdgpu.ppfeaturemask=0xfffd3fff \
+    amdgpu.ppfeaturemask=0xfffd7fff \
     iommu=pt \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
@@ -558,13 +557,14 @@ set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR powersave
 
 set -g ENV_VARS \
+    "AMD_VULKAN_ICD=RADV" \
+    "DXIL_SPIRV_CONFIG=wmma_rdna3_workaround" \
     "DXVK_LOG_LEVEL=none" \
     "DXVK_LOG_PATH=none" \
-    "MESA_SHADER_CACHE_MAX_SIZE=4G" \
+    "MESA_SHADER_CACHE_MAX_SIZE=16G" \
     "PROTON_ENABLE_WAYLAND=1" \
-    "PROTON_FSR4_RDNA3_UPGRADE=1" \
+    "PROTON_FSR4_UPGRADE=1" \
     "PROTON_LOCAL_SHADER_CACHE=1" \
-    "RADV_PERFTEST=nircache" \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
     "WINEDEBUG=-all"
@@ -660,7 +660,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:9 \
-        ENV_VARS:10 \
+        ENV_VARS:11 \
         SYSCTL_VALUES:8 \
         PKGS_ADD:15 \
         PKGS_DEL:7 \
@@ -756,7 +756,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
 end
 
-# ── CONTENT GENERATORS (13; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
+# ── CONTENT GENERATORS (12; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -829,8 +829,8 @@ function _content__etc_default_cpupower-service.conf --description "Generate con
 end
 
 # Malformed key=value tracked in _RY_SYSCTL_BAD_ENTRIES; count mismatch → EXIT_GEN_SYSCTL.
-function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Generate content for sysctl drop-in"
-    printf '%s\n' "# ry-install sysctl tunables (priority 99 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
+function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
+    printf '%s\n' "# ry-install sysctl tunables (priority 95 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
     for entry in $SYSCTL_VALUES
         if not string match -qr '^\s*\S[^=]*=\s*\S' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; functions -q _log; and _log "SYSCTL_SKIP_MALFORMED: '$entry' (require non-empty key=value)"; continue; end
@@ -841,16 +841,12 @@ function _content__etc_sysctl.d_99-cachyos-sysctl.conf --description "Generate c
     if test $_printed -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
 end
 
-function _content__etc_tmpfiles.d_99-cachyos-thp.conf --description "Generate content for THP tmpfiles drop-in"
-    printf '%s\n' "# THP shrink_underused: keep huge pages intact on high-RAM workstations (128 GB profile)" "w /sys/kernel/mm/transparent_hugepage/shrink_underused - - - - 0"
-end
-
 # Strix Halo gfx1151 GTT sizing — ttm pages_limit + page_pool_size (ROCm#5595).
 function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)"
     printf '%s\n' \
         "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
-        "options ttm pages_limit=32505856" \
-        "options ttm page_pool_size=32505856"
+        "options ttm pages_limit=16777216" \
+        "options ttm page_pool_size=16777216"
 end
 
 # Dynamic dispatch: fn name = _content_$(_tmpfile_key dst).
@@ -1308,7 +1304,8 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     test -n "$_last_byte"; and string match -qr '^\d+$' -- "$_total"; and set _total (math $_total + 1)
     set -l _redacted; set -l _head_cap (math "max(1, $cap - 100)"); set -l _tail_cap 100; set -l _need_tail false
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and set _need_tail true
-    for _l in (command head -n $_head_cap -- "$tmpfile"); set -a _redacted "$_l"; end
+    set -l _head_n $cap; test "$_need_tail" = true; and set _head_n $_head_cap
+    for _l in (command head -n $_head_n -- "$tmpfile"); set -a _redacted "$_l"; end
     if test "$_need_tail" = true
         set -a _redacted "[... "(math $_total - $_head_cap - $_tail_cap)" lines elided ...]"
         for _l in (command tail -n $_tail_cap -- "$tmpfile"); set -a _redacted "$_l"; end
@@ -2155,8 +2152,8 @@ end
 
 function _vss_sysctl --description "_verify_static_system sub: sysctl drop-in key=value check"
     _echo "── sysctl drop-in ──"
-    if _chk_file /etc/sysctl.d/99-cachyos-sysctl.conf
-        for entry in $SYSCTL_VALUES; set -l parts (string split -m1 '=' -- "$entry"); set -l key $parts[1]; set -l val $parts[2]; _chk_grep /etc/sysctl.d/99-cachyos-sysctl.conf "$key = $val" "$key=$val"; end
+    if _chk_file /etc/sysctl.d/95-ry-overrides.conf
+        for entry in $SYSCTL_VALUES; set -l parts (string split -m1 '=' -- "$entry"); set -l key $parts[1]; set -l val $parts[2]; _chk_grep /etc/sysctl.d/95-ry-overrides.conf "$key = $val" "$key=$val"; end
     end
 end
 
@@ -2602,7 +2599,7 @@ end
 # Hex-aware: amdgpu sysfs hex|decimal varies; normalize both to decimal.
 function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (hex-aware compare)"
     test -d /sys/module/amdgpu/parameters; or return 0
-    for pair in "ppfeaturemask:0xfffd3fff"
+    for pair in "ppfeaturemask:0xfffd7fff"
         set -l _p (string split ':' -- "$pair"); set -l pname $_p[1]; set -l expected $_p[2]; set -l ppath /sys/module/amdgpu/parameters/$pname
         test -f "$ppath"; or continue
         set -l sysfs_val (string trim -- (command cat -- "$ppath" 2>/dev/null)); set -l sysfs_val_dec "$sysfs_val"; set -l expected_dec "$expected"
@@ -2887,7 +2884,7 @@ function _vre_tcp --description "Runtime env check: TCP congestion control (bbr)
     _echo
 end
 
-function _vre_thp_ksm --description "Runtime env check: THP enabled/defrag/shrink_underused + KSM"
+function _vre_thp_ksm --description "Runtime env check: THP enabled/defrag + KSM"
     _echo "── THP / KSM / ZRAM ──"
     for _kv in 'enabled:[always]:always:CachyOS default' 'defrag:[defer+madvise]:defer+madvise:'
         set -l _parts (string split ':' -- "$_kv")
@@ -2903,14 +2900,6 @@ function _vre_thp_ksm --description "Runtime env check: THP enabled/defrag/shrin
             set -l _hint "recommended: $_parts[3]"
             test -n "$_parts[4]"; and set _hint "$_hint — $_parts[4]"
             _warn "  THP $_parts[1]: $_active ($_hint)"
-        end
-    end
-    if test -f /sys/kernel/mm/transparent_hugepage/shrink_underused
-        set -l _shrink (command cat -- /sys/kernel/mm/transparent_hugepage/shrink_underused 2>/dev/null | string trim --)
-        if test "$_shrink" = 0
-            _ok "  THP shrink_underused: 0"
-        else
-            _warn "  THP shrink_underused: $_shrink (recommended: 0)"
         end
     end
     if test -f /sys/kernel/mm/ksm/run
@@ -3760,7 +3749,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     return 0
 end
 
-# ── INSTALL PHASE 4 (SERVICES): RESOLVED + THP + PKG REMOVE + MASK + ENABLE ───────────────────────
+# ── INSTALL PHASE 4 (SERVICES): RESOLVED + PKG REMOVE + MASK + ENABLE ─────────────────────────────
 function _configure_services_resolved_restart --description "Restart systemd-resolved when its conf.d drop-in is in place"
     test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
     if _run sudo -n systemctl restart systemd-resolved
@@ -3769,18 +3758,6 @@ function _configure_services_resolved_restart --description "Restart systemd-res
         _warn "Systemd-resolved restart failed"
         _phase_record "Services: resolved restart" WARN "restart failed"
         set -g INSTALL_HAD_ERRORS true
-    end
-    return 0
-end
-
-function _configure_services_thp_apply --description "Apply THP tmpfiles.d entry immediately (avoid reboot dependency for verify-runtime)"
-    test -f /etc/tmpfiles.d/99-cachyos-thp.conf; or return 0
-    command -q systemd-tmpfiles; or return 0
-    if _run sudo -n systemd-tmpfiles --create -- /etc/tmpfiles.d/99-cachyos-thp.conf
-        _phase_record "Services: THP tmpfiles apply" PASS "applied immediately"
-    else
-        _warn "systemd-tmpfiles --create for 99-cachyos-thp.conf failed (will apply on next boot)"
-        _phase_record "Services: THP tmpfiles apply" WARN "apply failed; will apply on next boot"
     end
     return 0
 end
@@ -4002,7 +3979,7 @@ function _configure_services_enable --description "Daemon-reload, batch-enable s
     return $_ret
 end
 
-function _install_configure_services --description "Enable, start, and configure systemd services (fstab opts + resolved + THP + PKGS_DEL + mask + enable)"
+function _install_configure_services --description "Enable, start, and configure systemd services (fstab opts + resolved + PKGS_DEL + mask + enable)"
     _progress Services
     _info "Post-installation tasks..."
     set -l _ret 0
@@ -4014,7 +3991,6 @@ function _install_configure_services --description "Enable, start, and configure
         set _ret 1
     end
     _configure_services_resolved_restart
-    _configure_services_thp_apply
     _configure_services_pkg_remove
     _configure_services_mask; or set _ret 1
     _configure_services_enable; or set _ret 1

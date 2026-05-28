@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.8.5-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.9.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -13,6 +13,7 @@
 ## Contents
 
 - [Quick Start](#quick-start)
+- [Upgrading](#upgrading)
 - [Scope](#scope)
 - [Prerequisites](#prerequisites)
 - [Hardware](#hardware)
@@ -45,6 +46,16 @@ Run as your normal user — root is refused; sudo is invoked internally. If you 
 3. `./ry-install.fish --verify-runtime`
 
 Typical duration: **3–8 minutes**.
+
+## Upgrading
+
+Upgrading from **≤ 7.8.x**: two managed files were renamed or dropped in 7.9.0, and their old copies are no longer overwritten. Remove them by hand — a leftover `99-cachyos-sysctl.conf` loads *after* (and so overrides) the new `95-ry-overrides.conf`:
+
+```fish
+sudo rm -f /etc/sysctl.d/99-cachyos-sysctl.conf /etc/tmpfiles.d/99-cachyos-thp.conf
+```
+
+Then re-run `./ry-install.fish` and reboot.
 
 ## Scope
 
@@ -103,8 +114,8 @@ Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP
 |---|---|---|
 | 1 | Preflight | Prereqs + lock + runtime validate |
 | 2 | Packages | `pacman -Syu --needed` + AUR via paru + cache refresh |
-| 3 | Configuration | Deploy 13 embedded files (atomic) |
-| 4 | Services | fstab + resolved + THP + `PKGS_DEL` + mask + enable |
+| 3 | Configuration | Deploy 12 embedded files (atomic) |
+| 4 | Services | fstab + resolved + `PKGS_DEL` + mask + enable |
 | 5 | Boot | `mkinitcpio -P` + `sdboot-manage` + sanity |
 | 6 | Finalize | user daemon-reload + paccache + NM restart (deferred on active WiFi) |
 
@@ -225,7 +236,7 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 | Category | Params |
 |---|---|
 | CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
-| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.ppfeaturemask=0xfffd3fff` |
+| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.ppfeaturemask=0xfffd7fff` |
 | IOMMU/PCIe | `iommu=pt`, `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
@@ -338,30 +349,19 @@ Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
 | `vm.dirty_bytes` | `268435456` |
 | `vm.max_map_count` | `2147483642` |
 
-Priority 99 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
+Priority 95 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
 
 </details>
 
 <details>
-<summary><b>tmpfiles</b> — 1 entry</summary>
-
-| Type | Path | Argument |
-|---|---|---|
-| `w` | `/sys/kernel/mm/transparent_hugepage/shrink_underused` | `0` |
-
-Applied immediately on install and on `--install-file` re-deploy; re-applied every boot by `systemd-tmpfiles-setup.service`.
-
-</details>
-
-<details>
-<summary><b>Env vars</b> — 10 keys</summary>
+<summary><b>Env vars</b> — 11 keys</summary>
 
 | Category | Vars |
 |---|---|
 | DXVK | `DXVK_LOG_LEVEL=none`, `DXVK_LOG_PATH=none` |
 | VKD3D | `VKD3D_DEBUG=none`, `VKD3D_SHADER_DEBUG=none` |
-| Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
-| Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=4G`, `RADV_PERFTEST=nircache` |
+| Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `DXIL_SPIRV_CONFIG=wmma_rdna3_workaround` |
+| Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=16G`, `AMD_VULKAN_ICD=RADV` |
 | Wine | `WINEDEBUG=-all` |
 
 Loaded by `systemd --user`. Log out and back in, or `systemctl --user import-environment` (then restart active user units) for live apply; running child processes retain inherited env until restarted. User file installs `0600`.
@@ -374,10 +374,9 @@ Loaded by `systemd --user`. Log out and back in, or `systemctl --user import-env
 |---|---|
 | 1 | fstab rewrite (`_install_fstab_opts`) |
 | 2 | `systemd-resolved` restart (re-applies `99-cachyos-resolved.conf`) |
-| 3 | `systemd-tmpfiles --create` for THP |
-| 4 | `PKGS_DEL` removal |
-| 5 | Mask 12 desktop/power units |
-| 6 | `daemon-reload` + enable runtime units |
+| 3 | `PKGS_DEL` removal |
+| 4 | Mask 12 desktop/power units |
+| 5 | `daemon-reload` + enable runtime units |
 
 <details>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -455,10 +454,10 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 
 ## Managed Files
 
-13 files deployed via the [Phase 3](#phase-3--configuration-files) atomic-write sequence. System files install `0644`, the user file `0600`. The two iwd-gated destinations (`/etc/iwd/main.conf` and the NetworkManager drop-in) are skipped when `iwd` is not installed.
+12 files deployed via the [Phase 3](#phase-3--configuration-files) atomic-write sequence. System files install `0644`, the user file `0600`. The two iwd-gated destinations (`/etc/iwd/main.conf` and the NetworkManager drop-in) are skipped when `iwd` is not installed.
 
 <details>
-<summary><b>Destinations</b> — 13 paths</summary>
+<summary><b>Destinations</b> — 12 paths</summary>
 
 | Path | Mode |
 |---|---|
@@ -471,8 +470,7 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 | `/etc/iwd/main.conf` *(skipped when iwd absent)* | `0644` |
 | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` *(skipped when iwd absent)* | `0644` |
 | `/etc/default/cpupower-service.conf` | `0644` |
-| `/etc/sysctl.d/99-cachyos-sysctl.conf` | `0644` |
-| `/etc/tmpfiles.d/99-cachyos-thp.conf` | `0644` |
+| `/etc/sysctl.d/95-ry-overrides.conf` | `0644` |
 | `/etc/modprobe.d/ry-amdgpu-strixhalo.conf` | `0644` |
 | `~/.config/environment.d/10-environment.conf` | `0600` |
 

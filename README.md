@@ -354,6 +354,18 @@ Priority 95 — loaded after CachyOS vendor `70-cachyos-settings.conf`.
 </details>
 
 <details>
+<summary><b>amdgpu / ttm modprobe</b> — 2 options</summary>
+
+| Option | Value |
+|---|---|
+| `ttm pages_limit` | `16777216` |
+| `ttm page_pool_size` | `16777216` |
+
+`/etc/modprobe.d/ry-amdgpu-strixhalo.conf` caps the TTM GTT pool at 64 GiB (16777216 × 4 KiB pages) for gfx1151 ROCm allocations (ROCm#5595). Applied on next initramfs rebuild via the `modconf` hook.
+
+</details>
+
+<details>
 <summary><b>Env vars</b> — 11 keys</summary>
 
 | Category | Vars |

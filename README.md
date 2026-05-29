@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.11.2-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.11.3-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -123,7 +123,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 `pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update` indexers.
 
-<details>
+<details open>
 <summary><b>Packages — install</b> — 13 pkgs</summary>
 
 | Category | Packages |
@@ -138,7 +138,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 </details>
 
-<details>
+<details open>
 <summary><b>Packages — AUR</b> — 2 pkgs</summary>
 
 | Package | Purpose |
@@ -148,14 +148,20 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 </details>
 
-<details>
+<details open>
 <summary><b>Vulkan dependencies</b> — 3 pkgs</summary>
 
-`vulkan-radeon`, `lib32-vulkan-radeon` (`chwd`), `lib32-mesa` (`PKGS_ADD`). `--verify-runtime` fails on any missing.
+| Package | Source |
+|---|---|
+| `vulkan-radeon` | `chwd` |
+| `lib32-vulkan-radeon` | `chwd` |
+| `lib32-mesa` | `PKGS_ADD` |
+
+`--verify-runtime` fails on any missing.
 
 </details>
 
-<details>
+<details open>
 <summary><b>Package caveats</b> — 4 notes</summary>
 
 | Caveat | Detail |
@@ -171,7 +177,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 Atomic write per file: `mktemp` in destination's parent → render via `tee` → post-write symlink probe → `chmod` → `mv -T` (same-FS).
 
-<details>
+<details open>
 <summary><b>Kernel cmdline</b> — 16 params</summary>
 
 | Category | Params |
@@ -187,7 +193,7 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 </details>
 
-<details>
+<details open>
 <summary><b>Bootloader</b> — 10 keys</summary>
 
 | Scope | Settings |
@@ -198,7 +204,7 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 </details>
 
-<details>
+<details open>
 <summary><b>Initramfs</b> — 6 fields</summary>
 
 | Field | Value |
@@ -212,42 +218,63 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 </details>
 
-<details>
+<details open>
 <summary><b>systemd-resolved</b> — 4 keys</summary>
 
-`MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=opportunistic`, `DNSSEC=allow-downgrade`.
+| Key | Value |
+|---|---|
+| `MulticastDNS` | `resolve` |
+| `LLMNR` | `no` |
+| `DNSOverTLS` | `opportunistic` |
+| `DNSSEC` | `allow-downgrade` |
 
 </details>
 
-<details>
+<details open>
 <summary><b>systemd-logind</b> — 9 keys</summary>
 
-All power/suspend/hibernate/reboot key handlers (key + long-press) → `ignore`; `HandleSecureAttentionKey=ignore` on systemd ≥ 257.
+| Key | Value |
+|---|---|
+| `HandlePowerKey` / `HandlePowerKeyLongPress` | `ignore` |
+| `HandleSuspendKey` / `HandleSuspendKeyLongPress` | `ignore` |
+| `HandleHibernateKey` / `HandleHibernateKeyLongPress` | `ignore` |
+| `HandleRebootKey` / `HandleRebootKeyLongPress` | `ignore` |
+| `HandleSecureAttentionKey` (systemd ≥ 257) | `ignore` |
 
 </details>
 
-<details>
+<details open>
 <summary><b>iwd</b> — 3 keys</summary>
 
-`[General] EnableNetworkConfiguration=false`, `[DriverQuirks] PowerSaveDisable=*`, `[Network] NameResolvingService=systemd`.
+| Section | Key | Value |
+|---|---|---|
+| `[General]` | `EnableNetworkConfiguration` | `false` |
+| `[DriverQuirks]` | `PowerSaveDisable` | `*` |
+| `[Network]` | `NameResolvingService` | `systemd` |
 
 </details>
 
-<details>
+<details open>
 <summary><b>NetworkManager</b> — 3 keys</summary>
 
-`[device] wifi.backend=iwd`, `[connection] wifi.powersave=2`, `[logging] level=WARN`.
+| Section | Key | Value |
+|---|---|---|
+| `[device]` | `wifi.backend` | `iwd` |
+| `[connection]` | `wifi.powersave` | `2` |
+| `[logging]` | `level` | `WARN` |
 
 </details>
 
-<details>
+<details open>
 <summary><b>cpupower-service</b> — 1 key</summary>
 
-`GOVERNOR='powersave'`, sourced by `cpupower.service`.
+| Key | Value |
+|---|---|
+| `GOVERNOR` | `powersave` (sourced by `cpupower.service`) |
 
 </details>
 
-<details>
+<details open>
 <summary><b>sysctl</b> — 9 tunables</summary>
 
 | Key | Value |
@@ -265,21 +292,30 @@ Priority 95 — loaded after CachyOS `70-cachyos-settings.conf`.
 
 </details>
 
-<details>
+<details open>
 <summary><b>amdgpu / ttm modprobe</b> — 2 options</summary>
 
-`ttm pages_limit=16777216`, `ttm page_pool_size=16777216` — caps TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595). Applied on next initramfs rebuild.
+| Option | Value |
+|---|---|
+| `ttm pages_limit` | `16777216` |
+| `ttm page_pool_size` | `16777216` |
+
+Caps TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595). Applied on next initramfs rebuild.
 
 </details>
 
-<details>
+<details open>
 <summary><b>RADV drirc</b> — 1 option</summary>
 
-`radv_enable_unified_heap_on_apu=true` — unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884 extended beyond RDR2). Applied at next Vulkan/GL launch.
+| Option | Value |
+|---|---|
+| `radv_enable_unified_heap_on_apu` | `true` |
+
+Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884 extended beyond RDR2). Applied at next Vulkan/GL launch.
 
 </details>
 
-<details>
+<details open>
 <summary><b>Env vars</b> — 10 keys</summary>
 
 | Category | Vars |
@@ -298,14 +334,20 @@ Loaded by `systemd --user` (`0600`). Re-login or `systemctl --user import-enviro
 
 fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask 12 units → `daemon-reload` + enable runtime units.
 
-<details>
+<details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
 
-`noatime`, `lazytime`, `commit=10`. Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`; `findmnt --verify` gates the atomic `mv`. **No automatic backup — snapshot `/etc/fstab` first.**
+| Option | Effect |
+|---|---|
+| `noatime` | no access-time writes |
+| `lazytime` | deferred timestamp writeback |
+| `commit=10` | 10 s journal commit interval |
+
+Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`; `findmnt --verify` gates the atomic `mv`. **No automatic backup — snapshot `/etc/fstab` first.**
 
 </details>
 
-<details>
+<details open>
 <summary><b>Packages — remove</b> — 7 pkgs</summary>
 
 | Package | Category |
@@ -317,7 +359,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask 12 
 
 </details>
 
-<details>
+<details open>
 <summary><b>Masked units</b> — 12 units</summary>
 
 | Category | Units |
@@ -329,10 +371,16 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask 12 
 
 </details>
 
-<details>
+<details open>
 <summary><b>Enabled units</b> — 3 units</summary>
 
-`fstrim.timer` (weekly TRIM), `NetworkManager.service` (deduped via `_RY_PKG_MANAGED_SERVICES`), `cpupower.service` (oneshot — `active`/`exited`). `NetworkManager-dispatcher.service` enabled when present.
+| Unit | Note |
+|---|---|
+| `fstrim.timer` | weekly TRIM |
+| `NetworkManager.service` | deduped via `_RY_PKG_MANAGED_SERVICES` |
+| `cpupower.service` | oneshot — `active`/`exited` |
+
+`NetworkManager-dispatcher.service` enabled when present.
 
 </details>
 

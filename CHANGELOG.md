@@ -1,5 +1,10 @@
 ry-install ChangeLog
 
+v7.11.3 - 2026-05-28
+
+- README: all collapsibles in the Configuration section (Phases 1–6, 20 `<details>`) set to `<details open>`; prose-bodied entries (`Vulkan dependencies`, `systemd-resolved`, `systemd-logind`, `iwd`, `NetworkManager`, `cpupower-service`, `amdgpu/ttm`, `RADV drirc`, `fstab`, `Enabled units`) converted to tables. Docs-only; no behaviour/count/invariant change.
+- README/script synced to v7.11.3.
+
 v7.11.2 - 2026-05-28
 
 - `_ry_content_bytes`, `_awf_render_to_tmp`: quote `$pipestatus` index operands in numeric `test`/`return` (`"$_ps[1]"`, `"$_ps[2]"`) to match the quoted convention used at all other pipestatus sites. Cosmetic; pipestatus is always populated, so no behaviour/count/invariant change.

@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.10.5 (2026-05-28) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.10.7 (2026-05-28) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.10.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.10.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -701,7 +701,9 @@ end
 # RTL8127 (10ec:8127) 10GbE — append r8127-dkms when chip present (Beelink BBS#7762).
 function _ir_detect_rtl8127 --description "Detect Realtek RTL8127 on PCIe; gate r8127-dkms inclusion"
     set -g _RY_RTL8127_PRESENT false
+    if not command -q lspci; _log "RTL8127_PROBE_SKIP: lspci (pciutils) not installed — assuming absent"; return 0; end
     set -l _hits (command lspci -n -d 10ec: 2>/dev/null | string match -r '10ec:8127' | count)
+    test -z "$_hits"; and set _hits 0
     if test "$_hits" -gt 0
         set -g _RY_RTL8127_PRESENT true
         not contains -- r8127-dkms $AUR_PKGS; and set -ga AUR_PKGS r8127-dkms
@@ -1534,7 +1536,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     _resolve_systemd_ver
     if test -n "$_RY_SYSTEMD_VER"; and test "$_RY_SYSTEMD_VER" -lt 250; _err "Systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
     set -l _opt_missing
-    for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip; command -q $cmd; or set -a _opt_missing $cmd; end
+    for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
     if test (count $AUR_PKGS) -gt 0; and not command -q paru; _warn "paru not found — AUR phase will fail (AUR_PKGS=$AUR_PKGS)"; _info "  Install paru: sudo pacman -S --needed paru"; end
     if test (count $AUR_PKGS) -gt 0; and command -q paru

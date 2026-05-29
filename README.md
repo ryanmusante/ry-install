@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.10.5-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.10.7-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -49,17 +49,13 @@ Typical duration: **3–8 minutes**.
 
 ## Upgrading
 
-Upgrading from **7.10.x**: `DXIL_SPIRV_CONFIG=wmma_rdna3_workaround` was dropped from the user env file (`~/.config/environment.d/10-environment.conf`). Re-run `./ry-install.fish` to redeploy it, then log out and back in (or `systemctl --user import-environment`) to clear the variable from the session.
+Re-run `./ry-install.fish` for any upgrade. The table lists only embedded-file deltas and the extra step each requires (7.10.7 is a script-internal fix — no file changes).
 
-Upgrading from **7.9.x**: one new managed file (`/etc/drirc.d/95-ry-radv-apu.conf`). No orphans to remove. Re-run `./ry-install.fish` and re-launch Vulkan/OpenGL apps.
-
-Upgrading from **≤ 7.8.x**: two managed files were renamed or dropped in 7.9.0, and their old copies are no longer overwritten. Remove them by hand — a leftover `99-cachyos-sysctl.conf` loads *after* (and so overrides) the new `95-ry-overrides.conf`:
-
-```fish
-sudo rm -f /etc/sysctl.d/99-cachyos-sysctl.conf /etc/tmpfiles.d/99-cachyos-thp.conf
-```
-
-Then re-run `./ry-install.fish` and reboot.
+| From | Embedded file change | Extra step |
+|------|----------------------|------------|
+| 7.10.x | `environment.d/10-environment.conf` — dropped `DXIL_SPIRV_CONFIG` | Log out/in (or `systemctl --user import-environment`) to clear session env |
+| 7.9.x | `+ /etc/drirc.d/95-ry-radv-apu.conf` | Relaunch Vulkan/GL apps |
+| ≤ 7.8.x | `/etc/sysctl.d/99-cachyos-sysctl.conf` → `95-ry-overrides.conf`; dropped `/etc/tmpfiles.d/99-cachyos-thp.conf` | `sudo rm -f /etc/sysctl.d/99-cachyos-sysctl.conf /etc/tmpfiles.d/99-cachyos-thp.conf`, then reboot |
 
 ## Scope
 

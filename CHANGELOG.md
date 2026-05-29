@@ -1,5 +1,13 @@
 ry-install ChangeLog
 
+v7.10.7 - 2026-05-28
+
+- `_ir_detect_rtl8127`: guard `command -q lspci` + numeric-coerce `_hits`. On hosts without `pciutils`, the unguarded `lspci` probe raised two uncaught fish errors (`Unknown command: lspci`, then `Argument is not a number: ''`) that bypassed `QUIET`; now logs `RTL8127_PROBE_SKIP` and treats the chip as absent. `lspci` added to the `_ry_check_deps` optional-tool probe. Detection/`r8127-dkms` gating on hosts that have `lspci` is unchanged.
+
+v7.10.6 - 2026-05-28
+
+- README: `Upgrading` notes condensed to one line each (≤7.8.x orphan-removal command inlined; no content dropped). Docs-only.
+
 v7.10.5 - 2026-05-28
 
 - `_vrk_module_state`: add runtime probe for `ttm pages_limit`/`page_pool_size` (16777216) via `_chk_sysfs_eq` (silent on kernels not exposing the params). Closes the one verification gap where the `/etc/modprobe.d/ry-amdgpu-strixhalo.conf` GTT cap was byte-verified on disk (`--verify-static`) but its live effect was never confirmed (`--verify-runtime` previously checked `amdgpu.ppfeaturemask` only).

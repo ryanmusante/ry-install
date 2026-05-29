@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.10.8 (2026-05-28) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.11.1 (2026-05-28) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.10.8"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.11.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -3194,7 +3194,7 @@ function _dir_group_or_world_writable --argument-names mode --description "True 
     return 1
 end
 
-# Overlay ifaces resolve to wireless phy; rare false positive (bond/bridge over eth + wifi-up) only delays NM restart to reboot.
+# Overlay ifaces resolve to wireless phy; rare false positive only delays NM restart to reboot.
 function _is_wifi_active_route --description "True if default route exits via wireless interface"
     set -l _def_iface ""
     for _af in -4 -6; set _def_iface (command ip $_af route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}'); test -n "$_def_iface"; and break; end

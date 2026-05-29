@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.10.7 (2026-05-28) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.10.8 (2026-05-28) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.10.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.10.8"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -398,7 +398,7 @@ function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for l
 end
 
 function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
-    set --erase _KCONFIG_DATA _KCONFIG_LOADED _RY_SKIP_IWD _RY_ESP_PATH _RY_BOOT_PATH
+    set --erase _KCONFIG_DATA _KCONFIG_LOADED _RY_ESP_PATH _RY_BOOT_PATH
     set --erase _RY_ESP_TRIED _RY_BOOT_TRIED
     set --erase _RY_SYSTEMD_VER _RY_SYSTEMD_VER_TRIED _RY_DEPLOYED_SERVICES
     set --erase _RY_BOOT_COUNT _RY_BOOT_ENUM_OK _CPU_PATH
@@ -524,7 +524,6 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/modprobe.d/ry-amdgpu-strixhalo.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -g SERVICE_DESTINATIONS
-set -g _RY_IWD_GATED_DSTS "/etc/iwd/main.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
@@ -579,8 +578,7 @@ set -g SYSCTL_VALUES \
     "net.ipv4.tcp_slow_start_after_idle=0" \
     "vm.compaction_proactiveness=0"
 
-# Opt-in: uncomment `lact-git` in PKGS_ADD + bump invariant 15→16 (LACT AMD GPU control).
-set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications mesa lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges cpupower  # lact-git
+set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges
 # Opt-in: uncomment `shelly` in PKGS_DEL + bump invariant 7→8 (CachyOS Shelly pkg mgr).
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings  # shelly
 set -g AUR_PKGS mkinitcpio-firmware mt76-mt7925-dkms
@@ -663,7 +661,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         LOGIND_IGNORE_KEYS:9 \
         ENV_VARS:10 \
         SYSCTL_VALUES:9 \
-        PKGS_ADD:15 \
+        PKGS_ADD:13 \
         PKGS_DEL:7 \
         MASK:12 \
         EXPECTED_VULKAN_PKGS:3 \
@@ -1021,18 +1019,7 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
     return 0
 end
 
-# ── IWD GATE + MASK LIST + JSON ESCAPE ────────────────────────────────────────────────────────────
-function _should_skip_iwd --argument-names dst --description "True if dst is iwd-gated AND iwd not installed (memoized)"
-    contains -- "$dst" $_RY_IWD_GATED_DSTS; or return 1
-    if not set -q _RY_SKIP_IWD
-        if command -q pacman; and command pacman -Qi iwd >/dev/null 2>&1
-            set -g _RY_SKIP_IWD false
-        else
-            set -g _RY_SKIP_IWD true
-        end
-    end
-    test "$_RY_SKIP_IWD" = true
-end
+# ── MASK LIST + JSON ESCAPE ────────────────────────────────────────────────────────────
 
 function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)"
     set -l s "$argv[1]"
@@ -1980,7 +1967,6 @@ end
 
 # iwd-gated dsts (iwd/main.conf, NM drop-in) silently skip when iwd absent.
 function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination"
-    if _should_skip_iwd "$dst"; _warn "Skipping $dst: iwd package not installed"; return 0; end
     set -l dir (command dirname -- "$dst")
     if test "$use_sudo" = true
         if not _run sudo -n mkdir -p -m 0755 -- "$dir"; _fail "Cannot create directory: $dir"; return 1; end
@@ -2166,16 +2152,14 @@ function _vss_logind --description "_verify_static_system sub: logind.conf.d key
     end
 end
 
-function _vss_iwd --argument-names skip_iwd --description "_verify_static_system sub: iwd config (skip-iwd-aware)"
-    if test "$skip_iwd" = true; _info "  Skipping (iwd not installed)"; return 0; end
+function _vss_iwd --description "_verify_static_system sub: iwd config"
     _chk_file /etc/iwd/main.conf; or return 0
     _chk_grep /etc/iwd/main.conf "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG"
     for quirk in $IWD_DRIVER_QUIRKS; _chk_grep /etc/iwd/main.conf "$quirk" "DriverQuirks $quirk"; end
     _chk_grep /etc/iwd/main.conf "NameResolvingService=$IWD_DNS_SERVICE" "DNS via $IWD_DNS_SERVICE"
 end
 
-function _vss_nm --argument-names skip_iwd --description "_verify_static_system sub: NetworkManager config (skip-iwd-aware)"
-    if test "$skip_iwd" = true; _info "  Skipping iwd-backend config (iwd not installed)"; return 0; end
+function _vss_nm --description "_verify_static_system sub: NetworkManager config"
     _chk_file /etc/NetworkManager/conf.d/99-cachyos-nm.conf; or return 0
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.backend=$NM_WIFI_BACKEND" "wifi backend $NM_WIFI_BACKEND"
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.powersave=$NM_WIFI_POWERSAVE" "WiFi powersave $NM_WIFI_POWERSAVE"
@@ -2190,12 +2174,6 @@ function _vss_sysctl --description "_verify_static_system sub: sysctl drop-in ke
 end
 
 function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, iwd, NM, cpupower-service.conf, sysctl"
-    set -l _skip_iwd false
-    if not command -q pacman
-        set _skip_iwd true
-    else if not command pacman -Qi iwd >/dev/null 2>&1
-        set _skip_iwd true
-    end
     _echo "SYSTEM CONFIGURATION"
     _vss_ntsync_modules
     _echo "── resolved ──"
@@ -2205,9 +2183,9 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _echo "── logind.conf ──"
     _vss_logind
     _echo "── iwd ──"
-    _vss_iwd $_skip_iwd
+    _vss_iwd
     _echo "── NetworkManager ──"
-    _vss_nm $_skip_iwd
+    _vss_nm
     _echo "── cpupower-service.conf ──"
     _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "GOVERNOR='$CPUPOWER_GOVERNOR'" "GOVERNOR=$CPUPOWER_GOVERNOR"
     _vss_sysctl
@@ -2330,7 +2308,6 @@ end
 
 # Dual pipestatus: gen rc + string-collect rc (collect-fail = verifier bug).
 function _vsc_check_one --argument-names dst --description "_verify_static_checksum sub. Compare one destination's expected vs installed bytes"
-    if _should_skip_iwd "$dst"; _info "  $dst: SKIP (iwd not installed)"; _log "VERIFY_STATIC_SKIP_IWD: dst=$dst"; return 0; end
     set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _gen_rc $pipestatus[1]; set -l _gen_collect_rc $pipestatus[2]
     if test $_gen_rc -ne 0; _fail_no_count "  $dst: generator failed (rc=$_gen_rc)"; set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc"; return 0; end
@@ -2404,7 +2381,6 @@ end
 # ── --CHECK MODE: SILENT IDEMPOTENCY PROBE (0=clean / 3=preflight / 10=drift) ─────────────────────
 function _check_phase_files --description "--check phase: file content hash compare"
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
-        _should_skip_iwd "$dst"; and continue
         set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
         set -l _gen_rc $pipestatus[1]
         if test $_gen_rc -ne 0; _log "CHECK_PREFLIGHT: generator failed for $dst (rc=$_gen_rc)"; return $EXIT_PREFLIGHT; end
@@ -2500,7 +2476,7 @@ function _ry_do_check --description "Silent idempotency probe"
     set -l _drift $_RY_CHECK_DRIFT; set -l _checked $_RY_CHECK_FILES_CHECKED
     set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
     if test $_drift -ne 0; _log_section "CHECK END"; return $EXIT_DRIFT; end
-    if test $_checked -eq 0; _log "CHECK_PREFLIGHT: no files could be checked (all skipped by _should_skip_iwd)"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
+    if test $_checked -eq 0; _log "CHECK_PREFLIGHT: no files could be checked"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
     _log_section "CHECK END"
     return $EXIT_OK
 end
@@ -2793,7 +2769,7 @@ end
 
 function _vrsv_chk_cpupower_governor --argument-names rec_str --description "Check cpupower.service (oneshot accepts 'exited'); governor applied from /etc/default/cpupower-service.conf"
     set -l rec (string split ':' -- "$rec_str")
-    if test "$rec[1]" = not-found; _warn "  cpupower.service: not installed (PKGS_ADD includes cpupower; pacman db may be stale)"; return 0; end
+    if test "$rec[1]" = not-found; _warn "  cpupower.service: not installed (cpupower is a CachyOS default; pacman db may be stale)"; return 0; end
     if test "$rec[2]" = active; or test "$rec[2]" = exited
         if test "$rec[3]" = enabled
             _ok "  cpupower.service: $rec[2] (enabled)"
@@ -4407,8 +4383,6 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/services phases"
     else
         not _install_aur_packages; and set -g INSTALL_HAD_ERRORS true
     end
-    # AUR may have transitively installed iwd; re-probe.
-    set --erase _RY_SKIP_IWD
     _rrp_optional_indexer updatedb updatedb
     _rrp_optional_indexer pkgfile "pkgfile --update" --update
     set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0
@@ -4644,13 +4618,6 @@ function _ry_do_install_file --argument-names target --description "Install a si
     set -l _use_sudo (_idf_use_sudo_for_dst "$target")
     if test -z "$_use_sudo"; _err "Not a managed file: $target"; _info "Run without path to see managed files"; return $EXIT_USAGE; end
     _echo "── ry-install v$VERSION - Install Single File ──"
-    # iwd-gate: suppress false "Installed" + post-hook for skipped targets.
-    if _should_skip_iwd "$target"
-        _warn "Skipped: $target (iwd package not installed)"
-        _log "INSTALL_FILE_SKIP_IWD: target=$target"
-        _log_section "INSTALL-FILE END"
-        return 0
-    end
     if test "$_use_sudo" = true; _ensure_sudo_cached; or return $EXIT_PREFLIGHT; end
     if not _ry_install_file "$target" $_use_sudo; _err "Failed to install: $target"; _log_section "INSTALL-FILE END"; return 1; end
     _echo

@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.10.7-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.10.8-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -49,7 +49,7 @@ Typical duration: **3–8 minutes**.
 
 ## Upgrading
 
-Re-run `./ry-install.fish` for any upgrade. The table lists only embedded-file deltas and the extra step each requires (7.10.7 is a script-internal fix — no file changes).
+Re-run `./ry-install.fish` for any upgrade. The table lists only embedded-file deltas and the extra step each requires (7.10.7–7.10.8 are script-internal — no embedded-file changes; 7.10.8 makes the iwd configs unconditional and prunes already-default packages from `PKGS_ADD`, applied automatically on re-run).
 
 | From | Embedded file change | Extra step |
 |------|----------------------|------------|
@@ -169,17 +169,17 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 | 4 | `pkgfile --update` | optional indexer (run when `pkgfile` installed) |
 
 <details>
-<summary><b>Packages — install</b> — 15 pkgs</summary>
+<summary><b>Packages — install</b> — 13 pkgs</summary>
 
 | Category | Packages |
 |---|---|
 | sysadmin | `nvme-cli`, `htop`, `git-delta`, `lm_sensors` |
 | gaming | `cachyos-gaming-meta`, `cachyos-gaming-applications` |
-| Vulkan/GL | `mesa`, `lib32-mesa` |
+| Vulkan/GL | `lib32-mesa` |
 | rust utilities | `fd`, `sd`, `dust`, `procs`, `bottom` |
-| perf | `realtime-privileges`, `cpupower` |
+| perf | `realtime-privileges` |
 
-**Opt-in:** `lact-git` (LACT AMD GPU control) — uncomment in `PKGS_ADD` + bump invariant 15→16.
+`iwd`, `mesa`, and `cpupower` are CachyOS defaults (installed by the base system) — not re-added here; the iwd/NetworkManager configs deploy unconditionally regardless.
 
 </details>
 
@@ -479,7 +479,7 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 
 ## Managed Files
 
-13 files deployed via the [Phase 3](#phase-3--configuration-files) atomic-write sequence. System files install `0644`, the user file `0600`. The two iwd-gated destinations (`/etc/iwd/main.conf` and the NetworkManager drop-in) are skipped when `iwd` is not installed.
+13 files deployed via the [Phase 3](#phase-3--configuration-files) atomic-write sequence. System files install `0644`, the user file `0600`.
 
 <details>
 <summary><b>Destinations</b> — 13 paths</summary>
@@ -492,8 +492,8 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 | `/etc/mkinitcpio.conf` | `0644` |
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | `0644` |
 | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | `0644` |
-| `/etc/iwd/main.conf` *(skipped when iwd absent)* | `0644` |
-| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` *(skipped when iwd absent)* | `0644` |
+| `/etc/iwd/main.conf` | `0644` |
+| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `0644` |
 | `/etc/default/cpupower-service.conf` | `0644` |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `0644` |
 | `/etc/drirc.d/95-ry-radv-apu.conf` | `0644` |

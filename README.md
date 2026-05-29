@@ -13,7 +13,6 @@
 ## Contents
 
 - [Quick Start](#quick-start)
-- [Upgrading](#upgrading)
 - [Scope](#scope)
 - [Prerequisites](#prerequisites)
 - [Hardware](#hardware)
@@ -40,22 +39,9 @@ chmod +x ry-install.fish
 
 Run as your normal user — root is refused; sudo is invoked internally. If you cannot set the executable bit, use `fish ry-install.fish`.
 
-**Post-install:**
-1. Reboot — required for kernel cmdline, initramfs, NM backend switch.
-2. `./ry-install.fish --verify-static`
-3. `./ry-install.fish --verify-runtime`
+**Post-install:** reboot (required for cmdline, initramfs, NM backend switch), then `--verify-static` and `--verify-runtime`. Typical duration: **3–8 minutes**.
 
-Typical duration: **3–8 minutes**.
-
-## Upgrading
-
-Re-run `./ry-install.fish` for any upgrade. The table lists only embedded-file deltas and the extra step each requires (7.10.7–7.10.8 are script-internal — no embedded-file changes; 7.10.8 makes the iwd configs unconditional and prunes already-default packages from `PKGS_ADD`, applied automatically on re-run).
-
-| From | Embedded file change | Extra step |
-|------|----------------------|------------|
-| 7.10.x | `environment.d/10-environment.conf` — dropped `DXIL_SPIRV_CONFIG` | Log out/in (or `systemctl --user import-environment`) to clear session env |
-| 7.9.x | `+ /etc/drirc.d/95-ry-radv-apu.conf` | Relaunch Vulkan/GL apps |
-| ≤ 7.8.x | `/etc/sysctl.d/99-cachyos-sysctl.conf` → `95-ry-overrides.conf`; dropped `/etc/tmpfiles.d/99-cachyos-thp.conf` | `sudo rm -f /etc/sysctl.d/99-cachyos-sysctl.conf /etc/tmpfiles.d/99-cachyos-thp.conf`, then reboot |
+**Upgrading:** re-run `./ry-install.fish` — idempotent, no manual migration steps.
 
 ## Scope
 
@@ -71,14 +57,13 @@ Re-run `./ry-install.fish` for any upgrade. The table lists only embedded-file d
 | fish | ≥ 3.6 |
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | systemd | ≥ 250 |
-| GNU coreutils | ≥ 8.x (`timeout --foreground/--kill-after`) |
-| Hardware | `EXPECTED_CPU_MATCH` default `Ryzen AI Max` |
-| sudo cache | Cached credential (`sudo -v`) |
-| paru | Required for AUR (`mkinitcpio-firmware`, `mt76-mt7925-dkms`; +`r8127-dkms` on RTL8127 systems) |
+| Hardware | CPU matches `Ryzen AI Max` |
+| paru | required for AUR |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
+| sudo | cached credential (`sudo -v`) |
 
 > [!WARNING]
-> Sudo cache may lapse during the 3–8 min install. Mitigate via `Defaults timestamp_timeout=60` added to `/etc/sudoers` (edit with `sudo visudo`), a keepalive shell (`while true; sudo -v; sleep 60; end`), or a scoped `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. Interactive fallback needs stdin + stderr to be TTYs — set `RY_INSTALL_NO_INTERACTIVE_SUDO=1` for cron/systemd. Recovery: re-run (idempotent).
+> Sudo cache may lapse during the 3–8 min run. Mitigate with `Defaults timestamp_timeout=60` (via `sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. For cron/systemd set `RY_INSTALL_NO_INTERACTIVE_SUDO=1` (interactive fallback needs TTY stdin+stderr). Recovery: re-run — idempotent.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -87,11 +72,7 @@ df -h / /boot                    # verify space
 
 ## Hardware
 
-| Component | Part |
-|---|---|
-| CPU | Ryzen AI Max+ 395 (Zen 5, gfx1151 iGPU) |
-| GPU | Radeon 8060S (RDNA 3.5) |
-| RAM | 128 GB LPDDR5x-8000 |
+Ryzen AI Max+ 395 (Zen 5, gfx1151 iGPU) · Radeon 8060S (RDNA 3.5) · 128 GB LPDDR5x-8000.
 
 Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (profile is amdgpu/gfx1151-specific).
 
@@ -101,11 +82,10 @@ Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP
 |---|---|
 | (no args) | Full unattended install |
 | `-V, --verbose` | Show install output (check ignores -V) |
-| `--verify-static` | Check config files match embedded content |
-| `--verify-runtime` | Check live system state (after reboot) |
-| `--check` | Silent idempotency probe (0=clean, 3=preflight, 10=drift) |
-| `--install-file <path>` | Re-deploy a single managed file (absolute path) |
-| `--` | End of options (positionals after `--` are rejected) |
+| `--verify-static` | Files match embedded content |
+| `--verify-runtime` | Live system state (post-reboot) |
+| `--check` | Idempotency probe (0=clean, 3=preflight, 10=drift) |
+| `--install-file <path>` | Re-deploy one managed file (absolute path) |
 | `-h, --help` / `-v, --version` | Help / version |
 
 ## Install Flow
@@ -121,25 +101,15 @@ Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP
 
 ## Run Summary
 
-Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + totals (`PASS · WARN · FAIL · DEFER · SKIP · N/A`) + elapsed wall-clock + single-word verdict.
+Install prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + totals + elapsed + verdict. Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress it (JSONL still records every `PHASE_RESULT`).
 
-| Result | Semantics |
-|---|---|
-| `PASS`  | Ran and succeeded |
-| `WARN`  | Ran with a non-fatal anomaly |
-| `FAIL`  | Ran and failed (sets `INSTALL_HAD_ERRORS=true`) |
-| `DEFER` | Intentionally deferred to next boot |
-| `SKIP`  | Not run by design (tool absent, boot-critical bail, opt-in disabled) |
-| `--` / `N/A` | Not applicable |
-
-| Verdict | Trigger |
-|---|---|
-| `PASS`               | `0 FAIL · 0 WARN` |
-| `PASS-WITH-WARNINGS` | `0 FAIL · ≥1 WARN` |
-| `FAIL`               | `≥1 FAIL` (without boot-critical) |
-| `FAIL-BOOT-CRITICAL` | Boot rebuild cascade aborted (`EXIT_BOOT_CRIT`); prints **DO NOT REBOOT** + recovery steps |
-
-`DEFER`/`SKIP`/`N/A` are informational and don't affect the verdict. Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress the matrix (JSONL still records every `PHASE_RESULT`).
+| Result | Semantics | | Verdict | Trigger |
+|---|---|---|---|---|
+| `PASS` | succeeded | | `PASS` | `0 FAIL · 0 WARN` |
+| `WARN` | non-fatal anomaly | | `PASS-WITH-WARNINGS` | `0 FAIL · ≥1 WARN` |
+| `FAIL` | failed (`INSTALL_HAD_ERRORS=true`) | | `FAIL` | `≥1 FAIL` |
+| `DEFER` | deferred to next boot | | `FAIL-BOOT-CRITICAL` | boot cascade aborted; prints **DO NOT REBOOT** |
+| `SKIP` / `N/A` | by design / not applicable | | | |
 
 ## Configuration
 
@@ -147,26 +117,11 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 
 ### Phase 1 — Preflight
 
-| # | Step | Detail |
-|---|---|---|
-| 1 | Bootstrap | fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME |
-| 2 | `_init_runtime` | root UUID + CPU match + invariants |
-| 3 | Lock | atomic `mkdir` 0700 + dead-PID reclaim |
-| 4 | Sudo cache | `RY_INSTALL_NO_INTERACTIVE_SUDO=1` refuses fallback |
-| 5 | Deps | systemd ≥ 250 + paru ≥ 2.0.0 |
-| 6 | Disk space | 2 GiB `/` + 200 MiB `/boot` |
-| 7 | Network | HTTPS + ICMP probe |
-| 8 | Kernel | ≥ 6.14 FAIL · ≥ 6.18.4 WARN · ntsync |
-| 9 | Configs | per-destination format validators |
+Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (root UUID + CPU match + invariants) → lock (atomic `mkdir` 0700 + dead-PID reclaim) → sudo cache → deps (systemd ≥ 250 + paru ≥ 2.0.0) → disk space → network (HTTPS + ICMP) → kernel (≥ 6.14 FAIL · ≥ 6.18.4 WARN · ntsync) → per-destination config validators.
 
 ### Phase 2 — Packages
 
-| # | Step | Action |
-|---|---|---|
-| 1 | `_install_packages` | `pacman -Syu --needed` for `PKGS_ADD` |
-| 2 | `_install_aur_packages` | `paru` for `AUR_PKGS` |
-| 3 | `updatedb` | optional indexer (run when `mlocate` installed) |
-| 4 | `pkgfile --update` | optional indexer (run when `pkgfile` installed) |
+`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update` indexers.
 
 <details>
 <summary><b>Packages — install</b> — 13 pkgs</summary>
@@ -179,7 +134,7 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 | rust utilities | `fd`, `sd`, `dust`, `procs`, `bottom` |
 | perf | `realtime-privileges` |
 
-`iwd`, `mesa`, and `cpupower` are CachyOS defaults (installed by the base system) — not re-added here; the iwd/NetworkManager configs deploy unconditionally regardless.
+`iwd`, `mesa`, `cpupower` are CachyOS defaults — not re-added; iwd/NM configs deploy unconditionally.
 
 </details>
 
@@ -189,22 +144,14 @@ Install completion prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + t
 | Package | Purpose |
 |---|---|
 | `mkinitcpio-firmware` | firmware blobs not in `linux-firmware` |
-| `mt76-mt7925-dkms` | MT7925 WiFi (panic fix) |
-
-Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alone is not definitive).
+| `mt76-mt7925-dkms` | MT7925 WiFi (panic fix); `modinfo mt7925e` verifies DKMS build |
 
 </details>
 
 <details>
 <summary><b>Vulkan dependencies</b> — 3 pkgs</summary>
 
-| Package | Source |
-|---|---|
-| `vulkan-radeon` | `chwd` |
-| `lib32-vulkan-radeon` | `chwd` |
-| `lib32-mesa` | `PKGS_ADD` |
-
-`--verify-runtime` fails on any missing.
+`vulkan-radeon`, `lib32-vulkan-radeon` (`chwd`), `lib32-mesa` (`PKGS_ADD`). `--verify-runtime` fails on any missing.
 
 </details>
 
@@ -213,48 +160,41 @@ Post-install `modinfo mt7925e` cross-check verifies DKMS build (paru `rc=0` alon
 
 | Caveat | Detail |
 |---|---|
-| Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` → `pacman -Sy --needed` (no `-u`). Violates [Arch policy](https://wiki.archlinux.org/title/System_maintenance#Partial_upgrades_are_unsupported) |
-| AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`. `--removemake` omitted — DKMS needs makedeps |
-| PGP failures | `--skipreview` auto-declines key import; pre-import via `gpg --recv-keys <KEYID>` or run `paru -S <pkg>` manually |
-| Reverse deps | `PKGS_DEL` removal skipped on outside rdeps. Cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`); Plasma rdeps already enumerated |
+| Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` → `pacman -Sy --needed` (no `-u`; violates Arch policy) |
+| AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted — DKMS needs makedeps) |
+| PGP failures | pre-import `gpg --recv-keys <KEYID>` or run `paru -S <pkg>` manually |
+| Reverse deps | `PKGS_DEL` skipped on outside rdeps; cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`) |
 
 </details>
 
 ### Phase 3 — Configuration Files
 
-| # | Step |
-|---|---|
-| 1 | `mktemp` in destination's parent dir (same-FS rename) |
-| 2 | Render embedded content into tmp file via `tee` |
-| 3 | Symlink probe (post-write; narrows TOCTOU window to mktemp→tee) |
-| 4 | `chmod` to target mode |
-| 5 | `mv -T` to destination (atomic, same-FS) |
+Atomic write per file: `mktemp` in destination's parent → render via `tee` → post-write symlink probe → `chmod` → `mv -T` (same-FS).
 
 <details>
 <summary><b>Kernel cmdline</b> — 16 params</summary>
 
 | Category | Params |
 |---|---|
-| CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
-| CPU/idle | `processor.max_cstate=1` |
+| CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable`, `processor.max_cstate=1` |
 | GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.ppfeaturemask=0xfffd7fff` |
 | IOMMU/PCIe | `iommu=pt`, `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
-| Boot/log | `quiet` (flag), `nowatchdog` (flag) |
+| Boot/log | `quiet`, `nowatchdog` |
 
-Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`). UUID prefix computed from the `/` mount at preflight.
+Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`); root UUID prefix from the `/` mount.
 
 </details>
 
 <details>
 <summary><b>Bootloader</b> — 10 keys</summary>
 
-| Category | Settings |
+| Scope | Settings |
 |---|---|
-| loader.conf — UI | `default=@saved`, `timeout=0`, `console-mode=keep`, `editor=no` |
-| sdboot — kernel args | `LINUX_OPTIONS` mirrors `KERNEL_PARAMS`, `LINUX_FALLBACK_OPTIONS=quiet` |
-| sdboot — entry mgmt | `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING=yes`, `OVERWRITE_EXISTING=yes`, `REMOVE_OBSOLETE=yes` |
+| loader.conf | `default=@saved`, `timeout=0`, `console-mode=keep`, `editor=no` |
+| sdboot args | `LINUX_OPTIONS` = `KERNEL_PARAMS`, `LINUX_FALLBACK_OPTIONS=quiet` |
+| sdboot entries | `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING=yes`, `OVERWRITE_EXISTING=yes`, `REMOVE_OBSOLETE=yes` |
 
 </details>
 
@@ -264,75 +204,46 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 | Field | Value |
 |---|---|
 | `MODULES` | `(amdgpu)` |
-| `BINARIES` | `()` |
-| `FILES` | `()` |
+| `BINARIES` / `FILES` | `()` / `()` |
 | `HOOKS` | `(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)` |
-| `COMPRESSION` | `zstd` |
-| `COMPRESSION_OPTIONS` | `(-1 -T0)` |
+| `COMPRESSION` | `zstd`, `COMPRESSION_OPTIONS (-1 -T0)` |
 
-11 ordering invariants enforced by `_vmh_order_checks` (`base` first, `fsck` last, no duplicates). Existence-only validation also runs post-pacman.
+11 ordering invariants enforced by `_vmh_order_checks` (`base` first, `fsck` last, no dupes).
 
 </details>
 
 <details>
 <summary><b>systemd-resolved</b> — 4 keys</summary>
 
-| Key | Value |
-|---|---|
-| `MulticastDNS` | `resolve` |
-| `LLMNR` | `no` |
-| `DNSOverTLS` | `opportunistic` |
-| `DNSSEC` | `allow-downgrade` |
+`MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=opportunistic`, `DNSSEC=allow-downgrade`.
 
 </details>
 
 <details>
 <summary><b>systemd-logind</b> — 9 keys</summary>
 
-| Key | Value |
-|---|---|
-| `HandlePowerKey` | `ignore` |
-| `HandlePowerKeyLongPress` | `ignore` |
-| `HandleSuspendKey` | `ignore` |
-| `HandleSuspendKeyLongPress` | `ignore` |
-| `HandleHibernateKey` | `ignore` |
-| `HandleHibernateKeyLongPress` | `ignore` |
-| `HandleRebootKey` | `ignore` |
-| `HandleRebootKeyLongPress` | `ignore` |
-| `HandleSecureAttentionKey` | `ignore` (systemd ≥ 257) |
+All power/suspend/hibernate/reboot key handlers (key + long-press) → `ignore`; `HandleSecureAttentionKey=ignore` on systemd ≥ 257.
 
 </details>
 
 <details>
 <summary><b>iwd</b> — 3 keys</summary>
 
-| Section / Key | Value |
-|---|---|
-| `[General] EnableNetworkConfiguration` | `false` |
-| `[DriverQuirks] PowerSaveDisable` | `*` |
-| `[Network] NameResolvingService` | `systemd` |
+`[General] EnableNetworkConfiguration=false`, `[DriverQuirks] PowerSaveDisable=*`, `[Network] NameResolvingService=systemd`.
 
 </details>
 
 <details>
 <summary><b>NetworkManager</b> — 3 keys</summary>
 
-| Section / Key | Value |
-|---|---|
-| `[device] wifi.backend` | `iwd` |
-| `[connection] wifi.powersave` | `2` |
-| `[logging] level` | `WARN` |
+`[device] wifi.backend=iwd`, `[connection] wifi.powersave=2`, `[logging] level=WARN`.
 
 </details>
 
 <details>
 <summary><b>cpupower-service</b> — 1 key</summary>
 
-| Key | Value |
-|---|---|
-| `GOVERNOR` | `'powersave'` |
-
-Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
+`GOVERNOR='powersave'`, sourced by `cpupower.service`.
 
 </details>
 
@@ -341,8 +252,7 @@ Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
 
 | Key | Value |
 |---|---|
-| `net.core.busy_poll` | `50` |
-| `net.core.busy_read` | `50` |
+| `net.core.busy_poll`, `net.core.busy_read` | `50` |
 | `net.core.default_qdisc` | `fq` |
 | `net.core.netdev_budget` | `600` |
 | `net.core.netdev_budget_usecs` | `5000` |
@@ -351,30 +261,21 @@ Sourced by `cpupower.service` (`/usr/lib/systemd/scripts/cpupower`).
 | `net.ipv4.tcp_slow_start_after_idle` | `0` |
 | `vm.compaction_proactiveness` | `0` |
 
-Priority 95 — loaded after CachyOS vendor `70-cachyos-settings.conf`. `vm.max_map_count` (1 048 576) is supplied by systemd ≥ 254 (`/usr/lib/sysctl.d/10-map-count.conf`); `vm.dirty_*` revert to kernel ratio defaults (10 % / 20 %).
+Priority 95 — loaded after CachyOS `70-cachyos-settings.conf`.
 
 </details>
 
 <details>
 <summary><b>amdgpu / ttm modprobe</b> — 2 options</summary>
 
-| Option | Value |
-|---|---|
-| `ttm pages_limit` | `16777216` |
-| `ttm page_pool_size` | `16777216` |
-
-`/etc/modprobe.d/ry-amdgpu-strixhalo.conf` caps the TTM GTT pool at 64 GiB (16777216 × 4 KiB pages) for gfx1151 ROCm allocations (ROCm#5595). Applied on next initramfs rebuild via the `modconf` hook.
+`ttm pages_limit=16777216`, `ttm page_pool_size=16777216` — caps TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595). Applied on next initramfs rebuild.
 
 </details>
 
 <details>
 <summary><b>RADV drirc</b> — 1 option</summary>
 
-| Option | Value |
-|---|---|
-| `radv_enable_unified_heap_on_apu` | `true` |
-
-`/etc/drirc.d/95-ry-radv-apu.conf` exposes a single unified VRAM heap for all Vulkan applications on the gfx1151 APU. Mesa upstream auto-enables this only for Red Dead Redemption 2 by process-name match (Mesa MR!18884); this drop-in extends the optimisation to every app. Applied at next Vulkan/OpenGL process launch (no service restart).
+`radv_enable_unified_heap_on_apu=true` — unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884 extended beyond RDR2). Applied at next Vulkan/GL launch.
 
 </details>
 
@@ -389,30 +290,18 @@ Priority 95 — loaded after CachyOS vendor `70-cachyos-settings.conf`. `vm.max_
 | Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=16G`, `AMD_VULKAN_ICD=RADV` |
 | Wine | `WINEDEBUG=-all` |
 
-Loaded by `systemd --user`. Log out and back in, or `systemctl --user import-environment` (then restart active user units) for live apply; running child processes retain inherited env until restarted. User file installs `0600`.
+Loaded by `systemd --user` (`0600`). Re-login or `systemctl --user import-environment` to apply live.
 
 </details>
 
 ### Phase 4 — Services
 
-| # | Step |
-|---|---|
-| 1 | fstab rewrite (`_install_fstab_opts`) |
-| 2 | `systemd-resolved` restart (re-applies `99-cachyos-resolved.conf`) |
-| 3 | `PKGS_DEL` removal |
-| 4 | Mask 12 desktop/power units |
-| 5 | `daemon-reload` + enable runtime units |
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask 12 units → `daemon-reload` + enable runtime units.
 
 <details>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
 
-| Option | Effect |
-|---|---|
-| `noatime` | disable atime updates |
-| `lazytime` | defer atime/mtime writeback |
-| `commit=10` | journal flush every 10s |
-
-Idempotent rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `defaults`, existing `commit=*`. `findmnt --verify` gates the atomic `mv`. Malformed ext4 entries (digits-only `$4`, NF<4) surface as WARN, untouched. **No automatic backup — snapshot `/etc/fstab` before first run.**
+`noatime`, `lazytime`, `commit=10`. Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`; `findmnt --verify` gates the atomic `mv`. **No automatic backup — snapshot `/etc/fstab` first.**
 
 </details>
 
@@ -421,17 +310,10 @@ Idempotent rewrite — strips conflicting `atime`, `relatime`, `strictatime`, `d
 
 | Package | Category |
 |---|---|
-| `plymouth` | boot splash |
-| `cachyos-plymouth-bootanimation` | boot splash |
-| `cachyos-plymouth-theme` | boot splash |
-| `breeze-plymouth` | boot splash (Plasma rdep) |
-| `plymouth-kcm` | boot splash (Plasma rdep) |
-| `micro` | text editor |
-| `cachyos-micro-settings` | text editor |
+| `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm` | boot splash (incompatible with `quiet`; Plasma rdeps enumerated) |
+| `micro`, `cachyos-micro-settings` | text editor |
 
-Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman -R` does not refuse on rdep-hold.
-
-**Opt-in:** `shelly` (CachyOS Shelly pkg mgr) — uncomment in `PKGS_DEL` + bump invariant 7→8.
+**Opt-in:** `shelly` — uncomment in `PKGS_DEL` + bump invariant 7→8.
 
 </details>
 
@@ -440,42 +322,27 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 
 | Category | Units |
 |---|---|
-| Replaced daemons | `ananicy-cpp.service` (cgroups used instead), `avahi-daemon.{service,socket}` (systemd-resolved mDNS), `power-profiles-daemon.service` (conflicts with amd_pstate + cpupower) |
-| Unused subsys | `lvm2-monitor.service` (no LVM), `ufw.service` (rules flushed pre-mask via `ufw --force disable`) |
+| Replaced daemons | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service` |
+| Unused subsys | `lvm2-monitor.service`, `ufw.service` (rules flushed pre-mask) |
 | Boot delays | `NetworkManager-wait-online.service` |
-| Power states | `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` (suspend / hibernate disabled) |
+| Power states | `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
 
 </details>
 
 <details>
 <summary><b>Enabled units</b> — 3 units</summary>
 
-| Unit | Notes |
-|---|---|
-| `fstrim.timer` | weekly SSD TRIM |
-| `NetworkManager.service` | also enabled by its pacman scriptlet (deduped via `_RY_PKG_MANAGED_SERVICES`) |
-| `cpupower.service` | oneshot — accepts `active` or `exited` |
-
-`NetworkManager-dispatcher.service` is enabled when installed and not already enabled; silently skipped when absent.
+`fstrim.timer` (weekly TRIM), `NetworkManager.service` (deduped via `_RY_PKG_MANAGED_SERVICES`), `cpupower.service` (oneshot — `active`/`exited`). `NetworkManager-dispatcher.service` enabled when present.
 
 </details>
 
 ### Phase 5 — Boot
 
-| # | Step |
-|---|---|
-| 1 | `mkinitcpio -P` (initramfs rebuild) |
-| 2 | `sdboot-manage gen` (bootloader entries) |
-| 3 | `sdboot-manage update` (bootloader entries) |
-| 4 | Post-rebuild sanity (`vmlinuz-*` + `initramfs-*.img` + loader-entry kernel-path verify; emits **DO NOT REBOOT** on failure) |
+`mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update` → post-rebuild sanity (`vmlinuz-*` + `initramfs-*.img` + loader-entry kernel path; emits **DO NOT REBOOT** on failure).
 
 ### Phase 6 — Finalize
 
-| # | Step |
-|---|---|
-| 1 | `systemctl --user daemon-reload` (skipped when no active user-bus) |
-| 2 | pacman cache trim (`paccache -rk2 -ruk0`; keeps 2 installed + 0 uninstalled versions; falls back to `pacman -Sc` when paccache absent; runs when an upgrade ran or any `PKGS_DEL` member was removed this invocation) |
-| 3 | NetworkManager restart to apply the wpa_supplicant → iwd backend switch — deferred to next reboot when WiFi is the active route |
+`systemctl --user daemon-reload` (skipped without active user-bus) → pacman cache trim (`paccache -rk2 -ruk0`, falls back to `pacman -Sc`) → NetworkManager restart for the wpa_supplicant → iwd switch (deferred to reboot when WiFi is the active route).
 
 ## Managed Files
 
@@ -509,22 +376,21 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 | Atomic writes | tmp → render → symlink probe → chmod → `mv -T` |
 | Permissions | system `0644` · user `0600` · `~/ry-install/` `0700` |
 | fstab | `findmnt --verify` gate; rejects symlinked `/etc/fstab` |
-| Boot rebuild gate | Skipped on package/boot-config failure. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses taint only |
-| mkinitcpio rollback | Byte-exact revert on `pacman -Syu` failure or signal |
-| Root detection | Refuses root; sudo invoked internally |
-| Instance lock | Atomic mkdir `0700`; reclaims dead-PID lock via `kill -0` probe |
-| Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE non-fatal; WINCH non-fatal (progress bar re-anchor) |
+| Boot rebuild gate | skipped on package/boot-config failure; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses taint only |
+| mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
+| Instance lock | atomic mkdir `0700`; reclaims dead-PID lock via `kill -0` |
+| Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE/WINCH non-fatal |
 
 <details>
-<summary><b>Exit codes</b> — 12 entries</summary>
+<summary><b>Exit codes</b></summary>
 
-| Category | Codes |
+| Code | Meaning |
 |---|---|
-| General | `0` Success; `1` Verify FAIL count, non-critical install error, or kernel <6.14 hard-floor fail; `2` Usage error |
-| Phase failure | `3` Preflight failed; `4` Boot-critical failure; `5` Lock failed |
-| Drift | `10` `--check` drift |
-| Generator | `11` `EXIT_GEN_NOFN` — content generator function missing (internal sentinel); `12` `EXIT_GEN_NOUUID` — content generator missing prerequisite global (e.g. `_ROOT_UUID`); `13` `EXIT_GEN_SYSCTL` — `_content__etc_sysctl.d_*` output count mismatch / malformed sysctl entry |
-| Runtime/sig | `128+N` Signal (`129`=HUP, `130`=INT, `131`=QUIT, `143`=TERM, `134`=ABRT, `138`=USR1, `140`=USR2). `137` (KILL) cannot be caught — surfaces only when external `pkill -KILL` or `_run`'s 10s post-TERM grace fires; `251` `EXIT_RUN_TMPFAIL` — `_run` failed to allocate stdout/stderr capture tmpfiles |
+| `0` / `1` / `2` | success / verify-FAIL or kernel-floor fail / usage |
+| `3` / `4` / `5` | preflight / boot-critical / lock |
+| `10` | `--check` drift |
+| `11` / `12` / `13` | gen: missing fn / missing UUID / sysctl malformed |
+| `128+N` / `251` | signal (130=INT, 143=TERM, …) / `_run` tmpfile alloc fail |
 
 </details>
 
@@ -533,30 +399,22 @@ Boot-splash group incompatible with `quiet`. Plasma rdeps enumerated so `pacman 
 
 | Variable | Default | Effect |
 |---|---|---|
-| `RY_RUN_TIMEOUT` | `3600` | `_run` wall-clock cap (s); `0` disables. Pkg/boot/db-indexer ops bypass |
-| `RY_INITRD_WARN_MB` | `100` | Initramfs size warning threshold (MB) |
-| `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | `=1` → `pacman -Sy --needed` (install-only) |
+| `RY_RUN_TIMEOUT` | `3600` | `_run` cap (s); `0` disables (pkg/boot/db ops bypass) |
+| `RY_INITRD_WARN_MB` | `100` | initramfs size warning (MB) |
+| `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | `=1` → `pacman -Sy --needed` |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses torn-package gate |
-| `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | `=1` cascades rdeps into removal set |
-| `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses `EXPECTED_CPU_MATCH` hard-fail |
-| `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses interactive `sudo -v` fallback |
-| `RY_INSTALL_NO_MATRIX` | unset | any non-empty value suppresses run-summary matrix (JSONL unaffected) |
-| `NO_COLOR` | unset | Suppress ANSI color ([no-color.org](https://no-color.org/)) |
+| `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | `=1` cascades rdeps into removal |
+| `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses `EXPECTED_CPU_MATCH` |
+| `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses interactive `sudo -v` |
+| `RY_INSTALL_NO_MATRIX` | unset | non-empty suppresses run-summary matrix |
+| `NO_COLOR` | unset | suppress ANSI color |
 
 </details>
 
 <details>
-<summary><b>Logs</b> — 7 properties</summary>
+<summary><b>Logs</b></summary>
 
-| Property | Value |
-|---|---|
-| Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` |
-| Format | NDJSON, one file per run, no auto-rotation |
-| Prune | `find ~/ry-install/logs -xdev -type f -mtime +30 -delete` |
-| Events | `header`, `log`, `footer`; all carry `ts` + `event` |
-| Footer marker | `bail` (preflight fail), `interrupted` (signal); normal exit: none |
-| `ERR_NO_DATA` | systemctl probes returning <3 fields emit `ERR_NO_DATA` |
-| `gen_fail` | `_content__*` non-zero returns; flips verify exit to `1` |
+NDJSON at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, one file per run, no rotation. Events `header`/`log`/`footer` (all carry `ts` + `event`); footer marker `bail` (preflight) or `interrupted` (signal). Prune: `find ~/ry-install/logs -xdev -type f -mtime +30 -delete`.
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl
@@ -577,39 +435,37 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 
 ## Known Issues
 
-| Category | Issue | Workaround |
+| Component | Issue | Workaround |
 |---|---|---|
-| Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` OR `IgnorePkg=linux-firmware` (pin blocks future CVE fixes) |
-| Strix Halo GPU | ROCm VRAM allocation | Fixed in kernel 6.16+ (`sudo pacman -Syu linux-cachyos`) |
-| MediaTek MT7925 | Kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
-| MediaTek MT7925 | TX power 3 dBm / random deauth | None (cosmetic / upstream) |
-| Realtek RTL8127 10GbE | Throughput drops / disconnects under sustained load (Beelink BBS#7762) | `paru -S r8127-dkms` (auto-gated by lspci -d 10ec:8127) |
-| Strix Halo ACP | `No matching ASoC machine driver` (dmesg, once/boot) | Pending upstream; HDMI + USB audio unaffected |
-| NetworkManager + iwd | Boot connectivity failure (intermittent) | `nmcli radio wifi off; and nmcli radio wifi on` |
-| NetworkManager + iwd | WPA2/3 Enterprise GUI broken | Use CLI or wpa_supplicant |
-| Other | Stale instance lock | Auto-reclaimed if PID dead; else `rm -rf ~/ry-install/.lock` |
-| Other | `systemctl --user` skipped | No user-bus; enable via `loginctl enable-linger $USER` |
-| Other | AUR PGP signature failure | `gpg --recv-keys <KEYID>` then re-run, or `paru -S <pkg>` without `--skipreview` |
+| Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` or `IgnorePkg=linux-firmware` |
+| Strix Halo GPU | ROCm VRAM allocation | kernel 6.16+ (`pacman -Syu linux-cachyos`) |
+| MT7925 | kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
+| MT7925 | TX power 3 dBm / random deauth | none (upstream) |
+| RTL8127 10GbE | throughput drops under load (BBS#7762) | `paru -S r8127-dkms` (auto-gated) |
+| Strix Halo ACP | `No matching ASoC machine driver` | pending upstream; HDMI/USB audio unaffected |
+| NM + iwd | intermittent boot connectivity | `nmcli radio wifi off; and nmcli radio wifi on` |
+| NM + iwd | WPA2/3 Enterprise GUI broken | CLI or wpa_supplicant |
+| Lock / user-bus | stale lock / `systemctl --user` skipped | dead-PID auto-reclaim; `loginctl enable-linger $USER` |
+| AUR | PGP signature failure | `gpg --recv-keys <KEYID>` then re-run |
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
-| Initramfs rebuild refused | Fix root cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
+| Boot failure | live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
+| Initramfs rebuild refused | fix cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
-| Sudo cache expired | `./ry-install.fish` re-primes cache; see Prerequisites WARNING for long runs |
-| `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1 ./ry-install.fish`; inspect via `pactree -ru <pkg>` |
-| ntsync missing | Requires kernel 6.14+ · `ls /dev/ntsync` |
-| `.ry-install.*` orphan in `/etc` or `/boot/loader` | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, then re-run |
-| PipeWire `nice-level Permission denied` | `sudo usermod -aG realtime $USER` then re-login |
-| Kernel 6.19.0 + Strix Halo black screen | `sudo pacman -Syu` (≥6.19.1) ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
-| iwd config edits not taking effect | `sudo systemctl try-restart iwd.service` |
-| MT7925 workaround applied but WiFi still failing | `dkms status mt76-mt7925`; re-run `paru -S mt76-mt7925-dkms` without `--skipreview` |
+| Sudo cache expired | re-run re-primes; see Prerequisites warning |
+| `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1 ./ry-install.fish` |
+| ntsync missing | kernel 6.14+ · `ls /dev/ntsync` |
+| `.ry-install.*` orphan | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, re-run |
+| PipeWire `nice-level` denied | `sudo usermod -aG realtime $USER`, re-login |
+| Kernel 6.19.0 black screen | `pacman -Syu` (≥6.19.1) ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
+| iwd edits not applied | `sudo systemctl try-restart iwd.service` |
 
 ## References
 
-[NM + iwd](https://wiki.archlinux.org/title/NetworkManager#Using_iwd_as_the_Wi-Fi_backend) · [MT7925](https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek) · [gfx1151 issues](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) · [ppfeaturemask](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter) · [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes) · [CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042) (kernel 6.19.0 black screen)
+[NM + iwd](https://wiki.archlinux.org/title/NetworkManager#Using_iwd_as_the_Wi-Fi_backend) · [MT7925](https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek) · [gfx1151 issues](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) · [ppfeaturemask](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter) · [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes) · [CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)
 
 ## License
 

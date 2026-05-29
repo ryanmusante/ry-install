@@ -4,6 +4,7 @@ v7.10.8 - 2026-05-28
 
 - iwd configuration is now unconditional. Removed the iwd-gating subsystem: `_should_skip_iwd`, `_RY_IWD_GATED_DSTS`, the memoized `_RY_SKIP_IWD` probe (`pacman -Qi iwd`), the AUR-phase re-probe, the cleanup-erase entry, and every `skip_iwd` parameter/guard in `_ry_install_file`, `_vss_iwd`, `_vss_nm`, `_verify_static_system`, `_vsc_check_one`, `_check_phase_files`, and `_ry_do_install_file`. `/etc/iwd/main.conf` and the NetworkManager iwd-backend drop-in (`/etc/NetworkManager/conf.d/99-cachyos-nm.conf`) now deploy and verify unconditionally; previously they were skipped when `iwd` was absent. `iwd` is a CachyOS default (base `Network` group), so it is relied upon rather than force-installed.
 - Pruned `PKGS_ADD` of packages already present in a default CachyOS install: removed `iwd`, `mesa`, and `cpupower` (base groups), plus the commented `lact-git` opt-in. Invariant `PKGS_ADD` 15→13. README package table and Managed Files / Destinations updated accordingly (no "skipped when iwd absent" note). The `cpupower.service` not-found warning no longer references `PKGS_ADD`.
+- README: condensed the sudo-cache warning, removed the Upgrading section (replaced by a one-line note under Quick Start), and trimmed all tables to vital data (process/step tables collapsed to prose, uniform tables condensed, post-table prose cut). All concrete values — kernel cmdline, sysctl keys, env vars, paths, modes, exit codes, package names, masked units — preserved verbatim. Docs-only; 616→472 lines.
 
 v7.10.7 - 2026-05-28
 

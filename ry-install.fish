@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.11.1 (2026-05-28) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.11.2 (2026-05-28) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.11.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.11.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -1889,7 +1889,7 @@ end
 function _ry_content_bytes --argument-names dst --description "Raw bytes of embedded content"
     set -l _content (_ry_get_file_content "$dst" 2>/dev/null | string collect --no-trim-newlines --allow-empty)
     set -l _ps $pipestatus
-    test $_ps[1] -ne 0; and return $_ps[1]
+    test "$_ps[1]" -ne 0; and return "$_ps[1]"
     printf '%s' "$_content"
 end
 
@@ -1898,7 +1898,7 @@ function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description 
     _track_tmpfile "$_tee_err"
     _ry_get_file_content "$dst" | _as $use_sudo tee -- "$tmpfile" >/dev/null 2>"$_tee_err"
     set -l _ps $pipestatus
-    if test $_ps[1] -ne 0
+    if test "$_ps[1]" -ne 0
         switch $_ps[1]
             case $EXIT_GEN_NOFN
                 _err "Not a managed destination: $dst"
@@ -1916,12 +1916,12 @@ function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description 
         _rm_tmp "$_tee_err" false
         return 1
     end
-    if test $_ps[2] -eq 250
+    if test "$_ps[2]" -eq 250
         _fail "→ $dst (BUG: _as called with non-bool use_sudo='$use_sudo' in render pipe)"
         _rm_tmp "$_tee_err" false
         return 1
     end
-    if test $_ps[2] -ne 0
+    if test "$_ps[2]" -ne 0
         set -l _tee_msg ""
         test -n "$_tee_err"; and test -s "$_tee_err"; and set _tee_msg " tee_err="(command head -n 1 -- "$_tee_err" | string trim --)
         _fail "→ $dst (write to temp failed)$_tee_msg"

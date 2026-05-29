@@ -1,5 +1,10 @@
 ry-install ChangeLog
 
+v7.11.2 - 2026-05-28
+
+- `_ry_content_bytes`, `_awf_render_to_tmp`: quote `$pipestatus` index operands in numeric `test`/`return` (`"$_ps[1]"`, `"$_ps[2]"`) to match the quoted convention used at all other pipestatus sites. Cosmetic; pipestatus is always populated, so no behaviour/count/invariant change.
+- README/script synced to v7.11.2.
+
 v7.11.1 - 2026-05-28
 
 - Inline comment trim: longest explanatory comment condensed to terse single-line form. Section banners, "why" rationale, and script header (version + date + purpose) preserved. No behaviour/count/invariant change.

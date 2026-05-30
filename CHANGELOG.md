@@ -2,6 +2,9 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.16.4  2026-05-30
+- docs: tighten Prerequisites sudo-cache warning (drop duplicate "3-8 min", kept in Quick Start, + connective filler); all 7 mitigations retained.
+
 7.16.3  2026-05-30
 - docs: README collapsible sections all open by default (Destinations, Exit codes, Runtime variables, Logs; the other 20 already open).
 

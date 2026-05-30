@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.16.3-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.16.4-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -63,7 +63,7 @@ Run as your normal user — root is refused; sudo is invoked internally. If you 
 | sudo | cached credential (`sudo -v`) |
 
 > [!WARNING]
-> Sudo cache may lapse during the 3–8 min run. Mitigate with `Defaults timestamp_timeout=60` (via `sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. For cron/systemd, pre-cache credentials first — the interactive `sudo -v` fallback needs a TTY on stdin+stderr and is skipped without one. Recovery: re-run — idempotent.
+> Sudo cache may lapse mid-run. Mitigate with `Defaults timestamp_timeout=60` (`sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. For cron/systemd, pre-cache credentials first — the interactive `sudo -v` fallback needs a TTY (stdin+stderr) and is skipped without one. Recovery: re-run (idempotent).
 
 ```fish
 ./ry-install.fish --check        # idempotency probe

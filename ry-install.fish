@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.14.2 (2026-05-29) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.14.3 (2026-05-30) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.14.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.14.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -170,7 +170,7 @@ if test -z "$KVER_MINOR"; or not string match -qr '^\d+$' -- "$KVER_MINOR"; echo
 # ── KERNEL / SYSTEMD STATE PROBES ─────────────────────────────────────────────────────────────────
 function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy-loaded; empty on missing config)"
     if not set -q _KCONFIG_LOADED
-        if test -f /proc/config.gz
+        if test -f /proc/config.gz; and command -q zcat
             set -g _KCONFIG_DATA (command zcat /proc/config.gz 2>/dev/null)
         else
             set -g _KCONFIG_DATA
@@ -1576,7 +1576,7 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
             return 0
         end
     end
-    if command ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1
+    if command -q ping; and command ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1
         _err "Network connectivity: HTTPS or DNS unreachable (raw-IP ICMP works; check /etc/resolv.conf or 443 egress)"
     else
         _err "Network connectivity: FAILED — cannot reach archlinux.org, cloudflare.com, or 1.1.1.1"
@@ -3012,6 +3012,10 @@ function _vre_thp_ksm --description "Runtime env check: THP enabled/defrag + KSM
 end
 
 function _vre_zram --description "Runtime env check: zram service + active swap device"
+    if not command -q swapon
+        _warn "  ZRAM/swap check skipped: swapon(1) unavailable"
+        return 0
+    end
     set -l _zram_swap (command swapon --show=NAME,TYPE 2>/dev/null | command grep zram)
     set -l _zram_dev (printf '%s\n' $_zram_swap | string match -rg -- '(zram\d+)' | command head -n 1)
     test -z "$_zram_dev"; and set _zram_dev zram0
@@ -3034,7 +3038,8 @@ function _vre_zram --description "Runtime env check: zram service + active swap 
     end
     _echo "── ZRAM device ──"
     if test -n "$_zram_swap"
-        set -l _zram_info (command zramctl --output NAME,ALGORITHM,DISKSIZE,TOTAL,COMP-RATIO --noheadings 2>/dev/null | command head -n 1 | string trim --)
+        set -l _zram_info ""
+        command -q zramctl; and set _zram_info (command zramctl --output NAME,ALGORITHM,DISKSIZE,TOTAL,COMP-RATIO --noheadings 2>/dev/null | command head -n 1 | string trim --)
         _ok "  ZRAM swap active: $_zram_info"
     else
         set -l _any_swap (command swapon --show=NAME,SIZE 2>/dev/null | command tail -n +2)
@@ -3285,6 +3290,7 @@ end
 
 # Overlay ifaces resolve to wireless phy; rare false positive only defers NM restart.
 function _is_wifi_active_route --description "True if default route exits via wireless interface"
+    command -q ip; or return 1
     set -l _def_iface ""
     for _af in -4 -6; set _def_iface (command ip $_af route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}'); test -n "$_def_iface"; and break; end
     test -z "$_def_iface"; and return 1

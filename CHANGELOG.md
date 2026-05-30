@@ -2,6 +2,16 @@ ry-install changelog
 
 Most recent first. Dates ISO-8601; UTC offset omitted.
 
+7.14.3  2026-05-30
+- Guard optional-tool invocations whose absence emitted a fish "Unknown command"
+  stack trace (the inline 2>/dev/null does not suppress shell-level resolution
+  errors): _is_wifi_active_route (ip), _ry_check_network ICMP fallback (ping),
+  _vre_zram (swapon, zramctl), _kconfig_cache (zcat). Each now degrades to its
+  existing not-found path (return/skip/empty) when the tool is absent. These
+  tools are already in the optional warn-tier, so this only affects environments
+  missing iproute2/iputils/util-linux/gzip; install and verify behaviour on a
+  complete system is unchanged.
+
 7.14.2  2026-05-29
 - Formatting only, no behaviour change: list arrays use one-element-per-line
   continuation uniformly (MKINITCPIO_HOOKS, LOGIND_IGNORE_KEYS, PKGS_ADD,

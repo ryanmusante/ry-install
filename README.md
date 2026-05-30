@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.16.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.16.1-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -331,7 +331,7 @@ Loaded by `systemd --user` (`0600`). Re-login or `systemctl --user import-enviro
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask 12 units → `daemon-reload` + enable runtime units.
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask 11 units → `daemon-reload` + enable runtime units.
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -469,7 +469,7 @@ jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/log
 
 No automated uninstaller. Use [Managed Files](#managed-files) as the rollback source-of-truth:
 
-1. `sudo systemctl unmask` the 12 masked units.
+1. `sudo systemctl unmask` the 11 masked units.
 2. `sudo rm` deployed paths from the Managed Files list.
 3. Restore `/etc/fstab` from your pre-install snapshot.
 4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`).

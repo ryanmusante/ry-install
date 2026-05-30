@@ -2,6 +2,9 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.16.1  2026-05-30
+- docs: README prose mask count 12 -> 11 (Phase 4 narrative + Uninstall); now matches MASK array and detail table (lvm2-monitor.service dropped in 7.16.0).
+
 7.16.0  2026-05-30
 - logind: drop HandleSecureAttentionKey; LOGIND_IGNORE_KEYS 9 -> 8; remove systemd>=257 gate.
 - mask: drop lvm2-monitor.service; MASK 12 -> 11.

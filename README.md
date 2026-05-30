@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.16.2-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.16.3-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -395,7 +395,7 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 
 13 files deployed via the [Phase 3](#phase-3--configuration) atomic-write sequence. System files install `0644`, the user file `0600`.
 
-<details>
+<details open>
 <summary><b>Destinations</b> — 13 paths</summary>
 
 | Path | Mode |
@@ -429,7 +429,7 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 | Instance lock | atomic mkdir `0700`; reclaims dead-PID lock via `kill -0` |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE/WINCH non-fatal |
 
-<details>
+<details open>
 <summary><b>Exit codes</b></summary>
 
 | Code | Meaning |
@@ -442,7 +442,7 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 
 </details>
 
-<details>
+<details open>
 <summary><b>Runtime variables</b> — 4 vars</summary>
 
 | Variable | Default | Effect |
@@ -454,7 +454,7 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 
 </details>
 
-<details>
+<details open>
 <summary><b>Logs</b></summary>
 
 NDJSON at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, one file per run, no rotation. Events `header`/`log`/`footer` (all carry `ts` + `event`); footer marker `bail` (preflight) or `interrupted` (signal). Prune: `find ~/ry-install/logs -xdev -type f -mtime +30 -delete`.

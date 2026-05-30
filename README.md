@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.16.1-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.16.2-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -174,7 +174,7 @@ The AUR package is installed unconditionally (no hardware gating).
 
 </details>
 
-### Phase 3 — Configuration Files
+### Phase 3 — Configuration
 
 Atomic write per file: `mktemp` in destination's parent → render via `tee` → post-write symlink probe → `chmod` → `mv -T` (same-FS).
 
@@ -393,7 +393,7 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 
 ## Managed Files
 
-13 files deployed via the [Phase 3](#phase-3--configuration-files) atomic-write sequence. System files install `0644`, the user file `0600`.
+13 files deployed via the [Phase 3](#phase-3--configuration) atomic-write sequence. System files install `0644`, the user file `0600`.
 
 <details>
 <summary><b>Destinations</b> — 13 paths</summary>

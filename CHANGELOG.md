@@ -2,6 +2,9 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.16.2  2026-05-30
+- docs: README Phase 3 heading "Configuration Files" -> "Configuration"; matches _RY_PHASE_NAMES + Install-Flow table; internal anchor updated.
+
 7.16.1  2026-05-30
 - docs: README prose mask count 12 -> 11 (Phase 4 narrative + Uninstall); now matches MASK array and detail table (lvm2-monitor.service dropped in 7.16.0).
 

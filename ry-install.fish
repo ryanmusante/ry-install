@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.13.4 (2026-05-29) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.13.5 (2026-05-29) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.13.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.13.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -39,7 +39,6 @@ function _ry_show_help --description "Display usage information and available su
         "  canonical code recorded in JSONL footer.exit_code (130 INT / 143 TERM / 129 HUP / 131 QUIT / 134 ABRT / 138 USR1 / 140 USR2)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
-        "  RY_INITRD_WARN_MB=<MB>  Initramfs size warning threshold. Default 100." \
         "  RY_INSTALL_FORCE_BOOT_REBUILD=1  Bypass torn-package gate (recovery)." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
         "  NO_COLOR  Suppress ANSI color (any value, per no-color.org)." \
@@ -403,7 +402,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_PACMAN_REVERT_ATTEMPTED
     set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
-    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC _RY_DMESG_ACP
+    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
@@ -592,13 +591,7 @@ set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5
-set -g BOOT_TIME_TARGET 15; set -g INITRD_WARN_MB 100
-
-if set -q RY_INITRD_WARN_MB; and test -n "$RY_INITRD_WARN_MB"
-    if string match -qr '^[1-9][0-9]*$' -- "$RY_INITRD_WARN_MB"; set -g INITRD_WARN_MB $RY_INITRD_WARN_MB
-    else; not set -q _RY_DEFERRED_WARNS; and set -g _RY_DEFERRED_WARNS; set -ga _RY_DEFERRED_WARNS "RY_INITRD_WARN_MB='$RY_INITRD_WARN_MB' is invalid (expected positive integer) — using default $INITRD_WARN_MB MB"
-    end
-end
+set -g BOOT_TIME_TARGET 15
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ─────────────────────────────
@@ -2690,24 +2683,6 @@ function _vrkm_blacklist --description "_vrk_module_state sub: module_blacklist=
     end
 end
 
-# Merged modprobe config + dmesg ttm lines (diagnostic; non-fatal).
-function _vrkm_ttm_diag --description "_vrk_module_state sub: log effective TTM modprobe options + dmesg ttm messages"
-    if command -q modprobe
-        set -l _ttm_cfg (command modprobe -c 2>/dev/null | command grep -E '^[[:space:]]*options[[:space:]]+ttm\b')
-        if test (count $_ttm_cfg) -gt 0
-            for _l in $_ttm_cfg; _info "  TTM modprobe.d (effective): "(string trim -- "$_l"); _log "TTM_MODPROBE_EFFECTIVE: "(string trim -- "$_l"); end
-        else
-            _info "  TTM modprobe.d (effective): no 'options ttm' directive in merged modprobe config"
-            _log "TTM_MODPROBE_EFFECTIVE: none"
-        end
-    end
-    set -q _RY_DMESG_CACHE; and test (count $_RY_DMESG_CACHE) -gt 0; or return 0
-    set -l _ttm_dmesg (printf '%s\n' $_RY_DMESG_CACHE | command grep -iE 'ttm' | command head -n 5)
-    if test (count $_ttm_dmesg) -gt 0
-        for _l in $_ttm_dmesg; _info "  dmesg (ttm): $_l"; _log "TTM_DMESG: $_l"; end
-    end
-end
-
 function _vrk_module_state --description "Runtime kparam check: module parameters + blacklist"
     _echo "MODULE STATE"
     _echo
@@ -2717,7 +2692,6 @@ function _vrk_module_state --description "Runtime kparam check: module parameter
     _vrkm_amdgpu
     _chk_sysfs_eq /sys/module/ttm/parameters/pages_limit 16777216 ttm.pages_limit
     _chk_sysfs_eq /sys/module/ttm/parameters/page_pool_size 16777216 ttm.page_pool_size
-    _vrkm_ttm_diag
     _echo "── Additional module parameters ──"
     _chk_sysfs_match /sys/module/zswap/parameters/enabled '^[N0]$' zswap.enabled
     _chk_sysfs_eq /proc/sys/kernel/nmi_watchdog 0 nmi_watchdog
@@ -2751,18 +2725,9 @@ function _vrk_clocksource --description "Runtime kparam check: clocksource (with
     _echo
 end
 
-function _vrk_audio_state --description "Surface ACP ASoC machine-driver gap on Strix Halo (HDMI/USB audio unaffected)"
-    set -l _hit $_RY_DMESG_ACP
-    test -z "$_hit"; and return 0
-    _echo "── ACP audio state ──"
-    _info "  ACP ASoC machine driver missing (Strix Halo) — internal analog audio via ACP not routed"
-    _info "    HDMI audio (snd_hda_intel) and USB audio paths are unaffected"
-    _log "ACP_NO_MACHINE_DRIVER: $_hit"
-end
-
 # Extract markers from full dmesg before 5000-line cap (head scrolls off).
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource"
-    set -g _RY_DMESG_CACHE; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_BAR; set -g _RY_DMESG_TSC; set -g _RY_DMESG_ACP
+    set -g _RY_DMESG_CACHE; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_BAR; set -g _RY_DMESG_TSC
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null | string split \n)
         set -l _full_count (count $_full)
@@ -2771,7 +2736,6 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
             set -g _RY_DMESG_PREEMPT (printf '%s\n' $_full | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
             set -g _RY_DMESG_BAR (printf '%s\n' $_full | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large' | command head -n 1)
             set -g _RY_DMESG_TSC (printf '%s\n' $_full | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
-            set -g _RY_DMESG_ACP (printf '%s\n' $_full | command grep -m1 -E 'acp_asoc_acp7[0-9]\.[0-9]+: warning: No matching ASoC machine driver found')
         end
         # 5000-line cap bounds fish list memory; markers pre-extracted.
         set -g _RY_DMESG_CACHE $_full[1..5000]
@@ -2792,9 +2756,8 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     _vrk_gpu_state
     _vrk_cpu_state
     _vrk_module_state
-    _vrk_audio_state
     _vrk_clocksource
-    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC _RY_DMESG_ACP
+    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
 end
 
 # ── VERIFY-RUNTIME: SERVICES + ENVIRONMENT + FSTAB + SESSION ──────────────────────────────────────
@@ -4182,27 +4145,6 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     return 0
 end
 
-# Byte-precise threshold; floor(MB) would pass 100.9MB as 100.
-function _boot_initrd_size_scan --argument-names esp --description "Post-rebuild initramfs size sanity check"
-    set -l _initrd_list (sudo -n find "$esp" -maxdepth 1 -type f -name 'initramfs-*.img' -print0 2>/dev/null | string split0)
-    set -l _il_ps $pipestatus
-    if test "$_il_ps[1]" -ne 0; _warn "Cannot enumerate initramfs-*.img for size check (sudo lapsed or read error)"; return 0; end
-    # Byte compare: MB floor would pass 100.9MB through 100.
-    set -l _threshold_b (math "$INITRD_WARN_MB * 1048576")
-    for initrd in $_initrd_list
-        set -l size_b (sudo -n stat -c '%s' -- "$initrd" 2>/dev/null)
-        if test -n "$size_b"; and string match -qr '^\d+$' -- "$size_b"
-            set -l size_mb (math "floor($size_b / 1048576)")
-            if test "$size_b" -gt "$_threshold_b"
-                _warn "Large initramfs: $initrd ($size_mb MB > $INITRD_WARN_MB MB threshold) - consider reviewing MODULES/HOOKS"
-            else
-                _ok "Initramfs size: $initrd ($size_mb MB)"
-            end
-        end
-    end
-    return 0
-end
-
 # ── INSTALL PHASE 5: BOOT REBUILD (MKINITCPIO -P + SDBOOT GEN/UPDATE) ─────────────────────────────
 function _irb_skip_post_mki --description "Record SKIP rows for sdboot-gen, sdboot-update, post-rebuild sanity"
     _phase_record "Boot: sdboot-manage gen" SKIP "aborted"
@@ -4256,7 +4198,6 @@ function _irb_verify_entries --argument-names esp --description "Re-enumerate bo
             set -g INSTALL_HAD_ERRORS true
         end
     end
-    _boot_initrd_size_scan "$esp"
 end
 
 function _check_boot_taint_gate --description "Verify boot state not tainted (shared by _irb_taint_gate + _post_boot); rc=0 ok, 1=revert-failed, 2=tainted-no-force"
@@ -4994,10 +4935,6 @@ end
 if set -q _RY_PERM_FIX_NOTICES
     for _n in $_RY_PERM_FIX_NOTICES; _log "$_n"; end
     set --erase _RY_PERM_FIX_NOTICES _n
-end
-if set -q _RY_DEFERRED_WARNS
-    for _w in $_RY_DEFERRED_WARNS; _warn "$_w"; _log "DEFERRED_WARN: $_w"; end
-    set --erase _RY_DEFERRED_WARNS _w
 end
 
 set -g _RY_EXIT_CODE 0

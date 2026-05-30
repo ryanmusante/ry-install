@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.13.4-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.13.5-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -447,12 +447,11 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 </details>
 
 <details>
-<summary><b>Runtime variables</b> — 5 vars</summary>
+<summary><b>Runtime variables</b> — 4 vars</summary>
 
 | Variable | Default | Effect |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | `_run` cap (s); `0` disables (pkg/boot/db ops bypass) |
-| `RY_INITRD_WARN_MB` | `100` | initramfs size warning (MB) |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses torn-package gate |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses `EXPECTED_CPU_MATCH` |
 | `NO_COLOR` | unset | suppress ANSI color |

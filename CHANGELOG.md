@@ -1,5 +1,10 @@
 ry-install ChangeLog
 
+v7.13.5 - 2026-05-29
+
+- Removed three advisory diagnostics: `_vrkm_ttm_diag` (effective TTM modprobe options + dmesg ttm lines), `_vrk_audio_state` (Strix Halo ACP ASoC machine-driver gap notice), `_boot_initrd_size_scan` (post-rebuild initramfs size WARN). All were INFO/WARN-only — no gate, exit code, or install/verify-flow change.
+- Removed transitively-dead remnants: `RY_INITRD_WARN_MB` / `INITRD_WARN_MB` (sole consumer was the dropped size scan), the `_RY_DEFERRED_WARNS` collect/flush path (its only producer was the `RY_INITRD_WARN_MB` validator), and `_RY_DMESG_ACP` dmesg-marker plumbing (only consumer was the dropped ACP notice). Runtime-variable doc count 5 → 4.
+
 v7.13.4 - 2026-05-29
 
 - Comment trim: longest explanatory comments condensed to terse single-line form; section banners, "why" rationale, and script header preserved. CHANGELOG condensed; README synced. No behaviour/count/invariant change.

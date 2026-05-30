@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.15.0 (2026-05-30) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.16.0 (2026-05-30) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.15.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.16.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -227,7 +227,7 @@ function _unit_state_padded --argument-names unit --description "Return _unit_st
     end
 end
 
-# Scope: explicit user/system arg wins; auto via .config/systemd/user/ path match.
+# Scope: explicit user/system arg wins; else .config/systemd/user/ path match.
 function _verify_unit_syntax --argument-names unit_path label intended_scope --description "Verify unit syntax via systemd-analyze"
     set -l _scope_label auto
     test -n "$intended_scope"; and set _scope_label $intended_scope
@@ -263,7 +263,7 @@ function _write_footer --argument-names exit_code extra_key --description "Appen
     test $status -ne 0; and not set -q _RY_LOG_WRITE_FAIL; and set -g _RY_LOG_WRITE_FAIL true
 end
 
-# Sweep .ry-install.* pre-lock-release; sudo cache may lapse later on signal path.
+# Sweep .ry-install.* pre-lock-release; sudo cache may lapse on later signals.
 function _cleanup_tmpfiles --description "Remove temporary files created during this run"
     not set -q _FOOTER_WRITTEN; and _log "CLEANUP_TMPFILES: sweep starting"
     set -l _has_sudo false
@@ -284,7 +284,7 @@ set -g _CLEANUP_DONE false
 function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     set -l _prev_umask (umask)
     umask 0077
-    # Sentinel pre-mkdir, erased on failure; closes signal race vs _dc_kill_children.
+    # Sentinel pre-mkdir, erased on fail; closes signal race vs _dc_kill_children.
     set -g _RY_LOCK_DIR_OWNED true
     command mkdir -- "$LOCK_DIR" 2>/dev/null
     set -l _mk_rc $status
@@ -571,8 +571,7 @@ set -g LOGIND_IGNORE_KEYS \
     HandleHibernateKey \
     HandleHibernateKeyLongPress \
     HandleRebootKey \
-    HandleRebootKeyLongPress \
-    HandleSecureAttentionKey
+    HandleRebootKeyLongPress
 set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR powersave
@@ -630,7 +629,6 @@ set -g MASK \
     avahi-daemon.service \
     avahi-daemon.socket \
     power-profiles-daemon.service \
-    lvm2-monitor.service \
     NetworkManager-wait-online.service \
     ufw.service \
     sleep.target \
@@ -700,12 +698,12 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         KERNEL_PARAMS:17 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
-        LOGIND_IGNORE_KEYS:9 \
+        LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:10 \
         SYSCTL_VALUES:7 \
         PKGS_ADD:13 \
         PKGS_DEL:7 \
-        MASK:12 \
+        MASK:11 \
         EXPECTED_VULKAN_PKGS:3 \
         EXPECTED_SERVICES:3 \
         _RY_PKG_MANAGED_SERVICES:1 \
@@ -808,16 +806,10 @@ function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --descri
     printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
 end
 
-# HSAK skipped on systemd <257 (else logind warns each reload).
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
     printf '%s\n' "[Login]"
-    _resolve_systemd_ver
     for key in $LOGIND_IGNORE_KEYS
-        # HSAK needs systemd ≥257; older warns each logind reload.
-        if test "$key" = HandleSecureAttentionKey
-            test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257; and continue
-        end
         printf '%s\n' "$key=ignore"
     end
 end
@@ -983,7 +975,7 @@ function _track_tmpfile --argument-names path --description "Track a tmpfile/dir
     set -ga _TRACKED_TMPFILES "$path"
 end
 
-# /dev/null sentinel keeps 2> redirect valid on mktemp fail; callers check before read.
+# /dev/null sentinel keeps 2> valid on mktemp fail; callers check before read.
 function _mktemp_or_null --description "mktemp wrapper; emits path on stdout, /dev/null sentinel on failure"
     set -l _tf (command mktemp $argv 2>/dev/null)
     if test -z "$_tf"; echo /dev/null; functions -q _log; and _log "MKTEMP_OR_NULL_FAIL: args='$argv' — falling back to /dev/null sentinel"; return 0; end
@@ -1360,7 +1352,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
     echo "$_t"
 end
 
-# Hard contract: without stderr-capture tmpdir, _err on failed cmds lost — refuse.
+# Without stderr-capture tmpdir, _err on failed cmds is lost — refuse.
 function _run --description "Execute a command with logging, stdout/stderr capture, and timeout enforcement"
     if test (count $argv) -eq 0; _log "BUG: _run called with no arguments"; return 255; end
     if string match -q -- '-*' "$argv[1]"; _log "BUG: _run called with dash-prefixed argv[1]='$argv[1]' — refusing"; return 255; end
@@ -1514,7 +1506,7 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     end
 end
 
-# \b word boundary; assumes word-char start/end (MKINITCPIO_MODULES/HOOKS callers comply).
+# \b word boundary; callers (MKINITCPIO_MODULES/HOOKS) use word-char start/end.
 function _chk_token_in --argument-names line token label --description "Verify a whole-word token is present in a config line"
     set -l _re (string escape --style=regex -- "$token")
     if string match -qr "\\b$_re\\b" -- "$line"
@@ -2236,12 +2228,7 @@ end
 
 function _vss_logind --description "_verify_static_system sub: logind.conf.d keys"
     _chk_file /etc/systemd/logind.conf.d/99-cachyos-logind.conf; or return 0
-    _resolve_systemd_ver
     for key in $LOGIND_IGNORE_KEYS
-        # HSAK needs systemd ≥257; older warns each logind reload.
-        if test "$key" = HandleSecureAttentionKey
-            test -z "$_RY_SYSTEMD_VER"; or test "$_RY_SYSTEMD_VER" -lt 257; and continue
-        end
         _chk_grep /etc/systemd/logind.conf.d/99-cachyos-logind.conf "$key=ignore" "$key"
     end
 end
@@ -4152,7 +4139,7 @@ function _pbs_check_entries --argument-names boot --description "Enumerate \$BOO
     echo $errors
 end
 
-# Boot-critical FAIL gate: any vmlinuz/initramfs/entries error emits DO NOT REBOOT.
+# Boot-critical FAIL: any vmlinuz/initramfs/entries error emits DO NOT REBOOT.
 function _preflight_boot_sanity --description "Verify boot artifacts are viable after rebuild"
     set -l _boot (_resolve_boot_path)
     set -l _k (_pbs_check_boot_files "$_boot" 'vmlinuz-*' kernel)
@@ -4326,7 +4313,7 @@ function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk
     return 0
 end
 
-# Deferred when WiFi is active route: NM restart would drop install's connection.
+# Deferred when WiFi is active route: NM restart would drop the connection.
 function _if_nm_restart --description "Restart NetworkManager when iwd backend switch is in effect"
     if test "$_PROFILE_USES_WIFI_BACKEND" = false; _info "iwd/NetworkManager not managed — skipping NM restart"; _phase_record "Finalize: NetworkManager restart" SKIP "iwd backend not active"; return 0; end
     if not command -q pacman; or not command pacman -Qi iwd >/dev/null 2>&1
@@ -4387,7 +4374,7 @@ function _rrp_optional_indexer --argument-names cmd label --description "_rdi_ru
     end
 end
 
-# Phase dispatch aggregates INSTALL_HAD_ERRORS; mki-revert fail SKIPs remaining phases.
+# Phase dispatch aggregates INSTALL_HAD_ERRORS; mki-revert fail SKIPs the rest.
 function _rdi_run_phases --description "Run pkgs/aur/sys/services phases"
     not _install_packages; and set -g INSTALL_HAD_ERRORS true
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
@@ -4475,7 +4462,7 @@ function _rdi_matrix_rows --description "_rdi_render_matrix sub. Emit data rows;
     end
 end
 
-# Verdict precedence: BOOT_CRIT > FAIL > WARN > PASS. DEFER/SKIP/N/A informational only.
+# Verdict precedence: BOOT_CRIT > FAIL > WARN > PASS; DEFER/SKIP/N/A informational.
 function _rdi_matrix_footer --description "_rdi_render_matrix sub. Emit verdict-bearing footer rows + bottom bar"
     set -l _bar_top $argv[1]; set -l _inner $argv[2]
     set -l _verdict PASS
@@ -4498,7 +4485,7 @@ function _rdi_matrix_footer --description "_rdi_render_matrix sub. Emit verdict-
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
 end
 
-# Matrix is a stderr render only; JSONL PHASE_RESULT events are the durable record.
+# Matrix is stderr-only; JSONL PHASE_RESULT events are the durable record.
 function _rdi_render_matrix --description "Render install phase matrix as box-drawn Unicode table"
     test (count $_RY_PHASE_RESULTS) -eq 0; and return 0
     set -q _RY_OUTPUT_BROKEN; and return 0
@@ -4731,7 +4718,7 @@ function _post_logind --argument-names target --description "Post-hook: notify r
     return 0
 end
 
-# iwd reads main.conf at startup only; try-restart iwd first when main.conf is the target.
+# iwd reads main.conf at startup; try-restart iwd first when it's the target.
 function _post_nm --argument-names target --description "Post-hook: restart NetworkManager (+ try-restart iwd when iwd/main.conf changes); deferred when WiFi is active route"
     _echo
     # iwd absent → skip restart cascade (backend can't function).
@@ -4802,7 +4789,7 @@ function _post_envd --argument-names target --description "Post-hook: notify ses
     return 0
 end
 
-# Restart re-sources cpupower-service.conf; under amd_pstate=active, governor maps to EPP.
+# Restart re-sources cpupower-service.conf; amd_pstate=active maps governor to EPP.
 function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change"
     _echo
     if not _run sudo -n systemctl restart cpupower.service

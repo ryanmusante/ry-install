@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.15.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.16.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -232,7 +232,7 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 </details>
 
 <details open>
-<summary><b>systemd-logind</b> — 9 keys</summary>
+<summary><b>systemd-logind</b> — 8 keys</summary>
 
 | Key | Value |
 |---|---|
@@ -240,7 +240,6 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 | `HandleSuspendKey` / `HandleSuspendKeyLongPress` | `ignore` |
 | `HandleHibernateKey` / `HandleHibernateKeyLongPress` | `ignore` |
 | `HandleRebootKey` / `HandleRebootKeyLongPress` | `ignore` |
-| `HandleSecureAttentionKey` (systemd ≥ 257) | `ignore` |
 
 </details>
 
@@ -360,12 +359,12 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 </details>
 
 <details open>
-<summary><b>Masked units</b> — 12 units</summary>
+<summary><b>Masked units</b> — 11 units</summary>
 
 | Category | Units |
 |---|---|
 | Replaced daemons | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service` |
-| Unused subsys | `lvm2-monitor.service`, `ufw.service` (rules flushed pre-mask) |
+| Unused subsys | `ufw.service` (rules flushed pre-mask) |
 | Boot delays | `NetworkManager-wait-online.service` |
 | Power states | `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
 

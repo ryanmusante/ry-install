@@ -1,90 +1,46 @@
-ry-install ChangeLog
+ry-install changelog
 
-v7.14.0 - 2026-05-29
+Most recent first. Dates ISO-8601; UTC offset omitted.
 
-- `amdgpu.ppfeaturemask` `0xfffd7fff` → `0xfff73fff`.
-- `KERNEL_PARAMS` 16 → 17: +`amdgpu.sg_display=0`.
-- `AUR_PKGS` = `mkinitcpio-firmware`; removed `mt76-mt7925-dkms`, `r8127-dkms`. AUR count 3 → 1.
-- Removed transitively-dead MT7925 scaffolding (sole consumer was `mt76-mt7925-dkms`): `_aur_verify_mt7925` + its call, the MT7925 branch in `_iap_record_result`, and the MT7925-specific AUR error hint + noise token. Generic paru install/retry/record path unchanged.
-- README synced: AUR 3 → 1 pkg, cmdline 16 → 17 params; dropped `(installed by default)` from the RTL8127 known-issue note.
+7.14.1  2026-05-29
+- _vrkm_amdgpu: derive expected amdgpu.ppfeaturemask from KERNEL_PARAMS instead
+  of a hardcoded literal. The 7.14.0 bump to 0xfff73fff had left the runtime
+  expected at 0xfffd7fff, so --verify-runtime reported a spurious ppfeaturemask
+  FAIL on a correctly installed system. Install path was unaffected.
 
-v7.13.5 - 2026-05-29
+7.14.0  2026-05-29
+- amdgpu.ppfeaturemask 0xfffd7fff -> 0xfff73fff.
+- KERNEL_PARAMS 16 -> 17 (+amdgpu.sg_display=0).
+- AUR_PKGS reduced to mkinitcpio-firmware (3 -> 1); drop mt76-mt7925-dkms and
+  r8127-dkms plus the now-dead MT7925 verify/record scaffolding.
 
-- Removed three advisory diagnostics: `_vrkm_ttm_diag` (effective TTM modprobe options + dmesg ttm lines), `_vrk_audio_state` (Strix Halo ACP ASoC machine-driver gap notice), `_boot_initrd_size_scan` (post-rebuild initramfs size WARN). All were INFO/WARN-only — no gate, exit code, or install/verify-flow change.
-- Removed transitively-dead remnants: `RY_INITRD_WARN_MB` / `INITRD_WARN_MB` (sole consumer was the dropped size scan), the `_RY_DEFERRED_WARNS` collect/flush path (its only producer was the `RY_INITRD_WARN_MB` validator), and `_RY_DMESG_ACP` dmesg-marker plumbing (only consumer was the dropped ACP notice). Runtime-variable doc count 5 → 4.
+7.13.5  2026-05-29
+- Drop advisory-only diagnostics (_vrkm_ttm_diag, _vrk_audio_state,
+  _boot_initrd_size_scan) and their dead plumbing. Runtime-var doc 5 -> 4.
 
-v7.13.4 - 2026-05-29
+7.13.4  2026-05-29
+- Condense explanatory comments to single-line form; section banners, rationale,
+  and the script header retained. No behaviour, count, or invariant change.
 
-- Comment trim: longest explanatory comments condensed to terse single-line form; section banners, "why" rationale, and script header preserved. CHANGELOG condensed; README synced. No behaviour/count/invariant change.
+7.13.3  2026-05-29
+- Drop RY_INSTALL_NO_MATRIX; the run-summary matrix always renders to stderr
+  (JSONL PHASE_RESULT remains the durable record). Runtime-var doc 6 -> 5.
 
-v7.13.3 - 2026-05-29
+7.13.2  2026-05-29
+- Drop RY_INSTALL_PKG_REMOVE_CASCADE and RY_INSTALL_NO_INTERACTIVE_SUDO. PKGS_DEL
+  members held by outside reverse-deps are always skipped. Runtime-var doc 8 -> 6.
 
-- Removed `RY_INSTALL_NO_MATRIX`: run-summary matrix always renders to stderr; JSONL `PHASE_RESULT` remains the durable record. Runtime-variable doc count 6 → 5.
+7.13.1  2026-05-29
+- Drop inert RY_INSTALL_ALLOW_PARTIAL_UPGRADE; pacman -Syu --needed is run
+  unconditionally.
 
-v7.13.2 - 2026-05-29
+7.13.0  2026-05-29
+- AUR installs unconditionally; drop hardware-gating detectors and
+  RY_INSTALL_MAINTENANCE. Runtime-var doc 9 -> 8; AUR 2 -> 3.
 
-- Removed `RY_INSTALL_PKG_REMOVE_CASCADE`: `PKGS_DEL` members held by outside reverse-deps are always skipped; pactree detection unchanged. Remove manually with `pacman -Rns`.
-- Removed `RY_INSTALL_NO_INTERACTIVE_SUDO`: `sudo -v` fallback still runs only on a stdin+stderr TTY, else skipped. Runtime-variable doc count 8 → 6.
+7.12.0  2026-05-29
+- Automatic .ry.bak backups for loader.conf and mkinitcpio.conf, restored on
+  post-write byte mismatch (fstab excluded). Add time-sync preflight. Forbid
+  partial upgrades.
 
-v7.13.1 - 2026-05-29
-
-- Removed inert `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` (no effect since v7.12.0); `_ip_pacman_invoke` still runs `pacman -Syu --needed` unconditionally.
-
-v7.13.0 - 2026-05-29
-
-- AUR installs unconditionally: `AUR_PKGS` = `mkinitcpio-firmware mt76-mt7925-dkms r8127-dkms`. Removed hardware-gating detectors and `RY_INSTALL_MAINTENANCE`. Runtime-variable doc 9 → 8; AUR count 2 → 3.
-
-v7.12.0 - 2026-05-29
-
-- Automatic backups: `_atomic_write_file` writes `<path>.ry.bak` before overwriting `loader.conf`/`mkinitcpio.conf`, restores on post-write byte-mismatch (`fstab` excluded). New `_RY_BACKUP_TARGETS`, `_RY_BACKUP_SUFFIX`.
-- Time-sync preflight `_ry_check_time_sync`: reads `NTPSynchronized`, enables `systemd-timesyncd` if drifted (non-fatal).
-- Partial upgrades forbidden: `_ip_pacman_invoke` always runs `pacman -Syu --needed`.
-
-v7.11.x - 2026-05-28
-
-- Quoted `$pipestatus` index operands across all sites (cosmetic).
-- README: Configuration collapsibles opened; prose entries converted to tables.
-
-v7.10.x - 2026-05-28
-
-- `KERNEL_PARAMS` 15 → 16: +`processor.max_cstate=1`.
-- `SYSCTL_VALUES` 8 → 9: +`net.core.busy_poll=50`, +`busy_read=50`, +`netdev_budget=600`, +`netdev_budget_usecs=5000`; -`vm.dirty_*`, -`vm.max_map_count`.
-- Managed files 12 → 13: +`/etc/drirc.d/95-ry-radv-apu.conf` (`radv_enable_unified_heap_on_apu=true`).
-- iwd config unconditional (iwd-gating subsystem removed); `PKGS_ADD` 15 → 13.
-- `_rvc_dispatch` +`*/modprobe.d/*` validator; `ENV_VARS` 11 → 10.
-
-v7.9.0 - 2026-05-27
-
-- `ENV_VARS`: +`PROTON_FSR4_UPGRADE`, +`AMD_VULKAN_ICD=RADV`; `MESA_SHADER_CACHE_MAX_SIZE` 4G → 16G.
-- `amdgpu.ppfeaturemask` `0xfffd3fff` → `0xfffd7fff`; ttm `pages_limit`/`page_pool_size` → 16777216 (64 GiB GTT).
-- Kernel pin: `linux-cachyos` ≥ 6.18.4, skip 6.19.0 (CachyOS#23042).
-
-v7.8.x - 2026-05-26 / 27
-
-- `KERNEL_PARAMS` 18 → 15 (`amd_iommu=off` → `iommu=pt`; +`pcie_aspm.policy=performance`).
-- Managed files 12 → 13 (+`ry-amdgpu-strixhalo.conf`); chip-gated `r8127-dkms`.
-
-v7.7.x - 2026-05-26
-
-- `PKGS_DEL` 11 → 7 (`shelly` made opt-in).
-
-v7.6.x - 2026-05-24 / 26
-
-- `KERNEL_PARAMS` → 15, `SYSCTL_VALUES` → 10, `ENV_VARS` → 10.
-- New `_acquire_lock_fresh`, `_phase_record` sanitiser, `_init_runtime` CPU fail-closed; NM 1.56.0 compat.
-
-v7.5.0 - 2026-05-23
-
-- `/etc` tmpfile for same-FS atomic `rename(2)`; kernel < 6.14 hard-floor FAIL.
-
-v7.4.x - 2026-05-19 / 20
-
-- Preflight + lock + sudo redesign; `umask 0077` around mkdir; systemd < 250 hard-fail.
-
-v7.3.0 - 2026-05-17
-
-- NM 1.56.0 compat; `MASK` 10 → 12; `PKGS_ADD` +`realtime-privileges`.
-
-v7.0.0 - 2026-05-15
-
-- v6.x → v7.0: user-bus detection, atomic mkdir + pid-file lock, `--install-file` post-hook dispatch.
+Earlier releases: see git history.

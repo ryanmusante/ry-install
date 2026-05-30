@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.14.0 (2026-05-29) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.14.1 (2026-05-29) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.14.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.14.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -2648,10 +2648,14 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
     _echo
 end
 
-# Hex-aware: amdgpu sysfs hex|decimal varies; normalize both to decimal.
-function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (hex-aware compare)"
+# Hex-aware compare; expected from KERNEL_PARAMS (no drift).
+function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (hex-aware compare; expected from KERNEL_PARAMS)"
     test -d /sys/module/amdgpu/parameters; or return 0
-    for pair in "ppfeaturemask:0xfffd7fff"
+    set -l _pairs
+    for _kp in $KERNEL_PARAMS
+        string match -q 'amdgpu.ppfeaturemask=*' -- "$_kp"; and set -a _pairs "ppfeaturemask:"(string replace 'amdgpu.ppfeaturemask=' '' -- "$_kp")
+    end
+    for pair in $_pairs
         set -l _p (string split ':' -- "$pair"); set -l pname $_p[1]; set -l expected $_p[2]; set -l ppath /sys/module/amdgpu/parameters/$pname
         test -f "$ppath"; or continue
         set -l sysfs_val (string trim -- (command cat -- "$ppath" 2>/dev/null)); set -l sysfs_val_dec "$sysfs_val"; set -l expected_dec "$expected"

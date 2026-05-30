@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.11.3-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.13.4-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -63,7 +63,7 @@ Run as your normal user — root is refused; sudo is invoked internally. If you 
 | sudo | cached credential (`sudo -v`) |
 
 > [!WARNING]
-> Sudo cache may lapse during the 3–8 min run. Mitigate with `Defaults timestamp_timeout=60` (via `sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. For cron/systemd set `RY_INSTALL_NO_INTERACTIVE_SUDO=1` (interactive fallback needs TTY stdin+stderr). Recovery: re-run — idempotent.
+> Sudo cache may lapse during the 3–8 min run. Mitigate with `Defaults timestamp_timeout=60` (via `sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. For cron/systemd, pre-cache credentials first — the interactive `sudo -v` fallback needs a TTY on stdin+stderr and is skipped without one. Recovery: re-run — idempotent.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -101,7 +101,7 @@ Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP
 
 ## Run Summary
 
-Install prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + totals + elapsed + verdict. Set `RY_INSTALL_NO_MATRIX` to any non-empty value to suppress it (JSONL still records every `PHASE_RESULT`).
+Install prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + totals + elapsed + verdict (JSONL still records every `PHASE_RESULT`).
 
 | Result | Semantics | | Verdict | Trigger |
 |---|---|---|---|---|
@@ -117,7 +117,7 @@ Install prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + totals + ela
 
 ### Phase 1 — Preflight
 
-Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (root UUID + CPU match + invariants) → lock (atomic `mkdir` 0700 + dead-PID reclaim) → sudo cache → deps (systemd ≥ 250 + paru ≥ 2.0.0) → disk space → network (HTTPS + ICMP) → kernel (≥ 6.14 FAIL · ≥ 6.18.4 WARN · ntsync) → per-destination config validators.
+Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (root UUID + CPU match + invariants) → lock (atomic `mkdir` 0700 + dead-PID reclaim) → sudo cache → deps (systemd ≥ 250 + paru ≥ 2.0.0) → disk space → network (HTTPS + ICMP) → time sync (NTP, systemd-timesyncd) → kernel (≥ 6.14 FAIL · ≥ 6.18.4 WARN · ntsync) → per-destination config validators.
 
 ### Phase 2 — Packages
 
@@ -139,12 +139,15 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 </details>
 
 <details open>
-<summary><b>Packages — AUR</b> — 2 pkgs</summary>
+<summary><b>Packages — AUR</b> — 3 pkgs</summary>
 
 | Package | Purpose |
 |---|---|
 | `mkinitcpio-firmware` | firmware blobs not in `linux-firmware` |
 | `mt76-mt7925-dkms` | MT7925 WiFi (panic fix); `modinfo mt7925e` verifies DKMS build |
+| `r8127-dkms` | RTL8127 10GbE NIC driver |
+
+All AUR packages are installed unconditionally (no hardware gating).
 
 </details>
 
@@ -166,10 +169,10 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 | Caveat | Detail |
 |---|---|
-| Partial upgrade | `RY_INSTALL_ALLOW_PARTIAL_UPGRADE=1` → `pacman -Sy --needed` (no `-u`; violates Arch policy) |
+| Full upgrades only | partial upgrades forbidden; `pacman -Syu --needed` always |
 | AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted — DKMS needs makedeps) |
 | PGP failures | pre-import `gpg --recv-keys <KEYID>` or run `paru -S <pkg>` manually |
-| Reverse deps | `PKGS_DEL` skipped on outside rdeps; cascade via `RY_INSTALL_PKG_REMOVE_CASCADE=1` (needs `pacman-contrib`) |
+| Reverse deps | `PKGS_DEL` members held by outside rdeps are skipped (rdep detection needs `pacman-contrib`); remove manually with `pacman -Rns` if intended |
 
 </details>
 
@@ -422,6 +425,7 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 | Feature | Detail |
 |---|---|
 | Atomic writes | tmp → render → symlink probe → chmod → `mv -T` |
+| Auto backups | `<path>.ry.bak` written before overwriting `loader.conf`/`mkinitcpio.conf`; restored on post-write byte-mismatch (fstab excluded) |
 | Permissions | system `0644` · user `0600` · `~/ry-install/` `0700` |
 | fstab | `findmnt --verify` gate; rejects symlinked `/etc/fstab` |
 | Boot rebuild gate | skipped on package/boot-config failure; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses taint only |
@@ -443,18 +447,14 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 </details>
 
 <details>
-<summary><b>Runtime variables</b> — 9 vars</summary>
+<summary><b>Runtime variables</b> — 5 vars</summary>
 
 | Variable | Default | Effect |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | `_run` cap (s); `0` disables (pkg/boot/db ops bypass) |
 | `RY_INITRD_WARN_MB` | `100` | initramfs size warning (MB) |
-| `RY_INSTALL_ALLOW_PARTIAL_UPGRADE` | unset | `=1` → `pacman -Sy --needed` |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses torn-package gate |
-| `RY_INSTALL_PKG_REMOVE_CASCADE` | unset | `=1` cascades rdeps into removal |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses `EXPECTED_CPU_MATCH` |
-| `RY_INSTALL_NO_INTERACTIVE_SUDO` | unset | `=1` refuses interactive `sudo -v` |
-| `RY_INSTALL_NO_MATRIX` | unset | non-empty suppresses run-summary matrix |
 | `NO_COLOR` | unset | suppress ANSI color |
 
 </details>
@@ -489,7 +489,7 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 | Strix Halo GPU | ROCm VRAM allocation | kernel 6.16+ (`pacman -Syu linux-cachyos`) |
 | MT7925 | kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
 | MT7925 | TX power 3 dBm / random deauth | none (upstream) |
-| RTL8127 10GbE | throughput drops under load (BBS#7762) | `paru -S r8127-dkms` (auto-gated) |
+| RTL8127 10GbE | throughput drops under load (BBS#7762) | `paru -S r8127-dkms` (installed by default) |
 | Strix Halo ACP | `No matching ASoC machine driver` | pending upstream; HDMI/USB audio unaffected |
 | NM + iwd | intermittent boot connectivity | `nmcli radio wifi off; and nmcli radio wifi on` |
 | NM + iwd | WPA2/3 Enterprise GUI broken | CLI or wpa_supplicant |
@@ -504,7 +504,7 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 | Initramfs rebuild refused | fix cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
 | `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
 | Sudo cache expired | re-run re-primes; see Prerequisites warning |
-| `PKGS_DEL` member skipped | `RY_INSTALL_PKG_REMOVE_CASCADE=1 ./ry-install.fish` |
+| `PKGS_DEL` member skipped | held by outside rdeps — remove manually with `sudo pacman -Rns <pkg>` |
 | ntsync missing | kernel 6.14+ · `ls /dev/ntsync` |
 | `.ry-install.*` orphan | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, re-run |
 | PipeWire `nice-level` denied | `sudo usermod -aG realtime $USER`, re-login |

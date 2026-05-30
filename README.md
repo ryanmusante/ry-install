@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.14.3-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.15.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -276,11 +276,10 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 </details>
 
 <details open>
-<summary><b>sysctl</b> — 9 tunables</summary>
+<summary><b>sysctl</b> — 7 tunables</summary>
 
 | Key | Value |
 |---|---|
-| `net.core.busy_poll`, `net.core.busy_read` | `50` |
 | `net.core.default_qdisc` | `fq` |
 | `net.core.netdev_budget` | `600` |
 | `net.core.netdev_budget_usecs` | `5000` |
@@ -323,7 +322,7 @@ Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884 extended beyond 
 |---|---|
 | DXVK | `DXVK_LOG_LEVEL=none`, `DXVK_LOG_PATH=none` |
 | VKD3D | `VKD3D_DEBUG=none`, `VKD3D_SHADER_DEBUG=none` |
-| Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
+| Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
 | Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=16G`, `AMD_VULKAN_ICD=RADV` |
 | Wine | `WINEDEBUG=-all` |
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.14.3 (2026-05-30) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.15.0 (2026-05-30) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.14.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.15.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -583,14 +583,12 @@ set -g ENV_VARS \
     "DXVK_LOG_PATH=none" \
     "MESA_SHADER_CACHE_MAX_SIZE=16G" \
     "PROTON_ENABLE_WAYLAND=1" \
-    "PROTON_FSR4_UPGRADE=1" \
+    "PROTON_FSR4_RDNA3_UPGRADE=1" \
     "PROTON_LOCAL_SHADER_CACHE=1" \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
     "WINEDEBUG=-all"
 set -g SYSCTL_VALUES \
-    "net.core.busy_poll=50" \
-    "net.core.busy_read=50" \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
     "net.core.netdev_budget_usecs=5000" \
@@ -704,7 +702,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:9 \
         ENV_VARS:10 \
-        SYSCTL_VALUES:9 \
+        SYSCTL_VALUES:7 \
         PKGS_ADD:13 \
         PKGS_DEL:7 \
         MASK:12 \

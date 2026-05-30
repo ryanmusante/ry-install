@@ -2,6 +2,17 @@ ry-install changelog
 
 Most recent first. Dates ISO-8601; UTC offset omitted.
 
+7.15.0  2026-05-30
+- ENV_VARS: PROTON_FSR4_UPGRADE -> PROTON_FSR4_RDNA3_UPGRADE. The Radeon 8060S is RDNA 3.5
+  (gfx1151); the bare RDNA4 variable is inert on this iGPU. The RDNA3 variant enables the
+  INT8 compatibility path and fetches the 4.0.0 DLL (needs Mesa >= 25.2, satisfied by the
+  CachyOS rolling stack). Count unchanged at 10 (rename in place; alphabetical slot between
+  PROTON_ENABLE_WAYLAND and PROTON_LOCAL_SHADER_CACHE is identical).
+- SYSCTL_VALUES 9 -> 7: drop net.core.busy_poll and net.core.busy_read. Their sub-microsecond
+  RX-latency benefit only reaches sockets that opt in via SO_BUSY_POLL (games generally do
+  not) and burns CPU power that competes with the iGPU on a shared-TDP APU — net-negative for
+  gaming. _ir_validate_counts SYSCTL_VALUES invariant bumped 9 -> 7 to match.
+
 7.14.3  2026-05-30
 - Guard optional-tool invocations whose absence emitted a fish "Unknown command"
   stack trace (the inline 2>/dev/null does not suppress shell-level resolution

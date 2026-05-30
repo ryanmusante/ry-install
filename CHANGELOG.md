@@ -3,7 +3,7 @@ ry-install ChangeLog
 Newest first; dates ISO-8601.
 
 7.16.3  2026-05-30
-- docs: README all <details> sections open by default (Destinations, Exit codes, Runtime variables, Logs; the other 20 already open).
+- docs: README collapsible sections all open by default (Destinations, Exit codes, Runtime variables, Logs; the other 20 already open).
 
 7.16.2  2026-05-30
 - docs: README Phase 3 heading "Configuration Files" -> "Configuration"; matches _RY_PHASE_NAMES + Install-Flow table; internal anchor updated.

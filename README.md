@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.13.5-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.14.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -139,15 +139,13 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 </details>
 
 <details open>
-<summary><b>Packages — AUR</b> — 3 pkgs</summary>
+<summary><b>Packages — AUR</b> — 1 pkg</summary>
 
 | Package | Purpose |
 |---|---|
 | `mkinitcpio-firmware` | firmware blobs not in `linux-firmware` |
-| `mt76-mt7925-dkms` | MT7925 WiFi (panic fix); `modinfo mt7925e` verifies DKMS build |
-| `r8127-dkms` | RTL8127 10GbE NIC driver |
 
-All AUR packages are installed unconditionally (no hardware gating).
+The AUR package is installed unconditionally (no hardware gating).
 
 </details>
 
@@ -181,12 +179,12 @@ All AUR packages are installed unconditionally (no hardware gating).
 Atomic write per file: `mktemp` in destination's parent → render via `tee` → post-write symlink probe → `chmod` → `mv -T` (same-FS).
 
 <details open>
-<summary><b>Kernel cmdline</b> — 16 params</summary>
+<summary><b>Kernel cmdline</b> — 17 params</summary>
 
 | Category | Params |
 |---|---|
 | CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable`, `processor.max_cstate=1` |
-| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.ppfeaturemask=0xfffd7fff` |
+| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.ppfeaturemask=0xfff73fff`, `amdgpu.sg_display=0` |
 | IOMMU/PCIe | `iommu=pt`, `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
@@ -488,7 +486,7 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 | Strix Halo GPU | ROCm VRAM allocation | kernel 6.16+ (`pacman -Syu linux-cachyos`) |
 | MT7925 | kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
 | MT7925 | TX power 3 dBm / random deauth | none (upstream) |
-| RTL8127 10GbE | throughput drops under load (BBS#7762) | `paru -S r8127-dkms` (installed by default) |
+| RTL8127 10GbE | throughput drops under load (BBS#7762) | `paru -S r8127-dkms` |
 | Strix Halo ACP | `No matching ASoC machine driver` | pending upstream; HDMI/USB audio unaffected |
 | NM + iwd | intermittent boot connectivity | `nmcli radio wifi off; and nmcli radio wifi on` |
 | NM + iwd | WPA2/3 Enterprise GUI broken | CLI or wpa_supplicant |

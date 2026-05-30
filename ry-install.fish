@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.13.5 (2026-05-29) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.14.0 (2026-05-29) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.13.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.14.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -530,7 +530,8 @@ set -g KERNEL_PARAMS \
     amd_pstate=active \
     amdgpu.cwsr_enable=0 \
     amdgpu.gpu_recovery=1 \
-    amdgpu.ppfeaturemask=0xfffd7fff \
+    amdgpu.ppfeaturemask=0xfff73fff \
+    amdgpu.sg_display=0 \
     iommu=pt \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
@@ -577,8 +578,8 @@ set -g SYSCTL_VALUES \
 set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges
 # Opt-in: uncomment `shelly` in PKGS_DEL + bump invariant 7→8 (CachyOS Shelly pkg mgr).
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings  # shelly
-# AUR packages — all installed unconditionally (no hardware gating).
-set -g AUR_PKGS mkinitcpio-firmware mt76-mt7925-dkms r8127-dkms
+# AUR packages — installed unconditionally (no hardware gating).
+set -g AUR_PKGS mkinitcpio-firmware
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
 
@@ -646,7 +647,7 @@ end
 # Refuse deploy on README/script count drift.
 function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants"
     set -l _expect \
-        KERNEL_PARAMS:16 \
+        KERNEL_PARAMS:17 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:9 \
@@ -660,7 +661,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         _RY_PKG_MANAGED_SERVICES:1 \
         _RY_POST_HOOKS:16 \
         _RY_BOOT_CRITICAL_DSTS:4 \
-        AUR_PKGS:3
+        AUR_PKGS:1
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — README/script desync, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -3510,7 +3511,7 @@ function _install_packages --description "Install managed packages via pacman -S
     return 0
 end
 
-# ── INSTALL PHASE 2 (AUR): PARU + MT7925 BUILD VERIFY ─────────────────────────────────────────────
+# ── INSTALL PHASE 2 (AUR): PARU ───────────────────────────────────────────────────────────────────
 function _iap_per_pkg_retry --description "_install_aur_packages sub. Re-attempt AUR install one package at a time; returns failed count via _RY_IAP_RETRY_FAILED"
     set -g _RY_IAP_RETRY_FAILED 0
     for pkg in $AUR_PKGS
@@ -3522,16 +3523,7 @@ end
 
 function _iap_record_result --description "_install_aur_packages sub. Record final phase result for the run-summary matrix"
     set -l _total (count $AUR_PKGS)
-    if contains -- mt76-mt7925-dkms $AUR_PKGS
-        if command -q modinfo; and command modinfo mt7925e >/dev/null 2>&1
-            _phase_record "Packages: AUR (paru)" PASS "$_total/$_total (mt7925e module verified)"
-        else
-            set -g INSTALL_HAD_ERRORS true
-            _phase_record "Packages: AUR (paru)" WARN "$_total/$_total (mt76-mt7925-dkms installed but mt7925e module unbuilt — see JSONL)"
-        end
-    else
-        _phase_record "Packages: AUR (paru)" PASS "$_total/$_total"
-    end
+    _phase_record "Packages: AUR (paru)" PASS "$_total/$_total"
 end
 
 function _install_aur_packages --description "Install AUR packages via paru (no --removemake for DKMS)"
@@ -3539,17 +3531,15 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
     if not command -q paru
         _err "paru not found — cannot install AUR packages: $AUR_PKGS"
         _err "  Install paru: sudo pacman -S --needed paru"
-        _err "  AUR_PKGS may include WiFi DKMS (mt76-mt7925-dkms) — runtime, not boot-critical"
         set -g INSTALL_HAD_ERRORS true
         _phase_record "Packages: AUR (paru)" FAIL "paru not installed"
         return 1
     end
     set -l _had_fail false; set -l _retry_failed 0; set -g _RY_AUR_PARTIAL false
-    _log "AUR_NOISE_NOTE: paru/makepkg stderr/stdout may contain benign tokens; authoritative success signal is MT7925_VERIFY_OK from _aur_verify_mt7925"
+    _log "AUR_NOISE_NOTE: paru/makepkg stderr/stdout may contain benign tokens; non-zero paru exit is the failure signal"
     set -l _aur_noise_tokens \
         "'WARNING: Using existing \$srcdir/ tree' (cache reuse)" \
-        "'error: command failed to execute correctly' (retried sub-step)" \
-        "'BUILD_EXCLUSIVE directives ... do not match this kernel' (DKMS rejects alt kernel; mainline ships mt7925e in-tree)"
+        "'error: command failed to execute correctly' (retried sub-step)"
     _log "AUR_NOISE_NOTE_TOKENS: "(string join -- ' | ' $_aur_noise_tokens)
     if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- $AUR_PKGS
         if test (count $AUR_PKGS) -le 1
@@ -3578,32 +3568,7 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
         end
         return 1
     end
-    _aur_verify_mt7925
     _iap_record_result
-    return 0
-end
-
-# paru rc=0 ≠ DKMS build success; modinfo confirms .ko loadable.
-function _aur_verify_mt7925 --description "Post-AUR check: mt76-mt7925-dkms pkg installed AND mt7925e module built (paru rc=0 alone is not definitive)"
-    contains -- mt76-mt7925-dkms $AUR_PKGS; or return 0
-    if not command -q pacman; _log "MT7925_VERIFY_SKIP: pacman not found"; return 0; end
-    if not command pacman -Qi mt76-mt7925-dkms >/dev/null 2>&1
-        _warn "  mt76-mt7925-dkms: paru reported success but pacman -Qi cannot find the package — DKMS build likely failed"
-        _warn "  Inspect: paru -S mt76-mt7925-dkms (no --skipreview), then dkms status"
-        _log "MT7925_VERIFY_PKG_MISSING: pacman -Qi mt76-mt7925-dkms returned non-zero"
-        return 0
-    end
-    if not command -q modinfo; _log "MT7925_VERIFY_SKIP: modinfo not found"; return 0; end
-    # pacman -Qi: db entry; modinfo: DKMS .ko loadable (distinct failure modes).
-    if command modinfo mt7925e >/dev/null 2>&1
-        _ok "  mt76-mt7925-dkms verified (mt7925e modinfo found)"
-        _log "MT7925_VERIFY_OK: pkg installed and mt7925e module discoverable"
-    else
-        set -l _mt_ver (command pacman -Q mt76-mt7925-dkms 2>/dev/null | command awk '{print $2}')
-        _warn "  mt76-mt7925-dkms installed but mt7925e module not found — DKMS build silently failed"
-        _warn "  Inspect: dkms status mt76-mt7925; sudo dkms install mt76-mt7925/$_mt_ver"
-        _log "MT7925_VERIFY_MODULE_MISSING: pkg installed but modinfo mt7925e failed"
-    end
     return 0
 end
 

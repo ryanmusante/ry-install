@@ -1,5 +1,13 @@
 ry-install ChangeLog
 
+v7.14.0 - 2026-05-29
+
+- `amdgpu.ppfeaturemask` `0xfffd7fff` → `0xfff73fff`.
+- `KERNEL_PARAMS` 16 → 17: +`amdgpu.sg_display=0`.
+- `AUR_PKGS` = `mkinitcpio-firmware`; removed `mt76-mt7925-dkms`, `r8127-dkms`. AUR count 3 → 1.
+- Removed transitively-dead MT7925 scaffolding (sole consumer was `mt76-mt7925-dkms`): `_aur_verify_mt7925` + its call, the MT7925 branch in `_iap_record_result`, and the MT7925-specific AUR error hint + noise token. Generic paru install/retry/record path unchanged.
+- README synced: AUR 3 → 1 pkg, cmdline 16 → 17 params; dropped `(installed by default)` from the RTL8127 known-issue note.
+
 v7.13.5 - 2026-05-29
 
 - Removed three advisory diagnostics: `_vrkm_ttm_diag` (effective TTM modprobe options + dmesg ttm lines), `_vrk_audio_state` (Strix Halo ACP ASoC machine-driver gap notice), `_boot_initrd_size_scan` (post-rebuild initramfs size WARN). All were INFO/WARN-only — no gate, exit code, or install/verify-flow change.

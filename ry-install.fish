@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.14.1 (2026-05-29) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.14.2 (2026-05-29) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.14.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.14.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -62,7 +62,7 @@ set --erase _early_arg
 set -g _MY_UID (command id -u)
 
 function _ry_erase_handlers --description "Erase signal/exit handler functions"; functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null; end
-# Pre-bootstrap callers: `functions -q`-guard _log/_write_footer/_do_cleanup.
+# Pre-bootstrap callers: functions -q guards _log/_write_footer/_do_cleanup.
 function _ry_exit --argument-names code --description "Set bail sentinel and exit"
     test -z "$code"; and set code 0
     if set -q _RY_INSTALL_BAILING; and test "$_RY_INSTALL_BAILING" = true; set -g _RY_INSTALL_LAST_EXIT $code; exit $code; end
@@ -151,7 +151,11 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 
 # ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──────────────────────────────────────
 set -g _RY_BOOT_TAINTED false
-set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
+set -g _RY_BOOT_CRITICAL_DSTS \
+    "/boot/loader/loader.conf" \
+    "/etc/kernel/cmdline" \
+    "/etc/sdboot-manage.conf" \
+    "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/mkinitcpio.conf"; set -g _RY_BACKUP_SUFFIX .ry.bak
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _PROFILE_USES_WIFI_BACKEND false
@@ -544,11 +548,31 @@ set -g KERNEL_PARAMS \
     usbcore.autosuspend=-1 \
     zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
-set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
+set -g MKINITCPIO_HOOKS \
+    base \
+    systemd \
+    autodetect \
+    microcode \
+    modconf \
+    kms \
+    keyboard \
+    sd-vconsole \
+    block \
+    filesystems \
+    fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
 set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT opportunistic; set -g RESOLVED_DNSSEC allow-downgrade
-set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKey HandleSuspendKeyLongPress HandleHibernateKey HandleHibernateKeyLongPress HandleRebootKey HandleRebootKeyLongPress HandleSecureAttentionKey
+set -g LOGIND_IGNORE_KEYS \
+    HandlePowerKey \
+    HandlePowerKeyLongPress \
+    HandleSuspendKey \
+    HandleSuspendKeyLongPress \
+    HandleHibernateKey \
+    HandleHibernateKeyLongPress \
+    HandleRebootKey \
+    HandleRebootKeyLongPress \
+    HandleSecureAttentionKey
 set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR powersave
@@ -575,19 +599,47 @@ set -g SYSCTL_VALUES \
     "net.ipv4.tcp_slow_start_after_idle=0" \
     "vm.compaction_proactiveness=0"
 
-set -g PKGS_ADD nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges
-# Opt-in: uncomment `shelly` in PKGS_DEL + bump invariant 7→8 (CachyOS Shelly pkg mgr).
-set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings  # shelly
+set -g PKGS_ADD \
+    nvme-cli \
+    cachyos-gaming-meta \
+    cachyos-gaming-applications \
+    lib32-mesa \
+    fd \
+    sd \
+    dust \
+    procs \
+    bottom \
+    htop \
+    git-delta \
+    lm_sensors \
+    realtime-privileges
+# Opt-in: append shelly to PKGS_DEL + bump invariant 7→8 (CachyOS Shelly pkg mgr).
+set -g PKGS_DEL \
+    plymouth \
+    cachyos-plymouth-bootanimation \
+    cachyos-plymouth-theme \
+    breeze-plymouth \
+    plymouth-kcm \
+    micro \
+    cachyos-micro-settings
 # AUR packages — installed unconditionally (no hardware gating).
 set -g AUR_PKGS mkinitcpio-firmware
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
 
-set -g MASK ananicy-cpp.service avahi-daemon.service avahi-daemon.socket \
-    power-profiles-daemon.service lvm2-monitor.service \
-    NetworkManager-wait-online.service ufw.service \
-    sleep.target suspend.target hibernate.target \
-    hybrid-sleep.target suspend-then-hibernate.target
+set -g MASK \
+    ananicy-cpp.service \
+    avahi-daemon.service \
+    avahi-daemon.socket \
+    power-profiles-daemon.service \
+    lvm2-monitor.service \
+    NetworkManager-wait-online.service \
+    ufw.service \
+    sleep.target \
+    suspend.target \
+    hibernate.target \
+    hybrid-sleep.target \
+    suspend-then-hibernate.target
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 
@@ -865,7 +917,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before re
     return 0
 end
 
-# Branchless: `sudo -n` prefix or bare `command`; preserves argv shape.
+# Branchless: sudo -n prefix or bare command; preserves argv shape.
 function _as --argument-names use_sudo --description "Prefix command with sudo or command based on use_sudo flag"
     if test (count $argv) -lt 2; _log "BUG: _as called without command (argv=$argv)"; return 250; end
     if test "$use_sudo" != true; and test "$use_sudo" != false; _log "BUG: _as called with non-bool use_sudo='$use_sudo' (argv=$argv)"; return 250; end
@@ -984,7 +1036,7 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
     return 0
 end
 
-# ── MASK LIST + JSON ESCAPE ────────────────────────────────────────────────────────────
+# ── JSON ESCAPE ───────────────────────────────────────────────────────────────────────────────────
 
 function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)"
     set -l s "$argv[1]"
@@ -1076,7 +1128,7 @@ function _msg_nocount --argument-names level --description "Like _msg but skips 
     _msg_print $argv
 end
 
-# _ok/_fail/_warn/_info/_err always return 0 (callers chain via `; and`/`; or`).
+# _ok/_fail/_warn/_info/_err always return 0 (callers chain via ; and / ; or).
 function _ok --description "Emit OK-level message and increment VERIFY_OK"; _msg OK $argv; return 0; end
 function _fail --description "Emit FAIL-level message and increment VERIFY_FAIL"; _msg FAIL $argv; return 0; end
 function _fail_no_count --description "Emit FAIL-level message without incrementing VERIFY_FAIL"; _msg_nocount FAIL $argv; return 0; end
@@ -1345,7 +1397,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     return $ret
 end
 
-# ── GENERIC CHECK HELPERS (file, grep, perms, sysfs, token) ──────────────────────────────────────
+# ── GENERIC CHECK HELPERS (file, grep, perms, sysfs, token) ───────────────────────────────────────
 function _chk_eq --argument-names label actual expected --description "Compare actual vs expected; emit _ok or _fail"
     if test "$actual" = "$expected"
         _ok "  $label: $actual"
@@ -2678,7 +2730,7 @@ function _vrkm_blacklist --description "_vrk_module_state sub: module_blacklist=
     end
     if test (count $_bl_mods) -eq 0; _info "  No module_blacklist= entry in KERNEL_PARAMS"; return 0; end
     for mod in $_bl_mods
-        # lsmod normalizes hyphens to underscores in module names
+        # lsmod normalizes hyphens to underscores in module names.
         set -l _mod_lsmod (string replace -a -- '-' '_' "$mod")
         if command env LC_ALL=C lsmod 2>/dev/null | command grep -q -- "^$_mod_lsmod "
             _fail "  $mod: LOADED (should be blacklisted)"
@@ -3012,7 +3064,7 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
     set -l _fstab_ok true
     for _fl in $_fstab_ext4
         set -l _opts (printf '%s\n' "$_fl" | command awk '{ print $4 }')
-        # Comma/end boundary avoids `lazytime` false-matching `nolazytime`.
+        # Comma/end boundary avoids lazytime false-matching nolazytime.
         for _tok in noatime lazytime commit=10
             set -l _re (string escape --style=regex -- "$_tok")
             if not string match -qr '(^|,)'$_re'(,|$)' -- "$_opts"; _fail "  ext4 entry missing $_tok: $_fl"; set _fstab_ok false; end
@@ -3869,7 +3921,7 @@ function _csm_retry_individual --description "_configure_services_mask sub. Per-
     return $_ret
 end
 
-# mask does not flush live ufw netfilter rules; `ufw disable` does.
+# mask does not flush live ufw netfilter rules; ufw disable does.
 function _csm_disable_ufw_rules --description "Flush ufw rules before mask so kernel-level iptables/nftables rules don't persist post-mask"
     contains -- ufw.service $MASK; or return 0
     command -q ufw; or return 0
@@ -3983,7 +4035,7 @@ function _install_configure_services --description "Enable, start, and configure
     _progress Services
     _info "Post-installation tasks..."
     set -l _ret 0
-    # Phase 4 step 1: fstab ext4 opts (noatime,lazytime,commit=10)
+    # Phase 4 step 1: fstab ext4 opts (noatime,lazytime,commit=10).
     if _install_fstab_opts
         _phase_record "Services: fstab opts" PASS "noatime,lazytime,commit=10"
     else

@@ -2,6 +2,13 @@ ry-install changelog
 
 Most recent first. Dates ISO-8601; UTC offset omitted.
 
+7.14.2  2026-05-29
+- Formatting only, no behaviour change: list arrays use one-element-per-line
+  continuation uniformly (MKINITCPIO_HOOKS, LOGIND_IGNORE_KEYS, PKGS_ADD,
+  PKGS_DEL, MASK, _RY_BOOT_CRITICAL_DSTS); two section banners padded to the
+  100-column standard; comment punctuation and notation normalized. Counts and
+  invariants unchanged.
+
 7.14.1  2026-05-29
 - _vrkm_amdgpu: derive expected amdgpu.ppfeaturemask from KERNEL_PARAMS instead
   of a hardcoded literal. The 7.14.0 bump to 0xfff73fff had left the runtime

@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.17.13 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.14 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.13"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.14"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -415,7 +415,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
     set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_TSC
-    set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT
+    set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
     set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES
@@ -1568,7 +1568,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     set -l _opt_missing
     for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
-    if test (count $AUR_PKGS) -gt 0; and not command -q paru; _warn "paru not found — AUR phase will fail (AUR_PKGS=$AUR_PKGS)"; _info "  Install paru: sudo pacman -S --needed paru"; end
+    if test (count $AUR_PKGS) -gt 0; and not command -q paru; _warn "paru not found — AUR phase will be skipped (advisory, non-fatal; AUR_PKGS=$AUR_PKGS)"; _info "  Install paru to enable AUR: sudo pacman -S --needed paru"; end
     if test (count $AUR_PKGS) -gt 0; and command -q paru
         set -l _paru_ver (command paru --version 2>/dev/null | string match -rg '^paru v?(\d+\.\d+\.\d+)' | command head -n 1)
         if test -n "$_paru_ver"
@@ -3623,7 +3623,7 @@ end
 function _iap_per_pkg_retry --description "_install_aur_packages sub. Re-attempt AUR install one package at a time; returns failed count via _RY_IAP_RETRY_FAILED"
     set -g _RY_IAP_RETRY_FAILED 0
     for pkg in $AUR_PKGS
-        if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- "$pkg"; _warn "AUR install failed: $pkg"; set -g INSTALL_HAD_ERRORS true; set -g _RY_IAP_RETRY_FAILED (math $_RY_IAP_RETRY_FAILED + 1); end
+        if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- "$pkg"; _warn "AUR install failed: $pkg"; set -g _RY_IAP_RETRY_FAILED (math $_RY_IAP_RETRY_FAILED + 1); end
     end
     # Partial = some-but-not-all failed; total per-pkg failure is full failure.
     test $_RY_IAP_RETRY_FAILED -gt 0; and test $_RY_IAP_RETRY_FAILED -lt (count $AUR_PKGS); and set -g _RY_AUR_PARTIAL true
@@ -3637,11 +3637,11 @@ end
 function _install_aur_packages --description "Install AUR packages via paru (no --removemake for DKMS)"
     if test (count $AUR_PKGS) -le 0; _phase_record "Packages: AUR (paru)" "--" "AUR_PKGS empty"; return 0; end
     if not command -q paru
-        _err "paru not found — cannot install AUR packages: $AUR_PKGS"
-        _err "  Install paru: sudo pacman -S --needed paru"
-        set -g INSTALL_HAD_ERRORS true
-        _phase_record "Packages: AUR (paru)" FAIL "paru not installed"
-        return 1
+        _warn "paru not found — skipping AUR packages (advisory; not a hard gate): $AUR_PKGS"
+        _info "  Install paru to enable AUR, then re-run: sudo pacman -S --needed paru"
+        _log "AUR_SKIP_PARU_ABSENT: paru not installed; AUR_PKGS=$AUR_PKGS skipped (non-fatal)"
+        _phase_record "Packages: AUR (paru)" WARN "paru absent — skipped (non-fatal)"
+        return 0
     end
     set -l _had_fail false; set -l _retry_failed 0; set -g _RY_AUR_PARTIAL false
     _log "AUR_NOISE_NOTE: paru/makepkg stderr/stdout may contain benign tokens; non-zero paru exit is the failure signal"
@@ -3652,14 +3652,13 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
     if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- $AUR_PKGS
         if test (count $AUR_PKGS) -le 1
             _warn "AUR install failed: $AUR_PKGS"
-            set -g INSTALL_HAD_ERRORS true
             set _had_fail true
             set _retry_failed 1
         else
             _warn "AUR batch install failed — retrying per-package to identify failures"
             _iap_per_pkg_retry
-            set _had_fail true
             set _retry_failed $_RY_IAP_RETRY_FAILED
+            test $_retry_failed -gt 0; and set _had_fail true
         end
     end
     if test "$_had_fail" = true
@@ -3670,10 +3669,12 @@ function _install_aur_packages --description "Install AUR packages via paru (no 
         set -l _total (count $AUR_PKGS)
         if test "$_RY_AUR_PARTIAL" = true
             set -l _ok_count (math $_total - $_retry_failed)
+            _warn "AUR partial success ($_ok_count/$_total) — non-fatal; install proceeds"
             _phase_record "Packages: AUR (paru)" WARN "$_ok_count/$_total (partial — see JSONL)"
-        else
-            _phase_record "Packages: AUR (paru)" FAIL "0/$_total (all failed)"
+            return 0
         end
+        set -g INSTALL_HAD_ERRORS true
+        _phase_record "Packages: AUR (paru)" FAIL "0/$_total (all failed)"
         return 1
     end
     _iap_record_result
@@ -3860,9 +3861,8 @@ function _configure_services_resolved_restart --description "Restart systemd-res
     if _run sudo -n systemctl restart systemd-resolved
         _phase_record "Services: resolved restart" PASS "systemd-resolved restarted"
     else
-        _warn "Systemd-resolved restart failed"
-        _phase_record "Services: resolved restart" WARN "restart failed"
-        set -g INSTALL_HAD_ERRORS true
+        _warn "Systemd-resolved restart failed — drop-in still applies at next boot (non-fatal)"
+        _phase_record "Services: resolved restart" WARN "restart failed (applies next boot)"
     end
     return 0
 end
@@ -3904,10 +3904,11 @@ function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on
     if test -f /var/lib/pacman/db.lck
         _err "Pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run; skipping package removal"
         set -g INSTALL_HAD_ERRORS true
+        set -g _RY_PKG_REMOVE_DBLOCK true
         return 0
     end
     if _run sudo -n pacman -Rns --noconfirm -- $argv; _ok "Removed: $argv"; _log "PKG_REMOVE_BATCH_OK: $argv"; set -g _RY_PKGS_REMOVED_COUNT (math $_RY_PKGS_REMOVED_COUNT + (count $argv)); return 0; end
-    if test -f /var/lib/pacman/db.lck; _err "Pacman database became locked during removal — aborting"; set -g INSTALL_HAD_ERRORS true; _log "PKG_REMOVE_BATCH_FAIL_DBLOCK: $argv"; return 0; end
+    if test -f /var/lib/pacman/db.lck; _err "Pacman database became locked during removal — aborting"; set -g INSTALL_HAD_ERRORS true; set -g _RY_PKG_REMOVE_DBLOCK true; _log "PKG_REMOVE_BATCH_FAIL_DBLOCK: $argv"; return 0; end
     _warn "Batch removal failed, trying individually..."
     _log "PKG_REMOVE_BATCH_FAIL: $argv"
     set -l _retry_installed (command pacman -Qq 2>/dev/null)
@@ -3926,7 +3927,7 @@ end
 
 function _configure_services_pkg_remove --description "Remove PKGS_DEL packages (rdep-aware via pactree)"
     if not command -q pacman; _warn "pacman not found, skipping PKGS_DEL removal"; _phase_record "Services: PKGS_DEL removal" SKIP "pacman not found"; return 0; end
-    set -g _RY_PKG_REMOVE_SKIPS; set -g _RY_PKGS_REMOVED_COUNT 0; set -l to_del; set -l _del_installed (command pacman -Qq 2>/dev/null)
+    set -g _RY_PKG_REMOVE_SKIPS; set -g _RY_PKGS_REMOVED_COUNT 0; set -g _RY_PKG_REMOVE_DBLOCK false; set -l to_del; set -l _del_installed (command pacman -Qq 2>/dev/null)
     for pkg in $PKGS_DEL
         contains -- "$pkg" $_del_installed; or continue
         for _emit in (_csp_filter_rdeps "$pkg"); test -z "$_emit"; and continue; contains -- "$_emit" $to_del; and continue; set -a to_del "$_emit"; end
@@ -3937,14 +3938,20 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
         _log "PKG_REMOVE_SKIPS: $_RY_PKG_REMOVE_SKIPS"
     end
     if test $_del_count -gt 0; _log "PKG_REMOVE_REQUESTED: $to_del"; _csp_remove_pkgs $to_del; end
-    if test $_del_count -eq 0; and test $_skip_count -eq 0
+    if test "$_RY_PKG_REMOVE_DBLOCK" = true
+        _phase_record "Services: PKGS_DEL removal" FAIL "pacman db locked — 0 of $_del_count removed"
+    else if test $_del_count -eq 0; and test $_skip_count -eq 0
         _phase_record "Services: PKGS_DEL removal" "--" "no PKGS_DEL members installed"
     else if test $_del_count -eq 0
         _phase_record "Services: PKGS_DEL removal" WARN "$_skip_count skipped (rdep gate)"
+    else if test "$_RY_PKGS_REMOVED_COUNT" -lt $_del_count
+        set -l _msg "removed $_RY_PKGS_REMOVED_COUNT of $_del_count"
+        test $_skip_count -gt 0; and set _msg "$_msg, $_skip_count rdep-skipped"
+        _phase_record "Services: PKGS_DEL removal" WARN "$_msg"
     else if test $_skip_count -gt 0
-        _phase_record "Services: PKGS_DEL removal" WARN "removed $_del_count, $_skip_count rdep-skipped"
+        _phase_record "Services: PKGS_DEL removal" WARN "removed $_RY_PKGS_REMOVED_COUNT, $_skip_count rdep-skipped"
     else
-        _phase_record "Services: PKGS_DEL removal" PASS "removed $_del_count packages"
+        _phase_record "Services: PKGS_DEL removal" PASS "removed $_RY_PKGS_REMOVED_COUNT packages"
     end
     return 0
 end
@@ -4031,9 +4038,8 @@ function _cse_collect_units --description "Collect system units to enable"
     end
     if set -q _RY_DEPLOYED_SERVICES; and test (count $_RY_DEPLOYED_SERVICES) -gt 0
         if not _run sudo -n systemctl daemon-reload
-            _warn "Systemctl daemon-reload failed"
-            _phase_record "Services: daemon-reload" WARN "daemon-reload failed"
-            set -g INSTALL_HAD_ERRORS true
+            _warn "Systemctl daemon-reload failed — unit symlinks still apply at next boot (non-fatal)"
+            _phase_record "Services: daemon-reload" WARN "daemon-reload failed (non-fatal)"
         end
         for _u in $_RY_DEPLOYED_SERVICES; set -a _enable $_u; end
     end
@@ -4380,8 +4386,7 @@ end
 function _if_nm_restart --description "Restart NetworkManager when iwd backend switch is in effect"
     if test "$_PROFILE_USES_WIFI_BACKEND" = false; _info "iwd/NetworkManager not managed — skipping NM restart"; _phase_record "Finalize: NetworkManager restart" SKIP "iwd backend not active"; return 0; end
     if not command -q pacman; or not command pacman -Qi iwd >/dev/null 2>&1
-        _warn "iwd configs deployed but iwd package is not installed"
-        set -g INSTALL_HAD_ERRORS true
+        _warn "iwd configs deployed but iwd package is not installed (advisory; install iwd to activate the backend)"
         _phase_record "Finalize: NetworkManager restart" WARN "iwd package not installed"
         return 0
     end
@@ -4410,9 +4415,8 @@ function _install_finalize --description "Run post-install verification, cleanup
         if _run systemctl --user daemon-reload
             _phase_record "Finalize: systemctl --user reload" PASS "user-bus active"
         else
-            _warn "Systemctl --user daemon-reload failed"
-            _phase_record "Finalize: systemctl --user reload" WARN "daemon-reload failed"
-            set -g INSTALL_HAD_ERRORS true
+            _warn "Systemctl --user daemon-reload failed — re-login refreshes the user session (non-fatal)"
+            _phase_record "Finalize: systemctl --user reload" WARN "daemon-reload failed (non-fatal)"
         end
     else
         _info "Skipping systemctl --user daemon-reload (no active user-bus — log in graphically or enable-linger)"

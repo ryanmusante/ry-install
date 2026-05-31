@@ -2,7 +2,15 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
-7.17.13  2026-05-31
+7.17.14  2026-05-31
+- fix: paru-absent is now advisory — WARN + continue (exit 0), matching the documented "not a hard gate / warns and continues" contract; was FAIL + INSTALL_HAD_ERRORS (exit 1).
+- fix: a *partial* AUR failure (some-but-not-all packages) is recorded WARN and no longer taints the run; only an all-packages-failed AUR step is FAIL (exit 1). Resolves the verdict↔exit desync where the matrix showed PASS-WITH-WARNINGS while the process exited 1.
+- fix: a batch AUR install that fails but fully recovers on per-package retry is now PASS, not a spurious "0/N (all failed)" FAIL.
+- fix: WARN-only service paths no longer set INSTALL_HAD_ERRORS — systemd-resolved restart, system + user daemon-reload, and iwd-package-absent at finalize. A run whose only anomalies are WARN now exits 0, consistent with the verdict table.
+- fix: PKGS_DEL removal records the actual removed count (was the requested count, overstating success on per-package failures); a pacman db.lck during removal is now recorded FAIL to match the taint it already set (was a misleading PASS/N-A row).
+- docs: README Run Summary — verdict table gains an Exit column and notes the two preflight-stage exits (hard-requirement abort = 3, kernel < 6.14 floor = 1) that bypass it; clarify the JSONL footer pass/fail/warn are message-level tallies while the matrix verdict + PHASE_RESULT/MATRIX_RENDERED events are the authoritative per-phase record; Phase 2 now spells out the advisory AUR-failure semantics.
+
+
 - harden: _acquire_lock stale-reclaim retries up to 3x — a peer that wins the post-rm mkdir race re-populates the lock, and each pass re-checks PID liveness before reclaiming (was a single attempt that could return EXIT_LOCK while the lock was actually free).
 - fix: _awf_postwrite_verify_restore logs a WARN (+ JSONL POSTWRITE_VERIFY_SKIP) when the byte re-verify is skipped because the content-generator re-run or the installed-bytes read failed (e.g. transient sudo lapse) on a backup-target file; was a silent return 0.
 - docs: README Prerequisites adds a kernel-version map note consolidating the >=6.14 floor, >=6.18.4 gfx1151 rec, >=6.16 ROCm, and >=6.19.1 regression-fix references.

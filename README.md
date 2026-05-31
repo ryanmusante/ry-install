@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.17.13-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.17.14-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -100,26 +100,26 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 
 ## Run Summary
 
-Prints a CHECK/RESULT/EVIDENCE matrix (+ totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records every `PHASE_RESULT` and is the durable record once output scrolls away. The verdict maps to the exit code.
+Prints a CHECK/RESULT/EVIDENCE matrix (+ totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records every `PHASE_RESULT` plus a `MATRIX_RENDERED` event carrying the phase totals and verdict — these are the durable per-phase record once output scrolls away. The matrix verdict (from phase results) is what maps to the exit code; the JSONL `footer` line's `pass`/`fail`/`warn` are message-level tallies (every `_ok`/`_warn`/`_fail` emitted) and need not equal the phase-matrix counts.
 
 Per-phase result:
 
 | Result | Semantics |
 |---|---|
 | `PASS` | succeeded |
-| `WARN` | non-fatal anomaly |
-| `FAIL` | failed (`INSTALL_HAD_ERRORS=true`) |
+| `WARN` | non-fatal anomaly (never taints the run; exit stays `0`) |
+| `FAIL` | failed — the only result that sets `INSTALL_HAD_ERRORS=true` |
 | `DEFER` | deferred to next boot |
 | `SKIP` / `N/A` | by design / not applicable |
 
-Overall verdict (maps to exit code):
+Overall verdict and the exit code it maps to. A run that is all `PASS`/`WARN` exits `0`. Two preflight-stage outcomes bypass this table: a hard-requirement abort exits `3`, and a kernel `< 6.14` floor failure is recorded `FAIL` and exits `1` (it still rebuilds boot).
 
-| Verdict | Trigger |
-|---|---|
-| `PASS` | `0 FAIL · 0 WARN` |
-| `PASS-WITH-WARNINGS` | `0 FAIL · ≥1 WARN` |
-| `FAIL` | `≥1 FAIL` |
-| `FAIL-BOOT-CRITICAL` | boot cascade aborted; prints **DO NOT REBOOT** |
+| Verdict | Trigger | Exit |
+|---|---|---|
+| `PASS` | `0 FAIL · 0 WARN` | `0` |
+| `PASS-WITH-WARNINGS` | `0 FAIL · ≥1 WARN` | `0` |
+| `FAIL` | `≥1 FAIL` | `1` |
+| `FAIL-BOOT-CRITICAL` | boot cascade aborted; prints **DO NOT REBOOT** | `4` |
 
 ## Configuration
 
@@ -131,7 +131,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 ### Phase 2 — Packages
 
-`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, and `cpupower` are CachyOS defaults (not re-added); the iwd and NetworkManager configs still deploy.
+`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, and `cpupower` are CachyOS defaults (not re-added); the iwd and NetworkManager configs still deploy. The AUR step is advisory: a missing `paru` or a *partial* AUR failure is recorded `WARN` and the install continues (exit `0`); only an AUR step where **every** package fails is a `FAIL` (exit `1`). A `pacman -Syu` failure, by contrast, taints the run and skips the Phase 5 rebuild.
 
 <details open>
 <summary><b>Packages — install</b> — 13 pkgs</summary>

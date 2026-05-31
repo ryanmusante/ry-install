@@ -2,6 +2,15 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.17.10  2026-05-31
+- fix: add ry-tee-err.* to the _do_cleanup filesystem-sweep glob set so a fatal signal during a Phase 3 atomic write cannot leave the tee stderr-capture tmpfile orphaned in TMPDIR for a later run to inherit; the six sibling ry-* prefixes were already swept, and the tracked-list sweep already removed it on the normal path.
+- comment: condense three verbose rationale comments (lock-ownership gate, fish-math millisecond scaling, post-hook precedence) to tighter single lines; wording only, no code paths changed.
+
+7.17.9  2026-05-31
+- fix: count an installed-bytes string-collect failure in _verify_static_checksum once instead of twice; the explicit VERIFY_FAIL bump now pairs with _fail_no_count, matching the generator-stage branch above it. The doubled tally surfaced only on a near-unreachable collect failure and never altered the pass/fail verdict.
+- harden: make the systemd ≥ 250 preflight a true hard gate — refuse the install when systemctl --version is unparseable instead of silently passing, aligning behavior with the documented hard requirement.
+- harden: allocate the _run STDERR/STDOUT overflow-spill filename with mktemp --suffix=.log instead of a /dev/urandom-derived suffix, eliminating a possible empty suffix and filename collision when /dev/urandom is unreadable.
+
 7.17.8  2026-05-31
 - fix: export HOME via set -gx on the getent-recovery path so paru/makepkg/git children inherit it; the normalization assignment now also exports.
 - fix: signal-time lock cleanup removes the lock directory only when held by this process or when its pid file is empty/ours, preventing removal of a peer instance's lock if a fatal signal arrives during a failed mkdir.

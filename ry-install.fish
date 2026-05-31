@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.17.8 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.10 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.8"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.10"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -384,6 +384,7 @@ function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for l
     set -l _tmpdir (_tmp_dir)
     set -l _tmp_globs \
         'ry-sudo-err.*' \
+        'ry-tee-err.*' \
         'ry-run.*' \
         'ry-val-unit.*' \
         'ry-argparse-err.*' \
@@ -414,7 +415,7 @@ end
 # TERM → 0.5s grace → KILL; lets long pkg/boot ops flush first.
 function _dc_kill_children --description "_do_cleanup sub. Release lock + reap child PIDs (pkill -P, then SIGKILL after grace)"
     if begin; set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED; end; and set -q LOCK_DIR; and not test -L "$LOCK_DIR"
-        # Ownership gate: rm only when we hold the lock, or the pid file is empty/ours; never a live peer's dir.
+        # Ownership gate: rm only if we hold the lock or its pid file is empty/ours; never a peer's.
         set -l _own false
         if set -q _RY_HOLDS_LOCK
             set _own true
@@ -1324,12 +1325,12 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     if test "$_need_tail" = true
         set -l _ovf "$LOG_DIR/run-overflow"
         command mkdir -p -m 700 -- "$_ovf" 2>/dev/null
-        set -l _dest "$_ovf/$label_tag-$TIMESTAMP-"(command tr -dc a-z0-9 </dev/urandom 2>/dev/null | command head -c6)".log"
-        if command cp -- "$tmpfile" "$_dest" 2>/dev/null
+        set -l _dest (command mktemp --suffix=.log -p "$_ovf" "$label_tag-$TIMESTAMP-XXXXXX" 2>/dev/null)
+        if test -n "$_dest"; and command cp -- "$tmpfile" "$_dest" 2>/dev/null
             set -l _sha (command sha256sum -- "$_dest" 2>/dev/null | string match -rg -- '^(\S+)')
             _log "$label_tag""_FULL_SPILL: path=$_dest sha256=$_sha lines=$_total"
         else
-            _log "$label_tag""_FULL_SPILL_FAIL: could not write $_dest"
+            _log "$label_tag""_FULL_SPILL_FAIL: could not write spill file under $_ovf"
         end
     end
     if test "$QUIET" = false
@@ -1545,7 +1546,8 @@ function _ry_check_deps --description "Verify required packages are installed"
     if test (count $missing) -gt 0; _err "missing: $missing"; return 1; end
     if not command env LC_ALL=C df --output=avail / >/dev/null 2>&1; _err "df(1) lacks --output flag — GNU coreutils required (busybox/uutils not supported)"; return 1; end
     _resolve_systemd_ver
-    if test -n "$_RY_SYSTEMD_VER"; and test "$_RY_SYSTEMD_VER" -lt 250; _err "Systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
+    if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; return 1; end
+    if test "$_RY_SYSTEMD_VER" -lt 250; _err "Systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
     set -l _opt_missing
     for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
@@ -2410,7 +2412,7 @@ function _vsc_check_one --argument-names dst --description "_verify_static_check
     set -l actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _ib_rc $pipestatus[1]; set -l _ib_collect_rc $pipestatus[2]
     if test $_ib_collect_rc -ne 0
-        _fail "  $dst: string collect failed (rc=$_ib_collect_rc)"
+        _fail_no_count "  $dst: string collect failed (rc=$_ib_collect_rc)"
         set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
         _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=ib rc=$_ib_collect_rc"
         return 0
@@ -3245,7 +3247,7 @@ function _vrs_boot_perf --description "Runtime session check: systemd-analyze bo
         if test -n "$total_sec"; and string match -qr '^\d+(\.\d+)?$' -- "$total_sec"
             if set -q BOOT_TIME_TARGET; and test -n "$BOOT_TIME_TARGET"
                 set -l target $BOOT_TIME_TARGET
-                # fish math has no comparison operators; scale to ms and compare as integers via test
+                # fish math lacks comparison ops; scale to ms, compare as ints via test
                 set -l _bt_m (math "round($total_sec * 1000)")
                 set -l _tgt_m (math "$target * 1000")
                 set -l _warn_m (math "round($target * 900)")
@@ -4642,7 +4644,7 @@ set -g _RY_POST_HOOKS \
     "/etc/modprobe.d/*|modprobe" \
     "*.service|service"
 
-# First-match-wins: declaration order = priority (specific patterns first); a few tags (e.g. tmpfiles.d) have no default-profile destination, reachable only via --install-file.
+# First-match-wins: declaration order = priority; some tags (e.g. tmpfiles.d) are --install-file-only.
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"
     for _entry in $_RY_POST_HOOKS
         set -l _parts (string split -m1 '|' -- $_entry)

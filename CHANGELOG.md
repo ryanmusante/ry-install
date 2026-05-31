@@ -2,6 +2,13 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.17.12  2026-05-31
+- perf: _dc_kill_children probes for child PIDs (pgrep -P) before the TERM→0.5s-grace→KILL cycle; clean exits with no children skip the grace entirely (pgrep absent still runs the full cycle).
+- cleanup: drop the unreachable systemd-tmpfiles.d scaffolding (_post_tmpfiles, _grep_tmpfiles_entry, the */tmpfiles.d/* dispatch + post-hook tag); no tmpfiles.d destination is managed, so it was never reachable. _RY_POST_HOOKS 16 -> 15; post-hook handlers 11 -> 10.
+- harden: _resolve_esp / _resolve_boot_path try a non-sudo test -d on candidate paths before the sudo probe, so a readable vfat ESP is not misclassified to the /boot fallback on a sudo-cache lapse.
+- cleanup: _dc_erase_globals also erases _RY_FSTAB_NEEDS_CHANGE, _RY_FSTAB_COMMIT_OVERRIDES, _RY_SYSCTL_BAD_ENTRIES (already cleared inline; defence-in-depth across modes).
+- comment: note the *.service post-hook tag is reserved for SERVICE_DESTINATIONS (wired but currently empty); note RC_KVER_FAIL is an internal switch sentinel, never a process exit.
+
 7.17.11  2026-05-31
 - fix: force-print the boot-critical "DO NOT REBOOT" banner + recovery to stderr+JSONL in the default QUIET install (was dropped by the QUIET gate); --install-file unaffected.
 - fix: verify sudo-cache bail is now symmetric across static/runtime arms (both via _err_loud, no VERIFY_FAIL bump); exit 3 unchanged.

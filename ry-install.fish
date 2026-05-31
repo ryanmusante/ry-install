@@ -1,10 +1,11 @@
 #!/usr/bin/env fish
-# ry-install v7.17.11 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.12 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.11"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.12"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
+# RC_KVER_FAIL: internal _ry_check_kernel_version sentinel only (switch-consumed); never a process exit — kernel-floor fail surfaces as exit 1 via INSTALL_HAD_ERRORS.
 set -g RC_KVER_OK 0; set -g RC_KVER_FAIL 2
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 13
@@ -411,6 +412,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
+    set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES
 end
 
 # TERM → 0.5s grace → KILL; lets long pkg/boot ops flush first.
@@ -427,9 +429,17 @@ function _dc_kill_children --description "_do_cleanup sub. Release lock + reap c
         test "$_own" = true; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
     end
     if command -q pkill
-        command pkill -TERM -P "$fish_pid" 2>/dev/null
-        command sleep 0.5 </dev/null 2>/dev/null
-        command pkill -KILL -P "$fish_pid" 2>/dev/null
+        # Skip the TERM→grace→KILL cycle (and its 0.5s sleep) when no children exist
+        # (clean-exit fast path). pgrep absent → unknown → fall through to full grace.
+        set -l _have_kids unknown
+        command -q pgrep; and begin
+            test (count (command pgrep -P "$fish_pid" 2>/dev/null)) -gt 0; and set _have_kids yes; or set _have_kids no
+        end
+        if test "$_have_kids" != no
+            command pkill -TERM -P "$fish_pid" 2>/dev/null
+            command sleep 0.5 </dev/null 2>/dev/null
+            command pkill -KILL -P "$fish_pid" 2>/dev/null
+        end
     end
 end
 
@@ -713,7 +723,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         EXPECTED_VULKAN_PKGS:3 \
         EXPECTED_SERVICES:3 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:16 \
+        _RY_POST_HOOKS:15 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         AUR_PKGS:1
     for _kv in $_expect
@@ -1825,16 +1835,6 @@ function _grep_ini_header --argument-names dst --description 'Validate ≥1 [Sec
     return 0
 end
 
-function _grep_tmpfiles_entry --argument-names dst --description 'Validate ≥1 systemd-tmpfiles.d entry line'
-    test (count $argv) -lt 2; and _log "BUG: _grep_tmpfiles_entry called without content (dst=$dst)"; and return 2
-    # tmpfiles.d: TypeLetter[!\-=+~^]* <ws> Path … (man tmpfiles.d); NOT INI.
-    string match -qre '^[a-zA-Z][!\-=+~^]*[[:space:]]+\S' -- $argv[2..-1]; or begin
-        _fail "  $dst: no tmpfiles.d entries found"
-        return 1
-    end
-    return 0
-end
-
 function _grep_drirc_entry --argument-names dst --description 'Validate drirc XML: <driconf> root + ≥1 <option name="…" value="…"/>'
     test (count $argv) -lt 2; and _log "BUG: _grep_drirc_entry called without content (dst=$dst)"; and return 2
     string match -qre '<driconf>' -- $argv[2..-1]; or begin; _fail "  $dst: missing <driconf> root element"; return 1; end
@@ -1868,8 +1868,6 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_sysctl_kv "$dst" $_content
         case '*/drirc.d/*'
             _grep_drirc_entry "$dst" $_content
-        case '*/tmpfiles.d/*'
-            _grep_tmpfiles_entry "$dst" $_content
         case '*/modprobe.d/*'
             _grep_modprobe_entry "$dst" $_content
         case '*/mkinitcpio.conf' '*/environment.d/*' '*/default/cpupower-service.conf'
@@ -4115,13 +4113,13 @@ end
 function _resolve_esp --description "Resolve EFI system partition path (cached; empty result also cached)"
     if set -q _RY_ESP_TRIED; printf '%s' "$_RY_ESP_PATH"; return 0; end
     set -l _p (_bootctl_dir -p ESP_BOOTCTL_PIPE_FAIL "falling through to findmnt")
-    if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
+    if test -z "$_p"; or begin; not test -d "$_p"; and not sudo -n test -d "$_p" 2>/dev/null; end
         for _candidate in /efi /boot/efi /boot/EFI /boot
             set -l _fs (command findmnt -no FSTYPE -- "$_candidate" 2>/dev/null)
             if test "$_fs" = vfat; set _p "$_candidate"; break; end
         end
     end
-    if test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null
+    if test -z "$_p"; or begin; not test -d "$_p"; and not sudo -n test -d "$_p" 2>/dev/null; end
         if test -d /boot; or sudo -n test -d /boot 2>/dev/null
             set _p /boot
             set -g _RY_ESP_FALLBACK true
@@ -4143,7 +4141,7 @@ end
 function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, else ESP) per BLS (cached; empty result also cached)"
     if set -q _RY_BOOT_TRIED; printf '%s' "$_RY_BOOT_PATH"; return 0; end
     set -l _p (_bootctl_dir -x BOOT_BOOTCTL_PIPE_FAIL "falling through to ESP")
-    test -z "$_p"; or not sudo -n test -d "$_p" 2>/dev/null; and set _p (_resolve_esp)
+    test -z "$_p"; or begin; not test -d "$_p"; and not sudo -n test -d "$_p" 2>/dev/null; end; and set _p (_resolve_esp)
     set -g _RY_BOOT_PATH "$_p"; set -g _RY_BOOT_TRIED true
     printf '%s' "$_p"
 end
@@ -4645,12 +4643,11 @@ set -g _RY_POST_HOOKS \
     "*/sysctl.d/*|sysctl" \
     "*/environment.d/*|envd" \
     "/etc/default/cpupower-service.conf|cpupower" \
-    "*/tmpfiles.d/*|tmpfiles" \
     "/etc/drirc.d/*|drirc" \
     "/etc/modprobe.d/*|modprobe" \
     "*.service|service"
 
-# First-match-wins by declaration order; some tags (e.g. tmpfiles.d) are --install-file-only.
+# First-match-wins by declaration order. The *.service|service tag is reserved for SERVICE_DESTINATIONS (wired throughout but currently empty; populate to deploy unit files).
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"
     for _entry in $_RY_POST_HOOKS
         set -l _parts (string split -m1 '|' -- $_entry)
@@ -4703,7 +4700,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (11, _post_<tag> dynamic dispatch) ─────────────────────────
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (10, _post_<tag> dynamic dispatch) ─────────────────────────
 function _pb_rebuild_cascade --argument-names target --description "_post_boot sub. mkinitcpio -P + sdboot-manage cascade"
     if not _run sudo -n mkinitcpio -P; _err "Mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     if test "$SDBOOT_REMOVE_EXISTING" = yes
@@ -4823,17 +4820,6 @@ function _post_sysctl --argument-names target --description "Post-hook: apply sy
     if not _run sudo -n sysctl --system
         _warn "sysctl --system failed — tunables not applied until reboot"
         _info "  Retry: sudo sysctl --system"
-        return 1
-    end
-    return 0
-end
-
-function _post_tmpfiles --argument-names target --description "Post-hook: apply tmpfiles.d entry immediately (avoid reboot dependency)"
-    _echo
-    if not command -q systemd-tmpfiles; _warn "systemd-tmpfiles(8) not found — entries will apply on next boot via systemd-tmpfiles-setup.service"; return 0; end
-    if not _run sudo -n systemd-tmpfiles --create -- "$target"
-        _warn "systemd-tmpfiles --create $target failed — entries not applied until reboot"
-        _info "  Retry: sudo systemd-tmpfiles --create -- $target"
         return 1
     end
     return 0

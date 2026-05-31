@@ -2,6 +2,22 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.17.7  2026-05-31
+- format: split the --INSTALL-FILE banner into DISPATCH TABLE + ORCHESTRATOR and POST-HOOK HANDLERS (11) sections. Banners only — no code paths changed.
+
+7.17.6  2026-05-31
+- format: split the VERIFY-STATIC SYSTEM block into SYSTEM+USER / PACKAGES+SERVICES+SYNTAX / CHECKSUM+DRIVER banners. Banners only — no code paths changed.
+- comment: collapse the two-line _RY_POST_HOOKS dispatch note into a single line.
+- header: sync the file-header version string to VERSION (was 7.17.3).
+
+7.17.5  2026-05-31
+- format: split the 530-line VERIFY-RUNTIME banner into SERVICES / ENVIRONMENT / SESSION+PERMS arms, plus a TOP-LEVEL ORCHESTRATORS banner before _ry_verify_runtime/_ry_verify_all. Banners only — no code paths changed.
+
+7.17.4  2026-05-31
+- kernel: condense _ry_check_kernel_version to the < 6.14 hard-floor only; drop the advisory 6.18.4 stability WARN, the in-preflight ntsync state probe (still covered by verify static + runtime), and the 6.19.0 black-screen WARN.
+- cleanup: remove the now-unused RC_KVER_WARN return code and the unreachable WARN branch in the preflight kernel-version switch.
+- docs: README flow line — kernel preflight now reads "≥ 6.14 FAIL"; the 6.18.4 recommendation and 6.19.0 troubleshooting entry are retained as guidance.
+
 7.17.3  2026-05-31
 - docs: Prerequisites — paru is recommended (≥ 2.0.0), not a hard preflight gate; AUR phase warns and continues when paru is absent.
 - docs: scope the preflight-abort statement to hard requirements; clarify the kernel floor (< 6.14) taints the run (exit 1) rather than aborting (exit 3), and paru/NTP sync are warnings.

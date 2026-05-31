@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.17.3-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.17.7-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -125,7 +125,7 @@ The script is the source of truth — `--verify` checks embedded files byte-for-
 
 ### Phase 1 — Preflight
 
-Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (root UUID + CPU match + invariants) → lock (atomic `mkdir` 0700 + dead-PID reclaim) → sudo cache → deps (systemd ≥ 250 hard-gate · paru ≥ 2.0.0 advisory) → disk space → network (HTTPS + ICMP) → time sync (NTP, systemd-timesyncd) → kernel (≥ 6.14 FAIL · ≥ 6.18.4 WARN · ntsync) → per-destination config validators.
+Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (root UUID + CPU match + invariants) → lock (atomic `mkdir` 0700 + dead-PID reclaim) → sudo cache → deps (systemd ≥ 250 hard-gate · paru ≥ 2.0.0 advisory) → disk space → network (HTTPS + ICMP) → time sync (NTP, systemd-timesyncd) → kernel (≥ 6.14 FAIL) → per-destination config validators.
 
 ### Phase 2 — Packages
 

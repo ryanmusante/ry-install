@@ -1,11 +1,11 @@
 #!/usr/bin/env fish
-# ry-install v7.17.3 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.7 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
-set -g RC_KVER_OK 0; set -g RC_KVER_WARN 1; set -g RC_KVER_FAIL 2
+set -g RC_KVER_OK 0; set -g RC_KVER_FAIL 2
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 13
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
@@ -1642,43 +1642,14 @@ function _kver_below --argument-names major minor patch want_major want_minor wa
     test "$patch" -lt "$want_patch"
 end
 
-# <6.14 hard-fail (no ntsync/gfx1151); WARN aggregates 6.18.4 floor + 6.19.0 black-screen.
+# <6.14 hard-fail: ntsync + gfx1151 fixes unavailable below this floor.
 function _ry_check_kernel_version --description "Verify running kernel version meets minimum requirement"
-    set -l kver $KVER; set -l major $KVER_MAJOR; set -l minor $KVER_MINOR; set -l kver_patch 0
-    if set -q KVER_PARTS[3]; set -l _patch_clean (string replace -r '[^0-9].*' '' -- "$KVER_PARTS[3]"); test -n "$_patch_clean"; and set kver_patch $_patch_clean; end
-    _info "Kernel version: $kver"
-    if _kver_below $major $minor $kver_patch 6 14 0
-        _err  "Kernel $kver < 6.14: ntsync and gfx1151 fixes unavailable"
+    _info "Kernel version: $KVER"
+    if _kver_below $KVER_MAJOR $KVER_MINOR 0 6 14 0
+        _err "Kernel $KVER < 6.14: ntsync and gfx1151 fixes unavailable"
         _info "  Upgrade kernel before or during install (pacman -Syu)"
         return $RC_KVER_FAIL
     end
-    set -l _warns 0
-    if _kver_below $major $minor $kver_patch 6 18 4; _warn "Kernel $kver below README stability floor 6.18.4 (gfx1151)"; _info "  Recommend upgrading: sudo pacman -Syu linux-cachyos"; set _warns (math $_warns + 1); end
-    set -l _ns (_ntsync_state)
-    switch $_ns
-        case unavailable
-            _warn "Kernel $kver: ntsync not available (expected builtin or module)"
-            set _warns (math $_warns + 1)
-        case loaded_nodev
-            _warn "Kernel $kver: ntsync module loaded but /dev/ntsync missing"
-            set _warns (math $_warns + 1)
-        case missing
-            _warn "Kernel $kver: ntsync module not loaded (kernel ≥6.14 supports it; check MODULES list)"
-            set _warns (math $_warns + 1)
-        case builtin loaded
-            _ok "Kernel $kver: ntsync $_ns"
-        case '*'
-            _warn "Kernel $kver: ntsync unknown state '$_ns'"
-            set _warns (math $_warns + 1)
-    end
-    if test "$major" -eq 6; and test "$minor" -eq 19
-        if _kver_below $major $minor $kver_patch 6 19 1
-            _warn "Kernel 6.19.0: black screen regression on Strix Halo (CachyOS #23042)"
-            _warn "  Recommend: downgrade to 6.18.x or upgrade to 6.19.1+"
-            set _warns (math $_warns + 1)
-        end
-    end
-    test $_warns -gt 0; and return $RC_KVER_WARN
     return $RC_KVER_OK
 end
 
@@ -2206,7 +2177,7 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
     _vsb_entries
 end
 
-# ── VERIFY-STATIC: SYSTEM + USER + PACKAGES + SERVICES + SYNTAX + CHECKSUM ────────────────────────
+# ── VERIFY-STATIC: SYSTEM + USER (drop-ins, modprobe, drirc, env.d) ───────────────────────────────
 function _vss_ntsync_modules --description "_verify_static_system sub: ntsync state + autoload check"
     _echo "── ntsync state ──"
     set -l _ns (_ntsync_state)
@@ -2302,6 +2273,7 @@ function _verify_static_user --description "Verify environment.d ENV_VARS"
     end
 end
 
+# ── VERIFY-STATIC: PACKAGES + SERVICES + SYNTAX (presence, masks, unit/hook syntax) ───────────────
 function _vsp_required --description "Check PKGS_ADD against installed; emits OK/FAIL per pkg"
     _echo "── Required packages ──"
     for pkg in $PKGS_ADD
@@ -2412,6 +2384,7 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
     end
 end
 
+# ── VERIFY-STATIC: CHECKSUM + DRIVER (SHA256 match + _ry_verify_static) ───────────────────────────
 # Dual pipestatus: gen rc + string-collect rc (collect-fail = verifier bug).
 function _vsc_check_one --argument-names dst --description "_verify_static_checksum sub. Compare one destination's expected vs installed bytes"
     set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
@@ -2798,7 +2771,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_TSC
 end
 
-# ── VERIFY-RUNTIME: SERVICES + ENVIRONMENT + FSTAB + SESSION ──────────────────────────────────────
+# ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, wifi, masks) ─────────────────────────
 function _vrsv_chk_active_enabled --argument-names label rec_str --description "Helper: ok if active+enabled, warn if active only, fail otherwise"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found
@@ -2943,6 +2916,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
     return 0
 end
 
+# ── VERIFY-RUNTIME: ENVIRONMENT (env vars, sysctl, TCP, THP/KSM, zram, fstab, ntsync) ─────────────
 function _vre_envvars --description "Runtime env check: ENV_VARS via systemctl --user show-environment"
     _echo "ENVIRONMENT STATE"
     _echo
@@ -3130,6 +3104,7 @@ function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KS
     _vre_ntsync
 end
 
+# ── VERIFY-RUNTIME: SESSION + PERMS (file/dir perms, Vulkan, drirc, boot-perf) ────────────────────
 function _vrs_nm_perms --description "Runtime session check: NetworkManager system-connections perms (0600 root:root)"
     set -l nm_conn_dir /etc/NetworkManager/system-connections
     if not test -d "$nm_conn_dir"; _info "  NetworkManager connections: directory not found"; return 0; end
@@ -3292,6 +3267,7 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
     _vrs_boot_perf
 end
 
+# ── VERIFY: TOP-LEVEL ORCHESTRATORS (_ry_verify_runtime + _ry_verify_all) ─────────────────────────
 function _ry_verify_runtime --description "Verify runtime kernel params, services, and modules"
     _log_section "RUNTIME VERIFICATION START"
     _ensure_sudo_cached; or begin
@@ -3413,8 +3389,6 @@ function _install_preflight --description "Run all preflight checks before insta
     switch $_kv_rc
         case $RC_KVER_OK
             _phase_record "Preflight: kernel version" PASS "$KVER"
-        case $RC_KVER_WARN
-            _phase_record "Preflight: kernel version" WARN "$KVER (below recommended)"
         case '*'
             _phase_record "Preflight: kernel version" FAIL "$KVER (below required)"
             set -g INSTALL_HAD_ERRORS true
@@ -4638,7 +4612,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
-# ── --INSTALL-FILE: POST-HOOK DISPATCH TABLE + HANDLERS ───────────────────────────────────────────
+# ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR (resolver, sudo gate) ───────────────────────────
 set -g _RY_POST_HOOKS \
     "/boot/*|boot" \
     "/efi/*|boot" \
@@ -4657,8 +4631,7 @@ set -g _RY_POST_HOOKS \
     "/etc/modprobe.d/*|modprobe" \
     "*.service|service"
 
-# First-match-wins: declaration order = priority (specific patterns first).
-# A few tags (e.g. tmpfiles.d) have no default-profile destination and are reachable only via --install-file.
+# First-match-wins: declaration order = priority (specific patterns first); a few tags (e.g. tmpfiles.d) have no default-profile destination, reachable only via --install-file.
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"
     for _entry in $_RY_POST_HOOKS
         set -l _parts (string split -m1 '|' -- $_entry)
@@ -4711,6 +4684,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (11, _post_<tag> dynamic dispatch) ─────────────────────────
 function _pb_rebuild_cascade --argument-names target --description "_post_boot sub. mkinitcpio -P + sdboot-manage cascade"
     if not _run sudo -n mkinitcpio -P; _err "Mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     if test "$SDBOOT_REMOVE_EXISTING" = yes

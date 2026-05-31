@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.17.10 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.11 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.10"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.11"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -1991,7 +1991,7 @@ function _awf_make_backup --argument-names dst use_sudo --description "Create <d
     return 0
 end
 
-# Post-write byte-verify; restore .ry.bak on mismatch.
+# Post-write byte-verify; restore .ry.bak on mismatch. Re-invokes the content generator — keep _RY_BACKUP_TARGETS limited to side-effect-free generators (loader.conf/mkinitcpio.conf).
 function _awf_postwrite_verify_restore --argument-names dst use_sudo --description "Re-read installed bytes vs expected; restore .ry.bak on mismatch"
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"
     set -l _expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
@@ -2029,9 +2029,10 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     set -l tmpfile (_as $use_sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
     _track_tmpfile "$tmpfile"
     if test -z "$tmpfile"; _fail "→ $dst (mktemp failed)"; return 1; end
-    test "$_is_bt" = true; and _awf_make_backup "$dst" $use_sudo
     if not _awf_render_to_tmp "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
     if not _awf_symlink_check "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
+    # Back up the original only once committed to overwrite (render + symlink probe OK); a render failure no longer leaves a stale .ry.bak.
+    test "$_is_bt" = true; and _awf_make_backup "$dst" $use_sudo
     _awf_finalize_mv "$dst" "$tmpfile" $use_sudo "$perms"
     set -l _fin_rc $status
     if test $_fin_rc -ne 0; _rm_tmp "$tmpfile" $use_sudo; return $_fin_rc; end
@@ -2452,7 +2453,7 @@ end
 function _ry_verify_static --description "Verify installed configs match embedded checksums"
     _log_section "STATIC VERIFICATION START"
     _ensure_sudo_cached; or begin
-        _err "Sudo required for verification"
+        _err_loud "Sudo required for verification"
         return $EXIT_PREFLIGHT
     end
     set -g VERIFY_OK 0; set -g VERIFY_FAIL 0; set -g VERIFY_WARN 0; set -g VERIFY_GEN_FAIL 0
@@ -2854,7 +2855,6 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state
     _echo
     if test "$_PROFILE_USES_WIFI_BACKEND" = false
         _info "  iwd/NetworkManager not managed — skipping WiFi state checks"
-        _phase_record "Verify: WiFi state" "--" "profile does not use WiFi backend"
         return 0
     end
     set -l wlan_iface ""
@@ -3284,7 +3284,7 @@ end
 function _ry_verify_runtime --description "Verify runtime kernel params, services, and modules"
     _log_section "RUNTIME VERIFICATION START"
     _ensure_sudo_cached; or begin
-        _err "Sudo required for verification"
+        _err_loud "Sudo required for verification"
         return $EXIT_PREFLIGHT
     end
     set -g VERIFY_OK 0; set -g VERIFY_FAIL 0; set -g VERIFY_WARN 0; set -g VERIFY_GEN_FAIL 0
@@ -3305,7 +3305,7 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
     set -l _ok $VERIFY_OK; set -l _fail $VERIFY_FAIL; set -l _warn $VERIFY_WARN; set -l _gen $VERIFY_GEN_FAIL
     _ry_verify_runtime; set -l _rc_r $status
     if test $_rc_r -eq $EXIT_PREFLIGHT
-        # Runtime arm bailed at sudo-cache before resetting counters; VERIFY_* still hold static-arm totals — restore verbatim (no add) to avoid a doubled footer count.
+        # Runtime arm bailed at sudo-cache (now via _err_loud, no counter mutation); VERIFY_* still hold static-arm totals — restore verbatim as a defensive guard against a doubled footer count.
         set -g VERIFY_OK $_ok; set -g VERIFY_FAIL $_fail; set -g VERIFY_WARN $_warn; set -g VERIFY_GEN_FAIL $_gen
         return $_rc_r
     end
@@ -4568,12 +4568,17 @@ function _rdi_summary --description "Print final install summary"
     _rdi_render_matrix
     set -q _RY_AUR_PARTIAL; and test "$_RY_AUR_PARTIAL" = true; and _warn "AUR phase completed with partial success — some packages failed (see JSONL log)"
     if set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true
-        _err "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
-        _info "Recovery steps:"
-        _info "  1. Inspect: ls -la /boot/vmlinuz-* /boot/initramfs-*.img; sudo bootctl list"
-        _info "  2. Rebuild: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update"
-        _info "  3. Re-run ry-install (idempotent) — only reboot once verdict is PASS or PASS-WITH-WARNINGS"
-        _info "JSONL log captures the exact failure: $LOG_FILE"
+        # Boot-critical guidance must reach the user even in the default (QUIET) install: force-print to stderr + JSONL.
+        _msg_print --force ERR "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
+        _log "ERR: DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
+        for _bcl in \
+            "Recovery steps:" \
+            "  1. Inspect: ls -la /boot/vmlinuz-* /boot/initramfs-*.img; sudo bootctl list" \
+            "  2. Rebuild: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update" \
+            "  3. Re-run ry-install (idempotent) — only reboot once verdict is PASS or PASS-WITH-WARNINGS" \
+            "JSONL log captures the exact failure: $LOG_FILE"
+            _msg_print --force INFO "$_bcl"; _log "INFO: $_bcl"
+        end
         return 0
     end
     _info "Manual steps required:"

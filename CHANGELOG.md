@@ -2,6 +2,14 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.17.11  2026-05-31
+- fix: surface the boot-critical "DO NOT REBOOT" banner + recovery steps in the default (unattended, QUIET) install — the _rdi_summary block now force-prints to stderr (via _msg_print --force) and logs to JSONL instead of being dropped by the QUIET gate, matching the documented FAIL-BOOT-CRITICAL contract. The RUN-SUMMARY matrix already showed the verdict token; only the prose guidance was hidden. The --install-file boot path was unaffected (that mode is verbose).
+- fix: make the verify sudo-cache bail symmetric across the static and runtime arms — both now emit via _err_loud (force-print + JSONL, no VERIFY_FAIL bump) instead of the static arm leaving footer fail=1 while the runtime arm stripped its bump to fail=0; exit code 3 (preflight) was already authoritative and is unchanged.
+- fix: drop the stray _phase_record in _vrsv_wifi — verify mode renders no matrix, so the row was JSONL-only and reachable only on a profile without a WiFi backend (never the shipped gtr9_pro); the adjacent _info already records the skip. No count/exit impact.
+- harden: in _atomic_write_file, create the .ry.bak backup only after render + symlink-probe succeed (the commit point) rather than before render, so a render failure no longer leaves a stale backup for loader.conf/mkinitcpio.conf.
+- comment: note that _awf_postwrite_verify_restore re-invokes the content generator, so _RY_BACKUP_TARGETS must stay limited to side-effect-free generators.
+- docs: README Prerequisites — disambiguate the kernel-floor wording ("forces a non-zero exit (1) at the end rather than aborting preflight; the boot rebuild still runs") from the boot-rebuild taint that skips Phase 5.
+
 7.17.10  2026-05-31
 - fix: add ry-tee-err.* to the _do_cleanup filesystem-sweep glob set so a fatal signal during a Phase 3 atomic write cannot leave the tee stderr-capture tmpfile orphaned in TMPDIR for a later run to inherit; the six sibling ry-* prefixes were already swept, and the tracked-list sweep already removed it on the normal path.
 - comment: condense three verbose rationale comments (lock-ownership gate, fish-math millisecond scaling, post-hook precedence) to tighter single lines; wording only, no code paths changed.

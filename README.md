@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.17.10-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.17.11-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -45,7 +45,7 @@ Run as your normal user — root is refused, sudo is internal. **Post-install:**
 
 ## Prerequisites
 
-Hard requirements — sudo cache, systemd ≥ 250, GNU coreutils, free disk, network, and config validity — abort in preflight (exit 3) before any changes are made; every check is read-only and the run is idempotent, so a failed preflight can simply be retried after fixing the cause. The kernel floor (< 6.14) is the exception: it is recorded FAIL and taints the run (exit 1) rather than aborting, and paru / NTP sync are warnings.
+Hard requirements — sudo cache, systemd ≥ 250, GNU coreutils, free disk, network, and config validity — abort in preflight (exit 3) before any changes are made; every check is read-only and the run is idempotent, so a failed preflight can simply be retried after fixing the cause. The kernel floor (< 6.14) is the exception: it is recorded FAIL and forces a non-zero exit (1) at the end rather than aborting preflight — the boot rebuild still runs (it does not set the boot-rebuild taint) — and paru / NTP sync are warnings.
 
 | Requirement | Minimum |
 |---|---|

@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.17.12-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.17.13-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -57,6 +57,8 @@ Hard requirements (sudo cache, systemd ≥ 250, GNU coreutils, free disk, networ
 | paru | recommended ≥ 2.0.0 (AUR phase warns + continues if absent) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | sudo | cached credential (`sudo -v`) |
+
+> **Kernel versions** — `≥ 6.14` is the hard floor (below it: recorded FAIL, exit 1, boot still rebuilt). `≥ 6.18.4` recommended for gfx1151 graphics; `≥ 6.16` fixes ROCm VRAM allocation; `≥ 6.19.1` avoids the 6.19.0 black-screen regression. See [Known Issues](#known-issues).
 
 > [!WARNING]
 > Sudo cache may lapse mid-run. Mitigate: `Defaults timestamp_timeout=60` (`sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. Cron/systemd: pre-cache creds — the `sudo -v` fallback needs a TTY. Recovery: re-run.

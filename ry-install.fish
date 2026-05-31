@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.17.12 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.13 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.12"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.13"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -32,6 +32,7 @@ function _ry_show_help --description "Display usage information and available su
         "  --                End of options" \
         "  -h, --help        Show this help" \
         "  -v, --version     Show version" \
+        "  Note: -h/--help and -v/--version are honored before all checks (root guard, argparse)" \
         "EXIT CODES:" \
         "  0 ok · 1 verify-FAIL, install-error, or kernel <6.14 hard-floor fail · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
         "  11 gen-nofn (content-gen fn missing) · 12 gen-nouuid (prereq global missing) · 13 gen-sysctl (malformed entry) · 251 run-tmpfail (_run tmpfile alloc)" \
@@ -326,13 +327,18 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     set -l _fresh_rc $status
     test $_fresh_rc -eq 0; and return 0
     test $_fresh_rc -ne 2; and return 1
-    set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
-    # Reclaim if pid well-formed + process gone; PID-recycle race left to user.
-    if string match -qr '^[1-9]\d*$' -- "$_stale_pid"; and not command kill -0 "$_stale_pid" 2>/dev/null
-        functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR (PID not running, reclaiming)"
+    # Bounded stale-reclaim (re-check PID liveness each pass; peer winning post-rm mkdir race re-populates lock); PID-recycle race left to user.
+    for _reclaim_attempt in 1 2 3
+        set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
+        string match -qr '^[1-9]\d*$' -- "$_stale_pid"; or return 1
+        command kill -0 "$_stale_pid" 2>/dev/null; and return 1
+        functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR attempt=$_reclaim_attempt (PID not running, reclaiming)"
         if test -L "$LOCK_DIR"; functions -q _log; and _log "LOCK_RECLAIM_REFUSED: $LOCK_DIR is a symlink"; return 1; end
         command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
-        _acquire_lock_fresh; and return 0
+        _acquire_lock_fresh
+        set -l _re_rc $status
+        test $_re_rc -eq 0; and return 0
+        test $_re_rc -eq 2; or return 1
     end
     return 1
 end
@@ -1995,10 +2001,10 @@ function _awf_postwrite_verify_restore --argument-names dst use_sudo --descripti
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"
     set -l _expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _gen_ps $pipestatus
-    test "$_gen_ps[1]" -ne 0; and return 0
+    if test "$_gen_ps[1]" -ne 0; _warn "  $dst: post-write verify skipped (content generator re-run rc=$_gen_ps[1])"; _log "POSTWRITE_VERIFY_SKIP: dst=$dst reason=gen_rerun rc=$_gen_ps[1]"; return 0; end
     set -l _actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _ib_ps $pipestatus
-    test "$_ib_ps[1]" -ne 0; and return 0
+    if test "$_ib_ps[1]" -ne 0; _warn "  $dst: post-write verify skipped (installed-bytes read rc=$_ib_ps[1]; e.g. sudo cache lapse)"; _log "POSTWRITE_VERIFY_SKIP: dst=$dst reason=read_fail rc=$_ib_ps[1]"; return 0; end
     test "$_expected" = "$_actual"; and return 0
     _fail "→ $dst (post-write verification mismatch — installed bytes differ from expected)"
     _log "POSTWRITE_VERIFY_FAIL: dst=$dst installed!=expected"

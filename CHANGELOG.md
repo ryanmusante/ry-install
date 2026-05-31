@@ -2,6 +2,12 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.17.13  2026-05-31
+- harden: _acquire_lock stale-reclaim retries up to 3x — a peer that wins the post-rm mkdir race re-populates the lock, and each pass re-checks PID liveness before reclaiming (was a single attempt that could return EXIT_LOCK while the lock was actually free).
+- fix: _awf_postwrite_verify_restore logs a WARN (+ JSONL POSTWRITE_VERIFY_SKIP) when the byte re-verify is skipped because the content-generator re-run or the installed-bytes read failed (e.g. transient sudo lapse) on a backup-target file; was a silent return 0.
+- docs: README Prerequisites adds a kernel-version map note consolidating the >=6.14 floor, >=6.18.4 gfx1151 rec, >=6.16 ROCm, and >=6.19.1 regression-fix references.
+- docs: --help notes that -h/--help and -v/--version are honored before all checks (root guard + argparse).
+
 7.17.12  2026-05-31
 - perf: _dc_kill_children probes for child PIDs (pgrep -P) before the TERM→0.5s-grace→KILL cycle; clean exits with no children skip the grace entirely (pgrep absent still runs the full cycle).
 - cleanup: drop the unreachable systemd-tmpfiles.d scaffolding (_post_tmpfiles, _grep_tmpfiles_entry, the */tmpfiles.d/* dispatch + post-hook tag); no tmpfiles.d destination is managed, so it was never reachable. _RY_POST_HOOKS 16 -> 15; post-hook handlers 11 -> 10.

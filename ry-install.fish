@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.17.7 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.8 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.8"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -124,10 +124,10 @@ if not string match -qr '^[+-]\d{4}$' -- (command date '+%z' 2>/dev/null); echo 
 # ── TIMESTAMPS + HOME + LOG_DIR ───────────────────────────────────────────────────────────────────
 set -g DATE_LABEL (command date '+%Y-%m-%d'); set -g TIMESTAMP (string join '-' (command date '+%Y%m%d-%H%M%S%z') $fish_pid)
 if test -z "$HOME"; or not test -d "$HOME"
-    set -g HOME (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $6}')
+    set -gx HOME (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $6}')
     if test -z "$HOME"; or not test -d "$HOME"; echo "[ERR] Cannot determine HOME directory" >&2; _ry_exit $EXIT_PREFLIGHT; end
 end
-set -g HOME (string trim -r -c / -- (string trim -- "$HOME"))
+set -gx HOME (string trim -r -c / -- (string trim -- "$HOME"))
 if test -z "$HOME"; or not test -d "$HOME"; echo "[ERR] HOME resolves to empty/non-dir after normalization: '$HOME'" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -g _RY_HOME_DIR "$HOME/ry-install"; set -g LOG_DIR "$_RY_HOME_DIR/logs/$DATE_LABEL"
 set -l _prev_mkdir_umask (umask)
@@ -414,7 +414,15 @@ end
 # TERM → 0.5s grace → KILL; lets long pkg/boot ops flush first.
 function _dc_kill_children --description "_do_cleanup sub. Release lock + reap child PIDs (pkill -P, then SIGKILL after grace)"
     if begin; set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED; end; and set -q LOCK_DIR; and not test -L "$LOCK_DIR"
-        command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
+        # Ownership gate: rm only when we hold the lock, or the pid file is empty/ours; never a live peer's dir.
+        set -l _own false
+        if set -q _RY_HOLDS_LOCK
+            set _own true
+        else
+            set -l _lp (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
+            test -z "$_lp"; or test "$_lp" = "$fish_pid"; and set _own true
+        end
+        test "$_own" = true; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
     end
     if command -q pkill
         command pkill -TERM -P "$fish_pid" 2>/dev/null
@@ -1348,7 +1356,10 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
     set -l _effective_cmd $argv[1]
     if test "$_effective_cmd" = sudo
         for _ec_arg in $argv[2..-1]
-            if not string match -q -- '-*' "$_ec_arg"; set _effective_cmd $_ec_arg; break; end
+            string match -q -- '-*' "$_ec_arg"; and continue
+            test "$_ec_arg" = env; and continue
+            string match -qr -- '^[A-Za-z_][A-Za-z0-9_]*=' "$_ec_arg"; and continue
+            set _effective_cmd $_ec_arg; break
         end
     end
     if contains -- "$_effective_cmd" pacman paru mkinitcpio sdboot-manage paccache updatedb pkgfile

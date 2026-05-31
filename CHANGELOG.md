@@ -2,6 +2,11 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.17.8  2026-05-31
+- fix: export HOME via set -gx on the getent-recovery path so paru/makepkg/git children inherit it; the normalization assignment now also exports.
+- fix: signal-time lock cleanup removes the lock directory only when held by this process or when its pid file is empty/ours, preventing removal of a peer instance's lock if a fatal signal arrives during a failed mkdir.
+- harden: _run timeout-bypass detection skips env and VAR=val tokens after sudo when resolving the effective command.
+
 7.17.7  2026-05-31
 - format: split the --INSTALL-FILE banner into DISPATCH TABLE + ORCHESTRATOR and POST-HOOK HANDLERS (11) sections. Banners only — no code paths changed.
 

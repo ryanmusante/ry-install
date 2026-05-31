@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.17.2 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.3 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -829,7 +829,7 @@ function _content__etc_default_cpupower-service.conf --description "Generate con
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
 end
 
-# Malformed kv → _RY_SYSCTL_BAD_ENTRIES; count mismatch → EXIT_GEN_SYSCTL.
+# Side-effect: malformed key=value lines are recorded to global _RY_SYSCTL_BAD_ENTRIES, read back at deploy time to assert content integrity; count mismatch → EXIT_GEN_SYSCTL.
 function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
     printf '%s\n' "# ry-install sysctl tunables (priority 95 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
@@ -1197,7 +1197,7 @@ end
 # _RY_PHASE_NAMES: canonical phase list (progress + README).
 function _progress_init --description "Open scroll region; draw initial bar"
     set -g _PROG_STEPS $_RY_PHASE_NAMES
-    set -g _PROG_CUR 0; set -g _PROG_TOTAL (count $_PROG_STEPS)
+    set -g _PROG_CUR 0; set -g _PROG_TOTAL (count $_PROG_STEPS); test $_PROG_TOTAL -gt 0; or set -g _PROG_TOTAL 1
     set -g _PROG_START (_progress_now); set -g _PROG_STEP_START $_PROG_START
     set -g _PROG_STEP_NAME ""; set -g _PROG_PINNED false
     test "$_RY_NO_COLOR" = true; and return 0
@@ -4658,6 +4658,7 @@ set -g _RY_POST_HOOKS \
     "*.service|service"
 
 # First-match-wins: declaration order = priority (specific patterns first).
+# A few tags (e.g. tmpfiles.d) have no default-profile destination and are reachable only via --install-file.
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"
     for _entry in $_RY_POST_HOOKS
         set -l _parts (string split -m1 '|' -- $_entry)

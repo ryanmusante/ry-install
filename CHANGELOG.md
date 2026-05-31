@@ -2,6 +2,13 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.17.3  2026-05-31
+- docs: Prerequisites — paru is recommended (≥ 2.0.0), not a hard preflight gate; AUR phase warns and continues when paru is absent.
+- docs: scope the preflight-abort statement to hard requirements; clarify the kernel floor (< 6.14) taints the run (exit 1) rather than aborting (exit 3), and paru/NTP sync are warnings.
+- docs: Run Summary — split the per-phase Result legend and the overall Verdict legend into two tables (drop the empty spacer column).
+- progress: clamp _PROG_TOTAL to ≥ 1 in _progress_init — defensive guard against divide-by-zero in the bar math.
+- comments: note _content_…sysctl records malformed entries to a global consumed at deploy time, and that tmpfiles.d-class post-hooks have no default destination (--install-file only).
+
 7.17.2  2026-05-31
 - verify: fix footer double-count when the runtime arm bails at sudo-cache before its counter reset; static totals restored verbatim, exit code unchanged.
 - verify: split drirc xmllint check out of _vrs_vulkan into _vrs_drirc_xml.

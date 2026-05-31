@@ -45,7 +45,7 @@ Run as your normal user — root is refused, sudo is internal. **Post-install:**
 
 ## Prerequisites
 
-Unmet requirements abort in preflight, before any changes are made.
+Unmet requirements abort in preflight, before any changes are made. Every check is read-only and the run is idempotent, so a failed preflight (exit 3) can simply be retried after fixing the cause.
 
 | Requirement | Minimum |
 |---|---|
@@ -72,7 +72,7 @@ Ryzen AI Max+ 395 (Zen 5, gfx1151 iGPU) · Radeon 8060S (RDNA 3.5) · 128 GB LPD
 
 ## Usage
 
-Run with no arguments for a full unattended install, or pass a flag below.
+Run with no arguments for a full unattended install, or pass a flag below. `--check` and `--verify` only read system state, so they are safe to run anytime; only the no-argument run and `--install-file` write to disk.
 
 | Flag | Action |
 |---|---|
@@ -85,7 +85,7 @@ Run with no arguments for a full unattended install, or pass a flag below.
 
 ## Install Flow
 
-Six phases run in order; a package or boot-config failure taints the run and skips the Phase 5 boot rebuild.
+Six phases run in order; a package or boot-config failure taints the run and skips the Phase 5 boot rebuild. Because each Phase 3 file is written by atomic rename, even an aborted run leaves every managed file either fully old or fully new.
 
 | # | Phase | Action |
 |---|---|---|
@@ -98,7 +98,7 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 
 ## Run Summary
 
-Prints a CHECK/RESULT/EVIDENCE matrix to stderr (+ totals, elapsed, verdict); JSONL records every `PHASE_RESULT`.
+Prints a CHECK/RESULT/EVIDENCE matrix to stderr (+ totals, elapsed, verdict); JSONL records every `PHASE_RESULT`. The verdict maps to the exit code, and the JSONL file under `~/ry-install/logs/` is the durable record once the terminal output scrolls away.
 
 | Result | Semantics | | Verdict | Trigger |
 |---|---|---|---|---|
@@ -366,7 +366,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Managed Files
 
-13 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`.
+13 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from content embedded in the script itself, so the file on disk and the target `--verify` compares against always come from one source.
 
 <details open>
 <summary><b>Destinations</b> — 13 paths</summary>
@@ -391,7 +391,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Safety & Reliability
 
-How the installer protects the system.
+How the installer protects the system. Writes are atomic and the Phase 5 boot rebuild is gated, so a failed package or boot-config step can't leave a broken boot entry; `loader.conf` and `mkinitcpio.conf` are backed up to `.ry.bak` before overwrite. `/etc/fstab` is the exception — it is rewritten with no automatic backup, so snapshot it first.
 
 | Feature | Detail |
 |---|---|
@@ -454,7 +454,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 ## Known Issues
 
-Known hardware and software quirks on this platform.
+Known hardware and software quirks on this platform. Most clear with a DKMS package or a newer kernel; a couple — MT7925 TX-power/deauth and Strix Halo ACP audio — are upstream-pending with no local fix.
 
 | Component | Issue | Workaround |
 |---|---|---|
@@ -471,7 +471,7 @@ Known hardware and software quirks on this platform.
 
 ## Troubleshooting
 
-Common failure modes during or after install.
+Common failure modes during or after install. Boot problems recover from a live USB with `arch-chroot` + `mkinitcpio -P` + `sdboot-manage`, while config drift is fixable in place with `--install-file`.
 
 | Problem | Fix |
 |---|---|

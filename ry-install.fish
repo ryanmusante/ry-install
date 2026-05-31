@@ -346,6 +346,7 @@ function _dc_mki_revert --description "_do_cleanup sub: signal-time mkinitcpio.c
     else
         functions -q _log; and _log "MKINITCPIO_REVERT_SIGNAL_SKIP: backup unavailable or sudo missing (backup=$_RY_MKI_BACKUP_FILE)"
     end
+    command -q sudo; and functions -q _rm_tmp; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
     set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
 end
 
@@ -362,7 +363,7 @@ function _dc_sweep_tmpfiles --description "_do_cleanup sub. Remove tracked tmpfi
     set -l _has_sudo false
     test (count $_stuck_tmpfiles) -gt 0; and command -q sudo; and sudo -n true 2>/dev/null; and set _has_sudo true
     for _tf in $_stuck_tmpfiles
-        if test "$_has_sudo" = true; and begin; string match -q '/etc/*' -- "$_tf"; or string match -q '/boot/*' -- "$_tf"; or string match -q '/efi/*' -- "$_tf"; or string match -q '/var/*' -- "$_tf"; end
+        if test "$_has_sudo" = true; and begin; string match -q '/etc/*' -- "$_tf"; or string match -q '/boot/*' -- "$_tf"; or string match -q '/efi/*' -- "$_tf"; or string match -q '/var/*' -- "$_tf"; or string match -q '/run/*' -- "$_tf"; end
             if sudo -n test -d "$_tf" 2>/dev/null
                 sudo -n rm -rf --preserve-root -- "$_tf" 2>/dev/null; or begin
                     functions -q _log; and _log "TMPFILE_STUCK: $_tf (sudo rm -rf failed)"
@@ -415,7 +416,7 @@ end
 # TERM → 0.5s grace → KILL; lets long pkg/boot ops flush first.
 function _dc_kill_children --description "_do_cleanup sub. Release lock + reap child PIDs (pkill -P, then SIGKILL after grace)"
     if begin; set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED; end; and set -q LOCK_DIR; and not test -L "$LOCK_DIR"
-        # Ownership gate: rm only if we hold the lock or its pid file is empty/ours; never a peer's.
+        # Ownership gate: rm only if we hold the lock or its pid file is empty/ours.
         set -l _own false
         if set -q _RY_HOLDS_LOCK
             set _own true
@@ -838,7 +839,7 @@ function _content__etc_default_cpupower-service.conf --description "Generate con
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
 end
 
-# Side-effect: malformed key=value lines are recorded to global _RY_SYSCTL_BAD_ENTRIES, read back at deploy time to assert content integrity; count mismatch → EXIT_GEN_SYSCTL.
+# Side-effect: malformed entries → global _RY_SYSCTL_BAD_ENTRIES; count mismatch → EXIT_GEN_SYSCTL.
 function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
     printf '%s\n' "# ry-install sysctl tunables (priority 95 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
@@ -1991,7 +1992,7 @@ function _awf_make_backup --argument-names dst use_sudo --description "Create <d
     return 0
 end
 
-# Post-write byte-verify; restore .ry.bak on mismatch. Re-invokes the content generator — keep _RY_BACKUP_TARGETS limited to side-effect-free generators (loader.conf/mkinitcpio.conf).
+# Re-invokes the generator — keep _RY_BACKUP_TARGETS side-effect-free (loader.conf/mkinitcpio.conf).
 function _awf_postwrite_verify_restore --argument-names dst use_sudo --description "Re-read installed bytes vs expected; restore .ry.bak on mismatch"
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"
     set -l _expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
@@ -2031,7 +2032,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     if test -z "$tmpfile"; _fail "→ $dst (mktemp failed)"; return 1; end
     if not _awf_render_to_tmp "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
     if not _awf_symlink_check "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
-    # Back up the original only once committed to overwrite (render + symlink probe OK); a render failure no longer leaves a stale .ry.bak.
+    # Back up only after render + symlink-probe (commit point); render failure leaves no stale .ry.bak.
     test "$_is_bt" = true; and _awf_make_backup "$dst" $use_sudo
     _awf_finalize_mv "$dst" "$tmpfile" $use_sudo "$perms"
     set -l _fin_rc $status
@@ -3305,7 +3306,7 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
     set -l _ok $VERIFY_OK; set -l _fail $VERIFY_FAIL; set -l _warn $VERIFY_WARN; set -l _gen $VERIFY_GEN_FAIL
     _ry_verify_runtime; set -l _rc_r $status
     if test $_rc_r -eq $EXIT_PREFLIGHT
-        # Runtime arm bailed at sudo-cache (now via _err_loud, no counter mutation); VERIFY_* still hold static-arm totals — restore verbatim as a defensive guard against a doubled footer count.
+        # Runtime arm bailed at sudo-cache; VERIFY_* hold static totals — restore to avoid a doubled footer count.
         set -g VERIFY_OK $_ok; set -g VERIFY_FAIL $_fail; set -g VERIFY_WARN $_warn; set -g VERIFY_GEN_FAIL $_gen
         return $_rc_r
     end
@@ -4568,7 +4569,7 @@ function _rdi_summary --description "Print final install summary"
     _rdi_render_matrix
     set -q _RY_AUR_PARTIAL; and test "$_RY_AUR_PARTIAL" = true; and _warn "AUR phase completed with partial success — some packages failed (see JSONL log)"
     if set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true
-        # Boot-critical guidance must reach the user even in the default (QUIET) install: force-print to stderr + JSONL.
+        # Boot-critical guidance must reach the user even in QUIET: force-print to stderr + JSONL.
         _msg_print --force ERR "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
         _log "ERR: DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
         for _bcl in \
@@ -4649,7 +4650,7 @@ set -g _RY_POST_HOOKS \
     "/etc/modprobe.d/*|modprobe" \
     "*.service|service"
 
-# First-match-wins: declaration order = priority; some tags (e.g. tmpfiles.d) are --install-file-only.
+# First-match-wins by declaration order; some tags (e.g. tmpfiles.d) are --install-file-only.
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"
     for _entry in $_RY_POST_HOOKS
         set -l _parts (string split -m1 '|' -- $_entry)

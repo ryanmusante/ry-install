@@ -3,53 +3,53 @@ ry-install ChangeLog
 Newest first; dates ISO-8601.
 
 7.17.11  2026-05-31
-- fix: surface the boot-critical "DO NOT REBOOT" banner + recovery steps in the default (unattended, QUIET) install — the _rdi_summary block now force-prints to stderr (via _msg_print --force) and logs to JSONL instead of being dropped by the QUIET gate, matching the documented FAIL-BOOT-CRITICAL contract. The RUN-SUMMARY matrix already showed the verdict token; only the prose guidance was hidden. The --install-file boot path was unaffected (that mode is verbose).
-- fix: make the verify sudo-cache bail symmetric across the static and runtime arms — both now emit via _err_loud (force-print + JSONL, no VERIFY_FAIL bump) instead of the static arm leaving footer fail=1 while the runtime arm stripped its bump to fail=0; exit code 3 (preflight) was already authoritative and is unchanged.
-- fix: drop the stray _phase_record in _vrsv_wifi — verify mode renders no matrix, so the row was JSONL-only and reachable only on a profile without a WiFi backend (never the shipped gtr9_pro); the adjacent _info already records the skip. No count/exit impact.
-- harden: in _atomic_write_file, create the .ry.bak backup only after render + symlink-probe succeed (the commit point) rather than before render, so a render failure no longer leaves a stale backup for loader.conf/mkinitcpio.conf.
-- comment: note that _awf_postwrite_verify_restore re-invokes the content generator, so _RY_BACKUP_TARGETS must stay limited to side-effect-free generators.
-- docs: README Prerequisites — disambiguate the kernel-floor wording ("forces a non-zero exit (1) at the end rather than aborting preflight; the boot rebuild still runs") from the boot-rebuild taint that skips Phase 5.
+- fix: force-print the boot-critical "DO NOT REBOOT" banner + recovery to stderr+JSONL in the default QUIET install (was dropped by the QUIET gate); --install-file unaffected.
+- fix: verify sudo-cache bail is now symmetric across static/runtime arms (both via _err_loud, no VERIFY_FAIL bump); exit 3 unchanged.
+- fix: drop a stray JSONL-only _phase_record in _vrsv_wifi (verify renders no matrix; the _info already logs the skip).
+- harden: in _atomic_write_file, write .ry.bak only after render + symlink-probe (the commit point), so a render failure leaves no stale backup.
+- comment: note _awf_postwrite_verify_restore re-invokes the generator, so _RY_BACKUP_TARGETS must stay side-effect-free.
+- docs: README Prerequisites — disambiguate kernel-floor wording (exit 1 at end, still rebuilds) from the boot-rebuild taint.
 
 7.17.10  2026-05-31
-- fix: add ry-tee-err.* to the _do_cleanup filesystem-sweep glob set so a fatal signal during a Phase 3 atomic write cannot leave the tee stderr-capture tmpfile orphaned in TMPDIR for a later run to inherit; the six sibling ry-* prefixes were already swept, and the tracked-list sweep already removed it on the normal path.
-- comment: condense three verbose rationale comments (lock-ownership gate, fish-math millisecond scaling, post-hook precedence) to tighter single lines; wording only, no code paths changed.
+- fix: add ry-tee-err.* to the _do_cleanup filesystem-sweep globs so a signal during a Phase 3 write can't orphan the tee stderr tmpfile (normal path already removed it).
+- comment: condense three rationale comments (lock-ownership, fish-math ms scaling, post-hook precedence) to single lines.
 
 7.17.9  2026-05-31
-- fix: count an installed-bytes string-collect failure in _verify_static_checksum once instead of twice; the explicit VERIFY_FAIL bump now pairs with _fail_no_count, matching the generator-stage branch above it. The doubled tally surfaced only on a near-unreachable collect failure and never altered the pass/fail verdict.
-- harden: make the systemd ≥ 250 preflight a true hard gate — refuse the install when systemctl --version is unparseable instead of silently passing, aligning behavior with the documented hard requirement.
-- harden: allocate the _run STDERR/STDOUT overflow-spill filename with mktemp --suffix=.log instead of a /dev/urandom-derived suffix, eliminating a possible empty suffix and filename collision when /dev/urandom is unreadable.
+- fix: count an installed-bytes string-collect failure once in _verify_static_checksum (now pairs with _fail_no_count); verdict was never affected.
+- harden: make systemd >= 250 a true hard gate — refuse when systemctl --version is unparseable.
+- harden: allocate the _run overflow-spill filename via mktemp --suffix=.log (drops the /dev/urandom-suffix path).
 
 7.17.8  2026-05-31
-- fix: export HOME via set -gx on the getent-recovery path so paru/makepkg/git children inherit it; the normalization assignment now also exports.
-- fix: signal-time lock cleanup removes the lock directory only when held by this process or when its pid file is empty/ours, preventing removal of a peer instance's lock if a fatal signal arrives during a failed mkdir.
-- harden: _run timeout-bypass detection skips env and VAR=val tokens after sudo when resolving the effective command.
+- fix: export HOME via set -gx on the getent-recovery path so paru/makepkg/git children inherit it.
+- fix: signal-time lock cleanup removes the lock dir only when held by us or its pid file is empty/ours (protects a peer's lock).
+- harden: _run timeout-bypass detection skips env and VAR=val tokens after sudo.
 
 7.17.7  2026-05-31
-- format: split the --INSTALL-FILE banner into DISPATCH TABLE + ORCHESTRATOR and POST-HOOK HANDLERS (11) sections. Banners only — no code paths changed.
+- format: split the --INSTALL-FILE banner into DISPATCH TABLE + ORCHESTRATOR and POST-HOOK HANDLERS (11). Banners only.
 
 7.17.6  2026-05-31
-- format: split the VERIFY-STATIC SYSTEM block into SYSTEM+USER / PACKAGES+SERVICES+SYNTAX / CHECKSUM+DRIVER banners. Banners only — no code paths changed.
-- comment: collapse the two-line _RY_POST_HOOKS dispatch note into a single line.
-- header: sync the file-header version string to VERSION (was 7.17.3).
+- format: split VERIFY-STATIC SYSTEM into SYSTEM+USER / PACKAGES+SERVICES+SYNTAX / CHECKSUM+DRIVER banners. Banners only.
+- comment: collapse the _RY_POST_HOOKS dispatch note to one line.
+- header: sync the file-header version to VERSION (was 7.17.3).
 
 7.17.5  2026-05-31
-- format: split the 530-line VERIFY-RUNTIME banner into SERVICES / ENVIRONMENT / SESSION+PERMS arms, plus a TOP-LEVEL ORCHESTRATORS banner before _ry_verify_runtime/_ry_verify_all. Banners only — no code paths changed.
+- format: split the VERIFY-RUNTIME banner into SERVICES / ENVIRONMENT / SESSION+PERMS arms + a TOP-LEVEL ORCHESTRATORS banner. Banners only.
 
 7.17.4  2026-05-31
-- kernel: condense _ry_check_kernel_version to the < 6.14 hard-floor only; drop the advisory 6.18.4 stability WARN, the in-preflight ntsync state probe (still covered by verify static + runtime), and the 6.19.0 black-screen WARN.
-- cleanup: remove the now-unused RC_KVER_WARN return code and the unreachable WARN branch in the preflight kernel-version switch.
-- docs: README flow line — kernel preflight now reads "≥ 6.14 FAIL"; the 6.18.4 recommendation and 6.19.0 troubleshooting entry are retained as guidance.
+- kernel: condense _ry_check_kernel_version to the < 6.14 hard-floor only; drop the 6.18.4 WARN, in-preflight ntsync probe, and 6.19.0 WARN.
+- cleanup: remove the unused RC_KVER_WARN code and its unreachable WARN branch.
+- docs: README flow line now reads ">= 6.14 FAIL"; 6.18.4 + 6.19.0 retained as guidance.
 
 7.17.3  2026-05-31
-- docs: Prerequisites — paru is recommended (≥ 2.0.0), not a hard preflight gate; AUR phase warns and continues when paru is absent.
-- docs: scope the preflight-abort statement to hard requirements; clarify the kernel floor (< 6.14) taints the run (exit 1) rather than aborting (exit 3), and paru/NTP sync are warnings.
-- docs: Run Summary — split the per-phase Result legend and the overall Verdict legend into two tables (drop the empty spacer column).
-- progress: clamp _PROG_TOTAL to ≥ 1 in _progress_init — defensive guard against divide-by-zero in the bar math.
-- comments: note _content_…sysctl records malformed entries to a global consumed at deploy time, and that tmpfiles.d-class post-hooks have no default destination (--install-file only).
+- docs: Prerequisites — paru recommended (>= 2.0.0), not a hard gate; AUR phase warns and continues if absent.
+- docs: scope the preflight-abort statement to hard requirements; kernel < 6.14 taints (exit 1), not aborts (exit 3); paru/NTP warn.
+- docs: Run Summary — split Result and Verdict legends into two tables.
+- progress: clamp _PROG_TOTAL >= 1 in _progress_init (divide-by-zero guard).
+- comments: note the sysctl generator records malformed entries to a deploy-time global, and tmpfiles.d post-hooks are --install-file only.
 
 7.17.2  2026-05-31
-- verify: fix footer double-count when the runtime arm bails at sudo-cache before its counter reset; static totals restored verbatim, exit code unchanged.
-- verify: split drirc xmllint check out of _vrs_vulkan into _vrs_drirc_xml.
+- verify: fix footer double-count when the runtime arm bails at sudo-cache; static totals restored, exit unchanged.
+- verify: split the drirc xmllint check out of _vrs_vulkan into _vrs_drirc_xml.
 - verify: firewall nft_rules counts actual rules (handle lines minus block declarations), not chain headers.
 
 7.17.1  2026-05-31

@@ -37,7 +37,7 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-Run as your normal user — root is refused, sudo is internal. **Post-install:** reboot (required), then `--verify`; a full run takes 3–8 minutes. **Upgrading:** re-run `./ry-install.fish` — idempotent, no migration steps.
+Run as your normal user (root refused, sudo internal). Post-install: reboot, then `--verify`; a full run takes 3–8 minutes. Upgrading: re-run `./ry-install.fish` — idempotent, no migration steps.
 
 ## Scope
 
@@ -45,7 +45,7 @@ Run as your normal user — root is refused, sudo is internal. **Post-install:**
 
 ## Prerequisites
 
-Hard requirements — sudo cache, systemd ≥ 250, GNU coreutils, free disk, network, and config validity — abort in preflight (exit 3) before any changes are made; every check is read-only and the run is idempotent, so a failed preflight can simply be retried after fixing the cause. The kernel floor (< 6.14) is the exception: it is recorded FAIL and forces a non-zero exit (1) at the end rather than aborting preflight — the boot rebuild still runs (it does not set the boot-rebuild taint) — and paru / NTP sync are warnings.
+Hard requirements (sudo cache, systemd ≥ 250, GNU coreutils, free disk, network, config validity) abort read-only in preflight (exit 3); retry after fixing the cause. Kernel < 6.14 is the exception — recorded FAIL, exits 1 at the end but still rebuilds boot (no taint). paru and NTP sync only warn.
 
 | Requirement | Minimum |
 |---|---|
@@ -68,11 +68,11 @@ df -h / /boot                    # verify space
 
 ## Hardware
 
-Ryzen AI Max+ 395 (Zen 5, gfx1151 iGPU) · Radeon 8060S (RDNA 3.5) · 128 GB LPDDR5x-8000. Runtime init requires a CPU matching `Ryzen AI Max`; the profile is gfx1151-specific, so override with `RY_INSTALL_SKIP_HARDWARE_CHECK=1` on other hardware.
+Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 GB LPDDR5x-8000. Runtime init requires a CPU matching `Ryzen AI Max`; override on other hardware with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
 
 ## Usage
 
-Run with no arguments for a full unattended install, or pass a flag below. `--check` and `--verify` only read system state, so they are safe to run anytime; only the no-argument run and `--install-file` write to disk.
+No arguments runs a full unattended install. `--check` and `--verify` only read state; only the no-argument run and `--install-file` write to disk.
 
 | Flag | Action |
 |---|---|
@@ -85,7 +85,7 @@ Run with no arguments for a full unattended install, or pass a flag below. `--ch
 
 ## Install Flow
 
-Six phases run in order; a package or boot-config failure taints the run and skips the Phase 5 boot rebuild. Because each Phase 3 file is written by atomic rename, even an aborted run leaves every managed file either fully old or fully new.
+Six phases run in order; a package or boot-config failure taints the run and skips the Phase 5 rebuild. Phase 3 writes are atomic renames, so an aborted run leaves each managed file fully old or fully new.
 
 | # | Phase | Action |
 |---|---|---|
@@ -98,7 +98,7 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 
 ## Run Summary
 
-Prints a CHECK/RESULT/EVIDENCE matrix to stderr (+ totals, elapsed, verdict); JSONL records every `PHASE_RESULT`. The verdict maps to the exit code, and the JSONL file under `~/ry-install/logs/` is the durable record once the terminal output scrolls away.
+Prints a CHECK/RESULT/EVIDENCE matrix (+ totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records every `PHASE_RESULT` and is the durable record once output scrolls away. The verdict maps to the exit code.
 
 Per-phase result:
 
@@ -121,7 +121,7 @@ Overall verdict (maps to exit code):
 
 ## Configuration
 
-The script is the source of truth — `--verify` checks embedded files byte-for-byte, then live state; retune via `set -g` globals near the top. Phases 1, 5, and 6 deploy no embedded files.
+The script is the source of truth — `--verify` checks embedded files byte-for-byte, then live state; retune via `set -g` globals near the top. Phases 1, 5, and 6 deploy no files.
 
 ### Phase 1 — Preflight
 
@@ -129,7 +129,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 ### Phase 2 — Packages
 
-`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update` indexers. `iwd`, `mesa`, and `cpupower` are CachyOS defaults, so they are not re-added; the iwd and NetworkManager configs still deploy unconditionally.
+`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, and `cpupower` are CachyOS defaults (not re-added); the iwd and NetworkManager configs still deploy.
 
 <details open>
 <summary><b>Packages — install</b> — 13 pkgs</summary>
@@ -178,7 +178,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 ### Phase 3 — Configuration
 
-Atomic write per file: `mktemp` in the destination's parent → render via `tee` → post-write symlink probe → `chmod` → `mv -T` (same-FS). The kernel cmdline is written to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`), with the root UUID prefix taken from the `/` mount.
+Atomic write per file: `mktemp` in the destination parent → render via `tee` → symlink probe → `chmod` → `mv -T` (same-FS). The kernel cmdline goes to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`); root UUID prefix is taken from the `/` mount.
 
 <details open>
 <summary><b>Kernel cmdline</b> — 16 params</summary>
@@ -321,7 +321,7 @@ Atomic write per file: `mktemp` in the destination's parent → render via `tee`
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units. The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*` and is gated by `findmnt --verify`; **there is no auto-backup, so snapshot `/etc/fstab` first.**
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units. The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.**
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -377,7 +377,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Managed Files
 
-13 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from content embedded in the script itself, so the file on disk and the target `--verify` compares against always come from one source.
+13 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from content embedded in the script, so the file on disk and the `--verify` target share one source.
 
 <details open>
 <summary><b>Destinations</b> — 13 paths</summary>
@@ -402,7 +402,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Safety & Reliability
 
-How the installer protects the system. Writes are atomic and the Phase 5 boot rebuild is gated, so a failed package or boot-config step can't leave a broken boot entry; `loader.conf` and `mkinitcpio.conf` are backed up to `.ry.bak` before overwrite. `/etc/fstab` is the exception — it is rewritten with no automatic backup, so snapshot it first.
+Atomic writes and a gated Phase 5 rebuild mean a failed package or boot-config step can't leave a broken boot entry; `loader.conf` and `mkinitcpio.conf` get a `.ry.bak` before overwrite. `/etc/fstab` is the exception — rewritten with no automatic backup, so snapshot it first.
 
 | Feature | Detail |
 |---|---|
@@ -441,7 +441,7 @@ How the installer protects the system. Writes are atomic and the Phase 5 boot re
 
 </details>
 
-NDJSON at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, one per run, no rotation. Events `header`/`log`/`footer` (carry `ts` + `event`); footer marker `bail` (preflight) or `interrupted` (signal). Prune: `find ~/ry-install/logs -xdev -type f -mtime +30 -delete`.
+NDJSON at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, one per run, no rotation. Events `header`/`log`/`footer`; footer marker `bail` (preflight) or `interrupted` (signal). Prune: `find ~/ry-install/logs -xdev -type f -mtime +30 -delete`.
 
 <details open>
 <summary><b>Logs</b></summary>
@@ -465,7 +465,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 ## Known Issues
 
-Known hardware and software quirks on this platform. Most clear with a DKMS package or a newer kernel; a couple — MT7925 TX-power/deauth and Strix Halo ACP audio — are upstream-pending with no local fix.
+Hardware and software quirks on this platform. Most clear with a DKMS package or a newer kernel; MT7925 TX-power/deauth and Strix Halo ACP audio are upstream-pending with no local fix.
 
 | Component | Issue | Workaround |
 |---|---|---|
@@ -482,7 +482,7 @@ Known hardware and software quirks on this platform. Most clear with a DKMS pack
 
 ## Troubleshooting
 
-Common failure modes during or after install. Boot problems recover from a live USB with `arch-chroot` + `mkinitcpio -P` + `sdboot-manage`, while config drift is fixable in place with `--install-file`.
+Common failure modes. Boot problems recover from a live USB (`arch-chroot` + `mkinitcpio -P` + `sdboot-manage`); config drift is fixable in place with `--install-file`.
 
 | Problem | Fix |
 |---|---|

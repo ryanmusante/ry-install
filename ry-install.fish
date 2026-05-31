@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.17.0 (2026-05-30) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.2 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -1617,10 +1617,10 @@ function _check_avail --argument-names path divisor unit crit warn --description
     end
     set -l _disp "$_v$unit"
     test "$_v" -eq 0; and test "$_b" -gt 0; and set _disp "<1$unit"
-    if test "$_v" -lt $crit
+    if test "$_v" -lt "$crit"
         _err "Insufficient disk space on $path: $_disp available, need $crit$unit minimum"
         return 1
-    else if test "$_v" -lt $warn
+    else if test "$_v" -lt "$warn"
         _warn "Low disk space on $path: $_disp available"
     else
         _ok "Disk space on $path: $_disp available"
@@ -2227,7 +2227,7 @@ function _vss_ntsync_modules --description "_verify_static_system sub: ntsync st
     end
     _echo
     _echo "── Modules autoload ──"
-    if test -f $_RY_NTSYNC_MODLOAD_CONF
+    if test -f "$_RY_NTSYNC_MODLOAD_CONF"
         _ok "  ntsync autoload: $_RY_NTSYNC_MODLOAD_CONF present (shipped by wine-cachyos)"
     else
         _warn "  ntsync autoload: $_RY_NTSYNC_MODLOAD_CONF missing — module may not load on boot"
@@ -2917,7 +2917,7 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state
         end
     end
     set -l _ufw (command systemctl is-active ufw.service 2>/dev/null | string trim --)
-    set -l _nft 0; command -q nft; and set _nft (_as true nft list ruleset 2>/dev/null | command grep -c -- '^[[:space:]]*\(chain\|rule\)')
+    set -l _nft 0; command -q nft; and set _nft (_as true nft -a list ruleset 2>/dev/null | command grep -E -- '# handle [0-9]+$' | command grep -cvE -- '\{ # handle [0-9]+$')
     _info "  firewall posture: ufw=$_ufw nft_rules=$_nft"
 end
 
@@ -3230,6 +3230,11 @@ function _vrs_vulkan --description "Runtime session check: Vulkan driver package
         end
     end
     test (count $_vk_missing_list) -gt 0; and _info "  Install missing: sudo pacman -S --needed $_vk_missing_list"
+end
+
+function _vrs_drirc_xml --description "Runtime session check: drirc XML well-formedness via xmllint"
+    _echo
+    _echo "── drirc XML (well-formedness) ──"
     if command -q xmllint
         if xmllint --noout /etc/drirc.d/95-ry-radv-apu.conf 2>/dev/null
             _ok "  drirc XML well-formed (xmllint)"
@@ -3280,13 +3285,14 @@ function _vrs_boot_perf --description "Runtime session check: systemd-analyze bo
     for line in $_cc; _info "    $line"; end
 end
 
-function _verify_runtime_session --description "Verify file perms, parent dirs, Vulkan packages, boot performance"
+function _verify_runtime_session --description "Verify file perms, parent dirs, Vulkan packages, drirc XML, boot performance"
     _echo "FILE PERMISSIONS"
     _echo "── Sensitive files ──"
     _vrs_nm_perms
     _vrs_installed_file_perms
     _vrs_parent_dirs
     _vrs_vulkan
+    _vrs_drirc_xml
     _vrs_boot_perf
 end
 
@@ -3313,6 +3319,12 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
     test $_rc_s -eq $EXIT_PREFLIGHT; and return $_rc_s
     set -l _ok $VERIFY_OK; set -l _fail $VERIFY_FAIL; set -l _warn $VERIFY_WARN; set -l _gen $VERIFY_GEN_FAIL
     _ry_verify_runtime; set -l _rc_r $status
+    if test $_rc_r -eq $EXIT_PREFLIGHT
+        # Runtime arm bailed at its sudo-cache check before resetting counters, so VERIFY_* still
+        # hold the static-arm totals. Restore them verbatim (no add) to avoid a doubled footer count.
+        set -g VERIFY_OK $_ok; set -g VERIFY_FAIL $_fail; set -g VERIFY_WARN $_warn; set -g VERIFY_GEN_FAIL $_gen
+        return $_rc_r
+    end
     set -g VERIFY_OK (math $VERIFY_OK + $_ok)
     set -g VERIFY_FAIL (math $VERIFY_FAIL + $_fail)
     set -g VERIFY_WARN (math $VERIFY_WARN + $_warn)
@@ -4616,7 +4628,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _install_rebuild_boot
     set -l _boot_rc $status
     test $_boot_rc -ne 0; and set -g INSTALL_HAD_ERRORS true
-    if test "$_boot_rc" -eq $EXIT_BOOT_CRIT
+    if test "$_boot_rc" -eq "$EXIT_BOOT_CRIT"
         _err "Boot-critical failure — skipping finalization"
         _err "Fix boot issue first: sudo mkinitcpio -P && sudo sdboot-manage gen"
         set -g _PROG_FINALIZED_SKIP true; set -g _RY_BOOT_CRIT_HIT true
@@ -4627,7 +4639,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _progress_done
     _rdi_summary
     _log_section "INSTALLATION END"
-    if test "$_boot_rc" -eq $EXIT_BOOT_CRIT; _log "INSTALL_BAILOUT: boot-critical failure → returning EXIT_BOOT_CRIT"; return $EXIT_BOOT_CRIT; end
+    if test "$_boot_rc" -eq "$EXIT_BOOT_CRIT"; _log "INSTALL_BAILOUT: boot-critical failure → returning EXIT_BOOT_CRIT"; return $EXIT_BOOT_CRIT; end
     test "$INSTALL_HAD_ERRORS" = true; and return $EXIT_FAIL
     return $EXIT_OK
 end

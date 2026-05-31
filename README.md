@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.17.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.17.2-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -122,6 +122,8 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 `pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update` indexers.
 
+`iwd`, `mesa`, `cpupower` are CachyOS defaults — not re-added; iwd/NM configs deploy unconditionally.
+
 <details open>
 <summary><b>Packages — install</b> — 13 pkgs</summary>
 
@@ -133,9 +135,9 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 | rust utilities | `fd`, `sd`, `dust`, `procs`, `bottom` |
 | perf | `realtime-privileges` |
 
-`iwd`, `mesa`, `cpupower` are CachyOS defaults — not re-added; iwd/NM configs deploy unconditionally.
-
 </details>
+
+The AUR package is installed unconditionally (no hardware gating).
 
 <details open>
 <summary><b>Packages — AUR</b> — 1 pkg</summary>
@@ -144,9 +146,9 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 |---|---|
 | `mkinitcpio-firmware` | firmware blobs not in `linux-firmware` |
 
-The AUR package is installed unconditionally (no hardware gating).
-
 </details>
+
+`--verify` fails on any missing.
 
 <details open>
 <summary><b>Vulkan dependencies</b> — 3 pkgs</summary>
@@ -157,9 +159,9 @@ The AUR package is installed unconditionally (no hardware gating).
 | `lib32-vulkan-radeon` | `chwd` |
 | `lib32-mesa` | `PKGS_ADD` |
 
-`--verify` fails on any missing.
-
 </details>
+
+Constraints that govern every package transaction — upgrade policy, AUR flag choices, PGP-failure recovery, and reverse-dependency handling.
 
 <details open>
 <summary><b>Package caveats</b> — 4 notes</summary>
@@ -177,6 +179,8 @@ The AUR package is installed unconditionally (no hardware gating).
 
 Atomic write per file: `mktemp` in destination's parent → render via `tee` → post-write symlink probe → `chmod` → `mv -T` (same-FS).
 
+Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`); root UUID prefix from the `/` mount.
+
 <details open>
 <summary><b>Kernel cmdline</b> — 16 params</summary>
 
@@ -189,9 +193,9 @@ Atomic write per file: `mktemp` in destination's parent → render via `tee` →
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
 | Boot/log | `quiet`, `nowatchdog` |
 
-Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`); root UUID prefix from the `/` mount.
-
 </details>
+
+Deploys the `systemd-boot` loader defaults plus the `sdboot-manage` entry-generation policy that rewrites boot entries on every change.
 
 <details open>
 <summary><b>Bootloader</b> — 10 keys</summary>
@@ -204,6 +208,8 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 </details>
 
+11 ordering invariants enforced by `_vmh_order_checks` (`base` first, `fsck` last, no dupes).
+
 <details open>
 <summary><b>Initramfs</b> — 6 fields</summary>
 
@@ -214,9 +220,9 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 | `HOOKS` | `(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)` |
 | `COMPRESSION` | `zstd`, `COMPRESSION_OPTIONS (-1 -T0)` |
 
-11 ordering invariants enforced by `_vmh_order_checks` (`base` first, `fsck` last, no dupes).
-
 </details>
+
+DNS resolver behaviour — multicast DNS via resolved, LLMNR off, opportunistic DNS-over-TLS, and downgrade-tolerant DNSSEC.
 
 <details open>
 <summary><b>systemd-resolved</b> — 4 keys</summary>
@@ -230,6 +236,8 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 </details>
 
+Neutralises every ACPI power control — power, suspend, hibernate, and reboot keys, including their long-press variants, are all ignored.
+
 <details open>
 <summary><b>systemd-logind</b> — 8 keys</summary>
 
@@ -242,6 +250,8 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 </details>
 
+`iwd` daemon settings — it stops configuring the network itself, disables power-save, and hands name resolution to systemd.
+
 <details open>
 <summary><b>iwd</b> — 3 keys</summary>
 
@@ -252,6 +262,8 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 | `[Network]` | `NameResolvingService` | `systemd` |
 
 </details>
+
+Points NetworkManager at the `iwd` backend, disables WiFi power-save, and trims its log level to `WARN`.
 
 <details open>
 <summary><b>NetworkManager</b> — 3 keys</summary>
@@ -264,6 +276,8 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 </details>
 
+Single override sourced by `cpupower.service` to pin the CPU frequency governor.
+
 <details open>
 <summary><b>cpupower-service</b> — 1 key</summary>
 
@@ -272,6 +286,8 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 | `GOVERNOR` | `powersave` (sourced by `cpupower.service`) |
 
 </details>
+
+Priority 95 — loaded after CachyOS `70-cachyos-settings.conf`.
 
 <details open>
 <summary><b>sysctl</b> — 7 tunables</summary>
@@ -286,9 +302,9 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 | `net.ipv4.tcp_slow_start_after_idle` | `0` |
 | `vm.compaction_proactiveness` | `0` |
 
-Priority 95 — loaded after CachyOS `70-cachyos-settings.conf`.
-
 </details>
+
+Caps TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595). Applied on next initramfs rebuild. `--verify` content-greps both `ttm` keys (static arm).
 
 <details open>
 <summary><b>amdgpu / ttm modprobe</b> — 2 options</summary>
@@ -298,9 +314,9 @@ Priority 95 — loaded after CachyOS `70-cachyos-settings.conf`.
 | `ttm pages_limit` | `16777216` |
 | `ttm page_pool_size` | `16777216` |
 
-Caps TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595). Applied on next initramfs rebuild. `--verify` content-greps both `ttm` keys (static arm).
-
 </details>
+
+Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884 extended beyond RDR2). Applied at next Vulkan/GL launch. `--verify` content-greps the `driver`/option/`value` (static arm) and checks XML well-formedness via `xmllint` (runtime arm).
 
 <details open>
 <summary><b>RADV drirc</b> — 1 option</summary>
@@ -309,9 +325,9 @@ Caps TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595). Applied on next initra
 |---|---|
 | `radv_enable_unified_heap_on_apu` | `true` |
 
-Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884 extended beyond RDR2). Applied at next Vulkan/GL launch. `--verify` content-greps the `driver`/option/`value` (static arm) and checks XML well-formedness via `xmllint` (runtime arm).
-
 </details>
+
+Loaded by `systemd --user` (`0600`). Re-login or `systemctl --user import-environment` to apply live.
 
 <details open>
 <summary><b>Env vars</b> — 10 keys</summary>
@@ -324,13 +340,13 @@ Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884 extended beyond 
 | Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=16G`, `AMD_VULKAN_ICD=RADV` |
 | Wine | `WINEDEBUG=-all` |
 
-Loaded by `systemd --user` (`0600`). Re-login or `systemctl --user import-environment` to apply live.
-
 </details>
 
 ### Phase 4 — Services
 
 fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units (stop + mask) → `daemon-reload` + enable runtime units.
+
+Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`; `findmnt --verify` gates the atomic `mv`. **No automatic backup — snapshot `/etc/fstab` first.**
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -341,9 +357,9 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 | `lazytime` | deferred timestamp writeback |
 | `commit=10` | 10 s journal commit interval |
 
-Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`; `findmnt --verify` gates the atomic `mv`. **No automatic backup — snapshot `/etc/fstab` first.**
-
 </details>
+
+**Opt-in:** `shelly` — uncomment in `PKGS_DEL` + bump invariant 7→8.
 
 <details open>
 <summary><b>Packages — remove</b> — 7 pkgs</summary>
@@ -353,9 +369,9 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm` | boot splash (incompatible with `quiet`; Plasma rdeps enumerated) |
 | `micro`, `cachyos-micro-settings` | text editor |
 
-**Opt-in:** `shelly` — uncomment in `PKGS_DEL` + bump invariant 7→8.
-
 </details>
+
+Units masked `--now` to drop replaced daemons, an unused firewall, a boot-delay service, and every sleep/suspend target.
 
 <details open>
 <summary><b>Masked units</b> — 11 units</summary>
@@ -369,6 +385,8 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 
 </details>
 
+`NetworkManager-dispatcher.service` enabled when present.
+
 <details open>
 <summary><b>Enabled units</b> — 3 units</summary>
 
@@ -377,8 +395,6 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 | `fstrim.timer` | weekly TRIM |
 | `NetworkManager.service` | deduped via `_RY_PKG_MANAGED_SERVICES` |
 | `cpupower.service` | oneshot — `active`/`exited` |
-
-`NetworkManager-dispatcher.service` enabled when present.
 
 </details>
 

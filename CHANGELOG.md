@@ -2,6 +2,14 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.17.2  2026-05-31
+- verify: fix --verify footer double-count when the runtime arm bails at the sudo-cache check before its counter reset; static-arm totals are restored verbatim (exit code unchanged).
+- verify: extract drirc xmllint well-formedness check from _vrs_vulkan into its own _vrs_drirc_xml; runtime-arm placement and output unchanged.
+- verify: firewall-posture nft_rules now counts actual rules (handle lines minus block-opening declarations) instead of chain headers.
+
+7.17.1  2026-05-31
+- style: quote always-set test operands ($crit/$warn/$EXIT_BOOT_CRIT, ntsync conf path) for uniformity; no runtime change.
+
 7.17.0  2026-05-30
 - cmdline: drop amdgpu.sg_display=0; KERNEL_PARAMS 17 -> 16.
 - cli: --verify replaces --verify-static/--verify-runtime — single combined verify (static, then runtime); combined exit code + footer counts.

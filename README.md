@@ -45,7 +45,7 @@ Run as your normal user — root is refused, sudo is internal; without the exec 
 
 ## Prerequisites
 
-The platform and tooling the installer needs; an unmet requirement aborts in preflight, before any changes are made.
+Unmet requirements abort in preflight, before any changes are made.
 
 | Requirement | Minimum |
 |---|---|
@@ -72,7 +72,7 @@ Ryzen AI Max+ 395 (Zen 5, gfx1151 iGPU) · Radeon 8060S (RDNA 3.5) · 128 GB LPD
 
 ## Usage
 
-The command-line flags; run with no arguments for a full unattended install, or pass one of the flags below to verify, probe, or re-deploy a file.
+Run with no arguments for a full unattended install, or pass a flag below.
 
 | Flag | Action |
 |---|---|
@@ -85,7 +85,7 @@ The command-line flags; run with no arguments for a full unattended install, or 
 
 ## Install Flow
 
-The installer runs these six phases in order; a package or boot-config failure taints the run and skips the Phase 5 boot rebuild.
+Six phases run in order; a package or boot-config failure taints the run and skips the Phase 5 boot rebuild.
 
 | # | Phase | Action |
 |---|---|---|
@@ -133,7 +133,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 </details>
 
-The one AUR package the installer builds, pulled in unconditionally with no hardware gating.
+Built unconditionally — no hardware gating.
 
 <details open>
 <summary><b>Packages — AUR</b> — 1 pkg</summary>
@@ -144,7 +144,7 @@ The one AUR package the installer builds, pulled in unconditionally with no hard
 
 </details>
 
-The Vulkan/GL runtime packages, sourced from `chwd` and `PKGS_ADD`; `--verify` fails if any is missing.
+`--verify` fails if any is missing.
 
 <details open>
 <summary><b>Vulkan dependencies</b> — 3 pkgs</summary>
@@ -156,8 +156,6 @@ The Vulkan/GL runtime packages, sourced from `chwd` and `PKGS_ADD`; `--verify` f
 | `lib32-mesa` | `PKGS_ADD` |
 
 </details>
-
-Rules that constrain every package transaction — full-upgrade policy, the AUR flag set, PGP-failure recovery, and reverse-dependency handling.
 
 <details open>
 <summary><b>Package caveats</b> — 4 notes</summary>
@@ -189,8 +187,6 @@ Atomic write per file: `mktemp` in the destination's parent → render via `tee`
 
 </details>
 
-Sets the `systemd-boot` loader defaults and the `sdboot-manage` policy that regenerates boot entries on every change.
-
 <details open>
 <summary><b>Bootloader</b> — 10 keys</summary>
 
@@ -202,7 +198,7 @@ Sets the `systemd-boot` loader defaults and the `sdboot-manage` policy that rege
 
 </details>
 
-The mkinitcpio fields; `_vmh_order_checks` enforces 11 HOOKS ordering invariants (`base` first, `fsck` last, no duplicates).
+`_vmh_order_checks` enforces 11 HOOKS ordering invariants (`base` first, `fsck` last, no dups).
 
 <details open>
 <summary><b>Initramfs</b> — 6 fields</summary>
@@ -216,8 +212,6 @@ The mkinitcpio fields; `_vmh_order_checks` enforces 11 HOOKS ordering invariants
 
 </details>
 
-Tunes `systemd-resolved`: multicast DNS on, LLMNR off, opportunistic DNS-over-TLS, and downgrade-tolerant DNSSEC.
-
 <details open>
 <summary><b>systemd-resolved</b> — 4 keys</summary>
 
@@ -229,8 +223,6 @@ Tunes `systemd-resolved`: multicast DNS on, LLMNR off, opportunistic DNS-over-TL
 | `DNSSEC` | `allow-downgrade` |
 
 </details>
-
-Stops accidental power events — the power, suspend, hibernate, and reboot keys (and their long-press variants) are all set to `ignore`.
 
 <details open>
 <summary><b>systemd-logind</b> — 8 keys</summary>
@@ -244,8 +236,6 @@ Stops accidental power events — the power, suspend, hibernate, and reboot keys
 
 </details>
 
-Configures `iwd`: it stops managing IP itself, disables power-save, and defers name resolution to systemd.
-
 <details open>
 <summary><b>iwd</b> — 3 keys</summary>
 
@@ -256,8 +246,6 @@ Configures `iwd`: it stops managing IP itself, disables power-save, and defers n
 | `[Network]` | `NameResolvingService` | `systemd` |
 
 </details>
-
-Switches NetworkManager to the `iwd` backend, disables WiFi power-save, and lowers logging to `WARN`.
 
 <details open>
 <summary><b>NetworkManager</b> — 3 keys</summary>
@@ -270,8 +258,6 @@ Switches NetworkManager to the `iwd` backend, disables WiFi power-save, and lowe
 
 </details>
 
-Pins the CPU frequency governor to `powersave`, sourced by `cpupower.service`.
-
 <details open>
 <summary><b>cpupower-service</b> — 1 key</summary>
 
@@ -281,7 +267,7 @@ Pins the CPU frequency governor to `powersave`, sourced by `cpupower.service`.
 
 </details>
 
-Network and VM tunables at priority 95, loaded after CachyOS `70-cachyos-settings.conf`.
+Priority 95, loaded after CachyOS `70-cachyos-settings.conf`.
 
 <details open>
 <summary><b>sysctl</b> — 7 tunables</summary>
@@ -351,7 +337,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 </details>
 
-Packages removed during install — the Plymouth boot-splash stack (incompatible with `quiet`) and the `micro` editor. **Opt-in:** add `shelly` to `PKGS_DEL` and bump invariant 7→8.
+**Opt-in:** add `shelly` to `PKGS_DEL` and bump invariant 7→8.
 
 <details open>
 <summary><b>Packages — remove</b> — 7 pkgs</summary>
@@ -362,8 +348,6 @@ Packages removed during install — the Plymouth boot-splash stack (incompatible
 | `micro`, `cachyos-micro-settings` | text editor |
 
 </details>
-
-Units stopped and masked with `--now` — replaced daemons, the unused `ufw` firewall, a boot-delay service, and all sleep/suspend targets.
 
 <details open>
 <summary><b>Masked units</b> — 11 units</summary>
@@ -377,7 +361,7 @@ Units stopped and masked with `--now` — replaced daemons, the unused `ufw` fir
 
 </details>
 
-Runtime units enabled after the reload — weekly `fstrim`, NetworkManager, and `cpupower`; `NetworkManager-dispatcher.service` is also enabled when present.
+`NetworkManager-dispatcher.service` also enabled when present.
 
 <details open>
 <summary><b>Enabled units</b> — 3 units</summary>
@@ -425,8 +409,6 @@ Runtime units enabled after the reload — weekly `fstrim`, NetworkManager, and 
 
 ## Safety & Reliability
 
-How the installer protects the system — atomic writes, automatic backups, file locking, fstab gating, and rollback on failure.
-
 | Feature | Detail |
 |---|---|
 | Atomic writes | tmp → render → symlink probe → chmod → `mv -T` |
@@ -438,8 +420,6 @@ How the installer protects the system — atomic writes, automatic backups, file
 | Instance lock | atomic mkdir `0700`; reclaims dead-PID lock via `kill -0` |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE/WINCH non-fatal |
 | Firewall posture | host firewall (ufw) disabled+masked — trusted-LAN assumption; install emits a warning, `--verify` reports `ufw=<state> nft_rules=<n>` |
-
-Every exit status the script returns, by class — success, verify/usage, preflight/boot/lock, `--check` drift, generation errors, and signals.
 
 <details open>
 <summary><b>Exit codes</b></summary>
@@ -453,8 +433,6 @@ Every exit status the script returns, by class — success, verify/usage, prefli
 | `128+N` / `251` | signal (130=INT, 143=TERM, …) / `_run` tmpfile alloc fail |
 
 </details>
-
-Environment variables that override defaults — run timeout, the two gate bypasses, and color suppression.
 
 <details open>
 <summary><b>Runtime variables</b> — 4 vars</summary>
@@ -492,8 +470,6 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 ## Known Issues
 
-Known hardware and software quirks on this platform, each with a workaround or its upstream status.
-
 | Component | Issue | Workaround |
 |---|---|---|
 | Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` or `IgnorePkg=linux-firmware` |
@@ -508,8 +484,6 @@ Known hardware and software quirks on this platform, each with a workaround or i
 | AUR | PGP signature failure | `gpg --recv-keys <KEYID>` then re-run |
 
 ## Troubleshooting
-
-Common failure modes during or after install, each with its fix.
 
 | Problem | Fix |
 |---|---|

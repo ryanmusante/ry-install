@@ -4,11 +4,11 @@ Newest first; dates ISO-8601.
 
 7.17.2  2026-05-31
 - verify: fix footer double-count when the runtime arm bails at sudo-cache before its counter reset; static totals restored verbatim, exit code unchanged.
-- verify: split drirc xmllint check out of _vrs_vulkan into _vrs_drirc_xml; placement and output unchanged.
+- verify: split drirc xmllint check out of _vrs_vulkan into _vrs_drirc_xml.
 - verify: firewall nft_rules counts actual rules (handle lines minus block declarations), not chain headers.
 
 7.17.1  2026-05-31
-- style: quote always-set test operands ($crit/$warn/$EXIT_BOOT_CRIT, ntsync conf path) for uniformity; no runtime change.
+- style: quote always-set test operands ($crit/$warn/$EXIT_BOOT_CRIT, ntsync conf path) for uniformity.
 
 7.17.0  2026-05-30
 - cmdline: drop amdgpu.sg_display=0; KERNEL_PARAMS 17 -> 16.

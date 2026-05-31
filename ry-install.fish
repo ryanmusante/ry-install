@@ -418,7 +418,6 @@ function _dc_kill_children --description "_do_cleanup sub. Release lock + reap c
     end
     if command -q pkill
         command pkill -TERM -P "$fish_pid" 2>/dev/null
-        # 0.5s grace: lets pacman/paru and atomic ops flush before SIGKILL.
         command sleep 0.5 </dev/null 2>/dev/null
         command pkill -KILL -P "$fish_pid" 2>/dev/null
     end
@@ -1328,7 +1327,6 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     if test "$QUIET" = false
         for _l in $_redacted; printf '%s\n' "$_l" >&2; end
     else if test "$label_tag" = STDERR; and test $ret -ne 0
-        # QUIET bypass: surface ≤5 stderr lines on rc≠0.
         for _l in $_redacted[1..5]
             printf '%s\n' "$_l" >&2
         end
@@ -2716,7 +2714,6 @@ function _vrkm_blacklist --description "_vrk_module_state sub: module_blacklist=
     end
     if test (count $_bl_mods) -eq 0; _info "  No module_blacklist= entry in KERNEL_PARAMS"; return 0; end
     for mod in $_bl_mods
-        # lsmod normalizes hyphens to underscores in module names.
         set -l _mod_lsmod (string replace -a -- '-' '_' "$mod")
         if command env LC_ALL=C lsmod 2>/dev/null | command grep -q -- "^$_mod_lsmod "
             _fail "  $mod: LOADED (should be blacklisted)"
@@ -2774,7 +2771,6 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null | string split \n)
         set -l _full_count (count $_full)
-        # Extract from full first; early boot scrolls past 5000-line head.
         if test (count $_full) -gt 0
             set -g _RY_DMESG_PREEMPT (printf '%s\n' $_full | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
             set -g _RY_DMESG_TSC (printf '%s\n' $_full | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
@@ -3391,7 +3387,6 @@ function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_E
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
     _ry_sudo_cache_banner
-    # Force preflight errors to stderr in QUIET install; cleared on success/bail.
     set -g _RY_LOUD_ERR true; set -l _chk_labels "Preflight: sudo credential cache" "Preflight: dependency check" "Preflight: disk space"; set -l _i 1
     if test (count $_chk_labels) -ne 3; _err_loud "BUG: _chk_labels size drift (got "(count $_chk_labels)" expected 3)"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
     for _chk in _ensure_sudo_cached _ry_check_deps _ry_check_disk_space

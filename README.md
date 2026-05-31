@@ -114,7 +114,11 @@ The script is the source of truth — `--verify` checks embedded files byte-for-
 
 ### Phase 1 — Preflight
 
+Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (root UUID + CPU match + invariants) → lock (atomic `mkdir` 0700 + dead-PID reclaim) → sudo cache → deps (systemd ≥ 250 + paru ≥ 2.0.0) → disk space → network (HTTPS + ICMP) → time sync (NTP, systemd-timesyncd) → kernel (≥ 6.14 FAIL · ≥ 6.18.4 WARN · ntsync) → per-destination config validators.
+
 ### Phase 2 — Packages
+
+`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update` indexers. `iwd`, `mesa`, and `cpupower` are CachyOS defaults, so they are not re-added; the iwd and NetworkManager configs still deploy unconditionally.
 
 <details open>
 <summary><b>Packages — install</b> — 13 pkgs</summary>
@@ -162,6 +166,8 @@ The script is the source of truth — `--verify` checks embedded files byte-for-
 </details>
 
 ### Phase 3 — Configuration
+
+Atomic write per file: `mktemp` in the destination's parent → render via `tee` → post-write symlink probe → `chmod` → `mv -T` (same-FS). The kernel cmdline is written to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`), with the root UUID prefix taken from the `/` mount.
 
 <details open>
 <summary><b>Kernel cmdline</b> — 16 params</summary>
@@ -304,6 +310,8 @@ The script is the source of truth — `--verify` checks embedded files byte-for-
 
 ### Phase 4 — Services
 
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units. The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*` and is gated by `findmnt --verify`; **there is no auto-backup, so snapshot `/etc/fstab` first.**
+
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
 
@@ -350,7 +358,11 @@ The script is the source of truth — `--verify` checks embedded files byte-for-
 
 ### Phase 5 — Boot
 
+`mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update` → post-rebuild sanity (`vmlinuz-*` + `initramfs-*.img` + loader-entry kernel path; emits **DO NOT REBOOT** on failure).
+
 ### Phase 6 — Finalize
+
+`systemctl --user daemon-reload` (skipped without active user-bus) → pacman cache trim (`paccache -rk2 -ruk0`, falls back to `pacman -Sc`) → NetworkManager restart for the wpa_supplicant → iwd switch (deferred to reboot when WiFi is the active route).
 
 ## Managed Files
 

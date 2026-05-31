@@ -37,11 +37,11 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-Run as your normal user — root is refused; sudo is invoked internally. If you cannot set the executable bit, use `fish ry-install.fish`.
+Run as your normal user — root is refused, sudo is internal. Without the exec bit: `fish ry-install.fish`.
 
-**Post-install:** reboot (required for cmdline, initramfs, NM backend switch), then `--verify`. Typical duration: **3–8 minutes**.
+**Post-install:** reboot (cmdline, initramfs, NM switch), then `--verify`. Duration: **3–8 min**.
 
-**Upgrading:** re-run `./ry-install.fish` — idempotent, no manual migration steps.
+**Upgrading:** re-run `./ry-install.fish` — idempotent, no migration.
 
 ## Scope
 
@@ -50,6 +50,8 @@ Run as your normal user — root is refused; sudo is invoked internally. If you 
 **Out:** dotfiles, shells, editors, secrets, backups, multi-user, non-CachyOS distros, laptops, UKI.
 
 ## Prerequisites
+
+Checked in preflight; an unmet requirement aborts before any changes.
 
 | Requirement | Minimum |
 |---|---|
@@ -63,7 +65,7 @@ Run as your normal user — root is refused; sudo is invoked internally. If you 
 | sudo | cached credential (`sudo -v`) |
 
 > [!WARNING]
-> Sudo cache may lapse mid-run. Mitigate with `Defaults timestamp_timeout=60` (`sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. For cron/systemd, pre-cache credentials first — the interactive `sudo -v` fallback needs a TTY (stdin+stderr) and is skipped without one. Recovery: re-run (idempotent).
+> Sudo cache may lapse mid-run. Mitigate: `Defaults timestamp_timeout=60` (`sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. Cron/systemd: pre-cache creds — the `sudo -v` fallback needs a TTY. Recovery: re-run.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -74,9 +76,11 @@ df -h / /boot                    # verify space
 
 Ryzen AI Max+ 395 (Zen 5, gfx1151 iGPU) · Radeon 8060S (RDNA 3.5) · 128 GB LPDDR5x-8000.
 
-Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (profile is amdgpu/gfx1151-specific).
+Runtime init requires a `Ryzen AI Max` CPU; override with `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (profile is gfx1151-specific).
 
 ## Usage
+
+Invocation flags — no arguments runs a full unattended install.
 
 | Flag | Action |
 |---|---|
@@ -89,6 +93,8 @@ Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP
 
 ## Install Flow
 
+Phases run in order; a package or boot-config failure skips the Phase 5 boot rebuild.
+
 | # | Phase | Action |
 |---|---|---|
 | 1 | Preflight | Prereqs + lock + runtime validate |
@@ -100,7 +106,7 @@ Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP
 
 ## Run Summary
 
-Install prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + totals + elapsed + verdict (JSONL still records every `PHASE_RESULT`).
+Prints a CHECK/RESULT/EVIDENCE matrix to stderr (+ totals, elapsed, verdict); JSONL records every `PHASE_RESULT`.
 
 | Result | Semantics | | Verdict | Trigger |
 |---|---|---|---|---|
@@ -112,7 +118,7 @@ Install prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + totals + ela
 
 ## Configuration
 
-`--verify` compares installed files against embedded content byte-for-byte (static arm), then checks live system state (runtime arm); the script is the source of truth. Edit `set -g` globals near the top to retune. Phases 1, 5, 6 deploy no embedded data.
+`--verify` compares installed files to embedded content byte-for-byte (static arm), then checks live state (runtime arm) — the script is the source of truth. Retune via `set -g` globals near the top. Phases 1, 5, 6 deploy no embedded data.
 
 ### Phase 1 — Preflight
 
@@ -137,7 +143,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 </details>
 
-The AUR package is installed unconditionally (no hardware gating).
+Installed unconditionally (no hardware gating).
 
 <details open>
 <summary><b>Packages — AUR</b> — 1 pkg</summary>
@@ -161,7 +167,7 @@ The AUR package is installed unconditionally (no hardware gating).
 
 </details>
 
-Constraints that govern every package transaction — upgrade policy, AUR flag choices, PGP-failure recovery, and reverse-dependency handling.
+Constraints on every package transaction.
 
 <details open>
 <summary><b>Package caveats</b> — 4 notes</summary>
@@ -195,7 +201,7 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 </details>
 
-Deploys the `systemd-boot` loader defaults plus the `sdboot-manage` entry-generation policy that rewrites boot entries on every change.
+`systemd-boot` loader defaults and the `sdboot-manage` entry-generation policy.
 
 <details open>
 <summary><b>Bootloader</b> — 10 keys</summary>
@@ -222,7 +228,7 @@ Deploys the `systemd-boot` loader defaults plus the `sdboot-manage` entry-genera
 
 </details>
 
-DNS resolver behaviour — multicast DNS via resolved, LLMNR off, opportunistic DNS-over-TLS, and downgrade-tolerant DNSSEC.
+DNS resolver settings.
 
 <details open>
 <summary><b>systemd-resolved</b> — 4 keys</summary>
@@ -236,7 +242,7 @@ DNS resolver behaviour — multicast DNS via resolved, LLMNR off, opportunistic 
 
 </details>
 
-Neutralises every ACPI power control — power, suspend, hibernate, and reboot keys, including their long-press variants, are all ignored.
+All power-management keys set to `ignore`.
 
 <details open>
 <summary><b>systemd-logind</b> — 8 keys</summary>
@@ -250,7 +256,7 @@ Neutralises every ACPI power control — power, suspend, hibernate, and reboot k
 
 </details>
 
-`iwd` daemon settings — it stops configuring the network itself, disables power-save, and hands name resolution to systemd.
+`iwd` daemon settings.
 
 <details open>
 <summary><b>iwd</b> — 3 keys</summary>
@@ -263,7 +269,7 @@ Neutralises every ACPI power control — power, suspend, hibernate, and reboot k
 
 </details>
 
-Points NetworkManager at the `iwd` backend, disables WiFi power-save, and trims its log level to `WARN`.
+NetworkManager settings.
 
 <details open>
 <summary><b>NetworkManager</b> — 3 keys</summary>
@@ -276,7 +282,7 @@ Points NetworkManager at the `iwd` backend, disables WiFi power-save, and trims 
 
 </details>
 
-Single override sourced by `cpupower.service` to pin the CPU frequency governor.
+Governor sourced by `cpupower.service`.
 
 <details open>
 <summary><b>cpupower-service</b> — 1 key</summary>
@@ -304,7 +310,7 @@ Priority 95 — loaded after CachyOS `70-cachyos-settings.conf`.
 
 </details>
 
-Caps TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595). Applied on next initramfs rebuild. `--verify` content-greps both `ttm` keys (static arm).
+Caps the TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595); applied on next initramfs rebuild; `--verify` greps both keys.
 
 <details open>
 <summary><b>amdgpu / ttm modprobe</b> — 2 options</summary>
@@ -316,7 +322,7 @@ Caps TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595). Applied on next initra
 
 </details>
 
-Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884 extended beyond RDR2). Applied at next Vulkan/GL launch. `--verify` content-greps the `driver`/option/`value` (static arm) and checks XML well-formedness via `xmllint` (runtime arm).
+Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884); applied at next Vulkan/GL launch; `--verify` greps the option and checks XML via `xmllint`.
 
 <details open>
 <summary><b>RADV drirc</b> — 1 option</summary>
@@ -327,7 +333,7 @@ Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884 extended beyond 
 
 </details>
 
-Loaded by `systemd --user` (`0600`). Re-login or `systemctl --user import-environment` to apply live.
+Loaded by `systemd --user` (`0600`); apply live via re-login or `systemctl --user import-environment`.
 
 <details open>
 <summary><b>Env vars</b> — 10 keys</summary>
@@ -344,9 +350,9 @@ Loaded by `systemd --user` (`0600`). Re-login or `systemctl --user import-enviro
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units (stop + mask) → `daemon-reload` + enable runtime units.
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units.
 
-Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`; `findmnt --verify` gates the atomic `mv`. **No automatic backup — snapshot `/etc/fstab` first.**
+Strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`; `findmnt --verify` gates the `mv`. **No auto-backup — snapshot `/etc/fstab` first.**
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -371,7 +377,7 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 
 </details>
 
-Units masked `--now` to drop replaced daemons, an unused firewall, a boot-delay service, and every sleep/suspend target.
+Stopped and masked (`--now`).
 
 <details open>
 <summary><b>Masked units</b> — 11 units</summary>
@@ -408,7 +414,7 @@ Units masked `--now` to drop replaced daemons, an unused firewall, a boot-delay 
 
 ## Managed Files
 
-13 files deployed via the [Phase 3](#phase-3--configuration) atomic-write sequence. System files install `0644`, the user file `0600`.
+13 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`.
 
 <details open>
 <summary><b>Destinations</b> — 13 paths</summary>
@@ -433,6 +439,8 @@ Units masked `--now` to drop replaced daemons, an unused firewall, a boot-delay 
 
 ## Safety & Reliability
 
+Guard-rails applied to every run.
+
 | Feature | Detail |
 |---|---|
 | Atomic writes | tmp → render → symlink probe → chmod → `mv -T` |
@@ -444,6 +452,8 @@ Units masked `--now` to drop replaced daemons, an unused firewall, a boot-delay 
 | Instance lock | atomic mkdir `0700`; reclaims dead-PID lock via `kill -0` |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE/WINCH non-fatal |
 | Firewall posture | host firewall (ufw) disabled+masked — trusted-LAN assumption; install emits a warning, `--verify` reports `ufw=<state> nft_rules=<n>` |
+
+Exit statuses, grouped by class.
 
 <details open>
 <summary><b>Exit codes</b></summary>
@@ -458,6 +468,8 @@ Units masked `--now` to drop replaced daemons, an unused firewall, a boot-delay 
 
 </details>
 
+Environment variables that override defaults.
+
 <details open>
 <summary><b>Runtime variables</b> — 4 vars</summary>
 
@@ -470,10 +482,10 @@ Units masked `--now` to drop replaced daemons, an unused firewall, a boot-delay 
 
 </details>
 
+NDJSON at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, one per run, no rotation. Events `header`/`log`/`footer` (carry `ts` + `event`); footer marker `bail` (preflight) or `interrupted` (signal). Prune: `find ~/ry-install/logs -xdev -type f -mtime +30 -delete`.
+
 <details open>
 <summary><b>Logs</b></summary>
-
-NDJSON at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, one file per run, no rotation. Events `header`/`log`/`footer` (all carry `ts` + `event`); footer marker `bail` (preflight) or `interrupted` (signal). Prune: `find ~/ry-install/logs -xdev -type f -mtime +30 -delete`.
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl
@@ -483,9 +495,9 @@ jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/log
 
 ## Uninstall
 
-No automated uninstaller. Use [Managed Files](#managed-files) as the rollback source-of-truth:
+No automated uninstaller; use [Managed Files](#managed-files) as the rollback reference:
 
-1. `sudo systemctl unmask` the 11 masked units (masked with `--now`, so they were stopped — reboot or start manually to bring any back).
+1. `sudo systemctl unmask` the 11 masked units (stopped by `--now`; reboot or start to restore).
 2. `sudo rm` deployed paths from the Managed Files list.
 3. Restore `/etc/fstab` from your pre-install snapshot.
 4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`).
@@ -493,6 +505,8 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 6. Reboot.
 
 ## Known Issues
+
+Platform quirks, each with a workaround or upstream status.
 
 | Component | Issue | Workaround |
 |---|---|---|
@@ -508,6 +522,8 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 | AUR | PGP signature failure | `gpg --recv-keys <KEYID>` then re-run |
 
 ## Troubleshooting
+
+Common failures and fixes.
 
 | Problem | Fix |
 |---|---|

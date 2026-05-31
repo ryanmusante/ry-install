@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.16.4 (2026-05-30) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.0 (2026-05-30) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.16.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -20,10 +20,9 @@ function _ry_show_help --description "Display usage information and available su
         "Usage: "(status filename)" [OPTIONS]" \
         "INSTALLATION:" \
         "  (no args)         Default mode: unattended install" \
-        "  -V, --verbose     Show install output (install: silent by default; check: always silent; install-file/verify-*: always verbose)" \
+        "  -V, --verbose     Show install output (install: silent by default; check: always silent; install-file/verify: always verbose)" \
         "VERIFICATION:" \
-        "  --verify-static   Check config files match expected content" \
-        "  --verify-runtime  Check live system state (run after reboot)" \
+        "  --verify          Check config files + live system state (static, then runtime)" \
         "  --check           Silent idempotency probe (0=clean 3=preflight 10=drift). Requires functional sudo + systemctl;" \
         "                    ERR_NO_DATA from systemctl probes is treated as preflight (rc=3), masking any drift detection" \
         "UTILITIES:" \
@@ -406,7 +405,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_PACMAN_REVERT_ATTEMPTED
     set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
-    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
+    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_TSC
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
@@ -535,7 +534,6 @@ set -g KERNEL_PARAMS \
     amdgpu.cwsr_enable=0 \
     amdgpu.gpu_recovery=1 \
     amdgpu.ppfeaturemask=0xfff73fff \
-    amdgpu.sg_display=0 \
     iommu=pt \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
@@ -642,6 +640,8 @@ set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5
 set -g BOOT_TIME_TARGET 15
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
+set -g TTM_PAGES_LIMIT 16777216
+set -g TTM_PAGE_POOL_SIZE 16777216
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ─────────────────────────────
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
@@ -659,12 +659,9 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
         case install install-file
             _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
             _pre_dispatch_exit $EXIT_PREFLIGHT
-        case verify-static
-            _err_loud "Cannot detect root UUID ($_reason) — aborting verify-static; /etc/kernel/cmdline byte-equality cannot be checked"
+        case verify
+            _err_loud "Cannot detect root UUID ($_reason) — aborting verify; /etc/kernel/cmdline byte-equality cannot be checked"
             _pre_dispatch_exit $EXIT_PREFLIGHT
-        case verify-runtime
-            # verify-runtime uses /proc/cmdline; UUID missing → skip cross-check.
-            _log "ROOT_UUID_UNAVAILABLE: mode=verify-runtime reason=$_reason — root=UUID cross-check skipped, other runtime probes proceed"
         case '*'
             _log "ROOT_UUID_UNAVAILABLE: mode=$MODE reason=$_reason — non-fatal for this mode"
     end
@@ -695,7 +692,7 @@ end
 # Refuse deploy on README/script count drift.
 function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants"
     set -l _expect \
-        KERNEL_PARAMS:17 \
+        KERNEL_PARAMS:16 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
@@ -850,8 +847,8 @@ end
 function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)"
     printf '%s\n' \
         "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
-        "options ttm pages_limit=16777216" \
-        "options ttm page_pool_size=16777216"
+        "options ttm pages_limit=$TTM_PAGES_LIMIT" \
+        "options ttm page_pool_size=$TTM_PAGE_POOL_SIZE"
 end
 
 # gfx1151 unified-heap RADV drirc (Mesa MR!18884; upstream auto-enables RDR2 only).
@@ -1317,6 +1314,17 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     end
     _log "$label_tag: "(string join -- " | " $_redacted)
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and _log "$label_tag""_TRUNCATED: total_lines=$_total head_cap=$_head_cap tail_cap=$_tail_cap"
+    if test "$_need_tail" = true
+        set -l _ovf "$LOG_DIR/run-overflow"
+        command mkdir -p -m 700 -- "$_ovf" 2>/dev/null
+        set -l _dest "$_ovf/$label_tag-$TIMESTAMP-"(command tr -dc a-z0-9 </dev/urandom 2>/dev/null | command head -c6)".log"
+        if command cp -- "$tmpfile" "$_dest" 2>/dev/null
+            set -l _sha (command sha256sum -- "$_dest" 2>/dev/null | string match -rg -- '^(\S+)')
+            _log "$label_tag""_FULL_SPILL: path=$_dest sha256=$_sha lines=$_total"
+        else
+            _log "$label_tag""_FULL_SPILL_FAIL: could not write $_dest"
+        end
+    end
     if test "$QUIET" = false
         for _l in $_redacted; printf '%s\n' "$_l" >&2; end
     else if test "$label_tag" = STDERR; and test $ret -ne 0
@@ -2254,6 +2262,21 @@ function _vss_sysctl --description "_verify_static_system sub: sysctl drop-in ke
     end
 end
 
+function _vss_modprobe --description "_verify_static_system sub: amdgpu/ttm modprobe.d"
+    _echo "── amdgpu modprobe ──"
+    _chk_file /etc/modprobe.d/ry-amdgpu-strixhalo.conf; or return 0
+    _chk_grep /etc/modprobe.d/ry-amdgpu-strixhalo.conf "pages_limit=$TTM_PAGES_LIMIT" "ttm pages_limit=$TTM_PAGES_LIMIT"
+    _chk_grep /etc/modprobe.d/ry-amdgpu-strixhalo.conf "page_pool_size=$TTM_PAGE_POOL_SIZE" "ttm page_pool_size=$TTM_PAGE_POOL_SIZE"
+end
+
+function _vss_drirc --description "_verify_static_system sub: RADV drirc"
+    _echo "── drirc (RADV) ──"
+    _chk_file /etc/drirc.d/95-ry-radv-apu.conf; or return 0
+    _chk_grep /etc/drirc.d/95-ry-radv-apu.conf 'driver="radv"' 'driver=radv'
+    _chk_grep /etc/drirc.d/95-ry-radv-apu.conf 'radv_enable_unified_heap_on_apu' 'radv_enable_unified_heap_on_apu'
+    _chk_grep /etc/drirc.d/95-ry-radv-apu.conf 'value="true"' 'unified_heap value=true'
+end
+
 function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, iwd, NM, cpupower-service.conf, sysctl"
     _echo "SYSTEM CONFIGURATION"
     _vss_ntsync_modules
@@ -2270,6 +2293,8 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _echo "── cpupower-service.conf ──"
     _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "GOVERNOR='$CPUPOWER_GOVERNOR'" "GOVERNOR=$CPUPOWER_GOVERNOR"
     _vss_sysctl
+    _vss_modprobe
+    _vss_drirc
 end
 
 function _verify_static_user --description "Verify environment.d ENV_VARS"
@@ -2362,6 +2387,8 @@ function _verify_static_services --description "Verify SERVICE_DESTINATIONS file
             _warn "  $_svc: systemctl unavailable — cannot verify mask state"
         else if test "$_rec[1]" = not-found
             _info "  $_svc: unit not found (may not be installed)"
+        else if test "$_rec[3]" = masked; and test "$_rec[2]" = active
+            _fail "  $_svc: masked but ACTIVE (stop or reboot)"
         else if test "$_rec[3]" = masked
             _ok "  $_svc: masked"
         else
@@ -2630,35 +2657,9 @@ function _vrkg_perf_level --description "_vrk_gpu_state sub: power_dpm_force_per
     end
 end
 
-function _vrkg_rebar_sam --description "_vrk_gpu_state sub: ReBAR/SAM status via dmesg cache + lspci fallback"
-    _echo "── ReBAR/SAM status ──"
-    set -l rebar_status $_RY_DMESG_BAR
-    if test -n "$rebar_status"
-        if string match -qi '*enabled*' -- "$rebar_status"; or string match -qi '*resiz*' -- "$rebar_status"
-            _ok "  ReBAR/SAM: enabled"
-            _info "  $rebar_status"
-        else
-            _info "  ReBAR/SAM: check manually"
-            _info "  $rebar_status"
-        end
-        return 0
-    end
-    if not command -q lspci; _info "  lspci not available for ReBAR check"; return 0; end
-    # Pre-ReBAR AMD caps BAR at 256M; 500M floor excludes it (tune for UMA <8 GB).
-    set -l bar_size (command lspci -vvv 2>/dev/null | command grep -iE 'Region.*Memory.*[0-9]+G\b|Region.*Memory.*([5-9][0-9]{2}|[0-9]{4,})M\b' | command head -n 1)
-    if test -n "$bar_size"
-        _ok "  ReBAR/SAM: large BAR detected"
-        _info "  $bar_size"
-    else
-        _warn "  ReBAR/SAM: not detected (check BIOS settings)"
-        _info "  Verify with: dmesg | grep -i bar"
-    end
-end
-
-function _vrk_gpu_state --description "Runtime kparam check: GPU performance level + ReBAR/SAM"
+function _vrk_gpu_state --description "Runtime kparam check: GPU performance level"
     _echo "HARDWARE STATE"
     _vrkg_perf_level
-    _vrkg_rebar_sam
 end
 
 function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + amd_pstate + boost"
@@ -2732,8 +2733,8 @@ function _vrk_module_state --description "Runtime kparam check: module parameter
     _chk_sysfs_eq /sys/module/usbcore/parameters/autosuspend -1 "usbcore.autosuspend"
     _chk_sysfs_eq /sys/module/nvme_core/parameters/default_ps_max_latency_us 0 "nvme_core.default_ps_max_latency_us"
     _vrkm_amdgpu
-    _chk_sysfs_eq /sys/module/ttm/parameters/pages_limit 16777216 ttm.pages_limit
-    _chk_sysfs_eq /sys/module/ttm/parameters/page_pool_size 16777216 ttm.page_pool_size
+    _chk_sysfs_eq /sys/module/ttm/parameters/pages_limit $TTM_PAGES_LIMIT ttm.pages_limit
+    _chk_sysfs_eq /sys/module/ttm/parameters/page_pool_size $TTM_PAGE_POOL_SIZE ttm.page_pool_size
     _echo "── Additional module parameters ──"
     _chk_sysfs_match /sys/module/zswap/parameters/enabled '^[N0]$' zswap.enabled
     _chk_sysfs_eq /proc/sys/kernel/nmi_watchdog 0 nmi_watchdog
@@ -2769,14 +2770,13 @@ end
 
 # Extract markers from full dmesg before 5000-line cap (head scrolls off).
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource"
-    set -g _RY_DMESG_CACHE; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_BAR; set -g _RY_DMESG_TSC
+    set -g _RY_DMESG_CACHE; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_TSC
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null | string split \n)
         set -l _full_count (count $_full)
         # Extract from full first; early boot scrolls past 5000-line head.
         if test (count $_full) -gt 0
             set -g _RY_DMESG_PREEMPT (printf '%s\n' $_full | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
-            set -g _RY_DMESG_BAR (printf '%s\n' $_full | command grep -i 'BAR' | command grep -i -E 'resize|rebar|large' | command head -n 1)
             set -g _RY_DMESG_TSC (printf '%s\n' $_full | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
         end
         # 5000-line cap bounds fish list memory; markers pre-extracted.
@@ -2799,7 +2799,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     _vrk_cpu_state
     _vrk_module_state
     _vrk_clocksource
-    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_BAR _RY_DMESG_TSC
+    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_TSC
 end
 
 # ── VERIFY-RUNTIME: SERVICES + ENVIRONMENT + FSTAB + SESSION ──────────────────────────────────────
@@ -2891,6 +2891,21 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state
     else
         _fail "  iwd process: NOT running"
     end
+    if command -q NetworkManager
+        set -l _eff (_as true NetworkManager --print-config 2>/dev/null \
+            | command grep -E -- '^[[:space:]]*wifi\.backend[[:space:]]*=' \
+            | command head -n1 | string replace -r '.*=[[:space:]]*' '' | string trim --)
+        if test -z "$_eff"
+            _info "  NM effective wifi.backend: unset (default wpa_supplicant)"
+            test "$NM_WIFI_BACKEND" = iwd; and _fail "  NM backend: expected iwd, none configured"
+        else if test "$_eff" = "$NM_WIFI_BACKEND"
+            _ok "  NM effective wifi.backend: $_eff"
+        else
+            _fail "  NM effective wifi.backend: $_eff (expected: $NM_WIFI_BACKEND)"
+        end
+    else
+        _info "  NetworkManager binary absent — backend check skipped"
+    end
     if command -q nmcli
         set -l nm_wifi_enabled (command nmcli -t -f WIFI general 2>/dev/null | string trim --)
         test -n "$nm_wifi_enabled"; and _info "  NM wifi radio: $nm_wifi_enabled"
@@ -2901,12 +2916,33 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state
             _warn "  WiFi device: $wifi_state (not connected)"
         end
     end
+    set -l _ufw (command systemctl is-active ufw.service 2>/dev/null | string trim --)
+    set -l _nft 0; command -q nft; and set _nft (_as true nft list ruleset 2>/dev/null | command grep -c -- '^[[:space:]]*\(chain\|rule\)')
+    _info "  firewall posture: ufw=$_ufw nft_rules=$_nft"
+end
+
+function _vrsv_masked_inactive --description "Runtime services check: MASK units must be inactive"
+    _echo
+    _echo "── Masked units (runtime) ──"
+    for _u in $MASK
+        set -l _v (_unit_state_padded $_u)
+        if test "$_v[3]" = ERR_NO_DATA
+            _warn "  $_u: systemctl unavailable — cannot verify"
+        else if test "$_v[1]" = not-found
+            _info "  $_u: not installed"
+        else if test "$_v[2]" = active
+            _fail "  $_u: ACTIVE (masked but still running — stop or reboot)"
+        else
+            _ok "  $_u: $_v[2]"
+        end
+    end
 end
 
 function _verify_runtime_services --description "Verify systemd unit states (sys batch) and WiFi runtime"
     _echo "SERVICE STATE"
     _echo
     _vrsv_sys_units
+    _vrsv_masked_inactive
     _vrsv_wifi
     return 0
 end
@@ -3194,6 +3230,15 @@ function _vrs_vulkan --description "Runtime session check: Vulkan driver package
         end
     end
     test (count $_vk_missing_list) -gt 0; and _info "  Install missing: sudo pacman -S --needed $_vk_missing_list"
+    if command -q xmllint
+        if xmllint --noout /etc/drirc.d/95-ry-radv-apu.conf 2>/dev/null
+            _ok "  drirc XML well-formed (xmllint)"
+        else
+            _fail "  drirc XML malformed (xmllint --noout failed)"
+        end
+    else
+        _info "  xmllint absent — drirc XML well-formedness not checked"
+    end
 end
 
 function _vrs_boot_perf --description "Runtime session check: systemd-analyze boot time + slowest services"
@@ -3213,21 +3258,26 @@ function _vrs_boot_perf --description "Runtime session check: systemd-analyze bo
         if test -n "$total_sec"; and string match -qr '^\d+(\.\d+)?$' -- "$total_sec"
             if set -q BOOT_TIME_TARGET; and test -n "$BOOT_TIME_TARGET"
                 set -l target $BOOT_TIME_TARGET
-                set -l time_int (math "round($total_sec)" 2>/dev/null)
-                if test -n "$time_int"; and test "$time_int" -le $target
-                    _ok "  Boot time within "$target"s target"
-                else if test -n "$time_int"
-                    _info "  Boot time exceeds "$target"s target (ignored)"
-                    _info "  Run 'systemd-analyze blame' to identify slow services"
+                # fish math has no comparison operators; scale to ms and compare as integers via test
+                set -l _bt_m (math "round($total_sec * 1000)")
+                set -l _tgt_m (math "$target * 1000")
+                set -l _warn_m (math "round($target * 900)")
+                if test "$_bt_m" -gt "$_tgt_m"
+                    _warn "  Boot time $total_sec""s exceeds $target""s target"
+                    _info "  Inspect: systemd-analyze critical-chain"
+                else if test "$_bt_m" -ge "$_warn_m"
+                    _warn "  Boot time $total_sec""s within 10% of $target""s target (near-miss)"
+                else
+                    _ok "  Boot time within $target""s target"
                 end
             else
                 _info "  BOOT_TIME_TARGET not set — skipping target comparison"
             end
         end
     end
-    _echo "  Slowest services:"
-    set -l blame (command systemd-analyze blame 2>/dev/null | command head -n 3)
-    for line in $blame; _info "    $line"; end
+    _echo "  Critical chain (boot-gating path):"
+    set -l _cc (command systemd-analyze critical-chain --no-pager 2>/dev/null | command head -n 10)
+    for line in $_cc; _info "    $line"; end
 end
 
 function _verify_runtime_session --description "Verify file perms, parent dirs, Vulkan packages, boot performance"
@@ -3256,6 +3306,19 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _verify_summary
     set -l ret $status
     return $ret
+end
+
+function _ry_verify_all --description "Verify both: static configs + runtime state; FAIL if either fails. Footer = combined counts."
+    _ry_verify_static; set -l _rc_s $status
+    test $_rc_s -eq $EXIT_PREFLIGHT; and return $_rc_s
+    set -l _ok $VERIFY_OK; set -l _fail $VERIFY_FAIL; set -l _warn $VERIFY_WARN; set -l _gen $VERIFY_GEN_FAIL
+    _ry_verify_runtime; set -l _rc_r $status
+    set -g VERIFY_OK (math $VERIFY_OK + $_ok)
+    set -g VERIFY_FAIL (math $VERIFY_FAIL + $_fail)
+    set -g VERIFY_WARN (math $VERIFY_WARN + $_warn)
+    set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + $_gen)
+    test $_rc_r -ne 0; and return $_rc_r
+    return $_rc_s
 end
 
 # ── MISC HELPERS: PERM CHECK, WIFI ROUTE, USER-BUS, SUDO BANNER ───────────────────────────────────
@@ -3901,7 +3964,7 @@ end
 function _csm_retry_individual --description "_configure_services_mask sub. Per-unit retry after batch mask failed (argv pre-filtered by _csm_filter_units)"
     set -l _ret 0
     for _unit in $argv
-        if _run sudo -n systemctl mask -- $_unit
+        if _run sudo -n systemctl mask --now -- $_unit
             _ok "Masked: $_unit"
         else
             set -l _state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
@@ -3915,6 +3978,8 @@ end
 # mask does not flush live ufw netfilter rules; ufw disable does.
 function _csm_disable_ufw_rules --description "Flush ufw rules before mask so kernel-level iptables/nftables rules don't persist post-mask"
     contains -- ufw.service $MASK; or return 0
+    _warn "SECURITY: host firewall (ufw) disabled+masked by profile — trusted-LAN assumption"
+    _log "SECURITY_POSTURE: ufw disabled+masked; no host firewall; trusted-LAN assumption"
     command -q ufw; or return 0
     set -l _state (command systemctl is-active ufw.service 2>/dev/null | string trim --)
     if test "$_state" != active; _log "UFW_RULE_FLUSH_SKIP: ufw.service is-active=$_state"; return 0; end
@@ -3941,7 +4006,7 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
         return 0
     end
     set -l _mask_count (count $_to_mask)
-    if _run sudo -n systemctl mask -- $_to_mask
+    if _run sudo -n systemctl mask --now -- $_to_mask
         _phase_record "Services: mask units" PASS "masked $_mask_count units"
         return 0
     end
@@ -4472,7 +4537,7 @@ function _rdi_matrix_footer --description "_rdi_render_matrix sub. Emit verdict-
     set -l _totals "Totals : $_RY_MTX_PASS PASS · $_RY_MTX_WARN WARN · $_RY_MTX_FAIL FAIL · $_RY_MTX_DEFER DEFER · $_RY_MTX_SKIP SKIP · $_RY_MTX_NA N/A"
     set -l _elapsed "Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_verdict"
     set -l _log_line "Log    : $LOG_FILE"
-    set -l _next_msg "Next   : reboot · ./ry-install.fish --verify-static · --verify-runtime"
+    set -l _next_msg "Next   : reboot · ./ry-install.fish --verify"
     test "$_verdict" != PASS; and set _next_msg "Next   : review FAIL/WARN above · re-run install (idempotent)"
     set -l _pad_inner (math "$_inner - 2")
     printf '╠%s╣\n' $_bar_top >&2
@@ -4528,7 +4593,7 @@ function _rdi_summary --description "Print final install summary"
             _info "       sudo usermod -aG realtime $_uname  (then log out and back in)"
         end
     end
-    _info "Post-reboot verification: ./ry-install.fish --verify-static; and ./ry-install.fish --verify-runtime"
+    _info "Post-reboot verification: ./ry-install.fish --verify"
     if test "$INSTALL_HAD_ERRORS" = true
         _warn "Done (with warnings - see above)"
     else
@@ -4843,9 +4908,9 @@ set -l _ORIG_ARGV $argv
 set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) ry-argparse-err.XXXXXX)
 _track_tmpfile "$_ap_errfile"
 argparse --name=(status basename) \
-    --exclusive=verify-static,verify-runtime,check,install-file \
+    --exclusive=verify,check,install-file \
     h/help v/version V/verbose \
-    verify-static verify-runtime check install-file= \
+    verify check install-file= \
     -- $argv 2>"$_ap_errfile"
 set -l _argparse_rc $status
 if test $_argparse_rc -ne 0
@@ -4866,14 +4931,13 @@ _rm_tmp "$_ap_errfile" false
 
 if set -q _flag_help; _ry_show_help; _pre_dispatch_exit $EXIT_OK; end
 if set -q _flag_version; echo "v$VERSION"; _pre_dispatch_exit $EXIT_OK; end
-set -q _flag_verify_static; and set -g MODE verify-static
-set -q _flag_verify_runtime; and set -g MODE verify-runtime
+set -q _flag_verify; and set -g MODE verify
 set -q _flag_check; and set -g MODE check
 if set -q _flag_install_file
     set -g MODE install-file; set -l _if_val "$_flag_install_file"
     test -z "$_if_val"; and _early_usage_exit "--install-file requires a non-empty absolute path"
     if not string match -q -- '/*' "$_if_val"
-        if string match -qr -- '^--(verify-static|verify-runtime|check|verbose|help|version)$' "$_if_val"
+        if string match -qr -- '^--(verify|check|verbose|help|version)$' "$_if_val"
             _early_usage_exit "--install-file requires a value, but the next argument is the flag $_if_val. Use --install-file=<path> or place the path immediately after"
         else if string match -q -- '-*' "$_if_val"
             _early_usage_exit "--install-file requires an absolute path argument (got flag: $_if_val). Use --install-file=<path> for paths starting with '-'"
@@ -4959,11 +5023,8 @@ switch $MODE
 end
 
 switch $MODE
-    case verify-static
-        _ry_verify_static
-        _set_exit $status
-    case verify-runtime
-        _ry_verify_runtime
+    case verify
+        _ry_verify_all
         _set_exit $status
     case check
         _ry_do_check

@@ -2,6 +2,17 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.17.0  2026-05-30
+- cmdline: drop amdgpu.sg_display=0; KERNEL_PARAMS 17 -> 16.
+- cli: --verify replaces --verify-static/--verify-runtime — single combined verify (static, then runtime); combined exit code + footer counts.
+- mask: systemctl mask --now — stop live svc/socket units at install.
+- verify: assert masked units inactive; NM effective wifi.backend==iwd;
+          content-grep drirc + modprobe values; firewall-posture line;
+          boot-time near-miss + over-target WARN, critical-chain diagnostic.
+- run: spill full stdout/stderr to LOG_DIR/run-overflow on truncation.
+- verify: derive ttm pages_limit/page_pool_size from TTM_* consts; assert drirc XML well-formed via xmllint.
+- trim: drop advisory ReBAR/SAM verify telemetry — firmware state, not script-set.
+
 7.16.4  2026-05-30
 - docs: tighten Prerequisites sudo-cache warning (drop duplicate "3-8 min", kept in Quick Start, + connective filler); all 7 mitigations retained.
 

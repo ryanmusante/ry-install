@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.16.4-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.17.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -39,7 +39,7 @@ chmod +x ry-install.fish
 
 Run as your normal user — root is refused; sudo is invoked internally. If you cannot set the executable bit, use `fish ry-install.fish`.
 
-**Post-install:** reboot (required for cmdline, initramfs, NM backend switch), then `--verify-static` and `--verify-runtime`. Typical duration: **3–8 minutes**.
+**Post-install:** reboot (required for cmdline, initramfs, NM backend switch), then `--verify`. Typical duration: **3–8 minutes**.
 
 **Upgrading:** re-run `./ry-install.fish` — idempotent, no manual migration steps.
 
@@ -82,8 +82,7 @@ Runtime init requires CPU matching `Ryzen AI Max`; override via `RY_INSTALL_SKIP
 |---|---|
 | (no args) | Full unattended install |
 | `-V, --verbose` | Show install output (check ignores -V) |
-| `--verify-static` | Files match embedded content |
-| `--verify-runtime` | Live system state (post-reboot) |
+| `--verify` | Config files + live system state (static, then runtime) |
 | `--check` | Idempotency probe (0=clean, 3=preflight, 10=drift) |
 | `--install-file <path>` | Re-deploy one managed file (absolute path) |
 | `-h, --help` / `-v, --version` | Help / version |
@@ -113,7 +112,7 @@ Install prints a box-drawn CHECK/RESULT/EVIDENCE matrix to stderr + totals + ela
 
 ## Configuration
 
-`--verify-static` compares installed files against embedded content byte-for-byte; the script is the source of truth. Edit `set -g` globals near the top to retune. Phases 1, 5, 6 deploy no embedded data.
+`--verify` compares installed files against embedded content byte-for-byte (static arm), then checks live system state (runtime arm); the script is the source of truth. Edit `set -g` globals near the top to retune. Phases 1, 5, 6 deploy no embedded data.
 
 ### Phase 1 — Preflight
 
@@ -158,7 +157,7 @@ The AUR package is installed unconditionally (no hardware gating).
 | `lib32-vulkan-radeon` | `chwd` |
 | `lib32-mesa` | `PKGS_ADD` |
 
-`--verify-runtime` fails on any missing.
+`--verify` fails on any missing.
 
 </details>
 
@@ -179,12 +178,12 @@ The AUR package is installed unconditionally (no hardware gating).
 Atomic write per file: `mktemp` in destination's parent → render via `tee` → post-write symlink probe → `chmod` → `mv -T` (same-FS).
 
 <details open>
-<summary><b>Kernel cmdline</b> — 17 params</summary>
+<summary><b>Kernel cmdline</b> — 16 params</summary>
 
 | Category | Params |
 |---|---|
 | CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable`, `processor.max_cstate=1` |
-| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.ppfeaturemask=0xfff73fff`, `amdgpu.sg_display=0` |
+| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.ppfeaturemask=0xfff73fff` |
 | IOMMU/PCIe | `iommu=pt`, `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
@@ -299,7 +298,7 @@ Priority 95 — loaded after CachyOS `70-cachyos-settings.conf`.
 | `ttm pages_limit` | `16777216` |
 | `ttm page_pool_size` | `16777216` |
 
-Caps TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595). Applied on next initramfs rebuild.
+Caps TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595). Applied on next initramfs rebuild. `--verify` content-greps both `ttm` keys (static arm).
 
 </details>
 
@@ -310,7 +309,7 @@ Caps TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595). Applied on next initra
 |---|---|
 | `radv_enable_unified_heap_on_apu` | `true` |
 
-Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884 extended beyond RDR2). Applied at next Vulkan/GL launch.
+Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884 extended beyond RDR2). Applied at next Vulkan/GL launch. `--verify` content-greps the `driver`/option/`value` (static arm) and checks XML well-formedness via `xmllint` (runtime arm).
 
 </details>
 
@@ -331,7 +330,7 @@ Loaded by `systemd --user` (`0600`). Re-login or `systemctl --user import-enviro
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask 11 units → `daemon-reload` + enable runtime units.
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units (stop + mask) → `daemon-reload` + enable runtime units.
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -428,6 +427,7 @@ Idempotent rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | Instance lock | atomic mkdir `0700`; reclaims dead-PID lock via `kill -0` |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE/WINCH non-fatal |
+| Firewall posture | host firewall (ufw) disabled+masked — trusted-LAN assumption; install emits a warning, `--verify` reports `ufw=<state> nft_rules=<n>` |
 
 <details open>
 <summary><b>Exit codes</b></summary>
@@ -469,7 +469,7 @@ jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/log
 
 No automated uninstaller. Use [Managed Files](#managed-files) as the rollback source-of-truth:
 
-1. `sudo systemctl unmask` the 11 masked units.
+1. `sudo systemctl unmask` the 11 masked units (masked with `--now`, so they were stopped — reboot or start manually to bring any back).
 2. `sudo rm` deployed paths from the Managed Files list.
 3. Restore `/etc/fstab` from your pre-install snapshot.
 4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`).
@@ -497,7 +497,7 @@ No automated uninstaller. Use [Managed Files](#managed-files) as the rollback so
 |---|---|
 | Boot failure | live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
 | Initramfs rebuild refused | fix cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
-| `--verify-static` drift | `./ry-install.fish --install-file /etc/...` |
+| `--verify` drift | `./ry-install.fish --install-file /etc/...` |
 | Sudo cache expired | re-run re-primes; see Prerequisites warning |
 | `PKGS_DEL` member skipped | held by outside rdeps — remove manually with `sudo pacman -Rns <pkg>` |
 | ntsync missing | kernel 6.14+ · `ls /dev/ntsync` |

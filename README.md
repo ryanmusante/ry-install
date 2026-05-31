@@ -12,21 +12,21 @@
 
 ## Contents
 
-- [Quick Start](#quick-start)
-- [Scope](#scope)
-- [Prerequisites](#prerequisites)
-- [Hardware](#hardware)
-- [Usage](#usage)
-- [Install Flow](#install-flow)
-- [Run Summary](#run-summary)
-- [Configuration](#configuration)
-- [Managed Files](#managed-files)
-- [Safety & Reliability](#safety--reliability)
-- [Uninstall](#uninstall)
-- [Known Issues](#known-issues)
-- [Troubleshooting](#troubleshooting)
-- [References](#references)
-- [License](#license)
+1. [Quick Start](#quick-start)
+2. [Scope](#scope)
+3. [Prerequisites](#prerequisites)
+4. [Hardware](#hardware)
+5. [Usage](#usage)
+6. [Install Flow](#install-flow)
+7. [Run Summary](#run-summary)
+8. [Configuration](#configuration)
+9. [Managed Files](#managed-files)
+10. [Safety & Reliability](#safety--reliability)
+11. [Uninstall](#uninstall)
+12. [Known Issues](#known-issues)
+13. [Troubleshooting](#troubleshooting)
+14. [References](#references)
+15. [License](#license)
 
 ## Quick Start
 
@@ -37,7 +37,7 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-Run as your normal user — root is refused, sudo is internal; without the exec bit, run `fish ry-install.fish`. **Post-install:** reboot (required for the cmdline, initramfs, and NM backend switch), then `--verify`; a full run takes 3–8 minutes. **Upgrading:** re-run `./ry-install.fish` — idempotent, no migration steps.
+Run as your normal user — root is refused, sudo is internal. **Post-install:** reboot (required), then `--verify`; a full run takes 3–8 minutes. **Upgrading:** re-run `./ry-install.fish` — idempotent, no migration steps.
 
 ## Scope
 
@@ -391,7 +391,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Safety & Reliability
 
-How the installer protects the system — atomic writes, automatic backups, file locking, fstab gating, and rollback on failure.
+How the installer protects the system.
 
 | Feature | Detail |
 |---|---|
@@ -454,7 +454,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 ## Known Issues
 
-Known hardware and software quirks on this platform, each with a workaround or its upstream status.
+Known hardware and software quirks on this platform.
 
 | Component | Issue | Workaround |
 |---|---|---|
@@ -471,7 +471,7 @@ Known hardware and software quirks on this platform, each with a workaround or i
 
 ## Troubleshooting
 
-Common failure modes during or after install, each with its fix.
+Common failure modes during or after install.
 
 | Problem | Fix |
 |---|---|

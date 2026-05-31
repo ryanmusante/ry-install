@@ -110,15 +110,11 @@ Prints a CHECK/RESULT/EVIDENCE matrix to stderr (+ totals, elapsed, verdict); JS
 
 ## Configuration
 
-`--verify` compares installed files to embedded content byte-for-byte (static arm), then checks live state (runtime arm) — the script is the source of truth. Retune via `set -g` globals near the top. Phases 1, 5, 6 deploy no embedded data.
+The script is the source of truth — `--verify` checks embedded files byte-for-byte, then live state; retune via `set -g` globals near the top. Phases 1, 5, and 6 deploy no embedded files.
 
 ### Phase 1 — Preflight
 
-Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (root UUID + CPU match + invariants) → lock (atomic `mkdir` 0700 + dead-PID reclaim) → sudo cache → deps (systemd ≥ 250 + paru ≥ 2.0.0) → disk space → network (HTTPS + ICMP) → time sync (NTP, systemd-timesyncd) → kernel (≥ 6.14 FAIL · ≥ 6.18.4 WARN · ntsync) → per-destination config validators.
-
 ### Phase 2 — Packages
-
-`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update` indexers. `iwd`, `mesa`, and `cpupower` are CachyOS defaults, so they are not re-added; the iwd and NetworkManager configs still deploy unconditionally.
 
 <details open>
 <summary><b>Packages — install</b> — 13 pkgs</summary>
@@ -133,8 +129,6 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 </details>
 
-Built unconditionally — no hardware gating.
-
 <details open>
 <summary><b>Packages — AUR</b> — 1 pkg</summary>
 
@@ -143,8 +137,6 @@ Built unconditionally — no hardware gating.
 | `mkinitcpio-firmware` | firmware blobs not in `linux-firmware` |
 
 </details>
-
-`--verify` fails if any is missing.
 
 <details open>
 <summary><b>Vulkan dependencies</b> — 3 pkgs</summary>
@@ -171,8 +163,6 @@ Built unconditionally — no hardware gating.
 
 ### Phase 3 — Configuration
 
-Atomic write per file: `mktemp` in the destination's parent → render via `tee` → post-write symlink probe → `chmod` → `mv -T` (same-FS). The kernel cmdline is written to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`), with the root UUID prefix taken from the `/` mount.
-
 <details open>
 <summary><b>Kernel cmdline</b> — 16 params</summary>
 
@@ -197,8 +187,6 @@ Atomic write per file: `mktemp` in the destination's parent → render via `tee`
 | sdboot entries | `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING=yes`, `OVERWRITE_EXISTING=yes`, `REMOVE_OBSOLETE=yes` |
 
 </details>
-
-`_vmh_order_checks` enforces 11 HOOKS ordering invariants (`base` first, `fsck` last, no dups).
 
 <details open>
 <summary><b>Initramfs</b> — 6 fields</summary>
@@ -267,8 +255,6 @@ Atomic write per file: `mktemp` in the destination's parent → render via `tee`
 
 </details>
 
-Priority 95, loaded after CachyOS `70-cachyos-settings.conf`.
-
 <details open>
 <summary><b>sysctl</b> — 7 tunables</summary>
 
@@ -284,8 +270,6 @@ Priority 95, loaded after CachyOS `70-cachyos-settings.conf`.
 
 </details>
 
-Caps the TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595); applied on next initramfs rebuild; `--verify` greps both keys.
-
 <details open>
 <summary><b>amdgpu / ttm modprobe</b> — 2 options</summary>
 
@@ -296,8 +280,6 @@ Caps the TTM GTT pool at 64 GiB for gfx1151 ROCm (ROCm#5595); applied on next in
 
 </details>
 
-Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884); applied at next Vulkan/GL launch; `--verify` greps the option and checks XML via `xmllint`.
-
 <details open>
 <summary><b>RADV drirc</b> — 1 option</summary>
 
@@ -306,8 +288,6 @@ Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884); applied at nex
 | `radv_enable_unified_heap_on_apu` | `true` |
 
 </details>
-
-The gaming and debug environment, loaded by `systemd --user` (`0600`); apply it live via re-login or `systemctl --user import-environment`.
 
 <details open>
 <summary><b>Env vars</b> — 10 keys</summary>
@@ -324,8 +304,6 @@ The gaming and debug environment, loaded by `systemd --user` (`0600`); apply it 
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units. The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*` and is gated by `findmnt --verify`; **there is no auto-backup, so snapshot `/etc/fstab` first.**
-
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
 
@@ -336,8 +314,6 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 | `commit=10` | 10 s journal commit interval |
 
 </details>
-
-**Opt-in:** add `shelly` to `PKGS_DEL` and bump invariant 7→8.
 
 <details open>
 <summary><b>Packages — remove</b> — 7 pkgs</summary>
@@ -361,8 +337,6 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 </details>
 
-`NetworkManager-dispatcher.service` also enabled when present.
-
 <details open>
 <summary><b>Enabled units</b> — 3 units</summary>
 
@@ -376,11 +350,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ### Phase 5 — Boot
 
-`mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update` → post-rebuild sanity (`vmlinuz-*` + `initramfs-*.img` + loader-entry kernel path; emits **DO NOT REBOOT** on failure).
-
 ### Phase 6 — Finalize
-
-`systemctl --user daemon-reload` (skipped without active user-bus) → pacman cache trim (`paccache -rk2 -ruk0`, falls back to `pacman -Sc`) → NetworkManager restart for the wpa_supplicant → iwd switch (deferred to reboot when WiFi is the active route).
 
 ## Managed Files
 
@@ -408,6 +378,8 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 </details>
 
 ## Safety & Reliability
+
+How the installer protects the system — atomic writes, automatic backups, file locking, fstab gating, and rollback on failure.
 
 | Feature | Detail |
 |---|---|
@@ -470,6 +442,8 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 ## Known Issues
 
+Known hardware and software quirks on this platform, each with a workaround or its upstream status.
+
 | Component | Issue | Workaround |
 |---|---|---|
 | Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` or `IgnorePkg=linux-firmware` |
@@ -484,6 +458,8 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | AUR | PGP signature failure | `gpg --recv-keys <KEYID>` then re-run |
 
 ## Troubleshooting
+
+Common failure modes during or after install, each with its fix.
 
 | Problem | Fix |
 |---|---|

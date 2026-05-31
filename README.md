@@ -37,21 +37,15 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-Run as your normal user — root is refused, sudo is internal. Without the exec bit: `fish ry-install.fish`.
-
-**Post-install:** reboot (cmdline, initramfs, NM switch), then `--verify`. Duration: **3–8 min**.
-
-**Upgrading:** re-run `./ry-install.fish` — idempotent, no migration.
+Run as your normal user — root is refused, sudo is internal; without the exec bit, run `fish ry-install.fish`. **Post-install:** reboot (required for the cmdline, initramfs, and NM backend switch), then `--verify`; a full run takes 3–8 minutes. **Upgrading:** re-run `./ry-install.fish` — idempotent, no migration steps.
 
 ## Scope
 
-**In:** kernel cmdline, initramfs, systemd units (system + user), network stack, sysctl, gaming env vars, pacman/paru install+remove, systemd-boot BLS entries via `sdboot-manage`.
-
-**Out:** dotfiles, shells, editors, secrets, backups, multi-user, non-CachyOS distros, laptops, UKI.
+**In:** kernel cmdline, initramfs, systemd units (system + user), network stack, sysctl, gaming env vars, pacman/paru install+remove, and systemd-boot BLS entries via `sdboot-manage`. **Out:** dotfiles, shells, editors, secrets, backups, multi-user, non-CachyOS distros, laptops, and UKI.
 
 ## Prerequisites
 
-Checked in preflight; an unmet requirement aborts before any changes.
+The platform and tooling the installer needs; an unmet requirement aborts in preflight, before any changes are made.
 
 | Requirement | Minimum |
 |---|---|
@@ -74,13 +68,11 @@ df -h / /boot                    # verify space
 
 ## Hardware
 
-Ryzen AI Max+ 395 (Zen 5, gfx1151 iGPU) · Radeon 8060S (RDNA 3.5) · 128 GB LPDDR5x-8000.
-
-Runtime init requires a `Ryzen AI Max` CPU; override with `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (profile is gfx1151-specific).
+Ryzen AI Max+ 395 (Zen 5, gfx1151 iGPU) · Radeon 8060S (RDNA 3.5) · 128 GB LPDDR5x-8000. Runtime init requires a CPU matching `Ryzen AI Max`; the profile is gfx1151-specific, so override with `RY_INSTALL_SKIP_HARDWARE_CHECK=1` on other hardware.
 
 ## Usage
 
-Invocation flags — no arguments runs a full unattended install.
+The command-line flags; run with no arguments for a full unattended install, or pass one of the flags below to verify, probe, or re-deploy a file.
 
 | Flag | Action |
 |---|---|
@@ -93,7 +85,7 @@ Invocation flags — no arguments runs a full unattended install.
 
 ## Install Flow
 
-Phases run in order; a package or boot-config failure skips the Phase 5 boot rebuild.
+The installer runs these six phases in order; a package or boot-config failure taints the run and skips the Phase 5 boot rebuild.
 
 | # | Phase | Action |
 |---|---|---|
@@ -126,9 +118,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 ### Phase 2 — Packages
 
-`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update` indexers.
-
-`iwd`, `mesa`, `cpupower` are CachyOS defaults — not re-added; iwd/NM configs deploy unconditionally.
+`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update` indexers. `iwd`, `mesa`, and `cpupower` are CachyOS defaults, so they are not re-added; the iwd and NetworkManager configs still deploy unconditionally.
 
 <details open>
 <summary><b>Packages — install</b> — 13 pkgs</summary>
@@ -143,7 +133,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 </details>
 
-Installed unconditionally (no hardware gating).
+The one AUR package the installer builds, pulled in unconditionally with no hardware gating.
 
 <details open>
 <summary><b>Packages — AUR</b> — 1 pkg</summary>
@@ -154,7 +144,7 @@ Installed unconditionally (no hardware gating).
 
 </details>
 
-`--verify` fails on any missing.
+The Vulkan/GL runtime packages, sourced from `chwd` and `PKGS_ADD`; `--verify` fails if any is missing.
 
 <details open>
 <summary><b>Vulkan dependencies</b> — 3 pkgs</summary>
@@ -167,7 +157,7 @@ Installed unconditionally (no hardware gating).
 
 </details>
 
-Constraints on every package transaction.
+Rules that constrain every package transaction — full-upgrade policy, the AUR flag set, PGP-failure recovery, and reverse-dependency handling.
 
 <details open>
 <summary><b>Package caveats</b> — 4 notes</summary>
@@ -183,9 +173,7 @@ Constraints on every package transaction.
 
 ### Phase 3 — Configuration
 
-Atomic write per file: `mktemp` in destination's parent → render via `tee` → post-write symlink probe → `chmod` → `mv -T` (same-FS).
-
-Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`); root UUID prefix from the `/` mount.
+Atomic write per file: `mktemp` in the destination's parent → render via `tee` → post-write symlink probe → `chmod` → `mv -T` (same-FS). The kernel cmdline is written to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`), with the root UUID prefix taken from the `/` mount.
 
 <details open>
 <summary><b>Kernel cmdline</b> — 16 params</summary>
@@ -201,7 +189,7 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 </details>
 
-`systemd-boot` loader defaults and the `sdboot-manage` entry-generation policy.
+Sets the `systemd-boot` loader defaults and the `sdboot-manage` policy that regenerates boot entries on every change.
 
 <details open>
 <summary><b>Bootloader</b> — 10 keys</summary>
@@ -214,7 +202,7 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 </details>
 
-11 ordering invariants enforced by `_vmh_order_checks` (`base` first, `fsck` last, no dupes).
+The mkinitcpio fields; `_vmh_order_checks` enforces 11 HOOKS ordering invariants (`base` first, `fsck` last, no duplicates).
 
 <details open>
 <summary><b>Initramfs</b> — 6 fields</summary>
@@ -228,7 +216,7 @@ Deployed to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`
 
 </details>
 
-DNS resolver settings.
+Tunes `systemd-resolved`: multicast DNS on, LLMNR off, opportunistic DNS-over-TLS, and downgrade-tolerant DNSSEC.
 
 <details open>
 <summary><b>systemd-resolved</b> — 4 keys</summary>
@@ -242,7 +230,7 @@ DNS resolver settings.
 
 </details>
 
-All power-management keys set to `ignore`.
+Stops accidental power events — the power, suspend, hibernate, and reboot keys (and their long-press variants) are all set to `ignore`.
 
 <details open>
 <summary><b>systemd-logind</b> — 8 keys</summary>
@@ -256,7 +244,7 @@ All power-management keys set to `ignore`.
 
 </details>
 
-`iwd` daemon settings.
+Configures `iwd`: it stops managing IP itself, disables power-save, and defers name resolution to systemd.
 
 <details open>
 <summary><b>iwd</b> — 3 keys</summary>
@@ -269,7 +257,7 @@ All power-management keys set to `ignore`.
 
 </details>
 
-NetworkManager settings.
+Switches NetworkManager to the `iwd` backend, disables WiFi power-save, and lowers logging to `WARN`.
 
 <details open>
 <summary><b>NetworkManager</b> — 3 keys</summary>
@@ -282,7 +270,7 @@ NetworkManager settings.
 
 </details>
 
-Governor sourced by `cpupower.service`.
+Pins the CPU frequency governor to `powersave`, sourced by `cpupower.service`.
 
 <details open>
 <summary><b>cpupower-service</b> — 1 key</summary>
@@ -293,7 +281,7 @@ Governor sourced by `cpupower.service`.
 
 </details>
 
-Priority 95 — loaded after CachyOS `70-cachyos-settings.conf`.
+Network and VM tunables at priority 95, loaded after CachyOS `70-cachyos-settings.conf`.
 
 <details open>
 <summary><b>sysctl</b> — 7 tunables</summary>
@@ -333,7 +321,7 @@ Unified VRAM heap for all Vulkan apps on gfx1151 (Mesa MR!18884); applied at nex
 
 </details>
 
-Loaded by `systemd --user` (`0600`); apply live via re-login or `systemctl --user import-environment`.
+The gaming and debug environment, loaded by `systemd --user` (`0600`); apply it live via re-login or `systemctl --user import-environment`.
 
 <details open>
 <summary><b>Env vars</b> — 10 keys</summary>
@@ -350,9 +338,7 @@ Loaded by `systemd --user` (`0600`); apply live via re-login or `systemctl --use
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units.
-
-Strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`; `findmnt --verify` gates the `mv`. **No auto-backup — snapshot `/etc/fstab` first.**
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units. The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*` and is gated by `findmnt --verify`; **there is no auto-backup, so snapshot `/etc/fstab` first.**
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -365,7 +351,7 @@ Strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`; `find
 
 </details>
 
-**Opt-in:** `shelly` — uncomment in `PKGS_DEL` + bump invariant 7→8.
+Packages removed during install — the Plymouth boot-splash stack (incompatible with `quiet`) and the `micro` editor. **Opt-in:** add `shelly` by uncommenting it in `PKGS_DEL` and bumping invariant 7→8.
 
 <details open>
 <summary><b>Packages — remove</b> — 7 pkgs</summary>
@@ -377,7 +363,7 @@ Strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`; `find
 
 </details>
 
-Stopped and masked (`--now`).
+Units stopped and masked with `--now` — replaced daemons, the unused `ufw` firewall, a boot-delay service, and all sleep/suspend targets.
 
 <details open>
 <summary><b>Masked units</b> — 11 units</summary>
@@ -391,7 +377,7 @@ Stopped and masked (`--now`).
 
 </details>
 
-`NetworkManager-dispatcher.service` enabled when present.
+Runtime units enabled after the reload — weekly `fstrim`, NetworkManager, and `cpupower`; `NetworkManager-dispatcher.service` is also enabled when present.
 
 <details open>
 <summary><b>Enabled units</b> — 3 units</summary>
@@ -439,7 +425,7 @@ Stopped and masked (`--now`).
 
 ## Safety & Reliability
 
-Guard-rails applied to every run.
+How the installer protects the system — atomic writes, automatic backups, file locking, fstab gating, and rollback on failure.
 
 | Feature | Detail |
 |---|---|
@@ -453,7 +439,7 @@ Guard-rails applied to every run.
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE/WINCH non-fatal |
 | Firewall posture | host firewall (ufw) disabled+masked — trusted-LAN assumption; install emits a warning, `--verify` reports `ufw=<state> nft_rules=<n>` |
 
-Exit statuses, grouped by class.
+Every exit status the script returns, by class — success, verify/usage, preflight/boot/lock, `--check` drift, generation errors, and signals.
 
 <details open>
 <summary><b>Exit codes</b></summary>
@@ -468,7 +454,7 @@ Exit statuses, grouped by class.
 
 </details>
 
-Environment variables that override defaults.
+Environment variables that override defaults — run timeout, the two gate bypasses, and color suppression.
 
 <details open>
 <summary><b>Runtime variables</b> — 4 vars</summary>
@@ -506,7 +492,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 ## Known Issues
 
-Platform quirks, each with a workaround or upstream status.
+Known hardware and software quirks on this platform, each with a workaround or its upstream status.
 
 | Component | Issue | Workaround |
 |---|---|---|
@@ -523,7 +509,7 @@ Platform quirks, each with a workaround or upstream status.
 
 ## Troubleshooting
 
-Common failures and fixes.
+Common failure modes during or after install, each with its fix.
 
 | Problem | Fix |
 |---|---|

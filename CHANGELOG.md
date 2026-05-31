@@ -3,35 +3,33 @@ ry-install ChangeLog
 Newest first; dates ISO-8601.
 
 7.17.2  2026-05-31
-- verify: fix --verify footer double-count when the runtime arm bails at the sudo-cache check before its counter reset; static-arm totals are restored verbatim (exit code unchanged).
-- verify: extract drirc xmllint well-formedness check from _vrs_vulkan into its own _vrs_drirc_xml; runtime-arm placement and output unchanged.
-- verify: firewall-posture nft_rules now counts actual rules (handle lines minus block-opening declarations) instead of chain headers.
+- verify: fix footer double-count when the runtime arm bails at sudo-cache before its counter reset; static totals restored verbatim, exit code unchanged.
+- verify: split drirc xmllint check out of _vrs_vulkan into _vrs_drirc_xml; placement and output unchanged.
+- verify: firewall nft_rules counts actual rules (handle lines minus block declarations), not chain headers.
 
 7.17.1  2026-05-31
 - style: quote always-set test operands ($crit/$warn/$EXIT_BOOT_CRIT, ntsync conf path) for uniformity; no runtime change.
 
 7.17.0  2026-05-30
 - cmdline: drop amdgpu.sg_display=0; KERNEL_PARAMS 17 -> 16.
-- cli: --verify replaces --verify-static/--verify-runtime — single combined verify (static, then runtime); combined exit code + footer counts.
+- cli: --verify replaces --verify-static/--verify-runtime — one combined pass (static then runtime), combined exit code + footer.
 - mask: systemctl mask --now — stop live svc/socket units at install.
-- verify: assert masked units inactive; NM effective wifi.backend==iwd;
-          content-grep drirc + modprobe values; firewall-posture line;
-          boot-time near-miss + over-target WARN, critical-chain diagnostic.
+- verify: assert masked units inactive, NM wifi.backend==iwd, drirc + modprobe values, firewall-posture; boot-time WARN + critical-chain diagnostic.
 - run: spill full stdout/stderr to LOG_DIR/run-overflow on truncation.
 - verify: derive ttm pages_limit/page_pool_size from TTM_* consts; assert drirc XML well-formed via xmllint.
 - trim: drop advisory ReBAR/SAM verify telemetry — firmware state, not script-set.
 
 7.16.4  2026-05-30
-- docs: tighten Prerequisites sudo-cache warning (drop duplicate "3-8 min", kept in Quick Start, + connective filler); all 7 mitigations retained.
+- docs: tighten Prerequisites sudo-cache warning; all 7 mitigations retained.
 
 7.16.3  2026-05-30
 - docs: README collapsible sections all open by default (Destinations, Exit codes, Runtime variables, Logs; the other 20 already open).
 
 7.16.2  2026-05-30
-- docs: README Phase 3 heading "Configuration Files" -> "Configuration"; matches _RY_PHASE_NAMES + Install-Flow table; internal anchor updated.
+- docs: README Phase 3 heading 'Configuration Files' -> 'Configuration'; anchor updated.
 
 7.16.1  2026-05-30
-- docs: README prose mask count 12 -> 11 (Phase 4 narrative + Uninstall); now matches MASK array and detail table (lvm2-monitor.service dropped in 7.16.0).
+- docs: README mask count 12 -> 11; matches MASK array (lvm2-monitor dropped in 7.16.0).
 
 7.16.0  2026-05-30
 - logind: drop HandleSecureAttentionKey; LOGIND_IGNORE_KEYS 9 -> 8; remove systemd>=257 gate.

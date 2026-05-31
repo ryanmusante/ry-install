@@ -3320,8 +3320,7 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
     set -l _ok $VERIFY_OK; set -l _fail $VERIFY_FAIL; set -l _warn $VERIFY_WARN; set -l _gen $VERIFY_GEN_FAIL
     _ry_verify_runtime; set -l _rc_r $status
     if test $_rc_r -eq $EXIT_PREFLIGHT
-        # Runtime arm bailed at its sudo-cache check before resetting counters, so VERIFY_* still
-        # hold the static-arm totals. Restore them verbatim (no add) to avoid a doubled footer count.
+        # Runtime arm bailed at sudo-cache before resetting counters; VERIFY_* still hold static-arm totals — restore verbatim (no add) to avoid a doubled footer count.
         set -g VERIFY_OK $_ok; set -g VERIFY_FAIL $_fail; set -g VERIFY_WARN $_warn; set -g VERIFY_GEN_FAIL $_gen
         return $_rc_r
     end

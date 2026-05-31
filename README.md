@@ -351,7 +351,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 </details>
 
-Packages removed during install — the Plymouth boot-splash stack (incompatible with `quiet`) and the `micro` editor. **Opt-in:** add `shelly` by uncommenting it in `PKGS_DEL` and bumping invariant 7→8.
+Packages removed during install — the Plymouth boot-splash stack (incompatible with `quiet`) and the `micro` editor. **Opt-in:** add `shelly` to `PKGS_DEL` and bump invariant 7→8.
 
 <details open>
 <summary><b>Packages — remove</b> — 7 pkgs</summary>

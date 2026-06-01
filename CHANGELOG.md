@@ -2,6 +2,29 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.17.22  2026-05-31
+- docs: document curl in Prerequisites — it is a hard dependency (HTTPS preflight in _ry_check_network, enforced by the _ry_check_deps required-command gate), previously unlisted.
+- fix: fish-version gate defaults an absent minor to 0, so a bare-major version string (e.g. "4") parses and is evaluated against the >=3.6 floor instead of erroring as unparseable. Real fish always reports X.Y.Z, so this is defensive hardening with no behavior change for any released fish; garbage strings are still rejected via the parts[1] digit check.
+- refactor: collapse 80 adjacent `set -l` declarations onto shared lines (the script's existing one-liner idiom); 5166 -> 5086 lines, no behavior change.
+
+7.17.21  2026-05-31
+- feat: pin NVMe I/O scheduler to none via new managed file /etc/udev/rules.d/60-ry-ioschedulers.rules (NVMe has native multiqueue; a scheduler is pure overhead). Managed-file count 15 -> 16. Adds content generator, _grep_udev_entry + */udev/rules.d/* validator dispatch, _vss_udev static check, runtime [none] probe over /sys/block/nvme*n*, and _post_udev (udevadm control --reload-rules + trigger --subsystem-match=block); _RY_POST_HOOKS 15 -> 16. Rule carries ENV{DEVTYPE}=="disk" to avoid the partition/controller write errors the bare nvme[0-9]* form throws (ArchWiki Improving_performance).
+- change: ttm pages_limit + page_pool_size 16777216 -> 8388608 pages — GTT / unified-memory pool 64 GiB -> 32 GiB. Module is ttm (correct for Strix Halo / Ryzen AI Max), not amdttm (Instinct). Verify: cat /sys/module/ttm/parameters/p* | awk '{print $1*4096/1073741824" GiB"}'.
+
+7.17.20  2026-05-31
+- change: drop processor.max_cstate=1 and amdgpu.cwsr_enable=0 from cmdline — permit deeper CPU C-states (idle power / thermal headroom) and revert CWSR to amdgpu default; KERNEL_PARAMS 15 -> 13.
+- change: amdgpu.ppfeaturemask 0xfff73fff -> 0xffffffff (unmask all PowerPlay feature bits for full power/clock control). Stale cmdline reads as drift on --verify/--check until the boot entry is regenerated (re-deploy + reboot).
+- feat: add vm.max_map_count=2147483642 sysctl — raise per-process VMA cap for Proton / large-address-space titles; SYSCTL_VALUES 7 -> 8.
+
+7.17.19  2026-05-31
+- fix: _tmpfile_key derives the managed-file key via a literal HOME-prefix comparison (string sub) instead of a glob pattern; a HOME path containing glob metacharacters could otherwise misroute the key. Hardening only — output is byte-identical for a normalized HOME, no behavior change.
+- refactor: extract the NetworkManager effective-backend check out of _vrsv_wifi into _vrsv_wifi_nm_backend. No behavior change.
+- docs: exit-code table now notes code 1 also covers a general install FAIL (not only verify-FAIL / kernel-floor), matching --help and the Run Summary verdict table.
+
+7.17.18  2026-05-31
+- fix: modules-load.d config validator — /etc/modules-load.d/i2c-dev.conf was misrouted to the INI [Section] validator and failed preflight, aborting every install (exit 3). Added */modules-load.d/* dispatch case + _grep_modload_entry (bare module-name lines). Regression from 7.17.16.
+- docs: correct content-generator header count (13 -> 15); reword _csp_filter_rdeps comment to reflect global accumulator. No behavior change.
+
 7.17.17  2026-05-31
 - change: wireless regdom now mandatory (default US), set via /etc/modprobe.d/ry-cfg80211-regdom.conf (replaces OpenRC /etc/conf.d/wireless-regdom); now a tracked managed file. Managed-file count 14 -> 15.
 - feat: --verify now checks regdom statically (modprobe.d) and at runtime (iw reg get).

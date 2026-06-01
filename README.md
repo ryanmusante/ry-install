@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.17.17-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.17.22-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -53,6 +53,7 @@ Hard requirements (sudo cache, systemd ≥ 250, GNU coreutils, free disk, networ
 | fish | ≥ 3.6 |
 | Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | systemd | ≥ 250 |
+| curl | required (HTTPS preflight + connectivity check) |
 | Hardware | CPU matches `Ryzen AI Max` |
 | paru | recommended ≥ 2.0.0 (AUR phase warns + continues if absent) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
@@ -94,7 +95,7 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 |---|---|---|
 | 1 | Preflight | Prereqs + lock + runtime validate |
 | 2 | Packages | `pacman -Syu --needed` + AUR via paru + cache refresh |
-| 3 | Configuration | Deploy 15 embedded files (atomic) |
+| 3 | Configuration | Deploy 16 embedded files (atomic) |
 | 4 | Services | fstab + resolved + `PKGS_DEL` + mask + enable |
 | 5 | Boot | `mkinitcpio -P` + `sdboot-manage` + sanity |
 | 6 | Finalize | user daemon-reload + paccache + NM restart (deferred on active WiFi) |
@@ -185,12 +186,12 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 Atomic write per file: `mktemp` in the destination parent → render via `tee` → symlink probe → `chmod` → `mv -T` (same-FS). The kernel cmdline goes to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`); root UUID prefix is taken from the `/` mount.
 
 <details open>
-<summary><b>Kernel cmdline</b> — 15 params</summary>
+<summary><b>Kernel cmdline</b> — 13 params</summary>
 
 | Category | Params |
 |---|---|
-| CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable`, `processor.max_cstate=1` |
-| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.ppfeaturemask=0xfff73fff` |
+| CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
+| GPU/amdgpu | `amdgpu.ppfeaturemask=0xffffffff` |
 | IOMMU/PCIe | `iommu=pt`, `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
@@ -288,16 +289,17 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 | `net.ipv4.tcp_notsent_lowat` | `16384` |
 | `net.ipv4.tcp_slow_start_after_idle` | `0` |
 | `vm.compaction_proactiveness` | `0` |
+| `vm.max_map_count` | `2147483642` |
 
 </details>
 
 <details open>
-<summary><b>amdgpu / ttm modprobe</b> — 2 options</summary>
+<summary><b>amdgpu / ttm modprobe</b> — 2 options (caps GTT at 32 GiB)</summary>
 
 | Option | Value |
 |---|---|
-| `ttm pages_limit` | `16777216` |
-| `ttm page_pool_size` | `16777216` |
+| `ttm pages_limit` | `8388608` |
+| `ttm page_pool_size` | `8388608` |
 
 </details>
 
@@ -316,6 +318,17 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 | Option | Value |
 |---|---|
 | `radv_enable_unified_heap_on_apu` | `true` |
+
+</details>
+
+<details open>
+<summary><b>udev — I/O scheduler</b> — 1 rule</summary>
+
+| Device | Scheduler |
+|---|---|
+| NVMe (`KERNEL=="nvme[0-9]*"`, `ENV{DEVTYPE}=="disk"`) | `none` |
+
+NVMe exposes native multiqueue, so a kernel I/O scheduler adds only overhead; `none` is also the upstream default for NVMe and is pinned explicitly here. The `ENV{DEVTYPE}=="disk"` guard limits the match to whole-disk block devices, avoiding the *No such file or directory* udev write errors that the bare `nvme[0-9]*` form throws on partitions and the controller char-device.
 
 </details>
 
@@ -390,10 +403,10 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Managed Files
 
-15 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from content embedded in the script, so the file on disk and the `--verify` target share one source.
+16 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from content embedded in the script, so the file on disk and the `--verify` target share one source.
 
 <details open>
-<summary><b>Destinations</b> — 15 paths</summary>
+<summary><b>Destinations</b> — 16 paths</summary>
 
 | Path | Mode |
 |---|---|
@@ -411,6 +424,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 | `/etc/modprobe.d/ry-amdgpu-strixhalo.conf` | `0644` |
 | `/etc/modules-load.d/i2c-dev.conf` | `0644` |
 | `/etc/modprobe.d/ry-cfg80211-regdom.conf` | `0644` |
+| `/etc/udev/rules.d/60-ry-ioschedulers.rules` | `0644` |
 | `~/.config/environment.d/10-environment.conf` | `0600` |
 
 </details>
@@ -436,7 +450,7 @@ Atomic writes and a gated Phase 5 rebuild mean a failed package or boot-config s
 
 | Code | Meaning |
 |---|---|
-| `0` / `1` / `2` | success / verify-FAIL or kernel-floor fail / usage |
+| `0` / `1` / `2` | success / verify-FAIL, install FAIL, or kernel-floor fail / usage |
 | `3` / `4` / `5` | preflight / boot-critical / lock |
 | `10` | `--check` drift |
 | `11` / `12` / `13` | gen: missing fn / missing UUID / sysctl malformed |

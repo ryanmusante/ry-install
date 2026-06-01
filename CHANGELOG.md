@@ -2,6 +2,21 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.17.17  2026-05-31
+- change: wireless regdom is now mandatory (default US) and set the systemd-native way — /etc/modprobe.d/ry-cfg80211-regdom.conf (options cfg80211 ieee80211_regdom), replacing the OpenRC /etc/conf.d/wireless-regdom file. It is now a tracked core managed file; managed-file count 14 -> 15.
+- feat: add static (modprobe.d content) and runtime (iw reg get) verification of the regulatory domain under --verify.
+- change: --country=XX now overrides the US default and is validated as ISO-3166 alpha-2 at argparse (an invalid value is a usage error); regdom always applies.
+- feat: add iw to PKGS_ADD for runtime regdom application and verification; PKGS_ADD 15 -> 16.
+
+7.17.16  2026-05-31
+- feat: add ddcutil + rtkit to PKGS_ADD and ship /etc/modules-load.d/i2c-dev.conf (i2c-dev autoload at boot) for DDC/CI external-monitor brightness; managed-file count 13 -> 14, PKGS_ADD 13 -> 15.
+- feat: add opt-in --country=XX (ISO-3166 alpha-2) to set the wireless regulatory domain — writes /etc/conf.d/wireless-regdom and runs iw reg set; skipped when unset, advisory (never fails the run), and not tracked by --verify.
+- change: drop amdgpu.gpu_recovery=1 from the kernel cmdline (it set the TAINT_USER bit); KERNEL_PARAMS 16 -> 15. A stale cmdline still carrying it will read as drift until the boot entry is regenerated.
+- change: systemd-resolved DNSOverTLS opportunistic -> no, silencing the DoT-to-plaintext fallback log noise; single-source (no competing drop-in).
+
+7.17.15  2026-05-31
+- comment: condense the _dc_kill_children fast-path rationale from two lines to one (no functional change).
+
 7.17.14  2026-05-31
 - fix: paru-absent is now advisory — WARN + continue (exit 0), matching the documented "not a hard gate / warns and continues" contract; was FAIL + INSTALL_HAD_ERRORS (exit 1).
 - fix: a *partial* AUR failure (some-but-not-all packages) is recorded WARN and no longer taints the run; only an all-packages-failed AUR step is FAIL (exit 1). Resolves the verdict↔exit desync where the matrix showed PASS-WITH-WARNINGS while the process exited 1.
@@ -10,7 +25,7 @@ Newest first; dates ISO-8601.
 - fix: PKGS_DEL removal records the actual removed count (was the requested count, overstating success on per-package failures); a pacman db.lck during removal is now recorded FAIL to match the taint it already set (was a misleading PASS/N-A row).
 - docs: README Run Summary — verdict table gains an Exit column and notes the two preflight-stage exits (hard-requirement abort = 3, kernel < 6.14 floor = 1) that bypass it; clarify the JSONL footer pass/fail/warn are message-level tallies while the matrix verdict + PHASE_RESULT/MATRIX_RENDERED events are the authoritative per-phase record; Phase 2 now spells out the advisory AUR-failure semantics.
 
-
+7.17.13  2026-05-31
 - harden: _acquire_lock stale-reclaim retries up to 3x — a peer that wins the post-rm mkdir race re-populates the lock, and each pass re-checks PID liveness before reclaiming (was a single attempt that could return EXIT_LOCK while the lock was actually free).
 - fix: _awf_postwrite_verify_restore logs a WARN (+ JSONL POSTWRITE_VERIFY_SKIP) when the byte re-verify is skipped because the content-generator re-run or the installed-bytes read failed (e.g. transient sudo lapse) on a backup-target file; was a silent return 0.
 - docs: README Prerequisites adds a kernel-version map note consolidating the >=6.14 floor, >=6.18.4 gfx1151 rec, >=6.16 ROCm, and >=6.19.1 regression-fix references.

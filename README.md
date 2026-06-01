@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.17.14-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.17.17-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
@@ -83,6 +83,7 @@ No arguments runs a full unattended install. `--check` and `--verify` only read 
 | `--verify` | Config files + live system state (static, then runtime) |
 | `--check` | Idempotency probe (0=clean, 3=preflight, 10=drift) |
 | `--install-file <path>` | Re-deploy one managed file (absolute path) |
+| `--country=XX` | Override the wireless regulatory domain (ISO-3166 alpha-2; default `US`) |
 | `-h, --help` / `-v, --version` | Help / version |
 
 ## Install Flow
@@ -93,7 +94,7 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 |---|---|---|
 | 1 | Preflight | Prereqs + lock + runtime validate |
 | 2 | Packages | `pacman -Syu --needed` + AUR via paru + cache refresh |
-| 3 | Configuration | Deploy 13 embedded files (atomic) |
+| 3 | Configuration | Deploy 15 embedded files (atomic) |
 | 4 | Services | fstab + resolved + `PKGS_DEL` + mask + enable |
 | 5 | Boot | `mkinitcpio -P` + `sdboot-manage` + sanity |
 | 6 | Finalize | user daemon-reload + paccache + NM restart (deferred on active WiFi) |
@@ -134,15 +135,16 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 `pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, and `cpupower` are CachyOS defaults (not re-added); the iwd and NetworkManager configs still deploy. The AUR step is advisory: a missing `paru` or a *partial* AUR failure is recorded `WARN` and the install continues (exit `0`); only an AUR step where **every** package fails is a `FAIL` (exit `1`). A `pacman -Syu` failure, by contrast, taints the run and skips the Phase 5 rebuild.
 
 <details open>
-<summary><b>Packages — install</b> — 13 pkgs</summary>
+<summary><b>Packages — install</b> — 16 pkgs</summary>
 
 | Category | Packages |
 |---|---|
-| sysadmin | `nvme-cli`, `htop`, `git-delta`, `lm_sensors` |
+| sysadmin | `nvme-cli`, `htop`, `git-delta`, `lm_sensors`, `iw` |
 | gaming | `cachyos-gaming-meta`, `cachyos-gaming-applications` |
 | Vulkan/GL | `lib32-mesa` |
 | rust utilities | `fd`, `sd`, `dust`, `procs`, `bottom` |
-| perf | `realtime-privileges` |
+| perf | `realtime-privileges`, `rtkit` |
+| display | `ddcutil` (DDC/CI external-monitor brightness; loads `i2c-dev`) |
 
 </details>
 
@@ -183,12 +185,12 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 Atomic write per file: `mktemp` in the destination parent → render via `tee` → symlink probe → `chmod` → `mv -T` (same-FS). The kernel cmdline goes to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`); root UUID prefix is taken from the `/` mount.
 
 <details open>
-<summary><b>Kernel cmdline</b> — 16 params</summary>
+<summary><b>Kernel cmdline</b> — 15 params</summary>
 
 | Category | Params |
 |---|---|
 | CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable`, `processor.max_cstate=1` |
-| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.gpu_recovery=1`, `amdgpu.ppfeaturemask=0xfff73fff` |
+| GPU/amdgpu | `amdgpu.cwsr_enable=0`, `amdgpu.ppfeaturemask=0xfff73fff` |
 | IOMMU/PCIe | `iommu=pt`, `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
@@ -226,7 +228,7 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 |---|---|
 | `MulticastDNS` | `resolve` |
 | `LLMNR` | `no` |
-| `DNSOverTLS` | `opportunistic` |
+| `DNSOverTLS` | `no` |
 | `DNSSEC` | `allow-downgrade` |
 
 </details>
@@ -300,6 +302,15 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 </details>
 
 <details open>
+<summary><b>cfg80211 regdom</b> — 1 option</summary>
+
+| Option | Value |
+|---|---|
+| `cfg80211 ieee80211_regdom` | `US` (mandatory; override `--country=XX`) |
+
+</details>
+
+<details open>
 <summary><b>RADV drirc</b> — 1 option</summary>
 
 | Option | Value |
@@ -323,7 +334,7 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units. The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.**
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply the wireless regdom (`iw reg set $COUNTRY`). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** The regulatory domain is mandatory (default `US`, override `--country=XX`), set the systemd-native way via `/etc/modprobe.d/ry-cfg80211-regdom.conf` (`options cfg80211 ieee80211_regdom`) — a tracked managed file, verified statically and at runtime (`iw reg get`).
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -379,10 +390,10 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Managed Files
 
-13 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from content embedded in the script, so the file on disk and the `--verify` target share one source.
+15 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from content embedded in the script, so the file on disk and the `--verify` target share one source.
 
 <details open>
-<summary><b>Destinations</b> — 13 paths</summary>
+<summary><b>Destinations</b> — 15 paths</summary>
 
 | Path | Mode |
 |---|---|
@@ -398,6 +409,8 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 | `/etc/sysctl.d/95-ry-overrides.conf` | `0644` |
 | `/etc/drirc.d/95-ry-radv-apu.conf` | `0644` |
 | `/etc/modprobe.d/ry-amdgpu-strixhalo.conf` | `0644` |
+| `/etc/modules-load.d/i2c-dev.conf` | `0644` |
+| `/etc/modprobe.d/ry-cfg80211-regdom.conf` | `0644` |
 | `~/.config/environment.d/10-environment.conf` | `0600` |
 
 </details>
@@ -496,6 +509,7 @@ Common failure modes. Boot problems recover from a live USB (`arch-chroot` + `mk
 | ntsync missing | kernel 6.14+ · `ls /dev/ntsync` |
 | `.ry-install.*` orphan | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, re-run |
 | PipeWire `nice-level` denied | `sudo usermod -aG realtime $USER`, re-login |
+| `ddcutil` permission denied | `sudo usermod -aG i2c $USER`, re-login (`i2c-dev` autoloads at boot) |
 | Kernel 6.19.0 black screen | `pacman -Syu` (≥6.19.1) ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
 | iwd edits not applied | `sudo systemctl try-restart iwd.service` |
 

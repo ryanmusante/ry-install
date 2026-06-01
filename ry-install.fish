@@ -1,14 +1,14 @@
 #!/usr/bin/env fish
-# ry-install v7.17.14 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.17 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.14"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.17"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 # RC_KVER_FAIL: internal _ry_check_kernel_version sentinel only (switch-consumed); never a process exit — kernel-floor fail surfaces as exit 1 via INSTALL_HAD_ERRORS.
 set -g RC_KVER_OK 0; set -g RC_KVER_FAIL 2
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 13
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 15
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONF /usr/lib/modules-load.d/10-ntsync.conf
 
@@ -32,6 +32,7 @@ function _ry_show_help --description "Display usage information and available su
         "  --                End of options" \
         "  -h, --help        Show this help" \
         "  -v, --version     Show version" \
+        "  --country=XX      Wireless regulatory domain (ISO-3166 alpha-2); opt-in, install only" \
         "  Note: -h/--help and -v/--version are honored before all checks (root guard, argparse)" \
         "EXIT CODES:" \
         "  0 ok · 1 verify-FAIL, install-error, or kernel <6.14 hard-floor fail · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
@@ -435,8 +436,7 @@ function _dc_kill_children --description "_do_cleanup sub. Release lock + reap c
         test "$_own" = true; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
     end
     if command -q pkill
-        # Skip the TERM→grace→KILL cycle (and its 0.5s sleep) when no children exist
-        # (clean-exit fast path). pgrep absent → unknown → fall through to full grace.
+        # Skip TERM→grace→KILL cycle (clean-exit fast path) when no children; pgrep absent → full grace.
         set -l _have_kids unknown
         command -q pgrep; and begin
             test (count (command pgrep -P "$fish_pid" 2>/dev/null)) -gt 0; and set _have_kids yes; or set _have_kids no
@@ -545,7 +545,9 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" \
     "/etc/drirc.d/95-ry-radv-apu.conf" \
-    "/etc/modprobe.d/ry-amdgpu-strixhalo.conf"
+    "/etc/modprobe.d/ry-amdgpu-strixhalo.conf" \
+    "/etc/modules-load.d/i2c-dev.conf" \
+    "/etc/modprobe.d/ry-cfg80211-regdom.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -g SERVICE_DESTINATIONS
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
@@ -557,7 +559,6 @@ set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
     amd_pstate=active \
     amdgpu.cwsr_enable=0 \
-    amdgpu.gpu_recovery=1 \
     amdgpu.ppfeaturemask=0xfff73fff \
     iommu=pt \
     nowatchdog \
@@ -585,7 +586,9 @@ set -g MKINITCPIO_HOOKS \
     fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
-set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT opportunistic; set -g RESOLVED_DNSSEC allow-downgrade
+set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade
+# COUNTRY: wireless regulatory domain (mandatory; default US, override with --country=XX).
+set -g COUNTRY US
 set -g LOGIND_IGNORE_KEYS \
     HandlePowerKey \
     HandlePowerKeyLongPress \
@@ -632,7 +635,10 @@ set -g PKGS_ADD \
     htop \
     git-delta \
     lm_sensors \
-    realtime-privileges
+    realtime-privileges \
+    rtkit \
+    ddcutil \
+    iw
 # Opt-in: append shelly to PKGS_DEL + bump invariant 7→8 (CachyOS Shelly pkg mgr).
 set -g PKGS_DEL \
     plymouth \
@@ -717,13 +723,13 @@ end
 # Refuse deploy on README/script count drift.
 function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants"
     set -l _expect \
-        KERNEL_PARAMS:16 \
+        KERNEL_PARAMS:15 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:10 \
         SYSCTL_VALUES:7 \
-        PKGS_ADD:13 \
+        PKGS_ADD:16 \
         PKGS_DEL:7 \
         MASK:11 \
         EXPECTED_VULKAN_PKGS:3 \
@@ -888,6 +894,16 @@ function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate conte
         '        </application>' \
         '    </device>' \
         '</driconf>'
+end
+
+# DDC/CI external-monitor brightness — autoload i2c-dev at boot (ddcutil).
+function _content__etc_modules-load.d_i2c-dev.conf --description "Generate content for /etc/modules-load.d/i2c-dev.conf"
+    printf '%s\n' "# ry-install: i2c-dev for ddcutil/DDC-CI (managed file, do not edit by hand)" "i2c-dev"
+end
+
+# Mandatory wireless regdom (systemd/modprobe-native) — content reads $COUNTRY (default US).
+function _content__etc_modprobe.d_ry-cfg80211-regdom.conf --description "Generate content for cfg80211 regdom modprobe.d drop-in"
+    printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "options cfg80211 ieee80211_regdom=$COUNTRY"
 end
 
 # Dynamic dispatch: fn name = _content_$(_tmpfile_key dst).
@@ -2250,8 +2266,11 @@ function _vss_sysctl --description "_verify_static_system sub: sysctl drop-in ke
     end
 end
 
-function _vss_modprobe --description "_verify_static_system sub: amdgpu/ttm modprobe.d"
-    _echo "── amdgpu modprobe ──"
+function _vss_modprobe --description "_verify_static_system sub: amdgpu/ttm + cfg80211 regdom modprobe.d"
+    _echo "── modprobe.d (amdgpu + cfg80211 regdom) ──"
+    if _chk_file /etc/modprobe.d/ry-cfg80211-regdom.conf
+        _chk_grep /etc/modprobe.d/ry-cfg80211-regdom.conf "ieee80211_regdom=$COUNTRY" "cfg80211 regdom=$COUNTRY"
+    end
     _chk_file /etc/modprobe.d/ry-amdgpu-strixhalo.conf; or return 0
     _chk_grep /etc/modprobe.d/ry-amdgpu-strixhalo.conf "pages_limit=$TTM_PAGES_LIMIT" "ttm pages_limit=$TTM_PAGES_LIMIT"
     _chk_grep /etc/modprobe.d/ry-amdgpu-strixhalo.conf "page_pool_size=$TTM_PAGE_POOL_SIZE" "ttm page_pool_size=$TTM_PAGE_POOL_SIZE"
@@ -3112,6 +3131,22 @@ function _vre_ntsync --description "Runtime env check: ntsync state via _ntsync_
     _echo
 end
 
+function _vre_regdom --description "Runtime env check: wireless regulatory domain via iw reg get"
+    _echo
+    _echo "── wireless regdom ──"
+    if not command -q iw
+        _info "regdom: iw(8) absent — cannot query (expected $COUNTRY)"
+        _echo
+        return 0
+    end
+    if command iw reg get 2>/dev/null | string match -qr -- "^country $COUNTRY"
+        _ok "regdom: country $COUNTRY active"
+    else
+        _warn "regdom: country $COUNTRY not active — sudo iw reg set $COUNTRY (persists via modprobe.d at next boot)"
+    end
+    _echo
+end
+
 function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KSM/ZRAM, fstab, ntsync runtime"
     _vre_envvars
     _vre_sysctl_runtime
@@ -3120,6 +3155,7 @@ function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KS
     _vre_zram
     _vre_fstab
     _vre_ntsync
+    _vre_regdom
 end
 
 # ── VERIFY-RUNTIME: SESSION + PERMS (file/dir perms, Vulkan, drirc, boot-perf) ────────────────────
@@ -4091,6 +4127,18 @@ function _configure_services_enable --description "Daemon-reload, batch-enable s
     return $_ret
 end
 
+# Opt-in wireless regdom: skipped unless --country=XX; advisory (never fails the run).
+# Mandatory wireless regdom: the modprobe.d file deploys via the registry; this applies it now (advisory).
+function _apply_wireless_regdom --description "Apply the wireless regulatory domain ($COUNTRY) at runtime"
+    if not command -q iw
+        _info "  wireless regdom: iw(8) absent — $COUNTRY applies at next boot via modprobe.d"
+        return 0
+    end
+    _info "  wireless regdom → $COUNTRY"
+    _run sudo -n iw reg set "$COUNTRY"; or _warn "iw reg set $COUNTRY failed — applies at next boot via modprobe.d"
+    return 0
+end
+
 function _install_configure_services --description "Enable, start, and configure systemd services (fstab opts + resolved + PKGS_DEL + mask + enable)"
     _progress Services
     _info "Post-installation tasks..."
@@ -4106,6 +4154,7 @@ function _install_configure_services --description "Enable, start, and configure
     _configure_services_pkg_remove
     _configure_services_mask; or set _ret 1
     _configure_services_enable; or set _ret 1
+    _apply_wireless_regdom
     return $_ret
 end
 
@@ -4600,6 +4649,13 @@ function _rdi_summary --description "Print final install summary"
             _info "       sudo usermod -aG realtime $_uname  (then log out and back in)"
         end
     end
+    if command -q pacman; and command pacman -Qq ddcutil >/dev/null 2>&1
+        set -l _u2 (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}')
+        if test -n "$_u2"; and not command id -Gn -- "$_u2" 2>/dev/null | string split ' ' | contains -- i2c
+            _info "  4. Add user to i2c group for ddcutil monitor control:"
+            _info "       sudo usermod -aG i2c $_u2  (then log out and back in)"
+        end
+    end
     _info "Post-reboot verification: ./ry-install.fish --verify"
     if test "$INSTALL_HAD_ERRORS" = true
         _warn "Done (with warnings - see above)"
@@ -4906,7 +4962,7 @@ _track_tmpfile "$_ap_errfile"
 argparse --name=(status basename) \
     --exclusive=verify,check,install-file \
     h/help v/version V/verbose \
-    verify check install-file= \
+    verify check install-file= country= \
     -- $argv 2>"$_ap_errfile"
 set -l _argparse_rc $status
 if test $_argparse_rc -ne 0
@@ -4929,6 +4985,10 @@ if set -q _flag_help; _ry_show_help; _pre_dispatch_exit $EXIT_OK; end
 if set -q _flag_version; echo "v$VERSION"; _pre_dispatch_exit $EXIT_OK; end
 set -q _flag_verify; and set -g MODE verify
 set -q _flag_check; and set -g MODE check
+if set -q _flag_country; and test -n "$_flag_country"
+    string match -qr '^[A-Za-z][A-Za-z]$' -- "$_flag_country"; or _early_usage_exit "--country must be an ISO-3166 alpha-2 code (e.g. US); got '$_flag_country'"
+    set -g COUNTRY (string upper -- "$_flag_country")
+end
 if set -q _flag_install_file
     set -g MODE install-file; set -l _if_val "$_flag_install_file"
     test -z "$_if_val"; and _early_usage_exit "--install-file requires a non-empty absolute path"

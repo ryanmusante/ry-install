@@ -5,7 +5,7 @@ set -g VERSION "7.17.17"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAG
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
-# RC_KVER_FAIL: internal _ry_check_kernel_version sentinel only (switch-consumed); never a process exit — kernel-floor fail surfaces as exit 1 via INSTALL_HAD_ERRORS.
+# RC_KVER_FAIL: internal _ry_check_kernel_version sentinel (switch-consumed), never a process exit; kernel-floor fail exits 1 via INSTALL_HAD_ERRORS.
 set -g RC_KVER_OK 0; set -g RC_KVER_FAIL 2
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 15
@@ -328,7 +328,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     set -l _fresh_rc $status
     test $_fresh_rc -eq 0; and return 0
     test $_fresh_rc -ne 2; and return 1
-    # Bounded stale-reclaim (re-check PID liveness each pass; peer winning post-rm mkdir race re-populates lock); PID-recycle race left to user.
+    # Bounded stale-reclaim: re-check PID liveness each pass (peer can re-win the post-rm mkdir race); PID-recycle race left to user.
     for _reclaim_attempt in 1 2 3
         set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
         string match -qr '^[1-9]\d*$' -- "$_stale_pid"; or return 1
@@ -4127,8 +4127,7 @@ function _configure_services_enable --description "Daemon-reload, batch-enable s
     return $_ret
 end
 
-# Opt-in wireless regdom: skipped unless --country=XX; advisory (never fails the run).
-# Mandatory wireless regdom: the modprobe.d file deploys via the registry; this applies it now (advisory).
+# Mandatory wireless regdom: modprobe.d file deploys via the registry; this applies it at runtime (advisory).
 function _apply_wireless_regdom --description "Apply the wireless regulatory domain ($COUNTRY) at runtime"
     if not command -q iw
         _info "  wireless regdom: iw(8) absent — $COUNTRY applies at next boot via modprobe.d"
@@ -4713,7 +4712,7 @@ set -g _RY_POST_HOOKS \
     "/etc/modprobe.d/*|modprobe" \
     "*.service|service"
 
-# First-match-wins by declaration order. The *.service|service tag is reserved for SERVICE_DESTINATIONS (wired throughout but currently empty; populate to deploy unit files).
+# First-match-wins by declaration order; *.service tag reserved for SERVICE_DESTINATIONS (wired, currently empty).
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"
     for _entry in $_RY_POST_HOOKS
         set -l _parts (string split -m1 '|' -- $_entry)

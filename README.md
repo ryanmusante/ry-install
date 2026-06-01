@@ -37,7 +37,7 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-Run as your normal user (root refused, sudo internal). Post-install: reboot, then `--verify`; a full run takes 3–8 minutes. Upgrading: re-run `./ry-install.fish` — idempotent, no migration steps.
+Run as your normal user (root refused, sudo internal). Post-install: reboot, then `--verify`; a full run takes 3–8 minutes. Upgrading: re-run `./ry-install.fish` — idempotent.
 
 ## Scope
 
@@ -101,7 +101,7 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 
 ## Run Summary
 
-Prints a CHECK/RESULT/EVIDENCE matrix (+ totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records every `PHASE_RESULT` plus a `MATRIX_RENDERED` event carrying the phase totals and verdict — these are the durable per-phase record once output scrolls away. The matrix verdict (from phase results) is what maps to the exit code; the JSONL `footer` line's `pass`/`fail`/`warn` are message-level tallies (every `_ok`/`_warn`/`_fail` emitted) and need not equal the phase-matrix counts.
+Prints a CHECK/RESULT/EVIDENCE matrix (+ totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records every `PHASE_RESULT` plus a `MATRIX_RENDERED` event — the durable per-phase record once output scrolls away. The matrix verdict maps to the exit code; the JSONL `footer` `pass`/`fail`/`warn` are message-level tallies and need not equal the phase-matrix counts.
 
 Per-phase result:
 
@@ -144,7 +144,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 | Vulkan/GL | `lib32-mesa` |
 | rust utilities | `fd`, `sd`, `dust`, `procs`, `bottom` |
 | perf | `realtime-privileges`, `rtkit` |
-| display | `ddcutil` (DDC/CI external-monitor brightness; loads `i2c-dev`) |
+| display | `ddcutil` (loads `i2c-dev`) |
 
 </details>
 
@@ -480,7 +480,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 ## Known Issues
 
-Hardware and software quirks on this platform. Most clear with a DKMS package or a newer kernel; MT7925 TX-power/deauth and Strix Halo ACP audio are upstream-pending with no local fix.
+Most clear with a DKMS package or a newer kernel; MT7925 TX-power/deauth and Strix Halo ACP audio are upstream-pending with no local fix.
 
 | Component | Issue | Workaround |
 |---|---|---|
@@ -497,7 +497,7 @@ Hardware and software quirks on this platform. Most clear with a DKMS package or
 
 ## Troubleshooting
 
-Common failure modes. Boot problems recover from a live USB (`arch-chroot` + `mkinitcpio -P` + `sdboot-manage`); config drift is fixable in place with `--install-file`.
+Boot problems recover from a live USB (`arch-chroot` + `mkinitcpio -P` + `sdboot-manage`); config drift is fixable in place with `--install-file`.
 
 | Problem | Fix |
 |---|---|

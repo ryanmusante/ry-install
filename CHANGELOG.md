@@ -3,55 +3,55 @@ ry-install ChangeLog
 Newest first; dates ISO-8601.
 
 7.17.17  2026-05-31
-- change: wireless regdom is now mandatory (default US) and set the systemd-native way — /etc/modprobe.d/ry-cfg80211-regdom.conf (options cfg80211 ieee80211_regdom), replacing the OpenRC /etc/conf.d/wireless-regdom file. It is now a tracked core managed file; managed-file count 14 -> 15.
-- feat: add static (modprobe.d content) and runtime (iw reg get) verification of the regulatory domain under --verify.
-- change: --country=XX now overrides the US default and is validated as ISO-3166 alpha-2 at argparse (an invalid value is a usage error); regdom always applies.
-- feat: add iw to PKGS_ADD for runtime regdom application and verification; PKGS_ADD 15 -> 16.
+- change: wireless regdom now mandatory (default US), set via /etc/modprobe.d/ry-cfg80211-regdom.conf (replaces OpenRC /etc/conf.d/wireless-regdom); now a tracked managed file. Managed-file count 14 -> 15.
+- feat: --verify now checks regdom statically (modprobe.d) and at runtime (iw reg get).
+- change: --country=XX overrides the US default, validated as ISO-3166 alpha-2 at argparse (invalid = usage error).
+- feat: add iw to PKGS_ADD (runtime regdom apply + verify); PKGS_ADD 15 -> 16.
 
 7.17.16  2026-05-31
-- feat: add ddcutil + rtkit to PKGS_ADD and ship /etc/modules-load.d/i2c-dev.conf (i2c-dev autoload at boot) for DDC/CI external-monitor brightness; managed-file count 13 -> 14, PKGS_ADD 13 -> 15.
-- feat: add opt-in --country=XX (ISO-3166 alpha-2) to set the wireless regulatory domain — writes /etc/conf.d/wireless-regdom and runs iw reg set; skipped when unset, advisory (never fails the run), and not tracked by --verify.
-- change: drop amdgpu.gpu_recovery=1 from the kernel cmdline (it set the TAINT_USER bit); KERNEL_PARAMS 16 -> 15. A stale cmdline still carrying it will read as drift until the boot entry is regenerated.
-- change: systemd-resolved DNSOverTLS opportunistic -> no, silencing the DoT-to-plaintext fallback log noise; single-source (no competing drop-in).
+- feat: add ddcutil + rtkit to PKGS_ADD; ship /etc/modules-load.d/i2c-dev.conf (i2c-dev autoload). Managed-file 13 -> 14, PKGS_ADD 13 -> 15.
+- feat: add opt-in --country=XX (ISO-3166 alpha-2) wireless regdom — writes /etc/conf.d/wireless-regdom + iw reg set; advisory, untracked.
+- change: drop amdgpu.gpu_recovery=1 from cmdline (set TAINT_USER); KERNEL_PARAMS 16 -> 15. Stale cmdline reads as drift until boot entry regenerated.
+- change: systemd-resolved DNSOverTLS opportunistic -> no (silences DoT-to-plaintext fallback log noise).
 
 7.17.15  2026-05-31
-- comment: condense the _dc_kill_children fast-path rationale from two lines to one (no functional change).
+- comment: condense _dc_kill_children fast-path rationale to one line.
 
 7.17.14  2026-05-31
-- fix: paru-absent is now advisory — WARN + continue (exit 0), matching the documented "not a hard gate / warns and continues" contract; was FAIL + INSTALL_HAD_ERRORS (exit 1).
-- fix: a *partial* AUR failure (some-but-not-all packages) is recorded WARN and no longer taints the run; only an all-packages-failed AUR step is FAIL (exit 1). Resolves the verdict↔exit desync where the matrix showed PASS-WITH-WARNINGS while the process exited 1.
-- fix: a batch AUR install that fails but fully recovers on per-package retry is now PASS, not a spurious "0/N (all failed)" FAIL.
-- fix: WARN-only service paths no longer set INSTALL_HAD_ERRORS — systemd-resolved restart, system + user daemon-reload, and iwd-package-absent at finalize. A run whose only anomalies are WARN now exits 0, consistent with the verdict table.
-- fix: PKGS_DEL removal records the actual removed count (was the requested count, overstating success on per-package failures); a pacman db.lck during removal is now recorded FAIL to match the taint it already set (was a misleading PASS/N-A row).
-- docs: README Run Summary — verdict table gains an Exit column and notes the two preflight-stage exits (hard-requirement abort = 3, kernel < 6.14 floor = 1) that bypass it; clarify the JSONL footer pass/fail/warn are message-level tallies while the matrix verdict + PHASE_RESULT/MATRIX_RENDERED events are the authoritative per-phase record; Phase 2 now spells out the advisory AUR-failure semantics.
+- fix: paru-absent now advisory — WARN + continue (exit 0); was FAIL (exit 1).
+- fix: partial AUR failure now WARN (no taint); only all-packages-failed is FAIL (exit 1). Resolves verdict↔exit desync.
+- fix: batch AUR failure that recovers on per-package retry is now PASS, not a spurious FAIL.
+- fix: WARN-only service paths (resolved restart, daemon-reload, iwd-absent at finalize) no longer set INSTALL_HAD_ERRORS — WARN-only runs exit 0.
+- fix: PKGS_DEL removal records actual removed count (was requested count); db.lck during removal now FAIL (was a misleading PASS/N-A).
+- docs: README Run Summary — verdict table gains Exit column + the two bypassing preflight exits (abort = 3, kernel-floor = 1); clarify footer tallies vs matrix verdict; Phase 2 spells out advisory AUR semantics.
 
 7.17.13  2026-05-31
-- harden: _acquire_lock stale-reclaim retries up to 3x — a peer that wins the post-rm mkdir race re-populates the lock, and each pass re-checks PID liveness before reclaiming (was a single attempt that could return EXIT_LOCK while the lock was actually free).
-- fix: _awf_postwrite_verify_restore logs a WARN (+ JSONL POSTWRITE_VERIFY_SKIP) when the byte re-verify is skipped because the content-generator re-run or the installed-bytes read failed (e.g. transient sudo lapse) on a backup-target file; was a silent return 0.
-- docs: README Prerequisites adds a kernel-version map note consolidating the >=6.14 floor, >=6.18.4 gfx1151 rec, >=6.16 ROCm, and >=6.19.1 regression-fix references.
-- docs: --help notes that -h/--help and -v/--version are honored before all checks (root guard + argparse).
+- harden: _acquire_lock stale-reclaim retries up to 3x, re-checking PID liveness each pass (was single-attempt, could return EXIT_LOCK on a free lock).
+- fix: _awf_postwrite_verify_restore logs WARN (+ JSONL POSTWRITE_VERIFY_SKIP) when byte re-verify is skipped (generator re-run or installed-bytes read failed); was a silent return 0.
+- docs: README Prerequisites adds a kernel-version map (>=6.14 floor, >=6.18.4 gfx1151, >=6.16 ROCm, >=6.19.1 regression-fix).
+- docs: --help notes -h/--help and -v/--version are honored before all checks.
 
 7.17.12  2026-05-31
-- perf: _dc_kill_children probes for child PIDs (pgrep -P) before the TERM→0.5s-grace→KILL cycle; clean exits with no children skip the grace entirely (pgrep absent still runs the full cycle).
-- cleanup: drop the unreachable systemd-tmpfiles.d scaffolding (_post_tmpfiles, _grep_tmpfiles_entry, the */tmpfiles.d/* dispatch + post-hook tag); no tmpfiles.d destination is managed, so it was never reachable. _RY_POST_HOOKS 16 -> 15; post-hook handlers 11 -> 10.
-- harden: _resolve_esp / _resolve_boot_path try a non-sudo test -d on candidate paths before the sudo probe, so a readable vfat ESP is not misclassified to the /boot fallback on a sudo-cache lapse.
-- cleanup: _dc_erase_globals also erases _RY_FSTAB_NEEDS_CHANGE, _RY_FSTAB_COMMIT_OVERRIDES, _RY_SYSCTL_BAD_ENTRIES (already cleared inline; defence-in-depth across modes).
-- comment: note the *.service post-hook tag is reserved for SERVICE_DESTINATIONS (wired but currently empty); note RC_KVER_FAIL is an internal switch sentinel, never a process exit.
+- perf: _dc_kill_children probes child PIDs (pgrep -P) before TERM→grace→KILL; no-children exits skip the grace (pgrep absent runs full cycle).
+- cleanup: drop unreachable tmpfiles.d scaffolding (_post_tmpfiles, _grep_tmpfiles_entry, */tmpfiles.d/* dispatch + tag); no tmpfiles.d destination managed. _RY_POST_HOOKS 16 -> 15; handlers 11 -> 10.
+- harden: _resolve_esp / _resolve_boot_path try non-sudo test -d before the sudo probe, so a readable vfat ESP isn't misclassified to /boot on a sudo-cache lapse.
+- cleanup: _dc_erase_globals also erases _RY_FSTAB_NEEDS_CHANGE, _RY_FSTAB_COMMIT_OVERRIDES, _RY_SYSCTL_BAD_ENTRIES (defence-in-depth).
+- comment: note *.service tag reserved for SERVICE_DESTINATIONS (wired, empty); RC_KVER_FAIL is an internal sentinel, never a process exit.
 
 7.17.11  2026-05-31
-- fix: force-print the boot-critical "DO NOT REBOOT" banner + recovery to stderr+JSONL in the default QUIET install (was dropped by the QUIET gate); --install-file unaffected.
-- fix: verify sudo-cache bail is now symmetric across static/runtime arms (both via _err_loud, no VERIFY_FAIL bump); exit 3 unchanged.
-- fix: drop a stray JSONL-only _phase_record in _vrsv_wifi (verify renders no matrix; the _info already logs the skip).
-- harden: in _atomic_write_file, write .ry.bak only after render + symlink-probe (the commit point), so a render failure leaves no stale backup.
+- fix: force-print boot-critical "DO NOT REBOOT" banner + recovery to stderr+JSONL in QUIET install (was dropped by the QUIET gate); --install-file unaffected.
+- fix: verify sudo-cache bail now symmetric across static/runtime arms (both via _err_loud, no VERIFY_FAIL bump); exit 3 unchanged.
+- fix: drop a stray JSONL-only _phase_record in _vrsv_wifi (verify renders no matrix).
+- harden: _atomic_write_file writes .ry.bak only after render + symlink-probe (commit point); render failure leaves no stale backup.
 - comment: note _awf_postwrite_verify_restore re-invokes the generator, so _RY_BACKUP_TARGETS must stay side-effect-free.
 - docs: README Prerequisites — disambiguate kernel-floor wording (exit 1 at end, still rebuilds) from the boot-rebuild taint.
 
 7.17.10  2026-05-31
-- fix: add ry-tee-err.* to the _do_cleanup filesystem-sweep globs so a signal during a Phase 3 write can't orphan the tee stderr tmpfile (normal path already removed it).
+- fix: add ry-tee-err.* to _do_cleanup fs-sweep globs so a signal during a Phase 3 write can't orphan the tee stderr tmpfile.
 - comment: condense three rationale comments (lock-ownership, fish-math ms scaling, post-hook precedence) to single lines.
 
 7.17.9  2026-05-31
-- fix: count an installed-bytes string-collect failure once in _verify_static_checksum (now pairs with _fail_no_count); verdict was never affected.
+- fix: count an installed-bytes string-collect failure once in _verify_static_checksum; verdict was never affected.
 - harden: make systemd >= 250 a true hard gate — refuse when systemctl --version is unparseable.
 - harden: allocate the _run overflow-spill filename via mktemp --suffix=.log (drops the /dev/urandom-suffix path).
 

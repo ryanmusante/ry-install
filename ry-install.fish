@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.17.22 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.17.25 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.22"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.17.25"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -390,8 +390,7 @@ end
 
 function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for leftover ry-* tmpfiles"
     functions -q _tmp_dir; or return 0
-    set -l _tmpdir (_tmp_dir)
-    set -l _tmp_globs \
+    set -l _tmpdir (_tmp_dir); set -l _tmp_globs \
         'ry-sudo-err.*' \
         'ry-tee-err.*' \
         'ry-run.*' \
@@ -733,7 +732,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         EXPECTED_VULKAN_PKGS:3 \
         EXPECTED_SERVICES:3 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:16 \
+        _RY_POST_HOOKS:17 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         AUR_PKGS:1
     for _kv in $_expect
@@ -795,7 +794,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
 end
 
-# ── CONTENT GENERATORS (15; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
+# ── CONTENT GENERATORS (16; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -3195,10 +3194,17 @@ function _vrs_installed_file_perms --description "Runtime session check: install
     set -l _boot_fstype (command findmnt -n -o FSTYPE "$_boot_resolved" 2>/dev/null | string trim --)
     for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
         if sudo -n test -f "$dst" 2>/dev/null
-            if string match -q '/boot/*' -- "$dst"; and test "$_boot_fstype" = vfat
-                set perm_vfat_skipped (math $perm_vfat_skipped + 1)
-                _info "  $dst: skipped (vfat — unix perms synthesized from mount options, not stored)"
-                continue
+            if string match -q '/boot/*' -- "$dst"
+                # Per-file fstype (the file's own mount); fall back to the $BOOT fstype.
+                set -l _dst_fstype (command findmnt -n -o FSTYPE --target "$dst" 2>/dev/null | string trim --)
+                test -z "$_dst_fstype"; and set _dst_fstype "$_boot_fstype"
+                if test "$_dst_fstype" = vfat; or test -z "$_dst_fstype"
+                    set perm_vfat_skipped (math $perm_vfat_skipped + 1)
+                    set -l _why "vfat — unix perms synthesized from mount options, not stored"
+                    test "$_dst_fstype" = vfat; or set _why "boot fstype undetermined — perm check skipped (vfat-safe default)"
+                    _info "  $dst: skipped ($_why)"
+                    continue
+                end
             end
             set perm_checked (math $perm_checked + 1)
             _chk_perms "$dst" 644 root:root true; or set perm_bad (math $perm_bad + 1)
@@ -3218,7 +3224,7 @@ function _vrs_installed_file_perms --description "Runtime session check: install
     else if test $perm_checked -eq 0
         _warn "  No installed files found to check"
     end
-    test $perm_vfat_skipped -gt 0; and _info "  $perm_vfat_skipped file(s) skipped on vfat boot partition (unix perms synthesized from mount options)"
+    test $perm_vfat_skipped -gt 0; and _info "  $perm_vfat_skipped file(s) skipped on boot partition (vfat or undetermined fstype — unix perms not verifiable)"
 end
 
 function _vrs_parent_dirs --description "Runtime session check: parent dirs of managed files"
@@ -3780,7 +3786,7 @@ end
 # Idempotent: comments / non-ext4 / digits-only $4 / conformant ext4 pass through.
 function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk script for ext4 mount-opt rewrite"
     string join -- \n \
-        'BEGIN { OFS = " " }' \
+        'BEGIN { OFS = "\t" }' \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
         '$3 != "ext4" { print; next }' \
         '$4 ~ /^[0-9]+$/ { print; next }' \
@@ -4684,6 +4690,7 @@ set -g _RY_POST_HOOKS \
     "/etc/default/cpupower-service.conf|cpupower" \
     "/etc/drirc.d/*|drirc" \
     "/etc/modprobe.d/*|modprobe" \
+    "/etc/modules-load.d/*|modload" \
     "/etc/udev/rules.d/*|udev" \
     "*.service|service"
 
@@ -4739,7 +4746,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (11, _post_<tag> dynamic dispatch) ─────────────────────────
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (12, _post_<tag> dynamic dispatch) ─────────────────────────
 function _pb_rebuild_cascade --argument-names target --description "_post_boot sub. mkinitcpio -P + sdboot-manage cascade"
     if not _run sudo -n mkinitcpio -P; _err "Mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     if test "$SDBOOT_REMOVE_EXISTING" = yes
@@ -4901,6 +4908,22 @@ function _post_modprobe --argument-names target --description "Post-hook: rebuil
         return 1
     end
     return 0
+end
+
+# modules-load.d read by systemd-modules-load.service at boot; modprobe applies the listed modules now.
+function _post_modload --argument-names target --description "Post-hook: modprobe modules listed in /etc/modules-load.d/* (immediate load)"
+    _echo
+    if not command -q modprobe
+        _warn "modprobe(8) not found — modules load at next boot via systemd-modules-load.service"
+        return 0
+    end
+    set -l _mods (_ry_get_file_content "$target" 2>/dev/null | string match -rv -- '^\s*([#;]|$)' | string trim --)
+    if test (count $_mods) -eq 0; _info "modules-load.d $target changed — no module-name lines to load"; return 0; end
+    set -l _rc 0
+    for _m in $_mods
+        if not _run sudo -n modprobe -- "$_m"; _warn "modprobe $_m failed — loads at next boot via systemd-modules-load.service"; set _rc 1; end
+    end
+    return $_rc
 end
 
 function _post_udev --argument-names target --description "Post-hook: reload udev rules + retrigger block devices after /etc/udev/rules.d/* change"

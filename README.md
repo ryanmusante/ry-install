@@ -98,7 +98,7 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 
 ## Run Summary
 
-Prints a CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records each `PHASE_RESULT` plus a `MATRIX_RENDERED` event — the durable per-phase record once output scrolls away. The matrix verdict maps to the exit code; the JSONL `footer` `pass`/`fail`/`warn` are message-level tallies, not the phase counts.
+Prints a CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records each `PHASE_RESULT` plus a `MATRIX_RENDERED` event — the durable per-phase record. The matrix verdict maps to the exit code; the JSONL `footer` `pass`/`fail`/`warn` are message-level tallies, not phase counts.
 
 Per-phase result:
 
@@ -343,7 +343,7 @@ NVMe has native multiqueue, so a kernel scheduler is pure overhead; `none` is al
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply regdom (`iw reg set $COUNTRY`). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** Regdom is mandatory (default `US`, `--country=XX`), written to `/etc/iw-regdomain` (`COUNTRY=`) and consumed by CachyOS `cachyos-iw-set-regdomain.{service,path}` (`iw reg set` at device add); tracked and verified statically + at runtime (`iw reg get`).
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply regdom (`iw reg set $COUNTRY`). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** Regdom (mandatory; default `US`, `--country=XX`) is tracked and verified statically and at runtime (`iw reg get`).
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -426,7 +426,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Safety & Reliability
 
-Atomic writes and a gated Phase 5 rebuild mean a failed package or boot-config step can't leave a broken boot entry; `loader.conf` and `mkinitcpio.conf` get a `.ry.bak` before overwrite. `/etc/fstab` is the exception — rewritten with no automatic backup, so snapshot it first.
+Atomic writes and a gated Phase 5 rebuild mean a failed package or boot-config step can't leave a broken boot entry. `/etc/fstab` is the exception — rewritten with no automatic backup, so snapshot it first.
 
 | Feature | Detail |
 |---|---|

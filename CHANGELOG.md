@@ -11,7 +11,7 @@ Newest first; dates ISO-8601 (YYYY-MM-DD).
 7.19.0  2026-06-02
 - pkgs: drop iw, rtkit from PKGS_ADD (CachyOS defaults); 16 -> 14.
 - files: drop /etc/modules-load.d/i2c-dev.conf and its machinery (ddcutil ships it); managed-file 16 -> 15.
-- change: wireless regdom -> /etc/iw-regdomain (COUNTRY=), consumed by cachyos-iw-set-regdomain; old modprobe value was overridden.
+- change: wireless regdom -> /etc/iw-regdomain (COUNTRY=), consumed by cachyos-iw-set-regdomain; supersedes prior modprobe value.
 - fix: ntsync autoload verify scans candidate confs; ends spurious WARN. --verify only.
 
 7.18.0  2026-06-01
@@ -63,7 +63,7 @@ Newest first; dates ISO-8601 (YYYY-MM-DD).
 - docs: exit-code table notes code 1 covers general install FAIL.
 
 7.17.18  2026-05-31
-- fix: route modules-load.d/i2c-dev.conf to the bare-module validator (was aborting at exit 3). Regression from 7.17.16.
+- fix: route modules-load.d/i2c-dev.conf to the bare-module validator (was aborting at exit 3; regression from 7.17.16).
 - docs: content-generator count 13 -> 15.
 
 7.17.17  2026-05-31

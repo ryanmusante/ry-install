@@ -1,14 +1,14 @@
 #!/usr/bin/env fish
-# ry-install v7.19.4 (2026-06-02) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.5 (2026-06-02) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 15
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-# ntsync autoload providers — cachyos-settings ships ntsync.conf; wine-cachyos 10-ntsync.conf; /etc for user override.
+# ntsync autoload providers — cachyos-settings ntsync.conf; wine-cachyos 10-ntsync.conf; /etc override.
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf
 
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -296,7 +296,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     set -l _fresh_rc $status
     test $_fresh_rc -eq 0; and return 0
     test $_fresh_rc -ne 2; and return 1
-    # Bounded stale-reclaim: re-check PID liveness per pass (peer may re-win post-rm mkdir); PID-recycle left to user.
+    # Bounded stale-reclaim: re-check PID liveness per pass; PID-recycle left to user.
     for _reclaim_attempt in 1 2 3
         set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
         string match -qr '^[1-9]\d*$' -- "$_stale_pid"; or return 1
@@ -403,7 +403,7 @@ function _dc_kill_children --description "_do_cleanup sub. Release lock + reap c
         test "$_own" = true; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
     end
     if command -q pkill
-        # Skip TERM→grace→KILL cycle (clean-exit fast path) when no children; pgrep absent → full grace.
+        # Skip TERM→grace→KILL when no children (fast path); pgrep absent → full grace.
         set -l _have_kids unknown
         command -q pgrep; and begin
             test (count (command pgrep -P "$fish_pid" 2>/dev/null)) -gt 0; and set _have_kids yes; or set _have_kids no
@@ -698,7 +698,10 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         _RY_PKG_MANAGED_SERVICES:1 \
         _RY_POST_HOOKS:16 \
         _RY_BOOT_CRITICAL_DSTS:4 \
-        AUR_PKGS:1
+        AUR_PKGS:1 \
+        _RY_PHASE_NAMES:6 \
+        _RY_BACKUP_TARGETS:2 \
+        _RY_NTSYNC_MODLOAD_CONFS:3
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — README/script desync, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -822,7 +825,7 @@ function _content__etc_default_cpupower-service.conf --description "Generate con
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
 end
 
-# Side-effect: malformed entries → global _RY_SYSCTL_BAD_ENTRIES; count mismatch → EXIT_GEN_SYSCTL.
+# Malformed entries → _RY_SYSCTL_BAD_ENTRIES; count mismatch → EXIT_GEN_SYSCTL.
 function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
     printf '%s\n' "# ry-install sysctl tunables (priority 95 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
@@ -857,12 +860,12 @@ function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate conte
         '</driconf>'
 end
 
-# Mandatory wireless regdom — cachyos-iw-set-regdomain {service,path} runs `iw reg set $COUNTRY` at device add.
+# Mandatory wireless regdom — cachyos-iw-set-regdomain runs `iw reg set $COUNTRY` at device add.
 function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
 end
 
-# NVMe scheduler none — native multiqueue, scheduler is overhead; ENV{DEVTYPE}==disk guard avoids partition errors.
+# NVMe scheduler none — native multiqueue; ENV{DEVTYPE}==disk guard avoids partition errors.
 function _content__etc_udev_rules.d_60-ry-ioschedulers.rules --description "Generate content for NVMe I/O scheduler udev rule (none)"
     printf '%s\n' \
         "# ry-install: NVMe I/O scheduler none (managed file, do not edit by hand)" \
@@ -922,7 +925,7 @@ end
 # ── TMPFILE TRACKING + KEY DERIVATION ─────────────────────────────────────────────────────────────
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path"
     set -l p $path
-    # Literal HOME-prefix match (string sub, not glob): glob metachars in HOME must not misroute the key.
+    # Literal HOME-prefix match (not glob): glob metachars in HOME must not misroute the key.
     set -l _hlen (string length -- "$HOME")
     if test "$p" = "$HOME"
         set p HOME
@@ -1946,7 +1949,7 @@ function _awf_make_backup --argument-names dst use_sudo --description "Create <d
     return 0
 end
 
-# Re-invokes the generator — keep _RY_BACKUP_TARGETS side-effect-free (loader.conf/mkinitcpio.conf).
+# Re-invokes generator — keep _RY_BACKUP_TARGETS side-effect-free (loader.conf/mkinitcpio.conf).
 function _awf_postwrite_verify_restore --argument-names dst use_sudo --description "Re-read installed bytes vs expected; restore .ry.bak on mismatch"
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"; set -l _expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _gen_ps $pipestatus
     if test "$_gen_ps[1]" -ne 0; _warn "  $dst: post-write verify skipped (content generator re-run rc=$_gen_ps[1])"; _log "POSTWRITE_VERIFY_SKIP: dst=$dst reason=gen_rerun rc=$_gen_ps[1]"; return 0; end
@@ -1982,7 +1985,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     if test -z "$tmpfile"; _fail "→ $dst (mktemp failed)"; return 1; end
     if not _awf_render_to_tmp "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
     if not _awf_symlink_check "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
-    # Back up only after render + symlink-probe (commit point); render failure leaves no stale .ry.bak.
+    # Back up only after render + symlink-probe; render failure leaves no stale .ry.bak.
     test "$_is_bt" = true; and _awf_make_backup "$dst" $use_sudo
     _awf_finalize_mv "$dst" "$tmpfile" $use_sudo "$perms"
     set -l _fin_rc $status
@@ -2349,7 +2352,7 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
 end
 
 # ── VERIFY-STATIC: CHECKSUM + DRIVER (SHA256 match + _ry_verify_static) ───────────────────────────
-# Authoritative signal = generator rc (pipestatus[1]) + value compare; collect rc 1 on empty output is not a failure.
+# Signal = generator rc (pipestatus[1]) + value compare; collect rc 1 on empty output not a failure.
 function _vsc_check_one --argument-names dst --description "_verify_static_checksum sub. Compare one destination's expected vs installed bytes"
     set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _gen_rc $pipestatus[1]
@@ -2489,13 +2492,13 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
     return 0
 end
 
-# Silent-probe: no stdout/stderr; ERR_NO_DATA probe → EXIT_PREFLIGHT unless drift already confirmed (then EXIT_DRIFT).
+# Silent-probe: no stdout/stderr; ERR_NO_DATA → EXIT_PREFLIGHT unless drift confirmed (then EXIT_DRIFT).
 function _ry_do_check --description "Silent idempotency probe"
     _log_section "CHECK START"
     if not command -q sudo; or not sudo -n true 2>/dev/null; _log "CHECK_PREFLIGHT: sudo not cached"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
     if not command -q systemctl; _log "CHECK_PREFLIGHT: systemctl not available"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
     set -g _RY_CHECK_DRIFT 0; set -g _RY_CHECK_FILES_CHECKED 0; set -l _rc 0
-    # Dispatch; non-zero phase return = cannot probe; confirmed drift survives a later probe-fail as EXIT_DRIFT.
+    # Non-zero phase return = cannot probe; confirmed drift survives later probe-fail as EXIT_DRIFT.
     for _phase in _check_phase_files _check_phase_cmdline _check_phase_units
         $_phase
         set _rc $status
@@ -3266,7 +3269,7 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
     set -l _ok $VERIFY_OK; set -l _fail $VERIFY_FAIL; set -l _warn $VERIFY_WARN; set -l _gen $VERIFY_GEN_FAIL
     _ry_verify_runtime; set -l _rc_r $status
     if test $_rc_r -eq $EXIT_PREFLIGHT
-        # Runtime arm bailed at sudo-cache; VERIFY_* hold static totals — restore to avoid a doubled footer count.
+        # Runtime arm bailed at sudo-cache; restore VERIFY_* static totals to avoid doubled footer count.
         set -g VERIFY_OK $_ok; set -g VERIFY_FAIL $_fail; set -g VERIFY_WARN $_warn; set -g VERIFY_GEN_FAIL $_gen
         return $_rc_r
     end
@@ -4000,7 +4003,7 @@ function _configure_services_enable --description "Daemon-reload, batch-enable s
     return $_ret
 end
 
-# Mandatory wireless regdom: /etc/iw-regdomain deploys via registry (cachyos-iw-set-regdomain consumes it); apply now.
+# Mandatory wireless regdom: /etc/iw-regdomain deploys via registry; apply now.
 function _apply_wireless_regdom --description "Apply the wireless regulatory domain ($COUNTRY) at runtime"
     if not command -q iw
         _info "  wireless regdom: iw(8) absent — $COUNTRY applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
@@ -4481,7 +4484,7 @@ function _rdi_summary --description "Print final install summary"
     _rdi_render_matrix
     set -q _RY_AUR_PARTIAL; and test "$_RY_AUR_PARTIAL" = true; and _warn "AUR phase completed with partial success — some packages failed (see JSONL log)"
     if set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true
-        # Boot-critical guidance must reach the user even in QUIET: force-print to stderr + JSONL.
+        # Boot-critical guidance reaches user even in QUIET: force-print to stderr + JSONL.
         _msg_print --force ERR "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
         _log "ERR: DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
         for _bcl in \
@@ -4755,7 +4758,7 @@ function _post_modprobe --argument-names target --description "Post-hook: rebuil
     return 0
 end
 
-# /etc/iw-regdomain consumed by cachyos-iw-set-regdomain (iw reg set at device add); apply it now too.
+# /etc/iw-regdomain consumed by cachyos-iw-set-regdomain; apply it now too.
 function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"
     _echo
     _apply_wireless_regdom

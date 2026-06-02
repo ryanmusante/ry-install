@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.19.4-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.19.5-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 ![license](https://img.shields.io/badge/license-MIT-green.svg)
@@ -44,7 +44,7 @@ Run as your normal user (root refused; sudo internal). Reboot after install, the
 
 ## Prerequisites
 
-Hard requirements (sudo cache, systemd ≥ 250, GNU coreutils, free disk, network, config validity) abort read-only in preflight (exit 3); retry after fixing the cause. paru and NTP sync only warn.
+Hard requirements (sudo cache, systemd ≥ 250, GNU coreutils, free disk, network, config validity) abort read-only in preflight (exit 3); retry after fixing. paru and NTP sync only warn.
 
 | Requirement | Minimum |
 |---|---|
@@ -98,7 +98,7 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 
 ## Run Summary
 
-Prints a CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records each `PHASE_RESULT` plus a `MATRIX_RENDERED` event — the durable per-phase record. The matrix verdict maps to the exit code.
+Prints a CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records each `PHASE_RESULT` plus a `MATRIX_RENDERED` event. The verdict maps to the exit code.
 
 Per-phase result:
 
@@ -129,7 +129,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 ### Phase 2 — Packages
 
-`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added); their iwd/NetworkManager configs still deploy. AUR is advisory: a missing `paru` or a *partial* failure is `WARN` (exit `0`); only an all-package AUR failure is `FAIL` (exit `1`). A `pacman -Syu` failure taints the run and skips the Phase 5 rebuild.
+`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added); their iwd/NetworkManager configs still deploy. AUR is advisory: missing `paru` or a *partial* failure is `WARN` (exit `0`); only an all-package AUR failure is `FAIL` (exit `1`).
 
 <details open>
 <summary><b>Packages — install</b> — 14 pkgs</summary>
@@ -304,7 +304,7 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 
 | Key | Value |
 |---|---|
-| `COUNTRY` | `US` (`/etc/iw-regdomain`; consumed by CachyOS `cachyos-iw-set-regdomain`; mandatory, override `--country=XX`) |
+| `COUNTRY` | `US` (`/etc/iw-regdomain`; mandatory, override `--country=XX`) |
 
 </details>
 
@@ -343,7 +343,7 @@ NVMe has native multiqueue, so a scheduler is pure overhead; `none` is the upstr
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply regdom (`iw reg set $COUNTRY`, or via `/etc/iw-regdomain` when `iw` is absent). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** Regdom (mandatory; default `US`, `--country=XX`) is verified statically and at runtime (`iw reg get`).
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply regdom (`iw reg set $COUNTRY`, or `/etc/iw-regdomain` when `iw` absent). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** Regdom is verified statically and at runtime (`iw reg get`).
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -386,7 +386,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 | `fstrim.timer` | weekly TRIM |
 | `NetworkManager.service` | deduped via `_RY_PKG_MANAGED_SERVICES` |
 | `cpupower.service` | oneshot — `active`/`exited` |
-| `NetworkManager-dispatcher.service` | opportunistic — enabled only if already installed; not in `EXPECTED_SERVICES` (unverified) |
+| `NetworkManager-dispatcher.service` | opportunistic — enabled only if installed; not in `EXPECTED_SERVICES` |
 
 </details>
 

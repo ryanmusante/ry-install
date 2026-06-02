@@ -3,6 +3,14 @@ ry-install changelog
 
 Newest first; ISO-8601 dates.
 
+7.19.3  2026-06-02
+- cmdline: amdgpu.ppfeaturemask 0xffffffff -> 0xfff73fff (reverts the 7.x value bump; clears bits 15+19); KERNEL_PARAMS stays 13. Propagates to /etc/kernel/cmdline + sdboot LINUX_OPTIONS; static + runtime verify derive expected value from KERNEL_PARAMS (no hardcode).
+
+7.19.2  2026-06-02
+- cleanup: remove dead SERVICE_DESTINATIONS subsystem (declared empty, never populated) and all remnants -- the *.service post-hook entry + _post_service handler, the _rvc_dispatch *.service validation arm, the orphaned _verify_unit_syntax / _verify_unit_content validators, and the verify-static + Phase 3 service-file branches; _RY_POST_HOOKS 17 -> 16. No behavioral change (paths were unreachable).
+- docs(comment): preflight-gates banner dropped stale "KERNEL VERSION" (floor removed in 7.18.0); now reads DEPS + NETWORK + DISK + SYSTEMD.
+- docs(README): note wireless regdom falls back to /etc/iw-regdomain when iw(8) is absent; list NetworkManager-dispatcher.service as opportunistic (enabled only if installed, not in EXPECTED_SERVICES, unverified).
+
 7.19.1  2026-06-02
 - cmdline: iommu=pt -> amd_iommu=off; KERNEL_PARAMS stays 13.
 - docs: install-flow file count 16 -> 15; --help notes --country=XX honored in all modes.

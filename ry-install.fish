@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.1 (2026-06-02) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.3 (2026-06-02) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -219,28 +219,6 @@ function _unit_state_padded --argument-names unit --description "Return _unit_st
     end
 end
 
-# Scope: explicit user/system arg wins; else .config/systemd/user/ path match.
-function _verify_unit_syntax --argument-names unit_path label intended_scope --description "Verify unit syntax via systemd-analyze"
-    set -l _scope_label auto
-    test -n "$intended_scope"; and set _scope_label $intended_scope
-    _log "VERIFY_UNIT: $label ($unit_path) scope=$_scope_label"
-    command -q systemd-analyze; or begin
-        _warn "  systemd-analyze not available — skipping $label"
-        return 0
-    end
-    set -l user_flag
-    if test "$intended_scope" = user
-        set user_flag --user
-    else if test "$intended_scope" != system
-        string match -q '*/.config/systemd/user/*' -- "$unit_path"; and set user_flag --user
-    end
-    set -l _err_out (command systemd-analyze $user_flag verify "$unit_path" 2>&1)
-    if test $status -eq 0; test -n "$_err_out"; and _log "VERIFY_UNIT_WARN: ($label) "(printf '%s\n' $_err_out | command head -n 5 | string join -- '; '); _ok "  $label: syntax OK"; return 0; end
-    _log "VERIFY_UNIT_ERR: ($label) "(printf '%s\n' $_err_out | command head -n 5 | string join -- '; ')
-    _fail "  $label: INVALID SYNTAX"
-    return 1
-end
-
 # ── JSONL FOOTER + TMPFILE CLEANUP ────────────────────────────────────────────────────────────────
 function _write_footer --argument-names exit_code extra_key --description "Append JSONL footer to LOG_FILE"
     set -q _FOOTER_WRITTEN; and return 0
@@ -398,7 +376,7 @@ end
 function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _KCONFIG_DATA _KCONFIG_LOADED _RY_ESP_PATH _RY_BOOT_PATH
     set --erase _RY_ESP_TRIED _RY_BOOT_TRIED
-    set --erase _RY_SYSTEMD_VER _RY_SYSTEMD_VER_TRIED _RY_DEPLOYED_SERVICES
+    set --erase _RY_SYSTEMD_VER _RY_SYSTEMD_VER_TRIED
     set --erase _RY_BOOT_COUNT _RY_BOOT_ENUM_OK _CPU_PATH
     set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
     set --erase _PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_PACMAN_REVERT_ATTEMPTED
@@ -538,8 +516,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/iw-regdomain" \
     "/etc/udev/rules.d/60-ry-ioschedulers.rules"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
-set -g SERVICE_DESTINATIONS
-set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS)
+set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
@@ -548,7 +525,7 @@ set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
     amd_iommu=off \
     amd_pstate=active \
-    amdgpu.ppfeaturemask=0xffffffff \
+    amdgpu.ppfeaturemask=0xfff73fff \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
     pcie_aspm.policy=performance \
@@ -687,7 +664,7 @@ end
 # Canon-list index aligns with source-list for _idf_use_sudo_for_dst; drift refused.
 function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend / canonical-dst caches"
     set -g _SYS_TMP_DIRS
-    for _d in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS; set -l _dir (command dirname -- "$_d"); contains -- "$_dir" $_SYS_TMP_DIRS; or set -a _SYS_TMP_DIRS "$_dir"; end
+    for _d in $SYSTEM_DESTINATIONS; set -l _dir (command dirname -- "$_d"); contains -- "$_dir" $_SYS_TMP_DIRS; or set -a _SYS_TMP_DIRS "$_dir"; end
     set -g _USR_TMP_DIRS
     for _d in $USER_DESTINATIONS; set -l _dir (command dirname -- "$_d"); contains -- "$_dir" $_USR_TMP_DIRS; or set -a _USR_TMP_DIRS "$_dir"; end
     set -g _PROFILE_USES_WIFI_BACKEND false
@@ -695,10 +672,10 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
         if string match -q '*nm.conf' -- "$_d"; or string match -q '*/iwd/*' -- "$_d"; set -g _PROFILE_USES_WIFI_BACKEND true; break; end
     end
     set -g _RY_CANON_SYSTEM_DSTS
-    for _d in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS; set -a _RY_CANON_SYSTEM_DSTS (command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
+    for _d in $SYSTEM_DESTINATIONS; set -a _RY_CANON_SYSTEM_DSTS (command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
     set -g _RY_CANON_USER_DSTS
     for _d in $USER_DESTINATIONS; set -a _RY_CANON_USER_DSTS (command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
-    set -l _sys_in (count $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS); set -l _sys_out (count $_RY_CANON_SYSTEM_DSTS)
+    set -l _sys_in (count $SYSTEM_DESTINATIONS); set -l _sys_out (count $_RY_CANON_SYSTEM_DSTS)
     if test "$_sys_in" -ne "$_sys_out"; _err_loud "BUG: _RY_CANON_SYSTEM_DSTS count drift: in=$_sys_in out=$_sys_out"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     set -l _usr_in (count $USER_DESTINATIONS); set -l _usr_out (count $_RY_CANON_USER_DSTS)
     if test "$_usr_in" -ne "$_usr_out"; _err_loud "BUG: _RY_CANON_USER_DSTS count drift: in=$_usr_in out=$_usr_out"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -719,7 +696,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         EXPECTED_VULKAN_PKGS:3 \
         EXPECTED_SERVICES:3 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:17 \
+        _RY_POST_HOOKS:16 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         AUR_PKGS:1
     for _kv in $_expect
@@ -731,7 +708,7 @@ end
 # _tmpfile_key collision would shadow a content-gen entry; refuse early.
 function _ir_validate_keys --description "Refuse deploy on _tmpfile_key collision"
     set -l _seen_keys
-    for _d in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
+    for _d in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
         set -l _k (_tmpfile_key "$_d")
         if contains -- "$_k" $_seen_keys; _err_loud "Destination key collision: '$_d' produces key '_content_$_k' already in use — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
         set -a _seen_keys "$_k"
@@ -1546,7 +1523,7 @@ function _chk_token_in --argument-names line token label --description "Verify a
     end
 end
 
-# ── PREFLIGHT GATES: DEPS + NETWORK + DISK + KERNEL VERSION ───────────────────────────────────────
+# ── PREFLIGHT GATES: DEPS + NETWORK + DISK + SYSTEMD ──────────────────────────────────────────────
 function _ry_check_deps --description "Verify required packages are installed"
     _log DEPS_CHECK_START
     set -l missing
@@ -1733,26 +1710,7 @@ function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODU
     return 0
 end
 
-# ── CONFIG-FORMAT VALIDATORS (UNIT, KV, KPARAM, SYSCTL, INI, TMPFILES) ────────────────────────────
-function _verify_unit_content --argument-names dst --description "Verify systemd unit content via tmpfile+_verify_unit_syntax"
-    test (count $argv) -lt 2; and _log "BUG: _verify_unit_content called without content (dst=$dst)"; and return 2
-    set -l content $argv[2..-1]
-    command -q systemd-analyze; or return 0
-    set -l _intended_scope system
-    string match -q '*/.config/systemd/user/*' -- "$dst"; and set _intended_scope user
-    set -l tmp (command mktemp --suffix=.service -p (_tmp_dir) ry-val-unit.XXXXXX 2>/dev/null)
-    _track_tmpfile "$tmp"
-    test -n "$tmp"; or begin
-        _fail "  $dst: mktemp failed"
-        return 1
-    end
-    command chmod -- 600 "$tmp" 2>/dev/null
-    if not printf '%s\n' $content >"$tmp" 2>/dev/null; _rm_tmp "$tmp" false; _fail "  $dst: failed to write unit tmpfile for verification"; return 1; end
-    _verify_unit_syntax "$tmp" (command basename -- "$dst") "$_intended_scope"
-    set -l rc $status
-    _rm_tmp "$tmp" false
-    return $rc
-end
+# ── CONFIG-FORMAT VALIDATORS (KV, KPARAM, SYSCTL, INI, TMPFILES) ────────────────────────────
 
 function _grep_kv --argument-names dst --description "Validate kv pairs (loader.conf space-sep; sdboot-manage.conf eq-sep)"
     test (count $argv) -lt 2; and _log "BUG: _grep_kv called without content (dst=$dst)"; and return 2
@@ -1856,8 +1814,6 @@ end
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family"
     set -l _content $argv[2..-1]
     switch "$dst"
-        case '*.service'
-            _verify_unit_content "$dst" $_content
         case '*/loader.conf' '*/sdboot-manage.conf'
             _grep_kv "$dst" $_content
         case '*/kernel/cmdline'
@@ -1885,7 +1841,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     set -l errors 0
     _ry_validate_mkinitcpio_hooks; or set errors (math $errors + 1)
     _ry_validate_mkinitcpio_modules
-    for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
+    for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
         set -l fn "_content_"(_tmpfile_key "$dst")
         if not functions -q $fn; _fail "  $dst: content generator '$fn' not found"; set errors (math $errors + 1); continue; end
         set -l content ($fn)
@@ -2355,12 +2311,8 @@ function _verify_static_packages --description "Verify PKGS_ADD, AUR_PKGS, PKGS_
     _vsp_pacman_conf
 end
 
-function _verify_static_services --description "Verify SERVICE_DESTINATIONS files + masked services state"
+function _verify_static_services --description "Verify masked services state"
     _echo SERVICES
-    if test (count $SERVICE_DESTINATIONS) -gt 0
-        _echo "── Service files ──"
-        for svc_file in $SERVICE_DESTINATIONS; _chk_file "$svc_file"; end
-    end
     _echo "── Masked services ──"
     set -l _check_mask $MASK; set -l _mask_parsed
     for _u in $_check_mask
@@ -2383,7 +2335,7 @@ function _verify_static_services --description "Verify SERVICE_DESTINATIONS file
     end
 end
 
-function _verify_static_syntax --description "Validate mkinitcpio hooks ordering, systemd unit files"
+function _verify_static_syntax --description "Validate mkinitcpio hooks ordering"
     _echo "SYNTAX VALIDATION"
     _echo "── mkinitcpio hooks ──"
     set -l hooks_syntax_line (command grep -E -- '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | command head -n 1)
@@ -2393,10 +2345,6 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
         _ry_validate_mkinitcpio_hooks --existence-only (string split ' ' -- "$hooks_str")
     else
         _warn "  Could not parse HOOKS from mkinitcpio.conf"
-    end
-    if test (count $SERVICE_DESTINATIONS) -gt 0
-        _echo "── systemd units ──"
-        for unit in $SERVICE_DESTINATIONS; test -f "$unit"; and _verify_unit_syntax "$unit" (command basename -- "$unit") system; end
     end
 end
 
@@ -2433,7 +2381,7 @@ function _verify_static_checksum --description "Verify embedded content hash mat
     _echo "CHECKSUM VERIFICATION"
     _echo
     _echo "── embedded vs installed ──"
-    for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
+    for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
         _vsc_check_one "$dst"
     end
     _echo
@@ -2462,7 +2410,7 @@ end
 
 # ── --CHECK MODE: SILENT IDEMPOTENCY PROBE (0=clean / 3=preflight / 10=drift) ─────────────────────
 function _check_phase_files --description "--check phase: file content hash compare"
-    for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS
+    for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
         set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _gen_rc $pipestatus[1]
         if test $_gen_rc -ne 0; _log "CHECK_PREFLIGHT: generator failed for $dst (rc=$_gen_rc)"; return $EXIT_PREFLIGHT; end
         set -l actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _ib_rc $pipestatus[1]
@@ -3149,7 +3097,7 @@ function _vrs_installed_file_perms --description "Runtime session check: install
     set -l perm_bad 0; set -l perm_checked 0; set -l perm_vfat_skipped 0; set -l _boot_resolved (_resolve_boot_path)
     test -z "$_boot_resolved"; and set _boot_resolved /boot
     set -l _boot_fstype (command findmnt -n -o FSTYPE "$_boot_resolved" 2>/dev/null | string trim --)
-    for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
+    for dst in $SYSTEM_DESTINATIONS
         if sudo -n test -f "$dst" 2>/dev/null
             if string match -q '/boot/*' -- "$dst"
                 # Per-file fstype (the file's own mount); fall back to the $BOOT fstype.
@@ -3187,7 +3135,7 @@ end
 function _vrs_parent_dirs --description "Runtime session check: parent dirs of managed files"
     _echo "── Parent directories ──"
     set -l dir_bad 0; set -l dir_checked 0; set -l checked_dirs
-    for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
+    for dst in $SYSTEM_DESTINATIONS
         set -l dir (command dirname -- "$dst")
         contains -- "$dir" $checked_dirs; and continue
         set -a checked_dirs "$dir"
@@ -3524,7 +3472,7 @@ end
 # Re-deploy managed content + rm .pacnew; managed configs are source of truth.
 function _ip_scan_pacnew --description "Scan managed destinations for .pacnew/.pacsave remnants"
     set -l _pacnew_handled; set -l _pacnew_failed; set -l _pacsave_found
-    for _dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
+    for _dst in $SYSTEM_DESTINATIONS
         if sudo -n test -f "$_dst.pacnew" 2>/dev/null
             if _ry_install_file "$_dst" true
                 if _run sudo -n rm -f -- "$_dst.pacnew"
@@ -3684,25 +3632,12 @@ function _isf_deploy_set --argument-names use_sudo phase --description "Deploy a
     return 0
 end
 
-function _install_system_files --description "Deploy all embedded config + service unit files"
+function _install_system_files --description "Deploy all embedded config files"
     set -l _fn_err false
     _progress Configuration
     _info "Installing system configuration files..."
     _log "=== INSTALL SYSTEM FILES ==="
     if not _isf_deploy_set true System $SYSTEM_DESTINATIONS; set -g INSTALL_HAD_ERRORS true; set _fn_err true; end
-    if test (count $SERVICE_DESTINATIONS) -gt 0
-        _info "Installing service unit files..."
-        _log "=== INSTALL SERVICE FILES ==="
-        set -g _RY_DEPLOYED_SERVICES; set -l _svc_failed false
-        for dst in $SERVICE_DESTINATIONS
-            if _ry_install_file "$dst" true
-                set -a _RY_DEPLOYED_SERVICES (command basename -- "$dst")
-            else
-                set _svc_failed true
-            end
-        end
-        if test "$_svc_failed" = true; _err "Service unit file installation failed"; set -g INSTALL_HAD_ERRORS true; set _fn_err true; end
-    end
     _info "Installing user configuration files..."
     _log "=== INSTALL USER FILES ==="
     if not _isf_deploy_set false User $USER_DESTINATIONS; set -g INSTALL_HAD_ERRORS true; set _fn_err true; end
@@ -4019,15 +3954,8 @@ function _cse_collect_units --description "Collect system units to enable"
     else
         set -a _enable NetworkManager-dispatcher.service
     end
-    if set -q _RY_DEPLOYED_SERVICES; and test (count $_RY_DEPLOYED_SERVICES) -gt 0
-        if not _run sudo -n systemctl daemon-reload
-            _warn "Systemctl daemon-reload failed — unit symlinks still apply at next boot (non-fatal)"
-            _phase_record "Services: daemon-reload" WARN "daemon-reload failed (non-fatal)"
-        end
-        for _u in $_RY_DEPLOYED_SERVICES; set -a _enable $_u; end
-    end
-    # Skip deployed/pacman-managed units (avoid duplicate enable warn).
-    for _exp in $EXPECTED_SERVICES; contains -- "$_exp" $_RY_DEPLOYED_SERVICES; and continue; contains -- "$_exp" $_RY_PKG_MANAGED_SERVICES; and continue; set -a _enable "$_exp"; end
+    # Skip pacman-managed units (avoid duplicate enable warn).
+    for _exp in $EXPECTED_SERVICES; contains -- "$_exp" $_RY_PKG_MANAGED_SERVICES; and continue; set -a _enable "$_exp"; end
     test (count $_enable) -gt 0; and printf '%s\n' $_enable
 end
 
@@ -4639,10 +4567,9 @@ set -g _RY_POST_HOOKS \
     "/etc/drirc.d/*|drirc" \
     "/etc/modprobe.d/*|modprobe" \
     "/etc/iw-regdomain|regdom" \
-    "/etc/udev/rules.d/*|udev" \
-    "*.service|service"
+    "/etc/udev/rules.d/*|udev"
 
-# First-match-wins by declaration order; *.service tag reserved for SERVICE_DESTINATIONS (wired, currently empty).
+# First-match-wins by declaration order.
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path"
     for _entry in $_RY_POST_HOOKS
         set -l _parts (string split -m1 '|' -- $_entry)
@@ -4654,7 +4581,7 @@ end
 # _idx aligns canon-list to source-list; drift refused by _ir_validate_counts.
 function _idf_use_sudo_for_dst --argument-names target --description "Resolve managed-dst membership + emit sudo flag (true=system, false=user, empty=not-managed)"
     set -l _idx 1
-    for dst in $SYSTEM_DESTINATIONS $SERVICE_DESTINATIONS
+    for dst in $SYSTEM_DESTINATIONS
         if test "$target" = "$dst"; or test "$target" = "$_RY_CANON_SYSTEM_DSTS[$_idx]"; echo true; return 0; end
         set _idx (math $_idx + 1)
     end
@@ -4678,7 +4605,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
         _err "Usage: ry-install.fish --install-file <path>"
         _echo
         _info "Managed files:"
-        for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS $SERVICE_DESTINATIONS; _echo "  $dst"; end
+        for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS; _echo "  $dst"; end
         return $EXIT_USAGE
     end
     set -l _use_sudo (_idf_use_sudo_for_dst "$target")
@@ -4726,36 +4653,6 @@ function _post_boot --argument-names target --description "Post-hook: rebuild bo
     test -n "$_boot_v"; and _irb_verify_entries "$_boot_v"
     if not _preflight_boot_sanity; _err "CRITICAL: boot sanity check failed after single-file install — DO NOT REBOOT"; return $EXIT_BOOT_CRIT; end
     return 0
-end
-
-# daemon-reload + try-restart; oneshot re-runs idempotently; --user for user scope.
-function _post_service --argument-names target --description "Post-hook: daemon-reload + enable .service unit (+ try-restart to pick up changed ExecStart)"
-    set -l _rc 0; set -l _bn (command basename -- "$target"); set -l _is_user false
-    string match -q '*/.config/systemd/user/*' -- "$target"; and set _is_user true
-    if test "$_is_user" = true
-        if not _has_user_bus_active
-            _warn "User-scope service $_bn deployed but no active user-bus — enable on next login or via loginctl enable-linger \$USER"
-            _log "POST_SERVICE_NO_USER_BUS: target=$target"
-            return 0
-        end
-        _run systemctl --user daemon-reload; or _warn "Systemctl --user daemon-reload failed"
-        if not _run systemctl --user enable --now -- "$_bn"; _warn "Failed to enable $_bn (user)"; set _rc 1; end
-        if not _run systemctl --user try-restart -- "$_bn"
-            _log "POST_SERVICE_TRY_RESTART: rc=non-zero unit=$_bn scope=user"
-            _warn "try-restart of $_bn (user) failed (ExecStart change applies on next start)"
-            test $_rc -eq 0; and set _rc 1
-        end
-        return $_rc
-    end
-    _run sudo -n systemctl daemon-reload; or _warn "Systemctl daemon-reload failed"
-    if not _run sudo -n systemctl enable --now -- "$_bn"; _warn "Failed to enable $_bn (system)"; set _rc 1; end
-    # try-restart reloads ExecStart (non-oneshot); oneshot+RAE re-runs idempotent.
-    if not _run sudo -n systemctl try-restart -- "$_bn"
-        _log "POST_SERVICE_TRY_RESTART: rc=non-zero unit=$_bn scope=system"
-        _warn "try-restart of $_bn failed (ExecStart change applies on next start)"
-        test $_rc -eq 0; and set _rc 1
-    end
-    return $_rc
 end
 
 function _post_resolved --argument-names target --description "Post-hook: restart systemd-resolved"

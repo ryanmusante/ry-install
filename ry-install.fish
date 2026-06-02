@@ -1,14 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.18.0 (2026-06-01) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.0 (2026-06-02) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.18.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 16
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 15
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-set -g _RY_NTSYNC_MODLOAD_CONF /usr/lib/modules-load.d/10-ntsync.conf
+# ntsync autoload providers — cachyos-settings ships ntsync.conf; wine-cachyos historically 10-ntsync.conf; /etc for user override.
+set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf
 
 function _ry_show_help --description "Display usage information and available subcommands"
     printf '%s\n' \
@@ -534,8 +535,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/sysctl.d/95-ry-overrides.conf" \
     "/etc/drirc.d/95-ry-radv-apu.conf" \
     "/etc/modprobe.d/ry-amdgpu-strixhalo.conf" \
-    "/etc/modules-load.d/i2c-dev.conf" \
-    "/etc/modprobe.d/ry-cfg80211-regdom.conf" \
+    "/etc/iw-regdomain" \
     "/etc/udev/rules.d/60-ry-ioschedulers.rules"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -g SERVICE_DESTINATIONS
@@ -624,9 +624,7 @@ set -g PKGS_ADD \
     git-delta \
     lm_sensors \
     realtime-privileges \
-    rtkit \
-    ddcutil \
-    iw
+    ddcutil
 # Opt-in: append shelly to PKGS_DEL + bump invariant 7→8 (CachyOS Shelly pkg mgr).
 set -g PKGS_DEL \
     plymouth \
@@ -715,7 +713,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:10 \
         SYSCTL_VALUES:8 \
-        PKGS_ADD:16 \
+        PKGS_ADD:14 \
         PKGS_DEL:7 \
         MASK:11 \
         EXPECTED_VULKAN_PKGS:3 \
@@ -783,7 +781,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
 end
 
-# ── CONTENT GENERATORS (16; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
+# ── CONTENT GENERATORS (15; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -882,14 +880,9 @@ function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate conte
         '</driconf>'
 end
 
-# DDC/CI external-monitor brightness — autoload i2c-dev at boot (ddcutil).
-function _content__etc_modules-load.d_i2c-dev.conf --description "Generate content for /etc/modules-load.d/i2c-dev.conf"
-    printf '%s\n' "# ry-install: i2c-dev for ddcutil/DDC-CI (managed file, do not edit by hand)" "i2c-dev"
-end
-
-# Mandatory wireless regdom (systemd/modprobe-native) — content reads $COUNTRY (default US).
-function _content__etc_modprobe.d_ry-cfg80211-regdom.conf --description "Generate content for cfg80211 regdom modprobe.d drop-in"
-    printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "options cfg80211 ieee80211_regdom=$COUNTRY"
+# Mandatory wireless regdom — consumed by CachyOS cachyos-iw-set-regdomain ({service,path}: `iw reg set $COUNTRY` at device add).
+function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"
+    printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
 end
 
 # NVMe scheduler none — native multiqueue makes a scheduler overhead; ENV{DEVTYPE}==disk guard avoids partition errors.
@@ -1841,10 +1834,10 @@ function _grep_modprobe_entry --argument-names dst --description 'Validate ≥1 
     return 0
 end
 
-function _grep_modload_entry --argument-names dst --description 'Validate ≥1 module-name line (modules-load.d: one module per line, #/; comments allowed)'
-    test (count $argv) -lt 2; and _log "BUG: _grep_modload_entry called without content (dst=$dst)"; and return 2
-    string match -qre '^[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*$' -- $argv[2..-1]; or begin
-        _fail "  $dst: no module-name line found"
+function _grep_regdomain_entry --argument-names dst --description 'Validate a COUNTRY=<ISO-3166 alpha-2> line (/etc/iw-regdomain; # comments allowed)'
+    test (count $argv) -lt 2; and _log "BUG: _grep_regdomain_entry called without content (dst=$dst)"; and return 2
+    string match -qre '^[[:space:]]*COUNTRY=[A-Z][A-Z][[:space:]]*$' -- $argv[2..-1]; or begin
+        _fail "  $dst: no COUNTRY=<ISO-3166 alpha-2> line found"
         return 1
     end
     return 0
@@ -1875,8 +1868,8 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_drirc_entry "$dst" $_content
         case '*/modprobe.d/*'
             _grep_modprobe_entry "$dst" $_content
-        case '*/modules-load.d/*'
-            _grep_modload_entry "$dst" $_content
+        case '/etc/iw-regdomain'
+            _grep_regdomain_entry "$dst" $_content
         case '*/udev/rules.d/*'
             _grep_udev_entry "$dst" $_content
         case '*/mkinitcpio.conf' '*/environment.d/*' '*/default/cpupower-service.conf'
@@ -2205,10 +2198,12 @@ function _vss_ntsync_modules --description "_verify_static_system sub: ntsync st
     end
     _echo
     _echo "── Modules autoload ──"
-    if test -f "$_RY_NTSYNC_MODLOAD_CONF"
-        _ok "  ntsync autoload: $_RY_NTSYNC_MODLOAD_CONF present (shipped by wine-cachyos)"
+    set -l _found
+    for _c in $_RY_NTSYNC_MODLOAD_CONFS; test -f "$_c"; and set -a _found "$_c"; end
+    if test (count $_found) -gt 0
+        _ok "  ntsync autoload: "(string join ', ' -- $_found)" present (cachyos-settings/wine-cachyos)"
     else
-        _warn "  ntsync autoload: $_RY_NTSYNC_MODLOAD_CONF missing — module may not load on boot"
+        _warn "  ntsync autoload: no modules-load.d/*ntsync.conf found — module may not load on boot"
     end
 end
 
@@ -2240,14 +2235,17 @@ function _vss_sysctl --description "_verify_static_system sub: sysctl drop-in ke
     end
 end
 
-function _vss_modprobe --description "_verify_static_system sub: amdgpu/ttm + cfg80211 regdom modprobe.d"
-    _echo "── modprobe.d (amdgpu + cfg80211 regdom) ──"
-    if _chk_file /etc/modprobe.d/ry-cfg80211-regdom.conf
-        _chk_grep /etc/modprobe.d/ry-cfg80211-regdom.conf "ieee80211_regdom=$COUNTRY" "cfg80211 regdom=$COUNTRY"
-    end
+function _vss_modprobe --description "_verify_static_system sub: amdgpu/ttm modprobe.d"
+    _echo "── modprobe.d (amdgpu/ttm) ──"
     _chk_file /etc/modprobe.d/ry-amdgpu-strixhalo.conf; or return 0
     _chk_grep /etc/modprobe.d/ry-amdgpu-strixhalo.conf "pages_limit=$TTM_PAGES_LIMIT" "ttm pages_limit=$TTM_PAGES_LIMIT"
     _chk_grep /etc/modprobe.d/ry-amdgpu-strixhalo.conf "page_pool_size=$TTM_PAGE_POOL_SIZE" "ttm page_pool_size=$TTM_PAGE_POOL_SIZE"
+end
+
+function _vss_regdom --description "_verify_static_system sub: wireless regdom (/etc/iw-regdomain)"
+    _echo "── wireless regdom (/etc/iw-regdomain) ──"
+    _chk_file /etc/iw-regdomain; or return 0
+    _chk_grep /etc/iw-regdomain "COUNTRY=$COUNTRY" "regdom COUNTRY=$COUNTRY"
 end
 
 function _vss_udev --description "_verify_static_system sub: NVMe I/O scheduler udev rule"
@@ -2277,6 +2275,7 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _vss_iwd
     _echo "── NetworkManager ──"
     _vss_nm
+    _vss_regdom
     _echo "── cpupower-service.conf ──"
     _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "GOVERNOR='$CPUPOWER_GOVERNOR'" "GOVERNOR=$CPUPOWER_GOVERNOR"
     _vss_sysctl
@@ -3112,7 +3111,7 @@ function _vre_regdom --description "Runtime env check: wireless regulatory domai
     if command iw reg get 2>/dev/null | string match -qr -- "^country $COUNTRY"
         _ok "regdom: country $COUNTRY active"
     else
-        _warn "regdom: country $COUNTRY not active — sudo iw reg set $COUNTRY (persists via modprobe.d at next boot)"
+        _warn "regdom: country $COUNTRY not active — sudo iw reg set $COUNTRY (persists via /etc/iw-regdomain → cachyos-iw-set-regdomain)"
     end
     _echo
 end
@@ -4073,14 +4072,14 @@ function _configure_services_enable --description "Daemon-reload, batch-enable s
     return $_ret
 end
 
-# Mandatory wireless regdom: modprobe.d file deploys via the registry; this applies it at runtime (advisory).
+# Mandatory wireless regdom: /etc/iw-regdomain deploys via the registry (consumed by cachyos-iw-set-regdomain); this applies it now.
 function _apply_wireless_regdom --description "Apply the wireless regulatory domain ($COUNTRY) at runtime"
     if not command -q iw
-        _info "  wireless regdom: iw(8) absent — $COUNTRY applies at next boot via modprobe.d"
+        _info "  wireless regdom: iw(8) absent — $COUNTRY applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
         return 0
     end
     _info "  wireless regdom → $COUNTRY"
-    _run sudo -n iw reg set "$COUNTRY"; or _warn "iw reg set $COUNTRY failed — applies at next boot via modprobe.d"
+    _run sudo -n iw reg set "$COUNTRY"; or _warn "iw reg set $COUNTRY failed — applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
     return 0
 end
 
@@ -4639,7 +4638,7 @@ set -g _RY_POST_HOOKS \
     "/etc/default/cpupower-service.conf|cpupower" \
     "/etc/drirc.d/*|drirc" \
     "/etc/modprobe.d/*|modprobe" \
-    "/etc/modules-load.d/*|modload" \
+    "/etc/iw-regdomain|regdom" \
     "/etc/udev/rules.d/*|udev" \
     "*.service|service"
 
@@ -4859,20 +4858,10 @@ function _post_modprobe --argument-names target --description "Post-hook: rebuil
     return 0
 end
 
-# modules-load.d read by systemd-modules-load.service at boot; modprobe applies the listed modules now.
-function _post_modload --argument-names target --description "Post-hook: modprobe modules listed in /etc/modules-load.d/* (immediate load)"
+# /etc/iw-regdomain consumed by cachyos-iw-set-regdomain (iw reg set at device add); apply it now too.
+function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"
     _echo
-    if not command -q modprobe
-        _warn "modprobe(8) not found — modules load at next boot via systemd-modules-load.service"
-        return 0
-    end
-    set -l _mods (_ry_get_file_content "$target" 2>/dev/null | string match -rv -- '^\s*([#;]|$)' | string trim --)
-    if test (count $_mods) -eq 0; _info "modules-load.d $target changed — no module-name lines to load"; return 0; end
-    set -l _rc 0
-    for _m in $_mods
-        if not _run sudo -n modprobe -- "$_m"; _warn "modprobe $_m failed — loads at next boot via systemd-modules-load.service"; set _rc 1; end
-    end
-    return $_rc
+    _apply_wireless_regdom
 end
 
 function _post_udev --argument-names target --description "Post-hook: reload udev rules + retrigger block devices after /etc/udev/rules.d/* change"

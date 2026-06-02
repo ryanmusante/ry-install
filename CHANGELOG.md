@@ -2,6 +2,13 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.19.0  2026-06-02
+- remove: drop iw and rtkit from PKGS_ADD — both are CachyOS defaults (iw is a hard dependency of cachyos-settings, "# for setting proper regulatory"; rtkit is default-selected in the installer's audio group and already carries a cachyos-settings rtkit-daemon drop-in). PKGS_ADD 16 -> 14. `--needed` already made them no-ops; this removes the dead entries.
+- remove: drop the managed file /etc/modules-load.d/i2c-dev.conf and its machinery (_content_ generator, _grep_modload_entry validator + the */modules-load.d/* dispatch case, _post_modload hook). ddcutil already ships /usr/lib/modules-load.d/ddcutil.conf (= i2c-dev), so installing ddcutil autoloads i2c-dev. Managed-file 16 -> 15, content generators 16 -> 15.
+- change: wireless regdom moves from /etc/modprobe.d/ry-cfg80211-regdom.conf (options cfg80211 ieee80211_regdom=$COUNTRY) to /etc/iw-regdomain (COUNTRY=$COUNTRY), the input file CachyOS's cachyos-iw-set-regdomain.{service,path} consumes. The old modprobe value was silently overridden by that service (it runs `iw reg set` at device-add, after module load); writing CachyOS's own input makes the result deterministic. Adds _grep_regdomain_entry validator + the /etc/iw-regdomain dispatch case, _vss_regdom static check, and _post_regdom hook (reuses the modload _RY_POST_HOOKS slot — _RY_POST_HOOKS stays 17, handlers stay 12). Static + runtime verify retargeted; runtime still uses `iw reg get`.
+- fix: ntsync autoload verify no longer keys solely on /usr/lib/modules-load.d/10-ntsync.conf; it scans candidates (_RY_NTSYNC_MODLOAD_CONFS) including cachyos-settings' ntsync.conf and an /etc override, ending a spurious "autoload missing" WARN on stock CachyOS. --verify only.
+- header: file-header version comment tracks VERSION.
+
 7.18.0  2026-06-01
 - remove: drop the kernel-version floor gate entirely (_ry_check_kernel_version, _kver_below, RC_KVER_OK/RC_KVER_FAIL, KVER/KVER_MAJOR/KVER_MINOR parse + the preflight "Preflight: kernel version" row). No kernel-version is checked at install; a <6.14 kernel no longer records FAIL/exit 1. Behavior change for <6.14 only — kernels ≥ 6.14 (incl. 7+) are byte-for-byte unaffected.
 - remove: _ntsync_state no longer has a kernel-version branch (drops the "unavailable" state + the <6.14 notes in _vss_ntsync_modules / _vre_ntsync); ntsync detection (builtin/loaded/loaded_nodev/missing) is unchanged and kernel-agnostic.

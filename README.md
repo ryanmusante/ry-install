@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.18.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.19.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 ![license](https://img.shields.io/badge/license-MIT-green.svg)
@@ -129,19 +129,19 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 ### Phase 2 — Packages
 
-`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, and `cpupower` are CachyOS defaults (not re-added); the iwd and NetworkManager configs still deploy. The AUR step is advisory: a missing `paru` or a *partial* AUR failure is recorded `WARN` and the install continues (exit `0`); only an AUR step where **every** package fails is a `FAIL` (exit `1`). A `pacman -Syu` failure, by contrast, taints the run and skips the Phase 5 rebuild.
+`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added — `iw` is a hard dependency of `cachyos-settings`, `rtkit` is default-selected in the installer); the iwd and NetworkManager configs still deploy. The AUR step is advisory: a missing `paru` or a *partial* AUR failure is recorded `WARN` and the install continues (exit `0`); only an AUR step where **every** package fails is a `FAIL` (exit `1`). A `pacman -Syu` failure, by contrast, taints the run and skips the Phase 5 rebuild.
 
 <details open>
-<summary><b>Packages — install</b> — 16 pkgs</summary>
+<summary><b>Packages — install</b> — 14 pkgs</summary>
 
 | Category | Packages |
 |---|---|
-| sysadmin | `nvme-cli`, `htop`, `git-delta`, `lm_sensors`, `iw` |
+| sysadmin | `nvme-cli`, `htop`, `git-delta`, `lm_sensors` |
 | gaming | `cachyos-gaming-meta`, `cachyos-gaming-applications` |
 | Vulkan/GL | `lib32-mesa` |
 | rust utilities | `fd`, `sd`, `dust`, `procs`, `bottom` |
-| perf | `realtime-privileges`, `rtkit` |
-| display | `ddcutil` (loads `i2c-dev`) |
+| perf | `realtime-privileges` |
+| display | `ddcutil` (its package ships the `i2c-dev` autoload) |
 
 </details>
 
@@ -300,11 +300,11 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 </details>
 
 <details open>
-<summary><b>cfg80211 regdom</b> — 1 option</summary>
+<summary><b>wireless regdom</b> — 1 key</summary>
 
-| Option | Value |
+| Key | Value |
 |---|---|
-| `cfg80211 ieee80211_regdom` | `US` (mandatory; override `--country=XX`) |
+| `COUNTRY` | `US` (`/etc/iw-regdomain`; consumed by CachyOS `cachyos-iw-set-regdomain`; mandatory, override `--country=XX`) |
 
 </details>
 
@@ -343,7 +343,7 @@ NVMe exposes native multiqueue, so a kernel I/O scheduler adds only overhead; `n
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply the wireless regdom (`iw reg set $COUNTRY`). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** The regulatory domain is mandatory (default `US`, override `--country=XX`), set the systemd-native way via `/etc/modprobe.d/ry-cfg80211-regdom.conf` (`options cfg80211 ieee80211_regdom`) — a tracked managed file, verified statically and at runtime (`iw reg get`).
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply the wireless regdom (`iw reg set $COUNTRY`). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** The regulatory domain is mandatory (default `US`, override `--country=XX`), written to `/etc/iw-regdomain` (`COUNTRY=`) — the input file CachyOS's own `cachyos-iw-set-regdomain.{service,path}` consumes (it runs `iw reg set` at device add). Using CachyOS's native input file is deterministic; a `modprobe.d` `ieee80211_regdom` setting was silently overridden by that service. It is a tracked managed file, verified statically and at runtime (`iw reg get`).
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -399,10 +399,10 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Managed Files
 
-16 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from content embedded in the script, so the file on disk and the `--verify` target share one source.
+15 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from content embedded in the script, so the file on disk and the `--verify` target share one source.
 
 <details open>
-<summary><b>Destinations</b> — 16 paths</summary>
+<summary><b>Destinations</b> — 15 paths</summary>
 
 | Path | Mode |
 |---|---|
@@ -418,8 +418,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 | `/etc/sysctl.d/95-ry-overrides.conf` | `0644` |
 | `/etc/drirc.d/95-ry-radv-apu.conf` | `0644` |
 | `/etc/modprobe.d/ry-amdgpu-strixhalo.conf` | `0644` |
-| `/etc/modules-load.d/i2c-dev.conf` | `0644` |
-| `/etc/modprobe.d/ry-cfg80211-regdom.conf` | `0644` |
+| `/etc/iw-regdomain` | `0644` |
 | `/etc/udev/rules.d/60-ry-ioschedulers.rules` | `0644` |
 | `~/.config/environment.d/10-environment.conf` | `0600` |
 
@@ -484,7 +483,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 1. `sudo systemctl unmask` the 11 masked units (stopped by `--now`; reboot or start to restore).
 2. `sudo rm` deployed paths from the Managed Files list.
 3. Restore `/etc/fstab` from your pre-install snapshot.
-4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`). **Note:** `PKGS_ADD` includes Vulkan/gaming runtime deps (`lib32-mesa`, `realtime-privileges`, `rtkit`) — review the list and exclude anything still in use before removing.
+4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`). **Note:** `PKGS_ADD` includes Vulkan/gaming runtime deps (`lib32-mesa`, `realtime-privileges`) — review the list and exclude anything still in use before removing.
 5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
 6. Reboot.
 
@@ -517,7 +516,7 @@ Boot problems recover from a live USB (`arch-chroot` + `mkinitcpio -P` + `sdboot
 | `PKGS_DEL` member skipped | held by outside rdeps — remove manually with `sudo pacman -Rns <pkg>` |
 | `.ry-install.*` orphan | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, re-run |
 | PipeWire `nice-level` denied | `sudo usermod -aG realtime $USER`, re-login |
-| `ddcutil` permission denied | `sudo usermod -aG i2c $USER`, re-login (`i2c-dev` autoloads at boot) |
+| `ddcutil` permission denied | `sudo usermod -aG i2c $USER`, re-login (`i2c-dev` autoloads via ddcutil's `modules-load.d`) |
 | iwd edits not applied | `sudo systemctl try-restart iwd.service` |
 
 ## References

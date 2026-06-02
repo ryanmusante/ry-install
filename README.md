@@ -36,7 +36,7 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-Run as your normal user (root refused, sudo internal). Post-install: reboot, then `--verify`; a full run takes 3–8 minutes. Upgrading: re-run `./ry-install.fish` — idempotent.
+Run as your normal user (root refused, sudo internal). Post-install: reboot, then `--verify`; a full run takes 3–8 minutes. Upgrading: re-run — idempotent.
 
 ## Scope
 
@@ -67,7 +67,7 @@ df -h / /boot                    # verify space
 
 ## Hardware
 
-Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 GB LPDDR5x-8000. Runtime init requires a CPU matching `Ryzen AI Max`; override on other hardware with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
+Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 GB LPDDR5x-8000. Runtime init requires a CPU matching `Ryzen AI Max`; override with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
 
 ## Usage
 
@@ -98,19 +98,19 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 
 ## Run Summary
 
-Prints a CHECK/RESULT/EVIDENCE matrix (+ totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records every `PHASE_RESULT` plus a `MATRIX_RENDERED` event — the durable per-phase record once output scrolls away. The matrix verdict maps to the exit code; the JSONL `footer` `pass`/`fail`/`warn` are message-level tallies and need not equal the phase-matrix counts.
+Prints a CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records each `PHASE_RESULT` plus a `MATRIX_RENDERED` event — the durable per-phase record once output scrolls away. The matrix verdict maps to the exit code; the JSONL `footer` `pass`/`fail`/`warn` are message-level tallies, not the phase counts.
 
 Per-phase result:
 
 | Result | Semantics |
 |---|---|
 | `PASS` | succeeded |
-| `WARN` | non-fatal anomaly (never taints the run; exit stays `0`) |
+| `WARN` | non-fatal anomaly (never taints; exit stays `0`) |
 | `FAIL` | failed — the only result that sets `INSTALL_HAD_ERRORS=true` |
 | `DEFER` | deferred to next boot |
 | `SKIP` / `N/A` | by design / not applicable |
 
-Overall verdict and the exit code it maps to. A run that is all `PASS`/`WARN` exits `0`. One preflight-stage outcome bypasses this table: a hard-requirement abort exits `3`.
+Verdict → exit code. All `PASS`/`WARN` exits `0`; a hard-requirement preflight abort bypasses this table and exits `3`.
 
 | Verdict | Trigger | Exit |
 |---|---|---|
@@ -125,11 +125,11 @@ The script is the source of truth — `--verify` checks embedded files byte-for-
 
 ### Phase 1 — Preflight
 
-Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (root UUID + CPU match + invariants) → lock (atomic `mkdir` 0700 + dead-PID reclaim) → sudo cache → deps (systemd ≥ 250 hard-gate · paru ≥ 2.0.0 advisory) → disk space → network (HTTPS + ICMP) → time sync (NTP, systemd-timesyncd) → per-destination config validators.
+Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (root UUID + CPU match + invariants) → lock (atomic `mkdir` 0700 + dead-PID reclaim) → sudo cache → deps (systemd ≥ 250 hard-gate · paru ≥ 2.0.0 advisory) → disk space → network (HTTPS + ICMP) → time sync (NTP) → per-destination config validators.
 
 ### Phase 2 — Packages
 
-`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added — `iw` is a hard dependency of `cachyos-settings`, `rtkit` is default-selected in the installer); the iwd and NetworkManager configs still deploy. The AUR step is advisory: a missing `paru` or a *partial* AUR failure is recorded `WARN` and the install continues (exit `0`); only an AUR step where **every** package fails is a `FAIL` (exit `1`). A `pacman -Syu` failure, by contrast, taints the run and skips the Phase 5 rebuild.
+`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added); their iwd/NetworkManager configs still deploy. AUR is advisory: a missing `paru` or a *partial* failure is `WARN` (exit `0`); only an all-package AUR failure is `FAIL` (exit `1`). A `pacman -Syu` failure taints the run and skips the Phase 5 rebuild.
 
 <details open>
 <summary><b>Packages — install</b> — 14 pkgs</summary>
@@ -141,7 +141,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 | Vulkan/GL | `lib32-mesa` |
 | rust utilities | `fd`, `sd`, `dust`, `procs`, `bottom` |
 | perf | `realtime-privileges` |
-| display | `ddcutil` (its package ships the `i2c-dev` autoload) |
+| display | `ddcutil` (ships the `i2c-dev` autoload) |
 
 </details>
 
@@ -173,13 +173,13 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 | Full upgrades only | partial upgrades forbidden; `pacman -Syu --needed` always |
 | AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted — DKMS needs makedeps) |
 | PGP failures | pre-import `gpg --recv-keys <KEYID>` or run `paru -S <pkg>` manually |
-| Reverse deps | `PKGS_DEL` members held by outside rdeps are skipped (rdep detection needs `pacman-contrib`); remove manually with `pacman -Rns` if intended |
+| Reverse deps | `PKGS_DEL` members held by outside rdeps are skipped; remove manually with `pacman -Rns` |
 
 </details>
 
 ### Phase 3 — Configuration
 
-Atomic write per file: `mktemp` in the destination parent → render via `tee` → symlink probe → `chmod` → `mv -T` (same-FS). The kernel cmdline goes to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`); root UUID prefix is taken from the `/` mount.
+Atomic write per file: `mktemp` in the destination parent → render via `tee` → symlink probe → `chmod` → `mv -T` (same-FS). The kernel cmdline goes to `/etc/kernel/cmdline` and `/etc/sdboot-manage.conf` (`LINUX_OPTIONS`); root UUID prefix from the `/` mount.
 
 <details open>
 <summary><b>Kernel cmdline</b> — 13 params</summary>
@@ -324,7 +324,7 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 |---|---|
 | NVMe (`KERNEL=="nvme[0-9]*"`, `ENV{DEVTYPE}=="disk"`) | `none` |
 
-NVMe exposes native multiqueue, so a kernel I/O scheduler adds only overhead; `none` is also the upstream default for NVMe and is pinned explicitly here. The `ENV{DEVTYPE}=="disk"` guard limits the match to whole-disk block devices, avoiding the *No such file or directory* udev write errors that the bare `nvme[0-9]*` form throws on partitions and the controller char-device.
+NVMe has native multiqueue, so a kernel scheduler is pure overhead; `none` is also the NVMe upstream default. The `ENV{DEVTYPE}=="disk"` guard matches whole-disk devices only, avoiding udev write errors on partitions and the controller char-device.
 
 </details>
 
@@ -343,7 +343,7 @@ NVMe exposes native multiqueue, so a kernel I/O scheduler adds only overhead; `n
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply the wireless regdom (`iw reg set $COUNTRY`). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** The regulatory domain is mandatory (default `US`, override `--country=XX`), written to `/etc/iw-regdomain` (`COUNTRY=`) — the input file CachyOS's own `cachyos-iw-set-regdomain.{service,path}` consumes (it runs `iw reg set` at device add). Using CachyOS's native input file is deterministic; a `modprobe.d` `ieee80211_regdom` setting was silently overridden by that service. It is a tracked managed file, verified statically and at runtime (`iw reg get`).
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply regdom (`iw reg set $COUNTRY`). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** Regdom is mandatory (default `US`, `--country=XX`), written to `/etc/iw-regdomain` (`COUNTRY=`) and consumed by CachyOS `cachyos-iw-set-regdomain.{service,path}` (`iw reg set` at device add); tracked and verified statically + at runtime (`iw reg get`).
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -361,7 +361,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 | Package | Category |
 |---|---|
-| `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm` | boot splash (incompatible with `quiet`; Plasma rdeps enumerated) |
+| `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm` | boot splash (incompatible with `quiet`) |
 | `micro`, `cachyos-micro-settings` | text editor |
 
 </details>
@@ -399,7 +399,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Managed Files
 
-15 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from content embedded in the script, so the file on disk and the `--verify` target share one source.
+15 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from embedded content, so the on-disk file and the `--verify` target share one source.
 
 <details open>
 <summary><b>Destinations</b> — 15 paths</summary>
@@ -431,14 +431,14 @@ Atomic writes and a gated Phase 5 rebuild mean a failed package or boot-config s
 | Feature | Detail |
 |---|---|
 | Atomic writes | tmp → render → symlink probe → chmod → `mv -T` |
-| Auto backups | `<path>.ry.bak` written before overwriting `loader.conf`/`mkinitcpio.conf`; restored on post-write byte-mismatch (fstab excluded) |
+| Auto backups | `<path>.ry.bak` before overwriting `loader.conf`/`mkinitcpio.conf`; restored on post-write byte-mismatch (fstab excluded) |
 | Permissions | system `0644` · user `0600` · `~/ry-install/` `0700` |
 | fstab | `findmnt --verify` gate; rejects symlinked `/etc/fstab` |
 | Boot rebuild gate | skipped on package/boot-config failure; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses taint only |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | Instance lock | atomic mkdir `0700`; reclaims dead-PID lock via `kill -0` |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE/WINCH non-fatal |
-| Firewall posture | host firewall (ufw) disabled+masked — trusted-LAN assumption; install emits a warning, `--verify` reports `ufw=<state> nft_rules=<n>` |
+| Firewall posture | ufw disabled+masked (trusted-LAN); install warns, `--verify` reports `ufw=<state> nft_rules=<n>` |
 
 <details open>
 <summary><b>Exit codes</b></summary>
@@ -483,7 +483,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 1. `sudo systemctl unmask` the 11 masked units (stopped by `--now`; reboot or start to restore).
 2. `sudo rm` deployed paths from the Managed Files list.
 3. Restore `/etc/fstab` from your pre-install snapshot.
-4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`). **Note:** `PKGS_ADD` includes Vulkan/gaming runtime deps (`lib32-mesa`, `realtime-privileges`) — review the list and exclude anything still in use before removing.
+4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`). **Note:** `PKGS_ADD` includes Vulkan/gaming runtime deps (`lib32-mesa`, `realtime-privileges`) — exclude anything still in use before removing.
 5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
 6. Reboot.
 
@@ -513,10 +513,10 @@ Boot problems recover from a live USB (`arch-chroot` + `mkinitcpio -P` + `sdboot
 | Initramfs rebuild refused | fix cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
 | `--verify` drift | `./ry-install.fish --install-file /etc/...` |
 | Sudo cache expired | re-run re-primes; see Prerequisites warning |
-| `PKGS_DEL` member skipped | held by outside rdeps — remove manually with `sudo pacman -Rns <pkg>` |
+| `PKGS_DEL` member skipped | held by outside rdeps — `sudo pacman -Rns <pkg>` |
 | `.ry-install.*` orphan | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, re-run |
 | PipeWire `nice-level` denied | `sudo usermod -aG realtime $USER`, re-login |
-| `ddcutil` permission denied | `sudo usermod -aG i2c $USER`, re-login (`i2c-dev` autoloads via ddcutil's `modules-load.d`) |
+| `ddcutil` permission denied | `sudo usermod -aG i2c $USER`, re-login |
 | iwd edits not applied | `sudo systemctl try-restart iwd.service` |
 
 ## References

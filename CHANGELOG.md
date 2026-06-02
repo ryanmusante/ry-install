@@ -5,31 +5,26 @@ Newest first; dates ISO-8601 (YYYY-MM-DD).
 
 7.19.1  2026-06-02
 - cmdline: iommu=pt -> amd_iommu=off; KERNEL_PARAMS stays 13.
-- docs: install-flow file count 16 -> 15; --help marks --country=XX honored in all modes.
+- docs: install-flow file count 16 -> 15; --help notes --country=XX honored in all modes.
 - format: run-summary evidence column 30 -> 50 cols (no on-screen truncation).
-- header: file-header version tracks VERSION.
 
 7.19.0  2026-06-02
 - pkgs: drop iw, rtkit from PKGS_ADD (CachyOS defaults); 16 -> 14.
 - files: drop /etc/modules-load.d/i2c-dev.conf and its machinery (ddcutil ships it); managed-file 16 -> 15.
 - change: wireless regdom -> /etc/iw-regdomain (COUNTRY=), consumed by cachyos-iw-set-regdomain; old modprobe value was overridden.
 - fix: ntsync autoload verify scans candidate confs; ends spurious WARN. --verify only.
-- header: version comment tracks VERSION.
 
 7.18.0  2026-06-01
 - remove: drop the kernel-version floor gate; no kernel check at install.
 - remove: drop the _ntsync_state kernel-version branch; detection unchanged.
 - docs: README drops kernel badge/row/notes and moot pre-7 kernel issues.
-- header: version comment tracks VERSION.
 
 7.17.29  2026-06-01
 - comment: reword the <6.14 floor comment to "non-aborting".
 - docs: uninstall note — PKGS_ADD includes Vulkan/gaming deps; review before -Rns.
-- header: version comment tracks VERSION.
 
 7.17.28  2026-06-01
 - comment: condense over-length/multi-line comments to single lines (<= 120 cols).
-- header: version comment tracks VERSION.
 
 7.17.27  2026-06-01
 - fix: --check keeps confirmed drift as EXIT_DRIFT (10), not EXIT_PREFLIGHT (3). --check only.
@@ -134,7 +129,6 @@ Newest first; dates ISO-8601 (YYYY-MM-DD).
 7.17.6  2026-05-31
 - format: split VERIFY-STATIC SYSTEM into SYSTEM+USER / PACKAGES+SERVICES+SYNTAX / CHECKSUM+DRIVER.
 - comment: collapse the _RY_POST_HOOKS dispatch note to one line.
-- header: sync the file-header version to VERSION.
 
 7.17.5  2026-05-31
 - format: split the VERIFY-RUNTIME banner into SERVICES / ENVIRONMENT / SESSION+PERMS + orchestrators.

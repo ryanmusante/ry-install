@@ -8,7 +8,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 15
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-# ntsync autoload providers — cachyos-settings ships ntsync.conf; wine-cachyos historically 10-ntsync.conf; /etc for user override.
+# ntsync autoload providers — cachyos-settings ships ntsync.conf; wine-cachyos 10-ntsync.conf; /etc for user override.
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf
 
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -880,12 +880,12 @@ function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate conte
         '</driconf>'
 end
 
-# Mandatory wireless regdom — consumed by CachyOS cachyos-iw-set-regdomain ({service,path}: `iw reg set $COUNTRY` at device add).
+# Mandatory wireless regdom — cachyos-iw-set-regdomain {service,path} runs `iw reg set $COUNTRY` at device add.
 function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
 end
 
-# NVMe scheduler none — native multiqueue makes a scheduler overhead; ENV{DEVTYPE}==disk guard avoids partition errors.
+# NVMe scheduler none — native multiqueue, scheduler is overhead; ENV{DEVTYPE}==disk guard avoids partition errors.
 function _content__etc_udev_rules.d_60-ry-ioschedulers.rules --description "Generate content for NVMe I/O scheduler udev rule (none)"
     printf '%s\n' \
         "# ry-install: NVMe I/O scheduler none (managed file, do not edit by hand)" \
@@ -4072,7 +4072,7 @@ function _configure_services_enable --description "Daemon-reload, batch-enable s
     return $_ret
 end
 
-# Mandatory wireless regdom: /etc/iw-regdomain deploys via the registry (consumed by cachyos-iw-set-regdomain); this applies it now.
+# Mandatory wireless regdom: /etc/iw-regdomain deploys via registry (cachyos-iw-set-regdomain consumes it); apply now.
 function _apply_wireless_regdom --description "Apply the wireless regulatory domain ($COUNTRY) at runtime"
     if not command -q iw
         _info "  wireless regdom: iw(8) absent — $COUNTRY applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"

@@ -1,17 +1,17 @@
 ry-install changelog
 ====================
 
-Newest first; dates ISO-8601 (YYYY-MM-DD).
+Newest first; ISO-8601 dates.
 
 7.19.1  2026-06-02
 - cmdline: iommu=pt -> amd_iommu=off; KERNEL_PARAMS stays 13.
 - docs: install-flow file count 16 -> 15; --help notes --country=XX honored in all modes.
-- format: run-summary evidence column 30 -> 50 cols (no on-screen truncation).
+- format: run-summary evidence column 30 -> 50 cols.
 
 7.19.0  2026-06-02
 - pkgs: drop iw, rtkit from PKGS_ADD (CachyOS defaults); 16 -> 14.
 - files: drop /etc/modules-load.d/i2c-dev.conf and its machinery (ddcutil ships it); managed-file 16 -> 15.
-- change: wireless regdom -> /etc/iw-regdomain (COUNTRY=), consumed by cachyos-iw-set-regdomain; supersedes prior modprobe value.
+- change: wireless regdom -> /etc/iw-regdomain (COUNTRY=); supersedes prior modprobe value.
 - fix: ntsync autoload verify scans candidate confs; ends spurious WARN. --verify only.
 
 7.18.0  2026-06-01

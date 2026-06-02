@@ -36,7 +36,7 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-Run as your normal user (root refused, sudo internal). Post-install: reboot, then `--verify`; a full run takes 3–8 minutes. Upgrading: re-run — idempotent.
+Run as your normal user (root refused; sudo internal). Reboot after install, then `--verify`. Full run 3–8 min; idempotent — re-run to upgrade.
 
 ## Scope
 
@@ -58,7 +58,7 @@ Hard requirements (sudo cache, systemd ≥ 250, GNU coreutils, free disk, networ
 | sudo | cached credential (`sudo -v`) |
 
 > [!WARNING]
-> Sudo cache may lapse mid-run. Mitigate: `Defaults timestamp_timeout=60` (`sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. Cron/systemd: pre-cache creds — the `sudo -v` fallback needs a TTY. Recovery: re-run.
+> Sudo cache can lapse mid-run. Mitigate with `Defaults timestamp_timeout=60` (`sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. Cron/systemd: pre-cache creds — the `sudo -v` fallback needs a TTY. Recovery: re-run.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -85,7 +85,7 @@ No arguments runs a full unattended install. `--check` and `--verify` only read 
 
 ## Install Flow
 
-Six phases run in order; a package or boot-config failure taints the run and skips the Phase 5 rebuild. Phase 3 writes are atomic renames, so an aborted run leaves each managed file fully old or fully new.
+Six phases run in order; a package or boot-config failure taints the run and skips the Phase 5 rebuild. Phase 3 writes are atomic renames — an aborted run leaves each file fully old or fully new.
 
 | # | Phase | Action |
 |---|---|---|
@@ -98,7 +98,7 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 
 ## Run Summary
 
-Prints a CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records each `PHASE_RESULT` plus a `MATRIX_RENDERED` event — the durable per-phase record. The matrix verdict maps to the exit code; the JSONL `footer` `pass`/`fail`/`warn` are message-level tallies, not phase counts.
+Prints a CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records each `PHASE_RESULT` plus a `MATRIX_RENDERED` event — the durable per-phase record. The matrix verdict maps to the exit code.
 
 Per-phase result:
 
@@ -324,7 +324,7 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 |---|---|
 | NVMe (`KERNEL=="nvme[0-9]*"`, `ENV{DEVTYPE}=="disk"`) | `none` |
 
-NVMe has native multiqueue, so a kernel scheduler is pure overhead; `none` is also the NVMe upstream default. The `ENV{DEVTYPE}=="disk"` guard matches whole-disk devices only, avoiding udev write errors on partitions and the controller char-device.
+NVMe has native multiqueue, so a kernel scheduler is pure overhead; `none` is the upstream default. The `ENV{DEVTYPE}=="disk"` guard matches whole-disk devices only, avoiding udev errors on partitions and the controller char-device.
 
 </details>
 
@@ -343,7 +343,7 @@ NVMe has native multiqueue, so a kernel scheduler is pure overhead; `none` is al
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply regdom (`iw reg set $COUNTRY`). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** Regdom (mandatory; default `US`, `--country=XX`) is tracked and verified statically and at runtime (`iw reg get`).
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply regdom (`iw reg set $COUNTRY`). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** Regdom (mandatory; default `US`, `--country=XX`) is verified statically and at runtime (`iw reg get`).
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>
@@ -399,7 +399,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Managed Files
 
-15 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`. Each is rendered from embedded content, so the on-disk file and the `--verify` target share one source.
+15 files via the [Phase 3](#phase-3--configuration) atomic-write sequence; system `0644`, user `0600`.
 
 <details open>
 <summary><b>Destinations</b> — 15 paths</summary>
@@ -483,7 +483,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 1. `sudo systemctl unmask` the 11 masked units (stopped by `--now`; reboot or start to restore).
 2. `sudo rm` deployed paths from the Managed Files list.
 3. Restore `/etc/fstab` from your pre-install snapshot.
-4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`). **Note:** `PKGS_ADD` includes Vulkan/gaming runtime deps (`lib32-mesa`, `realtime-privileges`) — exclude anything still in use before removing.
+4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`). `PKGS_ADD` includes Vulkan/gaming runtime deps (`lib32-mesa`, `realtime-privileges`) — exclude anything still in use first.
 5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
 6. Reboot.
 

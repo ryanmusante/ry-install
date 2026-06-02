@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.19.0-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.19.1-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 ![license](https://img.shields.io/badge/license-MIT-green.svg)
@@ -91,7 +91,7 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 |---|---|---|
 | 1 | Preflight | Prereqs + lock + runtime validate |
 | 2 | Packages | `pacman -Syu --needed` + AUR via paru + cache refresh |
-| 3 | Configuration | Deploy 16 embedded files (atomic) |
+| 3 | Configuration | Deploy 15 embedded files (atomic) |
 | 4 | Services | fstab + resolved + `PKGS_DEL` + mask + enable |
 | 5 | Boot | `mkinitcpio -P` + `sdboot-manage` + sanity |
 | 6 | Finalize | user daemon-reload + paccache + NM restart (deferred on active WiFi) |
@@ -188,7 +188,7 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 |---|---|
 | CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
 | GPU/amdgpu | `amdgpu.ppfeaturemask=0xffffffff` |
-| IOMMU/PCIe | `iommu=pt`, `pcie_aspm.policy=performance` |
+| IOMMU/PCIe | `amd_iommu=off`, `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
 | Boot/log | `quiet`, `nowatchdog` |

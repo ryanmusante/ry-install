@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.0 (2026-06-02) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.1 (2026-06-02) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -31,7 +31,7 @@ function _ry_show_help --description "Display usage information and available su
         "  --                End of options" \
         "  -h, --help        Show this help" \
         "  -v, --version     Show version" \
-        "  --country=XX      Wireless regulatory domain (ISO-3166 alpha-2); opt-in, install only" \
+        "  --country=XX      Wireless regulatory domain (ISO-3166 alpha-2); opt-in, honored in all modes" \
         "  Note: -h/--help and -v/--version are honored before all checks (root guard, argparse)" \
         "EXIT CODES:" \
         "  0 ok · 1 verify-FAIL/install-error · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
@@ -546,9 +546,9 @@ set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_M
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
 set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
+    amd_iommu=off \
     amd_pstate=active \
     amdgpu.ppfeaturemask=0xffffffff \
-    iommu=pt \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
     pcie_aspm.policy=performance \
@@ -4536,7 +4536,7 @@ end
 function _rdi_render_matrix --description "Render install phase matrix as box-drawn Unicode table"
     test (count $_RY_PHASE_RESULTS) -eq 0; and return 0
     set -q _RY_OUTPUT_BROKEN; and return 0
-    set -l _w_check 34; set -l _w_result 6; set -l _w_evidence 30
+    set -l _w_check 34; set -l _w_result 6; set -l _w_evidence 50
     set -l _inner (math "$_w_check + $_w_result + $_w_evidence + 8"); set -l _bar_top (string repeat -n $_inner '═'); set -l _sep_c (string repeat -n (math "$_w_check + 2") '═'); set -l _sep_r (string repeat -n (math "$_w_result + 2") '═'); set -l _sep_e (string repeat -n (math "$_w_evidence + 2") '═')
     _rdi_matrix_header $_bar_top $_sep_c $_sep_r $_sep_e $_inner $_w_check $_w_result $_w_evidence
     _rdi_matrix_rows $_w_check $_w_result $_w_evidence

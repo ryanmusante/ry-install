@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.3 (2026-06-02) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.4 (2026-06-02) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -922,7 +922,7 @@ end
 # ── TMPFILE TRACKING + KEY DERIVATION ─────────────────────────────────────────────────────────────
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path"
     set -l p $path
-    # Literal HOME-prefix match (string sub, not glob): a HOME path with glob metacharacters must not misroute the key.
+    # Literal HOME-prefix match (string sub, not glob): glob metachars in HOME must not misroute the key.
     set -l _hlen (string length -- "$HOME")
     if test "$p" = "$HOME"
         set p HOME
@@ -3811,7 +3811,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
     for _r in $_rdeps_raw; contains -- "$_r" $PKGS_DEL; and continue; set -a _rdeps "$_r"; end
     if test (count $_rdeps) -gt 0
         _info "  $pkg: skipped (reverse deps: $_rdeps)"
-        # Append to global accumulator (_RY_PKG_REMOVE_SKIPS; reset per-run at caller L3966).
+        # Append to global accumulator (_RY_PKG_REMOVE_SKIPS; reset per-run at caller).
         set -a _RY_PKG_REMOVE_SKIPS "$pkg"
         return 0
     end
@@ -4621,7 +4621,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (12, _post_<tag> dynamic dispatch) ─────────────────────────
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (11, _post_<tag> dynamic dispatch) ─────────────────────────
 function _pb_rebuild_cascade --argument-names target --description "_post_boot sub. mkinitcpio -P + sdboot-manage cascade"
     if not _run sudo -n mkinitcpio -P; _err "Mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     if test "$SDBOOT_REMOVE_EXISTING" = yes

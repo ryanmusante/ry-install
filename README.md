@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.19.3-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.19.4-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 ![license](https://img.shields.io/badge/license-MIT-green.svg)
@@ -324,7 +324,7 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 |---|---|
 | NVMe (`KERNEL=="nvme[0-9]*"`, `ENV{DEVTYPE}=="disk"`) | `none` |
 
-NVMe has native multiqueue, so a kernel scheduler is pure overhead; `none` is the upstream default. The `ENV{DEVTYPE}=="disk"` guard matches whole-disk devices only, avoiding udev errors on partitions and the controller char-device.
+NVMe has native multiqueue, so a scheduler is pure overhead; `none` is the upstream default. The `disk` guard matches whole-disk devices only, avoiding udev errors on partitions and the char-device.
 
 </details>
 

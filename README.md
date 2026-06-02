@@ -343,7 +343,7 @@ NVMe has native multiqueue, so a scheduler is pure overhead; `none` is the upstr
 
 ### Phase 4 — Services
 
-fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply regdom (`iw reg set $COUNTRY`, or `/etc/iw-regdomain` when `iw` absent). The fstab rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.** Regdom is verified statically and at runtime (`iw reg get`).
+fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--now` 11 units → `daemon-reload` + enable runtime units → apply regdom (`iw reg set $COUNTRY`, or `/etc/iw-regdomain` when `iw` absent). The rewrite strips conflicting `atime`/`relatime`/`strictatime`/`defaults`/`commit=*`, gated by `findmnt --verify`; **no auto-backup — snapshot `/etc/fstab` first.**
 
 <details open>
 <summary><b>fstab</b> — 3 ext4 mount options</summary>

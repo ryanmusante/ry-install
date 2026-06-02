@@ -1,12 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.17.25 (2026-05-31) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.18.0 (2026-06-01) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.17.25"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.18.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
-# RC_KVER_FAIL: internal _ry_check_kernel_version sentinel (switch-consumed), never a process exit; kernel-floor fail exits 1 via INSTALL_HAD_ERRORS.
-set -g RC_KVER_OK 0; set -g RC_KVER_FAIL 2
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 16
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
@@ -25,7 +23,7 @@ function _ry_show_help --description "Display usage information and available su
         "VERIFICATION:" \
         "  --verify          Check config files + live system state (static, then runtime)" \
         "  --check           Silent idempotency probe (0=clean 3=preflight 10=drift). Requires functional sudo + systemctl;" \
-        "                    ERR_NO_DATA from systemctl probes is treated as preflight (rc=3), masking any drift detection" \
+        "                    a systemctl ERR_NO_DATA probe yields preflight (rc=3) only when no drift was already confirmed; confirmed drift returns rc=10" \
         "UTILITIES:" \
         "  --install-file <path>  Re-deploy a single managed file" \
         "OPTIONS:" \
@@ -35,7 +33,7 @@ function _ry_show_help --description "Display usage information and available su
         "  --country=XX      Wireless regulatory domain (ISO-3166 alpha-2); opt-in, install only" \
         "  Note: -h/--help and -v/--version are honored before all checks (root guard, argparse)" \
         "EXIT CODES:" \
-        "  0 ok · 1 verify-FAIL, install-error, or kernel <6.14 hard-floor fail · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
+        "  0 ok · 1 verify-FAIL/install-error · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
         "  11 gen-nofn (content-gen fn missing) · 12 gen-nouuid (prereq global missing) · 13 gen-sysctl (malformed entry) · 251 run-tmpfail (_run tmpfile alloc)" \
         "  Signal-induced runs: process \$status may not match signal (fish --on-signal limitation);" \
         "  canonical code recorded in JSONL footer.exit_code (130 INT / 143 TERM / 129 HUP / 131 QUIT / 134 ABRT / 138 USR1 / 140 USR2)" \
@@ -164,10 +162,6 @@ set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g 
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 set -g NM_RESTART_DELAY 3; set -g _PROG_BAR_WIDTH 40
-set -g KVER (command uname -r); set -g KVER_PARTS (string split '.' -- "$KVER"); set -g KVER_MAJOR $KVER_PARTS[1]
-if not string match -qr '^\d+$' -- "$KVER_MAJOR"; echo "[ERR] Cannot parse kernel major version from uname -r: $KVER" >&2; _ry_exit $EXIT_PREFLIGHT; end
-set -g KVER_MINOR (string replace -r '[^0-9].*' '' -- "$KVER_PARTS[2]")
-if test -z "$KVER_MINOR"; or not string match -qr '^\d+$' -- "$KVER_MINOR"; echo "[ERR] Cannot parse kernel minor version from uname -r: $KVER" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
 # ── KERNEL / SYSTEMD STATE PROBES ─────────────────────────────────────────────────────────────────
 function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy-loaded; empty on missing config)"
@@ -183,14 +177,9 @@ function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy
     printf '%s\n' $_KCONFIG_DATA
 end
 
-# Order: kernel-version gate → in-tree config probe → runtime dev/module probe.
-function _ntsync_state --description "Return: unavailable|builtin|loaded|loaded_nodev|missing"
-    _log "NTSYNC_CHECK: major=$KVER_MAJOR minor=$KVER_MINOR"
-    if test "$KVER_MAJOR" -lt 6; or begin
-            test "$KVER_MAJOR" -eq 6; and test "$KVER_MINOR" -lt 14
-        end
-        printf '%s\n' unavailable
-    else if _kconfig_cache | command grep -q -- '^CONFIG_NTSYNC=y' 2>/dev/null
+# Order: in-tree config probe → runtime dev/module probe.
+function _ntsync_state --description "Return: builtin|loaded|loaded_nodev|missing"
+    if _kconfig_cache | command grep -q -- '^CONFIG_NTSYNC=y' 2>/dev/null
         printf '%s\n' builtin
     else if test -c /dev/ntsync
         printf '%s\n' loaded
@@ -328,7 +317,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     set -l _fresh_rc $status
     test $_fresh_rc -eq 0; and return 0
     test $_fresh_rc -ne 2; and return 1
-    # Bounded stale-reclaim: re-check PID liveness each pass (peer can re-win the post-rm mkdir race); PID-recycle race left to user.
+    # Bounded stale-reclaim: re-check PID liveness per pass (peer may re-win post-rm mkdir); PID-recycle left to user.
     for _reclaim_attempt in 1 2 3
         set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
         string match -qr '^[1-9]\d*$' -- "$_stale_pid"; or return 1
@@ -903,7 +892,7 @@ function _content__etc_modprobe.d_ry-cfg80211-regdom.conf --description "Generat
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "options cfg80211 ieee80211_regdom=$COUNTRY"
 end
 
-# NVMe I/O scheduler none — device has native multiqueue, scheduler is pure overhead; ENV{DEVTYPE}==disk guard avoids partition/controller write errors (ArchWiki Improving_performance).
+# NVMe scheduler none — native multiqueue makes a scheduler overhead; ENV{DEVTYPE}==disk guard avoids partition errors.
 function _content__etc_udev_rules.d_60-ry-ioschedulers.rules --description "Generate content for NVMe I/O scheduler udev rule (none)"
     printf '%s\n' \
         "# ry-install: NVMe I/O scheduler none (managed file, do not edit by hand)" \
@@ -1675,26 +1664,6 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
     return 0
 end
 
-# Per-component integer compare; lexical would mis-order 10 < 9.
-function _kver_below --argument-names major minor patch want_major want_minor want_patch --description "True iff (major.minor.patch) < (want_major.want_minor.want_patch). Integer args"
-    test "$major" -lt "$want_major"; and return 0
-    test "$major" -gt "$want_major"; and return 1
-    test "$minor" -lt "$want_minor"; and return 0
-    test "$minor" -gt "$want_minor"; and return 1
-    test "$patch" -lt "$want_patch"
-end
-
-# <6.14 hard-fail: ntsync + gfx1151 fixes unavailable below this floor.
-function _ry_check_kernel_version --description "Verify running kernel version meets minimum requirement"
-    _info "Kernel version: $KVER"
-    if _kver_below $KVER_MAJOR $KVER_MINOR 0 6 14 0
-        _err "Kernel $KVER < 6.14: ntsync and gfx1151 fixes unavailable"
-        _info "  Upgrade kernel before or during install (pacman -Syu)"
-        return $RC_KVER_FAIL
-    end
-    return $RC_KVER_OK
-end
-
 # ── MKINITCPIO HOOK + MODULE VALIDATORS (11 ORDERING INVARIANTS) ──────────────────────────────────
 function _mkinitcpio_hook_exists --argument-names hook --description "True iff hook file exists in any mkinitcpio install/hooks dir"
     test -z "$hook"; and return 1
@@ -2231,8 +2200,6 @@ function _vss_ntsync_modules --description "_verify_static_system sub: ntsync st
             _info "  ntsync: built-in (CONFIG_NTSYNC=y)"
         case loaded_nodev
             _warn "  ntsync: module loaded but /dev/ntsync missing"
-        case unavailable
-            _info "  Kernel < 6.14 — ntsync not supported"
         case missing
             _info "  ntsync: module not loaded"
     end
@@ -2435,25 +2402,13 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
 end
 
 # ── VERIFY-STATIC: CHECKSUM + DRIVER (SHA256 match + _ry_verify_static) ───────────────────────────
-# Dual pipestatus: gen rc + string-collect rc (collect-fail = verifier bug).
+# Authoritative signal = generator rc (pipestatus[1]) + value compare; collect rc 1 on empty output is not a failure.
 function _vsc_check_one --argument-names dst --description "_verify_static_checksum sub. Compare one destination's expected vs installed bytes"
     set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
-    set -l _gen_rc $pipestatus[1]; set -l _gen_collect_rc $pipestatus[2]
+    set -l _gen_rc $pipestatus[1]
     if test $_gen_rc -ne 0; _fail_no_count "  $dst: generator failed (rc=$_gen_rc)"; set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc"; return 0; end
-    if test $_gen_collect_rc -ne 0
-        _fail_no_count "  $dst: string collect failed (rc=$_gen_collect_rc)"
-        set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1)
-        _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=gen rc=$_gen_collect_rc"
-        return 0
-    end
     set -l actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
-    set -l _ib_rc $pipestatus[1]; set -l _ib_collect_rc $pipestatus[2]
-    if test $_ib_collect_rc -ne 0
-        _fail_no_count "  $dst: string collect failed (rc=$_ib_collect_rc)"
-        set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
-        _log "VERIFY_STATIC_COLLECT_FAIL: dst=$dst stage=ib rc=$_ib_collect_rc"
-        return 0
-    end
+    set -l _ib_rc $pipestatus[1]
     switch $_ib_rc
         case 1
             _fail "  $dst: cannot read"; _log "VERIFY_STATIC_READ_FAIL: dst=$dst"; return 0
@@ -2587,17 +2542,22 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
     return 0
 end
 
-# Silent-probe: zero stdout/stderr; ERR_NO_DATA → EXIT_PREFLIGHT (masks drift).
+# Silent-probe: no stdout/stderr; ERR_NO_DATA probe → EXIT_PREFLIGHT unless drift already confirmed (then EXIT_DRIFT).
 function _ry_do_check --description "Silent idempotency probe"
     _log_section "CHECK START"
     if not command -q sudo; or not sudo -n true 2>/dev/null; _log "CHECK_PREFLIGHT: sudo not cached"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
     if not command -q systemctl; _log "CHECK_PREFLIGHT: systemctl not available"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
     set -g _RY_CHECK_DRIFT 0; set -g _RY_CHECK_FILES_CHECKED 0; set -l _rc 0
-    # Dynamic dispatch: per-phase rc + drift-erase semantics preserved.
+    # Dispatch; non-zero phase return = cannot probe; confirmed drift survives a later probe-fail as EXIT_DRIFT.
     for _phase in _check_phase_files _check_phase_cmdline _check_phase_units
         $_phase
         set _rc $status
-        if test $_rc -ne 0; set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED; _log_section "CHECK END"; return $_rc; end
+        if test $_rc -ne 0
+            set -l _drift_seen $_RY_CHECK_DRIFT
+            set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
+            if test "$_drift_seen" -ne 0; _log "CHECK_DRIFT_CONFIRMED_BEFORE_PREFLIGHT: returning EXIT_DRIFT despite later probe failure (probe_rc=$_rc)"; _log_section "CHECK END"; return $EXIT_DRIFT; end
+            _log_section "CHECK END"; return $_rc
+        end
     end
     set -l _drift $_RY_CHECK_DRIFT; set -l _checked $_RY_CHECK_FILES_CHECKED
     set --erase _RY_CHECK_DRIFT _RY_CHECK_FILES_CHECKED
@@ -3133,8 +3093,6 @@ function _vre_ntsync --description "Runtime env check: ntsync state via _ntsync_
             end
         case loaded_nodev
             _warn "ntsync: module loaded but /dev/ntsync missing"
-        case unavailable
-            _info "ntsync: NOT available (kernel 6.14+ required)"
         case missing
             _info "ntsync: NOT available (module not loaded)"
         case '*'
@@ -3448,15 +3406,6 @@ function _install_preflight --description "Run all preflight checks before insta
         _phase_record "Preflight: time sync" PASS "NTP synchronized"
     else
         _phase_record "Preflight: time sync" WARN "clock not NTP-synced or unverifiable"
-    end
-    _ry_check_kernel_version
-    set -l _kv_rc $status
-    switch $_kv_rc
-        case $RC_KVER_OK
-            _phase_record "Preflight: kernel version" PASS "$KVER"
-        case '*'
-            _phase_record "Preflight: kernel version" FAIL "$KVER (below required)"
-            set -g INSTALL_HAD_ERRORS true
     end
     _echo
     if not _ry_validate_configs; _phase_record "Preflight: config validation" FAIL "see JSONL log"; _err "Configuration validation failed - aborting"; _ip_bail_prep; return $EXIT_PREFLIGHT; end

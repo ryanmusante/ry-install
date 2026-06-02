@@ -2,6 +2,27 @@ ry-install ChangeLog
 
 Newest first; dates ISO-8601.
 
+7.18.0  2026-06-01
+- remove: drop the kernel-version floor gate entirely (_ry_check_kernel_version, _kver_below, RC_KVER_OK/RC_KVER_FAIL, KVER/KVER_MAJOR/KVER_MINOR parse + the preflight "Preflight: kernel version" row). No kernel-version is checked at install; a <6.14 kernel no longer records FAIL/exit 1. Behavior change for <6.14 only — kernels ≥ 6.14 (incl. 7+) are byte-for-byte unaffected.
+- remove: _ntsync_state no longer has a kernel-version branch (drops the "unavailable" state + the <6.14 notes in _vss_ntsync_modules / _vre_ntsync); ntsync detection (builtin/loaded/loaded_nodev/missing) is unchanged and kernel-agnostic.
+- docs: README drops the kernel badge, the Prerequisites kernel row + "Kernel versions" note, the install-flow/run-summary/exit-table kernel-floor mentions, and the moot <7 kernel rows in Known Issues/Troubleshooting (ROCm 6.16+, ntsync 6.14+, 6.19.0 black screen) + the now-orphaned CachyOS #23042 reference.
+- header: file-header version comment tracks VERSION.
+
+7.17.29  2026-06-01
+- comment: reword the kernel < 6.14 floor comment to "non-aborting" (recorded FAIL, exit 1, boot still rebuilt), matching the README; no behavior change.
+- docs: README uninstall step 4 notes that PKGS_ADD includes Vulkan/gaming runtime deps (lib32-mesa, realtime-privileges, rtkit) — review before a blanket -Rns.
+- header: file-header version comment tracks VERSION.
+
+7.17.28  2026-06-01
+- comment: condense over-length and multi-line rationale comments to single lines (all <= 120 cols); no behavior change.
+- header: file-header version comment now tracks VERSION.
+
+7.17.27  2026-06-01
+- fix: --check no longer downgrades confirmed drift to EXIT_PREFLIGHT (3) when a later phase's systemctl probe fails; confirmed drift returns EXIT_DRIFT (10). --check exit only.
+
+7.17.26  2026-06-01
+- fix: _vsc_check_one treats an empty installed file as a content MISMATCH, not a collect error; drops the spurious collect-rc guards (generator rc + value compare authoritative). --verify only.
+
 7.17.25  2026-05-31
 - style: collapse two adjacent set -l declarations in _dc_sweep_filesystem onto one line; no behavior change.
 
@@ -10,9 +31,8 @@ Newest first; dates ISO-8601.
 - change: fstab ext4 rewrite tab-separates rewritten lines (awk OFS " " -> "\t"); other lines unchanged, still idempotent.
 
 7.17.23  2026-05-31
-- fix: --install-file for /etc/modules-load.d/* now loads the listed modules immediately via new _post_modload (modprobe); the file previously deployed with no runtime apply. Adds */modules-load.d/* post-hook; _RY_POST_HOOKS 16 -> 17, handlers 11 -> 12. Full install unaffected (module still autoloads at boot).
-- docs: correct content-generator header count 15 -> 16 (udev generator from 7.17.21 was uncounted).
-- docs: README sysctl summary 7 -> 8 tunables (table and SYSCTL_VALUES already had 8 since 7.17.20).
+- fix: --install-file for /etc/modules-load.d/* now modprobes the listed modules immediately (new _post_modload); was deploy-only. _RY_POST_HOOKS 16 -> 17, handlers 11 -> 12. Full install unaffected.
+- docs: content-generator header count 15 -> 16; README sysctl summary 7 -> 8.
 
 7.17.22  2026-05-31
 - docs: document curl as a hard dependency in Prerequisites (HTTPS preflight, enforced by the required-command gate).
@@ -20,8 +40,8 @@ Newest first; dates ISO-8601.
 - refactor: collapse 80 adjacent set -l declarations onto shared lines; 5166 -> 5086 lines, no behavior change.
 
 7.17.21  2026-05-31
-- feat: pin NVMe I/O scheduler to none via new /etc/udev/rules.d/60-ry-ioschedulers.rules (native multiqueue makes a scheduler pure overhead); managed-file 15 -> 16, _RY_POST_HOOKS 15 -> 16. Adds generator, */udev/rules.d/* validator, static + runtime checks, and _post_udev. ENV{DEVTYPE}=="disk" guard avoids the partition/controller write errors of the bare nvme[0-9]* form.
-- change: ttm pages_limit + page_pool_size 16777216 -> 8388608 (GTT pool 64 -> 32 GiB); module is ttm, not amdttm.
+- feat: pin NVMe I/O scheduler to none via /etc/udev/rules.d/60-ry-ioschedulers.rules; managed-file 15 -> 16, _RY_POST_HOOKS 15 -> 16. Adds generator, validator, static+runtime checks, _post_udev.
+- change: ttm pages_limit + page_pool_size 16777216 -> 8388608 (GTT pool 64 -> 32 GiB).
 
 7.17.20  2026-05-31
 - change: drop processor.max_cstate=1 and amdgpu.cwsr_enable=0 (deeper C-states; CWSR to default); KERNEL_PARAMS 15 -> 13.

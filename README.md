@@ -2,9 +2,8 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.17.25-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.18.0-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
-[![kernel](https://img.shields.io/badge/kernel-%E2%89%A5%206.14%20%286.18.4%2B%20rec.%29-orange.svg)](https://www.kernel.org/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 ![license](https://img.shields.io/badge/license-MIT-green.svg)
 
@@ -45,21 +44,18 @@ Run as your normal user (root refused, sudo internal). Post-install: reboot, the
 
 ## Prerequisites
 
-Hard requirements (sudo cache, systemd ≥ 250, GNU coreutils, free disk, network, config validity) abort read-only in preflight (exit 3); retry after fixing the cause. Kernel < 6.14 is the exception — recorded FAIL, exits 1 at the end but still rebuilds boot (no taint). paru and NTP sync only warn.
+Hard requirements (sudo cache, systemd ≥ 250, GNU coreutils, free disk, network, config validity) abort read-only in preflight (exit 3); retry after fixing the cause. paru and NTP sync only warn.
 
 | Requirement | Minimum |
 |---|---|
 | CachyOS | systemd-boot, ext4 root |
 | fish | ≥ 3.6 |
-| Kernel | ≥ 6.14 (≥ 6.18.4 for gfx1151) |
 | systemd | ≥ 250 |
 | curl | required (HTTPS preflight + connectivity check) |
 | Hardware | CPU matches `Ryzen AI Max` |
 | paru | recommended ≥ 2.0.0 (AUR phase warns + continues if absent) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | sudo | cached credential (`sudo -v`) |
-
-> **Kernel versions** — `≥ 6.14` is the hard floor (below it: recorded FAIL, exit 1, boot still rebuilt). `≥ 6.18.4` recommended for gfx1151 graphics; `≥ 6.16` fixes ROCm VRAM allocation; `≥ 6.19.1` avoids the 6.19.0 black-screen regression. See [Known Issues](#known-issues).
 
 > [!WARNING]
 > Sudo cache may lapse mid-run. Mitigate: `Defaults timestamp_timeout=60` (`sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. Cron/systemd: pre-cache creds — the `sudo -v` fallback needs a TTY. Recovery: re-run.
@@ -114,7 +110,7 @@ Per-phase result:
 | `DEFER` | deferred to next boot |
 | `SKIP` / `N/A` | by design / not applicable |
 
-Overall verdict and the exit code it maps to. A run that is all `PASS`/`WARN` exits `0`. Two preflight-stage outcomes bypass this table: a hard-requirement abort exits `3`, and a kernel `< 6.14` floor failure is recorded `FAIL` and exits `1` (it still rebuilds boot).
+Overall verdict and the exit code it maps to. A run that is all `PASS`/`WARN` exits `0`. One preflight-stage outcome bypasses this table: a hard-requirement abort exits `3`.
 
 | Verdict | Trigger | Exit |
 |---|---|---|
@@ -129,7 +125,7 @@ The script is the source of truth — `--verify` checks embedded files byte-for-
 
 ### Phase 1 — Preflight
 
-Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (root UUID + CPU match + invariants) → lock (atomic `mkdir` 0700 + dead-PID reclaim) → sudo cache → deps (systemd ≥ 250 hard-gate · paru ≥ 2.0.0 advisory) → disk space → network (HTTPS + ICMP) → time sync (NTP, systemd-timesyncd) → kernel (≥ 6.14 FAIL) → per-destination config validators.
+Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (root UUID + CPU match + invariants) → lock (atomic `mkdir` 0700 + dead-PID reclaim) → sudo cache → deps (systemd ≥ 250 hard-gate · paru ≥ 2.0.0 advisory) → disk space → network (HTTPS + ICMP) → time sync (NTP, systemd-timesyncd) → per-destination config validators.
 
 ### Phase 2 — Packages
 
@@ -450,7 +446,7 @@ Atomic writes and a gated Phase 5 rebuild mean a failed package or boot-config s
 
 | Code | Meaning |
 |---|---|
-| `0` / `1` / `2` | success / verify-FAIL, install FAIL, or kernel-floor fail / usage |
+| `0` / `1` / `2` | success / verify-FAIL or install FAIL / usage |
 | `3` / `4` / `5` | preflight / boot-critical / lock |
 | `10` | `--check` drift |
 | `11` / `12` / `13` | gen: missing fn / missing UUID / sysctl malformed |
@@ -488,18 +484,17 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 1. `sudo systemctl unmask` the 11 masked units (stopped by `--now`; reboot or start to restore).
 2. `sudo rm` deployed paths from the Managed Files list.
 3. Restore `/etc/fstab` from your pre-install snapshot.
-4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`).
+4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`). **Note:** `PKGS_ADD` includes Vulkan/gaming runtime deps (`lib32-mesa`, `realtime-privileges`, `rtkit`) — review the list and exclude anything still in use before removing.
 5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
 6. Reboot.
 
 ## Known Issues
 
-Most clear with a DKMS package or a newer kernel; MT7925 TX-power/deauth and Strix Halo ACP audio are upstream-pending with no local fix.
+Most clear with a DKMS package; MT7925 TX-power/deauth and Strix Halo ACP audio are upstream-pending with no local fix.
 
 | Component | Issue | Workaround |
 |---|---|---|
 | Strix Halo GPU | MES page faults | `paru -S amdgpu-dkms-firmware` or `IgnorePkg=linux-firmware` |
-| Strix Halo GPU | ROCm VRAM allocation | kernel 6.16+ (`pacman -Syu linux-cachyos`) |
 | MT7925 | kernel panics (`mt792x_mac_reset_work`) | `paru -S mt76-mt7925-dkms` |
 | MT7925 | TX power 3 dBm / random deauth | none (upstream) |
 | RTL8127 10GbE | throughput drops under load (BBS#7762) | `paru -S r8127-dkms` |
@@ -520,16 +515,14 @@ Boot problems recover from a live USB (`arch-chroot` + `mkinitcpio -P` + `sdboot
 | `--verify` drift | `./ry-install.fish --install-file /etc/...` |
 | Sudo cache expired | re-run re-primes; see Prerequisites warning |
 | `PKGS_DEL` member skipped | held by outside rdeps — remove manually with `sudo pacman -Rns <pkg>` |
-| ntsync missing | kernel 6.14+ · `ls /dev/ntsync` |
 | `.ry-install.*` orphan | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, re-run |
 | PipeWire `nice-level` denied | `sudo usermod -aG realtime $USER`, re-login |
 | `ddcutil` permission denied | `sudo usermod -aG i2c $USER`, re-login (`i2c-dev` autoloads at boot) |
-| Kernel 6.19.0 black screen | `pacman -Syu` (≥6.19.1) ([CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)) |
 | iwd edits not applied | `sudo systemctl try-restart iwd.service` |
 
 ## References
 
-[NM + iwd](https://wiki.archlinux.org/title/NetworkManager#Using_iwd_as_the_Wi-Fi_backend) · [MT7925](https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek) · [gfx1151 issues](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) · [ppfeaturemask](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter) · [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes) · [CachyOS #23042](https://github.com/CachyOS/CachyOS/issues/23042)
+[NM + iwd](https://wiki.archlinux.org/title/NetworkManager#Using_iwd_as_the_Wi-Fi_backend) · [MT7925](https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek) · [gfx1151 issues](https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151) · [ppfeaturemask](https://wiki.archlinux.org/title/AMDGPU#Boot_parameter) · [Strix Halo Toolboxes](https://github.com/kyuz0/amd-strix-halo-toolboxes)
 
 ## License
 

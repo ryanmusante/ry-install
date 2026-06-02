@@ -4,7 +4,7 @@ ry-install changelog
 Newest first; ISO-8601 dates.
 
 7.19.5  2026-06-02
-- harden: _ir_validate_counts guards _RY_PHASE_NAMES (6), _RY_BACKUP_TARGETS (2), _RY_NTSYNC_MODLOAD_CONFS (3). No behavioral change.
+- harden: _ir_validate_counts guards _RY_PHASE_NAMES (6), _RY_BACKUP_TARGETS (2), _RY_NTSYNC_MODLOAD_CONFS (3).
 
 7.19.4  2026-06-02
 - comment: post-hook handler banner count 12 -> 11.
@@ -13,7 +13,7 @@ Newest first; ISO-8601 dates.
 - cmdline: amdgpu.ppfeaturemask 0xffffffff -> 0xfff73fff; KERNEL_PARAMS stays 13.
 
 7.19.2  2026-06-02
-- cleanup: drop dead SERVICE_DESTINATIONS subsystem + remnants; _RY_POST_HOOKS 17 -> 16. No behavioral change.
+- cleanup: drop dead SERVICE_DESTINATIONS subsystem + remnants; _RY_POST_HOOKS 17 -> 16.
 - comment: preflight banner KERNEL VERSION -> DEPS + NETWORK + DISK + SYSTEMD.
 - docs: regdom falls back to /etc/iw-regdomain when iw absent; NetworkManager-dispatcher opportunistic.
 

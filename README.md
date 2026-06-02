@@ -36,29 +36,29 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-Run as your normal user (root refused; sudo internal). Reboot after install, then `--verify`. Full run 3–8 min; idempotent — re-run to upgrade.
+Run as your normal user — root is refused, sudo is internal. Reboot, then `--verify`. Idempotent: re-run to upgrade.
 
 ## Scope
 
-**In:** kernel cmdline, initramfs, systemd units (system + user), network stack, sysctl, gaming env vars, pacman/paru install+remove, and systemd-boot BLS entries via `sdboot-manage`. **Out:** dotfiles, shells, editors, secrets, backups, multi-user, non-CachyOS distros, laptops, and UKI.
+**In:** kernel cmdline, initramfs, systemd units (system + user), network stack, sysctl, gaming env vars, pacman/paru install+remove, systemd-boot BLS entries via `sdboot-manage`. **Out:** dotfiles, shells, editors, secrets, backups, multi-user, non-CachyOS distros, laptops, UKI.
 
 ## Prerequisites
 
-Hard requirements (sudo cache, systemd ≥ 250, GNU coreutils, free disk, network, config validity) abort read-only in preflight (exit 3); retry after fixing. paru and NTP sync only warn.
+Hard requirements abort read-only in preflight (exit 3); retry after fixing. paru and NTP sync only warn.
 
 | Requirement | Minimum |
 |---|---|
 | CachyOS | systemd-boot, ext4 root |
 | fish | ≥ 3.6 |
 | systemd | ≥ 250 |
-| curl | required (HTTPS preflight + connectivity check) |
+| curl | required (HTTPS preflight) |
 | Hardware | CPU matches `Ryzen AI Max` |
-| paru | recommended ≥ 2.0.0 (AUR phase warns + continues if absent) |
+| paru | recommended ≥ 2.0.0 (AUR phase warns if absent) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | sudo | cached credential (`sudo -v`) |
 
 > [!WARNING]
-> Sudo cache can lapse mid-run. Mitigate with `Defaults timestamp_timeout=60` (`sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. Cron/systemd: pre-cache creds — the `sudo -v` fallback needs a TTY. Recovery: re-run.
+> Sudo cache can lapse mid-run; mitigate with `Defaults timestamp_timeout=60` (`sudo visudo`) or a `NOPASSWD` drop-in at `/etc/sudoers.d/ry-install`. Cron/systemd must pre-cache creds — the `sudo -v` fallback needs a TTY. Recovery: re-run.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -67,7 +67,7 @@ df -h / /boot                    # verify space
 
 ## Hardware
 
-Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 GB LPDDR5x-8000. Runtime init requires a CPU matching `Ryzen AI Max`; override with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
+Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 GB LPDDR5x-8000. Requires a CPU matching `Ryzen AI Max`; override with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
 
 ## Usage
 
@@ -77,15 +77,15 @@ No arguments runs a full unattended install. `--check` and `--verify` only read 
 |---|---|
 | (no args) | Full unattended install |
 | `-V, --verbose` | Show install output (check ignores -V) |
-| `--verify` | Config files + live system state (static, then runtime) |
+| `--verify` | Config files + live state (static, then runtime) |
 | `--check` | Idempotency probe (0=clean, 3=preflight, 10=drift) |
 | `--install-file <path>` | Re-deploy one managed file (absolute path) |
-| `--country=XX` | Override the wireless regulatory domain (ISO-3166 alpha-2; default `US`) |
+| `--country=XX` | Wireless regulatory domain (ISO-3166 alpha-2; default `US`) |
 | `-h, --help` / `-v, --version` | Help / version |
 
 ## Install Flow
 
-Six phases run in order; a package or boot-config failure taints the run and skips the Phase 5 rebuild. Phase 3 writes are atomic renames — an aborted run leaves each file fully old or fully new.
+Six phases in order; a package or boot-config failure taints the run and skips the Phase 5 rebuild. Phase 3 writes are atomic renames — an aborted run leaves each file fully old or fully new.
 
 | # | Phase | Action |
 |---|---|---|
@@ -98,7 +98,7 @@ Six phases run in order; a package or boot-config failure taints the run and ski
 
 ## Run Summary
 
-Prints a CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records each `PHASE_RESULT` plus a `MATRIX_RENDERED` event. The verdict maps to the exit code.
+Prints a CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) to stderr; JSONL under `~/ry-install/logs/` records each `PHASE_RESULT` plus a `MATRIX_RENDERED` event. Verdict maps to exit code.
 
 Per-phase result:
 
@@ -129,7 +129,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 
 ### Phase 2 — Packages
 
-`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added); their iwd/NetworkManager configs still deploy. AUR is advisory: missing `paru` or a *partial* failure is `WARN` (exit `0`); only an all-package AUR failure is `FAIL` (exit `1`).
+`pacman -Syu --needed` (`PKGS_ADD`) → `paru` (`AUR_PKGS`) → optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory: missing `paru` or a *partial* failure is `WARN` (exit `0`); only an all-package AUR failure is `FAIL` (exit `1`).
 
 <details open>
 <summary><b>Packages — install</b> — 14 pkgs</summary>
@@ -141,7 +141,7 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 | Vulkan/GL | `lib32-mesa` |
 | rust utilities | `fd`, `sd`, `dust`, `procs`, `bottom` |
 | perf | `realtime-privileges` |
-| display | `ddcutil` (ships the `i2c-dev` autoload) |
+| display | `ddcutil` (ships `i2c-dev` autoload) |
 
 </details>
 
@@ -172,8 +172,8 @@ Bootstrap (fish ≥ 3.6 + coreutils + PATH/TMPDIR/HOME) → `_init_runtime` (roo
 |---|---|
 | Full upgrades only | partial upgrades forbidden; `pacman -Syu --needed` always |
 | AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted — DKMS needs makedeps) |
-| PGP failures | pre-import `gpg --recv-keys <KEYID>` or run `paru -S <pkg>` manually |
-| Reverse deps | `PKGS_DEL` members held by outside rdeps are skipped; remove manually with `pacman -Rns` |
+| PGP failures | `gpg --recv-keys <KEYID>` or run `paru -S <pkg>` manually |
+| Reverse deps | `PKGS_DEL` members held by outside rdeps are skipped; remove with `pacman -Rns` |
 
 </details>
 
@@ -304,7 +304,7 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 
 | Key | Value |
 |---|---|
-| `COUNTRY` | `US` (`/etc/iw-regdomain`; mandatory, override `--country=XX`) |
+| `COUNTRY` | `US` (`/etc/iw-regdomain`; override `--country=XX`) |
 
 </details>
 
@@ -324,7 +324,7 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 |---|---|
 | NVMe (`KERNEL=="nvme[0-9]*"`, `ENV{DEVTYPE}=="disk"`) | `none` |
 
-NVMe has native multiqueue, so a scheduler is pure overhead; `none` is the upstream default. The `disk` guard matches whole-disk devices only, avoiding udev errors on partitions and the char-device.
+NVMe has native multiqueue; `none` (upstream default) avoids scheduler overhead. The `disk` guard matches whole-disk devices only, sparing partitions and the char-device.
 
 </details>
 
@@ -386,7 +386,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 | `fstrim.timer` | weekly TRIM |
 | `NetworkManager.service` | deduped via `_RY_PKG_MANAGED_SERVICES` |
 | `cpupower.service` | oneshot — `active`/`exited` |
-| `NetworkManager-dispatcher.service` | opportunistic — enabled only if installed; not in `EXPECTED_SERVICES` |
+| `NetworkManager-dispatcher.service` | enabled only if installed; not in `EXPECTED_SERVICES` |
 
 </details>
 
@@ -396,7 +396,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ### Phase 6 — Finalize
 
-`systemctl --user daemon-reload` (skipped without active user-bus) → pacman cache trim (`paccache -rk2 -ruk0`, falls back to `pacman -Sc`) → NetworkManager restart for the wpa_supplicant → iwd switch (deferred to reboot when WiFi is the active route).
+`systemctl --user daemon-reload` (skipped without active user-bus) → pacman cache trim (`paccache -rk2 -ruk0`, falls back to `pacman -Sc`) → NetworkManager restart (iwd switch deferred to reboot when WiFi is the active route).
 
 ## Managed Files
 
@@ -427,7 +427,7 @@ fstab rewrite → `systemd-resolved` restart → `PKGS_DEL` removal → mask `--
 
 ## Safety & Reliability
 
-Atomic writes and a gated Phase 5 rebuild mean a failed package or boot-config step can't leave a broken boot entry. `/etc/fstab` is the exception — rewritten with no automatic backup, so snapshot it first.
+Atomic writes plus a gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. `/etc/fstab` is the exception — no auto-backup, so snapshot it first.
 
 | Feature | Detail |
 |---|---|
@@ -439,7 +439,7 @@ Atomic writes and a gated Phase 5 rebuild mean a failed package or boot-config s
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | Instance lock | atomic mkdir `0700`; reclaims dead-PID lock via `kill -0` |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT → 128+signum; SIGPIPE/WINCH non-fatal |
-| Firewall posture | ufw disabled+masked (trusted-LAN); install warns, `--verify` reports `ufw=<state> nft_rules=<n>` |
+| Firewall posture | ufw disabled+masked (trusted-LAN); `--verify` reports `ufw=<state> nft_rules=<n>` |
 
 <details open>
 <summary><b>Exit codes</b></summary>
@@ -481,10 +481,10 @@ jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/log
 
 No automated uninstaller; use [Managed Files](#managed-files) as the rollback reference:
 
-1. `sudo systemctl unmask` the 11 masked units (stopped by `--now`; reboot or start to restore).
+1. `sudo systemctl unmask` the 11 masked units (reboot or start to restore).
 2. `sudo rm` deployed paths from the Managed Files list.
 3. Restore `/etc/fstab` from your pre-install snapshot.
-4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`). `PKGS_ADD` includes Vulkan/gaming runtime deps (`lib32-mesa`, `realtime-privileges`) — exclude anything still in use first.
+4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`). `PKGS_ADD` includes Vulkan/gaming runtime deps — exclude anything still in use.
 5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
 6. Reboot.
 

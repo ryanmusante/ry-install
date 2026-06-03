@@ -1,6 +1,13 @@
 ry-install changelog
 ====================
 
+7.19.15  2026-06-03
+- fix: preflight-abort run summary renders verdict PREFLIGHT (exit 3); was matrix verdict FAIL (table-mapped to exit 1) while the process exited 3.
+- docs: README verdict table + exit-code note add PREFLIGHT.
+
+7.19.14  2026-06-03
+- cleanup: _fstab_needs_change — drop redundant `--` in commit= capture (inert; single `--` already terminates options).
+
 7.19.13  2026-06-03
 - fix: fstab rewrite WARNs + logs when findmnt absent (was committed ungated).
 - style: trim verbose comments to vital info.

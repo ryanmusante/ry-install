@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.13 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.15 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.13"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.15"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -3682,7 +3682,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
         end
         if not string match -qr '(^|,)noatime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)lazytime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"
             set -g _RY_FSTAB_NEEDS_CHANGE true
-            set -l _existing_commit (string match -rg -- '(?:^|,)commit=([0-9]+)(?:,|$)' -- "$opts_field")
+            set -l _existing_commit (string match -rg -- '(?:^|,)commit=([0-9]+)(?:,|$)' "$opts_field")
             test -n "$_existing_commit"; and test "$_existing_commit" != 10; and set -ga _RY_FSTAB_COMMIT_OVERRIDES "$_existing_commit"
         end
     end
@@ -4468,13 +4468,15 @@ function _rdi_matrix_rows --description "_rdi_render_matrix sub. Emit data rows;
     end
 end
 
-# Verdict precedence: BOOT_CRIT > FAIL > WARN > PASS; DEFER/SKIP/N/A informational.
+# Verdict precedence: PREFLIGHT > BOOT_CRIT > FAIL > WARN > PASS; DEFER/SKIP/N/A informational.
 function _rdi_matrix_footer --description "_rdi_render_matrix sub. Emit verdict-bearing footer rows + bottom bar"
     set -l _bar_top $argv[1]; set -l _inner $argv[2]
     set -l _verdict PASS
     test "$_RY_MTX_WARN" -gt 0; and set _verdict PASS-WITH-WARNINGS
     test "$_RY_MTX_FAIL" -gt 0; and set _verdict FAIL
     set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true; and set _verdict FAIL-BOOT-CRITICAL
+    # Preflight abort bypasses the FAIL/WARN tally → exit 3, so the verdict must not read FAIL (exit 1).
+    set -q _RY_PREFLIGHT_ABORT; and test "$_RY_PREFLIGHT_ABORT" = true; and set _verdict PREFLIGHT
     set -l _totals "Totals : $_RY_MTX_PASS PASS · $_RY_MTX_WARN WARN · $_RY_MTX_FAIL FAIL · $_RY_MTX_DEFER DEFER · $_RY_MTX_SKIP SKIP · $_RY_MTX_NA N/A"; set -l _elapsed "Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_verdict"; set -l _log_line "Log    : $LOG_FILE"; set -l _next_msg "Next   : reboot · ./ry-install.fish --verify"
     test "$_verdict" != PASS; and set _next_msg "Next   : review FAIL/WARN above · re-run install (idempotent)"
     set -l _pad_inner (math "$_inner - 2")
@@ -4556,7 +4558,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     _progress_init
     _install_preflight
     set -l _pre_rc $status
-    if test "$_pre_rc" -ne 0; _progress_done; _rdi_render_matrix; _log_section "INSTALLATION END"; return $EXIT_PREFLIGHT; end
+    if test "$_pre_rc" -ne 0; set -g _RY_PREFLIGHT_ABORT true; _progress_done; _rdi_render_matrix; _log_section "INSTALLATION END"; return $EXIT_PREFLIGHT; end
     # rc discarded; phase failures tracked via INSTALL_HAD_ERRORS.
     _rdi_run_phases
     _install_rebuild_boot

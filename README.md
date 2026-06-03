@@ -2,7 +2,7 @@
 
 CachyOS configuration for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-Version 7.19.13 · fish >= 3.6 · CachyOS · MIT.
+Version 7.19.15 · fish >= 3.6 · CachyOS · MIT.
 
 ## Contents
 
@@ -106,7 +106,7 @@ Per-phase result:
 | `DEFER` | deferred to next boot |
 | `SKIP` / `N/A` | by design / not applicable |
 
-Verdict to exit code. All `PASS`/`WARN` exit `0`; a hard-requirement preflight abort bypasses this table and exits `3`.
+Verdict to exit code. All `PASS`/`WARN` exit `0`. A preflight abort exits `3`: a gate that fails after a phase row is recorded renders the summary with verdict `PREFLIGHT`; hard gates that fail earlier (fish/systemd/curl version, count drift) exit `3` directly without a matrix.
 
 | Verdict | Trigger | Exit |
 |---|---|---|
@@ -114,6 +114,7 @@ Verdict to exit code. All `PASS`/`WARN` exit `0`; a hard-requirement preflight a
 | `PASS-WITH-WARNINGS` | `0 FAIL · >=1 WARN` | `0` |
 | `FAIL` | `>=1 FAIL` | `1` |
 | `FAIL-BOOT-CRITICAL` | boot cascade aborted; prints DO NOT REBOOT | `4` |
+| `PREFLIGHT` | preflight gate failed after a phase row was recorded (overrides FAIL/WARN tally) | `3` |
 
 ## Configuration
 

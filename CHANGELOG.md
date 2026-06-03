@@ -1,6 +1,10 @@
 ry-install changelog
 ====================
 
+7.19.11  2026-06-03
+- fix: drop unused sort from preflight hard-dependency gate.
+- fix: _install_fstab_opts evidence reflects outcome (absent / no-ext4 / conformant / applied).
+
 7.19.10  2026-06-03
 - style: pad CONFIG-FORMAT VALIDATORS header divider to 100 cols (uniform with rest).
 - style: drop 2 stray blank lines after JSON ESCAPE / CONFIG-FORMAT VALIDATORS headers.

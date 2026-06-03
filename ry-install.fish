@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.10 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.11 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.10"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.11"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -386,7 +386,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
-    set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES
+    set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_FSTAB_EVIDENCE
 end
 
 # TERM → 0.5s grace → KILL; lets long pkg/boot ops flush first.
@@ -1532,7 +1532,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     set -l missing
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
         timeout mktemp awk grep curl getent sudo head df mv \
-        tee stat find cp chmod chown sort install cat rm date wc
+        tee stat find cp chmod chown install cat rm date wc
         command -q $cmd; or set -a missing $cmd
     end
     if test (count $missing) -gt 0; _err "missing: $missing"; return 1; end
@@ -3755,7 +3755,8 @@ end
 
 # Symlink-reject + idempotent (no-change skips rewrite); ext4 entries only.
 function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ext4 fstab entries"
-    if not test -f /etc/fstab; _warn "  /etc/fstab not found — skipping"; return 0; end
+    set -g _RY_FSTAB_EVIDENCE "noatime,lazytime,commit=10"
+    if not test -f /etc/fstab; _warn "  /etc/fstab not found — skipping"; set -g _RY_FSTAB_EVIDENCE "fstab absent — skipped"; return 0; end
     if test -L /etc/fstab; _fail "  /etc/fstab is a symlink — refusing to rewrite (resolve symlink first or skip fstab opts)"; return 1; end
     set -l ext4_lines
     if not test -r /etc/fstab
@@ -3765,12 +3766,13 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     else
         set ext4_lines (command awk "$_RY_AWK_EXT4_FILTER" /etc/fstab 2>/dev/null)
     end
-    if test -z "$ext4_lines"; _info "  No ext4 entries in /etc/fstab"; return 0; end
+    if test -z "$ext4_lines"; _info "  No ext4 entries in /etc/fstab"; set -g _RY_FSTAB_EVIDENCE "no ext4 entries"; return 0; end
     _fstab_needs_change $ext4_lines
     if test "$_RY_FSTAB_NEEDS_CHANGE" = false
         set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES
         _ok "  /etc/fstab: ext4 entries already have noatime,lazytime,commit=10"
         _log "FSTAB_OPTS_NOOP: ext4 entries already conformant"
+        set -g _RY_FSTAB_EVIDENCE "already conformant"
         return 0
     end
     test (count $_RY_FSTAB_COMMIT_OVERRIDES) -gt 0; and _warn "  /etc/fstab: replacing existing commit= value(s) with commit=10: $_RY_FSTAB_COMMIT_OVERRIDES"
@@ -3778,6 +3780,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     not _fstab_atomic_replace; and return 1
     _ok "  /etc/fstab: noatime,lazytime,commit=10 applied to ext4 entries"
     _log "FSTAB_OPTS: noatime,lazytime,commit=10 applied"
+    set -g _RY_FSTAB_EVIDENCE "applied noatime,lazytime,commit=10"
     return 0
 end
 
@@ -4019,7 +4022,7 @@ function _install_configure_services --description "Enable, start, and configure
     set -l _ret 0
     # Phase 4 step 1: fstab ext4 opts (noatime,lazytime,commit=10).
     if _install_fstab_opts
-        _phase_record "Services: fstab opts" PASS "noatime,lazytime,commit=10"
+        _phase_record "Services: fstab opts" PASS "$_RY_FSTAB_EVIDENCE"
     else
         _phase_record "Services: fstab opts" FAIL "see JSONL log"
         set _ret 1

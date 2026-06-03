@@ -2,7 +2,7 @@
 
 **CachyOS configuration for the Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S.**
 
-[![version](https://img.shields.io/badge/version-7.19.5-blue.svg)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.19.6-blue.svg)](CHANGELOG.md)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46.svg)](https://fishshell.com/)
 [![distro](https://img.shields.io/badge/distro-CachyOS-6a4c93.svg)](https://cachyos.org/)
 ![license](https://img.shields.io/badge/license-MIT-green.svg)
@@ -221,46 +221,40 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 <details open>
 <summary><b>systemd-resolved</b> — 4 keys</summary>
 
-| Key | Value |
+| Section | Settings |
 |---|---|
-| `MulticastDNS` | `resolve` |
-| `LLMNR` | `no` |
-| `DNSOverTLS` | `no` |
-| `DNSSEC` | `allow-downgrade` |
+| `[Resolve]` | `MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` |
 
 </details>
 
 <details open>
 <summary><b>systemd-logind</b> — 8 keys</summary>
 
-| Key | Value |
+| Section | Settings |
 |---|---|
-| `HandlePowerKey` / `HandlePowerKeyLongPress` | `ignore` |
-| `HandleSuspendKey` / `HandleSuspendKeyLongPress` | `ignore` |
-| `HandleHibernateKey` / `HandleHibernateKeyLongPress` | `ignore` |
-| `HandleRebootKey` / `HandleRebootKeyLongPress` | `ignore` |
+| `[Login]` | `HandlePowerKey`, `HandleSuspendKey`, `HandleHibernateKey`, `HandleRebootKey` (+ matching `…LongPress`) = `ignore` |
 
 </details>
 
 <details open>
 <summary><b>iwd</b> — 3 keys</summary>
 
-| Section | Key | Value |
-|---|---|---|
-| `[General]` | `EnableNetworkConfiguration` | `false` |
-| `[DriverQuirks]` | `PowerSaveDisable` | `*` |
-| `[Network]` | `NameResolvingService` | `systemd` |
+| Section | Settings |
+|---|---|
+| `[General]` | `EnableNetworkConfiguration=false` |
+| `[DriverQuirks]` | `PowerSaveDisable=*` |
+| `[Network]` | `NameResolvingService=systemd` |
 
 </details>
 
 <details open>
 <summary><b>NetworkManager</b> — 3 keys</summary>
 
-| Section | Key | Value |
-|---|---|---|
-| `[device]` | `wifi.backend` | `iwd` |
-| `[connection]` | `wifi.powersave` | `2` |
-| `[logging]` | `level` | `WARN` |
+| Section | Settings |
+|---|---|
+| `[device]` | `wifi.backend=iwd` |
+| `[connection]` | `wifi.powersave=2` |
+| `[logging]` | `level=WARN` |
 
 </details>
 
@@ -276,26 +270,20 @@ Atomic write per file: `mktemp` in the destination parent → render via `tee` �
 <details open>
 <summary><b>sysctl</b> — 8 tunables</summary>
 
-| Key | Value |
+| Scope | Settings |
 |---|---|
-| `net.core.default_qdisc` | `fq` |
-| `net.core.netdev_budget` | `600` |
-| `net.core.netdev_budget_usecs` | `5000` |
-| `net.ipv4.tcp_congestion_control` | `bbr` |
-| `net.ipv4.tcp_notsent_lowat` | `16384` |
-| `net.ipv4.tcp_slow_start_after_idle` | `0` |
-| `vm.compaction_proactiveness` | `0` |
-| `vm.max_map_count` | `2147483642` |
+| `net.core` | `default_qdisc=fq`, `netdev_budget=600`, `netdev_budget_usecs=5000` |
+| `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
+| `vm` | `compaction_proactiveness=0`, `max_map_count=2147483642` |
 
 </details>
 
 <details open>
 <summary><b>amdgpu / ttm modprobe</b> — 2 options (caps GTT at 32 GiB)</summary>
 
-| Option | Value |
+| Scope | Settings |
 |---|---|
-| `ttm pages_limit` | `8388608` |
-| `ttm page_pool_size` | `8388608` |
+| `ttm` | `pages_limit=8388608`, `page_pool_size=8388608` |
 
 </details>
 

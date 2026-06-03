@@ -3,6 +3,10 @@ ry-install changelog
 
 Newest first; ISO-8601 dates.
 
+7.19.6  2026-06-03
+- docs: README Configuration tables -> 2-column grouped layout (Section/Scope | Settings), matching Bootloader/Kernel cmdline/Env vars.
+- docs: converted iwd, NetworkManager, systemd-resolved, systemd-logind, sysctl, amdgpu/ttm; presentational only, no value changes.
+
 7.19.5  2026-06-02
 - harden: _ir_validate_counts guards _RY_PHASE_NAMES (6), _RY_BACKUP_TARGETS (2), _RY_NTSYNC_MODLOAD_CONFS (3).
 

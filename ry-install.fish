@@ -1,14 +1,14 @@
 #!/usr/bin/env fish
-# ry-install v7.19.11 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.13 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.11"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.13"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 15
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-# ntsync autoload providers — cachyos-settings ntsync.conf; wine-cachyos 10-ntsync.conf; /etc override.
+# ntsync autoload: cachyos-settings + wine-cachyos modules-load.d confs; /etc overrides.
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf
 
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -553,6 +553,26 @@ set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade
 # COUNTRY: wireless regulatory domain (mandatory; default US, override with --country=XX).
 set -g COUNTRY US
+# _RY_ISO3166_ALPHA2: assigned ISO-3166-1 alpha-2 codes; --country validated against this set.
+set -g _RY_ISO3166_ALPHA2 \
+    AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ \
+    BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS \
+    BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN \
+    CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE \
+    EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF \
+    GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM \
+    HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM \
+    JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC \
+    LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK \
+    ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA \
+    NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG \
+    PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW \
+    SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS \
+    ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO \
+    TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI \
+    VN VU WF WS YE YT ZA ZM ZW
+# RADV_APU_OPTION: drirc option name; single source for content-gen + verify.
+set -g RADV_APU_OPTION radv_enable_unified_heap_on_apu
 set -g LOGIND_IGNORE_KEYS \
     HandlePowerKey \
     HandlePowerKeyLongPress \
@@ -855,7 +875,7 @@ function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate conte
         '<driconf>' \
         '    <device driver="radv">' \
         '        <application name="Default">' \
-        '            <option name="radv_enable_unified_heap_on_apu" value="true"/>' \
+        "            <option name=\"$RADV_APU_OPTION\" value=\"true\"/>" \
         '        </application>' \
         '    </device>' \
         '</driconf>'
@@ -866,7 +886,7 @@ function _content__etc_iw-regdomain --description "Generate content for /etc/iw-
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
 end
 
-# NVMe scheduler none — native multiqueue; ENV{DEVTYPE}==disk guard avoids partition errors.
+# NVMe scheduler none (native multiqueue); DEVTYPE==disk guard spares partitions.
 function _content__etc_udev_rules.d_60-ry-ioschedulers.rules --description "Generate content for NVMe I/O scheduler udev rule (none)"
     printf '%s\n' \
         "# ry-install: NVMe I/O scheduler none (managed file, do not edit by hand)" \
@@ -912,7 +932,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before re
     return 0
 end
 
-# Branchless: sudo -n prefix or bare command; preserves argv shape. rc=250 = internal misuse sentinel.
+# sudo -n prefix or bare command; preserves argv. rc=250 = misuse sentinel.
 function _as --argument-names use_sudo --description "Prefix command with sudo or command based on use_sudo flag"
     if test (count $argv) -lt 2; _log "BUG: _as called without command (argv=$argv)"; return 250; end
     if test "$use_sudo" != true; and test "$use_sudo" != false; _log "BUG: _as called with non-bool use_sudo='$use_sudo' (argv=$argv)"; return 250; end
@@ -926,7 +946,7 @@ end
 # ── TMPFILE TRACKING + KEY DERIVATION ─────────────────────────────────────────────────────────────
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path"
     set -l p $path
-    # Literal HOME-prefix match (not glob): glob metachars in HOME must not misroute the key.
+    # Literal HOME-prefix match (not glob); HOME metachars must not misroute the key.
     set -l _hlen (string length -- "$HOME")
     if test "$p" = "$HOME"
         set p HOME
@@ -1362,7 +1382,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
     echo "$_t"
 end
 
-# Without stderr-capture tmpdir, _err on failed cmds is lost — refuse. rc=255 = internal misuse sentinel.
+# No stderr-capture tmpdir → refuse (cmd errors would be lost). rc=255 = misuse sentinel.
 function _run --description "Execute a command with logging, stdout/stderr capture, and timeout enforcement"
     if test (count $argv) -eq 0; _log "BUG: _run called with no arguments"; return 255; end
     if string match -q -- '-*' "$argv[1]"; _log "BUG: _run called with dash-prefixed argv[1]='$argv[1]' — refusing"; return 255; end
@@ -1658,7 +1678,7 @@ function _vmh_existence_only --description "_ry_validate_mkinitcpio_hooks sub. E
     test "$errors" -eq 0
 end
 
-# 10 ordering invariants: base-first + 8 BEFORE:AFTER pairs + fsck-last (upstream mkinitcpio build order).
+# 10 ordering invariants: base-first + 8 BEFORE:AFTER pairs + fsck-last.
 function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: ordering invariants"
     set -l hooks $argv; set -l errors 0
     if test (count $hooks) -eq 0; echo 0; return 0; end
@@ -1948,7 +1968,7 @@ function _awf_make_backup --argument-names dst use_sudo --description "Create <d
     return 0
 end
 
-# Re-invokes generator — keep _RY_BACKUP_TARGETS side-effect-free (loader.conf/mkinitcpio.conf).
+# Re-invokes generator; keep _RY_BACKUP_TARGETS generators side-effect-free.
 function _awf_postwrite_verify_restore --argument-names dst use_sudo --description "Re-read installed bytes vs expected; restore .ry.bak on mismatch"
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"; set -l _expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _gen_ps $pipestatus
     if test "$_gen_ps[1]" -ne 0; _warn "  $dst: post-write verify skipped (content generator re-run rc=$_gen_ps[1])"; _log "POSTWRITE_VERIFY_SKIP: dst=$dst reason=gen_rerun rc=$_gen_ps[1]"; return 0; end
@@ -2216,7 +2236,7 @@ function _vss_drirc --description "_verify_static_system sub: RADV drirc"
     _echo "── drirc (RADV) ──"
     _chk_file /etc/drirc.d/95-ry-radv-apu.conf; or return 0
     _chk_grep /etc/drirc.d/95-ry-radv-apu.conf 'driver="radv"' 'driver=radv'
-    _chk_grep /etc/drirc.d/95-ry-radv-apu.conf 'radv_enable_unified_heap_on_apu' 'radv_enable_unified_heap_on_apu'
+    _chk_grep /etc/drirc.d/95-ry-radv-apu.conf "$RADV_APU_OPTION" "$RADV_APU_OPTION"
     _chk_grep /etc/drirc.d/95-ry-radv-apu.conf 'value="true"' 'unified_heap value=true'
 end
 
@@ -2351,7 +2371,7 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
 end
 
 # ── VERIFY-STATIC: CHECKSUM + DRIVER (SHA256 match + _ry_verify_static) ───────────────────────────
-# Signal = generator rc (pipestatus[1]) + value compare; collect rc 1 on empty output not a failure.
+# Signal = generator rc (pipestatus[1]) + value compare; empty-output collect rc 1 is OK.
 function _vsc_check_one --argument-names dst --description "_verify_static_checksum sub. Compare one destination's expected vs installed bytes"
     set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _gen_rc $pipestatus[1]
@@ -3747,6 +3767,9 @@ function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp 
             for _vl in (printf '%s\n' $_verify_out | command head -n 3); _fail "    $_vl"; end
             return 1
         end
+    else
+        _warn "  /etc/fstab: findmnt absent — committing without --verify gate (symlink + size checks still applied)"
+        _log "FSTAB_VERIFY_SKIPPED: findmnt not found"
     end
     if not sudo -n mv -T -- "$tmpfstab" /etc/fstab; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: atomic move failed"; return 1; end
     _untrack_tmpfile "$tmpfstab"
@@ -4834,8 +4857,9 @@ if set -q _flag_version; echo "v$VERSION"; _pre_dispatch_exit $EXIT_OK; end
 set -q _flag_verify; and set -g MODE verify
 set -q _flag_check; and set -g MODE check
 if set -q _flag_country; and test -n "$_flag_country"
-    string match -qr '^[A-Za-z][A-Za-z]$' -- "$_flag_country"; or _early_usage_exit "--country must be an ISO-3166 alpha-2 code (e.g. US); got '$_flag_country'"
-    set -g COUNTRY (string upper -- "$_flag_country")
+    set -l _cc (string upper -- "$_flag_country")
+    contains -- "$_cc" $_RY_ISO3166_ALPHA2; or _early_usage_exit "--country must be an assigned ISO-3166-1 alpha-2 code (e.g. US, GB, DE); got '$_flag_country'"
+    set -g COUNTRY $_cc
 end
 if set -q _flag_install_file
     set -g MODE install-file; set -l _if_val "$_flag_install_file"

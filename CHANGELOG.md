@@ -1,6 +1,16 @@
 ry-install changelog
 ====================
 
+7.19.13  2026-06-03
+- fix: fstab rewrite WARNs + logs when findmnt absent (was committed ungated).
+- style: trim verbose comments to vital info.
+- docs: trim README/CHANGELOG verbose lines.
+
+7.19.12  2026-06-03
+- harden: --country validated against 249 assigned ISO-3166-1 alpha-2 codes (was shape-only).
+- refactor: RADV drirc option from $RADV_APU_OPTION global (single source).
+- docs: note 250/255 are internal _as/_run misuse rc (never a process exit).
+
 7.19.11  2026-06-03
 - fix: drop unused sort from preflight hard-dependency gate.
 - fix: _install_fstab_opts evidence reflects outcome (absent / no-ext4 / conformant / applied).

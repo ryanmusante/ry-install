@@ -2,7 +2,7 @@
 
 CachyOS configuration for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-Version 7.19.11 · fish >= 3.6 · CachyOS · MIT.
+Version 7.19.13 · fish >= 3.6 · CachyOS · MIT.
 
 ## Contents
 
@@ -54,7 +54,7 @@ Hard requirements abort read-only in preflight (exit 3); retry after fixing. par
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | sudo | cached credential (`sudo -v`) |
 
-Warning: the sudo cache can lapse mid-run. Mitigate with `Defaults timestamp_timeout=60` (`sudo visudo`) or a NOPASSWD drop-in at `/etc/sudoers.d/ry-install`. Cron/systemd must pre-cache credentials; the `sudo -v` fallback needs a TTY. Recovery: re-run.
+Warning: the sudo cache can lapse mid-run. Mitigate with `Defaults timestamp_timeout=60` or a NOPASSWD drop-in at `/etc/sudoers.d/ry-install`. Cron/systemd must pre-cache (`sudo -v` fallback needs a TTY). Recovery: re-run.
 
 ```fish
 ./ry-install.fish --check        # idempotency probe
@@ -76,12 +76,12 @@ No arguments runs a full unattended install. `--check` and `--verify` only read 
 | `--verify` | Config files + live state (static, then runtime) |
 | `--check` | Idempotency probe (0=clean, 3=preflight, 10=drift) |
 | `--install-file <path>` | Re-deploy one managed file (absolute path) |
-| `--country=XX` | Wireless regulatory domain (ISO-3166 alpha-2; default `US`) |
+| `--country=XX` | Wireless regulatory domain — validated against assigned ISO-3166-1 alpha-2 codes (default `US`) |
 | `-h, --help` / `-v, --version` | Help / version |
 
 ## Install Flow
 
-Six phases in order. A package or boot-config failure taints the run and skips the Phase 5 rebuild. Phase 3 writes are atomic renames: an aborted run leaves each file fully old or fully new.
+Six phases in order. A package or boot-config failure taints the run, skipping the Phase 5 rebuild. Phase 3 writes are atomic renames (a file is left fully old or fully new).
 
 | # | Phase | Action |
 |---|---|---|
@@ -273,7 +273,7 @@ Env vars (10 keys):
 
 ### Phase 4 - Services
 
-fstab rewrite -> `systemd-resolved` restart -> `PKGS_DEL` removal -> mask `--now` 11 units -> `daemon-reload` + enable runtime units -> apply regdom (`iw reg set $COUNTRY`, or `/etc/iw-regdomain` when `iw` absent). The rewrite strips conflicting entries, gated by `findmnt --verify`. No auto-backup: snapshot `/etc/fstab` first.
+fstab rewrite -> `systemd-resolved` restart -> `PKGS_DEL` removal -> mask `--now` 11 units -> `daemon-reload` + enable runtime units -> apply regdom (`iw reg set $COUNTRY`, or `/etc/iw-regdomain` when `iw` absent). The rewrite strips conflicting entries, gated by `findmnt --verify` (WARN if findmnt absent). No auto-backup: snapshot `/etc/fstab` first.
 
 fstab (3 ext4 mount options):
 
@@ -348,7 +348,7 @@ Atomic writes plus a gated Phase 5 rebuild keep a failed package or boot-config 
 | Atomic writes | tmp -> render -> symlink probe -> chmod -> `mv -T` |
 | Auto backups | `<path>.ry.bak` before overwriting `loader.conf`/`mkinitcpio.conf`; restored on post-write byte-mismatch (fstab excluded) |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
-| fstab | `findmnt --verify` gate; rejects symlinked `/etc/fstab` |
+| fstab | `findmnt --verify` gate (WARN if absent); rejects symlinked `/etc/fstab` |
 | Boot rebuild gate | skipped on package/boot-config failure; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses taint only |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | Instance lock | atomic mkdir `0700`; reclaims dead-PID lock via `kill -0` |
@@ -364,6 +364,8 @@ Exit codes:
 | `10` | `--check` drift |
 | `11` / `12` / `13` | gen: missing fn / missing UUID / sysctl malformed |
 | `128+N` / `251` | signal (130=INT, 143=TERM, ...) / `_run` tmpfile alloc fail |
+
+`250` / `255` are internal function return codes (`_as` / `_run` argument-misuse guards) and never surface as a process exit code.
 
 Runtime variables (4):
 

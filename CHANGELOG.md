@@ -1,6 +1,12 @@
 ry-install changelog
 ====================
 
+7.19.19  2026-06-03
+- verify: drirc XML check reports NOT FOUND for an absent drop-in (was misreported as malformed)
+- verify: ZRAM/swap state demoted to advisory warning (out of scope; no longer fails --verify)
+- cleanup: reclaim empty /run/ry-install staging dir after mkinitcpio.conf snapshot
+- docs: clarify findmnt is a required dependency; fstab --verify gate always applies
+
 7.19.18  2026-06-03
 - cleanup: drop dead ry-val-unit sweep glob (no producer)
 - cleanup: track atomic-write/fstab tmpfile after empty-guard

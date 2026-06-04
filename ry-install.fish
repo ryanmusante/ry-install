@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.18 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.19 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.18"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.19"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -2990,7 +2990,7 @@ function _vre_zram --description "Runtime env check: zram service + active swap 
     set -l _zram_state (command systemctl is-enabled "systemd-zram-setup@$_zram_dev.service" 2>/dev/null | string trim --)
     switch "$_zram_state"
         case masked
-            _fail "  ZRAM service: masked (expected: enabled or static+active)"
+            _warn "  ZRAM service: masked (out-of-scope advisory; not managed by this profile)"
         case enabled
             _ok "  ZRAM service: enabled"
         case static
@@ -3012,7 +3012,7 @@ function _vre_zram --description "Runtime env check: zram service + active swap 
     else
         set -l _any_swap (command swapon --show=NAME,SIZE 2>/dev/null | command tail -n +2)
         if test -z "$_any_swap"
-            _fail "  No swap available (ZRAM not active, no swap file/partition)"
+            _warn "  No swap available (out-of-scope advisory; ZRAM/swap not managed by this profile)"
         else
             _warn "  ZRAM not active but other swap found: $_any_swap"
         end
@@ -3205,7 +3205,9 @@ function _vrs_drirc_xml --description "Runtime session check: drirc XML well-for
     _echo
     _echo "── drirc XML (well-formedness) ──"
     if command -q xmllint
-        if xmllint --noout /etc/drirc.d/95-ry-radv-apu.conf 2>/dev/null
+        if not begin; test -r /etc/drirc.d/95-ry-radv-apu.conf; or sudo -n test -r /etc/drirc.d/95-ry-radv-apu.conf 2>/dev/null; end
+            _fail "  drirc: /etc/drirc.d/95-ry-radv-apu.conf NOT FOUND"
+        else if xmllint --noout /etc/drirc.d/95-ry-radv-apu.conf 2>/dev/null
             _ok "  drirc XML well-formed (xmllint)"
         else
             _fail "  drirc XML malformed (xmllint --noout failed)"
@@ -3568,6 +3570,7 @@ function _install_packages --description "Install managed packages via pacman -S
         _err "Aborting package installation — mkinitcpio.conf must be in place before -Syu"
         set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
         set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
+        sudo -n rmdir /run/ry-install 2>/dev/null; or true
         set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
         _phase_record "Packages: pacman -Syu" FAIL "mkinitcpio.conf pre-deploy failed"
         return 1
@@ -3576,6 +3579,8 @@ function _install_packages --description "Install managed packages via pacman -S
     _ip_scan_pacnew
     set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
     set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
+    # Reclaim the empty snapshot staging dir; rmdir is a no-op if absent or non-empty.
+    sudo -n rmdir /run/ry-install 2>/dev/null; or true
     if test "$_fn_err" = true; _phase_record "Packages: pacman -Syu" FAIL "see JSONL log"; return 1; end
     _phase_record "Packages: pacman -Syu" PASS "system upgraded (full -Syu)"
     return 0

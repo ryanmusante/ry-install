@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.19 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.21 (2026-06-04) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.19"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.21"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -402,7 +402,7 @@ function _dc_kill_children --description "_do_cleanup sub. Release lock + reap c
         test "$_own" = true; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
     end
     if command -q pkill
-        # Skip TERM→grace→KILL when no children (fast path); pgrep absent → full grace.
+        # No children → skip TERM/grace/KILL fast-path; pgrep absent → full grace.
         set -l _have_kids unknown
         command -q pgrep; and begin
             test (count (command pgrep -P "$fish_pid" 2>/dev/null)) -gt 0; and set _have_kids yes; or set _have_kids no
@@ -1074,7 +1074,7 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
     set -q _RY_LOG_WRITE_FAIL; and test "$_RY_LOG_WRITE_FAIL" = true; and return 0
     # Pre-bootstrap: skip when LOG_FILE unset (callable via functions -q pre-init).
     test -n "$LOG_FILE"; or return 0
-    # Skip lazy-create after _pre_dispatch_log_cleanup; prevents orphan preflight-*.jsonl.
+    # Skip lazy-create post-cleanup; prevents orphan preflight-*.jsonl.
     set -q _RY_LOG_SUPPRESS_CREATE; and test "$_RY_LOG_SUPPRESS_CREATE" = true; and not test -f "$LOG_FILE"; and return 0
     if not test -f "$LOG_FILE"
         set -l _prev_umask (umask)
@@ -2343,7 +2343,7 @@ function _verify_static_services --description "Verify masked services state"
     for _mask_idx in (seq 1 (count $_check_mask))
         set -l _svc $_check_mask[$_mask_idx]; set -l _rec (string split ':' -- "$_mask_parsed[$_mask_idx]")
         if test "$_rec[3]" = ERR_NO_DATA
-            _warn "  $_svc: systemctl unavailable — cannot verify mask state"
+            _warn "  $_svc: systemctl state unavailable (absent or no running manager) — cannot verify mask state"
         else if test "$_rec[1]" = not-found
             _info "  $_svc: unit not found (may not be installed)"
         else if test "$_rec[3]" = masked; and test "$_rec[2]" = active
@@ -2878,7 +2878,7 @@ function _vrsv_masked_inactive --description "Runtime services check: MASK units
     for _u in $MASK
         set -l _v (_unit_state_padded $_u)
         if test "$_v[3]" = ERR_NO_DATA
-            _warn "  $_u: systemctl unavailable — cannot verify"
+            _warn "  $_u: systemctl state unavailable (absent or no running manager) — cannot verify"
         else if test "$_v[1]" = not-found
             _info "  $_u: not installed"
         else if test "$_v[2]" = active
@@ -2935,7 +2935,7 @@ function _vre_sysctl_runtime --description "Runtime env check: sysctl values via
     _echo
 end
 
-function _vre_tcp --description "Runtime env check: TCP congestion control (bbr) + tcp_bbr module version"
+function _vre_tcp --description "Runtime env check: tcp_bbr module version (active bbr value verified in sysctl block)"
     _echo "── TCP congestion control ──"
     if command -q modinfo
         set -l _bbr_ver (command modinfo tcp_bbr 2>/dev/null | command grep -i '^version:' | string replace -r -- '^version:\s*' '')
@@ -2944,12 +2944,6 @@ function _vre_tcp --description "Runtime env check: TCP congestion control (bbr)
         else
             _info "  tcp_bbr: version field not available"
         end
-    end
-    set -l _cc_active (command cat -- /proc/sys/net/ipv4/tcp_congestion_control 2>/dev/null | string trim --)
-    if test "$_cc_active" = bbr
-        _ok "  tcp_congestion_control: $_cc_active"
-    else if test -n "$_cc_active"
-        _warn "  tcp_congestion_control: $_cc_active (expected: bbr)"
     end
     _echo
 end
@@ -2965,9 +2959,7 @@ function _vre_thp_ksm --description "Runtime env check: THP enabled/defrag + KSM
         else
             set -l _m (string match -r '\[(\S+)\]' -- "$_val"); set -l _active $_m[2]
             test -n "$_active"; or set _active "$_val"
-            set -l _hint "recommended: $_parts[3]"
-            test -n "$_parts[4]"; and set _hint "$_hint — $_parts[4]"
-            _warn "  THP $_parts[1]: $_active ($_hint)"
+            _info "  THP $_parts[1]: $_active (advisory — not managed by this profile; CachyOS default: $_parts[3])"
         end
     end
     if test -f /sys/kernel/mm/ksm/run
@@ -3223,7 +3215,7 @@ function _vrs_boot_perf --description "Runtime session check: systemd-analyze bo
     _echo
     if not command -q systemd-analyze; _warn "  systemd-analyze not available"; return 0; end
     set -l boot_time (command systemd-analyze 2>/dev/null | command head -n 1)
-    _info "  $boot_time"
+    test -n "$boot_time"; and _info "  $boot_time"
     _log "BOOT_TIME_CHECK: parsing systemd-analyze output"
     if not string match -qr -- '= [0-9.]+s\b' "$boot_time"
         _info "  systemd-analyze output format unrecognized — skipping target compare"
@@ -3289,7 +3281,7 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
     set -l _ok $VERIFY_OK; set -l _fail $VERIFY_FAIL; set -l _warn $VERIFY_WARN; set -l _gen $VERIFY_GEN_FAIL
     _ry_verify_runtime; set -l _rc_r $status
     if test "$_rc_r" -eq "$EXIT_PREFLIGHT"
-        # Runtime arm bailed at sudo-cache; restore VERIFY_* static totals to avoid doubled footer count.
+        # Restore VERIFY_* static totals after a sudo-cache bail (avoids doubled footer count).
         set -g VERIFY_OK $_ok; set -g VERIFY_FAIL $_fail; set -g VERIFY_WARN $_warn; set -g VERIFY_GEN_FAIL $_gen
         return $_rc_r
     end
@@ -3297,6 +3289,18 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
     set -g VERIFY_FAIL (math $VERIFY_FAIL + $_fail)
     set -g VERIFY_WARN (math $VERIFY_WARN + $_warn)
     set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + $_gen)
+    set -l _vt_lvl OK
+    if test "$VERIFY_FAIL" -gt 0; or test "$VERIFY_GEN_FAIL" -gt 0
+        set _vt_lvl FAIL
+    else if test "$VERIFY_WARN" -gt 0
+        set _vt_lvl WARN
+    end
+    set -l _vt "Combined (static + runtime): $VERIFY_OK OK"
+    test "$VERIFY_WARN" -gt 0; and set _vt "$_vt, $VERIFY_WARN WARN"
+    test "$VERIFY_FAIL" -gt 0; and set _vt "$_vt, $VERIFY_FAIL FAIL"
+    test "$VERIFY_GEN_FAIL" -gt 0; and set _vt "$_vt, $VERIFY_GEN_FAIL GEN_FAIL"
+    _msg_nocount $_vt_lvl "$_vt"
+    _log "VERIFY_RESULT_COMBINED: ok=$VERIFY_OK fail=$VERIFY_FAIL warn=$VERIFY_WARN gen_fail=$VERIFY_GEN_FAIL"
     test "$_rc_r" -ne 0; and return $_rc_r
     return $_rc_s
 end
@@ -3772,8 +3776,10 @@ function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp 
             return 1
         end
     else
-        _warn "  /etc/fstab: findmnt absent — committing without --verify gate (symlink + size checks still applied)"
-        _log "FSTAB_VERIFY_SKIPPED: findmnt not found"
+        _fail "  /etc/fstab: findmnt absent — refusing rewrite (--verify gate is mandatory; findmnt is a hard dependency)"
+        _log "FSTAB_VERIFY_REFUSED: findmnt not found"
+        _rm_tmp "$tmpfstab" true
+        return 1
     end
     if not sudo -n mv -T -- "$tmpfstab" /etc/fstab; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: atomic move failed"; return 1; end
     _untrack_tmpfile "$tmpfstab"
@@ -4646,11 +4652,18 @@ function _ry_do_install_file --argument-names target --description "Install a si
     if test -z "$_use_sudo"; _err "Not a managed file: $target"; _info "Run without path to see managed files"; return $EXIT_USAGE; end
     _echo "── ry-install v$VERSION - Install Single File ──"
     if test "$_use_sudo" = true; _ensure_sudo_cached; or return $EXIT_PREFLIGHT; end
+    set -l _changed_before $_RY_DEPLOY_CHANGED_COUNT
     if not _ry_install_file "$target" $_use_sudo; _err "Failed to install: $target"; _log_section "INSTALL-FILE END"; return 1; end
     _echo
     _ok "Installed: $target"
-    set -l _hook_rc 0; set -l _h (_post_hook_for_target "$target")
-    if test -n "$_h"; _idf_dispatch_hook "$target" "$_h"; set _hook_rc $status; end
+    # Live-apply post-hook only when bytes changed; an unchanged re-deploy needs no re-apply.
+    set -l _hook_rc 0
+    if test "$_RY_DEPLOY_CHANGED_COUNT" -gt "$_changed_before"
+        set -l _h (_post_hook_for_target "$target")
+        if test -n "$_h"; _idf_dispatch_hook "$target" "$_h"; set _hook_rc $status; end
+    else
+        _log "POST_HOOK_SKIP_UNCHANGED: target=$target (bytes identical; no live-apply)"
+    end
     _log_section "INSTALL-FILE END"
     return $_hook_rc
 end
@@ -4692,8 +4705,8 @@ end
 function _post_resolved --argument-names target --description "Post-hook: restart systemd-resolved"
     _echo
     if not _run sudo -n systemctl restart systemd-resolved
-        _warn "Systemd-resolved restart failed"
-        return 1
+        _warn "systemd-resolved restart failed — drop-in applies at next boot (non-fatal; file deployed)"
+        return 0
     end
     return 0
 end
@@ -4718,19 +4731,16 @@ function _post_nm --argument-names target --description "Post-hook: restart Netw
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=install_file target=$target"
         return 0
     end
-    set -l _post_nm_rc 0
     # iwd reads main.conf only at startup; NM restart alone does not re-read it.
     if string match -q '*/iwd/main.conf' -- "$target"
         if not _run sudo -n systemctl try-restart iwd.service
-            _warn "iwd try-restart failed (config will apply on next reboot)"
-            set _post_nm_rc 1
+            _warn "iwd try-restart failed — config applies on next reboot (non-fatal; file deployed)"
         end
     end
     if not _run sudo -n systemctl restart NetworkManager
-        _warn "NetworkManager restart failed"
-        set _post_nm_rc 1
+        _warn "NetworkManager restart failed — config applies on next reboot (non-fatal; file deployed)"
     end
-    return $_post_nm_rc
+    return 0
 end
 
 function _post_sysctl --argument-names target --description "Post-hook: apply sysctl tunables"
@@ -4741,9 +4751,9 @@ function _post_sysctl --argument-names target --description "Post-hook: apply sy
         return 0
     end
     if not _run sudo -n sysctl --system
-        _warn "sysctl --system failed — tunables not applied until reboot"
+        _warn "sysctl --system failed — tunables not applied until reboot (non-fatal; file deployed)"
         _info "  Retry: sudo sysctl --system"
-        return 1
+        return 0
     end
     return 0
 end
@@ -4767,9 +4777,9 @@ end
 function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change"
     _echo
     if not _run sudo -n systemctl restart cpupower.service
-        _warn "cpupower.service restart failed — governor change applies on next boot"
+        _warn "cpupower.service restart failed — governor change applies on next boot (non-fatal; file deployed)"
         _info "  Under amd_pstate=active + governor=powersave, EPP is configurable independently (kernel default: balance_performance)"
-        return 1
+        return 0
     end
     return 0
 end
@@ -4782,9 +4792,9 @@ function _post_modprobe --argument-names target --description "Post-hook: rebuil
         return 0
     end
     if not _run sudo -n mkinitcpio -P
-        _err "mkinitcpio -P failed — module options not in initramfs until next rebuild"
+        _warn "mkinitcpio -P failed — module options not in initramfs until next rebuild (non-fatal; file deployed, existing initramfs intact)"
         _info "  Retry: sudo mkinitcpio -P"
-        return 1
+        return 0
     end
     return 0
 end
@@ -4802,9 +4812,9 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
         return 0
     end
     if not _run sudo -n udevadm control --reload-rules
-        _err "udevadm control --reload-rules failed — rule applies at next boot"
+        _warn "udevadm control --reload-rules failed — rule applies at next boot (non-fatal; file deployed)"
         _info "  Retry: sudo udevadm control --reload-rules; and sudo udevadm trigger --subsystem-match=block --action=change"
-        return 1
+        return 0
     end
     _run sudo -n udevadm trigger --subsystem-match=block --action=change; or _warn "udevadm trigger failed — scheduler applies at next boot or device hotplug"
     return 0
@@ -4862,7 +4872,8 @@ if set -q _flag_help; _ry_show_help; _pre_dispatch_exit $EXIT_OK; end
 if set -q _flag_version; echo "v$VERSION"; _pre_dispatch_exit $EXIT_OK; end
 set -q _flag_verify; and set -g MODE verify
 set -q _flag_check; and set -g MODE check
-if set -q _flag_country; and test -n "$_flag_country"
+if set -q _flag_country
+    test -z "$_flag_country"; and _early_usage_exit "--country requires a value (assigned ISO-3166-1 alpha-2, e.g. US, GB, DE)"
     set -l _cc (string upper -- "$_flag_country")
     contains -- "$_cc" $_RY_ISO3166_ALPHA2; or _early_usage_exit "--country must be an assigned ISO-3166-1 alpha-2 code (e.g. US, GB, DE; UK is GB; 00/EU not valid); got '$_flag_country'"
     set -g COUNTRY $_cc

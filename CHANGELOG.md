@@ -1,9 +1,25 @@
 ry-install changelog
 ====================
 
+7.19.21  2026-06-04
+- verify: print combined static+runtime totals line (per-arm summaries were console-only)
+- verify: tcp_congestion_control checked once (drop _vre_tcp duplicate)
+- verify: reword systemctl-unreadable state as "absent or no running manager"
+- verify: THP enabled/defrag demoted to advisory INFO (out of scope; not managed)
+- install-file: resolved/nm/modprobe/udev live-apply failure is WARN-class rc0
+- fstab: findmnt-absent path refuses rewrite (gate mandatory; findmnt is a hard dep)
+
+7.19.20  2026-06-03
+- fix: --install-file post-hook live-apply failure (sysctl/cpupower) is WARN-class, not rc1
+- fix: --install-file live-apply post-hook runs only on byte change (no-op if unchanged)
+- fix: --country= with empty value rejected as usage (rc 2); was silently ignored
+- verify: suppress empty boot-time [INFO] line when systemd-analyze output is unparseable
+- docs: only -Syu/package-verify/boot-config failures taint Phase 5 (AUR advisory does not)
+- style: condense verbose comment lines
+
 7.19.19  2026-06-03
-- verify: drirc XML check reports NOT FOUND for an absent drop-in (was misreported as malformed)
-- verify: ZRAM/swap state demoted to advisory warning (out of scope; no longer fails --verify)
+- verify: drirc XML reports NOT FOUND for absent drop-in (was reported malformed)
+- verify: ZRAM/swap demoted to advisory (out of scope; no longer fails --verify)
 - cleanup: reclaim empty /run/ry-install staging dir after mkinitcpio.conf snapshot
 - docs: clarify findmnt is a required dependency; fstab --verify gate always applies
 
@@ -12,7 +28,7 @@ ry-install changelog
 - cleanup: track atomic-write/fstab tmpfile after empty-guard
 
 7.19.17  2026-06-03
-- verify: root-UUID resolution failure no longer aborts; warns and continues with generic root=UUID check
+- verify: root-UUID resolution failure warns + continues (generic root=UUID check)
 - docs: convert remaining README prose to tables
 
 7.19.16  2026-06-03
@@ -59,7 +75,7 @@ ry-install changelog
 - docs: README config tables to 2-column layout
 
 7.19.5  2026-06-02
-- harden: _ir_validate_counts guards _RY_PHASE_NAMES, _RY_BACKUP_TARGETS, _RY_NTSYNC_MODLOAD_CONFS
+- harden: _ir_validate_counts also guards phase-names/backup-targets/ntsync-confs
 
 7.19.4  2026-06-02
 - comment: post-hook handler banner 12 -> 11

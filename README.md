@@ -2,7 +2,7 @@
 
 CachyOS configuration for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-Version 7.19.19 · fish >= 3.6 · CachyOS · MIT.
+Version 7.19.21 · fish >= 3.6 · CachyOS · MIT.
 
 ## Contents
 
@@ -87,7 +87,7 @@ No arguments runs a full unattended install. `--check` and `--verify` only read 
 
 ## Install Flow
 
-Six phases in order. A package or boot-config failure taints the run, skipping the Phase 5 rebuild. Phase 3 writes are atomic renames.
+Six phases in order. A `pacman -Syu`, package-verify, or boot-config failure taints the run, skipping the Phase 5 rebuild; the advisory AUR phase does not taint. Phase 3 writes are atomic renames.
 
 | # | Phase | Action |
 |---|---|---|

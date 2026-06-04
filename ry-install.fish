@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.16 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.17 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.16"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.17"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -675,8 +675,8 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
             _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         case verify
-            _err_loud "Cannot detect root UUID ($_reason) — aborting verify; /etc/kernel/cmdline byte-equality cannot be checked"
-            _pre_dispatch_exit $EXIT_PREFLIGHT
+            _warn "Cannot detect root UUID ($_reason) — exact root=UUID match in /etc/kernel/cmdline skipped; other checks continue"
+            _log "ROOT_UUID_UNAVAILABLE: $_reason — verify continues with generic root=UUID presence check"
         case '*'
             _log "ROOT_UUID_UNAVAILABLE: mode=$MODE reason=$_reason — non-fatal for this mode"
     end

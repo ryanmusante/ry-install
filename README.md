@@ -2,7 +2,7 @@
 
 CachyOS configuration for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-Version 7.19.17 · fish >= 3.6 · CachyOS · MIT.
+Version 7.19.18 · fish >= 3.6 · CachyOS · MIT.
 
 ## Contents
 

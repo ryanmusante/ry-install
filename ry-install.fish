@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.17 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.18 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.17"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.18"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -362,7 +362,6 @@ function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for l
         'ry-sudo-err.*' \
         'ry-tee-err.*' \
         'ry-run.*' \
-        'ry-val-unit.*' \
         'ry-argparse-err.*' \
         'ry-fstab-tee-err.*' \
         'ry-fstab-awk-err.*'
@@ -2000,8 +1999,8 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     set -l dst_dir (command dirname -- "$dst"); set -l _is_bt false
     _awf_is_backup_target "$dst"; and set _is_bt true
     set -l tmpfile (_as $use_sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
-    _track_tmpfile "$tmpfile"
     if test -z "$tmpfile"; _fail "→ $dst (mktemp failed)"; return 1; end
+    _track_tmpfile "$tmpfile"
     if not _awf_render_to_tmp "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
     if not _awf_symlink_check "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
     # Back up only after render + symlink-probe; render failure leaves no stale .ry.bak.
@@ -3753,8 +3752,8 @@ end
 function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp + awk + verify + mv)"
     # Tmpfile in /etc (dst parent): same-FS mv -T atomic; /run tmpfs = cross-FS.
     set -l tmpfstab (sudo -n mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null)
-    _track_tmpfile "$tmpfstab"
     if test -z "$tmpfstab"; _fail "  /etc/fstab: mktemp failed"; return 1; end
+    _track_tmpfile "$tmpfstab"
     if sudo -n test -L "$tmpfstab" 2>/dev/null; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: temp file is symlink — aborting"; return 1; end
     if not _far_awk_rewrite "$tmpfstab"; _rm_tmp "$tmpfstab" true; return 1; end
     if not sudo -n chmod --reference=/etc/fstab -- "$tmpfstab" 2>/dev/null; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: chmod --reference failed"; return 1; end

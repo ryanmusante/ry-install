@@ -1,6 +1,10 @@
 ry-install changelog
 ====================
 
+7.19.18  2026-06-03
+- cleanup: drop dead ry-val-unit sweep glob (no producer)
+- cleanup: track atomic-write/fstab tmpfile after empty-guard
+
 7.19.17  2026-06-03
 - verify: root-UUID resolution failure no longer aborts; warns and continues with generic root=UUID check
 - docs: convert remaining README prose to tables

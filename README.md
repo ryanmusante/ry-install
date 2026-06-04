@@ -35,9 +35,10 @@ Run as your normal user (root is refused; sudo is internal). Reboot, then `--ver
 
 ## Scope
 
-In: kernel cmdline, initramfs, systemd units (system + user), network stack, sysctl, gaming env vars, pacman/paru install + remove, systemd-boot BLS entries via `sdboot-manage`.
-
-Out: dotfiles, shells, editors, secrets, backups, multi-user, non-CachyOS distros, laptops, UKI.
+| Scope | Items |
+|---|---|
+| In | kernel cmdline, initramfs, systemd units (system + user), network stack, sysctl, gaming env vars, pacman/paru install + remove, systemd-boot BLS entries via `sdboot-manage` |
+| Out | dotfiles, shells, editors, secrets, backups, multi-user, non-CachyOS distros, laptops, UKI |
 
 ## Prerequisites
 
@@ -54,11 +55,21 @@ Hard requirements abort read-only in preflight (exit 3); retry after fixing. par
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | sudo | cached credential (`sudo -v`) |
 
-The sudo cache can lapse mid-run; mitigate with `Defaults timestamp_timeout=60` or a NOPASSWD drop-in at `/etc/sudoers.d/ry-install`. Cron/systemd must pre-cache (the `sudo -v` fallback needs a TTY). Recovery: re-run.
+| sudo cache | Detail |
+|---|---|
+| Risk | can lapse mid-run |
+| Mitigate | `Defaults timestamp_timeout=60`, or NOPASSWD drop-in `/etc/sudoers.d/ry-install` |
+| Cron/systemd | must pre-cache (`sudo -v` fallback needs a TTY) |
+| Recovery | re-run |
 
 ## Hardware
 
-Ryzen AI Max+ 395 (Zen 5, gfx1151), Radeon 8060S (RDNA 3.5), 128 GB LPDDR5x-8000. Requires a CPU matching `Ryzen AI Max`; override with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
+| Component | Spec |
+|---|---|
+| CPU | Ryzen AI Max+ 395 (Zen 5, gfx1151) |
+| GPU | Radeon 8060S (RDNA 3.5) |
+| Memory | 128 GB LPDDR5x-8000 |
+| CPU gate | matches `Ryzen AI Max`; override `RY_INSTALL_SKIP_HARDWARE_CHECK=1` |
 
 ## Usage
 
@@ -130,11 +141,28 @@ Packages — install (14):
 | perf | `realtime-privileges` |
 | display | `ddcutil` (ships `i2c-dev` autoload) |
 
-Packages — AUR (1): `mkinitcpio-firmware` (firmware blobs not in `linux-firmware`).
+Packages — AUR (1):
 
-Vulkan deps (3): `vulkan-radeon` (chwd), `lib32-vulkan-radeon` (chwd), `lib32-mesa` (`PKGS_ADD`).
+| Package | Reason |
+|---|---|
+| `mkinitcpio-firmware` | firmware blobs absent from `linux-firmware` |
 
-Caveats: full upgrades only (`pacman -Syu --needed`); AUR flags `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted; DKMS needs makedeps); PGP failures -> `gpg --recv-keys <KEYID>`; `PKGS_DEL` members held by outside rdeps are skipped (`pacman -Rns` to force).
+Vulkan deps (3):
+
+| Package | Source |
+|---|---|
+| `vulkan-radeon` | chwd |
+| `lib32-vulkan-radeon` | chwd |
+| `lib32-mesa` | `PKGS_ADD` |
+
+Caveats:
+
+| Topic | Detail |
+|---|---|
+| Upgrades | full only (`pacman -Syu --needed`) |
+| AUR flags | `paru -S --needed --noconfirm --skipreview --cleanafter`; `--removemake` omitted (DKMS makedeps) |
+| PGP failure | `gpg --recv-keys <KEYID>` |
+| `PKGS_DEL` blocked | held by outside rdeps; `pacman -Rns` to force |
 
 ### Phase 3 — Configuration
 
@@ -168,15 +196,15 @@ Initramfs (6 fields):
 | `HOOKS` | `(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)` |
 | `COMPRESSION` | `zstd`, `COMPRESSION_OPTIONS (-1 -T0)` |
 
-systemd-resolved (4 keys): `[Resolve]` `MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade`.
+Service configs:
 
-systemd-logind (8 keys): `[Login]` `HandlePowerKey`, `HandleSuspendKey`, `HandleHibernateKey`, `HandleRebootKey` (+ matching `...LongPress`) = `ignore`.
-
-iwd (3 keys): `[General]` `EnableNetworkConfiguration=false`; `[DriverQuirks]` `PowerSaveDisable=*`; `[Network]` `NameResolvingService=systemd`.
-
-NetworkManager (3 keys): `[device]` `wifi.backend=iwd`; `[connection]` `wifi.powersave=2`; `[logging]` `level=WARN`.
-
-cpupower-service (1 key): `GOVERNOR=powersave` (sourced by `cpupower.service`).
+| Config | Settings |
+|---|---|
+| systemd-resolved | `[Resolve]` `MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` |
+| systemd-logind | `[Login]` `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `...LongPress`) = `ignore` |
+| iwd | `[General]` `EnableNetworkConfiguration=false`; `[DriverQuirks]` `PowerSaveDisable=*`; `[Network]` `NameResolvingService=systemd` |
+| NetworkManager | `[device]` `wifi.backend=iwd`; `[connection]` `wifi.powersave=2`; `[logging]` `level=WARN` |
+| cpupower-service | `GOVERNOR=powersave` (sourced by `cpupower.service`) |
 
 sysctl (8 tunables):
 
@@ -186,13 +214,14 @@ sysctl (8 tunables):
 | `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
 | `vm` | `compaction_proactiveness=0`, `max_map_count=2147483642` |
 
-amdgpu / ttm modprobe (2 options; caps GTT at 32 GiB): `ttm pages_limit=8388608`, `page_pool_size=8388608`.
+Driver / misc configs:
 
-wireless regdom (1 key): `COUNTRY=US` (`/etc/iw-regdomain`; override `--country=XX`).
-
-RADV drirc (1 option): `radv_enable_unified_heap_on_apu=true`.
-
-udev I/O scheduler (1 rule): NVMe (`ACTION=="add|change"`, `KERNEL=="nvme[0-9]*"`, `ENV{DEVTYPE}=="disk"`) -> `none`. The `disk` guard matches whole-disk devices only, sparing partitions and the char-device.
+| Config | Setting |
+|---|---|
+| amdgpu/ttm modprobe | `ttm pages_limit=8388608`, `page_pool_size=8388608` (caps GTT at 32 GiB) |
+| wireless regdom | `COUNTRY=US` (`/etc/iw-regdomain`; override `--country=XX`) |
+| RADV drirc | `radv_enable_unified_heap_on_apu=true` |
+| udev I/O scheduler | NVMe whole-disk (`KERNEL=="nvme[0-9]*"`, `ENV{DEVTYPE}=="disk"`) -> `none` |
 
 Env vars (10 keys):
 
@@ -208,7 +237,13 @@ Env vars (10 keys):
 
 fstab rewrite -> `systemd-resolved` restart -> `PKGS_DEL` removal -> mask `--now` 11 units -> `daemon-reload` + enable runtime units -> apply regdom (`iw reg set $COUNTRY`, or `/etc/iw-regdomain` when `iw` absent). The rewrite strips conflicting entries, gated by `findmnt --verify` (WARN if findmnt absent). No auto-backup: snapshot `/etc/fstab` first.
 
-fstab (3 ext4 mount options): `noatime` (no access-time writes), `lazytime` (deferred timestamp writeback), `commit=10` (10 s journal commit interval).
+fstab (3 ext4 mount options):
+
+| Option | Effect |
+|---|---|
+| `noatime` | no access-time writes |
+| `lazytime` | deferred timestamp writeback |
+| `commit=10` | 10 s journal commit interval |
 
 Packages — remove (8):
 
@@ -227,7 +262,14 @@ Masked units (11):
 | Boot delays | `NetworkManager-wait-online.service` |
 | Power states | `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
 
-Enabled units (3 verified; + `NetworkManager-dispatcher.service` if installed): `fstrim.timer` (weekly TRIM), `NetworkManager.service` (deduped via `_RY_PKG_MANAGED_SERVICES`), `cpupower.service` (oneshot; `active`/`exited`).
+Enabled units (3 verified):
+
+| Unit | Role |
+|---|---|
+| `fstrim.timer` | weekly TRIM |
+| `NetworkManager.service` | deduped via `_RY_PKG_MANAGED_SERVICES` |
+| `cpupower.service` | oneshot (`active`/`exited`) |
+| `NetworkManager-dispatcher.service` | if installed |
 
 ### Phase 5 — Boot
 
@@ -284,8 +326,7 @@ Exit codes:
 | `10` | `--check` drift |
 | `11` / `12` / `13` | gen: missing fn / missing UUID / sysctl malformed |
 | `128+N` / `251` | signal (130=INT, 143=TERM, ...) / `_run` tmpfile alloc fail |
-
-`250` / `255` are internal function return codes (`_as` / `_run` argument-misuse guards) and never surface as a process exit code.
+| `250` / `255` | internal `_as` / `_run` arg-misuse guards (never a process exit) |
 
 Runtime variables (4):
 
@@ -296,7 +337,15 @@ Runtime variables (4):
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses `EXPECTED_CPU_MATCH` |
 | `NO_COLOR` | unset | suppress ANSI color |
 
-NDJSON at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, one per run, no rotation. Events `header`/`log`/`footer`; footer marker `bail` (preflight) or `interrupted` (signal). Prune with `find ~/ry-install/logs -xdev -type f -mtime +30 -delete`.
+Logs (NDJSON):
+
+| Field | Detail |
+|---|---|
+| Path | `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` |
+| Rotation | one per run; none |
+| Events | `header`, `log`, `footer` |
+| Footer marker | `bail` (preflight) or `interrupted` (signal) |
+| Prune | `find ~/ry-install/logs -xdev -type f -mtime +30 -delete` |
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl

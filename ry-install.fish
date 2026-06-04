@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.15 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.16 (2026-06-03) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.15"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.16"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -551,9 +551,9 @@ set -g MKINITCPIO_HOOKS \
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
 set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade
-# COUNTRY: wireless regulatory domain (mandatory; default US, override with --country=XX).
+# COUNTRY: wireless regdom; default US, override --country=XX.
 set -g COUNTRY US
-# _RY_ISO3166_ALPHA2: assigned ISO-3166-1 alpha-2 codes; --country validated against this set.
+# _RY_ISO3166_ALPHA2: assigned ISO-3166-1 alpha-2 codes for --country validation.
 set -g _RY_ISO3166_ALPHA2 \
     AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ \
     BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS \
@@ -881,7 +881,7 @@ function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate conte
         '</driconf>'
 end
 
-# Mandatory wireless regdom — cachyos-iw-set-regdomain runs `iw reg set $COUNTRY` at device add.
+# Wireless regdom: cachyos-iw-set-regdomain runs `iw reg set $COUNTRY` at device add.
 function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
 end
@@ -2511,13 +2511,13 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
     return 0
 end
 
-# Silent-probe: no stdout/stderr; ERR_NO_DATA → EXIT_PREFLIGHT unless drift confirmed (then EXIT_DRIFT).
+# Silent-probe: ERR_NO_DATA gives EXIT_PREFLIGHT unless drift already confirmed (then EXIT_DRIFT).
 function _ry_do_check --description "Silent idempotency probe"
     _log_section "CHECK START"
     if not command -q sudo; or not sudo -n true 2>/dev/null; _log "CHECK_PREFLIGHT: sudo not cached"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
     if not command -q systemctl; _log "CHECK_PREFLIGHT: systemctl not available"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
     set -g _RY_CHECK_DRIFT 0; set -g _RY_CHECK_FILES_CHECKED 0; set -l _rc 0
-    # Non-zero phase return = cannot probe; confirmed drift survives later probe-fail as EXIT_DRIFT.
+    # Non-zero phase return = cannot probe; confirmed drift survives as EXIT_DRIFT.
     for _phase in _check_phase_files _check_phase_cmdline _check_phase_units
         $_phase
         set _rc $status
@@ -4475,7 +4475,7 @@ function _rdi_matrix_footer --description "_rdi_render_matrix sub. Emit verdict-
     test "$_RY_MTX_WARN" -gt 0; and set _verdict PASS-WITH-WARNINGS
     test "$_RY_MTX_FAIL" -gt 0; and set _verdict FAIL
     set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true; and set _verdict FAIL-BOOT-CRITICAL
-    # Preflight abort bypasses the FAIL/WARN tally → exit 3, so the verdict must not read FAIL (exit 1).
+    # Preflight abort gives exit 3, so verdict must not read FAIL (exit 1).
     set -q _RY_PREFLIGHT_ABORT; and test "$_RY_PREFLIGHT_ABORT" = true; and set _verdict PREFLIGHT
     set -l _totals "Totals : $_RY_MTX_PASS PASS · $_RY_MTX_WARN WARN · $_RY_MTX_FAIL FAIL · $_RY_MTX_DEFER DEFER · $_RY_MTX_SKIP SKIP · $_RY_MTX_NA N/A"; set -l _elapsed "Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_verdict"; set -l _log_line "Log    : $LOG_FILE"; set -l _next_msg "Next   : reboot · ./ry-install.fish --verify"
     test "$_verdict" != PASS; and set _next_msg "Next   : review FAIL/WARN above · re-run install (idempotent)"
@@ -4860,7 +4860,7 @@ set -q _flag_verify; and set -g MODE verify
 set -q _flag_check; and set -g MODE check
 if set -q _flag_country; and test -n "$_flag_country"
     set -l _cc (string upper -- "$_flag_country")
-    contains -- "$_cc" $_RY_ISO3166_ALPHA2; or _early_usage_exit "--country must be an assigned ISO-3166-1 alpha-2 code (e.g. US, GB, DE); got '$_flag_country'"
+    contains -- "$_cc" $_RY_ISO3166_ALPHA2; or _early_usage_exit "--country must be an assigned ISO-3166-1 alpha-2 code (e.g. US, GB, DE; UK is GB; 00/EU not valid); got '$_flag_country'"
     set -g COUNTRY $_cc
 end
 if set -q _flag_install_file

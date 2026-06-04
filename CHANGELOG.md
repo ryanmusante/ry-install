@@ -1,30 +1,34 @@
 ry-install changelog
 ====================
 
+7.19.16  2026-06-03
+- cli: --country reject message notes UK is GB and that 00/EU are not alpha-2.
+- style: tighten verbose comments to vital info.
+
 7.19.15  2026-06-03
-- fix: preflight-abort run summary renders verdict PREFLIGHT (exit 3); was matrix verdict FAIL (table-mapped to exit 1) while the process exited 3.
-- docs: README verdict table + exit-code note add PREFLIGHT.
+- fix: preflight-abort summary renders verdict PREFLIGHT (exit 3); was FAIL.
+- docs: README verdict + exit-code tables add PREFLIGHT.
 
 7.19.14  2026-06-03
-- cleanup: _fstab_needs_change — drop redundant `--` in commit= capture (inert; single `--` already terminates options).
+- cleanup: _fstab_needs_change drop redundant -- in commit= capture (inert).
 
 7.19.13  2026-06-03
 - fix: fstab rewrite WARNs + logs when findmnt absent (was committed ungated).
-- style: trim verbose comments to vital info.
-- docs: trim README/CHANGELOG verbose lines.
+- style: trim verbose comments.
+- docs: trim README/CHANGELOG.
 
 7.19.12  2026-06-03
-- harden: --country validated against 249 assigned ISO-3166-1 alpha-2 codes (was shape-only).
-- refactor: RADV drirc option from $RADV_APU_OPTION global (single source).
-- docs: note 250/255 are internal _as/_run misuse rc (never a process exit).
+- harden: --country validated against 249 assigned ISO-3166-1 alpha-2 codes.
+- refactor: RADV drirc option from $RADV_APU_OPTION (single source).
+- docs: note 250/255 are internal _as/_run misuse rc, never a process exit.
 
 7.19.11  2026-06-03
 - fix: drop unused sort from preflight hard-dependency gate.
-- fix: _install_fstab_opts evidence reflects outcome (absent / no-ext4 / conformant / applied).
+- fix: _install_fstab_opts evidence reflects outcome.
 
 7.19.10  2026-06-03
-- style: pad CONFIG-FORMAT VALIDATORS header divider to 100 cols (uniform with rest).
-- style: drop 2 stray blank lines after JSON ESCAPE / CONFIG-FORMAT VALIDATORS headers.
+- style: pad CONFIG-FORMAT VALIDATORS divider to 100 cols.
+- style: drop stray blank lines after two headers.
 
 7.19.9  2026-06-03
 - pkgs: add cachy-update to PKGS_DEL; 7 -> 8.
@@ -69,7 +73,7 @@ ry-install changelog
 - docs: PKGS_ADD includes Vulkan/gaming deps.
 
 7.17.28  2026-06-01
-- comment: condense comments to single line (<= 120 cols).
+- comment: condense to single line (<= 120 cols).
 
 7.17.27  2026-06-01
 - fix: --check keeps confirmed drift as EXIT_DRIFT (10).
@@ -205,7 +209,7 @@ ry-install changelog
 - verify: derive expected ppfeaturemask from KERNEL_PARAMS.
 
 7.14.0  2026-05-29
-- cmdline: ppfeaturemask 0xfffd7fff -> 0xfff73fff; +amdgpu.sg_display=0; KERNEL_PARAMS 16 -> 17.
+- cmdline: ppfeaturemask 0xfffd7fff -> 0xfff73fff; +amdgpu.sg_display=0; 16 -> 17.
 - aur: reduce to mkinitcpio-firmware; 3 -> 1.
 
 7.13.5  2026-05-29
@@ -218,7 +222,7 @@ ry-install changelog
 - cli: drop RY_INSTALL_NO_MATRIX; matrix always to stderr; runtime-vars 6 -> 5.
 
 7.13.2  2026-05-29
-- cli: drop RY_INSTALL_PKG_REMOVE_CASCADE, RY_INSTALL_NO_INTERACTIVE_SUDO; runtime-vars 8 -> 6.
+- cli: drop RY_INSTALL_PKG_REMOVE_CASCADE, RY_INSTALL_NO_INTERACTIVE_SUDO; 8 -> 6.
 
 7.13.1  2026-05-29
 - cli: drop RY_INSTALL_ALLOW_PARTIAL_UPGRADE; pacman -Syu --needed always.

@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.21 (2026-06-04) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.22 (2026-06-04) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.21"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.22"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -60,6 +60,13 @@ for _early_arg in $argv
     end
 end
 set --erase _early_arg
+# ── PATH HARDENING (before first external command: id -u) ─────────────────────────────────────────
+set -l _ry_path_new
+for _ry_p in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin $PATH
+    not contains -- $_ry_p $_ry_path_new; and set -a _ry_path_new $_ry_p
+end
+set -gx PATH $_ry_path_new
+set --erase _ry_path_new _ry_p
 set -g _MY_UID (command id -u)
 
 function _ry_erase_handlers --description "Erase signal/exit handler functions"; functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null; end
@@ -96,13 +103,7 @@ test "$parts[1]" -gt 3; and set _fish_ok 1
 test "$parts[1]" -eq 3; and test "$_fish_minor" -ge 6; and set _fish_ok 1
 if test "$_fish_ok" -eq 0; echo "[ERR] fish 3.6+ required (found: $fish_ver)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
-# ── PATH HARDENING + TMPDIR + COREUTILS PROBES ────────────────────────────────────────────────────
-set -l _ry_path_new
-for _ry_p in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin $PATH
-    not contains -- $_ry_p $_ry_path_new; and set -a _ry_path_new $_ry_p
-end
-set -gx PATH $_ry_path_new
-set --erase _ry_path_new _ry_p
+# ── TMPDIR + COREUTILS PROBES ─────────────────────────────────────────────────────────────────────
 if set -q TMPDIR; and test -n "$TMPDIR"; and not string match -q -- '/*' "$TMPDIR"; echo "[WARN] TMPDIR is not an absolute path ($TMPDIR) — falling back to /tmp" >&2; set -gx TMPDIR /tmp; end
 if set -q TMPDIR; and test -n "$TMPDIR"; and not test -d "$TMPDIR"; echo "[WARN] TMPDIR does not exist ($TMPDIR) — falling back to /tmp" >&2; set -gx TMPDIR /tmp; end
 set -l _ry_tmpprobe_dir /tmp

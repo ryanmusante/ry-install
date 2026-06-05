@@ -2,7 +2,7 @@
 
 CachyOS configuration for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-Version 7.19.21 · fish >= 3.6 · CachyOS · MIT.
+Version 7.19.22 · fish >= 3.6 · CachyOS · MIT.
 
 ## Contents
 
@@ -69,7 +69,7 @@ Hard requirements abort read-only in preflight (exit 3); retry after fixing. par
 | CPU | Ryzen AI Max+ 395 (Zen 5, gfx1151) |
 | GPU | Radeon 8060S (RDNA 3.5) |
 | Memory | 128 GB LPDDR5x-8000 |
-| CPU gate | matches `Ryzen AI Max`; override `RY_INSTALL_SKIP_HARDWARE_CHECK=1` |
+| CPU gate | matches `Ryzen AI Max`; override `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (gate applies in every mode, including `--verify`/`--check`) |
 
 ## Usage
 
@@ -262,7 +262,7 @@ Masked units (11):
 | Boot delays | `NetworkManager-wait-online.service` |
 | Power states | `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
 
-Enabled units (3 verified):
+Enabled units (3 verified; dispatcher enabled only if installed):
 
 | Unit | Role |
 |---|---|

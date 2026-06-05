@@ -1,6 +1,11 @@
 ry-install changelog
 ====================
 
+7.19.22  2026-06-04
+- preflight: harden PATH before first `id -u` (broken inherited PATH no longer yields empty UID)
+- docs: CPU gate applies in every mode incl --verify/--check (override RY_INSTALL_SKIP_HARDWARE_CHECK=1)
+- docs: README "Enabled units" header notes 3 verified + conditional NetworkManager-dispatcher
+
 7.19.21  2026-06-04
 - verify: print combined static+runtime totals line (per-arm summaries were console-only)
 - verify: tcp_congestion_control checked once (drop _vre_tcp duplicate)

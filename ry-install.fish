@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.20.0 (2026-06-04) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.20.1 (2026-06-05) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.20.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.20.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -526,8 +526,10 @@ set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
+# Bootloader keys: loader.conf (LOADER_*) + sdboot-manage.conf (SDBOOT_*).
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
+# KERNEL_PARAMS (13; counts enforced by _ir_validate_counts) -> /etc/kernel/cmdline + sdboot LINUX_OPTIONS.
 set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
     amd_iommu=off \
@@ -542,6 +544,7 @@ set -g KERNEL_PARAMS \
     tsc=reliable \
     usbcore.autosuspend=-1 \
     zswap.enabled=0
+# Initramfs -> /etc/mkinitcpio.conf: MODULES (1) + HOOKS (11, enforced) + COMPRESSION.
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS \
     base \
@@ -557,6 +560,7 @@ set -g MKINITCPIO_HOOKS \
     fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
+# systemd-resolved drop-in keys (RESOLVED_*).
 set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade
 # COUNTRY: wireless regdom; default US, override --country=XX.
 set -g COUNTRY US
@@ -580,6 +584,7 @@ set -g _RY_ISO3166_ALPHA2 \
     VN VU WF WS YE YT ZA ZM ZW
 # RADV_APU_OPTION: drirc option name; single source for content-gen + verify.
 set -g RADV_APU_OPTION radv_enable_unified_heap_on_apu
+# LOGIND_IGNORE_KEYS (8, enforced) -> logind.conf.d (Handle*Key=ignore).
 set -g LOGIND_IGNORE_KEYS \
     HandlePowerKey \
     HandlePowerKeyLongPress \
@@ -589,10 +594,12 @@ set -g LOGIND_IGNORE_KEYS \
     HandleHibernateKeyLongPress \
     HandleRebootKey \
     HandleRebootKeyLongPress
+# Network/power keys: iwd (IWD_*), NetworkManager (NM_*), cpupower governor.
 set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR powersave
 
+# ENV_VARS (10, enforced) -> ~/.config/environment.d (gaming/Vulkan).
 set -g ENV_VARS \
     "AMD_VULKAN_ICD=RADV" \
     "DXVK_LOG_LEVEL=none" \
@@ -604,6 +611,7 @@ set -g ENV_VARS \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
     "WINEDEBUG=-all"
+# SYSCTL_VALUES (8, enforced) -> /etc/sysctl.d/95-ry-overrides.conf.
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
@@ -614,6 +622,7 @@ set -g SYSCTL_VALUES \
     "vm.compaction_proactiveness=0" \
     "vm.max_map_count=2147483642"
 
+# PKGS_ADD (14, enforced) -> pacman -Syu --needed (Phase 2).
 set -g PKGS_ADD \
     nvme-cli \
     cachyos-gaming-meta \
@@ -642,8 +651,10 @@ set -g PKGS_DEL \
 # AUR packages — installed unconditionally (no hardware gating).
 set -g AUR_PKGS mkinitcpio-firmware
 set -g _RY_PKG_REMOVE_SKIPS
+# EXPECTED_VULKAN_PKGS (2, enforced) -> chwd Vulkan drivers (verified present).
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon
 
+# MASK (11, enforced) -> systemctl mask --now (Phase 4).
 set -g MASK \
     ananicy-cpp.service \
     avahi-daemon.service \
@@ -656,9 +667,11 @@ set -g MASK \
     hibernate.target \
     hybrid-sleep.target \
     suspend-then-hibernate.target
+# EXPECTED_SERVICES (3, enforced) -> enabled + verified (Phase 4/6).
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 
+# Thresholds + hardware gate: disk (GiB/MiB), boot-time target, CPU match, TTM GTT caps.
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5
 set -g BOOT_TIME_TARGET 15
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
@@ -1321,7 +1334,7 @@ function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable 
     end
     if not set -q _RY_RUN_TIMEOUT_WARNED
         set -g _RY_RUN_TIMEOUT_WARNED true
-        _warn "RY_RUN_TIMEOUT='$RY_RUN_TIMEOUT' is invalid (expected non-negative integer; 0 to disable) — using default "$_RY_RUN_TIMEOUT_DEFAULT"s"
+        _msg_nocount WARN "RY_RUN_TIMEOUT='$RY_RUN_TIMEOUT' is invalid (expected non-negative integer; 0 to disable) — using default "$_RY_RUN_TIMEOUT_DEFAULT"s"
         _log "RY_RUN_TIMEOUT_INVALID: value=$RY_RUN_TIMEOUT — using default $_RY_RUN_TIMEOUT_DEFAULT"
     end
     echo $_RY_RUN_TIMEOUT_DEFAULT
@@ -2380,8 +2393,7 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
     end
 end
 
-# ── VERIFY-STATIC: CHECKSUM + DRIVER (SHA256 match + _ry_verify_static) ───────────────────────────
-# Signal = generator rc (pipestatus[1]) + value compare; empty-output collect rc 1 is OK.
+# ── VERIFY-STATIC: CHECKSUM + DRIVER (SHA256 match + _ry_verify_static) ── Signal = generator rc (pipestatus[1]) + value compare; empty-output collect rc 1 is OK.
 function _vsc_check_one --argument-names dst --description "_verify_static_checksum sub. Compare one destination's expected vs installed bytes"
     set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _gen_rc $pipestatus[1]

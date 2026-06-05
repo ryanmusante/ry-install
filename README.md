@@ -2,7 +2,7 @@
 
 CachyOS configuration for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-Version 7.20.1 · fish >= 3.6 · CachyOS · MIT.
+Version 7.20.2 · fish >= 3.6 · CachyOS · MIT.
 
 ## Contents
 
@@ -235,7 +235,7 @@ Env vars (10 keys):
 
 ### Phase 4 — Services
 
-fstab rewrite -> `systemd-resolved` restart -> `PKGS_DEL` removal -> mask `--now` 11 units -> `daemon-reload` + enable runtime units -> apply regdom (`iw reg set $COUNTRY`, or `/etc/iw-regdomain` when `iw` absent). The rewrite strips conflicting entries, gated by `findmnt --verify` (a required dependency). No auto-backup: snapshot `/etc/fstab` first.
+fstab rewrite -> `systemd-resolved` restart -> `PKGS_DEL` removal -> mask `--now` 11 units -> `daemon-reload` + enable runtime units -> apply regdom (`iw reg set $COUNTRY`, or `/etc/iw-regdomain` when `iw` absent). The rewrite strips conflicting options, gated by `findmnt --verify` (a required dependency). Pre-rewrite snapshot saved to `/etc/fstab.ry.bak`.
 
 fstab (3 ext4 mount options):
 
@@ -303,12 +303,12 @@ Enabled units (3 verified; dispatcher enabled only if installed):
 
 ## Safety and Reliability
 
-Atomic writes plus a gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. `/etc/fstab` is the exception: no auto-backup, so snapshot it first.
+Atomic writes plus a gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. `/etc/fstab` is snapshotted to `/etc/fstab.ry.bak` before rewrite; auto-restore on post-write mismatch still excludes fstab.
 
 | Feature | Detail |
 |---|---|
 | Atomic writes | tmp -> render -> symlink probe -> chmod -> `mv -T` |
-| Auto backups | `<path>.ry.bak` before overwriting `loader.conf`/`mkinitcpio.conf`; restored on post-write byte-mismatch (fstab excluded) |
+| Auto backups | `<path>.ry.bak` before overwriting `loader.conf`/`mkinitcpio.conf`/`fstab`; auto-restore on post-write byte-mismatch excludes fstab |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
 | fstab | `findmnt --verify` gate (findmnt is a required dependency); rejects symlinked `/etc/fstab` |
 | Boot rebuild gate | skipped on package/boot-config failure; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses taint only |
@@ -357,7 +357,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 1. `sudo systemctl unmask` the 11 masked units (reboot or start to restore).
 2. `sudo rm` deployed paths from the Managed Files list.
-3. Restore `/etc/fstab` from your pre-install snapshot.
+3. Restore `/etc/fstab` from `/etc/fstab.ry.bak` (or your own snapshot).
 4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`); `PKGS_ADD`.
 5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
 6. Reboot.

@@ -128,7 +128,7 @@ Bootstrap (fish >= 3.6 + coreutils + PATH/TMPDIR/HOME) -> `_init_runtime` (root 
 
 ### Phase 2 — Packages
 
-`pacman -Syu --needed` (`PKGS_ADD`) -> `paru` (`AUR_PKGS`) -> optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory: missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. With a single AUR package there is no partial state, so its failure is `FAIL` (exit `1`) — but it never taints the Phase 5 boot rebuild.
+`pacman -Syu --needed` (`PKGS_ADD`) -> `paru` (`AUR_PKGS`) -> optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory: missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`.
 
 Packages — install (14):
 
@@ -358,7 +358,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 1. `sudo systemctl unmask` the 11 masked units (reboot or start to restore).
 2. `sudo rm` deployed paths from the Managed Files list.
 3. Restore `/etc/fstab` from your pre-install snapshot.
-4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`); `PKGS_ADD` includes Vulkan/gaming runtime deps, so exclude anything still in use.
+4. Optionally reverse package changes (`sudo pacman -S <PKGS_DEL>`, `sudo pacman -Rns <PKGS_ADD>`); `PKGS_ADD`.
 5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
 6. Reboot.
 

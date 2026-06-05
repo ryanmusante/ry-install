@@ -2,7 +2,7 @@
 
 CachyOS configuration for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-Version 7.19.24 · fish >= 3.6 · CachyOS · MIT.
+Version 7.19.25 · fish >= 3.6 · CachyOS · MIT.
 
 ## Contents
 
@@ -128,7 +128,7 @@ Bootstrap (fish >= 3.6 + coreutils + PATH/TMPDIR/HOME) -> `_init_runtime` (root 
 
 ### Phase 2 — Packages
 
-`pacman -Syu --needed` (`PKGS_ADD`) -> `paru` (`AUR_PKGS`) -> optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory: missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`.
+`pacman -Syu --needed` (`PKGS_ADD`) -> `paru` (`AUR_PKGS`) -> optional `updatedb` / `pkgfile --update`. `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory: missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. With a single AUR package there is no partial state, so its failure is `FAIL` (exit `1`) — but it never taints the Phase 5 boot rebuild.
 
 Packages — install (14):
 

@@ -1,6 +1,11 @@
 ry-install changelog
 ====================
 
+7.19.25  2026-06-04
+- fix: boot-taint gate message dropped stale AUR (only -Syu/pkg-verify/boot-config taint)
+- docs: note sole-AUR-package failure is FAIL/exit 1 yet never taints boot rebuild
+- comment: _vrs_installed_file_perms reads user-file group to tolerate setgid parents
+
 7.19.24  2026-06-04
 - docs: trim CHANGELOG entries to single line
 

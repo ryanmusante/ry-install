@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.24 (2026-06-04) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.19.25 (2026-06-04) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.24"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.19.25"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -3135,6 +3135,8 @@ function _vrs_installed_file_perms --description "Runtime session check: install
     for dst in $USER_DESTINATIONS
         if test -f "$dst"
             set perm_checked (math $perm_checked + 1)
+            # Group read from the file's own %G (not id -gn): tolerates a setgid ~/.config parent
+            # that overrides the user's primary group. Net: owner + mode 0600 enforced; group not.
             set -l _actual_grp (command stat -c '%G' -- "$dst" 2>/dev/null)
             test -z "$_actual_grp"; and set _actual_grp (command id -gn)
             _chk_perms "$dst" 600 "$_u_uname:$_actual_grp" false; or set perm_bad (math $perm_bad + 1)
@@ -4251,7 +4253,7 @@ function _check_boot_taint_gate --description "Verify boot state not tainted (sh
     end
     if test "$_RY_BOOT_TAINTED" = true; and test "$RY_INSTALL_FORCE_BOOT_REBUILD" != 1
         _err "Refusing initramfs rebuild — an earlier phase of THIS run tainted package or boot-critical config state"
-        _err "  (mkinitcpio.conf, kernel cmdline, loader, sdboot-manage, or pacman/AUR install failed)"
+        _err "  (mkinitcpio.conf, kernel cmdline, loader, sdboot-manage, or pacman -Syu/package-verify failed; the advisory AUR phase never taints)"
         _err "  Resolve manually then re-run, OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
         return 2
     end

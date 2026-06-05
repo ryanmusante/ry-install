@@ -2,7 +2,7 @@
 
 CachyOS configuration for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-Version 7.19.25 · fish >= 3.6 · CachyOS · MIT.
+Version 7.20.0 · fish >= 3.6 · CachyOS · MIT.
 
 ## Contents
 
@@ -100,7 +100,7 @@ Six phases in order. A `pacman -Syu`, package-verify, or boot-config failure tai
 
 ## Run Summary
 
-Prints a CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) to stderr. JSONL under `~/ry-install/logs/` records each `PHASE_RESULT` plus a `MATRIX_RENDERED` event. Verdict maps to exit code.
+Prints a CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) to stderr. The JSONL under `~/ry-install/logs/` records each `PHASE_RESULT` and a final `MATRIX_RENDERED` summary as `log`-type entries (the event types are `header`, `log`, `footer`). Verdict maps to exit code.
 
 | Result | Semantics |
 |---|---|
@@ -147,13 +147,13 @@ Packages — AUR (1):
 |---|---|
 | `mkinitcpio-firmware` | firmware blobs absent from `linux-firmware` |
 
-Vulkan deps (3):
+Vulkan deps — `EXPECTED_VULKAN_PKGS` verifies the two chwd-provided packages; `lib32-mesa` ships via `PKGS_ADD` and is confirmed by the required-package check:
 
-| Package | Source |
-|---|---|
-| `vulkan-radeon` | chwd |
-| `lib32-vulkan-radeon` | chwd |
-| `lib32-mesa` | `PKGS_ADD` |
+| Package | Source | Verified by |
+|---|---|---|
+| `vulkan-radeon` | chwd | `EXPECTED_VULKAN_PKGS` |
+| `lib32-vulkan-radeon` | chwd | `EXPECTED_VULKAN_PKGS` |
+| `lib32-mesa` | `PKGS_ADD` | required-package check |
 
 Caveats:
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env fish
-# ry-install v7.19.25 (2026-06-04) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.20.0 (2026-06-04) — CachyOS config manager | Ryan Musante | MIT.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.19.25"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.20.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -341,8 +341,11 @@ function _dc_sweep_tmpfiles --description "_do_cleanup sub. Remove tracked tmpfi
     end
     set -l _has_sudo false
     test (count $_stuck_tmpfiles) -gt 0; and command -q sudo; and sudo -n true 2>/dev/null; and set _has_sudo true
+    # Escalation roots: managed-dest parents + /run; sudo-rm only our tmpfiles there.
+    set -l _esc_roots /run/ry-install
+    for _d in $SYSTEM_DESTINATIONS; set -a _esc_roots (command dirname -- "$_d"); end
     for _tf in $_stuck_tmpfiles
-        if test "$_has_sudo" = true; and begin; string match -q '/etc/*' -- "$_tf"; or string match -q '/boot/*' -- "$_tf"; or string match -q '/efi/*' -- "$_tf"; or string match -q '/var/*' -- "$_tf"; or string match -q '/run/*' -- "$_tf"; end
+        if test "$_has_sudo" = true; and contains -- (command dirname -- "$_tf") $_esc_roots
             if sudo -n test -d "$_tf" 2>/dev/null
                 sudo -n rm -rf --preserve-root -- "$_tf" 2>/dev/null; or begin
                     functions -q _log; and _log "TMPFILE_STUCK: $_tf (sudo rm -rf failed)"
@@ -384,7 +387,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_PACMAN_REVERT_ATTEMPTED
     set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
-    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_TSC
+    set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT _RY_DMESG_TSC
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
@@ -455,8 +458,10 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     set -g _CLEANUP_DONE true; set -l _sig_label SIG$argv[1]
     string match -q 'SIG*' -- "$argv[1]"; and set _sig_label "$argv[1]"
     test -z "$argv[1]"; and set _sig_label exit
-    echo "" >&2
-    echo "[WARN] Caught $_sig_label - cleaning up..." >&2
+    if not set -q _RY_OUTPUT_BROKEN
+        echo "" >&2
+        echo "[WARN] Caught $_sig_label - cleaning up..." >&2
+    end
     set -l _sig_exit 130
     switch "$argv[1]"
         case HUP SIGHUP
@@ -637,7 +642,7 @@ set -g PKGS_DEL \
 # AUR packages — installed unconditionally (no hardware gating).
 set -g AUR_PKGS mkinitcpio-firmware
 set -g _RY_PKG_REMOVE_SKIPS
-set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon lib32-mesa
+set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon
 
 set -g MASK \
     ananicy-cpp.service \
@@ -716,7 +721,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         PKGS_ADD:14 \
         PKGS_DEL:8 \
         MASK:11 \
-        EXPECTED_VULKAN_PKGS:3 \
+        EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:3 \
         _RY_PKG_MANAGED_SERVICES:1 \
         _RY_POST_HOOKS:16 \
@@ -1348,11 +1353,13 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
             _log "$label_tag""_FULL_SPILL_FAIL: could not write spill file under $_ovf"
         end
     end
-    if test "$QUIET" = false
-        for _l in $_redacted; printf '%s\n' "$_l" >&2; end
-    else if test "$label_tag" = STDERR; and test "$ret" -ne 0
-        for _l in $_redacted[1..5]
-            printf '%s\n' "$_l" >&2
+    if not set -q _RY_OUTPUT_BROKEN
+        if test "$QUIET" = false
+            for _l in $_redacted; printf '%s\n' "$_l" >&2; end
+        else if test "$label_tag" = STDERR; and test "$ret" -ne 0
+            for _l in $_redacted[1..5]
+                printf '%s\n' "$_l" >&2
+            end
         end
     end
 end
@@ -1377,6 +1384,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
             set _effective_cmd $_ec_arg; break
         end
     end
+    set _effective_cmd (command basename -- "$_effective_cmd")
     if contains -- "$_effective_cmd" pacman paru mkinitcpio sdboot-manage paccache updatedb pkgfile
         test "$_t" -gt 0 2>/dev/null; and _log "TIMEOUT_BYPASS: cmd=$_effective_cmd (long-running pkg/boot/db op; SIGKILL would bypass rollback)"
         set _t 0
@@ -2710,7 +2718,7 @@ function _vrk_clocksource --description "Runtime kparam check: clocksource (with
             set -l _tsc_demote $_RY_DMESG_TSC
             if test -n "$_tsc_demote"
                 for _l in $_tsc_demote; _info "  dmesg: $_l"; end
-            else if test (count $_RY_DMESG_CACHE) -eq 0
+            else if test "$_RY_DMESG_LINES" -eq 0
                 _info "  dmesg: cannot scan (sudo lapsed or dmesg unavailable — TSC demotion check skipped)"
             else
                 _info "  dmesg: no TSC demotion markers found — check BIOS/firmware"
@@ -2724,18 +2732,16 @@ end
 
 # Extract markers from full dmesg before 5000-line cap (head scrolls off).
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource"
-    set -g _RY_DMESG_CACHE; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_TSC
+    set -g _RY_DMESG_LINES 0; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_TSC
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null | string split \n); set -l _full_count (count $_full)
         if test (count $_full) -gt 0
             set -g _RY_DMESG_PREEMPT (printf '%s\n' $_full | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
             set -g _RY_DMESG_TSC (printf '%s\n' $_full | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
         end
-        # 5000-line cap bounds fish list memory; markers pre-extracted.
-        set -g _RY_DMESG_CACHE $_full[1..5000]
-        test "$_full_count" -gt 5000; and _log "DMESG_CAPPED: kept=5000 of $_full_count lines (markers pre-extracted from full buffer)"
+        set -g _RY_DMESG_LINES $_full_count
     end
-    if test (count $_RY_DMESG_CACHE) -eq 0
+    if test "$_RY_DMESG_LINES" -eq 0
         if not command -q dmesg
             _log "DMESG_CACHE_EMPTY: dmesg(1) not installed"
         else if not command -q sudo
@@ -2751,7 +2757,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     _vrk_cpu_state
     _vrk_module_state
     _vrk_clocksource
-    set --erase _RY_DMESG_CACHE _RY_DMESG_PREEMPT _RY_DMESG_TSC
+    set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT _RY_DMESG_TSC
 end
 
 # ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, wifi, masks) ─────────────────────────
@@ -3135,8 +3141,7 @@ function _vrs_installed_file_perms --description "Runtime session check: install
     for dst in $USER_DESTINATIONS
         if test -f "$dst"
             set perm_checked (math $perm_checked + 1)
-            # Group read from the file's own %G (not id -gn): tolerates a setgid ~/.config parent
-            # that overrides the user's primary group. Net: owner + mode 0600 enforced; group not.
+            # Group from file's own %G (not id -gn): tolerates setgid ~/.config; owner+0600 enforced, group not.
             set -l _actual_grp (command stat -c '%G' -- "$dst" 2>/dev/null)
             test -z "$_actual_grp"; and set _actual_grp (command id -gn)
             _chk_perms "$dst" 600 "$_u_uname:$_actual_grp" false; or set perm_bad (math $perm_bad + 1)

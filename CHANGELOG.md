@@ -1,86 +1,91 @@
 ry-install changelog
 ====================
 
+7.19.24  2026-06-04
+- docs: trim CHANGELOG entries to single line
+
+7.19.23  2026-06-04
+- preflight: guard id(1) presence before first use
+
 7.19.22  2026-06-04
-- preflight: harden PATH before first `id -u` (broken inherited PATH no longer yields empty UID)
-- docs: CPU gate applies in every mode incl --verify/--check (override RY_INSTALL_SKIP_HARDWARE_CHECK=1)
-- docs: README "Enabled units" header notes 3 verified + conditional NetworkManager-dispatcher
+- preflight: harden PATH before first id -u
+- docs: CPU gate applies in every mode incl --verify/--check
+- docs: README enabled units = 3 verified + conditional dispatcher
 
 7.19.21  2026-06-04
-- verify: print combined static+runtime totals line (per-arm summaries were console-only)
-- verify: tcp_congestion_control checked once (drop _vre_tcp duplicate)
-- verify: reword systemctl-unreadable state as "absent or no running manager"
-- verify: THP enabled/defrag demoted to advisory INFO (out of scope; not managed)
-- install-file: resolved/nm/modprobe/udev live-apply failure is WARN-class rc0
-- fstab: findmnt-absent path refuses rewrite (gate mandatory; findmnt is a hard dep)
+- verify: print combined static+runtime totals
+- verify: tcp_congestion_control checked once
+- verify: reword systemctl-unreadable as absent/no running manager
+- verify: THP enabled/defrag demoted to INFO
+- install-file: resolved/nm/modprobe/udev live-apply failure is rc0 WARN
+- fstab: findmnt-absent refuses rewrite (gate mandatory)
 
 7.19.20  2026-06-03
-- fix: --install-file post-hook live-apply failure (sysctl/cpupower) is WARN-class, not rc1
-- fix: --install-file live-apply post-hook runs only on byte change (no-op if unchanged)
-- fix: --country= with empty value rejected as usage (rc 2); was silently ignored
-- verify: suppress empty boot-time [INFO] line when systemd-analyze output is unparseable
-- docs: only -Syu/package-verify/boot-config failures taint Phase 5 (AUR advisory does not)
-- style: condense verbose comment lines
+- install-file: post-hook live-apply failure is WARN, not rc1
+- install-file: live-apply runs only on byte change
+- cli: --country= empty value rejected (rc 2)
+- verify: suppress empty boot-time INFO when systemd-analyze unparseable
+- docs: only -Syu/pkg-verify/boot-config taint Phase 5
 
 7.19.19  2026-06-03
-- verify: drirc XML reports NOT FOUND for absent drop-in (was reported malformed)
-- verify: ZRAM/swap demoted to advisory (out of scope; no longer fails --verify)
-- cleanup: reclaim empty /run/ry-install staging dir after mkinitcpio.conf snapshot
-- docs: clarify findmnt is a required dependency; fstab --verify gate always applies
+- verify: drirc reports NOT FOUND for absent drop-in
+- verify: ZRAM/swap demoted to advisory
+- cleanup: reclaim empty /run/ry-install staging dir
+- docs: findmnt is a required dependency
 
 7.19.18  2026-06-03
-- cleanup: drop dead ry-val-unit sweep glob (no producer)
+- cleanup: drop dead ry-val-unit sweep glob
 - cleanup: track atomic-write/fstab tmpfile after empty-guard
 
 7.19.17  2026-06-03
-- verify: root-UUID resolution failure warns + continues (generic root=UUID check)
+- verify: root-UUID resolution failure warns + continues
 - docs: convert remaining README prose to tables
 
 7.19.16  2026-06-03
-- cli: --country reject message notes UK is GB and that 00/EU are not alpha-2
-- style: tighten verbose comments to vital info
+- cli: --country reject notes UK is GB; 00/EU not alpha-2
+- style: tighten verbose comments
 
 7.19.15  2026-06-03
-- fix: preflight-abort summary renders verdict PREFLIGHT (exit 3); was FAIL
-- docs: README verdict + exit-code tables add PREFLIGHT
+- fix: preflight-abort verdict renders PREFLIGHT (exit 3)
+- docs: verdict + exit-code tables add PREFLIGHT
 
 7.19.14  2026-06-03
-- cleanup: _fstab_needs_change drop redundant -- in commit= capture (inert)
+- cleanup: drop redundant -- in commit= capture
 
 7.19.13  2026-06-03
-- fix: fstab rewrite WARNs + logs when findmnt absent (was committed ungated)
+- fix: fstab rewrite WARNs + logs when findmnt absent
 - style: trim verbose comments
 - docs: trim README/CHANGELOG
 
 7.19.12  2026-06-03
-- harden: --country validated against 249 assigned ISO-3166-1 alpha-2 codes
-- refactor: RADV drirc option from $RADV_APU_OPTION (single source)
-- docs: note 250/255 are internal _as/_run misuse rc, never a process exit
+- harden: --country validated against 249 ISO-3166-1 alpha-2 codes
+- refactor: RADV drirc option from single source
+- docs: 250/255 are internal misuse rc, never a process exit
 
 7.19.11  2026-06-03
-- fix: drop unused sort from preflight hard-dependency gate
+- fix: drop unused sort from preflight gate
 - fix: _install_fstab_opts evidence reflects outcome
 
 7.19.10  2026-06-03
 - style: pad CONFIG-FORMAT VALIDATORS divider to 100 cols
-- style: drop stray blank lines after two headers
+- style: drop stray blank lines after headers
 
 7.19.9  2026-06-03
 - pkgs: add cachy-update to PKGS_DEL; 7 -> 8
 
 7.19.8  2026-06-03
-- comment: _vmh_order_checks banner 11 -> 10 invariants
-- comment: note _as rc=250 / _run rc=255 misuse sentinels
+- comment: _vmh_order_checks banner 11 -> 10
+- comment: note _as rc=250 / _run rc=255 sentinels
 
 7.19.7  2026-06-03
 - style: quote remaining numeric test operands
 - docs: README plain layout; udev ACTION=="add|change"
 
 7.19.6  2026-06-03
-- docs: README config tables to 2-column layout
+- docs: README config tables to 2-column
 
 7.19.5  2026-06-02
-- harden: _ir_validate_counts also guards phase-names/backup-targets/ntsync-confs
+- harden: _ir_validate_counts guards phase-names/backup-targets/ntsync-confs
 
 7.19.4  2026-06-02
 - comment: post-hook handler banner 12 -> 11

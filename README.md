@@ -13,7 +13,8 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent (safe to upgrade).
+> [!IMPORTANT]
+> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent (safe to upgrade).
 
 ## Scope
 
@@ -62,7 +63,10 @@ The CPU gate matches `Ryzen AI Max` in every mode (incl. `--verify`/`--check`); 
 | `--country=XX` | Wireless regdom (ISO-3166-1 alpha-2; default `US`; UK is `GB`) |
 | `-h, --help` · `-v, --version` | Help · version |
 
-`--install-file` of a boot-critical file (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade; **cascade failure exits 4 (DO NOT REBOOT).** Non-boot post-hook failures stay exit 0 (file already deployed).
+`--install-file` of a boot-critical file (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade. Non-boot post-hook failures stay exit 0 (file already deployed).
+
+> [!CAUTION]
+> A boot-cascade failure during `--install-file` exits 4 — **do not reboot** until it succeeds.
 
 ## Install Flow
 
@@ -101,7 +105,7 @@ A CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) prints to stderr; the 
 
 The script is the source of truth; `--verify` checks each embedded file byte-for-byte, then live state. Retune via the `set -g` globals near the top. Subsections below follow the six install phases; settings are grouped under the phase that writes them (or, for in-place edits, acts on them). Phases 1, 5, and 6 write no files — see their prose notes.
 
-### Phase 1 · Preflight — writes nothing
+### Phase 1 · Preflight
 
 Read-only gate. Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space), acquires the instance lock, and runs the runtime invariants (CPU match, embedded-array counts, destination-key uniqueness). Any failure aborts before a single byte is written (exit `3`; lock contention exits `5`). `paru` and NTP only `WARN`.
 
@@ -192,11 +196,11 @@ Ordered: fstab rewrite → resolved restart → package removal → mask 11 unit
 | Masked | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
 | Enabled | `fstrim.timer`, `NetworkManager.service`, `cpupower.service` (+ `NetworkManager-dispatcher.service` if installed) |
 
-### Phase 5 · Boot — writes nothing
+### Phase 5 · Boot
 
 Regenerates artifacts from the Phase-3 boot configs: `mkinitcpio -P` (initramfs) → `sdboot-manage gen` + `update` (systemd-boot BLS entries) → post-rebuild sanity (`vmlinuz` present, initramfs non-zero, entries valid). A `pacman -Syu`, package-verify, or boot-config failure earlier in the run taints this phase and **skips the rebuild**; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint only. Cascade failure exits `4` and prints **DO NOT REBOOT**.
 
-### Phase 6 · Finalize — writes nothing
+### Phase 6 · Finalize
 
 User `systemctl --user daemon-reload` (only when a user bus is active) → pacman cache trim (`paccache -rk2 -ruk0`, or `pacman -Sc` fallback; skipped when nothing was upgraded or removed) → NetworkManager restart for the iwd backend switch, **deferred when Wi-Fi is the active route** (applies on next reboot).
 
@@ -226,6 +230,9 @@ User `systemctl --user daemon-reload` (only when a user bus is active) → pacma
 
 Atomic writes plus a gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. `/etc/fstab` is snapshotted to `/etc/fstab.ry.bak` before rewrite; the post-write auto-restore excludes fstab.
 
+> [!WARNING]
+> This profile **disables and masks the host firewall** (`ufw`) on a trusted-LAN assumption — there is no host packet filtering after install. `--verify` reports its state.
+
 | Feature | Detail |
 |---|---|
 | Atomic writes | tmp → render → symlink probe → chmod → `mv -T` |
@@ -235,7 +242,7 @@ Atomic writes plus a gated Phase 5 rebuild keep a failed package or boot-config 
 | fstab | `findmnt --verify` gate (mandatory); symlinked `/etc/fstab` refused |
 | Instance lock | atomic `mkdir` `0700`; dead-PID reclaim via `kill -0` |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
-| Firewall | **WARNING: no host firewall** — `ufw` disabled + masked (trusted-LAN); `--verify` reports its state |
+| Firewall | no host firewall — `ufw` disabled + masked (trusted-LAN); `--verify` reports its state |
 
 Exit codes:
 

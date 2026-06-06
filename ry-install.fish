@@ -533,7 +533,7 @@ if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_
 # Bootloader keys: loader.conf (LOADER_*) + sdboot-manage.conf (SDBOOT_*).
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-# KERNEL_PARAMS (13; counts enforced by _ir_validate_counts) -> /etc/kernel/cmdline + sdboot LINUX_OPTIONS.
+# KERNEL_PARAMS (13, enforced) -> /etc/kernel/cmdline + sdboot LINUX_OPTIONS.
 set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
     amd_iommu=off \
@@ -1390,7 +1390,7 @@ function _run_redact_cmd --description "_run sub: build logged cmd string with t
     string replace -ar -- '/tmp/ry-[A-Za-z0-9_.-]+' '/tmp/ry-[REDACTED]' "$log_cmd"
 end
 
-# Bypass timeout for pacman/paru/mkinitcpio/sdboot-manage (SIGKILL corrupts db.lck); bypass matches resolved basename only — invoke pkg/boot ops by canonical name (not a differently-named wrapper), else RY_RUN_TIMEOUT may SIGKILL a db txn.
+# Bypass timeout for pkg/boot/db ops (SIGKILL corrupts db.lck); matches resolved basename — call by canonical name.
 function _run_effective_timeout --description "_run sub: resolve timeout; bypass for long-running pkg/boot/db ops (0 = disabled)"
     set -l _t (_run_resolve_timeout); set -l _effective_cmd $argv[1]
     if test "$_effective_cmd" = sudo
@@ -2404,7 +2404,7 @@ function _verify_static_syntax --description "Validate mkinitcpio hooks ordering
     end
 end
 
-# ── VERIFY-STATIC: CHECKSUM + DRIVER (SHA256 match + _ry_verify_static) ── Signal = generator rc (pipestatus[1]) + value compare; empty-output collect rc 1 is OK.
+# ── VERIFY-STATIC: CHECKSUM + DRIVER (SHA256 match + _ry_verify_static) ───────────────────────────
 function _vsc_check_one --argument-names dst --description "_verify_static_checksum sub. Compare one destination's expected vs installed bytes"
     set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _gen_rc $pipestatus[1]
@@ -2544,7 +2544,7 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
     return 0
 end
 
-# Silent-probe: ERR_NO_DATA gives EXIT_PREFLIGHT unless drift already confirmed (then EXIT_DRIFT).
+# Silent-probe: ERR_NO_DATA -> EXIT_PREFLIGHT unless drift already confirmed (-> EXIT_DRIFT).
 function _ry_do_check --description "Silent idempotency probe"
     _log_section "CHECK START"
     if not command -q sudo; or not sudo -n true 2>/dev/null; _log "CHECK_PREFLIGHT: sudo not cached"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
@@ -3164,7 +3164,7 @@ function _vrs_installed_file_perms --description "Runtime session check: install
     for dst in $USER_DESTINATIONS
         if test -f "$dst"
             set perm_checked (math $perm_checked + 1)
-            # Group from file's own %G (not id -gn): tolerates setgid ~/.config; owner+0600 enforced, group not.
+            # Group from file's own %G (not id -gn): tolerates setgid ~/.config; owner+0600 enforced.
             set -l _actual_grp (command stat -c '%G' -- "$dst" 2>/dev/null)
             test -z "$_actual_grp"; and set _actual_grp (command id -gn)
             _chk_perms "$dst" 600 "$_u_uname:$_actual_grp" false; or set perm_bad (math $perm_bad + 1)
@@ -3314,7 +3314,7 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
     set -l _ok $VERIFY_OK; set -l _fail $VERIFY_FAIL; set -l _warn $VERIFY_WARN; set -l _gen $VERIFY_GEN_FAIL
     _ry_verify_runtime; set -l _rc_r $status
     if test "$_rc_r" -eq "$EXIT_PREFLIGHT"
-        # Restore VERIFY_* static totals after a sudo-cache bail (avoids doubled footer count).
+        # Restore VERIFY_* static totals after sudo-cache bail (avoid doubled footer count).
         set -g VERIFY_OK $_ok; set -g VERIFY_FAIL $_fail; set -g VERIFY_WARN $_warn; set -g VERIFY_GEN_FAIL $_gen
         return $_rc_r
     end
@@ -4555,7 +4555,7 @@ function _rdi_summary --description "Print final install summary"
     _rdi_render_matrix
     set -q _RY_AUR_PARTIAL; and test "$_RY_AUR_PARTIAL" = true; and _warn "AUR phase completed with partial success — some packages failed (see JSONL log)"
     if set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true
-        # Boot-critical guidance reaches user even in QUIET: force-print to stderr + JSONL.
+        # Boot-critical guidance reaches user even in QUIET (force-print stderr + JSONL).
         _msg_print --force ERR "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
         _log "ERR: DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
         for _bcl in \
@@ -4690,7 +4690,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     if not _ry_install_file "$target" $_use_sudo; _err "Failed to install: $target"; _log_section "INSTALL-FILE END"; return 1; end
     _echo
     _ok "Installed: $target"
-    # Live-apply post-hook only when bytes changed; an unchanged re-deploy needs no re-apply.
+    # Live-apply post-hook only on byte change (unchanged re-deploy needs none).
     set -l _hook_rc 0
     if test "$_RY_DEPLOY_CHANGED_COUNT" -gt "$_changed_before"
         set -l _h (_post_hook_for_target "$target")

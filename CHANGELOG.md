@@ -1,5 +1,8 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.20.11 (2026-06-06)
+docs: move counts into a per-row # table column; drop (N) totals from headers/prose.
+
 ry-install 7.20.10 (2026-06-06)
 docs: drop low-value README prose — four rationale notes and two edge-case paragraphs.
 docs: condense changelog entries.

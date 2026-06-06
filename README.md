@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.20.10 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.20.11 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -76,7 +76,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 |---|---|---|
 | 1 | Preflight | prereqs + lock + runtime validation |
 | 2 | Packages | `pacman -Syu --needed` + AUR via `paru` + cache refresh |
-| 3 | Configuration | deploy 15 embedded files (atomic) |
+| 3 | Configuration | deploy embedded files (atomic) |
 | 4 | Services | fstab + resolved + package removal + mask + enable |
 | 5 | Boot | `mkinitcpio -P` + `sdboot-manage` + post-rebuild sanity |
 | 6 | Finalize | user daemon-reload + paccache + NetworkManager restart (deferred on active Wi-Fi) |
@@ -109,41 +109,41 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 
 Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space), acquires the instance lock (contention → exit `5`), and runs runtime invariants. Any failure aborts before a byte is written.
 
-### Phase 2 · Packages — install (14) + AUR (1)
+### Phase 2 · Packages — install + AUR
 
 `pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed before `-Syu`**; Phase 3 re-writes it idempotently.
 
 `iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Flags: `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted for DKMS makedeps). Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
 
-| Action | Packages |
-|---|---|
-| Install | `nvme-cli`, `htop`, `git-delta`, `lm_sensors`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `fd`, `sd`, `dust`, `procs`, `bottom`, `realtime-privileges`, `ddcutil` |
-| AUR | `mkinitcpio-firmware` (firmware blobs absent from `linux-firmware`) |
+| # | Action | Packages |
+|---|---|---|
+| 14 | Install | `nvme-cli`, `htop`, `git-delta`, `lm_sensors`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `fd`, `sd`, `dust`, `procs`, `bottom`, `realtime-privileges`, `ddcutil` |
+| 1 | AUR | `mkinitcpio-firmware` (firmware blobs absent from `linux-firmware`) |
 
-### Phase 3 · Configuration — 15 embedded files (atomic)
+### Phase 3 · Configuration — embedded files (atomic)
 
-Deploys all 15 managed files via the atomic sequence (see Safety). The four boot configs (`kernel/cmdline`, `loader.conf`, `sdboot-manage.conf`, `mkinitcpio.conf`) are consumed by the Phase 5 rebuild; the resolved drop-in and wireless regdom take effect in Phase 4.
+Deploys all managed files via the atomic sequence (see Safety). The four boot configs (`kernel/cmdline`, `loader.conf`, `sdboot-manage.conf`, `mkinitcpio.conf`) are consumed by the Phase 5 rebuild; the resolved drop-in and wireless regdom take effect in Phase 4.
 
-**Kernel cmdline (13)** → `/etc/kernel/cmdline` + sdboot `LINUX_OPTIONS`
+**Kernel cmdline** → `/etc/kernel/cmdline` + sdboot `LINUX_OPTIONS`
 
-| Category | Params |
-|---|---|
-| CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
-| GPU | `amdgpu.ppfeaturemask=0xfff73fff` |
-| IOMMU/PCIe | `amd_iommu=off` (disables IOMMU DMA isolation), `pcie_aspm.policy=performance` |
-| Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
-| USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
-| Boot/log | `quiet`, `nowatchdog` |
+| # | Category | Params |
+|---|---|---|
+| 4 | CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
+| 1 | GPU | `amdgpu.ppfeaturemask=0xfff73fff` |
+| 2 | IOMMU/PCIe | `amd_iommu=off` (disables IOMMU DMA isolation), `pcie_aspm.policy=performance` |
+| 2 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
+| 2 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
+| 2 | Boot/log | `quiet`, `nowatchdog` |
 
-**Bootloader (10) & initramfs (6)**
+**Bootloader & initramfs**
 
-| Target | Settings |
-|---|---|
-| `loader.conf` | `default=@saved`, `timeout=0`, `console-mode=keep`, `editor=no` |
-| `sdboot-manage.conf` | `LINUX_OPTIONS`=cmdline, `LINUX_FALLBACK_OPTIONS=quiet`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING`/`OVERWRITE_EXISTING`/`REMOVE_OBSOLETE=yes` |
-| `mkinitcpio.conf` | `MODULES=(amdgpu)`, `BINARIES=()`, `FILES=()`, `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`, `COMPRESSION=zstd`, `COMPRESSION_OPTIONS=(-1 -T0)` |
+| # | Target | Settings |
+|---|---|---|
+| 4 | `loader.conf` | `default=@saved`, `timeout=0`, `console-mode=keep`, `editor=no` |
+| 6 | `sdboot-manage.conf` | `LINUX_OPTIONS`=cmdline, `LINUX_FALLBACK_OPTIONS=quiet`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING`/`OVERWRITE_EXISTING`/`REMOVE_OBSOLETE=yes` |
+| 6 | `mkinitcpio.conf` | `MODULES=(amdgpu)`, `BINARIES=()`, `FILES=()`, `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`, `COMPRESSION=zstd`, `COMPRESSION_OPTIONS=(-1 -T0)` |
 
-**Service (5) & device (4) configs**
+**Service & device configs**
 
 | Config | Settings |
 |---|---|
@@ -157,38 +157,38 @@ Deploys all 15 managed files via the atomic sequence (see Safety). The four boot
 | udev | NVMe whole-disk I/O scheduler → `none` |
 | wireless regdom | `COUNTRY=US` (override `--country=XX`); applied at runtime in Phase 4 |
 
-**sysctl (8)** → `/etc/sysctl.d/95-ry-overrides.conf`
+**sysctl** → `/etc/sysctl.d/95-ry-overrides.conf`
 
-| Scope | Settings |
-|---|---|
-| `net.core` | `default_qdisc=fq`, `netdev_budget=600`, `netdev_budget_usecs=5000` |
-| `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
-| `vm` | `compaction_proactiveness=0`, `max_map_count=2147483642` |
+| # | Scope | Settings |
+|---|---|---|
+| 3 | `net.core` | `default_qdisc=fq`, `netdev_budget=600`, `netdev_budget_usecs=5000` |
+| 3 | `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
+| 2 | `vm` | `compaction_proactiveness=0`, `max_map_count=2147483642` |
 
-**Gaming env vars (10)** → `~/.config/environment.d/10-environment.conf` (`0600`)
+**Gaming env vars** → `~/.config/environment.d/10-environment.conf` (`0600`)
 
-| Category | Vars |
-|---|---|
-| DXVK | `DXVK_LOG_LEVEL=none`, `DXVK_LOG_PATH=none` |
-| VKD3D | `VKD3D_DEBUG=none`, `VKD3D_SHADER_DEBUG=none` |
-| Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
-| Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=16G`, `AMD_VULKAN_ICD=RADV` |
-| Wine | `WINEDEBUG=-all` |
+| # | Category | Vars |
+|---|---|---|
+| 2 | DXVK | `DXVK_LOG_LEVEL=none`, `DXVK_LOG_PATH=none` |
+| 2 | VKD3D | `VKD3D_DEBUG=none`, `VKD3D_SHADER_DEBUG=none` |
+| 3 | Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
+| 2 | Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=16G`, `AMD_VULKAN_ICD=RADV` |
+| 1 | Wine | `WINEDEBUG=-all` |
 
-### Phase 4 · Services — fstab (3) · remove (8) · mask (11) · enable (3)
+### Phase 4 · Services — fstab · remove · mask · enable
 
 Ordered: fstab rewrite → resolved restart → package removal → mask units → enable runtime units → apply regdom (`iw reg set $COUNTRY`).
 
-**fstab (3, ext4 in-place):** `noatime`, `lazytime`, `commit=10`. Strips conflicting options, gated by `findmnt --verify`, snapshots to `/etc/fstab.ry.bak` first. An in-place edit — **not one of the 15 embedded configs**.
+**fstab (ext4 in-place):** `noatime`, `lazytime`, `commit=10`. Strips conflicting options, gated by `findmnt --verify`, snapshots to `/etc/fstab.ry.bak` first. An in-place edit — **not one of the embedded configs**.
 
-| Action | Packages |
-|---|---|
-| Remove | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm` (boot splash); `micro`, `cachyos-micro-settings` (editor); `cachy-update` |
+| # | Action | Packages |
+|---|---|---|
+| 8 | Remove | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm` (boot splash); `micro`, `cachyos-micro-settings` (editor); `cachy-update` |
 
-| Set | Units |
-|---|---|
-| Masked | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
-| Enabled | `fstrim.timer`, `NetworkManager.service`, `cpupower.service` (+ `NetworkManager-dispatcher.service` if installed) |
+| # | Set | Units |
+|---|---|---|
+| 11 | Masked | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
+| 3 | Enabled | `fstrim.timer`, `NetworkManager.service`, `cpupower.service` (+ `NetworkManager-dispatcher.service` if installed) |
 
 ### Phase 5 · Boot — initramfs + bootloader rebuild
 
@@ -200,7 +200,7 @@ User `systemctl --user daemon-reload` (only when a user bus is active) → pacma
 
 ## Managed Files
 
-The 15 Phase-3 files — the uninstall reference (system `0644`, user `0600`):
+The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 
 | Path | Mode |
 |---|---|
@@ -266,7 +266,7 @@ jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/log
 
 No automated uninstaller; use Managed Files as the rollback reference.
 
-1. `sudo systemctl unmask` the 11 masked units.
+1. `sudo systemctl unmask` the masked units.
 2. `sudo rm` the deployed paths.
 3. Restore `/etc/fstab` from `/etc/fstab.ry.bak`.
 4. Optionally reverse the package changes.

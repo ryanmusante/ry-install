@@ -1,24 +1,29 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.21.1 (2026-06-06)
+preflight: refuse backup target whose content generator mutates run state.
+docs: clarify date(1) %z guard rejects empty/literal-%z output.
+docs: note sdboot-manage gen clears foreign loader entries; --check reads drift until reboot.
+
 ry-install 7.21.0 (2026-06-06)
-resolved: DNSOverTLS no -> opportunistic (DoT when offered, plaintext fallback).
+resolved: DNSOverTLS no -> opportunistic.
 docs: failure-triage jq also matches PHASE_RESULT result=FAIL/WARN rows.
-docs: clarify CachyOS-default packages whose configs deploy; condense changelog.
+docs: clarify CachyOS-default packages whose configs deploy.
 
 ry-install 7.20.11 (2026-06-06)
-docs: counts in per-row # column; drop (N) totals from headers/prose.
+docs: counts in per-row # column; drop (N) totals from headers.
 
 ry-install 7.20.10 (2026-06-06)
-docs: drop low-value README prose; condense changelog.
+docs: drop low-value README prose.
 
 ry-install 7.20.9 (2026-06-06)
-docs: trim redundant README prose (lead-ins, cross-refs, duplicated notes).
+docs: trim redundant README prose.
 
 ry-install 7.20.8 (2026-06-06)
 docs: log term -> JSONL; config group driver -> device; Phase 1/5/6 heading suffixes.
 
 ry-install 7.20.7 (2026-06-06)
-verify: static FAIL outranks runtime preflight bail in --verify (return 1, not 3).
+verify: static FAIL outranks runtime preflight bail (return 1, not 3).
 preflight: pin SYSTEM_DESTINATIONS (14) + USER_DESTINATIONS (1) counts.
 style: fold explanatory comments onto statements.
 
@@ -38,10 +43,10 @@ docs: document exit 2/4 semantics, GNU-coreutils req, ufw/amd_iommu posture.
 style: note one-liner style in header.
 
 ry-install 7.20.3 (2026-06-05)
-verify: malformed sdboot LINUX_OPTIONS now FAIL (was WARN); keeps remaining checks.
+verify: malformed sdboot LINUX_OPTIONS now FAIL (was WARN).
 
 ry-install 7.20.2 (2026-06-05)
-fstab: snapshot to .ry.bak before rewrite (best-effort, non-fatal).
+fstab: snapshot to .ry.bak before rewrite.
 
 ry-install 7.20.1 (2026-06-05)
 harden: RY_RUN_TIMEOUT-invalid notice no longer bumps verify counters.

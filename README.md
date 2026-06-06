@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.21.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.21.1 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -51,7 +51,7 @@ The CPU is gated to `Ryzen AI Max` in every mode (incl. `--verify`/`--check`); o
 
 ## Usage
 
-`--check` and `--verify` only read state; only the no-argument run and `--install-file` write to disk.
+`--check` and `--verify` only read state; only the no-argument run and `--install-file` write to disk. `--check` compares the running kernel cmdline (`/proc/cmdline`), so a pending cmdline change reads as drift (`10`) until the next reboot.
 
 | Flag | Action |
 |---|---|
@@ -193,6 +193,9 @@ Ordered: fstab rewrite → resolved restart → package removal → mask units �
 ### Phase 5 · Boot — initramfs + bootloader rebuild
 
 Regenerates artifacts from the Phase-3 boot configs: `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity checks. The taint (see Install Flow) skips this rebuild; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses it. Cascade failure exits `4`.
+
+> [!NOTE]
+> With `REMOVE_EXISTING=yes`, `sdboot-manage gen` deletes every entry under `loader/entries/` before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched, but hand-written BLS entries are not preserved. Single-boot is assumed; dual-boot users should re-add custom entries after install.
 
 ### Phase 6 · Finalize — reloads, cache trim, NM restart
 

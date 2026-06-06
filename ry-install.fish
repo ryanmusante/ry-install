@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.21.0 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.21.1 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
 # Code style: dense semicolon-joined one-liners are intentional. fish_indent reformatting is cosmetic only and is NOT applied — do not gate CI on `fish_indent --check`/`fish_indent -w` no-diff; use `fish -n` as the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.21.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.21.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -122,7 +122,7 @@ if not command -q timeout; echo "[ERR] GNU coreutils timeout(1) required (used b
 if not command timeout --foreground --kill-after=1 1 true 2>/dev/null; echo "[ERR] timeout(1) lacks --foreground/--kill-after (need GNU coreutils ≥ 8.x; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command -q stat; echo "[ERR] GNU coreutils stat(1) required (used for mode/owner verification)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command -q date; echo "[ERR] GNU coreutils date(1) required (used for timestamps in DATE_LABEL, TIMESTAMP, JSONL ts fields)" >&2; _ry_exit $EXIT_PREFLIGHT; end
-if not string match -qr '^[+-]\d{4}$' -- (command date '+%z' 2>/dev/null); echo "[ERR] date(1) lacks %z timezone offset support (need GNU coreutils ≥ 8.x; busybox/uutils emit '+0000' without sign)" >&2; _ry_exit $EXIT_PREFLIGHT; end
+if not string match -qr '^[+-]\d{4}$' -- (command date '+%z' 2>/dev/null); echo "[ERR] date(1) lacks %z timezone offset support (need GNU coreutils ≥ 8.x; rejects empty or literal-%z output)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
 # ── TIMESTAMPS + HOME + LOG_DIR ───────────────────────────────────────────────────────────────────
 set -g DATE_LABEL (command date '+%Y-%m-%d'); set -g TIMESTAMP (string join '-' (command date '+%Y%m%d-%H%M%S%z') $fish_pid)
@@ -760,6 +760,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
     _ir_validate_counts
     _ir_validate_keys
+    for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end # Backup-target generators must be side-effect-free (re-invoked by postwrite verify); sysctl is the only stateful generator.
     _ir_precompute_caches
     set -l _kp_metachar_re '[\s"`$;\\\\]'
     for _kp in $KERNEL_PARAMS

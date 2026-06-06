@@ -1,12 +1,16 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.21.3 (2026-06-06)
+docs: document TMPDIR fallback; prune guidance covers run-overflow/ .log spills.
+style: trim verbose comments to vital; fold header lint line (code unchanged).
+
 ry-install 7.21.2 (2026-06-06)
-docs: add missing space between the AUR-failure and Vulkan-drivers sentences (Phase 2).
+docs: fix missing space in Phase 2 AUR/Vulkan prose.
 
 ry-install 7.21.1 (2026-06-06)
-preflight: refuse backup target whose content generator mutates run state.
-docs: clarify date(1) %z guard rejects empty/literal-%z output.
-docs: note sdboot-manage gen clears foreign loader entries; --check reads drift until reboot.
+preflight: refuse stateful backup-target generator.
+docs: note %z guard rejects empty/literal output.
+docs: note sdboot gen clears foreign entries; --check drifts until reboot.
 
 ry-install 7.21.0 (2026-06-06)
 resolved: DNSOverTLS no -> opportunistic.
@@ -23,7 +27,7 @@ ry-install 7.20.9 (2026-06-06)
 docs: trim redundant README prose.
 
 ry-install 7.20.8 (2026-06-06)
-docs: log term -> JSONL; config group driver -> device; Phase 1/5/6 heading suffixes.
+docs: term log->JSONL; driver->device; phase heading suffixes.
 
 ry-install 7.20.7 (2026-06-06)
 verify: static FAIL outranks runtime preflight bail (return 1, not 3).
@@ -32,17 +36,17 @@ style: fold explanatory comments onto statements.
 
 ry-install 7.20.6 (2026-06-06)
 style: trim verbose comments (code unchanged).
-docs: reorder README config by phase; flag fstab in-place; adopt GitHub alert callouts.
+docs: README config by phase; flag fstab in-place; GitHub callouts.
 docs: fix log-retention claim (logs not auto-pruned).
 
 ry-install 7.20.5 (2026-06-05)
 style: fold last multi-line comment to single line.
 docs: fish -n is the syntax gate (fish_indent cosmetic, not CI-gated).
-docs: condense README prose/tables; align exit-code labels with script.
+docs: condense README; align exit-code labels with script.
 
 ry-install 7.20.4 (2026-06-05)
 lock: reclaim corrupt/non-numeric .lock pidfile (was permanent exit-5).
-docs: document exit 2/4 semantics, GNU-coreutils req, ufw/amd_iommu posture.
+docs: document exit 2/4, GNU-coreutils req, ufw/amd_iommu posture.
 style: note one-liner style in header.
 
 ry-install 7.20.3 (2026-06-05)
@@ -62,9 +66,9 @@ pkgs: drop lib32-mesa from EXPECTED_VULKAN_PKGS (3->2).
 verify: track dmesg line count, not 5000-line buffer.
 
 ry-install 7.19.0 - 7.19.25 (2026-06-02..2026-06-04)
-fix: preflight-abort renders PREFLIGHT (exit 3); only -Syu/pkg-verify/boot-config taint Phase 5.
+fix: preflight-abort renders PREFLIGHT (3); only -Syu/pkg-verify/boot-config taint Phase 5.
 fix: fstab rewrite refuses when findmnt absent.
-harden: validate --country (ISO-3166-1 alpha-2); CPU gate in every mode; guard id(1)/PATH.
+harden: validate --country; CPU gate every mode; guard id(1)/PATH.
 verify: combined static+runtime totals; THP/ZRAM/swap advisory.
 install-file: live-apply only on byte change; post-hook rc0 WARN.
 pkgs: drop iw, rtkit (16->14); add cachy-update to removals (7->8).

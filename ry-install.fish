@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.21.2 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
-# Code style: dense semicolon-joined one-liners are intentional. fish_indent reformatting is cosmetic only and is NOT applied — do not gate CI on `fish_indent --check`/`fish_indent -w` no-diff; use `fish -n` as the syntax gate.
+# ry-install v7.21.3 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
+# Style: dense semicolon one-liners are intentional; fish -n is the syntax gate (fish_indent cosmetic, not CI-gated).
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.21.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.21.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -67,7 +67,7 @@ for _ry_p in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin $PATH
 end
 set -gx PATH $_ry_path_new
 set --erase _ry_path_new _ry_p
-command -q id; or begin; echo "[ERR] GNU coreutils id(1) required (resolves UID before privilege checks)" >&2; exit $EXIT_PREFLIGHT; end # id(1) is the first external command; guard presence before use (output validated below).
+command -q id; or begin; echo "[ERR] GNU coreutils id(1) required (resolves UID before privilege checks)" >&2; exit $EXIT_PREFLIGHT; end # id(1) is the first external command; guard presence before use.
 set -g _MY_UID (command id -u)
 
 function _ry_erase_handlers --description "Erase signal/exit handler functions"; functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null; end
@@ -760,7 +760,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
     _ir_validate_counts
     _ir_validate_keys
-    for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end # Backup-target generators must be side-effect-free (re-invoked by postwrite verify); sysctl is the only stateful generator.
+    for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end # Backup-target generators must be side-effect-free; sysctl is the only stateful one.
     _ir_precompute_caches
     set -l _kp_metachar_re '[\s"`$;\\\\]'
     for _kp in $KERNEL_PARAMS
@@ -1333,7 +1333,7 @@ function _run_redact_cmd --description "_run sub: build logged cmd string with t
     string replace -ar -- '/tmp/ry-[A-Za-z0-9_.-]+' '/tmp/ry-[REDACTED]' "$log_cmd"
 end
 
-function _run_effective_timeout --description "_run sub: resolve timeout; bypass for long-running pkg/boot/db ops (0 = disabled)" # Bypass timeout for pkg/boot/db ops (SIGKILL corrupts db.lck); matches resolved basename — call by canonical name.
+function _run_effective_timeout --description "_run sub: resolve timeout; bypass for long-running pkg/boot/db ops (0 = disabled)" # Bypass timeout for pkg/boot/db ops (SIGKILL corrupts db.lck); matches command basename.
     set -l _t (_run_resolve_timeout); set -l _effective_cmd $argv[1]
     if test "$_effective_cmd" = sudo
         for _ec_arg in $argv[2..-1]
@@ -3224,7 +3224,7 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
     _ry_verify_runtime; set -l _rc_r $status
     if test "$_rc_r" -eq "$EXIT_PREFLIGHT"
         set -g VERIFY_OK $_ok; set -g VERIFY_FAIL $_fail; set -g VERIFY_WARN $_warn; set -g VERIFY_GEN_FAIL $_gen # Restore VERIFY_* static totals after sudo-cache bail (avoid doubled footer count).
-        test "$_rc_s" -ne 0; and return $_rc_s # Confirmed static FAIL outranks a runtime sudo-cache preflight bail (mirror --check drift-before-preflight precedence).
+        test "$_rc_s" -ne 0; and return $_rc_s # Static FAIL outranks runtime sudo-cache preflight bail (mirrors --check drift-before-preflight).
         return $_rc_r
     end
     set -g VERIFY_OK (math $VERIFY_OK + $_ok)

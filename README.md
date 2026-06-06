@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.21.2 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.21.3 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -258,8 +258,9 @@ Runtime variables:
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses the torn-package gate |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses the CPU match |
 | `NO_COLOR` | unset | suppress ANSI color |
+| `TMPDIR` | `/tmp` | scratch dir for stream capture; a non-absolute, missing, or non-writable value falls back to `/tmp` |
 
-Logs are JSONL under `~/ry-install/logs/<date>/`, one file per run, **not auto-pruned** (prune manually: `find ~/ry-install/logs -type f -name '*.jsonl' -mtime +30 -delete`). Query failures:
+Logs are JSONL under `~/ry-install/logs/<date>/`, one file per run, **not auto-pruned**. The per-run `run-overflow/` subdir holds full stdout/stderr spills (`.log`) when a command's output exceeds the inline cap. Prune both manually: `find ~/ry-install/logs -type f \( -name '*.jsonl' -o -name '*.log' \) -mtime +30 -delete`. Query failures:
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):") or test("result=(FAIL|WARN)")))' ~/ry-install/logs/**/*.jsonl

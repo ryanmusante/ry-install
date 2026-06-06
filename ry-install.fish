@@ -1,7 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.20.2 (2026-06-05) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.20.4 (2026-06-05) — CachyOS config manager | Ryan Musante | MIT.
+# Code style: dense semicolon-joined one-liners are intentional; fish_indent will reformat most lines (cosmetic only, not applied).
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.20.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.20.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -302,8 +303,11 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     # Bounded stale-reclaim: re-check PID liveness per pass; PID-recycle left to user.
     for _reclaim_attempt in 1 2 3
         set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
-        string match -qr '^[1-9]\d*$' -- "$_stale_pid"; or return 1
-        command kill -0 "$_stale_pid" 2>/dev/null; and return 1
+        if string match -qr '^[1-9]\d*$' -- "$_stale_pid"
+            command kill -0 "$_stale_pid" 2>/dev/null; and return 1
+        else
+            functions -q _log; and _log "LOCK_PIDFILE_CORRUPT: '$_stale_pid' not a PID — reclaiming (attempt=$_reclaim_attempt)"
+        end
         functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR attempt=$_reclaim_attempt (PID not running, reclaiming)"
         if test -L "$LOCK_DIR"; functions -q _log; and _log "LOCK_RECLAIM_REFUSED: $LOCK_DIR is a symlink"; return 1; end
         command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
@@ -1387,6 +1391,8 @@ function _run_redact_cmd --description "_run sub: build logged cmd string with t
 end
 
 # Bypass timeout for pacman/paru/mkinitcpio/sdboot-manage: SIGKILL corrupts db.lck.
+# CONSTRAINT: bypass matches resolved basename only — invoke pkg/boot ops by canonical
+# name (not via differently-named wrapper), else RY_RUN_TIMEOUT may SIGKILL a db txn.
 function _run_effective_timeout --description "_run sub: resolve timeout; bypass for long-running pkg/boot/db ops (0 = disabled)"
     set -l _t (_run_resolve_timeout); set -l _effective_cmd $argv[1]
     if test "$_effective_cmd" = sudo
@@ -2076,12 +2082,19 @@ function _vsb_sdboot --description "_verify_static_boot sub: sdboot-manage.conf 
     _echo "── sdboot-manage.conf ──"
     _chk_file /etc/sdboot-manage.conf; or return 0
     set -l _opts_raw (command grep -- '^LINUX_OPTIONS=' /etc/sdboot-manage.conf 2>/dev/null); set -l _grep_rc $status
-    if test "$_grep_rc" -ne 0; or test -z "$_opts_raw"; _fail "  /etc/sdboot-manage.conf: LINUX_OPTIONS= line missing"; return 0; end
-    if test (count $_opts_raw) -gt 1; _warn "  /etc/sdboot-manage.conf: "(count $_opts_raw)" LINUX_OPTIONS= lines found (expected 1) — skipping param extraction"; return 0; end
-    set -l _quote_count (string replace -ar -- '[^"]' '' "$_opts_raw" | string length --)
-    if test "$_quote_count" -ne 2; _warn "  /etc/sdboot-manage.conf: LINUX_OPTIONS= has $_quote_count quote chars (expected 2) — skipping param extraction"; return 0; end
-    set -l opts (printf '%s\n' "$_opts_raw" | string replace -r -- '^LINUX_OPTIONS="([^"]*)".*$' '$1')
-    for param in $KERNEL_PARAMS; set -l _param_re (string escape --style=regex -- "$param"); string match -qr -- "(^|\s)$_param_re(\s|\$)" "$opts"; _chk_present $status "$param"; end
+    set -l _opts_ok true
+    if test "$_grep_rc" -ne 0; or test -z "$_opts_raw"
+        _fail "  /etc/sdboot-manage.conf: LINUX_OPTIONS= line missing"; set _opts_ok false
+    else if test (count $_opts_raw) -gt 1
+        _fail "  /etc/sdboot-manage.conf: "(count $_opts_raw)" LINUX_OPTIONS= lines found (expected 1) — skipping param extraction"; set _opts_ok false
+    else
+        set -l _quote_count (string replace -ar -- '[^"]' '' "$_opts_raw" | string length --)
+        if test "$_quote_count" -ne 2; _fail "  /etc/sdboot-manage.conf: LINUX_OPTIONS= has $_quote_count quote chars (expected 2) — skipping param extraction"; set _opts_ok false; end
+    end
+    if test "$_opts_ok" = true
+        set -l opts (printf '%s\n' "$_opts_raw" | string replace -r -- '^LINUX_OPTIONS="([^"]*)".*$' '$1')
+        for param in $KERNEL_PARAMS; set -l _param_re (string escape --style=regex -- "$param"); string match -qr -- "(^|\s)$_param_re(\s|\$)" "$opts"; _chk_present $status "$param"; end
+    end
     for _kv in "OVERWRITE_EXISTING:$SDBOOT_OVERWRITE" \
         "REMOVE_EXISTING:$SDBOOT_REMOVE_EXISTING" \
         "REMOVE_OBSOLETE:$SDBOOT_REMOVE_OBSOLETE" \

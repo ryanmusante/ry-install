@@ -2,7 +2,7 @@
 
 CachyOS configuration for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-Version 7.20.2 · fish >= 3.6 · CachyOS · MIT.
+Version 7.20.4 · fish >= 3.6 · CachyOS · MIT.
 
 ## Contents
 
@@ -31,7 +31,7 @@ chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
-Run as your normal user (root is refused; sudo is internal). Reboot, then `--verify`. Re-run to upgrade (idempotent).
+Run as your normal user (root is refused; sudo is internal). Reboot, then `--verify`. Re-run to upgrade (idempotent). Running as root exits 2 (usage).
 
 ## Scope
 
@@ -46,7 +46,7 @@ Hard requirements abort read-only in preflight (exit 3); retry after fixing. par
 
 | Requirement | Minimum |
 |---|---|
-| CachyOS | systemd-boot, ext4 root |
+| CachyOS | systemd-boot, ext4 root, GNU coreutils (busybox/uutils unsupported — preflight refuses) |
 | fish | >= 3.6 |
 | systemd | >= 250 |
 | curl | required (HTTPS preflight) |
@@ -84,6 +84,8 @@ No arguments runs a full unattended install. `--check` and `--verify` only read 
 | `--install-file <path>` | Re-deploy one managed file (absolute path) |
 | `--country=XX` | Wireless regulatory domain — assigned ISO-3166-1 alpha-2 (default `US`; UK is GB) |
 | `-h, --help` / `-v, --version` | Help / version |
+
+`--install-file` of a boot-critical file (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade; cascade failure exits 4 (FAIL-BOOT-CRITICAL — DO NOT REBOOT). Non-boot post-hook failures stay exit 0 (WARN; file already deployed).
 
 ## Install Flow
 
@@ -174,7 +176,7 @@ Kernel cmdline (13 params):
 |---|---|
 | CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
 | GPU/amdgpu | `amdgpu.ppfeaturemask=0xfff73fff` |
-| IOMMU/PCIe | `amd_iommu=off`, `pcie_aspm.policy=performance` |
+| IOMMU/PCIe | `amd_iommu=off` (disables IOMMU DMA isolation — perf/compat for Strix Halo), `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
 | Boot/log | `quiet`, `nowatchdog` |
@@ -315,13 +317,13 @@ Atomic writes plus a gated Phase 5 rebuild keep a failed package or boot-config 
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | Instance lock | atomic mkdir `0700`; reclaims dead-PID lock via `kill -0` |
 | Signals | HUP/INT/QUIT/TERM/USR1/USR2/ABRT -> 128+signum; SIGPIPE/WINCH non-fatal |
-| Firewall posture | ufw disabled + masked (trusted-LAN); `--verify` reports `ufw=<state> nft_rules=<n>` |
+| Firewall posture | WARNING: no host firewall — ufw disabled + masked (trusted-LAN); `--verify` reports `ufw=<state> nft_rules=<n>` |
 
 Exit codes:
 
 | Code | Meaning |
 |---|---|
-| `0` / `1` / `2` | success / verify-FAIL or install FAIL / usage |
+| `0` / `1` / `2` | success / verify-FAIL or install FAIL / usage (incl. root-refused, unexpected positional) |
 | `3` / `4` / `5` | preflight / boot-critical / lock |
 | `10` | `--check` drift |
 | `11` / `12` / `13` | gen: missing fn / missing UUID / sysctl malformed |
@@ -390,6 +392,7 @@ Boot problems recover from a live USB (`arch-chroot` + `mkinitcpio -P` + `sdboot
 | Sudo cache expired | re-run re-primes; see Prerequisites |
 | `PKGS_DEL` member skipped | held by outside rdeps; `sudo pacman -Rns <pkg>` |
 | `.ry-install.*` orphan | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, re-run |
+| Lock held / exit 5, no live PID | `rm -rf ~/ry-install/.lock`; re-run (dead-PID auto-reclaims; corrupt pidfile needs manual rm) |
 | PipeWire `nice-level` denied | `sudo usermod -aG realtime $USER`, re-login |
 | `ddcutil` permission denied | `sudo usermod -aG i2c $USER`, re-login |
 | iwd edits not applied | `sudo systemctl try-restart iwd.service` |

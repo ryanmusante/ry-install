@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.20.6 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.20.7 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -256,6 +256,8 @@ Exit codes:
 | `250` / `255` | internal `_as` / `_run` arg-misuse guards (never a process exit) |
 
 On a signal-terminated run the process `$status` may not match the signal (a fish `--on-signal` limitation); the canonical code is recorded in the JSONL footer (`footer.exit_code`).
+
+In `--verify`, a confirmed static FAIL outranks a runtime sudo-cache preflight bail: the combined result stays `1` (verify-FAIL) rather than `3`, and the JSONL footer carries the static counts.
 
 Runtime variables:
 

@@ -1,5 +1,10 @@
 ry-install change log — newest first; subsystem: change, ISO-8601 dates.
 
+ry-install 7.20.7 (2026-06-06)
+verify: a confirmed static FAIL now outranks a runtime sudo-cache preflight bail in --verify — _ry_verify_all returns 1 (verify-FAIL) instead of 3 (preflight) when static failed and the runtime pass could not complete; the JSONL footer keeps the static counts (mirrors the --check drift-before-preflight rule).
+preflight: pin SYSTEM_DESTINATIONS (14) and USER_DESTINATIONS (1) in _ir_validate_counts so all per-array counts are enforced in one place; the _RY_MANAGED_FILE_COUNT sum guard is retained.
+style: fold standalone explanatory comments onto their statements (single-line comments throughout; script header and section dividers unchanged).
+
 ry-install 7.20.6 (2026-06-06)
 style: trim verbose comment lines to essential information (code unchanged).
 docs: reorder README configuration section by install phase; add prose for the no-write phases (preflight/boot/finalize); flag fstab as in-place (not one of the 15 embedded files); note mkinitcpio.conf pre-deploys in phase 2; adopt GitHub-flavored alert callouts.

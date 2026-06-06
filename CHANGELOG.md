@@ -1,5 +1,8 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.21.2 (2026-06-06)
+docs: add missing space between the AUR-failure and Vulkan-drivers sentences (Phase 2).
+
 ry-install 7.21.1 (2026-06-06)
 preflight: refuse backup target whose content generator mutates run state.
 docs: clarify date(1) %z guard rejects empty/literal-%z output.

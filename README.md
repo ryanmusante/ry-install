@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.21.1 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.21.2 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -113,7 +113,7 @@ Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`
 
 `pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed before `-Syu`**; Phase 3 re-writes it idempotently.
 
-`iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); the relevant device/service configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`.Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
+`iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); the relevant device/service configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
 
 | # | Action | Packages |
 |---|---|---|

@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.20.11 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.21.0 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
 # Code style: dense semicolon-joined one-liners are intentional. fish_indent reformatting is cosmetic only and is NOT applied — do not gate CI on `fish_indent --check`/`fish_indent -w` no-diff; use `fish -n` as the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.20.11"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.21.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -542,7 +542,7 @@ set -g MKINITCPIO_HOOKS \
     fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
-set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade # systemd-resolved drop-in keys (RESOLVED_*).
+set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT opportunistic; set -g RESOLVED_DNSSEC allow-downgrade # systemd-resolved drop-in keys (RESOLVED_*).
 set -g COUNTRY US # COUNTRY: wireless regdom; default US, override --country=XX.
 # _RY_ISO3166_ALPHA2: assigned ISO-3166-1 alpha-2 codes for --country validation.
 set -g _RY_ISO3166_ALPHA2 \

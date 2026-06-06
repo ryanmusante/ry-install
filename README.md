@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.20.11 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.21.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -113,7 +113,7 @@ Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`
 
 `pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed before `-Syu`**; Phase 3 re-writes it idempotently.
 
-`iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Flags: `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted for DKMS makedeps). Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
+`iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); the relevant device/service configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Flags: `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted for DKMS makedeps). Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
 
 | # | Action | Packages |
 |---|---|---|
@@ -147,7 +147,7 @@ Deploys all managed files via the atomic sequence (see Safety). The four boot co
 
 | Config | Settings |
 |---|---|
-| systemd-resolved | `MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` |
+| systemd-resolved | `MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=opportunistic`, `DNSSEC=allow-downgrade` |
 | systemd-logind | `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `…LongPress`) = `ignore` |
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
 | NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2`, `logging level=WARN` |
@@ -259,7 +259,7 @@ Runtime variables:
 Logs are JSONL under `~/ry-install/logs/<date>/`, one file per run, **not auto-pruned** (prune manually: `find ~/ry-install/logs -type f -name '*.jsonl' -mtime +30 -delete`). Query failures:
 
 ```fish
-jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl
+jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):") or test("result=(FAIL|WARN)")))' ~/ry-install/logs/**/*.jsonl
 ```
 
 ## Uninstall

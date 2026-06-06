@@ -1,18 +1,21 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.21.0 (2026-06-06)
+resolved: DNSOverTLS no -> opportunistic (DoT when offered, plaintext fallback).
+docs: failure-triage jq also matches PHASE_RESULT result=FAIL/WARN rows.
+docs: clarify CachyOS-default packages whose configs deploy; condense changelog.
+
 ry-install 7.20.11 (2026-06-06)
-docs: move counts into a per-row # table column; drop (N) totals from headers/prose.
+docs: counts in per-row # column; drop (N) totals from headers/prose.
 
 ry-install 7.20.10 (2026-06-06)
-docs: drop low-value README prose — four rationale notes and two edge-case paragraphs.
-docs: condense changelog entries.
+docs: drop low-value README prose; condense changelog.
 
 ry-install 7.20.9 (2026-06-06)
 docs: trim redundant README prose (lead-ins, cross-refs, duplicated notes).
 
 ry-install 7.20.8 (2026-06-06)
-docs: log term -> JSONL; config group driver -> device; prose number-style fixes.
-docs: add Phase 1/5/6 heading suffixes; polish wording.
+docs: log term -> JSONL; config group driver -> device; Phase 1/5/6 heading suffixes.
 
 ry-install 7.20.7 (2026-06-06)
 verify: static FAIL outranks runtime preflight bail in --verify (return 1, not 3).
@@ -39,33 +42,26 @@ verify: malformed sdboot LINUX_OPTIONS now FAIL (was WARN); keeps remaining chec
 
 ry-install 7.20.2 (2026-06-05)
 fstab: snapshot to .ry.bak before rewrite (best-effort, non-fatal).
-docs: document fstab .ry.bak snapshot.
 
 ry-install 7.20.1 (2026-06-05)
 harden: RY_RUN_TIMEOUT-invalid notice no longer bumps verify counters.
-style: fold remaining multi-line comment to single line.
 docs: annotate embedded-config arrays with purpose + count.
 
 ry-install 7.20.0 (2026-06-04)
-harden: skip stderr writes after SIGPIPE.
-harden: timeout-bypass matches command basename.
+harden: skip stderr writes after SIGPIPE; timeout-bypass matches command basename.
 sweep: derive sudo-rm roots from managed-dest parents.
 pkgs: drop lib32-mesa from EXPECTED_VULKAN_PKGS (3->2).
 verify: track dmesg line count, not 5000-line buffer.
-docs: PHASE_RESULT/MATRIX_RENDERED are log entries, not event types.
 
 ry-install 7.19.0 - 7.19.25 (2026-06-02..2026-06-04)
-fix: preflight-abort renders PREFLIGHT (exit 3).
-fix: only -Syu/pkg-verify/boot-config taint Phase 5 rebuild.
+fix: preflight-abort renders PREFLIGHT (exit 3); only -Syu/pkg-verify/boot-config taint Phase 5.
 fix: fstab rewrite refuses when findmnt absent.
-harden: validate --country (ISO-3166-1 alpha-2); CPU gate in every mode.
-preflight: guard id(1) and PATH before id -u.
+harden: validate --country (ISO-3166-1 alpha-2); CPU gate in every mode; guard id(1)/PATH.
 verify: combined static+runtime totals; THP/ZRAM/swap advisory.
 install-file: live-apply only on byte change; post-hook rc0 WARN.
 pkgs: drop iw, rtkit (16->14); add cachy-update to removals (7->8).
 files: drop i2c-dev modules-load (16->15); regdom to /etc/iw-regdomain.
 cmdline: ppfeaturemask 0xfff73fff; iommu=pt -> amd_iommu=off.
-cleanup: drop SERVICE_DESTINATIONS; reclaim /run staging dir.
 
 ry-install 7.18.0 (2026-06-01)
 remove: kernel-version floor gate.
@@ -76,10 +72,8 @@ cli: --verify replaces --verify-static/--verify-runtime.
 cmdline: drop max_cstate, cwsr_enable, sg_display (13 params).
 sysctl: +vm.max_map_count (8); halve ttm page limits.
 harden: systemd >= 250 gate; _run overflow-spill; 3x stale-lock reclaim.
-fix: paru-absent WARN; partial AUR WARN, all-failed FAIL.
-fix: per-file findmnt skips vfat; confirmed drift stays EXIT_DRIFT.
+fix: paru-absent WARN; partial AUR WARN, all-failed FAIL; per-file findmnt skips vfat.
 verify: fix footer double-count; derive ppfeaturemask from KERNEL_PARAMS.
-style: quote numeric test operands; one element per array line.
 
 ry-install 7.16.0 (2026-05-30)
 logind: drop HandleSecureAttentionKey (9->8).
@@ -91,13 +85,11 @@ sysctl: drop busy_poll/busy_read (9->7).
 
 ry-install 7.14.0 - 7.14.3 (2026-05-29..2026-05-30)
 cmdline: ppfeaturemask tuning; AUR reduced to mkinitcpio-firmware (3->1).
-verify: derive ppfeaturemask from KERNEL_PARAMS.
 harden: guard optional tools (ip, ping, swapon, zcat).
 
 ry-install 7.13.0 - 7.13.5 (2026-05-29)
 aur: install unconditionally; drop hardware-gating.
 cli: drop RY_INSTALL_* toggles (runtime-vars 6->4).
-trim: drop advisory diagnostics.
 
 ry-install 7.12.0 (2026-05-29)
 backups: auto .ry.bak for loader.conf, mkinitcpio.conf; add time-sync preflight.

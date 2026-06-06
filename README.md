@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.20.8 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.20.9 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -25,7 +25,7 @@ chmod +x ry-install.fish
 
 ## Prerequisites
 
-Hard requirements abort read-only in preflight (exit 3); retry after fixing. `paru` and NTP sync only warn.
+Hard requirements abort read-only in preflight (exit 3). `paru` and NTP sync only warn.
 
 | Requirement | Minimum |
 |---|---|
@@ -37,7 +37,7 @@ Hard requirements abort read-only in preflight (exit 3); retry after fixing. `pa
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | sudo | cached credential (`sudo -v`) |
 
-The sudo cache can lapse mid-run; mitigate with `Defaults timestamp_timeout=60` or a NOPASSWD drop-in at `/etc/sudoers.d/ry-install`. Non-TTY contexts (cron/systemd) must pre-cache — the `sudo -v` fallback needs a TTY. Recovery is always to re-run.
+The sudo cache can lapse mid-run; mitigate with `Defaults timestamp_timeout=60` or a NOPASSWD drop-in at `/etc/sudoers.d/ry-install`. Non-TTY contexts (cron/systemd) must pre-cache — the `sudo -v` fallback needs a TTY.
 
 ## Hardware
 
@@ -70,7 +70,7 @@ The CPU is gated to `Ryzen AI Max` in every mode (incl. `--verify`/`--check`); o
 
 ## Install Flow
 
-Six phases. A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 rebuild; the advisory AUR phase never taints. Phase 3 writes are atomic renames.
+A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 rebuild; the advisory AUR phase never taints. Phase 3 writes are atomic renames.
 
 | # | Phase | Action |
 |---|---|---|
@@ -88,7 +88,7 @@ A CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) prints to stderr; the 
 | Result | Semantics |
 |---|---|
 | `PASS` | succeeded |
-| `WARN` | non-fatal anomaly (never taints; exit stays `0`) |
+| `WARN` | non-fatal anomaly; exit stays `0` |
 | `FAIL` | failed; the only result that sets `INSTALL_HAD_ERRORS` |
 | `DEFER` | deferred to next boot |
 | `SKIP` / `N/A` | by design / not applicable |
@@ -103,17 +103,17 @@ A CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) prints to stderr; the 
 
 ## Configuration
 
-The script is the source of truth; retune via the `set -g` globals near the top. Subsections follow the six phases; settings sit under the phase that writes (or edits) them. Phases 1, 5, 6 write no files.
+The script is the source of truth; retune via the `set -g` globals near the top. Phases 1, 5, 6 write no files.
 
 ### Phase 1 · Preflight — read-only gate
 
-Read-only gate. Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space), acquires the instance lock (contention → exit `5`), and runs runtime invariants (CPU match, embedded-array counts, destination-key uniqueness). Any failure aborts before a byte is written.
+Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space), acquires the instance lock (contention → exit `5`), and runs runtime invariants (CPU match, embedded-array counts, destination-key uniqueness). Any failure aborts before a byte is written.
 
 ### Phase 2 · Packages — install (14) + AUR (1)
 
-`pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed before `-Syu`** (the kernel scriptlet reads the on-disk config during the upgrade); Phase 3 re-writes it idempotently. The eight removals run in Phase 4.
+`pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed before `-Syu`** (the kernel scriptlet reads the on-disk config during the upgrade); Phase 3 re-writes it idempotently.
 
-`iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Flags: `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted for DKMS makedeps). Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present; `lib32-mesa` ships in the install list.
+`iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Flags: `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted for DKMS makedeps). Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
 
 | Action | Packages |
 |---|---|
@@ -130,7 +130,7 @@ Deploys all 15 managed files via the atomic sequence (see Safety). The four boot
 |---|---|
 | CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
 | GPU | `amdgpu.ppfeaturemask=0xfff73fff` |
-| IOMMU/PCIe | `amd_iommu=off` (disables IOMMU DMA isolation — perf/compat for Strix Halo), `pcie_aspm.policy=performance` |
+| IOMMU/PCIe | `amd_iommu=off` (disables IOMMU DMA isolation), `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
 | Boot/log | `quiet`, `nowatchdog` |
@@ -177,7 +177,7 @@ Deploys all 15 managed files via the atomic sequence (see Safety). The four boot
 
 ### Phase 4 · Services — fstab (3) · remove (8) · mask (11) · enable (3)
 
-Ordered: fstab rewrite → resolved restart → package removal → mask 11 units → enable runtime units → apply regdom (`iw reg set $COUNTRY`).
+Ordered: fstab rewrite → resolved restart → package removal → mask units → enable runtime units → apply regdom (`iw reg set $COUNTRY`).
 
 **fstab (3, ext4 in-place):** `noatime`, `lazytime`, `commit=10`. Strips conflicting options, gated by `findmnt --verify`, snapshots to `/etc/fstab.ry.bak` first. An in-place edit — **not one of the 15 embedded configs**.
 

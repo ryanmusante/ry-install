@@ -1,5 +1,8 @@
 ry-install change log — newest first; subsystem: change, ISO-8601 dates.
 
+ry-install 7.20.9 (2026-06-06)
+docs: trim README prose at the redundancy margin — drop the Phase 1 "read-only gate" lead (now in the heading), "Six phases" (the table is numbered 1-6), the configuration-layout meta-sentence, the sudo "re-run" note, the Phase 2 forward-reference to the Phase 4 removals and the "lib32-mesa ships in the install list" pointer (it is in the install table), the WARN "never taints" note (implied by FAIL being the only tainter), the amd_iommu performance justification (the DMA-isolation note stays), the "retry after fixing" aside, and the redundant "11" in the Phase 4 order line. No parameters, counts, exit codes, paths, modes, or safety notes changed.
+
 ry-install 7.20.8 (2026-06-06)
 docs: standardize the log-format term on JSONL (drop a stray "NDJSON"; the script and changelog already use JSONL throughout); spell "eight removals" in prose to match the existing "four"/"Six" number style; relabel the README "Service (5) & driver (4)" config group to "device (4)" since the udev I/O-scheduler rule and wireless regdom are not driver configs.
 docs: give Phases 1/5/6 brief heading suffixes so all six phase headings share the "Phase N · Name — summary" form; minor wording polish (Known Issues lead-in; Usage Help/Version action label). No code or behavior change.

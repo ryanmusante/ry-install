@@ -37,7 +37,7 @@ Hard requirements abort read-only in preflight (exit 3); retry after fixing. `pa
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | sudo | cached credential (`sudo -v`) |
 
-The sudo cache can lapse mid-run; mitigate with `Defaults timestamp_timeout=60` or a NOPASSWD drop-in at `/etc/sudoers.d/ry-install`. Cron/systemd contexts must pre-cache (the `sudo -v` fallback needs a TTY). Recovery is always to re-run.
+The sudo cache can lapse mid-run; mitigate with `Defaults timestamp_timeout=60` or a NOPASSWD drop-in at `/etc/sudoers.d/ry-install`. Non-TTY contexts (cron/systemd) must pre-cache — the `sudo -v` fallback needs a TTY. Recovery is always to re-run.
 
 ## Hardware
 
@@ -47,7 +47,7 @@ The sudo cache can lapse mid-run; mitigate with `Defaults timestamp_timeout=60` 
 | GPU | Radeon 8060S (RDNA 3.5) |
 | Memory | 128 GB LPDDR5x-8000 |
 
-The CPU gate matches `Ryzen AI Max` in every mode (incl. `--verify`/`--check`); override with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
+The CPU is gated to `Ryzen AI Max` in every mode (incl. `--verify`/`--check`); override with `RY_INSTALL_SKIP_HARDWARE_CHECK=1`.
 
 ## Usage
 
@@ -98,33 +98,31 @@ A CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) prints to stderr; the 
 | `PASS` | `0 FAIL · 0 WARN` | `0` |
 | `PASS-WITH-WARNINGS` | `0 FAIL · ≥1 WARN` | `0` |
 | `FAIL` | `≥1 FAIL` | `1` |
-| `FAIL-BOOT-CRITICAL` | boot cascade aborted (prints DO NOT REBOOT) | `4` |
+| `FAIL-BOOT-CRITICAL` | boot cascade aborted | `4` |
 | `PREFLIGHT` | preflight gate failed after a phase row was recorded | `3` |
 
 ## Configuration
 
-The script is the source of truth; `--verify` checks each embedded file byte-for-byte, then live state. Retune via the `set -g` globals near the top. Subsections below follow the six install phases; settings are grouped under the phase that writes them (or, for in-place edits, acts on them). Phases 1, 5, and 6 write no files — see their prose notes.
+The script is the source of truth; retune via the `set -g` globals near the top. Subsections follow the six phases; settings sit under the phase that writes (or edits) them. Phases 1, 5, 6 write no files.
 
 ### Phase 1 · Preflight
 
-Read-only gate. Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space), acquires the instance lock, and runs the runtime invariants (CPU match, embedded-array counts, destination-key uniqueness). Any failure aborts before a single byte is written (exit `3`; lock contention exits `5`). `paru` and NTP only `WARN`.
+Read-only gate. Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space), acquires the instance lock (contention → exit `5`), and runs runtime invariants (CPU match, embedded-array counts, destination-key uniqueness). Any failure aborts before a byte is written.
 
 ### Phase 2 · Packages — install (14) + AUR (1)
 
-`pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed here, before `-Syu`** (the kernel scriptlet reads the on-disk config during the upgrade); Phase 3 re-writes it idempotently. The 8 package **removals run in Phase 4**, not here.
+`pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed before `-Syu`** (the kernel scriptlet reads the on-disk config during the upgrade); Phase 3 re-writes it idempotently. The 8 removals run in Phase 4.
 
-`iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Flags: `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted for DKMS makedeps). PGP failure → `gpg --recv-keys <KEYID>`.
+`iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Flags: `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted for DKMS makedeps). Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present; `lib32-mesa` ships in the install list.
 
 | Action | Packages |
 |---|---|
 | Install | `nvme-cli`, `htop`, `git-delta`, `lm_sensors`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `fd`, `sd`, `dust`, `procs`, `bottom`, `realtime-privileges`, `ddcutil` |
 | AUR | `mkinitcpio-firmware` (firmware blobs absent from `linux-firmware`) |
 
-Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present; `lib32-mesa` ships in the install list.
-
 ### Phase 3 · Configuration — 15 embedded files (atomic)
 
-All 15 managed files are deployed (atomic `tmp → render → symlink-probe → chmod → mv -T`; system `0644`, user `0600`). The four boot configs (`kernel/cmdline`, `loader.conf`, `sdboot-manage.conf`, `mkinitcpio.conf`) are written here but **consumed by the Phase 5 rebuild**; the resolved drop-in and wireless regdom are written here but **take effect in Phase 4**.
+Deploys all 15 managed files via the atomic sequence (see Safety). The four boot configs (`kernel/cmdline`, `loader.conf`, `sdboot-manage.conf`, `mkinitcpio.conf`) are consumed by the Phase 5 rebuild; the resolved drop-in and wireless regdom take effect in Phase 4.
 
 **Kernel cmdline (13)** → `/etc/kernel/cmdline` + sdboot `LINUX_OPTIONS`
 
@@ -181,15 +179,11 @@ All 15 managed files are deployed (atomic `tmp → render → symlink-probe → 
 
 Ordered: fstab rewrite → resolved restart → package removal → mask 11 units → enable runtime units → apply regdom (`iw reg set $COUNTRY`).
 
-**fstab (3, ext4 in-place):** `noatime`, `lazytime`, `commit=10`. The rewrite strips conflicting options, is gated by `findmnt --verify`, and snapshots to `/etc/fstab.ry.bak` first. This is an in-place edit of an existing file — **not one of the 15 embedded configs**.
-
-**Package removal (8):**
+**fstab (3, ext4 in-place):** `noatime`, `lazytime`, `commit=10`. Strips conflicting options, gated by `findmnt --verify`, snapshots to `/etc/fstab.ry.bak` first. An in-place edit — **not one of the 15 embedded configs**.
 
 | Action | Packages |
 |---|---|
 | Remove | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm` (boot splash); `micro`, `cachyos-micro-settings` (editor); `cachy-update` |
-
-**Masked (11) & enabled (3) units:**
 
 | Set | Units |
 |---|---|
@@ -198,15 +192,15 @@ Ordered: fstab rewrite → resolved restart → package removal → mask 11 unit
 
 ### Phase 5 · Boot
 
-Regenerates artifacts from the Phase-3 boot configs: `mkinitcpio -P` (initramfs) → `sdboot-manage gen` + `update` (systemd-boot BLS entries) → post-rebuild sanity (`vmlinuz` present, initramfs non-zero, entries valid). A `pacman -Syu`, package-verify, or boot-config failure earlier in the run taints this phase and **skips the rebuild**; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint only. Cascade failure exits `4` and prints **DO NOT REBOOT**.
+Regenerates artifacts from the Phase-3 boot configs: `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity (`vmlinuz` present, initramfs non-zero, entries valid). The taint (see Install Flow) skips this rebuild; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses it. Cascade failure exits `4`.
 
 ### Phase 6 · Finalize
 
-User `systemctl --user daemon-reload` (only when a user bus is active) → pacman cache trim (`paccache -rk2 -ruk0`, or `pacman -Sc` fallback; skipped when nothing was upgraded or removed) → NetworkManager restart for the iwd backend switch, **deferred when Wi-Fi is the active route** (applies on next reboot).
+User `systemctl --user daemon-reload` (only when a user bus is active) → pacman cache trim (`paccache -rk2 -ruk0`, or `pacman -Sc` fallback; skipped when nothing changed) → NetworkManager restart for the iwd backend switch, **deferred when Wi-Fi is the active route** (applies next reboot).
 
 ## Managed Files
 
-15 files via the Phase 3 atomic-write sequence (system `0644`, user `0600`). Use this list as the uninstall reference.
+The 15 Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 
 | Path | Mode |
 |---|---|
@@ -228,7 +222,7 @@ User `systemctl --user daemon-reload` (only when a user bus is active) → pacma
 
 ## Safety & Reliability
 
-Atomic writes plus a gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. `/etc/fstab` is snapshotted to `/etc/fstab.ry.bak` before rewrite; the post-write auto-restore excludes fstab.
+Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. The post-write auto-restore excludes fstab.
 
 > [!WARNING]
 > This profile **disables and masks the host firewall** (`ufw`) on a trusted-LAN assumption — there is no host packet filtering after install. `--verify` reports its state.
@@ -237,12 +231,10 @@ Atomic writes plus a gated Phase 5 rebuild keep a failed package or boot-config 
 |---|---|
 | Atomic writes | tmp → render → symlink probe → chmod → `mv -T` |
 | Auto backups | `<path>.ry.bak` before overwriting `loader.conf`/`mkinitcpio.conf`/`fstab` |
-| Boot rebuild gate | skipped on package/boot-config failure; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint only |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | fstab | `findmnt --verify` gate (mandatory); symlinked `/etc/fstab` refused |
 | Instance lock | atomic `mkdir` `0700`; dead-PID reclaim via `kill -0` |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
-| Firewall | no host firewall — `ufw` disabled + masked (trusted-LAN); `--verify` reports its state |
 
 Exit codes:
 
@@ -268,7 +260,7 @@ Runtime variables:
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses the CPU match |
 | `NO_COLOR` | unset | suppress ANSI color |
 
-Logs are NDJSON under `~/ry-install/logs/<date>/`, one file per run. They are **not auto-pruned** — old logs accumulate; remove them manually if desired (`find ~/ry-install/logs -type f -name '*.jsonl' -mtime +30 -delete`):
+Logs are NDJSON under `~/ry-install/logs/<date>/`, one file per run, **not auto-pruned** (prune manually: `find ~/ry-install/logs -type f -name '*.jsonl' -mtime +30 -delete`). Query failures:
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl

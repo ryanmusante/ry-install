@@ -75,7 +75,7 @@ Six phases. A `pacman -Syu`, package-verify, or boot-config failure taints the r
 | 3 | Configuration | deploy 15 embedded files (atomic) |
 | 4 | Services | fstab + resolved + package removal + mask + enable |
 | 5 | Boot | `mkinitcpio -P` + `sdboot-manage` + post-rebuild sanity |
-| 6 | Finalize | user daemon-reload + paccache + NetworkManager restart (deferred on active WiFi) |
+| 6 | Finalize | user daemon-reload + paccache + NetworkManager restart (deferred on active Wi-Fi) |
 
 ## Run Summary
 
@@ -113,7 +113,7 @@ The script is the source of truth; `--verify` checks each embedded file byte-for
 
 Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present; `lib32-mesa` ships in the install list.
 
-### Kernel cmdline (13 params)
+### Kernel cmdline (13)
 
 | Category | Params |
 |---|---|
@@ -146,7 +146,7 @@ Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified prese
 | udev | NVMe whole-disk I/O scheduler → `none` |
 | wireless regdom | `COUNTRY=US` (override `--country=XX`) |
 
-### sysctl (8) & fstab
+### sysctl & fstab
 
 | Scope | Settings |
 |---|---|
@@ -165,7 +165,7 @@ Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified prese
 | Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=16G`, `AMD_VULKAN_ICD=RADV` |
 | Wine | `WINEDEBUG=-all` |
 
-### Services (Phase 4)
+### Masked & enabled units
 
 fstab rewrite → resolved restart → package removal → mask 11 units → enable runtime units → apply regdom. The fstab rewrite strips conflicting options, is gated by `findmnt --verify`, and snapshots to `/etc/fstab.ry.bak` first.
 
@@ -196,7 +196,7 @@ fstab rewrite → resolved restart → package removal → mask 11 units → ena
 | `/etc/udev/rules.d/60-ry-ioschedulers.rules` | `0644` |
 | `~/.config/environment.d/10-environment.conf` | `0600` |
 
-## Safety and Reliability
+## Safety & Reliability
 
 Atomic writes plus a gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. `/etc/fstab` is snapshotted to `/etc/fstab.ry.bak` before rewrite; the post-write auto-restore excludes fstab.
 
@@ -207,7 +207,7 @@ Atomic writes plus a gated Phase 5 rebuild keep a failed package or boot-config 
 | Boot rebuild gate | skipped on package/boot-config failure; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint only |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | fstab | `findmnt --verify` gate (mandatory); symlinked `/etc/fstab` refused |
-| Instance lock | atomic `mkdir` 0700; dead-PID reclaim via `kill -0` |
+| Instance lock | atomic `mkdir` `0700`; dead-PID reclaim via `kill -0` |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
 | Firewall | **WARNING: no host firewall** — `ufw` disabled + masked (trusted-LAN); `--verify` reports its state |
 

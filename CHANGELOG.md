@@ -2,6 +2,12 @@ ry-install changelog
 
 Newest first; one line per change. Dates in ISO-8601.
 
+ry-install 7.20.6 (2026-06-06)
+
+docs: reorder README Configuration section to follow the six install phases; add short prose for the no-write phases (Preflight, Boot, Finalize); annotate per-config write-vs-act phase (boot configs written Phase 3 / consumed Phase 5; resolved drop-in + wireless regdom written Phase 3 / applied Phase 4); mark fstab as an in-place ext4 edit, not one of the 15 embedded files; note mkinitcpio.conf is pre-deployed in Phase 2 before -Syu.
+
+docs: correct log-retention claim — logs are NOT auto-pruned (the script implements no retention/pruning; only the current run's pre-dispatch log is removed on early bail); was "pruned after 30 days". Manual cleanup one-liner added.
+
 ry-install 7.20.5 (2026-06-05)
 
 style: fold the _run_effective_timeout header into a single-line comment (last remaining multi-line comment).

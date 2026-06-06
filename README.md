@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.20.5 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.20.6 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -99,9 +99,15 @@ A CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) prints to stderr; the 
 
 ## Configuration
 
-The script is the source of truth; `--verify` checks each embedded file byte-for-byte, then live state. Retune via the `set -g` globals near the top. Phases 1, 5, and 6 deploy no files.
+The script is the source of truth; `--verify` checks each embedded file byte-for-byte, then live state. Retune via the `set -g` globals near the top. Subsections below follow the six install phases; settings are grouped under the phase that writes them (or, for in-place edits, acts on them). Phases 1, 5, and 6 write no files — see their prose notes.
 
-### Packages (14 install, 1 AUR, 8 remove)
+### Phase 1 · Preflight — writes nothing
+
+Read-only gate. Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space), acquires the instance lock, and runs the runtime invariants (CPU match, embedded-array counts, destination-key uniqueness). Any failure aborts before a single byte is written (exit `3`; lock contention exits `5`). `paru` and NTP only `WARN`.
+
+### Phase 2 · Packages — install (14) + AUR (1)
+
+`pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed here, before `-Syu`** (the kernel scriptlet reads the on-disk config during the upgrade); Phase 3 re-writes it idempotently. The 8 package **removals run in Phase 4**, not here.
 
 `iwd`, `mesa`, `cpupower`, `iw`, and `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Flags: `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted for DKMS makedeps). PGP failure → `gpg --recv-keys <KEYID>`.
 
@@ -109,11 +115,14 @@ The script is the source of truth; `--verify` checks each embedded file byte-for
 |---|---|
 | Install | `nvme-cli`, `htop`, `git-delta`, `lm_sensors`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `fd`, `sd`, `dust`, `procs`, `bottom`, `realtime-privileges`, `ddcutil` |
 | AUR | `mkinitcpio-firmware` (firmware blobs absent from `linux-firmware`) |
-| Remove | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm` (boot splash); `micro`, `cachyos-micro-settings` (editor); `cachy-update` |
 
 Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present; `lib32-mesa` ships in the install list.
 
-### Kernel cmdline (13)
+### Phase 3 · Configuration — 15 embedded files (atomic)
+
+All 15 managed files are deployed (atomic `tmp → render → symlink-probe → chmod → mv -T`; system `0644`, user `0600`). The four boot configs (`kernel/cmdline`, `loader.conf`, `sdboot-manage.conf`, `mkinitcpio.conf`) are written here but **consumed by the Phase 5 rebuild**; the resolved drop-in and wireless regdom are written here but **take effect in Phase 4**.
+
+**Kernel cmdline (13)** → `/etc/kernel/cmdline` + sdboot `LINUX_OPTIONS`
 
 | Category | Params |
 |---|---|
@@ -124,7 +133,7 @@ Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified prese
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
 | Boot/log | `quiet`, `nowatchdog` |
 
-### Bootloader (10) & initramfs (6)
+**Bootloader (10) & initramfs (6)**
 
 | Target | Settings |
 |---|---|
@@ -132,7 +141,7 @@ Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified prese
 | `sdboot-manage.conf` | `LINUX_OPTIONS`=cmdline, `LINUX_FALLBACK_OPTIONS=quiet`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING`/`OVERWRITE_EXISTING`/`REMOVE_OBSOLETE=yes` |
 | `mkinitcpio.conf` | `MODULES=(amdgpu)`, `BINARIES=()`, `FILES=()`, `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`, `COMPRESSION=zstd`, `COMPRESSION_OPTIONS=(-1 -T0)` |
 
-### Service (5) & driver (4) configs
+**Service (5) & driver (4) configs**
 
 | Config | Settings |
 |---|---|
@@ -144,18 +153,17 @@ Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified prese
 | amdgpu/ttm | `pages_limit`/`page_pool_size=8388608` (caps GTT at 32 GiB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
 | udev | NVMe whole-disk I/O scheduler → `none` |
-| wireless regdom | `COUNTRY=US` (override `--country=XX`) |
+| wireless regdom | `COUNTRY=US` (override `--country=XX`); applied at runtime in Phase 4 |
 
-### sysctl (8) & fstab (3)
+**sysctl (8)** → `/etc/sysctl.d/95-ry-overrides.conf`
 
 | Scope | Settings |
 |---|---|
 | `net.core` | `default_qdisc=fq`, `netdev_budget=600`, `netdev_budget_usecs=5000` |
 | `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
 | `vm` | `compaction_proactiveness=0`, `max_map_count=2147483642` |
-| fstab (ext4) | `noatime`, `lazytime`, `commit=10` |
 
-### Gaming env vars (10)
+**Gaming env vars (10)** → `~/.config/environment.d/10-environment.conf` (`0600`)
 
 | Category | Vars |
 |---|---|
@@ -165,14 +173,32 @@ Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified prese
 | Mesa/RADV | `MESA_SHADER_CACHE_MAX_SIZE=16G`, `AMD_VULKAN_ICD=RADV` |
 | Wine | `WINEDEBUG=-all` |
 
-### Masked (11) & enabled (3) units
+### Phase 4 · Services — fstab (3) · remove (8) · mask (11) · enable (3)
 
-fstab rewrite → resolved restart → package removal → mask 11 units → enable runtime units → apply regdom. The fstab rewrite strips conflicting options, is gated by `findmnt --verify`, and snapshots to `/etc/fstab.ry.bak` first.
+Ordered: fstab rewrite → resolved restart → package removal → mask 11 units → enable runtime units → apply regdom (`iw reg set $COUNTRY`).
+
+**fstab (3, ext4 in-place):** `noatime`, `lazytime`, `commit=10`. The rewrite strips conflicting options, is gated by `findmnt --verify`, and snapshots to `/etc/fstab.ry.bak` first. This is an in-place edit of an existing file — **not one of the 15 embedded configs**.
+
+**Package removal (8):**
+
+| Action | Packages |
+|---|---|
+| Remove | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm` (boot splash); `micro`, `cachyos-micro-settings` (editor); `cachy-update` |
+
+**Masked (11) & enabled (3) units:**
 
 | Set | Units |
 |---|---|
 | Masked | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
 | Enabled | `fstrim.timer`, `NetworkManager.service`, `cpupower.service` (+ `NetworkManager-dispatcher.service` if installed) |
+
+### Phase 5 · Boot — writes nothing
+
+Regenerates artifacts from the Phase-3 boot configs: `mkinitcpio -P` (initramfs) → `sdboot-manage gen` + `update` (systemd-boot BLS entries) → post-rebuild sanity (`vmlinuz` present, initramfs non-zero, entries valid). A `pacman -Syu`, package-verify, or boot-config failure earlier in the run taints this phase and **skips the rebuild**; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint only. Cascade failure exits `4` and prints **DO NOT REBOOT**.
+
+### Phase 6 · Finalize — writes nothing
+
+User `systemctl --user daemon-reload` (only when a user bus is active) → pacman cache trim (`paccache -rk2 -ruk0`, or `pacman -Sc` fallback; skipped when nothing was upgraded or removed) → NetworkManager restart for the iwd backend switch, **deferred when Wi-Fi is the active route** (applies on next reboot).
 
 ## Managed Files
 
@@ -233,7 +259,7 @@ Runtime variables:
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses the CPU match |
 | `NO_COLOR` | unset | suppress ANSI color |
 
-Logs are NDJSON under `~/ry-install/logs/<date>/`, one file per run, pruned after 30 days:
+Logs are NDJSON under `~/ry-install/logs/<date>/`, one file per run. They are **not auto-pruned** — old logs accumulate; remove them manually if desired (`find ~/ry-install/logs -type f -name '*.jsonl' -mtime +30 -delete`):
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl

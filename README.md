@@ -113,7 +113,7 @@ Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`
 
 `pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed before `-Syu`**; Phase 3 re-writes it idempotently.
 
-`iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); the relevant device/service configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Flags: `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted for DKMS makedeps). Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
+`iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); the relevant device/service configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`.Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
 
 | # | Action | Packages |
 |---|---|---|
@@ -195,7 +195,7 @@ Ordered: fstab rewrite → resolved restart → package removal → mask units �
 Regenerates artifacts from the Phase-3 boot configs: `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity checks. The taint (see Install Flow) skips this rebuild; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses it. Cascade failure exits `4`.
 
 > [!NOTE]
-> With `REMOVE_EXISTING=yes`, `sdboot-manage gen` deletes every entry under `loader/entries/` before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched, but hand-written BLS entries are not preserved. Single-boot is assumed; dual-boot users should re-add custom entries after install.
+> With `REMOVE_EXISTING=yes`, `sdboot-manage gen` deletes every entry under `loader/entries/` before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched, but hand-written BLS entries are not preserved.
 
 ### Phase 6 · Finalize — reloads, cache trim, NM restart
 

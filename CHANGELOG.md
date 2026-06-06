@@ -2,6 +2,14 @@ ry-install changelog
 
 Newest first; one line per change. Dates in ISO-8601.
 
+ry-install 7.20.5 (2026-06-05)
+
+style: fold the _run_effective_timeout header into a single-line comment (last remaining multi-line comment).
+
+docs: fish_indent --check/-w must not gate CI — the dense one-liner style is intentional and reformatting is cosmetic; fish -n is the syntax gate. Header style line updated to match.
+
+docs: trim README — condense verbose prose and tables, keep all sections (script stays source of truth, --verify checks byte-for-byte); align exit-code labels with the script (gen-nofn/gen-nouuid/gen-sysctl).
+
 ry-install 7.20.4 (2026-06-05)
 
 lock: reclaim corrupt/non-numeric .lock pidfile (was permanent exit-5 refusal); live-PID + symlink refusal unchanged.

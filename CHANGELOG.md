@@ -1,96 +1,99 @@
-ry-install change log — newest first; subsystem: change, ISO-8601 dates.
+ry-install changelog — newest first; <subsystem>: <change>.
+
+ry-install 7.20.10 (2026-06-06)
+docs: drop low-value README prose — four rationale notes and two edge-case paragraphs.
+docs: condense changelog entries.
 
 ry-install 7.20.9 (2026-06-06)
-docs: trim README prose at the redundancy margin — drop the Phase 1 "read-only gate" lead (now in the heading), "Six phases" (the table is numbered 1-6), the configuration-layout meta-sentence, the sudo "re-run" note, the Phase 2 forward-reference to the Phase 4 removals and the "lib32-mesa ships in the install list" pointer (it is in the install table), the WARN "never taints" note (implied by FAIL being the only tainter), the amd_iommu performance justification (the DMA-isolation note stays), the "retry after fixing" aside, and the redundant "11" in the Phase 4 order line. No parameters, counts, exit codes, paths, modes, or safety notes changed.
+docs: trim redundant README prose (lead-ins, cross-refs, duplicated notes).
 
 ry-install 7.20.8 (2026-06-06)
-docs: standardize the log-format term on JSONL (drop a stray "NDJSON"; the script and changelog already use JSONL throughout); spell "eight removals" in prose to match the existing "four"/"Six" number style; relabel the README "Service (5) & driver (4)" config group to "device (4)" since the udev I/O-scheduler rule and wireless regdom are not driver configs.
-docs: give Phases 1/5/6 brief heading suffixes so all six phase headings share the "Phase N · Name — summary" form; minor wording polish (Known Issues lead-in; Usage Help/Version action label). No code or behavior change.
+docs: log term -> JSONL; config group driver -> device; prose number-style fixes.
+docs: add Phase 1/5/6 heading suffixes; polish wording.
 
 ry-install 7.20.7 (2026-06-06)
-verify: a confirmed static FAIL now outranks a runtime sudo-cache preflight bail in --verify — _ry_verify_all returns 1 (verify-FAIL) instead of 3 (preflight) when static failed and the runtime pass could not complete; the JSONL footer keeps the static counts (mirrors the --check drift-before-preflight rule).
-preflight: pin SYSTEM_DESTINATIONS (14) and USER_DESTINATIONS (1) in _ir_validate_counts so all per-array counts are enforced in one place; the _RY_MANAGED_FILE_COUNT sum guard is retained.
-style: fold standalone explanatory comments onto their statements (single-line comments throughout; script header and section dividers unchanged).
+verify: static FAIL outranks runtime preflight bail in --verify (return 1, not 3).
+preflight: pin SYSTEM_DESTINATIONS (14) + USER_DESTINATIONS (1) counts.
+style: fold explanatory comments onto statements.
 
 ry-install 7.20.6 (2026-06-06)
-style: trim verbose comment lines to essential information (code unchanged).
-docs: reorder README configuration section by install phase; add prose for the no-write phases (preflight/boot/finalize); flag fstab as in-place (not one of the 15 embedded files); note mkinitcpio.conf pre-deploys in phase 2; adopt GitHub-flavored alert callouts.
-docs: correct log-retention claim — logs are not auto-pruned (the script has no retention/pruning).
+style: trim verbose comments (code unchanged).
+docs: reorder README config by phase; flag fstab in-place; adopt GitHub alert callouts.
+docs: fix log-retention claim (logs not auto-pruned).
 
 ry-install 7.20.5 (2026-06-05)
-style: fold the _run_effective_timeout header into a single-line comment (last remaining multi-line comment).
-docs: fish_indent --check/-w must not gate CI — the dense one-liner style is intentional and reformatting is cosmetic; fish -n is the syntax gate. Header style line updated to match.
-docs: trim README — condense verbose prose and tables, keep all sections (script stays source of truth, --verify checks byte-for-byte); align exit-code labels with the script (gen-nofn/gen-nouuid/gen-sysctl).
+style: fold last multi-line comment to single line.
+docs: fish -n is the syntax gate (fish_indent cosmetic, not CI-gated).
+docs: condense README prose/tables; align exit-code labels with script.
 
 ry-install 7.20.4 (2026-06-05)
-lock: reclaim corrupt/non-numeric .lock pidfile (was permanent exit-5 refusal); live-PID + symlink refusal unchanged.
-docs: root-refuse exit 2; --install-file boot-cascade exit 4 vs non-boot rc0 WARN; .lock manual-clear; GNU-coreutils requirement; ufw/amd_iommu posture notes.
-style: note intentional one-liner style in header (fish_indent diffs are cosmetic).
+lock: reclaim corrupt/non-numeric .lock pidfile (was permanent exit-5).
+docs: document exit 2/4 semantics, GNU-coreutils req, ufw/amd_iommu posture.
+style: note one-liner style in header.
 
 ry-install 7.20.3 (2026-06-05)
-verify: malformed sdboot-manage.conf LINUX_OPTIONS is now FAIL (was WARN) and no longer skips the remaining sdboot key checks (DEFAULT_ENTRY, REMOVE/OVERWRITE/REMOVE_OBSOLETE, LINUX_FALLBACK_OPTIONS).
+verify: malformed sdboot LINUX_OPTIONS now FAIL (was WARN); keeps remaining checks.
 
 ry-install 7.20.2 (2026-06-05)
-fstab: snapshot /etc/fstab to .ry.bak before atomic rewrite (best-effort, non-fatal; reuses _awf_make_backup)
-doc: document fstab .ry.bak snapshot; "strips conflicting options" (was "entries")
+fstab: snapshot to .ry.bak before rewrite (best-effort, non-fatal).
+docs: document fstab .ry.bak snapshot.
 
 ry-install 7.20.1 (2026-06-05)
-harden: RY_RUN_TIMEOUT-invalid notice no longer bumps VERIFY_* counters (config input, not a verify-check anomaly); message and JSONL log unchanged via _msg_nocount.
-style: fold the remaining multi-line comment into a single line.
-docs: annotate embedded-config arrays with per-array purpose and enforced-count comments.
+harden: RY_RUN_TIMEOUT-invalid notice no longer bumps verify counters.
+style: fold remaining multi-line comment to single line.
+docs: annotate embedded-config arrays with purpose + count.
 
 ry-install 7.20.0 (2026-06-04)
-harden: skip cleanup/_run stderr writes after SIGPIPE (honor _RY_OUTPUT_BROKEN).
-harden: timeout-bypass matches command basename (absolute paths safe).
-sweep: derive sudo-rm escalation roots from managed-dest parents.
-pkgs: drop redundant lib32-mesa from EXPECTED_VULKAN_PKGS; 3 -> 2 (verified via PKGS_ADD).
-verify: track dmesg line count instead of buffering 5000 lines.
-docs: PHASE_RESULT and MATRIX_RENDERED are log entries, not event types.
+harden: skip stderr writes after SIGPIPE.
+harden: timeout-bypass matches command basename.
+sweep: derive sudo-rm roots from managed-dest parents.
+pkgs: drop lib32-mesa from EXPECTED_VULKAN_PKGS (3->2).
+verify: track dmesg line count, not 5000-line buffer.
+docs: PHASE_RESULT/MATRIX_RENDERED are log entries, not event types.
 
 ry-install 7.19.0 - 7.19.25 (2026-06-02..2026-06-04)
-fix: preflight-abort verdict renders PREFLIGHT (exit 3).
-fix: only -Syu/pkg-verify/boot-config taint Phase 5 boot rebuild.
-fix: fstab rewrite refuses when findmnt absent (gate mandatory).
-harden: --country validated against ISO-3166-1 alpha-2 (UK is GB); CPU gate in every mode.
-preflight: guard id(1) and PATH before first id -u.
-verify: combined static+runtime totals; tcp_congestion_control once; THP/ZRAM/swap demoted to advisory.
-install-file: live-apply only on byte change; post-hook failure is rc0 WARN.
-pkgs: drop iw, rtkit (16 -> 14); add cachy-update to PKGS_DEL (7 -> 8).
-files: drop modules-load.d/i2c-dev.conf (16 -> 15); wireless regdom to /etc/iw-regdomain.
-cmdline: ppfeaturemask -> 0xfff73fff; iommu=pt -> amd_iommu=off.
-cleanup: drop SERVICE_DESTINATIONS; reclaim empty /run/ry-install staging dir.
+fix: preflight-abort renders PREFLIGHT (exit 3).
+fix: only -Syu/pkg-verify/boot-config taint Phase 5 rebuild.
+fix: fstab rewrite refuses when findmnt absent.
+harden: validate --country (ISO-3166-1 alpha-2); CPU gate in every mode.
+preflight: guard id(1) and PATH before id -u.
+verify: combined static+runtime totals; THP/ZRAM/swap advisory.
+install-file: live-apply only on byte change; post-hook rc0 WARN.
+pkgs: drop iw, rtkit (16->14); add cachy-update to removals (7->8).
+files: drop i2c-dev modules-load (16->15); regdom to /etc/iw-regdomain.
+cmdline: ppfeaturemask 0xfff73fff; iommu=pt -> amd_iommu=off.
+cleanup: drop SERVICE_DESTINATIONS; reclaim /run staging dir.
 
 ry-install 7.18.0 (2026-06-01)
 remove: kernel-version floor gate.
 
 ry-install 7.17.0 - 7.17.29 (2026-05-30..2026-06-01)
-feat: pin NVMe scheduler none (15 -> 16); add ddcutil; --country=XX overrides US regdom.
+feat: pin NVMe scheduler none (15->16); add ddcutil; --country=XX regdom.
 cli: --verify replaces --verify-static/--verify-runtime.
-cmdline: drop processor.max_cstate, amdgpu.cwsr_enable, sg_display (KERNEL_PARAMS -> 13).
-sysctl: +vm.max_map_count (SYSCTL_VALUES -> 8); ttm page limits halved.
-harden: systemd >= 250 hard gate; _run overflow-spill; timeout-bypass skips env/VAR=val; stale-lock reclaim 3x.
-harden: write .ry.bak only after render + symlink-probe; force-print boot-critical notice in QUIET.
-fix: paru-absent WARN+continue, partial AUR WARN, all-failed FAIL; PKGS_DEL records actual removed count.
-fix: per-file findmnt fstype skips vfat; confirmed drift stays EXIT_DRIFT in --check.
-verify: fix footer double-count on sudo-cache bail; derive expected ppfeaturemask from KERNEL_PARAMS.
-style: quote numeric test operands; condense comments; one-element-per-line arrays.
+cmdline: drop max_cstate, cwsr_enable, sg_display (13 params).
+sysctl: +vm.max_map_count (8); halve ttm page limits.
+harden: systemd >= 250 gate; _run overflow-spill; 3x stale-lock reclaim.
+fix: paru-absent WARN; partial AUR WARN, all-failed FAIL.
+fix: per-file findmnt skips vfat; confirmed drift stays EXIT_DRIFT.
+verify: fix footer double-count; derive ppfeaturemask from KERNEL_PARAMS.
+style: quote numeric test operands; one element per array line.
 
 ry-install 7.16.0 (2026-05-30)
-logind: drop HandleSecureAttentionKey (LOGIND_IGNORE_KEYS 9 -> 8).
-mask: drop lvm2-monitor.service (MASK 12 -> 11).
+logind: drop HandleSecureAttentionKey (9->8).
+mask: drop lvm2-monitor.service (12->11).
 
 ry-install 7.15.0 (2026-05-30)
 env: PROTON_FSR4_UPGRADE -> PROTON_FSR4_RDNA3_UPGRADE.
-sysctl: drop net.core.busy_poll/busy_read (SYSCTL_VALUES 9 -> 7).
+sysctl: drop busy_poll/busy_read (9->7).
 
 ry-install 7.14.0 - 7.14.3 (2026-05-29..2026-05-30)
-cmdline: ppfeaturemask tuning; aur reduce to mkinitcpio-firmware (3 -> 1).
-verify: derive expected ppfeaturemask from KERNEL_PARAMS.
-harden: guard optional-tool calls (ip, ping, swapon/zramctl, zcat).
+cmdline: ppfeaturemask tuning; AUR reduced to mkinitcpio-firmware (3->1).
+verify: derive ppfeaturemask from KERNEL_PARAMS.
+harden: guard optional tools (ip, ping, swapon, zcat).
 
 ry-install 7.13.0 - 7.13.5 (2026-05-29)
 aur: install unconditionally; drop hardware-gating.
-cli: drop RY_INSTALL_* partial-upgrade/cascade/interactive/no-matrix toggles; runtime-vars 6 -> 4.
+cli: drop RY_INSTALL_* toggles (runtime-vars 6->4).
 trim: drop advisory diagnostics.
 
 ry-install 7.12.0 (2026-05-29)

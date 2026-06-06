@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.20.9 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.20.10 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -37,7 +37,7 @@ Hard requirements abort read-only in preflight (exit 3). `paru` and NTP sync onl
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | sudo | cached credential (`sudo -v`) |
 
-The sudo cache can lapse mid-run; mitigate with `Defaults timestamp_timeout=60` or a NOPASSWD drop-in at `/etc/sudoers.d/ry-install`. Non-TTY contexts (cron/systemd) must pre-cache — the `sudo -v` fallback needs a TTY.
+The sudo cache can lapse mid-run; mitigate with `Defaults timestamp_timeout=60` or a NOPASSWD drop-in at `/etc/sudoers.d/ry-install`.
 
 ## Hardware
 
@@ -63,7 +63,7 @@ The CPU is gated to `Ryzen AI Max` in every mode (incl. `--verify`/`--check`); o
 | `--country=XX` | Wireless regdom (ISO-3166-1 alpha-2; default `US`; UK is `GB`) |
 | `-h, --help` · `-v, --version` | Help · Version |
 
-`--install-file` of a boot-critical file (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade. Non-boot post-hook failures stay exit 0 (file already deployed).
+`--install-file` of a boot-critical file (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade. Non-boot post-hook failures stay exit 0.
 
 > [!CAUTION]
 > A boot-cascade failure during `--install-file` exits 4 — **do not reboot** until it succeeds.
@@ -83,7 +83,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 
 ## Run Summary
 
-A CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) prints to stderr; the JSONL log records each phase result and a final summary. Verdict maps to the exit code.
+A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phase result and a final summary. Verdict maps to the exit code.
 
 | Result | Semantics |
 |---|---|
@@ -107,11 +107,11 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 
 ### Phase 1 · Preflight — read-only gate
 
-Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space), acquires the instance lock (contention → exit `5`), and runs runtime invariants (CPU match, embedded-array counts, destination-key uniqueness). Any failure aborts before a byte is written.
+Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space), acquires the instance lock (contention → exit `5`), and runs runtime invariants. Any failure aborts before a byte is written.
 
 ### Phase 2 · Packages — install (14) + AUR (1)
 
-`pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed before `-Syu`** (the kernel scriptlet reads the on-disk config during the upgrade); Phase 3 re-writes it idempotently.
+`pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed before `-Syu`**; Phase 3 re-writes it idempotently.
 
 `iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Flags: `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted for DKMS makedeps). Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
 
@@ -192,7 +192,7 @@ Ordered: fstab rewrite → resolved restart → package removal → mask units �
 
 ### Phase 5 · Boot — initramfs + bootloader rebuild
 
-Regenerates artifacts from the Phase-3 boot configs: `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity (`vmlinuz` present, initramfs non-zero, entries valid). The taint (see Install Flow) skips this rebuild; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses it. Cascade failure exits `4`.
+Regenerates artifacts from the Phase-3 boot configs: `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity checks. The taint (see Install Flow) skips this rebuild; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses it. Cascade failure exits `4`.
 
 ### Phase 6 · Finalize — reloads, cache trim, NM restart
 
@@ -246,10 +246,6 @@ Exit codes:
 | `11` / `12` / `13` | `gen-nofn` (content-gen fn missing) / `gen-nouuid` (prereq global missing) / `gen-sysctl` (malformed entry) |
 | `128+N` / `251` | signal (130 INT, 143 TERM, …) / `_run` tmpfile-alloc fail |
 | `250` / `255` | internal `_as` / `_run` arg-misuse guards (never a process exit) |
-
-On a signal-terminated run the process `$status` may not match the signal (a fish `--on-signal` limitation); the canonical code is recorded in the JSONL footer (`footer.exit_code`).
-
-In `--verify`, a confirmed static FAIL outranks a runtime sudo-cache preflight bail: the combined result stays `1` (verify-FAIL) rather than `3`, and the JSONL footer carries the static counts.
 
 Runtime variables:
 

@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.20.7 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.20.8 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -61,7 +61,7 @@ The CPU is gated to `Ryzen AI Max` in every mode (incl. `--verify`/`--check`); o
 | `--check` | Idempotency probe (`0` clean · `3` preflight · `10` drift) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--country=XX` | Wireless regdom (ISO-3166-1 alpha-2; default `US`; UK is `GB`) |
-| `-h, --help` · `-v, --version` | Help · version |
+| `-h, --help` · `-v, --version` | Help · Version |
 
 `--install-file` of a boot-critical file (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade. Non-boot post-hook failures stay exit 0 (file already deployed).
 
@@ -105,13 +105,13 @@ A CHECK/RESULT/EVIDENCE matrix (totals, elapsed, verdict) prints to stderr; the 
 
 The script is the source of truth; retune via the `set -g` globals near the top. Subsections follow the six phases; settings sit under the phase that writes (or edits) them. Phases 1, 5, 6 write no files.
 
-### Phase 1 · Preflight
+### Phase 1 · Preflight — read-only gate
 
 Read-only gate. Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space), acquires the instance lock (contention → exit `5`), and runs runtime invariants (CPU match, embedded-array counts, destination-key uniqueness). Any failure aborts before a byte is written.
 
 ### Phase 2 · Packages — install (14) + AUR (1)
 
-`pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed before `-Syu`** (the kernel scriptlet reads the on-disk config during the upgrade); Phase 3 re-writes it idempotently. The 8 removals run in Phase 4.
+`pacman -Syu --needed`, then AUR via `paru`, then index refresh (`updatedb`/`pkgfile --update`). `mkinitcpio.conf` is **pre-deployed before `-Syu`** (the kernel scriptlet reads the on-disk config during the upgrade); Phase 3 re-writes it idempotently. The eight removals run in Phase 4.
 
 `iwd`, `mesa`, `cpupower`, `iw`, `rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`; only an all-package AUR failure is `FAIL`. Flags: `paru -S --needed --noconfirm --skipreview --cleanafter` (`--removemake` omitted for DKMS makedeps). Vulkan drivers `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present; `lib32-mesa` ships in the install list.
 
@@ -143,7 +143,7 @@ Deploys all 15 managed files via the atomic sequence (see Safety). The four boot
 | `sdboot-manage.conf` | `LINUX_OPTIONS`=cmdline, `LINUX_FALLBACK_OPTIONS=quiet`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING`/`OVERWRITE_EXISTING`/`REMOVE_OBSOLETE=yes` |
 | `mkinitcpio.conf` | `MODULES=(amdgpu)`, `BINARIES=()`, `FILES=()`, `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`, `COMPRESSION=zstd`, `COMPRESSION_OPTIONS=(-1 -T0)` |
 
-**Service (5) & driver (4) configs**
+**Service (5) & device (4) configs**
 
 | Config | Settings |
 |---|---|
@@ -190,11 +190,11 @@ Ordered: fstab rewrite → resolved restart → package removal → mask 11 unit
 | Masked | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
 | Enabled | `fstrim.timer`, `NetworkManager.service`, `cpupower.service` (+ `NetworkManager-dispatcher.service` if installed) |
 
-### Phase 5 · Boot
+### Phase 5 · Boot — initramfs + bootloader rebuild
 
 Regenerates artifacts from the Phase-3 boot configs: `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity (`vmlinuz` present, initramfs non-zero, entries valid). The taint (see Install Flow) skips this rebuild; `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses it. Cascade failure exits `4`.
 
-### Phase 6 · Finalize
+### Phase 6 · Finalize — reloads, cache trim, NM restart
 
 User `systemctl --user daemon-reload` (only when a user bus is active) → pacman cache trim (`paccache -rk2 -ruk0`, or `pacman -Sc` fallback; skipped when nothing changed) → NetworkManager restart for the iwd backend switch, **deferred when Wi-Fi is the active route** (applies next reboot).
 
@@ -260,7 +260,7 @@ Runtime variables:
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses the CPU match |
 | `NO_COLOR` | unset | suppress ANSI color |
 
-Logs are NDJSON under `~/ry-install/logs/<date>/`, one file per run, **not auto-pruned** (prune manually: `find ~/ry-install/logs -type f -name '*.jsonl' -mtime +30 -delete`). Query failures:
+Logs are JSONL under `~/ry-install/logs/<date>/`, one file per run, **not auto-pruned** (prune manually: `find ~/ry-install/logs -type f -name '*.jsonl' -mtime +30 -delete`). Query failures:
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):")))' ~/ry-install/logs/**/*.jsonl
@@ -279,7 +279,7 @@ No automated uninstaller; use Managed Files as the rollback reference.
 
 ## Known Issues
 
-Most clear with a DKMS package. MT7925 TX-power/deauth and Strix Halo ACP audio are upstream-pending with no local fix.
+Most of these clear up with a DKMS package. MT7925 TX-power/deauth and Strix Halo ACP audio are upstream-pending with no local fix.
 
 | Component | Issue | Workaround |
 |---|---|---|

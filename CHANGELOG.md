@@ -1,5 +1,9 @@
 ry-install change log — newest first; subsystem: change, ISO-8601 dates.
 
+ry-install 7.20.8 (2026-06-06)
+docs: standardize the log-format term on JSONL (drop a stray "NDJSON"; the script and changelog already use JSONL throughout); spell "eight removals" in prose to match the existing "four"/"Six" number style; relabel the README "Service (5) & driver (4)" config group to "device (4)" since the udev I/O-scheduler rule and wireless regdom are not driver configs.
+docs: give Phases 1/5/6 brief heading suffixes so all six phase headings share the "Phase N · Name — summary" form; minor wording polish (Known Issues lead-in; Usage Help/Version action label). No code or behavior change.
+
 ry-install 7.20.7 (2026-06-06)
 verify: a confirmed static FAIL now outranks a runtime sudo-cache preflight bail in --verify — _ry_verify_all returns 1 (verify-FAIL) instead of 3 (preflight) when static failed and the runtime pass could not complete; the JSONL footer keeps the static counts (mirrors the --check drift-before-preflight rule).
 preflight: pin SYSTEM_DESTINATIONS (14) and USER_DESTINATIONS (1) in _ir_validate_counts so all per-array counts are enforced in one place; the _RY_MANAGED_FILE_COUNT sum guard is retained.

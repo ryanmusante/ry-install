@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.22.5 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.22.7 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -197,7 +197,7 @@ Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-confi
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → render → symlink-probe → chmod → `mv -T` → backup-targets → `.ry.bak` restore on mismatch |
+| Atomic writes | render → `tmp` → symlink-probe → backup-target `.ry.bak` (pre-write) → chmod → `mv -T` → re-read + restore on mismatch |
 | Auto backups | `<path>.ry.bak` before overwriting `loader.conf` / `mkinitcpio.conf` / `fstab` |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | fstab | mandatory `findmnt --verify` gate; symlinked `/etc/fstab` refused |

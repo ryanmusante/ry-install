@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.22.5 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.22.7 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners are intentional; fish -n is the syntax gate (fish_indent cosmetic, not CI-gated).
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.22.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.22.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -1981,7 +1981,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     return 0
 end
 
-function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination" # All managed dsts deploy unconditionally (byte-match skips re-write); iwd/NM activation gated at restart (Phase 6).
+function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination" # All dsts deploy unconditionally (byte-match skips no-op); iwd/NM activation gated at Phase-6 restart.
     set -l dir (command dirname -- "$dst")
     if test "$use_sudo" = true
         if not _run sudo -n mkdir -p -m 0755 -- "$dir"; _fail "Cannot create directory: $dir"; return 1; end
@@ -2474,7 +2474,7 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
         set -l _v (_unit_state_padded $unit)
         if test "$_v[1]" = ERR_NO_DATA; _log "CHECK_PREFLIGHT: cannot determine state for $unit (systemctl error)"; return $EXIT_PREFLIGHT; end
         test "$_v[1]" = not-found; and continue
-        test "$_v[3]" = enabled; or test "$_v[3]" = static; or set -g _RY_CHECK_DRIFT 1 # conf.d-driven units (resolved, NM-dispatcher) accept enabled|static; runtime gates on active.
+        test "$_v[3]" = enabled; or test "$_v[3]" = static; or set -g _RY_CHECK_DRIFT 1 # conf.d-driven units accept enabled|static; runtime gates on active.
     end
     return 0
 end
@@ -3926,6 +3926,8 @@ function _cse_collect_units --description "Collect system units to enable"
     set -l _enable; set -l _ndsp (command systemctl is-enabled NetworkManager-dispatcher.service 2>/dev/null | string trim --)
     if test "$_ndsp" = enabled
         _ok "NetworkManager-dispatcher.service: already enabled"
+    else if test "$_ndsp" = static
+        _ok "NetworkManager-dispatcher.service: static (socket/D-Bus-activated; no enable needed)" # static has no [Install]; enable --now would warn. Verify side accepts static.
     else if test -z "$_ndsp"
         _info "NetworkManager-dispatcher.service: not installed — skipping enable"
     else
@@ -3935,7 +3937,7 @@ function _cse_collect_units --description "Collect system units to enable"
         if not contains -- "$_exp" $_RY_PKG_MANAGED_SERVICES
             set -a _enable "$_exp"; continue
         end
-        set -l _st (command systemctl is-enabled "$_exp" 2>/dev/null | string trim --) # Pkg-managed: enable only if preset did not (avoids duplicate-enable warn when already enabled).
+        set -l _st (command systemctl is-enabled "$_exp" 2>/dev/null | string trim --) # Pkg-managed: enable only if preset didn't (avoids duplicate-enable warn).
         if test "$_st" = enabled
             _ok "$_exp: already enabled (package preset)"
         else if test -z "$_st"
@@ -4586,7 +4588,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     _echo
     _ok "Installed: $target"
     set -l _hook_rc 0 # Live-apply post-hook only on byte change (unchanged re-deploy needs none).
-    set -l _hook_path "$target"; test -n "$_RY_RESOLVED_MANAGED_DST"; and set _hook_path "$_RY_RESOLVED_MANAGED_DST" # Dispatch on literal managed dst (post-hook globs are literal; canonical may diverge under /etc symlink).
+    set -l _hook_path "$target"; test -n "$_RY_RESOLVED_MANAGED_DST"; and set _hook_path "$_RY_RESOLVED_MANAGED_DST" # Dispatch on literal dst (post-hook globs literal; canonical may diverge under /etc symlink).
     if test "$_RY_DEPLOY_CHANGED_COUNT" -gt "$_changed_before"
         set -l _h (_post_hook_for_target "$_hook_path")
         if test -n "$_h"; _idf_dispatch_hook "$_hook_path" "$_h"; set _hook_rc $status; end

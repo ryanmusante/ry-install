@@ -1,5 +1,14 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.21.5 (2026-06-06)
+docs: comment-only fixes — drop stale "iwd-gate" note from _ry_install_file/_ry_do_install_file (managed configs always deploy; iwd/NM activation is restart-gated, not deploy-gated); drop stale "5000-line cap" dmesg note (buffer cap removed in 7.20.0).
+docs: README Prerequisites list pacman-contrib (pactree) as a recommended soft-dep for rdep-safe PKGS_DEL removal.
+
+ry-install 7.21.4 (2026-06-06)
+install-file: non-cmdline managed targets no longer require a resolvable root UUID; only /etc/kernel/cmdline does (its generator remains the authoritative EXIT_GEN_NOUUID guard). Enables single-file redeploy from rescue environments where findmnt cannot read the root UUID.
+docs: --help exit-code list notes 250/255 internal _as/_run arg-misuse sentinels (never a process exit).
+style: erase stray top-level loop variable after argv JSONL build.
+
 ry-install 7.21.3 (2026-06-06)
 docs: document TMPDIR fallback; prune guidance covers run-overflow/ .log spills.
 style: trim verbose comments to vital; fold header lint line (code unchanged).

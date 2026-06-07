@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.21.3 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.21.5 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -25,7 +25,7 @@ chmod +x ry-install.fish
 
 ## Prerequisites
 
-Hard requirements abort read-only in preflight (exit 3). `paru` and NTP sync only warn.
+Hard requirements abort read-only in preflight (exit 3). `paru`, `pacman-contrib`, and NTP sync only warn.
 
 | Requirement | Minimum |
 |---|---|
@@ -34,6 +34,7 @@ Hard requirements abort read-only in preflight (exit 3). `paru` and NTP sync onl
 | curl / findmnt | both required |
 | Hardware | CPU matches `Ryzen AI Max` |
 | paru | recommended ≥ 2.0.0 (AUR phase warns if absent) |
+| pacman-contrib | recommended (`pactree` enables rdep-safe `PKGS_DEL` removal; absent → removal skips packages with live reverse-deps) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | sudo | cached credential (`sudo -v`) |
 

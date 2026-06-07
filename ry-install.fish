@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.21.3 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.21.5 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners are intentional; fish -n is the syntax gate (fish_indent cosmetic, not CI-gated).
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.21.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.21.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -36,6 +36,7 @@ function _ry_show_help --description "Display usage information and available su
         "EXIT CODES:" \
         "  0 ok · 1 verify-FAIL/install-error · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
         "  11 gen-nofn (content-gen fn missing) · 12 gen-nouuid (prereq global missing) · 13 gen-sysctl (malformed entry) · 251 run-tmpfail (_run tmpfile alloc)" \
+        "  250/255 internal arg-misuse sentinels (_as / _run) — never a process exit code" \
         "  Signal-induced runs: process \$status may not match signal (fish --on-signal limitation);" \
         "  canonical code recorded in JSONL footer.exit_code (130 INT / 143 TERM / 129 HUP / 131 QUIT / 134 ABRT / 138 USR1 / 140 USR2)" \
         "ENVIRONMENT (see README.md for detail):" \
@@ -665,9 +666,17 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
         case check
             _log "ROOT_UUID_UNAVAILABLE: $_reason (silent for --check)"
             _pre_dispatch_exit $EXIT_PREFLIGHT
-        case install install-file
+        case install
             _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
             _pre_dispatch_exit $EXIT_PREFLIGHT
+        case install-file # Only /etc/kernel/cmdline embeds root=UUID; other managed targets do not need it. The cmdline generator still hard-fails EXIT_GEN_NOUUID as the authoritative guard.
+            set -l _cmdline_canon (command realpath -m -- /etc/kernel/cmdline 2>/dev/null)
+            if test "$INSTALL_FILE_TARGET" = /etc/kernel/cmdline; or begin; test -n "$_cmdline_canon"; and test "$INSTALL_FILE_TARGET" = "$_cmdline_canon"; end
+                _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
+                _pre_dispatch_exit $EXIT_PREFLIGHT
+            end
+            _warn "Cannot detect root UUID ($_reason) — only /etc/kernel/cmdline embeds it; continuing for --install-file $INSTALL_FILE_TARGET"
+            _log "ROOT_UUID_UNAVAILABLE: $_reason — install-file target=$INSTALL_FILE_TARGET does not embed root=UUID; continuing"
         case verify
             _warn "Cannot detect root UUID ($_reason) — exact root=UUID match in /etc/kernel/cmdline skipped; other checks continue"
             _log "ROOT_UUID_UNAVAILABLE: $_reason — verify continues with generic root=UUID presence check"
@@ -1966,7 +1975,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     return 0
 end
 
-function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination" # iwd-gated dsts (iwd/main.conf, NM drop-in) silently skip when iwd absent.
+function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination" # All managed dsts deploy unconditionally (byte-match skips re-write); iwd/NM activation is gated at restart time (Phase 6 / _post_nm), not at deploy.
     set -l dir (command dirname -- "$dst")
     if test "$use_sudo" = true
         if not _run sudo -n mkdir -p -m 0755 -- "$dir"; _fail "Cannot create directory: $dir"; return 1; end
@@ -2668,7 +2677,7 @@ function _vrk_clocksource --description "Runtime kparam check: clocksource (with
     _echo
 end
 
-function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource" # Extract markers from full dmesg before 5000-line cap (head scrolls off).
+function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource" # Extract preempt/TSC markers from the full dmesg ring buffer (no line cap; _RY_DMESG_LINES records the line count).
     set -g _RY_DMESG_LINES 0; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_TSC
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null | string split \n); set -l _full_count (count $_full)
@@ -4532,7 +4541,7 @@ function _idf_dispatch_hook --argument-names target tag --description "Dispatch 
     _post_$tag "$target"
 end
 
-function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)" # Single-file: validate → iwd-gate → atomic-write → post-hook.
+function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)" # Single-file: resolve-managed → atomic-write → post-hook (live-apply on byte change only).
     _log_section "INSTALL-FILE START"
     if test -z "$target"
         _err "Usage: ry-install.fish --install-file <path>"
@@ -4823,6 +4832,7 @@ end
 
 set -l _argv_parts; set -l _argv_in (status filename) $_ORIG_ARGV
 for _r in $_argv_in; set -a _argv_parts '"'(_json_str "$_r")'"'; end
+set --erase _r
 set -l _argv_json '['(string join -- ',' $_argv_parts)']'; set -l _verbose_json false
 test "$QUIET" = false; and set _verbose_json true
 printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' (command date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null # Literal format string: no variable-as-format-arg surface for future edits.

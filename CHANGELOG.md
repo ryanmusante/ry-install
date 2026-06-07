@@ -1,16 +1,25 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.22.4 (2026-06-07)
+docs: render the Configuration section as tables.
+
+ry-install 7.22.3 (2026-06-07)
+docs: trim README to vital info; fold per-phase prose into the flow table; condense config tables.
+
+ry-install 7.22.2 (2026-06-07)
+cli: glued short cluster honors only h/v/V; other clusters exit usage, not help.
+
 ry-install 7.22.1 (2026-06-06)
 cli: honor glued short flags (-hV/-Vh) before the root guard, matching --help.
 style: drop stale daemon-reload mention from the enable-phase description.
 
 ry-install 7.22.0 (2026-06-06)
-fix: realtime/i2c group hint mis-fired for existing members (contains reads args, not stdin).
+fix: realtime/i2c group hint mis-fired for existing members.
 style: erase top-level set -l temporaries.
 docs: README PKGS_ADD order synced; fstab rewrite drops redundant defaults.
 
 ry-install 7.21.9 (2026-06-06)
-aur: verify via pacman -T post-paru; missing despite rc=0 -> WARN (non-tainting).
+aur: verify via pacman -T post-paru; rc=0 but missing → WARN.
 style: trim verbose inline comments.
 
 ry-install 7.21.8 (2026-06-06)

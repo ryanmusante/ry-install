@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.21.9 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.22.0 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners are intentional; fish -n is the syntax gate (fish_indent cosmetic, not CI-gated).
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.21.9"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.22.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -103,6 +103,7 @@ set -l _fish_ok 0
 test "$parts[1]" -gt 3; and set _fish_ok 1
 test "$parts[1]" -eq 3; and test "$_fish_minor" -ge 6; and set _fish_ok 1
 if test "$_fish_ok" -eq 0; echo "[ERR] fish 3.6+ required (found: $fish_ver)" >&2; _ry_exit $EXIT_PREFLIGHT; end
+set --erase fish_ver parts _fish_minor _fish_ok
 
 # ── TMPDIR + COREUTILS PROBES ─────────────────────────────────────────────────────────────────────
 if set -q TMPDIR; and test -n "$TMPDIR"; and not string match -q -- '/*' "$TMPDIR"; echo "[WARN] TMPDIR is not an absolute path ($TMPDIR) — falling back to /tmp" >&2; set -gx TMPDIR /tmp; end
@@ -119,6 +120,7 @@ if not test -w "$_ry_tmpprobe_dir"
         _ry_exit $EXIT_PREFLIGHT
     end
 end
+set --erase _ry_tmpprobe_dir
 if not command -q timeout; echo "[ERR] GNU coreutils timeout(1) required (used by _run for hang-protection)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command timeout --foreground --kill-after=1 1 true 2>/dev/null; echo "[ERR] timeout(1) lacks --foreground/--kill-after (need GNU coreutils ≥ 8.x; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command -q stat; echo "[ERR] GNU coreutils stat(1) required (used for mode/owner verification)" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -149,7 +151,7 @@ for _ld_path in "$_RY_HOME_DIR" "$_RY_HOME_DIR/logs" "$LOG_DIR"
     if test -n "$_pre"; and test "$_pre" != "$_post"; not set -q _RY_PERM_FIX_NOTICES; and set -g _RY_PERM_FIX_NOTICES; set -ga _RY_PERM_FIX_NOTICES "LOG_DIR_PERM_FIX: $_ld_path $_pre→$_post"; end
     if test "$_post" != 700; echo "[ERR] Log dir mode is $_post (expected 700): $_ld_path" >&2; _ry_exit $EXIT_PREFLIGHT; end
 end
-set --erase _ld_path
+set --erase _ld_path _prev_mkdir_umask
 set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS false
 
 # ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──────────────────────────────────────
@@ -511,6 +513,7 @@ set -g SYSTEM_DESTINATIONS \
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
+set --erase _ry_dst_count
 
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no # Bootloader keys: loader.conf (LOADER_*) + sdboot-manage.conf (SDBOOT_*).
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
@@ -4458,14 +4461,14 @@ function _rdi_summary --description "Print final install summary"
     _info "  2. REBOOT to apply kernel cmdline and module changes"
     if command -q pacman; and command pacman -Qq realtime-privileges >/dev/null 2>&1
         set -l _uname (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}')
-        if test -n "$_uname"; and not command id -Gn -- "$_uname" 2>/dev/null | string split ' ' | contains -- realtime
+        if test -n "$_uname"; and not contains -- realtime (command id -Gn -- "$_uname" 2>/dev/null | string split ' ')
             _info "  3. Add user to realtime group for PipeWire RT scheduling:"
             _info "       sudo usermod -aG realtime $_uname  (then log out and back in)"
         end
     end
     if command -q pacman; and command pacman -Qq ddcutil >/dev/null 2>&1
         set -l _u2 (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}')
-        if test -n "$_u2"; and not command id -Gn -- "$_u2" 2>/dev/null | string split ' ' | contains -- i2c
+        if test -n "$_u2"; and not contains -- i2c (command id -Gn -- "$_u2" 2>/dev/null | string split ' ')
             _info "  4. Add user to i2c group for ddcutil monitor control:"
             _info "       sudo usermod -aG i2c $_u2  (then log out and back in)"
         end

@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.21.9 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.22.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -118,7 +118,7 @@ Runs runtime invariants (CPU match, embedded-array counts, key-collision checks)
 
 | # | Action | Packages |
 |---|---|---|
-| 14 | Install | `nvme-cli`, `htop`, `git-delta`, `lm_sensors`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `fd`, `sd`, `dust`, `procs`, `bottom`, `realtime-privileges`, `ddcutil` |
+| 14 | Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil` |
 | 1 | AUR | `mkinitcpio-firmware` (firmware blobs absent from `linux-firmware`) |
 
 ### Phase 3 · Configuration — embedded files (atomic)
@@ -180,7 +180,7 @@ Deploys all managed files via the atomic sequence (see Safety). The four boot co
 
 Ordered: fstab rewrite → resolved restart → package removal → mask units → enable runtime units → apply regdom (`iw reg set $COUNTRY`).
 
-**fstab (ext4 in-place):** `noatime`, `lazytime`, `commit=10`. Strips conflicting options, gated by `findmnt --verify`, snapshots to `/etc/fstab.ry.bak` first. An in-place edit — **not one of the embedded configs**.
+**fstab (ext4 in-place):** `noatime`, `lazytime`, `commit=10`. Strips conflicting atime options and a redundant `defaults` token, normalizes any existing `commit=`, gated by `findmnt --verify`, snapshots to `/etc/fstab.ry.bak` first. An in-place edit — **not one of the embedded configs**.
 
 | # | Action | Packages |
 |---|---|---|

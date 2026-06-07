@@ -1,5 +1,10 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.22.0 (2026-06-06)
+summary: fix realtime/i2c group hint — contains reads args, not stdin; hint mis-fired for existing members.
+style: erase top-level set -l temporaries (fish-ver/tmpdir/dst-count/umask probes).
+docs: README PKGS_ADD order matches script; note fstab rewrite drops redundant defaults.
+
 ry-install 7.21.9 (2026-06-06)
 aur: verify install via pacman -T post-paru; missing despite rc=0 → WARN (non-tainting).
 style: trim verbose inline comments to vital information.

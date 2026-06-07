@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.22.7 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.22.9 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners are intentional; fish -n is the syntax gate (fish_indent cosmetic, not CI-gated).
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.22.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.22.9"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -133,7 +133,7 @@ if not command -q date; echo "[ERR] GNU coreutils date(1) required (used for tim
 if not string match -qr '^[+-]\d{4}$' -- (command date '+%z' 2>/dev/null); echo "[ERR] date(1) lacks %z timezone offset support (need GNU coreutils ≥ 8.x; rejects empty or literal-%z output)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
 # ── TIMESTAMPS + HOME + LOG_DIR ───────────────────────────────────────────────────────────────────
-set -g DATE_LABEL (command date '+%Y-%m-%d'); set -g TIMESTAMP (string join '-' (command date '+%Y%m%d-%H%M%S%z') $fish_pid)
+set -l _ry_now (command date '+%Y-%m-%d|%Y%m%d-%H%M%S%z'); set -l _ry_dt (string split -m1 '|' -- "$_ry_now"); set -g DATE_LABEL $_ry_dt[1]; set -g TIMESTAMP (string join '-' $_ry_dt[2] $fish_pid); set --erase _ry_now _ry_dt
 if test -z "$HOME"; or not test -d "$HOME"
     set -gx HOME (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $6}')
     if test -z "$HOME"; or not test -d "$HOME"; echo "[ERR] Cannot determine HOME directory" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -167,7 +167,7 @@ set -g _RY_BOOT_CRITICAL_DSTS \
     "/etc/sdboot-manage.conf" \
     "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/mkinitcpio.conf"; set -g _RY_BACKUP_SUFFIX .ry.bak
-set -g _RY_TMPDIR_GLOBS 'ry-sudo-err.*' 'ry-tee-err.*' 'ry-run.*' 'ry-argparse-err.*' 'ry-fstab-tee-err.*' 'ry-fstab-awk-err.*' # Single source for TMPDIR tmpfile sweep; count pinned in _ir_validate_counts (mirrors mktemp templates).
+set -g _RY_TMPDIR_GLOBS 'ry-sudo-err.*' 'ry-tee-err.*' 'ry-run.*' 'ry-argparse-err.*' 'ry-fstab-tee-err.*' 'ry-fstab-awk-err.*' # TMPDIR-resident sweep globs (count pinned in _ir_validate_counts); dst-parent .ry-install.* temps swept separately via _cleanup_tmpfiles.
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _PROFILE_USES_WIFI_BACKEND false
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
@@ -416,7 +416,7 @@ function _dc_kill_children --description "_do_cleanup sub. Release lock + reap c
     end
 end
 
-function _do_cleanup --description "Master cleanup: orchestrate revert → tmpfiles → fs sweep → children → globals" # Fixed order: revert→tmpfiles→fs-sweep→children→globals.
+function _do_cleanup --description "Master cleanup: orchestrate revert → tmpfiles → fs sweep → children → globals"
     _dc_mki_revert
     _dc_sweep_tmpfiles
     _dc_sweep_filesystem
@@ -1981,7 +1981,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     return 0
 end
 
-function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination" # All dsts deploy unconditionally (byte-match skips no-op); iwd/NM activation gated at Phase-6 restart.
+function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination" # Deploy unconditionally; byte-match skips no-op; iwd/NM activation gated at Phase 6.
     set -l dir (command dirname -- "$dst")
     if test "$use_sudo" = true
         if not _run sudo -n mkdir -p -m 0755 -- "$dir"; _fail "Cannot create directory: $dir"; return 1; end
@@ -2434,7 +2434,7 @@ function _check_phase_cmdline --description "--check phase: cmdline contains KER
     return 0
 end
 
-function _cpu_chk_expected --description "Check EXPECTED_SERVICES units"
+function _svc_chk_expected --description "Check EXPECTED_SERVICES units"
     for unit in $EXPECTED_SERVICES
         set -l _v (_unit_state_padded $unit); set -l load $_v[1]; set -l active $_v[2]; set -l ufs $_v[3]
         if test "$load" = ERR_NO_DATA
@@ -2463,7 +2463,7 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
                 contains -- NetworkManager-dispatcher.service $_implicit_svcs; or set -a _implicit_svcs NetworkManager-dispatcher.service
         end
     end
-    _cpu_chk_expected; or return $status
+    _svc_chk_expected; or return $status
     for unit in $MASK
         set -l _v (_unit_state_padded $unit)
         if test "$_v[1]" = ERR_NO_DATA; _log "CHECK_PREFLIGHT: cannot determine state for $unit (systemctl error)"; return $EXIT_PREFLIGHT; end
@@ -4588,7 +4588,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     _echo
     _ok "Installed: $target"
     set -l _hook_rc 0 # Live-apply post-hook only on byte change (unchanged re-deploy needs none).
-    set -l _hook_path "$target"; test -n "$_RY_RESOLVED_MANAGED_DST"; and set _hook_path "$_RY_RESOLVED_MANAGED_DST" # Dispatch on literal dst (post-hook globs literal; canonical may diverge under /etc symlink).
+    set -l _hook_path "$target"; test -n "$_RY_RESOLVED_MANAGED_DST"; and set _hook_path "$_RY_RESOLVED_MANAGED_DST" # Dispatch on literal dst (canonical may diverge under /etc symlink).
     if test "$_RY_DEPLOY_CHANGED_COUNT" -gt "$_changed_before"
         set -l _h (_post_hook_for_target "$_hook_path")
         if test -n "$_h"; _idf_dispatch_hook "$_hook_path" "$_h"; set _hook_rc $status; end

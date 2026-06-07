@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.22.7 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.22.9 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -55,6 +55,9 @@ Hardware: Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 G
 
 `--install-file` of a boot config (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade; non-boot post-hook failures stay exit 0.
 
+> [!NOTE]
+> `--verify` is exhaustive: beyond the 15 managed files (byte-for-byte) and boot/service state, it also checks runtime state the installer does not itself write — `ntsync` (built-in/loaded), THP/KSM/ZRAM, the active `tcp_bbr` module, drirc XML well-formedness (`xmllint`), ext4 fstab mount options, and boot time against a 15 s target.
+
 > [!CAUTION]
 > A boot-cascade failure during `--install-file` exits 4 — **do not reboot** until it succeeds.
 
@@ -65,7 +68,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | # | Phase | Action |
 |---|---|---|
 | 1 | Preflight | runtime invariants (CPU / array-count / key-collision) → instance lock (exit 5 on contention) → hard-requirement + free-space gates. Read-only; any failure aborts before a write. |
-| 2 | Packages | `pacman -Syu --needed` → AUR via `paru` → index refresh (`updatedb`/`pkgfile`). `mkinitcpio.conf` is pre-deployed **before** `-Syu`. |
+| 2 | Packages | `pacman -Syu --needed` → AUR via `paru` → index refresh (`updatedb`/`pkgfile`). `mkinitcpio.conf` is pre-deployed **before** `-Syu`. A transient failure retries once with `-Syyu` (forced db refresh + full upgrade). |
 | 3 | Configuration | deploy the 15 embedded files atomically (four boot configs feed Phase 5) |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regdom |
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate. |

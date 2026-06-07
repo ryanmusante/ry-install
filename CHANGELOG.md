@@ -1,8 +1,18 @@
 ry-install changelog — newest first; lines are <subsystem>: <change>.
 
+7.22.9 - 2026-06-07
+docs: correct retry-command reference to -Syyu (force-refresh + full sysupgrade).
+check: rename _cpu_chk_expected to _svc_chk_expected (checks EXPECTED_SERVICES, not CPU).
+style: single-split DATE_LABEL/TIMESTAMP; clarify _RY_TMPDIR_GLOBS scope comment.
+
+7.22.8 - 2026-06-07
+fix: derive DATE_LABEL and TIMESTAMP from one date call (atomic across midnight).
+docs: document --verify runtime-only coverage; note -Syy retry on transient pacman failure.
+style: trim verbose inline comments to vital information.
+
 7.22.7 - 2026-06-07
 docs: correct atomic-write order (backup precedes mv -T; restore is post-write).
-docs: flatten changelog to plain-text, uniform font.
+docs: flatten changelog to plain text.
 style: tighten longest inline comments to vital information.
 
 7.22.6 - 2026-06-07
@@ -59,7 +69,7 @@ docs: fix Phase 2 prose spacing.
 
 7.21.1 - 2026-06-06
 preflight: refuse stateful backup-target generator.
-docs: %z guard rejects empty/literal; sdboot gen clears foreign entries; --check drifts until reboot.
+docs: %z guard; sdboot gen clears foreign entries; --check drifts until reboot.
 
 7.21.0 - 2026-06-06
 resolved: DNSOverTLS no → opportunistic.
@@ -82,7 +92,7 @@ verify: static FAIL outranks runtime preflight bail (return 1, not 3).
 preflight: pin SYSTEM_DESTINATIONS (14) + USER_DESTINATIONS (1).
 
 7.20.6 - 2026-06-06
-docs: README config by phase; flag fstab in-place; GitHub callouts; fix log-retention claim.
+docs: README config by phase; flag fstab in-place; fix log-retention claim.
 
 7.20.5 - 2026-06-05
 docs: fish -n is the syntax gate; condense README; align exit-code labels.
@@ -127,7 +137,7 @@ cmdline: drop max_cstate, cwsr_enable, sg_display (13 params).
 sysctl: +vm.max_map_count (8); halve ttm page limits.
 harden: systemd ≥ 250 gate; _run overflow-spill; 3x stale-lock reclaim.
 fix: paru-absent WARN; partial AUR WARN, all-failed FAIL; per-file findmnt skips vfat.
-verify: fix footer double-count; derive ppfeaturemask from KERNEL_PARAMS.
+verify: fix footer double-count; ppfeaturemask derived from KERNEL_PARAMS.
 
 7.16.0 - 2026-05-30
 logind: drop HandleSecureAttentionKey (9→8).

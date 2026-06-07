@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.22.10 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
-# Style: dense semicolon one-liners are intentional; fish -n is the syntax gate (fish_indent cosmetic, not CI-gated).
+# ry-install v7.22.11 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
+# Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.22.10"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.22.11"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -167,7 +167,7 @@ set -g _RY_BOOT_CRITICAL_DSTS \
     "/etc/sdboot-manage.conf" \
     "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/mkinitcpio.conf"; set -g _RY_BACKUP_SUFFIX .ry.bak
-set -g _RY_TMPDIR_GLOBS 'ry-sudo-err.*' 'ry-tee-err.*' 'ry-run.*' 'ry-argparse-err.*' 'ry-fstab-tee-err.*' 'ry-fstab-awk-err.*' # TMPDIR-resident sweep globs (count pinned in _ir_validate_counts); dst-parent .ry-install.* temps swept separately via _cleanup_tmpfiles.
+set -g _RY_TMPDIR_GLOBS 'ry-sudo-err.*' 'ry-tee-err.*' 'ry-run.*' 'ry-argparse-err.*' 'ry-fstab-tee-err.*' 'ry-fstab-awk-err.*' # TMPDIR sweep globs (count pinned in _ir_validate_counts); .ry-install.* temps swept by _cleanup_tmpfiles.
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _PROFILE_USES_WIFI_BACKEND false
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
@@ -1986,12 +1986,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     if test "$use_sudo" = true
         if not _run sudo -n mkdir -p -m 0755 -- "$dir"; _fail "Cannot create directory: $dir"; return 1; end
     else
-        set -l _prev_umask (umask)
-        umask 0077
-        set -l _mkdir_rc 0
-        _run mkdir -p -- "$dir"; or set _mkdir_rc 1
-        umask $_prev_umask
-        if test "$_mkdir_rc" -ne 0; _fail "Cannot create directory: $dir"; return 1; end
+        if not _run mkdir -p -- "$dir"; _fail "Cannot create directory: $dir"; return 1; end # Ambient umask: dir conventional, file 0600 via atomic-write chmod.
     end
     set -l perms 0644
     test "$use_sudo" = false; and set perms 0600
@@ -2584,10 +2579,15 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
         set -l cpu_name (string replace -r '.*/cpu(\d+)/.*' 'cpu$1' -- "$_CPU_PATH")
         _info "  Checking $cpu_name (representative)"
         for check in "scaling_driver:amd-pstate-epp:Scaling driver" \
-            "scaling_governor:powersave:Governor" \
-            "energy_performance_preference:balance_performance:EPP"
+            "scaling_governor:powersave:Governor" # Driver (amd_pstate=active) + governor (cpupower-service.conf) are profile-managed.
             set -l parts (string split ':' -- "$check"); set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
             _chk_eq "$parts[3]" "$sysfs_val" "$parts[2]"
+        end
+        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # EPP is not profile-managed; advisory (kernel default for powersave is balance_performance).
+        if test "$_epp" = balance_performance
+            _ok "  EPP: $_epp"
+        else if test -n "$_epp"
+            _info "  EPP: $_epp (advisory — not set by this profile; kernel default for powersave is balance_performance)"
         end
     end
     _echo
@@ -4448,7 +4448,7 @@ end
 
 function _rdi_summary --description "Print final install summary"
     if test "$INSTALL_HAD_ERRORS" = true
-        _echo "INSTALLATION FINISHED WITH WARNINGS"
+        _echo "INSTALLATION FINISHED WITH ERRORS"
         _err "Some steps had errors - review log for details"
     else
         _echo "INSTALLATION COMPLETE"
@@ -4487,7 +4487,7 @@ function _rdi_summary --description "Print final install summary"
     end
     _info "Post-reboot verification: ./ry-install.fish --verify"
     if test "$INSTALL_HAD_ERRORS" = true
-        _warn "Done (with warnings - see above)"
+        _warn "Done (with errors - see above)"
     else
         _ok "Done!"
     end
@@ -4581,19 +4581,19 @@ function _ry_do_install_file --argument-names target --description "Install a si
     end
     set -l _use_sudo (_idf_use_sudo_for_dst "$target")
     if test -z "$_use_sudo"; _err "Not a managed file: $target"; _info "Run without path to see managed files"; return $EXIT_USAGE; end
+    set -l _mdst "$_RY_RESOLVED_MANAGED_DST" # Literal declared dst; canonical match-key may diverge under an /etc|/boot symlink.
     _echo "── ry-install v$VERSION - Install Single File ──"
     if test "$_use_sudo" = true; _ensure_sudo_cached; or return $EXIT_PREFLIGHT; end
     set -l _changed_before $_RY_DEPLOY_CHANGED_COUNT
-    if not _ry_install_file "$target" $_use_sudo; _err "Failed to install: $target"; _log_section "INSTALL-FILE END"; return 1; end
+    if not _ry_install_file "$_mdst" $_use_sudo; _err "Failed to install: $_mdst"; _log_section "INSTALL-FILE END"; return 1; end
     _echo
-    _ok "Installed: $target"
-    set -l _hook_rc 0 # Live-apply post-hook only on byte change (unchanged re-deploy needs none).
-    set -l _hook_path "$target"; test -n "$_RY_RESOLVED_MANAGED_DST"; and set _hook_path "$_RY_RESOLVED_MANAGED_DST" # Dispatch on literal dst (canonical may diverge under /etc symlink).
+    _ok "Installed: $_mdst"
+    set -l _hook_rc 0 # Live-apply post-hook only on byte change.
     if test "$_RY_DEPLOY_CHANGED_COUNT" -gt "$_changed_before"
-        set -l _h (_post_hook_for_target "$_hook_path")
-        if test -n "$_h"; _idf_dispatch_hook "$_hook_path" "$_h"; set _hook_rc $status; end
+        set -l _h (_post_hook_for_target "$_mdst")
+        if test -n "$_h"; _idf_dispatch_hook "$_mdst" "$_h"; set _hook_rc $status; end
     else
-        _log "POST_HOOK_SKIP_UNCHANGED: target=$target (bytes identical; no live-apply)"
+        _log "POST_HOOK_SKIP_UNCHANGED: target=$_mdst (bytes identical; no live-apply)"
     end
     _log_section "INSTALL-FILE END"
     return $_hook_rc

@@ -1,5 +1,12 @@
 ry-install changelog — newest first; lines are `<subsystem>: <change>`.
 
+# 7.22.11 - 2026-06-07
+- install-file: deploy/gen/hook on the matched literal dst (no misroute under an /etc|/boot symlink).
+- verify: CPU EPP check is advisory, not FAIL (profile sets the governor, not energy_performance_preference).
+- fix: install summary banner reads ERRORS, not WARNINGS, on a failed run.
+- harden: user config dir uses ambient umask; 0600 file unchanged.
+- style: trim longest inline comment to vital info.
+
 # 7.22.10 - 2026-06-07
 - docs: label 11/12/13/251 as internal sentinels, never a process exit — matches 250/255 (README + --help).
 - docs: NetworkManager logging is `[logging] level=WARN` (was `logging=WARN` shorthand).

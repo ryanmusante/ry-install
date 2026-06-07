@@ -1,8 +1,14 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.21.8 (2026-06-06)
+docs: preflight runs invariants before lock; atomic-write sequence notes post-write verify/restore.
+
+ry-install 7.21.7 (2026-06-06)
+install-file: post-hook resolves on the matched managed dst, not the canonicalized target.
+
 ry-install 7.21.6 (2026-06-06)
-verify: root-UUID-unresolved cmdline checksum is WARN, not GEN_FAIL (rescue-env --verify no longer exits 1; presence still checked).
-preflight: explicit return 0 (success no longer rides a set --erase exit status).
+verify: root-UUID-unresolved cmdline checksum WARN not GEN_FAIL (rescue --verify no longer exits 1; presence still checked).
+preflight: explicit return 0 (no longer rides set --erase status).
 
 ry-install 7.21.5 (2026-06-06)
 docs: drop stale iwd-gate + 5000-line dmesg comments.

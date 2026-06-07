@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.21.6 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.21.8 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners are intentional; fish -n is the syntax gate (fish_indent cosmetic, not CI-gated).
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.21.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.21.8"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -386,6 +386,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
     set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_FSTAB_EVIDENCE
+    set --erase _RY_RESOLVED_MANAGED_DST
 end
 
 function _dc_kill_children --description "_do_cleanup sub. Release lock + reap child PIDs (pkill -P, then SIGKILL after grace)" # TERM → 0.5s grace → KILL; lets long pkg/boot ops flush first.
@@ -4526,15 +4527,16 @@ function _post_hook_for_target --argument-names target --description "Return pos
     return 1
 end
 
-function _idf_use_sudo_for_dst --argument-names target --description "Resolve managed-dst membership + emit sudo flag (true=system, false=user, empty=not-managed)" # _idx aligns canon-list to source-list; drift refused by _ir_validate_counts.
+function _idf_use_sudo_for_dst --argument-names target --description "Resolve managed-dst membership + emit sudo flag (true=system, false=user, empty=not-managed)" # Stashes matched literal dst in _RY_RESOLVED_MANAGED_DST; _idx aligns canon-list to source-list.
+    set -g _RY_RESOLVED_MANAGED_DST ""
     set -l _idx 1
     for dst in $SYSTEM_DESTINATIONS
-        if test "$target" = "$dst"; or test "$target" = "$_RY_CANON_SYSTEM_DSTS[$_idx]"; echo true; return 0; end
+        if test "$target" = "$dst"; or test "$target" = "$_RY_CANON_SYSTEM_DSTS[$_idx]"; set -g _RY_RESOLVED_MANAGED_DST "$dst"; echo true; return 0; end
         set _idx (math $_idx + 1)
     end
     set _idx 1
     for dst in $USER_DESTINATIONS
-        if test "$target" = "$dst"; or test "$target" = "$_RY_CANON_USER_DSTS[$_idx]"; echo false; return 0; end
+        if test "$target" = "$dst"; or test "$target" = "$_RY_CANON_USER_DSTS[$_idx]"; set -g _RY_RESOLVED_MANAGED_DST "$dst"; echo false; return 0; end
         set _idx (math $_idx + 1)
     end
     return 1
@@ -4563,9 +4565,10 @@ function _ry_do_install_file --argument-names target --description "Install a si
     _echo
     _ok "Installed: $target"
     set -l _hook_rc 0 # Live-apply post-hook only on byte change (unchanged re-deploy needs none).
+    set -l _hook_path "$target"; test -n "$_RY_RESOLVED_MANAGED_DST"; and set _hook_path "$_RY_RESOLVED_MANAGED_DST" # Resolve/dispatch on literal managed dst: post-hook globs are literal, canonical target may diverge under an /etc symlink.
     if test "$_RY_DEPLOY_CHANGED_COUNT" -gt "$_changed_before"
-        set -l _h (_post_hook_for_target "$target")
-        if test -n "$_h"; _idf_dispatch_hook "$target" "$_h"; set _hook_rc $status; end
+        set -l _h (_post_hook_for_target "$_hook_path")
+        if test -n "$_h"; _idf_dispatch_hook "$_hook_path" "$_h"; set _hook_rc $status; end
     else
         _log "POST_HOOK_SKIP_UNCHANGED: target=$target (bytes identical; no live-apply)"
     end

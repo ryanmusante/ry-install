@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.21.6 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.21.8 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -108,7 +108,7 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 
 ### Phase 1 · Preflight — read-only gate
 
-Validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space), acquires the instance lock (contention → exit `5`), and runs runtime invariants. Any failure aborts before a byte is written.
+Runs runtime invariants (CPU match, embedded-array counts, key-collision checks), acquires the instance lock (contention → exit `5`), then validates hard requirements (`pacman`/`systemctl`/`mkinitcpio`/`sdboot-manage`/`findmnt`/`curl` + GNU coreutils, fish ≥ 3.6, systemd ≥ 250, free space). Any failure aborts before a byte is written.
 
 ### Phase 2 · Packages — install + AUR
 
@@ -233,7 +233,7 @@ Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-confi
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → render → symlink probe → chmod → `mv -T` |
+| Atomic writes | tmp → render → symlink-probe → chmod → `mv -T` → post-write re-read; backup-targets restore `.ry.bak` on mismatch |
 | Auto backups | `<path>.ry.bak` before overwriting `loader.conf`/`mkinitcpio.conf`/`fstab` |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | fstab | `findmnt --verify` gate (mandatory); symlinked `/etc/fstab` refused |

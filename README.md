@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.22.11 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.22.12 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -234,8 +234,8 @@ jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):") or test("result=(FA
 No automated uninstaller; use Managed Files as the rollback reference.
 
 1. `sudo systemctl unmask` the masked units.
-2. `sudo rm` the deployed paths.
-3. Restore `/etc/fstab` from `/etc/fstab.ry.bak`.
+2. `sudo rm` the deployed system paths; remove the user file `~/.config/environment.d/10-environment.conf` (no sudo).
+3. Restore `/etc/fstab` from `/etc/fstab.ry.bak`, then delete the `.ry.bak` backups (`/boot/loader/loader.conf.ry.bak`, `/etc/mkinitcpio.conf.ry.bak`, `/etc/fstab.ry.bak`).
 4. Optionally reverse the package changes.
 5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
 6. Reboot.

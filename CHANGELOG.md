@@ -1,15 +1,20 @@
 ry-install changelog — newest first; lines are `<subsystem>: <change>`.
 
+# 7.22.12 - 2026-06-07
+- cli: unexpected-positional error lists all stray args, not just the first.
+- docs: uninstall removes `.ry.bak` backups; user env file removed without sudo.
+- style: trim longest inline comments to vital info.
+
 # 7.22.11 - 2026-06-07
-- install-file: deploy/gen/hook on the matched literal dst (no misroute under an /etc|/boot symlink).
-- verify: CPU EPP check is advisory, not FAIL (profile sets the governor, not energy_performance_preference).
-- fix: install summary banner reads ERRORS, not WARNINGS, on a failed run.
+- install-file: deploy/gen/hook on the matched literal dst (symlink-safe).
+- verify: CPU EPP check advisory, not FAIL (profile sets governor, not EPP).
+- fix: summary banner reads ERRORS not WARNINGS on a failed run.
 - harden: user config dir uses ambient umask; 0600 file unchanged.
-- style: trim longest inline comment to vital info.
+- style: trim longest inline comment.
 
 # 7.22.10 - 2026-06-07
-- docs: label 11/12/13/251 as internal sentinels, never a process exit — matches 250/255 (README + --help).
-- docs: NetworkManager logging is `[logging] level=WARN` (was `logging=WARN` shorthand).
+- docs: label 11/12/13/251 internal sentinels, never a process exit (README + --help).
+- docs: NetworkManager logging is `[logging] level=WARN`.
 
 # 7.22.9 - 2026-06-07
 - docs: correct retry-command reference to -Syyu.
@@ -17,12 +22,12 @@ ry-install changelog — newest first; lines are `<subsystem>: <change>`.
 - style: single-split DATE_LABEL/TIMESTAMP; clarify _RY_TMPDIR_GLOBS scope comment.
 
 # 7.22.8 - 2026-06-07
-- fix: derive DATE_LABEL/TIMESTAMP from one date call (atomic across midnight).
-- docs: document --verify runtime-only coverage; note -Syy retry on transient pacman fail.
-- style: trim verbose inline comments to vital information.
+- fix: derive DATE_LABEL/TIMESTAMP from one date call (midnight-atomic).
+- docs: document --verify runtime coverage; -Syy retry on transient pacman fail.
+- style: trim verbose inline comments.
 
 # 7.22.7 - 2026-06-07
-- docs: correct atomic-write order (backup precedes mv -T; restore is post-write).
+- docs: correct atomic-write order (backup precedes mv -T; restore post-write).
 - docs: flatten changelog to plain text.
 - style: tighten longest inline comments.
 
@@ -37,7 +42,7 @@ ry-install changelog — newest first; lines are `<subsystem>: <change>`.
 - docs: scope post-write re-read/restore to boot backup-targets.
 
 # 7.22.4 - 2026-06-07
-- docs: render the Configuration section as tables.
+- docs: render Configuration section as tables.
 
 # 7.22.3 - 2026-06-07
 - docs: trim README; fold per-phase prose into flow table; condense config tables.
@@ -46,7 +51,7 @@ ry-install changelog — newest first; lines are `<subsystem>: <change>`.
 - cli: glued short cluster honors only h/v/V; other clusters exit usage.
 
 # 7.22.1 - 2026-06-06
-- cli: honor glued short flags (-hV/-Vh) before the root guard.
+- cli: honor glued short flags (-hV/-Vh) before root guard.
 
 # 7.22.0 - 2026-06-06
 - fix: realtime/i2c group hint mis-fired for existing members.
@@ -62,7 +67,7 @@ ry-install changelog — newest first; lines are `<subsystem>: <change>`.
 - install-file: post-hook resolves on the matched managed dst.
 
 # 7.21.6 - 2026-06-06
-- verify: root-UUID-unresolved cmdline checksum → WARN (presence still checked).
+- verify: root-UUID-unresolved cmdline checksum → WARN (presence checked).
 - preflight: explicit return 0.
 
 # 7.21.5 - 2026-06-06

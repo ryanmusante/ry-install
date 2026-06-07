@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.22.11 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.22.12 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.22.11"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.22.12"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -59,7 +59,7 @@ for _early_arg in $argv
             echo "v$VERSION"
             exit $EXIT_OK
         case '-*'
-            if string match -qr -- '^-[hvV]+$' "$_early_arg" # Glued h/v/V cluster only (e.g. -hV); other clusters fall through to argparse.
+            if string match -qr -- '^-[hvV]+$' "$_early_arg" # Glued h/v/V only; other clusters fall through to argparse.
                 string match -q -- '*h*' "$_early_arg"; and begin; _ry_show_help; exit $EXIT_OK; end
                 string match -q -- '*v*' "$_early_arg"; and begin; echo "v$VERSION"; exit $EXIT_OK; end
             end
@@ -167,7 +167,7 @@ set -g _RY_BOOT_CRITICAL_DSTS \
     "/etc/sdboot-manage.conf" \
     "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/mkinitcpio.conf"; set -g _RY_BACKUP_SUFFIX .ry.bak
-set -g _RY_TMPDIR_GLOBS 'ry-sudo-err.*' 'ry-tee-err.*' 'ry-run.*' 'ry-argparse-err.*' 'ry-fstab-tee-err.*' 'ry-fstab-awk-err.*' # TMPDIR sweep globs (count pinned in _ir_validate_counts); .ry-install.* temps swept by _cleanup_tmpfiles.
+set -g _RY_TMPDIR_GLOBS 'ry-sudo-err.*' 'ry-tee-err.*' 'ry-run.*' 'ry-argparse-err.*' 'ry-fstab-tee-err.*' 'ry-fstab-awk-err.*' # TMPDIR sweep globs (count pinned); .ry-install.* swept by _cleanup_tmpfiles.
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _PROFILE_USES_WIFI_BACKEND false
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
@@ -260,7 +260,7 @@ set -g _CLEANUP_DONE false
 function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     set -l _prev_umask (umask)
     umask 0077
-    set -g _RY_LOCK_DIR_OWNED true # Sentinel pre-mkdir, erased on fail; closes signal race vs _dc_kill_children.
+    set -g _RY_LOCK_DIR_OWNED true # Pre-mkdir sentinel; closes signal race vs _dc_kill_children.
     command mkdir -- "$LOCK_DIR" 2>/dev/null
     set -l _mk_rc $status
     umask $_prev_umask
@@ -634,7 +634,7 @@ set -g PKGS_DEL \
     cachy-update
 set -g AUR_PKGS mkinitcpio-firmware # AUR packages — installed unconditionally (no hardware gating).
 set -g _RY_PKG_REMOVE_SKIPS
-set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # EXPECTED_VULKAN_PKGS (2, enforced) -> chwd Vulkan drivers (verified present).
+set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # EXPECTED_VULKAN_PKGS (2) -> chwd Vulkan drivers (verified present).
 
 # MASK (11, enforced) -> systemctl mask --now (Phase 4).
 set -g MASK \
@@ -674,7 +674,7 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
         case install
             _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
             _pre_dispatch_exit $EXIT_PREFLIGHT
-        case install-file # Only /etc/kernel/cmdline embeds root=UUID; its generator hard-fails EXIT_GEN_NOUUID.
+        case install-file # Only cmdline embeds root=UUID; generator hard-fails EXIT_GEN_NOUUID.
             set -l _cmdline_canon (command realpath -m -- /etc/kernel/cmdline 2>/dev/null)
             if test "$INSTALL_FILE_TARGET" = /etc/kernel/cmdline; or begin; test -n "$_cmdline_canon"; and test "$INSTALL_FILE_TARGET" = "$_cmdline_canon"; end
                 _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
@@ -2579,11 +2579,11 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
         set -l cpu_name (string replace -r '.*/cpu(\d+)/.*' 'cpu$1' -- "$_CPU_PATH")
         _info "  Checking $cpu_name (representative)"
         for check in "scaling_driver:amd-pstate-epp:Scaling driver" \
-            "scaling_governor:powersave:Governor" # Driver (amd_pstate=active) + governor (cpupower-service.conf) are profile-managed.
+            "scaling_governor:powersave:Governor" # Driver + governor are profile-managed.
             set -l parts (string split ':' -- "$check"); set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
             _chk_eq "$parts[3]" "$sysfs_val" "$parts[2]"
         end
-        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # EPP is not profile-managed; advisory (kernel default for powersave is balance_performance).
+        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # EPP not profile-managed; advisory (powersave default = balance_performance).
         if test "$_epp" = balance_performance
             _ok "  EPP: $_epp"
         else if test -n "$_epp"
@@ -3538,7 +3538,7 @@ function _iap_per_pkg_retry --description "_install_aur_packages sub. Re-attempt
     for pkg in $AUR_PKGS
         if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- "$pkg"; _warn "AUR install failed: $pkg"; set -g _RY_IAP_RETRY_FAILED (math $_RY_IAP_RETRY_FAILED + 1); end
     end
-    test "$_RY_IAP_RETRY_FAILED" -gt 0; and test "$_RY_IAP_RETRY_FAILED" -lt (count $AUR_PKGS); and set -g _RY_AUR_PARTIAL true # Partial = some-but-not-all failed; total per-pkg failure is full failure.
+    test "$_RY_IAP_RETRY_FAILED" -gt 0; and test "$_RY_IAP_RETRY_FAILED" -lt (count $AUR_PKGS); and set -g _RY_AUR_PARTIAL true # Partial = some failed; all-failed = full failure.
 end
 
 function _iap_record_result --description "_install_aur_packages sub. Record final phase result" # paru rc=0 but pacman -T reports missing → PASS downgraded to WARN (non-tainting).
@@ -3792,7 +3792,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
     for _r in $_rdeps_raw; contains -- "$_r" $PKGS_DEL; and continue; set -a _rdeps "$_r"; end
     if test (count $_rdeps) -gt 0
         _info "  $pkg: skipped (reverse deps: $_rdeps)"
-        set -a _RY_PKG_REMOVE_SKIPS "$pkg" # Append to global accumulator (_RY_PKG_REMOVE_SKIPS; reset per-run at caller).
+        set -a _RY_PKG_REMOVE_SKIPS "$pkg" # Global accumulator; reset per-run at caller.
         return 0
     end
     printf '%s\n' "$pkg"
@@ -3855,7 +3855,7 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
 end
 
 function _csm_filter_units --description "_configure_services_mask sub. Pre-filter unit list"
-    for _unit in $argv # Per-unit fork: batched is-enabled elides not-found rows → positional drift.
+    for _unit in $argv # Per-unit: batched is-enabled elides not-found → positional drift.
         set -l _state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
         if test "$_state" = masked; _log "MASK_ALREADY: $_unit"; continue; end
         if test -z "$_state"; _info "Mask skip (unit not installed): $_unit"; _log "MASK_NOT_INSTALLED: $_unit"; continue; end
@@ -3927,7 +3927,7 @@ function _cse_collect_units --description "Collect system units to enable"
     if test "$_ndsp" = enabled
         _ok "NetworkManager-dispatcher.service: already enabled"
     else if test "$_ndsp" = static
-        _ok "NetworkManager-dispatcher.service: static (socket/D-Bus-activated; no enable needed)" # static has no [Install]; enable --now would warn. Verify side accepts static.
+        _ok "NetworkManager-dispatcher.service: static (socket/D-Bus-activated; no enable needed)" # static has no [Install]; enable would warn; verify accepts static.
     else if test -z "$_ndsp"
         _info "NetworkManager-dispatcher.service: not installed — skipping enable"
     else
@@ -3959,7 +3959,7 @@ function _cse_batch_enable --description "Batch enable system units" # Splits en
             _ok "Enabled: $_unit"
         else
             set -l _enabled_state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
-            if contains -- "$_enabled_state" enabled enabled-runtime alias static linked linked-runtime indirect generated transient # Per systemctl(1): boot-running states. Excludes masked/disabled/bad/empty.
+            if contains -- "$_enabled_state" enabled enabled-runtime alias static linked linked-runtime indirect generated transient # systemctl boot-running states; excludes masked/disabled/bad/empty.
                 _warn "Enabled but failed to start: $_unit (will activate on next boot if config is fixed)"
                 _warn "  Diagnose: systemctl status $_unit; journalctl -u $_unit -b"
                 _log "ENABLE_OK_START_FAIL: unit=$_unit is-enabled=$_enabled_state"
@@ -4180,7 +4180,7 @@ end
 
 function _check_boot_taint_gate --description "Verify boot state not tainted (shared by _irb_taint_gate + _post_boot); rc=0 ok, 1=revert-failed, 2=tainted-no-force"
     if test "$_RY_BOOT_TAINTED" = true; and test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
-        _warn "Boot-rebuild forced by RY_INSTALL_FORCE_BOOT_REBUILD=1 — _RY_BOOT_TAINTED gate bypassed" # Surface override: post-mortem cannot distinguish forced vs clean otherwise.
+        _warn "Boot-rebuild forced by RY_INSTALL_FORCE_BOOT_REBUILD=1 — _RY_BOOT_TAINTED gate bypassed" # Surface override; post-mortem cannot distinguish forced vs clean.
         _log "BOOT_TAINTED_OVERRIDE: RY_INSTALL_FORCE_BOOT_REBUILD=1 bypassed taint flag"
     end
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
@@ -4581,7 +4581,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     end
     set -l _use_sudo (_idf_use_sudo_for_dst "$target")
     if test -z "$_use_sudo"; _err "Not a managed file: $target"; _info "Run without path to see managed files"; return $EXIT_USAGE; end
-    set -l _mdst "$_RY_RESOLVED_MANAGED_DST" # Literal declared dst; canonical match-key may diverge under an /etc|/boot symlink.
+    set -l _mdst "$_RY_RESOLVED_MANAGED_DST" # Literal dst; canonical key may diverge under /etc|/boot symlink.
     _echo "── ry-install v$VERSION - Install Single File ──"
     if test "$_use_sudo" = true; _ensure_sudo_cached; or return $EXIT_PREFLIGHT; end
     set -l _changed_before $_RY_DEPLOY_CHANGED_COUNT
@@ -4660,7 +4660,7 @@ function _post_nm --argument-names target --description "Post-hook: restart Netw
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=install_file target=$target"
         return 0
     end
-    if string match -q '*/iwd/main.conf' -- "$target" # iwd reads main.conf only at startup; NM restart alone does not re-read it.
+    if string match -q '*/iwd/main.conf' -- "$target" # iwd reads main.conf only at startup; NM restart will not re-read it.
         if not _run sudo -n systemctl try-restart iwd.service
             _warn "iwd try-restart failed — config applies on next reboot (non-fatal; file deployed)"
         end
@@ -4752,7 +4752,7 @@ function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/d
     command rmdir -- "$LOG_DIR" 2>/dev/null
     command rmdir -- (command dirname -- "$LOG_DIR") 2>/dev/null
     command rmdir -- "$_RY_HOME_DIR" 2>/dev/null
-    set -g _RY_LOG_SUPPRESS_CREATE true # Suppress _log lazy-create; prevents orphan 90-byte log on argparse error.
+    set -g _RY_LOG_SUPPRESS_CREATE true # Suppress lazy-create; prevents orphan log on argparse error.
 end
 
 function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: log/dir cleanup, then exit"; _pre_dispatch_log_cleanup; _ry_exit $code; end
@@ -4825,7 +4825,7 @@ if set -q _flag_install_file
     end
 end
 
-if test (count $argv) -gt 0; echo "[ERR] Unexpected positional argument: $argv[1]" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
+if test (count $argv) -gt 0; echo "[ERR] Unexpected positional argument(s): $argv" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
 if test "$MODE" = check
     set -q _flag_verbose; and _log "CHECK_VERBOSE_IGNORED: -V/--verbose dropped under --check (silent-probe contract)" # --check ignores -V (silent-probe contract); log to JSONL only.
 else if set -q _flag_verbose; or test "$MODE" != install
@@ -4865,7 +4865,7 @@ for _r in $_argv_in; set -a _argv_parts '"'(_json_str "$_r")'"'; end
 set --erase _r
 set -l _argv_json '['(string join -- ',' $_argv_parts)']'; set -l _verbose_json false
 test "$QUIET" = false; and set _verbose_json true
-printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' (command date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null # Literal format string: no variable-as-format-arg surface for future edits.
+printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' (command date '+%Y-%m-%dT%H:%M:%S%z') "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null # Literal format string (no var-as-format surface).
 if test "$status" -eq 0
     set -g _RY_HEADER_WRITTEN true
 else

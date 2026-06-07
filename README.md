@@ -190,14 +190,14 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 
 ## Safety & Reliability
 
-Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. Post-write re-read and auto-restore cover backup-targets; fstab has its own `findmnt --verify` gate and `.ry.bak`.
+Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. Post-write re-read and auto-restore cover backup-targets; fstab has `findmnt --verify` gate and `.ry.bak`.
 
 > [!WARNING]
 > This profile **disables and masks the host firewall** (`ufw`) on a trusted-LAN assumption — no host packet filtering after install. `--verify` reports its state.
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → render → symlink-probe → chmod → `mv -T` → Backup-targets → `.ry.bak` restore on mismatch |
+| Atomic writes | tmp → render → symlink-probe → chmod → `mv -T` → backup-targets → `.ry.bak` restore on mismatch |
 | Auto backups | `<path>.ry.bak` before overwriting `loader.conf` / `mkinitcpio.conf` / `fstab` |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | fstab | mandatory `findmnt --verify` gate; symlinked `/etc/fstab` refused |

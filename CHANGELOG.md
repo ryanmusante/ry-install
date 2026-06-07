@@ -1,39 +1,42 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.22.1 (2026-06-06)
+cli: honor glued short flags (-hV/-Vh) before the root guard, matching --help.
+style: drop stale daemon-reload mention from the enable-phase description.
+
 ry-install 7.22.0 (2026-06-06)
-summary: fix realtime/i2c group hint — contains reads args, not stdin; hint mis-fired for existing members.
-style: erase top-level set -l temporaries (fish-ver/tmpdir/dst-count/umask probes).
-docs: README PKGS_ADD order matches script; note fstab rewrite drops redundant defaults.
+fix: realtime/i2c group hint mis-fired for existing members (contains reads args, not stdin).
+style: erase top-level set -l temporaries.
+docs: README PKGS_ADD order synced; fstab rewrite drops redundant defaults.
 
 ry-install 7.21.9 (2026-06-06)
-aur: verify install via pacman -T post-paru; missing despite rc=0 → WARN (non-tainting).
-style: trim verbose inline comments to vital information.
+aur: verify via pacman -T post-paru; missing despite rc=0 -> WARN (non-tainting).
+style: trim verbose inline comments.
 
 ry-install 7.21.8 (2026-06-06)
-docs: preflight runs invariants before lock; note post-write verify/restore.
+preflight: run invariants before lock; note post-write verify/restore.
 
 ry-install 7.21.7 (2026-06-06)
-install-file: post-hook resolves on the matched managed dst, not the canonicalized target.
+install-file: post-hook resolves on the matched managed dst, not the canonical target.
 
 ry-install 7.21.6 (2026-06-06)
-verify: root-UUID-unresolved cmdline checksum → WARN not GEN_FAIL (presence still checked).
-preflight: explicit return 0 (no longer rides set --erase status).
+verify: root-UUID-unresolved cmdline checksum -> WARN (presence still checked).
+preflight: explicit return 0.
 
 ry-install 7.21.5 (2026-06-06)
-docs: drop stale iwd-gate + 5000-line dmesg comments.
-docs: README lists pacman-contrib (pactree) soft-dep for rdep-safe removal.
+docs: drop stale iwd-gate/dmesg comments; list pacman-contrib soft-dep.
 
 ry-install 7.21.4 (2026-06-06)
-install-file: only /etc/kernel/cmdline needs root UUID; enables rescue-env redeploy.
-docs: --help notes 250/255 internal _as/_run sentinels.
+install-file: only /etc/kernel/cmdline needs root UUID (rescue-env redeploy).
+docs: --help notes 250/255 _as/_run sentinels.
 style: erase stray top-level argv loop var.
 
 ry-install 7.21.3 (2026-06-06)
-docs: document TMPDIR fallback + run-overflow .log prune.
-style: trim verbose comments; fold header lint line.
+docs: document TMPDIR fallback and run-overflow .log prune.
+style: trim comments; fold header lint line.
 
 ry-install 7.21.2 (2026-06-06)
-docs: fix missing space in Phase 2 prose.
+docs: fix Phase 2 prose spacing.
 
 ry-install 7.21.1 (2026-06-06)
 preflight: refuse stateful backup-target generator.
@@ -44,7 +47,7 @@ resolved: DNSOverTLS no -> opportunistic.
 docs: failure-triage jq matches PHASE_RESULT FAIL/WARN; clarify CachyOS-default pkgs.
 
 ry-install 7.20.11 (2026-06-06)
-docs: per-row # counts; drop (N) header totals.
+docs: per-row counts; drop header totals.
 
 ry-install 7.20.10 (2026-06-06)
 docs: drop low-value README prose.
@@ -71,7 +74,6 @@ docs: fish -n is the syntax gate; condense README; align exit-code labels.
 ry-install 7.20.4 (2026-06-05)
 lock: reclaim corrupt/non-numeric .lock pidfile.
 docs: document exit 2/4, GNU-coreutils req, ufw/amd_iommu posture.
-style: note one-liner style in header.
 
 ry-install 7.20.3 (2026-06-05)
 verify: malformed sdboot LINUX_OPTIONS now FAIL (was WARN).

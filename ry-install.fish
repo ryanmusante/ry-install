@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.22.0 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.22.1 (2026-06-06) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners are intentional; fish -n is the syntax gate (fish_indent cosmetic, not CI-gated).
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.22.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.22.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -58,6 +58,11 @@ for _early_arg in $argv
         case -v --version
             echo "v$VERSION"
             exit $EXIT_OK
+        case '-*'
+            if string match -qr -- '^-[A-Za-z]+$' "$_early_arg" # Glued short cluster (e.g. -hV): honor h/v before root guard.
+                string match -q -- '*h*' "$_early_arg"; and begin; _ry_show_help; exit $EXIT_OK; end
+                string match -q -- '*v*' "$_early_arg"; and begin; echo "v$VERSION"; exit $EXIT_OK; end
+            end
     end
 end
 set --erase _early_arg
@@ -3961,7 +3966,7 @@ function _cse_batch_enable --description "Batch enable system units" # Splits en
     return $_ret
 end
 
-function _configure_services_enable --description "Daemon-reload, batch-enable system units"
+function _configure_services_enable --description "Batch-enable system units (per-unit retry on batch failure)"
     set -l _ret 0; set -l _units (_cse_collect_units); set -l _enable_count (count $_units)
     if test "$_enable_count" -eq 0
         _phase_record "Services: enable units" "--" "no units to enable"

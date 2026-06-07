@@ -197,7 +197,7 @@ Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-confi
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → render → symlink-probe → chmod → `mv -T`. Backup-targets add a re-read + `.ry.bak` restore on mismatch |
+| Atomic writes | tmp → render → symlink-probe → chmod → `mv -T` → Backup-targets → `.ry.bak` restore on mismatch |
 | Auto backups | `<path>.ry.bak` before overwriting `loader.conf` / `mkinitcpio.conf` / `fstab` |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | fstab | mandatory `findmnt --verify` gate; symlinked `/etc/fstab` refused |

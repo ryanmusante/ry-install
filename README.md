@@ -190,7 +190,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 
 ## Safety & Reliability
 
-Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. Post-write re-read and auto-restore cover backup-targets; fstab own `findmnt --verify` gate and `.ry.bak`.
+Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. Post-write re-read and auto-restore cover backup-targets; fstab has its own `findmnt --verify` gate and `.ry.bak`.
 
 > [!WARNING]
 > This profile **disables and masks the host firewall** (`ufw`) on a trusted-LAN assumption — no host packet filtering after install. `--verify` reports its state.

@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.22.4 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.22.5 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -190,14 +190,14 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 
 ## Safety & Reliability
 
-Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. The post-write auto-restore excludes fstab.
+Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. Post-write re-read and auto-restore cover the two boot backup-targets; fstab has its own `findmnt --verify` gate and `.ry.bak`.
 
 > [!WARNING]
 > This profile **disables and masks the host firewall** (`ufw`) on a trusted-LAN assumption — no host packet filtering after install. `--verify` reports its state.
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | tmp → render → symlink-probe → chmod → `mv -T` → post-write re-read; backup-targets restore `.ry.bak` on mismatch |
+| Atomic writes | tmp → render → symlink-probe → chmod → `mv -T` (same-FS rename); a pre-write byte-compare skips no-op rewrites. Backup-targets (`loader.conf`, `mkinitcpio.conf`) add a post-write re-read + `.ry.bak` restore on mismatch |
 | Auto backups | `<path>.ry.bak` before overwriting `loader.conf` / `mkinitcpio.conf` / `fstab` |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | fstab | mandatory `findmnt --verify` gate; symlinked `/etc/fstab` refused |

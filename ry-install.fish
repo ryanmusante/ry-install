@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.22.4 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.22.5 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners are intentional; fish -n is the syntax gate (fish_indent cosmetic, not CI-gated).
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.22.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.22.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -167,6 +167,7 @@ set -g _RY_BOOT_CRITICAL_DSTS \
     "/etc/sdboot-manage.conf" \
     "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/mkinitcpio.conf"; set -g _RY_BACKUP_SUFFIX .ry.bak
+set -g _RY_TMPDIR_GLOBS 'ry-sudo-err.*' 'ry-tee-err.*' 'ry-run.*' 'ry-argparse-err.*' 'ry-fstab-tee-err.*' 'ry-fstab-awk-err.*' # Single source for TMPDIR tmpfile sweep; count pinned in _ir_validate_counts (mirrors mktemp templates).
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _PROFILE_USES_WIFI_BACKEND false
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
@@ -365,13 +366,8 @@ end
 
 function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for leftover ry-* tmpfiles"
     functions -q _tmp_dir; or return 0
-    set -l _tmpdir (_tmp_dir); set -l _tmp_globs \
-        'ry-sudo-err.*' \
-        'ry-tee-err.*' \
-        'ry-run.*' \
-        'ry-argparse-err.*' \
-        'ry-fstab-tee-err.*' \
-        'ry-fstab-awk-err.*'
+    set -l _tmpdir (_tmp_dir); set -l _tmp_globs $_RY_TMPDIR_GLOBS
+    test (count $_tmp_globs) -gt 0; or return 0
     set -l _find_name_args
     for _g in $_tmp_globs; test -n "$_find_name_args"; and set -a _find_name_args -o; set -a _find_name_args -name "$_g"; end
     command find "$_tmpdir" -xdev -maxdepth 1 \( $_find_name_args \) -type f -user "$_MY_UID" -delete 2>/dev/null
@@ -733,6 +729,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_NTSYNC_MODLOAD_CONFS:3 \
+        _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:14 \
         USER_DESTINATIONS:1
     for _kv in $_expect
@@ -780,7 +777,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     _ir_validate_keys
     for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end # Backup-target generators must be side-effect-free (sysctl is stateful).
     _ir_precompute_caches
-    set -l _kp_metachar_re '[\s"`$;\\\\]'
+    set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!]'
     for _kp in $KERNEL_PARAMS
         if string match -qr -- "$_kp_metachar_re" "$_kp"
             _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"
@@ -2477,11 +2474,7 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
         set -l _v (_unit_state_padded $unit)
         if test "$_v[1]" = ERR_NO_DATA; _log "CHECK_PREFLIGHT: cannot determine state for $unit (systemctl error)"; return $EXIT_PREFLIGHT; end
         test "$_v[1]" = not-found; and continue
-        if test "$unit" = NetworkManager-dispatcher.service
-            test "$_v[3]" = enabled; or test "$_v[3]" = static; or set -g _RY_CHECK_DRIFT 1
-        else
-            test "$_v[3]" = enabled; or set -g _RY_CHECK_DRIFT 1
-        end
+        test "$_v[3]" = enabled; or test "$_v[3]" = static; or set -g _RY_CHECK_DRIFT 1 # conf.d-driven units (resolved, NM-dispatcher) accept enabled|static; runtime gates on active.
     end
     return 0
 end
@@ -3938,7 +3931,19 @@ function _cse_collect_units --description "Collect system units to enable"
     else
         set -a _enable NetworkManager-dispatcher.service
     end
-    for _exp in $EXPECTED_SERVICES; contains -- "$_exp" $_RY_PKG_MANAGED_SERVICES; and continue; set -a _enable "$_exp"; end # Skip pacman-managed units (avoid duplicate enable warn).
+    for _exp in $EXPECTED_SERVICES
+        if not contains -- "$_exp" $_RY_PKG_MANAGED_SERVICES
+            set -a _enable "$_exp"; continue
+        end
+        set -l _st (command systemctl is-enabled "$_exp" 2>/dev/null | string trim --) # Pkg-managed: enable only if preset did not (avoids duplicate-enable warn when already enabled).
+        if test "$_st" = enabled
+            _ok "$_exp: already enabled (package preset)"
+        else if test -z "$_st"
+            _info "$_exp: not installed — skipping enable"
+        else
+            set -a _enable "$_exp"
+        end
+    end
     test (count $_enable) -gt 0; and printf '%s\n' $_enable
 end
 

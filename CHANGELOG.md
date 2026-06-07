@@ -1,10 +1,17 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.22.5 (2026-06-07)
+services: enable NetworkManager.service when preset leaves it disabled.
+check: accept static for conf.d-driven units (resolved), matching runtime.
+harden: widen KERNEL_PARAMS metachar reject set.
+sweep: centralize TMPDIR tmpfile globs; pin count.
+docs: scope post-write re-read/restore to the two boot backup-targets.
+
 ry-install 7.22.4 (2026-06-07)
 docs: render the Configuration section as tables.
 
 ry-install 7.22.3 (2026-06-07)
-docs: trim README to vital info; fold per-phase prose into the flow table; condense config tables.
+docs: trim README; fold per-phase prose into flow table; condense config tables.
 
 ry-install 7.22.2 (2026-06-07)
 cli: glued short cluster honors only h/v/V; other clusters exit usage, not help.

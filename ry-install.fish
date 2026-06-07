@@ -1,10 +1,11 @@
 #!/usr/bin/env fish
-# ry-install v7.22.12 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.22.13 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.22.12"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.22.13"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
+set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 15
@@ -729,6 +730,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_NTSYNC_MODLOAD_CONFS:3 \
+        _RY_ISO3166_ALPHA2:249 \
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:14 \
         USER_DESTINATIONS:1
@@ -932,8 +934,8 @@ function _ensure_sudo_cached --description "Cache sudo credential once before re
 end
 
 function _as --argument-names use_sudo --description "Prefix command with sudo or command based on use_sudo flag" # sudo -n prefix or bare command; preserves argv. rc=250 = misuse sentinel.
-    if test (count $argv) -lt 2; _log "BUG: _as called without command (argv=$argv)"; return 250; end
-    if test "$use_sudo" != true; and test "$use_sudo" != false; _log "BUG: _as called with non-bool use_sudo='$use_sudo' (argv=$argv)"; return 250; end
+    if test (count $argv) -lt 2; _log "BUG: _as called without command (argv=$argv)"; return $EXIT_AS_MISUSE; end
+    if test "$use_sudo" != true; and test "$use_sudo" != false; _log "BUG: _as called with non-bool use_sudo='$use_sudo' (argv=$argv)"; return $EXIT_AS_MISUSE; end
     if test "$use_sudo" = true
         sudo -n -- $argv[2..-1]
     else
@@ -1367,8 +1369,8 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
 end
 
 function _run --description "Execute a command with logging, stdout/stderr capture, and timeout enforcement" # No stderr-capture tmpdir → refuse. rc=255 = misuse sentinel.
-    if test (count $argv) -eq 0; _log "BUG: _run called with no arguments"; return 255; end
-    if string match -q -- '-*' "$argv[1]"; _log "BUG: _run called with dash-prefixed argv[1]='$argv[1]' — refusing"; return 255; end
+    if test (count $argv) -eq 0; _log "BUG: _run called with no arguments"; return $EXIT_RUN_MISUSE; end
+    if string match -q -- '-*' "$argv[1]"; _log "BUG: _run called with dash-prefixed argv[1]='$argv[1]' — refusing"; return $EXIT_RUN_MISUSE; end
     set -l log_cmd (_run_redact_cmd $argv)
     _log "RUN: $log_cmd"
     set -l _run_dir (command mktemp -d -p (_tmp_dir) ry-run.XXXXXX 2>/dev/null)
@@ -1883,7 +1885,7 @@ function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description 
         _rm_tmp "$_tee_err" false
         return 1
     end
-    if test "$_ps[2]" -eq 250
+    if test "$_ps[2]" -eq $EXIT_AS_MISUSE
         _fail "→ $dst (BUG: _as called with non-bool use_sudo='$use_sudo' in render pipe)"
         _rm_tmp "$_tee_err" false
         return 1
@@ -4907,5 +4909,5 @@ end
 
 _write_footer "$_RY_EXIT_CODE" ""
 set -q _RY_LOG_WRITE_FAIL; and test "$_RY_LOG_WRITE_FAIL" = true; and echo "[WARN] Log writes failed during this run — JSONL may be incomplete (check disk space / file permissions on $LOG_FILE)" >&2
-test "$MODE" != check; and not set -q _RY_LOG_WRITE_FAIL; and echo "[i] Log file: $LOG_FILE" >&2
+test "$MODE" != check; and not set -q _RY_LOG_WRITE_FAIL; and echo "[INFO] Log file: $LOG_FILE" >&2
 exit $_RY_EXIT_CODE

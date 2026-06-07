@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.22.9 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.22.10 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -129,7 +129,7 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 | systemd-resolved | `MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=opportunistic`, `DNSSEC=allow-downgrade` |
 | systemd-logind | `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `…LongPress`) = `ignore` |
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
-| NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2`, `logging=WARN` |
+| NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2`, `[logging] level=WARN` |
 | cpupower | `GOVERNOR=powersave` |
 | amdgpu/ttm | `pages_limit`/`page_pool_size=8388608` (caps GTT at 32 GiB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
@@ -212,9 +212,8 @@ Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-confi
 | `0` / `1` / `2` | success / verify-FAIL or install-error / usage (incl. root-refused) |
 | `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock |
 | `10` | `--check` drift |
-| `11` / `12` / `13` | gen-nofn / gen-nouuid / gen-sysctl (content-gen failures) |
-| `128+N` / `251` | signal (130 INT, 143 TERM, …) / `_run` tmpfile-alloc fail |
-| `250` / `255` | internal `_as` / `_run` arg-misuse guards (never a process exit) |
+| `128+N` | signal exit (130 INT, 143 TERM, …) |
+| `11` / `12` / `13` / `251` / `250` / `255` | internal sentinels — gen-nofn/nouuid/sysctl, `_run` tmpfile-alloc, `_as`/`_run` arg-misuse; **never a process exit** (surfaced in JSONL `gen_fail`; collapses to `1` install/verify, `3` `--check`) |
 
 | Variable | Default | Effect |
 |---|---|---|

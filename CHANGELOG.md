@@ -1,13 +1,17 @@
 ry-install changelog — newest first; <subsystem>: <change>.
 
+ry-install 7.21.9 (2026-06-06)
+aur: verify install via pacman -T post-paru; missing despite rc=0 → WARN (non-tainting).
+style: trim verbose inline comments to vital information.
+
 ry-install 7.21.8 (2026-06-06)
-docs: preflight runs invariants before lock; atomic-write sequence notes post-write verify/restore.
+docs: preflight runs invariants before lock; note post-write verify/restore.
 
 ry-install 7.21.7 (2026-06-06)
 install-file: post-hook resolves on the matched managed dst, not the canonicalized target.
 
 ry-install 7.21.6 (2026-06-06)
-verify: root-UUID-unresolved cmdline checksum WARN not GEN_FAIL (rescue --verify no longer exits 1; presence still checked).
+verify: root-UUID-unresolved cmdline checksum → WARN not GEN_FAIL (presence still checked).
 preflight: explicit return 0 (no longer rides set --erase status).
 
 ry-install 7.21.5 (2026-06-06)
@@ -15,7 +19,7 @@ docs: drop stale iwd-gate + 5000-line dmesg comments.
 docs: README lists pacman-contrib (pactree) soft-dep for rdep-safe removal.
 
 ry-install 7.21.4 (2026-06-06)
-install-file: only /etc/kernel/cmdline needs a resolvable root UUID; enables rescue-env single-file redeploy.
+install-file: only /etc/kernel/cmdline needs root UUID; enables rescue-env redeploy.
 docs: --help notes 250/255 internal _as/_run sentinels.
 style: erase stray top-level argv loop var.
 

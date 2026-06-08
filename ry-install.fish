@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.22.14 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.23.0 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.22.14"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.23.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -524,7 +524,7 @@ set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
     amd_iommu=off \
     amd_pstate=active \
-    amdgpu.ppfeaturemask=0xfff73fff \
+    amdgpu.ppfeaturemask=0xffff7fff \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
     pcie_aspm.policy=performance \
@@ -596,16 +596,14 @@ set -g ENV_VARS \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
     "WINEDEBUG=-all"
-# SYSCTL_VALUES (8, enforced) -> /etc/sysctl.d/95-ry-overrides.conf.
+# SYSCTL_VALUES (6, enforced) -> /etc/sysctl.d/95-ry-overrides.conf.
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
     "net.core.netdev_budget_usecs=5000" \
     "net.ipv4.tcp_congestion_control=bbr" \
     "net.ipv4.tcp_notsent_lowat=16384" \
-    "net.ipv4.tcp_slow_start_after_idle=0" \
-    "vm.compaction_proactiveness=0" \
-    "vm.max_map_count=2147483642"
+    "net.ipv4.tcp_slow_start_after_idle=0"
 
 # PKGS_ADD (14, enforced) -> pacman -Syu --needed (Phase 2).
 set -g PKGS_ADD \
@@ -657,7 +655,7 @@ set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2
 set -g BOOT_TIME_TARGET 15
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 set -g TTM_PAGES_LIMIT 8388608
-set -g TTM_PAGE_POOL_SIZE 8388608
+set -g TTM_PAGE_POOL_SIZE 4194304
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ─────────────────────────────
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
@@ -717,7 +715,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:10 \
-        SYSCTL_VALUES:8 \
+        SYSCTL_VALUES:6 \
         PKGS_ADD:14 \
         PKGS_DEL:8 \
         MASK:11 \

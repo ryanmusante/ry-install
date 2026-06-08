@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.22.14 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.23.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -108,7 +108,7 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 | Category | Params |
 |---|---|
 | CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
-| GPU | `amdgpu.ppfeaturemask=0xfff73fff` |
+| GPU | `amdgpu.ppfeaturemask=0xffff7fff` |
 | IOMMU/PCIe | `amd_iommu=off` (disables IOMMU DMA isolation), `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
 | USB/Serial | `8250.nr_uarts=0`, `usbcore.autosuspend=-1` |
@@ -131,7 +131,7 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
 | NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2`, `[logging] level=WARN` |
 | cpupower | `GOVERNOR=powersave` |
-| amdgpu/ttm | `pages_limit`/`page_pool_size=8388608` (caps GTT at 32 GiB) |
+| amdgpu/ttm | `pages_limit=8388608`/`page_pool_size=4194304` (caps GTT at 32 GiB; pool = ½ limit) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
 | udev | NVMe whole-disk I/O scheduler → `none` |
 | wireless regdom | `COUNTRY=US` (override `--country=XX`), applied in Phase 4 |
@@ -142,7 +142,6 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 |---|---|
 | `net.core` | `default_qdisc=fq`, `netdev_budget=600`, `netdev_budget_usecs=5000` |
 | `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
-| `vm` | `compaction_proactiveness=0`, `max_map_count=2147483642` |
 
 **Gaming env** → `~/.config/environment.d/10-environment.conf` (`0600`)
 

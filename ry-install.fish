@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.23.1 (2026-06-08) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.23.2 (2026-06-08) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.23.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.23.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -390,7 +390,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
     set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_FSTAB_EVIDENCE
-    set --erase _RY_RESOLVED_MANAGED_DST
+    set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE
 end
 
 function _dc_kill_children --description "_do_cleanup sub. Release lock + reap child PIDs (pkill -P, then SIGKILL after grace)" # TERM → 0.5s grace → KILL; lets long pkg/boot ops flush first.
@@ -1983,7 +1983,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     return 0
 end
 
-function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination" # Deploy unconditionally; byte-match skips no-op; iwd/NM activation gated at Phase 6.
+function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination" # Deploy unconditionally; byte-match skips no-op; iwd/NM live-apply at Phase 6.
     set -l dir (command dirname -- "$dst")
     if test "$use_sudo" = true
         if not _run sudo -n mkdir -p -m 0755 -- "$dir"; _fail "Cannot create directory: $dir"; return 1; end
@@ -3557,7 +3557,7 @@ function _iap_per_pkg_retry --description "_install_aur_packages sub. Re-attempt
     test "$_RY_IAP_RETRY_FAILED" -gt 0; and test "$_RY_IAP_RETRY_FAILED" -lt (count $AUR_PKGS); and set -g _RY_AUR_PARTIAL true # Partial = some failed; all-failed = full failure.
 end
 
-function _iap_record_result --description "_install_aur_packages sub. Record final phase result" # paru rc=0 but pacman -T reports missing → PASS downgraded to WARN (non-tainting).
+function _iap_record_result --description "_install_aur_packages sub. Record final phase result" # paru rc=0 but pacman -T missing → PASS→WARN (non-tainting).
     set -l _total (count $AUR_PKGS); set -l _missing
     command -q pacman; and set _missing (command pacman -T -- $AUR_PKGS 2>/dev/null)
     if test (count $_missing) -gt 0
@@ -3814,7 +3814,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-
     printf '%s\n' "$pkg"
 end
 
-function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on batch failure" # Batch -Rns first (atomic on rdep refusal); per-pkg retry isolates the bad pkg.
+function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on batch failure" # Batch -Rns (atomic on rdep refusal); per-pkg retry isolates the bad pkg.
     if test -f /var/lib/pacman/db.lck
         _err "Pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run; skipping package removal"
         set -g INSTALL_HAD_ERRORS true
@@ -3965,7 +3965,7 @@ function _cse_collect_units --description "Collect system units to enable"
     test (count $_enable) -gt 0; and printf '%s\n' $_enable
 end
 
-function _cse_batch_enable --description "Batch enable system units" # Splits enabled-but-start-fail (recoverable) from hard fail (missing/disabled).
+function _cse_batch_enable --description "Batch enable system units" # Splits enable-ok/start-fail (recoverable) from hard fail.
     test (count $argv) -eq 0; and return 0
     _run sudo -n systemctl enable --now -- $argv; and return 0
     _warn "Batch enable failed — retrying individually to identify failures"
@@ -4004,13 +4004,20 @@ function _configure_services_enable --description "Batch-enable system units (pe
     return $_ret
 end
 
-function _apply_wireless_regdom --description "Apply the wireless regulatory domain ($COUNTRY) at runtime" # Mandatory wireless regdom: /etc/iw-regdomain deploys via registry; apply now.
+function _apply_wireless_regdom --description "Apply the wireless regulatory domain ($COUNTRY) at runtime" # Sets _RY_REGDOM_RESULT/_RY_REGDOM_EVIDENCE; always returns 0 (deferral is non-fatal).
+    set -g _RY_REGDOM_RESULT DEFER; set -g _RY_REGDOM_EVIDENCE ""
     if not command -q iw
         _info "  wireless regdom: iw(8) absent — $COUNTRY applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
+        set -g _RY_REGDOM_EVIDENCE "iw(8) absent — applies via /etc/iw-regdomain"
         return 0
     end
     _info "  wireless regdom → $COUNTRY"
-    _run sudo -n iw reg set "$COUNTRY"; or _warn "iw reg set $COUNTRY failed — applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
+    if _run sudo -n iw reg set "$COUNTRY"
+        set -g _RY_REGDOM_RESULT PASS; set -g _RY_REGDOM_EVIDENCE "country $COUNTRY set"
+        return 0
+    end
+    _warn "iw reg set $COUNTRY failed — applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
+    set -g _RY_REGDOM_EVIDENCE "iw reg set failed — applies via /etc/iw-regdomain"
     return 0
 end
 
@@ -4029,6 +4036,7 @@ function _install_configure_services --description "Enable, start, and configure
     _configure_services_mask; or set _ret 1
     _configure_services_enable; or set _ret 1
     _apply_wireless_regdom
+    _phase_record "Services: regdom" $_RY_REGDOM_RESULT "$_RY_REGDOM_EVIDENCE"
     return $_ret
 end
 
@@ -4566,7 +4574,7 @@ function _post_hook_for_target --argument-names target --description "Return pos
     return 1
 end
 
-function _idf_use_sudo_for_dst --argument-names target --description "Resolve managed-dst membership + emit sudo flag (true=system, false=user, empty=not-managed)" # Stashes matched dst in _RY_RESOLVED_MANAGED_DST; _idx aligns canon→source list.
+function _idf_use_sudo_for_dst --argument-names target --description "Resolve managed-dst membership + emit sudo flag (true=system, false=user, empty=not-managed)" # Stashes match in _RY_RESOLVED_MANAGED_DST; _idx aligns canon→source.
     set -g _RY_RESOLVED_MANAGED_DST ""
     set -l _idx 1
     for dst in $SYSTEM_DESTINATIONS

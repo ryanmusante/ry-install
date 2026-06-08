@@ -1,9 +1,12 @@
 ry-install changelog - newest first.
 
+7.23.2 - 2026-06-08
+- services: record regdom phase row in the run-summary matrix.
+
 7.23.1 - 2026-06-08
 - verify: advisory report of CachyOS-set vm.max_map_count + vm.compaction_proactiveness.
 - preflight: assert ttm page_pool_size == pages_limit / 2.
-- docs: document BOOT_TIME_TARGET/PACTREE_TIMEOUT_S/NM_RESTART_DELAY; note CachyOS vm sysctls; single-AUR-pkg fail exits 1.
+- docs: document timing tunables + CachyOS vm sysctls; single-AUR-pkg fail exits 1.
 
 7.23.0 - 2026-06-07
 - cmdline: ppfeaturemask 0xfff73fff -> 0xffff7fff (GFXOFF off; overdrive un-gated).
@@ -152,7 +155,7 @@ ry-install changelog - newest first.
 - verify: track dmesg line count, not 5000-line buffer.
 
 7.19.0..7.19.25 - 2026-06-02..2026-06-04
-- fix: preflight-abort renders PREFLIGHT (3); only -Syu/pkg-verify/boot-config taint Phase 5.
+- fix: preflight-abort renders PREFLIGHT (3); only -Syu/pkg/boot-config taint Phase 5.
 - fix: fstab rewrite refuses when findmnt absent.
 - harden: validate --country; CPU gate every mode; guard id(1)/PATH.
 - verify: combined static+runtime totals; THP/ZRAM/swap advisory.
@@ -170,7 +173,7 @@ ry-install changelog - newest first.
 - cmdline: drop max_cstate, cwsr_enable, sg_display (13 params).
 - sysctl: +vm.max_map_count (8); halve ttm page limits.
 - harden: systemd >= 250 gate; _run overflow-spill; 3x stale-lock reclaim.
-- fix: paru-absent WARN; partial AUR WARN, all-failed FAIL; per-file findmnt skips vfat.
+- fix: paru-absent/partial AUR WARN, all-failed FAIL; per-file findmnt skips vfat.
 - verify: fix footer double-count; ppfeaturemask derived from KERNEL_PARAMS.
 
 7.16.0 - 2026-05-30

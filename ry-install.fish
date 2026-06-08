@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.22.13 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.22.14 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.22.13"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.22.14"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -1534,7 +1534,8 @@ function _ry_check_deps --description "Verify required packages are installed"
     set -l missing
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
         timeout mktemp awk grep curl getent sudo head df mv \
-        tee stat find cp chmod chown install cat rm date wc
+        tee stat find cp chmod chown install cat rm date wc \
+        tail basename dirname mkdir rmdir touch env sleep
         command -q $cmd; or set -a missing $cmd
     end
     if test (count $missing) -gt 0; _err "missing: $missing"; return 1; end
@@ -1543,7 +1544,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; return 1; end
     if test "$_RY_SYSTEMD_VER" -lt 250; _err "Systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
     set -l _opt_missing
-    for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci; command -q $cmd; or set -a _opt_missing $cmd; end
+    for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci kill; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
     if test (count $AUR_PKGS) -gt 0; and not command -q paru; _warn "paru not found — AUR phase will be skipped (advisory, non-fatal; AUR_PKGS=$AUR_PKGS)"; _info "  Install paru to enable AUR: sudo pacman -S --needed paru"; end
     if test (count $AUR_PKGS) -gt 0; and command -q paru

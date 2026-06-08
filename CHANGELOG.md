@@ -1,4 +1,7 @@
-ry-install changelog — newest first; lines are `<subsystem>: <change>`.
+ry-install changelog — newest first.
+
+7.22.14 - 2026-06-07
+- preflight: gate remaining coreutils + kill.
 
 7.22.13 - 2026-06-07
 - cli: name _as/_run misuse sentinels (250/255) as EXIT_AS_MISUSE/EXIT_RUN_MISUSE globals.

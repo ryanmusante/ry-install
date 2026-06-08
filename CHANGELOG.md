@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+7.23.1 - 2026-06-08
+- verify: advisory report of CachyOS-set vm.max_map_count + vm.compaction_proactiveness.
+- preflight: assert ttm page_pool_size == pages_limit / 2.
+- docs: document BOOT_TIME_TARGET/PACTREE_TIMEOUT_S/NM_RESTART_DELAY; note CachyOS vm sysctls; single-AUR-pkg fail exits 1.
+
 7.23.0 - 2026-06-07
 - cmdline: ppfeaturemask 0xfff73fff -> 0xffff7fff (GFXOFF off; overdrive un-gated).
 - modprobe: ttm page_pool_size 8388608 -> 4194304 (half of pages_limit).

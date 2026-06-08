@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.23.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.23.1 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -56,7 +56,7 @@ Hardware: Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 G
 `--install-file` of a boot config (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade; non-boot post-hook failures stay exit 0.
 
 > [!NOTE]
-> `--verify` is exhaustive: beyond the 15 managed files (byte-for-byte) and boot/service state, it also checks runtime state the installer does not itself write — `ntsync` (built-in/loaded), THP/KSM/ZRAM, the active `tcp_bbr` module, drirc XML well-formedness (`xmllint`), ext4 fstab mount options, and boot time against a 15 s target.
+> `--verify` is exhaustive: beyond the 15 managed files (byte-for-byte) and boot/service state, it also checks runtime state the installer does not itself write — `ntsync` (built-in/loaded), THP/KSM/ZRAM, the active `tcp_bbr` module, drirc XML well-formedness (`xmllint`), ext4 fstab mount options, the CachyOS-provided `vm.max_map_count` / `vm.compaction_proactiveness` (advisory), and boot time against a 15 s target.
 
 > [!CAUTION]
 > A boot-cascade failure during `--install-file` exits 4 — **do not reboot** until it succeeds.
@@ -74,7 +74,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate. |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` → NetworkManager restart (deferred on active Wi-Fi) |
 
-`iwd`/`mesa`/`cpupower`/`iw`/`rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`, only an all-package failure is `FAIL`. `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
+`iwd`/`mesa`/`cpupower`/`iw`/`rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`, only an all-package failure is `FAIL` (with a single AUR package, any failure is therefore `FAIL`, exit 1). `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
 
 > [!NOTE]
 > With `REMOVE_EXISTING=yes`, `sdboot-manage gen` deletes every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched; hand-written BLS entries are not preserved.
@@ -94,6 +94,8 @@ A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phas
 ## Configuration
 
 The script is the source of truth; retune via the `set -g` globals near the top.
+
+Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_TARGET=15` (s; `--verify` boot-time target), `PACTREE_TIMEOUT_S=60` (s; rdep query cap for `PKGS_DEL`), `NM_RESTART_DELAY=3` (s; NetworkManager settle window).
 
 **Packages**
 
@@ -142,6 +144,8 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 |---|---|
 | `net.core` | `default_qdisc=fq`, `netdev_budget=600`, `netdev_budget_usecs=5000` |
 | `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
+
+`vm.max_map_count` and `vm.compaction_proactiveness` are intentionally **not** set here — CachyOS ships suitable defaults; `--verify` reports their live values (advisory).
 
 **Gaming env** → `~/.config/environment.d/10-environment.conf` (`0600`)
 

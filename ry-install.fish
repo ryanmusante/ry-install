@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.23.0 (2026-06-07) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.23.1 (2026-06-08) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.23.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.23.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -736,6 +736,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — README/script desync, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
+    set -l _ttm_half (math --scale=0 "$TTM_PAGES_LIMIT / 2"); if test "$TTM_PAGE_POOL_SIZE" -ne "$_ttm_half"; _err_loud "TTM_PAGE_POOL_SIZE=$TTM_PAGE_POOL_SIZE must equal TTM_PAGES_LIMIT/2=$_ttm_half — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
 end
 
 function _ir_validate_keys --description "Refuse deploy on _tmpfile_key collision" # _tmpfile_key collision would shadow a content-gen entry; refuse early.
@@ -2895,6 +2896,19 @@ function _vre_sysctl_runtime --description "Runtime env check: sysctl values via
     _echo
 end
 
+function _vre_vm_delegated --description "Runtime env check: CachyOS-set vm tunables (advisory; not managed by this profile)"
+    _echo "── vm tunables (CachyOS-set) ──"
+    for _key in vm.max_map_count vm.compaction_proactiveness
+        set -l _proc_path (string replace -a '.' '/' -- "$_key"); set -l _val (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim --)
+        if test -n "$_val"
+            _info "  $_key: $_val (advisory — provided by CachyOS, not managed by this profile)"
+        else
+            _info "  $_key: not readable (advisory — expected from CachyOS base)"
+        end
+    end
+    _echo
+end
+
 function _vre_tcp --description "Runtime env check: tcp_bbr module version (active bbr value verified in sysctl block)"
     _echo "── TCP congestion control ──"
     if command -q modinfo
@@ -3036,9 +3050,10 @@ function _vre_regdom --description "Runtime env check: wireless regulatory domai
     _echo
 end
 
-function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KSM/ZRAM, fstab, ntsync runtime"
+function _verify_runtime_env --description "Verify ENV_VARS, sysctl, vm-delegated, TCP, THP/KSM/ZRAM, fstab, ntsync runtime"
     _vre_envvars
     _vre_sysctl_runtime
+    _vre_vm_delegated
     _vre_tcp
     _vre_thp_ksm
     _vre_zram
@@ -4457,7 +4472,7 @@ function _rdi_summary --description "Print final install summary"
     _rdi_render_matrix
     set -q _RY_AUR_PARTIAL; and test "$_RY_AUR_PARTIAL" = true; and _warn "AUR phase completed with partial success — some packages failed (see JSONL log)"
     if set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true
-        _msg_print --force ERR "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)" # Boot-critical guidance reaches user even in QUIET.
+        _msg_print --force ERR "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)" # Force bypasses QUIET; JSONL line below retains it if stderr is post-SIGPIPE.
         _log "ERR: DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
         for _bcl in \
             "Recovery steps:" \

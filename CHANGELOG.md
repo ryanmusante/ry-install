@@ -1,5 +1,29 @@
 ry-install changelog - newest first.
 
+7.24.6 - 2026-06-09
+- style: script comment lines trimmed to vital info; 7.24.3 changelog entry condensed.
+
+7.24.5 - 2026-06-09
+- modprobe: ttm page_pool_size 12582912 -> 25165824 (equal to pages_limit).
+- preflight: ttm assert updated to page_pool_size == pages_limit.
+
+7.24.4 - 2026-06-09
+- resolved: DNSOverTLS opportunistic -> no.
+
+7.24.3 - 2026-06-09
+- fix: wifi-route case 'br[0-9]*' never matched (fish lacks [..] globs); collapse to 'br*' so NM restarts defer over wlan-backed bridges.
+- fix: --install-file boot cascade refuses a non-vfat /boot ESP fallback via shared _sdboot_fallback_vfat_ok (Phase 5 parity).
+- verify: drirc xmllint sudo-reads root-only files; nft posture unknown on sudo lapse, n/a when absent; sys_units pinned to 5.
+- check: --check stderr-silent on post-parse anomaly paths; pre-parse TMPDIR warnings remain.
+- harden: lock pidfile write/install failures emit LOCK_PIDFILE_WRITE_FAIL/INSTALL_FAIL JSONL tags.
+- run: nftables is-active probe un-wrapped from _run (no EXIT noise when inactive).
+- docs: README synced — Phase 1 NTP wording, managed-files scope, orphan sweep user dir, exit-5 note, --check pre-parse stderr, non-vfat refusal.
+- style: fish literal-bracket glob notes at the THP check and overlay case list.
+
+7.24.2 - 2026-06-09
+- fix: nftables.conf routed to _grep_ini_header via _rvc_dispatch fallthrough (an nft ruleset has no [Section]) made _ry_validate_configs fail, aborting the no-arg install at preflight config validation (EXIT_PREFLIGHT); add _grep_nft_entry (table+chain skeleton) + a *.nftables.conf dispatch case. Regression from the 7.24.0 nftables addition; --verify/--check/--install-file were unaffected (no _ry_validate_configs on those paths).
+- harden: lock stale-reclaim re-reads the pidfile immediately before rm -rf and aborts if it changed mid-pass (closes a narrow TOCTOU where two concurrent fresh starts could both acquire the lock).
+
 7.24.1 - 2026-06-09
 - docs: fix two stale inline count comments (PKGS_ADD 14->15, post-hook handlers 11->12); both lagged the 7.24.0 nftables addition. Runtime invariants, README, and functional counts were already correct — no behaviour change.
 

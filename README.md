@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.24.1 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.24.6 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -43,7 +43,7 @@ Hardware: Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 G
 
 ## Usage
 
-`--verify`/`--check` only read state; the no-arg run and `--install-file` write. `--check` compares the running `/proc/cmdline`, so a pending cmdline change reads as drift (`10`) until reboot.
+`--verify`/`--check` only read state; the no-arg run and `--install-file` write. `--check` compares the running `/proc/cmdline`, so a pending cmdline change reads as drift (`10`) until reboot. `--check` is stderr-silent after argument parsing; pre-parse environment warnings (an invalid `TMPDIR`, for example) can still print.
 
 | Flag | Action |
 |---|---|
@@ -55,7 +55,7 @@ Hardware: Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 G
 | `--country=XX` | Wireless regdom (ISO-3166-1 alpha-2; default `US`; UK is `GB`) |
 | `-h, --help` · `-v, --version` | Help · Version |
 
-`--install-file` of a boot config (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade; non-boot post-hook failures stay exit 0.
+`--install-file` of a boot config (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade (which refuses a non-vfat `/boot` ESP fallback, exit 4); non-boot post-hook failures stay exit 0.
 
 > [!NOTE]
 > `--verify` is exhaustive: beyond the 16 managed files (byte-for-byte) and boot/service state, it also checks runtime state the installer does not itself write — `ntsync` (built-in/loaded), THP/KSM/ZRAM, the active `tcp_bbr` module, drirc XML well-formedness (`xmllint`), ext4 fstab mount options, the CachyOS-provided `vm.max_map_count` / `vm.compaction_proactiveness` (advisory), and boot time against a 15 s target.
@@ -65,15 +65,15 @@ Hardware: Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 G
 
 ## Install Flow
 
-A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 rebuild; the advisory AUR phase never taints. Phase 3 writes are atomic renames; phases 1/5/6 write no files.
+A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 rebuild; the advisory AUR phase never taints. Phase 3 writes are atomic renames; phases 1/5/6 write no managed files (Phase 5 regenerates `/boot` artifacts via `mkinitcpio`/`sdboot-manage`).
 
 | # | Phase | Action |
 |---|---|---|
-| 1 | Preflight | runtime invariants (CPU / array-count / key-collision) → instance lock (exit 5 on contention) → hard-requirement + free-space gates. Read-only; any failure aborts before a write. |
+| 1 | Preflight | runtime invariants (CPU / array-count / key-collision) → instance lock (exit 5 on contention) → hard-requirement + free-space gates. Read-only apart from a non-fatal NTP repair (enables `systemd-timesyncd` when the clock is unsynced); any hard failure aborts before a managed write. |
 | 2 | Packages | `pacman -Syu --needed` → AUR via `paru` → index refresh (`updatedb`/`pkgfile`). `mkinitcpio.conf` is pre-deployed **before** `-Syu`. A transient failure retries once with `-Syyu` (forced db refresh + full upgrade). |
 | 3 | Configuration | deploy the 16 embedded files atomically (four boot configs feed Phase 5) |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regdom |
-| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate. |
+| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate. A non-vfat `/boot` ESP fallback refuses sdboot. |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` → NetworkManager restart (deferred on active Wi-Fi) |
 
 `iwd`/`mesa`/`cpupower`/`iw`/`rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`, only an all-package failure is `FAIL` (with a single AUR package, any failure is therefore `FAIL`, exit 1). `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
@@ -130,12 +130,12 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 
 | Config | Settings |
 |---|---|
-| systemd-resolved | `MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=opportunistic`, `DNSSEC=allow-downgrade` |
+| systemd-resolved | `MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` |
 | systemd-logind | `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `…LongPress`) = `ignore` |
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
 | NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2`, `[logging] level=WARN` |
 | cpupower | `GOVERNOR=performance` (amd_pstate=active → EPP locked to performance; no ppd needed) |
-| amdgpu/ttm | `pages_limit=25165824`/`page_pool_size=12582912` (GTT ~96 GiB; pool = ½ limit; set BIOS UMA/GMA=512 MB) |
+| amdgpu/ttm | `pages_limit=25165824`/`page_pool_size=25165824` (GTT ~96 GiB; pool = limit; set BIOS UMA/GMA=512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
 | udev | NVMe whole-disk I/O scheduler → `none` |
 | wireless regdom | `COUNTRY=US` (override `--country=XX`), applied in Phase 4 |
@@ -218,7 +218,7 @@ Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-confi
 | Code | Meaning |
 |---|---|
 | `0` / `1` / `2` | success / verify-FAIL or install-error / usage (incl. root-refused) |
-| `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock |
+| `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock (contention or lock-dir I/O — the JSONL log disambiguates) |
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, …) |
 | `11` / `12` / `13` / `251` / `250` / `255` | internal sentinels — gen-nofn/nouuid/sysctl, `_run` tmpfile-alloc, `_as`/`_run` arg-misuse; **never a process exit** (surfaced in JSONL `gen_fail`; collapses to `1` install/verify, `3` `--check`) |
@@ -270,7 +270,7 @@ Most clear up with a DKMS package; MT7925 TX-power/deauth and Strix Halo ACP aud
 | Boot failure | live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
 | Initramfs rebuild refused | fix the cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
 | `--verify` drift | `./ry-install.fish --install-file /etc/...` |
-| `.ry-install.*` orphan | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete`, then re-run |
+| `.ry-install.*` orphan | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete; find ~/.config/environment.d -xdev -name '.ry-install.*' -delete`, then re-run |
 | Lock held, no live PID | `rm -rf ~/ry-install/.lock`; re-run |
 | PipeWire / ddcutil permission denied | `sudo usermod -aG realtime,i2c $USER`, re-login |
 

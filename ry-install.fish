@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.24.1 (2026-06-09) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.24.6 (2026-06-09) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.24.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.24.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -276,6 +276,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
         test -n "$_pid_tmp"; and command rm -f -- "$_pid_tmp" 2>/dev/null
         command rmdir -- "$LOCK_DIR" 2>/dev/null
         set --erase _RY_LOCK_DIR_OWNED
+        _log "LOCK_PIDFILE_WRITE_FAIL: $LOCK_FILE"
         echo "[ERR] Failed to write lock pid file: $LOCK_FILE" >&2
         _pre_dispatch_log_cleanup
         return 1
@@ -284,6 +285,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
         command rm -f -- "$_pid_tmp" 2>/dev/null
         command rmdir -- "$LOCK_DIR" 2>/dev/null
         set --erase _RY_LOCK_DIR_OWNED
+        _log "LOCK_PIDFILE_INSTALL_FAIL: $LOCK_FILE"
         echo "[ERR] Failed to install lock pid file: $LOCK_FILE" >&2
         _pre_dispatch_log_cleanup
         return 1
@@ -310,6 +312,8 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
         end
         functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR attempt=$_reclaim_attempt (PID not running, reclaiming)"
         if test -L "$LOCK_DIR"; functions -q _log; and _log "LOCK_RECLAIM_REFUSED: $LOCK_DIR is a symlink"; return 1; end
+        set -l _recheck_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --) # Re-read pidfile right before rm: abort if another instance reclaimed mid-pass (TOCTOU narrowing).
+        if test "$_recheck_pid" != "$_stale_pid"; functions -q _log; and _log "LOCK_RECLAIM_ABORT: pidfile changed mid-pass ('$_stale_pid' → '$_recheck_pid') — another instance active"; return 1; end
         command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
         _acquire_lock_fresh
         set -l _re_rc $status
@@ -390,7 +394,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
     set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_FSTAB_EVIDENCE
-    set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE
+    set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE _RY_SDBOOT_REFUSE_FS
 end
 
 function _dc_kill_children --description "_do_cleanup sub. Release lock + reap child PIDs (pkill -P, then SIGKILL after grace)" # TERM → 0.5s grace → KILL; lets long pkg/boot ops flush first.
@@ -450,7 +454,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     set -g _CLEANUP_DONE true; set -l _sig_label SIG$argv[1]
     string match -q 'SIG*' -- "$argv[1]"; and set _sig_label "$argv[1]"
     test -z "$argv[1]"; and set _sig_label exit
-    if not set -q _RY_OUTPUT_BROKEN
+    if not set -q _RY_OUTPUT_BROKEN; and test "$MODE" != check # --check stays stderr-silent; JSONL records the interrupt.
         echo "" >&2
         echo "[WARN] Caught $_sig_label - cleaning up..." >&2
     end
@@ -550,7 +554,7 @@ set -g MKINITCPIO_HOOKS \
     fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
-set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT opportunistic; set -g RESOLVED_DNSSEC allow-downgrade # systemd-resolved drop-in keys (RESOLVED_*).
+set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade # systemd-resolved drop-in keys (RESOLVED_*).
 set -g COUNTRY US # COUNTRY: wireless regdom; default US, override --country=XX.
 # _RY_ISO3166_ALPHA2: assigned ISO-3166-1 alpha-2 codes for --country validation.
 set -g _RY_ISO3166_ALPHA2 \
@@ -657,7 +661,7 @@ set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2
 set -g BOOT_TIME_TARGET 15
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 set -g TTM_PAGES_LIMIT 25165824
-set -g TTM_PAGE_POOL_SIZE 12582912
+set -g TTM_PAGE_POOL_SIZE 25165824
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ─────────────────────────────
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
@@ -738,7 +742,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — README/script desync, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
-    set -l _ttm_half (math --scale=0 "$TTM_PAGES_LIMIT / 2"); if test "$TTM_PAGE_POOL_SIZE" -ne "$_ttm_half"; _err_loud "TTM_PAGE_POOL_SIZE=$TTM_PAGE_POOL_SIZE must equal TTM_PAGES_LIMIT/2=$_ttm_half — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if test "$TTM_PAGE_POOL_SIZE" -ne "$TTM_PAGES_LIMIT"; _err_loud "TTM_PAGE_POOL_SIZE=$TTM_PAGE_POOL_SIZE must equal TTM_PAGES_LIMIT=$TTM_PAGES_LIMIT — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
 end
 
 function _ir_validate_keys --description "Refuse deploy on _tmpfile_key collision" # _tmpfile_key collision would shadow a content-gen entry; refuse early.
@@ -1828,6 +1832,19 @@ function _grep_udev_entry --argument-names dst --description 'Validate ≥1 udev
     return 0
 end
 
+function _grep_nft_entry --argument-names dst --description 'Validate nftables ruleset skeleton (table + chain); loaded via nft -f, not INI' # nft ruleset has no [Section]; real syntax gate is nft -c at deploy (_post_nft) + service start.
+    test (count $argv) -lt 2; and _log "BUG: _grep_nft_entry called without content (dst=$dst)"; and return 2
+    string match -qre '^[[:space:]]*table[[:space:]]+\S' -- $argv[2..-1]; or begin
+        _fail "  $dst: no nftables 'table <family> <name>' declaration found"
+        return 1
+    end
+    string match -qre '^[[:space:]]*chain[[:space:]]+\S' -- $argv[2..-1]; or begin
+        _fail "  $dst: no nftables 'chain' declaration found"
+        return 1
+    end
+    return 0
+end
+
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family" # Per-format validator; mkinitcpio/env/cpupower covered by their own validators.
     set -l _content $argv[2..-1]
     switch "$dst"
@@ -1845,6 +1862,8 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_regdomain_entry "$dst" $_content
         case '*/udev/rules.d/*'
             _grep_udev_entry "$dst" $_content
+        case '*/nftables.conf'
+            _grep_nft_entry "$dst" $_content
         case '*/mkinitcpio.conf' '*/environment.d/*' '*/default/cpupower-service.conf'
             return 0
         case '*'
@@ -2795,6 +2814,7 @@ end
 
 function _vrsv_sys_units --description "Runtime services check: 5-unit batch"
     set -l sys_units fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service NetworkManager.service cpupower.service; set -l parsed
+    if test (count $sys_units) -ne 5; _warn "  BUG: sys_units count drift (got "(count $sys_units)" expected 5) — skipping unit batch"; _log "SYS_UNITS_COUNT_DRIFT: got="(count $sys_units)" expected=5"; return 0; end # parsed[1..5] requires the pinned 5-unit order.
     for _u in $sys_units; set -l _v (_unit_state_padded $_u); set -a parsed "$_v[1]:$_v[2]:$_v[3]"; end
     _vrsv_chk_active_enabled fstrim.timer "$parsed[1]"
     _vrsv_chk_resolved "$parsed[2]"
@@ -2857,7 +2877,15 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state
         end
     end
     set -l _ufw (command systemctl is-active ufw.service 2>/dev/null | string trim --)
-    set -l _nft 0; command -q nft; and set _nft (_as true nft -a list ruleset 2>/dev/null | command grep -E -- '# handle [0-9]+$' | command grep -cvE -- '\{ # handle [0-9]+$')
+    set -l _nft n/a # n/a = nft absent, unknown = sudo lapse, else live rule count.
+    if command -q nft
+        if sudo -n true 2>/dev/null
+            set _nft (_as true nft -a list ruleset 2>/dev/null | command grep -E -- '# handle [0-9]+$' | command grep -cvE -- '\{ # handle [0-9]+$')
+            string match -qr '^\d+$' -- "$_nft"; or set _nft unknown
+        else
+            set _nft unknown
+        end
+    end
     _info "  firewall posture: ufw=$_ufw nft_rules=$_nft"
 end
 
@@ -2952,7 +2980,7 @@ end
 
 function _vre_thp_ksm --description "Runtime env check: THP enabled/defrag + KSM"
     _echo "── THP / KSM / ZRAM ──"
-    for _kv in 'enabled:[always]:always:CachyOS default' 'defrag:[defer+madvise]:defer+madvise:'
+    for _kv in 'enabled:[always]:always:CachyOS default' 'defrag:[defer+madvise]:defer+madvise:' # fish [..] is literal — "*[always]*" matches the active marker.
         set -l _parts (string split ':' -- "$_kv"); set -l _f /sys/kernel/mm/transparent_hugepage/$_parts[1]
         test -f "$_f"; or continue
         set -l _val (command cat -- "$_f" 2>/dev/null)
@@ -3194,20 +3222,21 @@ function _vrs_vulkan --description "Runtime session check: Vulkan driver package
     test (count $_vk_missing_list) -gt 0; and _info "  Install missing: sudo pacman -S --needed $_vk_missing_list"
 end
 
-function _vrs_drirc_xml --description "Runtime session check: drirc XML well-formedness via xmllint"
+function _vrs_drirc_xml --description "Runtime session check: drirc XML well-formedness via xmllint (sudo read fallback)"
     _echo
     _echo "── drirc XML (well-formedness) ──"
-    if command -q xmllint
-        if not begin; test -r /etc/drirc.d/95-ry-radv-apu.conf; or sudo -n test -r /etc/drirc.d/95-ry-radv-apu.conf 2>/dev/null; end
-            _fail "  drirc: /etc/drirc.d/95-ry-radv-apu.conf NOT FOUND"
-        else if xmllint --noout /etc/drirc.d/95-ry-radv-apu.conf 2>/dev/null
-            _ok "  drirc XML well-formed (xmllint)"
-        else
-            _fail "  drirc XML malformed (xmllint --noout failed)"
-        end
-    else
-        _info "  xmllint absent — drirc XML well-formedness not checked"
+    if not command -q xmllint; _info "  xmllint absent — drirc XML well-formedness not checked"; return 0; end
+    set -l _drc /etc/drirc.d/95-ry-radv-apu.conf
+    if test -r "$_drc"
+        if xmllint --noout "$_drc" 2>/dev/null; _ok "  drirc XML well-formed (xmllint)"; else; _fail "  drirc XML malformed (xmllint --noout failed)"; end
+        return 0
     end
+    if sudo -n test -r "$_drc" 2>/dev/null # Root-only readable: sudo-validate, don't misreport as malformed.
+        if sudo -n xmllint --noout "$_drc" 2>/dev/null; _ok "  drirc XML well-formed (xmllint via sudo; file not user-readable)"; else; _fail "  drirc XML malformed (xmllint --noout failed via sudo)"; end
+        return 0
+    end
+    if not sudo -n true 2>/dev/null; _warn "  drirc: sudo cache lapsed — cannot read $_drc"; return 0; end
+    _fail "  drirc: $_drc NOT FOUND"
 end
 
 function _vrs_boot_perf --description "Runtime session check: systemd-analyze boot time + slowest services"
@@ -3323,7 +3352,7 @@ function _is_wifi_active_route --description "True if default route exits via wi
     test -z "$_def_iface"; and return 1
     test -d "/sys/class/net/$_def_iface/wireless"; and return 0
     switch "$_def_iface"
-        case 'tun*' 'tap*' 'wg*' 'ppp*' 'gre*' 'gretap*' 'sit*' 'ip6tnl*' 'ipip*' 'br[0-9]*' 'br-*' 'bridge*' 'macvlan*' 'macvtap*' 'vlan*' 'bond*' 'geneve*' 'vxlan*' 'nlmon*'
+        case 'tun*' 'tap*' 'wg*' 'ppp*' 'gre*' 'gretap*' 'sit*' 'ip6tnl*' 'ipip*' 'br*' 'macvlan*' 'macvtap*' 'vlan*' 'bond*' 'geneve*' 'vxlan*' 'nlmon*' # fish lacks [..] globs; 'br*' covers all bridges.
             for _phy in /sys/class/net/*/wireless
                 test -d "$_phy"; or continue
                 set -l _name (command basename -- (command dirname -- "$_phy")); set -l _state (command cat -- "/sys/class/net/$_name/operstate" 2>/dev/null | string trim --)
@@ -4115,6 +4144,17 @@ function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, 
     printf '%s' "$_p"
 end
 
+function _sdboot_fallback_vfat_ok --description "Refuse sdboot when ESP fell back to a non-vfat /boot (rc 0=ok 1=refuse)" # Non-vfat /boot fallback = foreign bootloader.
+    set -q _RY_ESP_FALLBACK; and test "$_RY_ESP_FALLBACK" = true; or return 0
+    set -l _boot_fs (command findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
+    if test "$_boot_fs" = vfat; return 0; end
+    set -g _RY_SDBOOT_REFUSE_FS "$_boot_fs"
+    _err "Refusing sdboot-manage: ESP autodetect fell back to /boot but /boot is not vfat (fstype=$_boot_fs)"
+    _err "  ry-install targets systemd-boot. Detected non-systemd-boot bootloader — aborting."
+    _log "SDBOOT_APPLY_REFUSED: esp_fallback=true boot_fstype=$_boot_fs"
+    return 1
+end
+
 # ── BOOT SANITY: ENTRIES + KERNEL/INITRAMFS PROBES + SIZE SCAN ────────────────────────────────────
 function _enum_boot_entries --argument-names esp --description "Enumerate \$esp/loader/entries/*.conf"
     set -g _RY_BOOT_ENUM_OK true
@@ -4184,16 +4224,10 @@ function _irb_skip_post_mki --description "Record SKIP rows for sdboot-gen, sdbo
 end
 
 function _irb_sdboot_apply --description "Run sdboot-manage gen + update" # Refuse sdboot on non-vfat /boot fallback: sdboot targets EFI.
-    if set -q _RY_ESP_FALLBACK; and test "$_RY_ESP_FALLBACK" = true
-        set -l _boot_fs (command findmnt -n -o FSTYPE /boot 2>/dev/null | string trim --)
-        if test "$_boot_fs" != vfat
-            _err "Refusing sdboot-manage: ESP autodetect fell back to /boot but /boot is not vfat (fstype=$_boot_fs)"
-            _err "  ry-install targets systemd-boot. Detected non-systemd-boot bootloader — aborting."
-            _log "SDBOOT_APPLY_REFUSED: esp_fallback=true boot_fstype=$_boot_fs"
-            _phase_record "Boot: sdboot-manage gen" FAIL "ESP fallback to /boot not vfat (fstype=$_boot_fs)"
-            _phase_record "Boot: sdboot-manage update" SKIP "aborted"
-            return $EXIT_BOOT_CRIT
-        end
+    if not _sdboot_fallback_vfat_ok
+        _phase_record "Boot: sdboot-manage gen" FAIL "ESP fallback to /boot not vfat (fstype=$_RY_SDBOOT_REFUSE_FS)"
+        _phase_record "Boot: sdboot-manage update" SKIP "aborted"
+        return $EXIT_BOOT_CRIT
     end
     if not _run sudo -n sdboot-manage gen
         _err "Sdboot-manage gen failed"
@@ -4655,6 +4689,7 @@ end
 # ── --INSTALL-FILE: POST-HOOK HANDLERS (12, _post_<tag> dynamic dispatch) ─────────────────────────
 function _pb_rebuild_cascade --argument-names target --description "_post_boot sub. mkinitcpio -P + sdboot-manage cascade"
     if not _run sudo -n mkinitcpio -P; _err "Mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
+    if not _sdboot_fallback_vfat_ok; _log "POST_BOOT_SDBOOT_REFUSED: target=$target"; return $EXIT_BOOT_CRIT; end
     if test "$SDBOOT_REMOVE_EXISTING" = yes
         set -l _boot (_resolve_boot_path)
         if test -z "$_boot"
@@ -4782,7 +4817,7 @@ function _post_nft --argument-names target --description "Post-hook: validate + 
         _warn "nftables ruleset failed validation (nft -c) — not reloaded; fix /etc/nftables.conf"
         return 0
     end
-    if _run sudo -n systemctl is-active --quiet nftables.service
+    if sudo -n systemctl is-active --quiet nftables.service 2>/dev/null # Bare probe: avoids _run EXIT noise when inactive.
         _run sudo -n systemctl reload nftables.service; or _warn "nftables reload failed (applies when service starts)"
     end
     return 0
@@ -4903,16 +4938,16 @@ if test -f "$old_log"; and test "$old_log" != "$new_log"
     if not command mv -- "$old_log" "$new_log" 2>/dev/null
         if command cp -p -- "$old_log" "$new_log" 2>/dev/null
             command rm -f -- "$old_log" 2>/dev/null
-            echo "[WARN] Log rename via mv failed; recovered via cp+rm: $old_log -> $new_log" >&2
+            test "$MODE" != check; and echo "[WARN] Log rename via mv failed; recovered via cp+rm: $old_log -> $new_log" >&2
         else
             set _log_rename_ok false
             not set -q _RY_LOG_WRITE_FAIL; and set -g _RY_LOG_WRITE_FAIL true
-            echo "[WARN] Log rename failed (mv and cp both): $old_log -> $new_log (keeping old path)" >&2
+            test "$MODE" != check; and echo "[WARN] Log rename failed (mv and cp both): $old_log -> $new_log (keeping old path)" >&2
         end
     end
 end
 test "$_log_rename_ok" = true; and set -g LOG_FILE "$new_log"
-if test -L "$LOG_FILE"; command rm -f -- "$LOG_FILE" 2>/dev/null; echo "[WARN] Pre-existing LOG_FILE was a symlink — removed; will re-create with 0600" >&2; end
+if test -L "$LOG_FILE"; command rm -f -- "$LOG_FILE" 2>/dev/null; test "$MODE" != check; and echo "[WARN] Pre-existing LOG_FILE was a symlink — removed; will re-create with 0600" >&2; end
 if not test -f "$LOG_FILE"
     set -l _prev_umask (umask)
     umask 0177
@@ -4971,6 +5006,6 @@ switch $MODE
 end
 
 _write_footer "$_RY_EXIT_CODE" ""
-set -q _RY_LOG_WRITE_FAIL; and test "$_RY_LOG_WRITE_FAIL" = true; and echo "[WARN] Log writes failed during this run — JSONL may be incomplete (check disk space / file permissions on $LOG_FILE)" >&2
+set -q _RY_LOG_WRITE_FAIL; and test "$_RY_LOG_WRITE_FAIL" = true; and test "$MODE" != check; and echo "[WARN] Log writes failed during this run — JSONL may be incomplete (check disk space / file permissions on $LOG_FILE)" >&2
 test "$MODE" != check; and not set -q _RY_LOG_WRITE_FAIL; and echo "[INFO] Log file: $LOG_FILE" >&2
 exit $_RY_EXIT_CODE

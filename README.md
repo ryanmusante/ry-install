@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.23.2 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.24.1 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -26,6 +26,8 @@ chmod +x ry-install.fish
 ## Requirements
 
 Hard requirements abort read-only in preflight (exit 3); `paru`, `pacman-contrib`, and NTP sync only warn.
+
+Recommended: enable the Zen 5 / AVX-512 repos (`cachyos-znver4`, `cachyos-core-znver4`, `cachyos-extra-znver4`) ordered above `[core]`/`[extra]`.
 
 | Requirement | Minimum |
 |---|---|
@@ -56,7 +58,7 @@ Hardware: Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 G
 `--install-file` of a boot config (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade; non-boot post-hook failures stay exit 0.
 
 > [!NOTE]
-> `--verify` is exhaustive: beyond the 15 managed files (byte-for-byte) and boot/service state, it also checks runtime state the installer does not itself write — `ntsync` (built-in/loaded), THP/KSM/ZRAM, the active `tcp_bbr` module, drirc XML well-formedness (`xmllint`), ext4 fstab mount options, the CachyOS-provided `vm.max_map_count` / `vm.compaction_proactiveness` (advisory), and boot time against a 15 s target.
+> `--verify` is exhaustive: beyond the 16 managed files (byte-for-byte) and boot/service state, it also checks runtime state the installer does not itself write — `ntsync` (built-in/loaded), THP/KSM/ZRAM, the active `tcp_bbr` module, drirc XML well-formedness (`xmllint`), ext4 fstab mount options, the CachyOS-provided `vm.max_map_count` / `vm.compaction_proactiveness` (advisory), and boot time against a 15 s target.
 
 > [!CAUTION]
 > A boot-cascade failure during `--install-file` exits 4 — **do not reboot** until it succeeds.
@@ -69,7 +71,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 |---|---|---|
 | 1 | Preflight | runtime invariants (CPU / array-count / key-collision) → instance lock (exit 5 on contention) → hard-requirement + free-space gates. Read-only; any failure aborts before a write. |
 | 2 | Packages | `pacman -Syu --needed` → AUR via `paru` → index refresh (`updatedb`/`pkgfile`). `mkinitcpio.conf` is pre-deployed **before** `-Syu`. A transient failure retries once with `-Syyu` (forced db refresh + full upgrade). |
-| 3 | Configuration | deploy the 15 embedded files atomically (four boot configs feed Phase 5) |
+| 3 | Configuration | deploy the 16 embedded files atomically (four boot configs feed Phase 5) |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regdom |
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate. |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` → NetworkManager restart (deferred on active Wi-Fi) |
@@ -101,7 +103,7 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 
 | Action | Packages |
 |---|---|
-| Install (14) | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil` |
+| Install (15) | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil`, `nftables` |
 | AUR (1) | `mkinitcpio-firmware` |
 | Remove (8) | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update` |
 
@@ -132,8 +134,8 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 | systemd-logind | `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `…LongPress`) = `ignore` |
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
 | NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2`, `[logging] level=WARN` |
-| cpupower | `GOVERNOR=powersave` |
-| amdgpu/ttm | `pages_limit=8388608`/`page_pool_size=4194304` (caps GTT at 32 GiB; pool = ½ limit) |
+| cpupower | `GOVERNOR=performance` (amd_pstate=active → EPP locked to performance; no ppd needed) |
+| amdgpu/ttm | `pages_limit=25165824`/`page_pool_size=12582912` (GTT ~96 GiB; pool = ½ limit; set BIOS UMA/GMA=512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
 | udev | NVMe whole-disk I/O scheduler → `none` |
 | wireless regdom | `COUNTRY=US` (override `--country=XX`), applied in Phase 4 |
@@ -170,7 +172,9 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 | Set | Units |
 |---|---|
 | Masked (11) | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
-| Enabled (3) | `fstrim.timer`, `NetworkManager.service`, `cpupower.service` (+ `NetworkManager-dispatcher.service` if installed) |
+| Enabled (4) | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service` (+ `NetworkManager-dispatcher.service` if installed) |
+
+`power-profiles-daemon.service` is intentionally masked; with `GOVERNOR=performance` applied globally, per-launch profile switching (CachyOS `game-performance`) is unnecessary and not relied upon. `gamemoderun` remains available for non-CPU niceties.
 
 ## Managed Files
 
@@ -192,6 +196,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 | `/etc/modprobe.d/ry-amdgpu-strixhalo.conf` | `0644` |
 | `/etc/iw-regdomain` | `0644` |
 | `/etc/udev/rules.d/60-ry-ioschedulers.rules` | `0644` |
+| `/etc/nftables.conf` | `0644` |
 | `~/.config/environment.d/10-environment.conf` | `0600` |
 
 ## Safety & Reliability
@@ -199,7 +204,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. Post-write re-read and auto-restore cover backup-targets; fstab has `findmnt --verify` gate and `.ry.bak`.
 
 > [!WARNING]
-> This profile **disables and masks the host firewall** (`ufw`) on a trusted-LAN assumption — no host packet filtering after install. `--verify` reports its state.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset (`/etc/nftables.conf`, `nftables.service`): established/related, loopback, and ICMP are allowed, all other inbound is dropped, output is unrestricted. No inbound ports are opened by default — add them to the ruleset as needed. `--verify` reports its state.
 
 | Feature | Detail |
 |---|---|

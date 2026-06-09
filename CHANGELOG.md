@@ -1,5 +1,15 @@
 ry-install changelog - newest first.
 
+7.24.1 - 2026-06-09
+- docs: fix two stale inline count comments (PKGS_ADD 14->15, post-hook handlers 11->12); both lagged the 7.24.0 nftables addition. Runtime invariants, README, and functional counts were already correct — no behaviour change.
+
+7.24.0 - 2026-06-08
+- cpupower: governor powersave -> performance (amd_pstate=active pins EPP=performance; no EPP rule, no ppd).
+- modprobe: ttm pages_limit 8388608 -> 25165824 (~96 GiB), page_pool_size 4194304 -> 12582912 (BIOS UMA=512 MB).
+- security: add nftables default-deny-inbound (nftables pkg + /etc/nftables.conf + nftables.service; ufw stays masked); PKGS_ADD 14->15, EXPECTED_SERVICES 3->4, managed files 15->16, post-hooks 16->17.
+- services: ppd stays masked and unused; governor=performance is global, so game-performance/ppd are moot.
+- docs: recommend cachyos-znver4 (Zen5/AVX-512) repos.
+
 7.23.2 - 2026-06-08
 - services: record regdom phase row in the run-summary matrix.
 

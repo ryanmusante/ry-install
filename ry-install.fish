@@ -1,14 +1,14 @@
 #!/usr/bin/env fish
-# ry-install v7.23.2 (2026-06-08) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.24.1 (2026-06-09) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.23.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.24.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 15
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 16
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs (cachyos-settings/wine-cachyos); /etc overrides.
 
@@ -511,7 +511,8 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/drirc.d/95-ry-radv-apu.conf" \
     "/etc/modprobe.d/ry-amdgpu-strixhalo.conf" \
     "/etc/iw-regdomain" \
-    "/etc/udev/rules.d/60-ry-ioschedulers.rules"
+    "/etc/udev/rules.d/60-ry-ioschedulers.rules" \
+    "/etc/nftables.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -582,7 +583,7 @@ set -g LOGIND_IGNORE_KEYS \
     HandleRebootKeyLongPress
 set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd # Network/power keys: iwd (IWD_*), NetworkManager (NM_*), cpupower governor.
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
-set -g CPUPOWER_GOVERNOR powersave
+set -g CPUPOWER_GOVERNOR performance
 
 # ENV_VARS (10, enforced) -> ~/.config/environment.d (gaming/Vulkan).
 set -g ENV_VARS \
@@ -605,7 +606,7 @@ set -g SYSCTL_VALUES \
     "net.ipv4.tcp_notsent_lowat=16384" \
     "net.ipv4.tcp_slow_start_after_idle=0"
 
-# PKGS_ADD (14, enforced) -> pacman -Syu --needed (Phase 2).
+# PKGS_ADD (15, enforced) -> pacman -Syu --needed (Phase 2).
 set -g PKGS_ADD \
     nvme-cli \
     cachyos-gaming-meta \
@@ -620,7 +621,8 @@ set -g PKGS_ADD \
     git-delta \
     lm_sensors \
     realtime-privileges \
-    ddcutil
+    ddcutil \
+    nftables
 # Opt-in: append shelly to PKGS_DEL + bump invariant 8→9 (CachyOS Shelly pkg mgr).
 set -g PKGS_DEL \
     plymouth \
@@ -648,14 +650,14 @@ set -g MASK \
     hibernate.target \
     hybrid-sleep.target \
     suspend-then-hibernate.target
-set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service # EXPECTED_SERVICES (3, enforced) -> enabled + verified (Phase 4/6).
+set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # EXPECTED_SERVICES (4, enforced) -> enabled + verified (Phase 4/6).
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # Thresholds: disk, boot-time, CPU match, TTM GTT caps.
 set -g BOOT_TIME_TARGET 15
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
-set -g TTM_PAGES_LIMIT 8388608
-set -g TTM_PAGE_POOL_SIZE 4194304
+set -g TTM_PAGES_LIMIT 25165824
+set -g TTM_PAGE_POOL_SIZE 12582912
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ─────────────────────────────
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
@@ -716,13 +718,13 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:10 \
         SYSCTL_VALUES:6 \
-        PKGS_ADD:14 \
+        PKGS_ADD:15 \
         PKGS_DEL:8 \
         MASK:11 \
         EXPECTED_VULKAN_PKGS:2 \
-        EXPECTED_SERVICES:3 \
+        EXPECTED_SERVICES:4 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:16 \
+        _RY_POST_HOOKS:17 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         AUR_PKGS:1 \
         _RY_PHASE_NAMES:6 \
@@ -730,7 +732,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         _RY_NTSYNC_MODLOAD_CONFS:3 \
         _RY_ISO3166_ALPHA2:249 \
         _RY_TMPDIR_GLOBS:6 \
-        SYSTEM_DESTINATIONS:14 \
+        SYSTEM_DESTINATIONS:15 \
         USER_DESTINATIONS:1
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -790,7 +792,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
 end
 
-# ── CONTENT GENERATORS (15; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
+# ── CONTENT GENERATORS (16; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -851,6 +853,25 @@ end
 
 function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
+end
+
+function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset" # ufw masked; this is the active host firewall.
+    printf '%s\n' \
+        "#!/usr/bin/nft -f" \
+        "# ry-install: minimal default-deny-inbound (ufw masked). No inbound ports open by default — add them below." \
+        "flush ruleset" \
+        "table inet filter {" \
+        "    chain input {" \
+        "        type filter hook input priority filter; policy drop;" \
+        "        ct state established,related accept" \
+        "        iif \"lo\" accept" \
+        "        ct state invalid drop" \
+        "        ip protocol icmp accept" \
+        "        ip6 nexthdr ipv6-icmp accept" \
+        "    }" \
+        "    chain forward { type filter hook forward priority filter; policy drop; }" \
+        "    chain output { type filter hook output priority filter; policy accept; }" \
+        "}"
 end
 
 function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in" # Malformed entries → _RY_SYSCTL_BAD_ENTRIES; count mismatch → EXIT_GEN_SYSCTL.
@@ -2208,6 +2229,11 @@ function _vss_drirc --description "_verify_static_system sub: RADV drirc"
     _chk_grep /etc/drirc.d/95-ry-radv-apu.conf 'value="true"' 'unified_heap value=true'
 end
 
+function _vss_nft --description "_verify_static_system sub: nftables default-deny-inbound"
+    _chk_file /etc/nftables.conf; or return 0
+    _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
+end
+
 function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, iwd, NM, cpupower-service.conf, sysctl"
     _echo "SYSTEM CONFIGURATION"
     _vss_ntsync_modules
@@ -2228,6 +2254,8 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _vss_modprobe
     _vss_udev
     _vss_drirc
+    _echo "── nftables ──"
+    _vss_nft
 end
 
 function _verify_static_user --description "Verify environment.d ENV_VARS"
@@ -2581,15 +2609,15 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
         set -l cpu_name (string replace -r '.*/cpu(\d+)/.*' 'cpu$1' -- "$_CPU_PATH")
         _info "  Checking $cpu_name (representative)"
         for check in "scaling_driver:amd-pstate-epp:Scaling driver" \
-            "scaling_governor:powersave:Governor" # Driver + governor are profile-managed.
+            "scaling_governor:performance:Governor" # Driver + governor are profile-managed.
             set -l parts (string split ':' -- "$check"); set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
             _chk_eq "$parts[3]" "$sysfs_val" "$parts[2]"
         end
-        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # EPP not profile-managed; advisory (powersave default = balance_performance).
-        if test "$_epp" = balance_performance
-            _ok "  EPP: $_epp"
-        else if test -n "$_epp"
-            _info "  EPP: $_epp (advisory — not set by this profile; kernel default for powersave is balance_performance)"
+        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # EPP forced to performance by the performance governor under amd_pstate=active.
+        if test -n "$_epp"
+            _chk_eq "EPP" "$_epp" performance
+        else
+            _info "  EPP: unreadable"
         end
     end
     _echo
@@ -4564,7 +4592,8 @@ set -g _RY_POST_HOOKS \
     "/etc/drirc.d/*|drirc" \
     "/etc/modprobe.d/*|modprobe" \
     "/etc/iw-regdomain|regdom" \
-    "/etc/udev/rules.d/*|udev"
+    "/etc/udev/rules.d/*|udev" \
+    "/etc/nftables.conf|nft"
 
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path" # First-match-wins by declaration order.
     for _entry in $_RY_POST_HOOKS
@@ -4623,7 +4652,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (11, _post_<tag> dynamic dispatch) ─────────────────────────
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (12, _post_<tag> dynamic dispatch) ─────────────────────────
 function _pb_rebuild_cascade --argument-names target --description "_post_boot sub. mkinitcpio -P + sdboot-manage cascade"
     if not _run sudo -n mkinitcpio -P; _err "Mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     if test "$SDBOOT_REMOVE_EXISTING" = yes
@@ -4727,7 +4756,7 @@ function _post_cpupower --argument-names target --description "Post-hook: restar
     _echo
     if not _run sudo -n systemctl restart cpupower.service
         _warn "cpupower.service restart failed — governor change applies on next boot (non-fatal; file deployed)"
-        _info "  Under amd_pstate=active + governor=powersave, EPP is configurable independently (kernel default: balance_performance)"
+        _info "  Under amd_pstate=active + governor=performance, EPP is pinned to performance on next boot"
         return 0
     end
     return 0
@@ -4743,6 +4772,18 @@ function _post_modprobe --argument-names target --description "Post-hook: rebuil
         _warn "mkinitcpio -P failed — module options not in initramfs until next rebuild (non-fatal; file deployed, existing initramfs intact)"
         _info "  Retry: sudo mkinitcpio -P"
         return 0
+    end
+    return 0
+end
+
+function _post_nft --argument-names target --description "Post-hook: validate + (if active) reload nftables ruleset" # enable --now (Phase 4) applies it on first install.
+    _echo
+    if not _run sudo -n nft -c -f /etc/nftables.conf
+        _warn "nftables ruleset failed validation (nft -c) — not reloaded; fix /etc/nftables.conf"
+        return 0
+    end
+    if _run sudo -n systemctl is-active --quiet nftables.service
+        _run sudo -n systemctl reload nftables.service; or _warn "nftables reload failed (applies when service starts)"
     end
     return 0
 end

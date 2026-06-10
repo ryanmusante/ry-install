@@ -1,11 +1,20 @@
 ry-install changelog - newest first.
 
+7.25.0 - 2026-06-09
+- cpupower: governor performance -> powersave; EPP no longer pinned, --verify reports EPP as advisory.
+- cmdline: drop preempt=full (linux-cachyos defaults to full preemption; KERNEL_PARAMS 13->12).
+- check: unreadable /proc/cmdline returns preflight (3), not drift (10).
+- services: ufw flush messages name nftables as the active host firewall.
+- lock: cleanup removes an empty-pidfile lock dir only when this process created it.
+- run: rename _run_emit_stream capture list _redacted -> _captured.
+- docs: README notes sdboot-manage injects root= into LINUX_OPTIONS.
+
 7.24.7 - 2026-06-09
-- progress: WINCH resize below 10 rows tears down the pinned bar (mirrors the init-time <10-row refusal) instead of keeping a stale row anchor.
-- docs: reword two stale function descriptions — _csp_filter_rdeps emits self only, never rdeps (in-set rdeps are removed by their own iteration); _verify_static_syntax validates live-HOOKS presence (ordering is enforced on embedded HOOKS at preflight; live drift is caught by checksum match).
+- progress: WINCH below 10 rows tears down the pinned bar (mirrors init-time refusal) instead of keeping a stale anchor.
+- docs: reword stale descriptions — _csp_filter_rdeps emits self only; _verify_static_syntax checks live-HOOKS presence (ordering enforced at preflight, drift via checksum).
 - docs: README Phase 2 documents managed-path .pacnew auto-resolution and .pacsave reporting (behaviour unchanged; present since the pacnew scan landed).
 - style: drop a redundant '| string split \n' in the dmesg capture (command substitution already line-splits).
-- build: release archive ships ry-install.fish with mode 0755 (7.24.6 zip stored 0644; README chmod step stays valid and idempotent).
+- build: archive ships ry-install.fish mode 0755 (7.24.6 stored 0644; README chmod step stays valid).
 
 7.24.6 - 2026-06-09
 - style: script comment lines trimmed to vital info; 7.24.3 changelog entry condensed.
@@ -18,26 +27,26 @@ ry-install changelog - newest first.
 - resolved: DNSOverTLS opportunistic -> no.
 
 7.24.3 - 2026-06-09
-- fix: wifi-route case 'br[0-9]*' never matched (fish lacks [..] globs); collapse to 'br*' so NM restarts defer over wlan-backed bridges.
+- fix: wifi-route case 'br[0-9]*' never matched (fish lacks [..] globs); use 'br*' so NM defers over wlan-backed bridges.
 - fix: --install-file boot cascade refuses a non-vfat /boot ESP fallback via shared _sdboot_fallback_vfat_ok (Phase 5 parity).
-- verify: drirc xmllint sudo-reads root-only files; nft posture unknown on sudo lapse, n/a when absent; sys_units pinned to 5.
+- verify: drirc xmllint sudo-reads root-only files; nft posture unknown/n-a handling; sys_units pinned to 5.
 - check: --check stderr-silent on post-parse anomaly paths; pre-parse TMPDIR warnings remain.
 - harden: lock pidfile write/install failures emit LOCK_PIDFILE_WRITE_FAIL/INSTALL_FAIL JSONL tags.
 - run: nftables is-active probe un-wrapped from _run (no EXIT noise when inactive).
-- docs: README synced — Phase 1 NTP wording, managed-files scope, orphan sweep user dir, exit-5 note, --check pre-parse stderr, non-vfat refusal.
+- docs: README synced — NTP wording, managed-files scope, orphan sweep, exit-5 note, --check stderr, non-vfat refusal.
 - style: fish literal-bracket glob notes at the THP check and overlay case list.
 
 7.24.2 - 2026-06-09
-- fix: nftables.conf routed to _grep_ini_header via _rvc_dispatch fallthrough (an nft ruleset has no [Section]) made _ry_validate_configs fail, aborting the no-arg install at preflight config validation (EXIT_PREFLIGHT); add _grep_nft_entry (table+chain skeleton) + a *.nftables.conf dispatch case. Regression from the 7.24.0 nftables addition; --verify/--check/--install-file were unaffected (no _ry_validate_configs on those paths).
-- harden: lock stale-reclaim re-reads the pidfile immediately before rm -rf and aborts if it changed mid-pass (closes a narrow TOCTOU where two concurrent fresh starts could both acquire the lock).
+- fix: nftables.conf fell through to _grep_ini_header (nft has no [Section]), failing _ry_validate_configs and aborting no-arg install at preflight; add _grep_nft_entry + dispatch case. 7.24.0 regression; --verify/--check/--install-file unaffected.
+- harden: stale-reclaim re-reads the pidfile right before rm -rf, aborting if it changed mid-pass (closes a fresh-start TOCTOU).
 
 7.24.1 - 2026-06-09
-- docs: fix two stale inline count comments (PKGS_ADD 14->15, post-hook handlers 11->12); both lagged the 7.24.0 nftables addition. Runtime invariants, README, and functional counts were already correct — no behaviour change.
+- docs: fix stale count comments (PKGS_ADD 14->15, post-hooks 11->12) lagging 7.24.0; invariants and README already correct.
 
 7.24.0 - 2026-06-08
 - cpupower: governor powersave -> performance (amd_pstate=active pins EPP=performance; no EPP rule, no ppd).
 - modprobe: ttm pages_limit 8388608 -> 25165824 (~96 GiB), page_pool_size 4194304 -> 12582912 (BIOS UMA=512 MB).
-- security: add nftables default-deny-inbound (nftables pkg + /etc/nftables.conf + nftables.service; ufw stays masked); PKGS_ADD 14->15, EXPECTED_SERVICES 3->4, managed files 15->16, post-hooks 16->17.
+- security: add nftables default-deny-inbound (pkg + /etc/nftables.conf + service; ufw stays masked); counts 14->15 / 3->4 / 15->16 / 16->17.
 - services: ppd stays masked and unused; governor=performance is global, so game-performance/ppd are moot.
 - docs: recommend cachyos-znver4 (Zen5/AVX-512) repos.
 

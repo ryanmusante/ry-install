@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.24.7 (2026-06-09) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.25.0 (2026-06-09) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.24.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.25.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -270,12 +270,13 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
         test -d "$LOCK_DIR"; and return 2
         return 1
     end
+    set -g _RY_LOCK_MKDIR_OK true # mkdir succeeded: this process created LOCK_DIR; gates empty-pidfile rm in cleanup.
     command chmod -- 700 "$LOCK_DIR" 2>/dev/null
     set -l _pid_tmp (command mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
     if test -z "$_pid_tmp"; or not printf '%s\n' "$fish_pid" >"$_pid_tmp" 2>/dev/null
         test -n "$_pid_tmp"; and command rm -f -- "$_pid_tmp" 2>/dev/null
         command rmdir -- "$LOCK_DIR" 2>/dev/null
-        set --erase _RY_LOCK_DIR_OWNED
+        set --erase _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
         _log "LOCK_PIDFILE_WRITE_FAIL: $LOCK_FILE"
         echo "[ERR] Failed to write lock pid file: $LOCK_FILE" >&2
         _pre_dispatch_log_cleanup
@@ -284,7 +285,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     if not command mv -Tf -- "$_pid_tmp" "$LOCK_FILE" 2>/dev/null
         command rm -f -- "$_pid_tmp" 2>/dev/null
         command rmdir -- "$LOCK_DIR" 2>/dev/null
-        set --erase _RY_LOCK_DIR_OWNED
+        set --erase _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
         _log "LOCK_PIDFILE_INSTALL_FAIL: $LOCK_FILE"
         echo "[ERR] Failed to install lock pid file: $LOCK_FILE" >&2
         _pre_dispatch_log_cleanup
@@ -388,7 +389,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
     set --erase _PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_PACMAN_REVERT_ATTEMPTED
     set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED
-    set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED
+    set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
     set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT _RY_DMESG_TSC
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
@@ -402,7 +403,7 @@ function _dc_kill_children --description "_do_cleanup sub. Release lock + reap c
         set -l _own false # Ownership gate: rm only if we hold the lock or its pid file is empty/ours.
         if set -q _RY_HOLDS_LOCK
             set _own true
-        else
+        else if set -q _RY_LOCK_MKDIR_OK # Empty pidfile counts as ours only when this process created LOCK_DIR.
             set -l _lp (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
             test -z "$_lp"; or test "$_lp" = "$fish_pid"; and set _own true
         end
@@ -524,7 +525,7 @@ set --erase _ry_dst_count
 
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no # Bootloader keys: loader.conf (LOADER_*) + sdboot-manage.conf (SDBOOT_*).
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-# KERNEL_PARAMS (13, enforced) -> /etc/kernel/cmdline + sdboot LINUX_OPTIONS.
+# KERNEL_PARAMS (12, enforced) -> /etc/kernel/cmdline + sdboot LINUX_OPTIONS.
 set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
     amd_iommu=off \
@@ -533,7 +534,6 @@ set -g KERNEL_PARAMS \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
     pcie_aspm.policy=performance \
-    preempt=full \
     quiet \
     split_lock_detect=off \
     tsc=reliable \
@@ -587,7 +587,7 @@ set -g LOGIND_IGNORE_KEYS \
     HandleRebootKeyLongPress
 set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd # Network/power keys: iwd (IWD_*), NetworkManager (NM_*), cpupower governor.
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
-set -g CPUPOWER_GOVERNOR performance
+set -g CPUPOWER_GOVERNOR powersave
 
 # ENV_VARS (10, enforced) -> ~/.config/environment.d (gaming/Vulkan).
 set -g ENV_VARS \
@@ -716,7 +716,7 @@ end
 
 function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants" # Refuse deploy on README/script count drift.
     set -l _expect \
-        KERNEL_PARAMS:13 \
+        KERNEL_PARAMS:12 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
@@ -1333,15 +1333,15 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     test -s "$tmpfile"; or return 0
     set -l _total (command wc -l <"$tmpfile" 2>/dev/null | string trim --); set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
     test -n "$_last_byte"; and string match -qr '^\d+$' -- "$_total"; and set _total (math $_total + 1)
-    set -l _redacted; set -l _head_cap (math "max(1, $cap - 100)"); set -l _tail_cap 100; set -l _need_tail false
+    set -l _captured; set -l _head_cap (math "max(1, $cap - 100)"); set -l _tail_cap 100; set -l _need_tail false
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and set _need_tail true
     set -l _head_n $cap; test "$_need_tail" = true; and set _head_n $_head_cap
-    for _l in (command head -n $_head_n -- "$tmpfile"); set -a _redacted "$_l"; end
+    for _l in (command head -n $_head_n -- "$tmpfile"); set -a _captured "$_l"; end
     if test "$_need_tail" = true
-        set -a _redacted "[... "(math $_total - $_head_cap - $_tail_cap)" lines elided ...]"
-        for _l in (command tail -n $_tail_cap -- "$tmpfile"); set -a _redacted "$_l"; end
+        set -a _captured "[... "(math $_total - $_head_cap - $_tail_cap)" lines elided ...]"
+        for _l in (command tail -n $_tail_cap -- "$tmpfile"); set -a _captured "$_l"; end
     end
-    _log "$label_tag: "(string join -- " | " $_redacted)
+    _log "$label_tag: "(string join -- " | " $_captured)
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and _log "$label_tag""_TRUNCATED: total_lines=$_total head_cap=$_head_cap tail_cap=$_tail_cap"
     if test "$_need_tail" = true
         set -l _ovf "$LOG_DIR/run-overflow"
@@ -1356,9 +1356,9 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     end
     if not set -q _RY_OUTPUT_BROKEN
         if test "$QUIET" = false
-            for _l in $_redacted; printf '%s\n' "$_l" >&2; end
+            for _l in $_captured; printf '%s\n' "$_l" >&2; end
         else if test "$label_tag" = STDERR; and test "$ret" -ne 0
-            for _l in $_redacted[1..5]
+            for _l in $_captured[1..5]
                 printf '%s\n' "$_l" >&2
             end
         end
@@ -2472,7 +2472,7 @@ end
 
 function _check_phase_cmdline --description "--check phase: cmdline contains KERNEL_PARAMS + rw"
     set -l _cmdline (command cat -- /proc/cmdline 2>/dev/null)
-    if test -z "$_cmdline"; _log "CHECK_PREFLIGHT: /proc/cmdline empty or unreadable"; set -g _RY_CHECK_DRIFT 1; return 0; end
+    if test -z "$_cmdline"; _log "CHECK_PREFLIGHT: /proc/cmdline empty or unreadable"; return $EXIT_PREFLIGHT; end
     for _p in $KERNEL_PARAMS; set -l _p_re (string escape --style=regex -- "$_p"); string match -qr -- "(^|\s)$_p_re(\s|\$)" "$_cmdline"; or set -g _RY_CHECK_DRIFT 1; end
     string match -qr -- '(^|\s)rw(\s|$)' "$_cmdline"; or set -g _RY_CHECK_DRIFT 1
     return 0
@@ -2579,7 +2579,7 @@ function _vrk_cmdline --description "Runtime kparam check: /proc/cmdline + preem
         if string match -q '*full*' -- "$_preempt"
             _ok "  $_preempt"
         else
-            _warn "  $_preempt (linux-cachyos defaults to full; add preempt=full to cmdline if running a different kernel)"
+            _info "  $_preempt (advisory — kernel default; this profile does not pin preempt= on the cmdline)"
         end
     else
         set -l _preempt_param (string match -rg -- '(?:^|\s)preempt=(\S+)' "$cmdline")
@@ -2628,13 +2628,13 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
         set -l cpu_name (string replace -r '.*/cpu(\d+)/.*' 'cpu$1' -- "$_CPU_PATH")
         _info "  Checking $cpu_name (representative)"
         for check in "scaling_driver:amd-pstate-epp:Scaling driver" \
-            "scaling_governor:performance:Governor" # Driver + governor are profile-managed.
+            "scaling_governor:$CPUPOWER_GOVERNOR:Governor" # Driver + governor are profile-managed.
             set -l parts (string split ':' -- "$check"); set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
             _chk_eq "$parts[3]" "$sysfs_val" "$parts[2]"
         end
-        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # EPP forced to performance by the performance governor under amd_pstate=active.
+        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # Profile sets governor only; EPP reported as advisory.
         if test -n "$_epp"
-            _chk_eq "EPP" "$_epp" performance
+            _info "  EPP: $_epp (advisory — profile sets governor, not EPP)"
         else
             _info "  EPP: unreadable"
         end
@@ -3952,8 +3952,8 @@ end
 
 function _csm_disable_ufw_rules --description "Flush ufw rules before mask so kernel-level iptables/nftables rules don't persist post-mask" # mask does not flush live ufw netfilter rules; ufw disable does.
     contains -- ufw.service $MASK; or return 0
-    _warn "SECURITY: host firewall (ufw) disabled+masked by profile — trusted-LAN assumption"
-    _log "SECURITY_POSTURE: ufw disabled+masked; no host firewall; trusted-LAN assumption"
+    _warn "SECURITY: ufw disabled+masked by profile — nftables default-deny-inbound is the active host firewall"
+    _log "SECURITY_POSTURE: ufw disabled+masked; nftables default-deny-inbound active (/etc/nftables.conf)"
     command -q ufw; or return 0
     set -l _state (command systemctl is-active ufw.service 2>/dev/null | string trim --)
     if test "$_state" != active; _log "UFW_RULE_FLUSH_SKIP: ufw.service is-active=$_state"; return 0; end
@@ -4787,11 +4787,11 @@ function _post_envd --argument-names target --description "Post-hook: notify ses
     return 0
 end
 
-function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change" # Restart re-sources the conf; amd_pstate=active maps governor→EPP.
+function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change" # Restart re-sources the conf; profile sets governor only.
     _echo
     if not _run sudo -n systemctl restart cpupower.service
         _warn "cpupower.service restart failed — governor change applies on next boot (non-fatal; file deployed)"
-        _info "  Under amd_pstate=active + governor=performance, EPP is pinned to performance on next boot"
+        _info "  Governor from /etc/default/cpupower-service.conf re-applies on next boot"
         return 0
     end
     return 0

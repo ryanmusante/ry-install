@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.24.7 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.25.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -111,7 +111,7 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 
 | Category | Params |
 |---|---|
-| CPU | `amd_pstate=active`, `preempt=full`, `split_lock_detect=off`, `tsc=reliable` |
+| CPU | `amd_pstate=active`, `split_lock_detect=off`, `tsc=reliable` |
 | GPU | `amdgpu.ppfeaturemask=0xffff7fff` |
 | IOMMU/PCIe | `amd_iommu=off` (disables IOMMU DMA isolation), `pcie_aspm.policy=performance` |
 | Storage | `nvme_core.default_ps_max_latency_us=0`, `zswap.enabled=0` |
@@ -123,7 +123,7 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 | File | Settings |
 |---|---|
 | `loader.conf` | `default=@saved`, `timeout=0`, `console-mode=keep`, `editor=no` |
-| `sdboot-manage.conf` | `LINUX_OPTIONS`=cmdline, `LINUX_FALLBACK_OPTIONS=quiet`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING`/`OVERWRITE_EXISTING`/`REMOVE_OBSOLETE=yes` |
+| `sdboot-manage.conf` | `LINUX_OPTIONS`=kernel params (`root=` injected by sdboot-manage), `LINUX_FALLBACK_OPTIONS=quiet`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING`/`OVERWRITE_EXISTING`/`REMOVE_OBSOLETE=yes` |
 | `mkinitcpio.conf` | `MODULES=(amdgpu)`, `BINARIES=()`, `FILES=()`, `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`, `COMPRESSION=zstd` `-1 -T0` |
 
 **Service & device configs**
@@ -134,7 +134,7 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 | systemd-logind | `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `…LongPress`) = `ignore` |
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
 | NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2`, `[logging] level=WARN` |
-| cpupower | `GOVERNOR=performance` (amd_pstate=active → EPP locked to performance; no ppd needed) |
+| cpupower | `GOVERNOR=powersave` (amd_pstate=active EPP mode; EPP not pinned by this profile) |
 | amdgpu/ttm | `pages_limit=25165824`/`page_pool_size=25165824` (GTT ~96 GiB; pool = limit; set BIOS UMA/GMA=512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
 | udev | NVMe whole-disk I/O scheduler → `none` |
@@ -174,7 +174,7 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 | Masked (11) | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
 | Enabled (4) | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service` (+ `NetworkManager-dispatcher.service` if installed) |
 
-`power-profiles-daemon.service` is intentionally masked; with `GOVERNOR=performance` applied globally, per-launch profile switching (CachyOS `game-performance`) is unnecessary and not relied upon. `gamemoderun` remains available for non-CPU niceties.
+`power-profiles-daemon.service` stays masked; this profile sets `GOVERNOR=powersave` and does not manage EPP or per-launch profile switching. `gamemoderun` remains available for non-CPU niceties.
 
 ## Managed Files
 

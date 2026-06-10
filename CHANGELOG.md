@@ -1,7 +1,15 @@
 ry-install changelog - newest first.
 
+7.25.5 - 2026-06-10
+- lock: every acquire-failure path logs a JSONL tag and reports the holder PID on stderr.
+- packages: a failed or db-locked pacman -Syu skips the AUR phase even without a rollback.
+- summary: revert-failed bail adds SKIP rows for updatedb, pkgfile, and regdom.
+- preflight: network FAIL evidence reflects the probe outcome (ICMP-ok vs all-unreachable).
+- style: lowercase command names in messages; _RY_ prefix on the wifi-backend flag.
+- style: command-prefix xmllint; drop three trailing description periods.
+
 7.25.4 - 2026-06-10
-- cleanup: guard the progress-bar teardown call; a signal landing before the progress module loads no longer prints an unknown-command error.
+- cleanup: guard the progress-bar teardown; a pre-load signal no longer prints unknown-command.
 - docs: README firewall note states the forward chain is dropped, matching the shipped ruleset.
 - style: trim two long inline comments; post-hook banner reads 12 handlers / 17 patterns.
 

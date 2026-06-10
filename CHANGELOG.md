@@ -1,46 +1,62 @@
 ry-install changelog - newest first.
 
+7.25.4 - 2026-06-10
+- cleanup: guard the progress-bar teardown call; a signal landing before the progress module loads no longer prints an unknown-command error.
+- docs: README firewall note states the forward chain is dropped, matching the shipped ruleset.
+- style: trim two long inline comments; post-hook banner reads 12 handlers / 17 patterns.
+
+7.25.3 - 2026-06-10
+- services: activate nftables.service before the ufw flush (no unfirewalled window in the handoff).
+- verify: runtime unit batch covers nftables.service (pinned 5->6).
+- verify: parent-dir perms skip vfat/undetermined /boot dirs (per-file parity).
+- verify: HOOKS parse tolerates multi-line HOOKS=( ... ).
+- log: failed log rename keeps logging to the old path instead of disabling JSONL.
+- log: _json_str preserves trailing newlines.
+- fstab: opts rewrite splices the options field, original whitespace preserved.
+- summary: matrix footer joins column rules with proper junctions.
+- style: pacman -Qq for iwd presence; single username resolve in the completion summary.
+
 7.25.2 - 2026-06-09
-- cleanup: failed/skipped signal-time mkinitcpio revert preserves the /run snapshot (pacman-path parity).
-- cleanup: reap children before the revert; lock release moved after the sweeps (_dc_release_lock).
+- cleanup: failed/skipped signal-time mkinitcpio revert preserves the /run snapshot.
+- cleanup: reap children before the revert; lock release moved after the sweeps.
 - cleanup: child-reap grace polls up to 10s while db.lck is held (0.5s otherwise).
 - cleanup: ry-run.* inner-file sweep no longer breaks on TMPDIR glob metachars.
 - packages: after a -Syu revert, mkinitcpio.conf.pacnew is reported for pacdiff, not auto-resolved.
 - verify: boot-time parser accepts h/min/s/ms totals; >60s boots hit the target compare.
 - verify: NM wifi.backend probe distinguishes sudo lapse from a missing backend.
 - lock: live-but-unsignalable peer PID (/proc present, EPERM) is never reclaimed.
-- boot: _preflight_boot_sanity refuses an empty $BOOT explicitly.
-- docs: README trimmed to vital info; sdboot injects root=+rw; vm sysctls are linux-cachyos kernel defaults.
+- boot: _preflight_boot_sanity refuses an empty $BOOT.
+- docs: README trimmed; sdboot injects root=+rw; vm sysctls are kernel defaults.
 - style: trim long inline comments; merge AUR noise-token log lines.
 
 7.25.1 - 2026-06-09
 - guard: sourced invocation returns 1 instead of exiting the caller's shell.
-- lock: settle 0.2s and re-read before reclaiming an empty/corrupt pidfile; a live peer now wins.
-- packages: preserve the /run mkinitcpio snapshot when revert fails (manual restore; cleared on reboot).
-- verify: parent-dir check covers the user environment.d dir (owner + group/other-write).
-- run: _rm_tmp keeps sudo-deleted paths tracked unless rm returned 0 (cleanup sweep retries).
-- preflight: drop dead fish-minor emptiness re-test; add '#' to the cmdline metachar reject set.
-- docs: README notes the boot-time near-miss tier, snapshot preservation, and lock settle.
+- lock: settle 0.2s + re-read before empty-pidfile reclaim; live peer wins.
+- packages: keep the /run mkinitcpio snapshot when revert fails.
+- verify: parent-dir check covers the user environment.d dir.
+- run: _rm_tmp keeps paths tracked unless rm returned 0.
+- preflight: drop dead fish-minor re-test; add '#' to the metachar reject set.
+- docs: README notes boot-time near-miss tier, snapshot keep, lock settle.
 - style: trim longest inline comments.
 
 7.25.0 - 2026-06-09
 - cpupower: governor performance -> powersave; EPP unpinned, reported advisory.
-- cmdline: drop preempt=full (linux-cachyos defaults to full preemption; KERNEL_PARAMS 13->12).
+- cmdline: drop preempt=full (kernel default; 13->12).
 - check: unreadable /proc/cmdline returns preflight (3), not drift (10).
 - services: ufw flush messages name nftables as the active host firewall.
-- lock: cleanup removes an empty-pidfile lock dir only when this process created it.
+- lock: cleanup removes an empty-pidfile lock dir only if self-created.
 - run: rename _run_emit_stream capture list _redacted -> _captured.
 - docs: README notes sdboot-manage injects root= into LINUX_OPTIONS.
 
 7.24.7 - 2026-06-09
-- progress: WINCH below 10 rows tears down the pinned bar (mirrors init refusal).
+- progress: WINCH below 10 rows tears down the pinned bar.
 - docs: reword stale descriptions for _csp_filter_rdeps and _verify_static_syntax.
 - docs: README Phase 2 documents .pacnew auto-resolution and .pacsave reporting.
 - style: drop redundant string split in the dmesg capture.
 - build: archive ships ry-install.fish mode 0755 (7.24.6 stored 0644).
 
 7.24.6 - 2026-06-09
-- style: script comment lines trimmed to vital info; 7.24.3 changelog entry condensed.
+- style: script comments trimmed; 7.24.3 changelog entry condensed.
 
 7.24.5 - 2026-06-09
 - modprobe: ttm page_pool_size 12582912 -> 25165824 (equal to pages_limit).
@@ -55,29 +71,29 @@ ry-install changelog - newest first.
 - verify: drirc xmllint sudo-reads root-only files; nft unknown/n-a posture; sys_units pinned to 5.
 - check: stderr-silent on post-parse anomalies; pre-parse TMPDIR warnings remain.
 - harden: lock pidfile write/install failures emit JSONL tags.
-- run: nftables is-active probe un-wrapped from _run (no EXIT noise when inactive).
-- docs: README synced (NTP, managed-files scope, orphan sweep, exit-5, --check stderr, non-vfat).
+- run: nftables is-active probe un-wrapped from _run.
+- docs: README synced (NTP, scope, orphan sweep, exit-5, --check stderr, non-vfat).
 - style: note fish literal-bracket globs at the THP check and overlay case list.
 
 7.24.2 - 2026-06-09
-- fix: nftables.conf fell through to _grep_ini_header, aborting preflight; add _grep_nft_entry (7.24.0 regression).
-- harden: stale-reclaim re-reads the pidfile right before rm -rf (closes a fresh-start TOCTOU).
+- fix: nftables.conf fell through to _grep_ini_header; add _grep_nft_entry (7.24.0 regression).
+- harden: stale-reclaim re-reads the pidfile right before rm -rf.
 
 7.24.1 - 2026-06-09
-- docs: fix stale count comments (PKGS_ADD 14->15, post-hooks 11->12) lagging 7.24.0; invariants and README already correct.
+- docs: fix stale count comments (PKGS_ADD 14->15, post-hooks 11->12).
 
 7.24.0 - 2026-06-08
-- cpupower: governor powersave -> performance (amd_pstate=active pins EPP=performance; no EPP rule, no ppd).
-- modprobe: ttm pages_limit 8388608 -> 25165824 (~96 GiB), page_pool_size 4194304 -> 12582912 (UMA=512 MB).
-- security: nftables default-deny-inbound (pkg + conf + service; ufw masked); counts 14->15 / 3->4 / 15->16 / 16->17.
-- services: ppd stays masked and unused; governor=performance is global, so game-performance/ppd are moot.
+- cpupower: governor powersave -> performance (EPP follows; no ppd).
+- modprobe: ttm pages_limit 8388608 -> 25165824, page_pool_size 4194304 -> 12582912.
+- security: nftables default-deny-inbound; ufw masked; counts 14->15/3->4/15->16/16->17.
+- services: ppd stays masked; governor=performance is global.
 - docs: recommend cachyos-znver4 (Zen5/AVX-512) repos.
 
 7.23.2 - 2026-06-08
 - services: record regdom phase row in the run-summary matrix.
 
 7.23.1 - 2026-06-08
-- verify: advisory report of CachyOS-set vm.max_map_count + vm.compaction_proactiveness.
+- verify: advisory report of CachyOS vm.max_map_count/compaction_proactiveness.
 - preflight: assert ttm page_pool_size == pages_limit / 2.
 - docs: document timing tunables + CachyOS vm sysctls; single-AUR-pkg fail exits 1.
 
@@ -90,30 +106,30 @@ ry-install changelog - newest first.
 - preflight: gate remaining coreutils + kill.
 
 7.22.13 - 2026-06-07
-- cli: name _as/_run misuse sentinels (250/255) as EXIT_AS_MISUSE/EXIT_RUN_MISUSE globals.
-- preflight: count-guard _RY_ISO3166_ALPHA2 (249) alongside the other array invariants.
-- style: final log-path notice prefix [i] -> [INFO] for level-vocab consistency.
+- cli: name 250/255 sentinels EXIT_AS_MISUSE/EXIT_RUN_MISUSE.
+- preflight: count-guard _RY_ISO3166_ALPHA2 (249).
+- style: log-path notice prefix [i] -> [INFO].
 
 7.22.12 - 2026-06-07
-- cli: unexpected-positional error lists all stray args, not just the first.
+- cli: positional error lists all stray args.
 - docs: uninstall removes .ry.bak backups; user env file removed without sudo.
-- style: trim longest inline comments to vital info.
+- style: trim longest inline comments.
 
 7.22.11 - 2026-06-07
 - install-file: deploy/gen/hook on the matched literal dst (symlink-safe).
-- verify: CPU EPP check advisory, not FAIL (profile sets governor, not EPP).
+- verify: CPU EPP check advisory (profile sets governor, not EPP).
 - fix: summary banner reads ERRORS not WARNINGS on a failed run.
 - harden: user config dir uses ambient umask; 0600 file unchanged.
 - style: trim longest inline comment.
 
 7.22.10 - 2026-06-07
-- docs: label 11/12/13/251 internal sentinels, never a process exit (README + --help).
+- docs: label 11/12/13/251 internal sentinels (README + --help).
 - docs: NetworkManager logging is [logging] level=WARN.
 
 7.22.9 - 2026-06-07
 - docs: correct retry-command reference to -Syyu.
-- check: rename _cpu_chk_expected -> _svc_chk_expected (checks EXPECTED_SERVICES).
-- style: single-split DATE_LABEL/TIMESTAMP; clarify _RY_TMPDIR_GLOBS scope comment.
+- check: rename _cpu_chk_expected -> _svc_chk_expected.
+- style: single-split DATE_LABEL/TIMESTAMP; clarify _RY_TMPDIR_GLOBS comment.
 
 7.22.8 - 2026-06-07
 - fix: derive DATE_LABEL/TIMESTAMP from one date call (midnight-atomic).

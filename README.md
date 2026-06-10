@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.25.2 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.25.4 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -58,7 +58,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | 1 | Preflight | invariants → lock (exit 5) → hard gates; read-only except a non-fatal NTP repair |
 | 2 | Packages | `pacman -Syu --needed` → AUR (`paru`) → `updatedb`/`pkgfile`. `mkinitcpio.conf` pre-deployed before `-Syu`; one `-Syyu` retry. Managed `.pacnew` auto-resolved (left for `pacdiff` after a rollback); `.pacsave` reported |
 | 3 | Configuration | deploy the 16 embedded files atomically |
-| 4 | Services | fstab → resolved restart → package removal → mask → enable → regdom |
+| 4 | Services | fstab → resolved restart → package removal → nftables activation → mask (ufw flush) → enable → regdom |
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` → NetworkManager restart (deferred on active Wi-Fi) |
 
@@ -135,13 +135,13 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 | Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
 | Wine | `WINEDEBUG=-all` |
 
-**fstab** — ext4 entries rewritten in place: applies `noatime`, `lazytime`, `commit=10`; strips conflicting atime opts + redundant `defaults`; rewrites any `commit=`. Mandatory `findmnt --verify` gate; snapshot to `/etc/fstab.ry.bak`; symlinked `/etc/fstab` refused.
+**fstab** — ext4 entries rewritten in place: applies `noatime`, `lazytime`, `commit=10`; strips conflicting atime opts + redundant `defaults`; rewrites any `commit=`; original field whitespace preserved. Mandatory `findmnt --verify` gate; snapshot to `/etc/fstab.ry.bak`; symlinked `/etc/fstab` refused.
 
 **Units**
 
 | Set | Units |
 |---|---|
-| Masked (11) | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
+| Masked (11) | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask, after nftables activates), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
 | Enabled (4) | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service` (+ `NetworkManager-dispatcher.service` if installed) |
 
 ## Managed Files
@@ -170,7 +170,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, and ICMP allowed; all other inbound dropped; output unrestricted. Add inbound ports to `/etc/nftables.conf` as needed.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, and ICMP allowed; all other inbound dropped; forwarding dropped; output unrestricted. Add inbound ports to `/etc/nftables.conf` as needed.
 
 | Feature | Detail |
 |---|---|

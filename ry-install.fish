@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.25.2 (2026-06-09) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.25.4 (2026-06-10) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return: exit here would kill the sourcing shell.
-set -g VERSION "7.25.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.25.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -347,7 +347,7 @@ function _dc_mki_revert --description "_do_cleanup sub: signal-time mkinitcpio.c
     end
     if test "$_rv_tried" = true; and test "$_rv_rc" -eq 0
         command -q sudo; and functions -q _rm_tmp; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
-    else # Failed/skipped revert keeps the /run snapshot for manual restore (parity with _install_packages; tmpfs clears on reboot).
+    else # Failed/skipped revert: keep /run snapshot for manual restore (tmpfs; gone on reboot).
         functions -q _untrack_tmpfile; and _untrack_tmpfile "$_RY_MKI_BACKUP_FILE"
         functions -q _log; and _log "MKINITCPIO_SNAPSHOT_PRESERVED: $_RY_MKI_BACKUP_FILE (signal-time revert failed or skipped)"
     end
@@ -460,7 +460,7 @@ end
 set -g VERIFY_OK 0; set -g VERIFY_FAIL 0; set -g VERIFY_WARN 0; set -g VERIFY_GEN_FAIL 0
 
 function _teardown --argument-names mode --description "Unified cleanup: progress teardown, footer, resources" # Mode 'signal' marks footer interrupted; 'exit' writes a normal footer.
-    _progress_teardown
+    functions -q _progress_teardown; and _progress_teardown # Guard: signals can land before the progress module is defined.
     set -l _signum 0 # Validate argv[2] numeric before _write_footer (printf %d).
     test (count $argv) -ge 2; and string match -qr '^\d+$' -- "$argv[2]"; and set _signum $argv[2]
     switch $mode
@@ -1102,6 +1102,7 @@ end
 function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)"
     set -l s "$argv[1]"
     if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"; printf '%s' "$s" | string collect --allow-empty; return $status; end
+    set s "$s"x # Sentinel: each collect round-trip trims trailing newlines; stripped by position below.
     set s (string replace -a -- \\ \\\\ "$s" | string collect)
     set s (string replace -a -- '"' '\\"' "$s" | string collect)
     set s (string replace -a -- \n '\\n' "$s" | string collect)
@@ -1110,6 +1111,12 @@ function _json_str --description "Escape a string for safe JSON embedding (RFC 8
     set s (string replace -a -- \b '\\b' "$s" | string collect)
     set s (string replace -a -- \f '\\f' "$s" | string collect)
     for _hex in 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f; set s (string replace -a -- (printf '\x'$_hex) '\u00'$_hex "$s" | string collect); end # NUL omitted: fish strings cannot carry NUL.
+    set -l _slen (string length -- "$s")
+    if test "$_slen" -gt 1
+        set s (string sub --length (math "$_slen - 1") -- "$s") # No raw newlines remain post-escape; plain cmdsub is safe.
+    else
+        set s ""
+    end
     printf '%s' "$s" | string collect --allow-empty
 end
 
@@ -2399,10 +2406,10 @@ function _verify_static_services --description "Verify masked services state"
     end
 end
 
-function _verify_static_syntax --description "Validate live mkinitcpio HOOKS presence" # Ordering gated at preflight; live drift caught by checksum.
+function _verify_static_syntax --description "Validate live mkinitcpio HOOKS presence (multi-line HOOKS tolerated)" # Ordering gated at preflight; live drift caught by checksum.
     _echo "SYNTAX VALIDATION"
     _echo "── mkinitcpio hooks ──"
-    set -l hooks_syntax_line (command grep -E -- '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | command head -n 1)
+    set -l hooks_syntax_line (command awk '/^[[:space:]]*HOOKS=\(/ { found = 1 } found { printf "%s ", $0 } found && /\)/ { exit }' /etc/mkinitcpio.conf 2>/dev/null | string trim --)
     if test -n "$hooks_syntax_line"
         set -l hooks_str (string replace -r '.*HOOKS=\(([^)]*)\).*' '$1' -- "$hooks_syntax_line")
         set hooks_str (string replace -ra '\s+' ' ' -- "$hooks_str" | string trim --)
@@ -2840,15 +2847,16 @@ function _vrsv_chk_cpupower_governor --argument-names rec_str --description "Che
     _fail "  cpupower.service: $rec[2] (expected: active or exited)"
 end
 
-function _vrsv_sys_units --description "Runtime services check: 5-unit batch"
-    set -l sys_units fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service NetworkManager.service cpupower.service; set -l parsed
-    if test (count $sys_units) -ne 5; _warn "  BUG: sys_units count drift (got "(count $sys_units)" expected 5) — skipping unit batch"; _log "SYS_UNITS_COUNT_DRIFT: got="(count $sys_units)" expected=5"; return 0; end # parsed[1..5] requires the pinned 5-unit order.
+function _vrsv_sys_units --description "Runtime services check: 6-unit batch"
+    set -l sys_units fstrim.timer systemd-resolved.service NetworkManager-dispatcher.service NetworkManager.service cpupower.service nftables.service; set -l parsed
+    if test (count $sys_units) -ne 6; _warn "  BUG: sys_units count drift (got "(count $sys_units)" expected 6) — skipping unit batch"; _log "SYS_UNITS_COUNT_DRIFT: got="(count $sys_units)" expected=6"; return 0; end # parsed[1..6] requires the pinned 6-unit order.
     for _u in $sys_units; set -l _v (_unit_state_padded $_u); set -a parsed "$_v[1]:$_v[2]:$_v[3]"; end
     _vrsv_chk_active_enabled fstrim.timer "$parsed[1]"
     _vrsv_chk_resolved "$parsed[2]"
     _vrsv_chk_nm_dispatcher "$parsed[3]"
     _vrsv_chk_active_enabled NetworkManager.service "$parsed[4]"
     _vrsv_chk_cpupower_governor "$parsed[5]"
+    _vrsv_chk_active_enabled nftables.service "$parsed[6]"
 end
 
 function _vrsv_wifi_nm_backend --description "_vrsv_wifi sub: verify NM effective wifi.backend vs NM_WIFI_BACKEND"
@@ -3208,12 +3216,26 @@ end
 
 function _vrs_parent_dirs --description "Runtime session check: parent dirs of managed files (system root-owned; user dir user-owned)"
     _echo "── Parent directories ──"
-    set -l dir_bad 0; set -l dir_checked 0; set -l checked_dirs
+    set -l dir_bad 0; set -l dir_checked 0; set -l dir_vfat_skipped 0; set -l checked_dirs
+    set -l _boot_resolved (_resolve_boot_path)
+    test -z "$_boot_resolved"; and set _boot_resolved /boot
+    set -l _boot_fstype (command findmnt -n -o FSTYPE "$_boot_resolved" 2>/dev/null | string trim --)
     for dst in $SYSTEM_DESTINATIONS
         set -l dir (command dirname -- "$dst")
         contains -- "$dir" $checked_dirs; and continue
         set -a checked_dirs "$dir"
         if sudo -n test -d "$dir" 2>/dev/null
+            if test "$dir" = /boot; or string match -q '/boot/*' -- "$dir" # Mirror the per-file vfat skip: FAT stores no unix perms.
+                set -l _dir_fstype (command findmnt -n -o FSTYPE --target "$dir" 2>/dev/null | string trim --)
+                test -z "$_dir_fstype"; and set _dir_fstype "$_boot_fstype"
+                if test "$_dir_fstype" = vfat; or test -z "$_dir_fstype"
+                    set dir_vfat_skipped (math $dir_vfat_skipped + 1)
+                    set -l _why "vfat — unix perms synthesized from mount options, not stored"
+                    test "$_dir_fstype" = vfat; or set _why "boot fstype undetermined — perm check skipped (vfat-safe default)"
+                    _info "  $dir: skipped ($_why)"
+                    continue
+                end
+            end
             set dir_checked (math $dir_checked + 1)
             set -l _po (sudo -n stat -c '%a %U:%G' -- "$dir" 2>/dev/null)
             if test -z "$_po"; _fail "  $dir: stat failed"; set dir_bad (math $dir_bad + 1); continue; end
@@ -3250,6 +3272,7 @@ function _vrs_parent_dirs --description "Runtime session check: parent dirs of m
     else if test "$dir_checked" -eq 0
         _warn "  No parent directories found to check"
     end
+    test "$dir_vfat_skipped" -gt 0; and _info "  $dir_vfat_skipped dir(s) skipped on boot partition (vfat or undetermined fstype — unix perms not verifiable)"
 end
 
 function _vrs_vulkan --description "Runtime session check: Vulkan driver packages (DXVK/VKD3D-Proton dependency)"
@@ -3788,9 +3811,8 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
     end
 end
 
-function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk script for ext4 mount-opt rewrite" # Idempotent: non-ext4 / conformant ext4 lines pass through.
+function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk script for ext4 mount-opt rewrite" # Idempotent: conformant/non-ext4 pass through; splice opts field, keep whitespace.
     string join -- \n \
-        'BEGIN { OFS = "\t" }' \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
         '$3 != "ext4" { print; next }' \
         '$4 ~ /^[0-9]+$/ { print; next }' \
@@ -3811,8 +3833,13 @@ function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk scr
         '    if (!has_noat)  out = (out == "" ? "noatime"  : out ",noatime")' \
         '    if (!has_lazy)  out = (out == "" ? "lazytime" : out ",lazytime")' \
         '    out = (out == "" ? "commit=10" : out ",commit=10")' \
-        '    $4 = out' \
-        '    print' \
+        '    pos = 1' \
+        '    for (f = 1; f <= 3; f++) {' \
+        '        match(substr($0, pos), /[^ \t]+/); pos += RSTART + RLENGTH - 1' \
+        '        match(substr($0, pos), /[ \t]+/);  pos += RSTART + RLENGTH - 1' \
+        '    }' \
+        '    match(substr($0, pos), /[^ \t]+/)' \
+        '    print substr($0, 1, pos + RSTART - 2) out substr($0, pos + RSTART + RLENGTH - 1)' \
         '}'
 end
 
@@ -4020,6 +4047,21 @@ function _csm_retry_individual --description "_configure_services_mask sub. Per-
     return $_ret
 end
 
+function _csm_enable_nftables_first --description "Activate nftables before the ufw flush so default-deny is live during the firewall handoff" # Enable step re-asserts later (idempotent).
+    contains -- ufw.service $MASK; or return 0
+    contains -- nftables.service $EXPECTED_SERVICES; or return 0
+    set -l _state (command systemctl is-active nftables.service 2>/dev/null | string trim --)
+    if test "$_state" = active; _log "NFT_PRE_ENABLE_SKIP: already active"; return 0; end
+    if _run sudo -n systemctl enable --now -- nftables.service
+        _ok "nftables.service active — default-deny ruleset live before the ufw flush"
+        _log "NFT_PRE_ENABLE_OK"
+    else
+        _warn "nftables.service failed to start before the ufw flush — inbound unfirewalled until the enable step or reboot"
+        _log "NFT_PRE_ENABLE_FAIL"
+    end
+    return 0
+end
+
 function _csm_disable_ufw_rules --description "Flush ufw rules before mask so kernel-level iptables/nftables rules don't persist post-mask" # mask does not flush live ufw netfilter rules; ufw disable does.
     contains -- ufw.service $MASK; or return 0
     _warn "SECURITY: ufw disabled+masked by profile — nftables default-deny-inbound is the active host firewall"
@@ -4037,7 +4079,8 @@ function _csm_disable_ufw_rules --description "Flush ufw rules before mask so ke
     return 0
 end
 
-function _configure_services_mask --description "Apply MASK list; batch-mask with per-unit retry"
+function _configure_services_mask --description "Apply MASK list; batch-mask with per-unit retry" # nftables activates first: default-deny live before the ufw flush.
+    _csm_enable_nftables_first
     _csm_disable_ufw_rules
     set -l safe_mask $MASK
     if test (count $safe_mask) -eq 0
@@ -4440,7 +4483,7 @@ end
 
 function _if_nm_restart --description "Restart NetworkManager when iwd backend switch is in effect" # Deferred when WiFi is active route: NM restart would drop the connection.
     if test "$_PROFILE_USES_WIFI_BACKEND" = false; _info "iwd/NetworkManager not managed — skipping NM restart"; _phase_record "Finalize: NetworkManager restart" SKIP "iwd backend not active"; return 0; end
-    if not command -q pacman; or not command pacman -Qi iwd >/dev/null 2>&1
+    if not command -q pacman; or not command pacman -Qq iwd >/dev/null 2>&1
         _warn "iwd configs deployed but iwd package is not installed (advisory; install iwd to activate the backend)"
         _phase_record "Finalize: NetworkManager restart" WARN "iwd package not installed"
         return 0
@@ -4578,7 +4621,7 @@ function _rdi_matrix_rows --description "_rdi_render_matrix sub. Emit data rows;
 end
 
 function _rdi_matrix_footer --description "_rdi_render_matrix sub. Emit verdict-bearing footer rows + bottom bar" # Verdict precedence: PREFLIGHT>BOOT_CRIT>FAIL>WARN>PASS.
-    set -l _bar_top $argv[1]; set -l _inner $argv[2]
+    set -l _bar_top $argv[1]; set -l _inner $argv[2]; set -l _sep_c $argv[3]; set -l _sep_r $argv[4]; set -l _sep_e $argv[5]
     set -l _verdict PASS
     test "$_RY_MTX_WARN" -gt 0; and set _verdict PASS-WITH-WARNINGS
     test "$_RY_MTX_FAIL" -gt 0; and set _verdict FAIL
@@ -4587,7 +4630,7 @@ function _rdi_matrix_footer --description "_rdi_render_matrix sub. Emit verdict-
     set -l _totals "Totals : $_RY_MTX_PASS PASS · $_RY_MTX_WARN WARN · $_RY_MTX_FAIL FAIL · $_RY_MTX_DEFER DEFER · $_RY_MTX_SKIP SKIP · $_RY_MTX_NA N/A"; set -l _elapsed "Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_verdict"; set -l _log_line "Log    : $LOG_FILE"; set -l _next_msg "Next   : reboot · ./ry-install.fish --verify"
     test "$_verdict" != PASS; and set _next_msg "Next   : review FAIL/WARN above · re-run install (idempotent)"
     set -l _pad_inner (math "$_inner - 2")
-    printf '╠%s╣\n' $_bar_top >&2
+    printf '╠%s╩%s╩%s╣\n' $_sep_c $_sep_r $_sep_e >&2
     printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_totals) >&2
     printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_elapsed) >&2
     printf '║ %s ║\n' (string pad -r -w $_pad_inner -- (string sub -l $_pad_inner -- $_log_line)) >&2
@@ -4604,7 +4647,7 @@ function _rdi_render_matrix --description "Render install phase matrix as box-dr
     set -l _inner (math "$_w_check + $_w_result + $_w_evidence + 8"); set -l _bar_top (string repeat -n $_inner '═'); set -l _sep_c (string repeat -n (math "$_w_check + 2") '═'); set -l _sep_r (string repeat -n (math "$_w_result + 2") '═'); set -l _sep_e (string repeat -n (math "$_w_evidence + 2") '═')
     _rdi_matrix_header $_bar_top $_sep_c $_sep_r $_sep_e $_inner $_w_check $_w_result $_w_evidence
     _rdi_matrix_rows $_w_check $_w_result $_w_evidence
-    _rdi_matrix_footer $_bar_top $_inner
+    _rdi_matrix_footer $_bar_top $_inner $_sep_c $_sep_r $_sep_e
 end
 
 function _rdi_summary --description "Print final install summary"
@@ -4632,18 +4675,17 @@ function _rdi_summary --description "Print final install summary"
     _info "Manual steps required:"
     _info "  1. Run 'rehash' or start new shell (updates command paths)"
     _info "  2. REBOOT to apply kernel cmdline and module changes"
+    set -l _post_uname (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}') # Single resolve; reused by the group hints below.
     if command -q pacman; and command pacman -Qq realtime-privileges >/dev/null 2>&1
-        set -l _uname (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}')
-        if test -n "$_uname"; and not contains -- realtime (command id -Gn -- "$_uname" 2>/dev/null | string split ' ')
+        if test -n "$_post_uname"; and not contains -- realtime (command id -Gn -- "$_post_uname" 2>/dev/null | string split ' ')
             _info "  3. Add user to realtime group for PipeWire RT scheduling:"
-            _info "       sudo usermod -aG realtime $_uname  (then log out and back in)"
+            _info "       sudo usermod -aG realtime $_post_uname  (then log out and back in)"
         end
     end
     if command -q pacman; and command pacman -Qq ddcutil >/dev/null 2>&1
-        set -l _u2 (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}')
-        if test -n "$_u2"; and not contains -- i2c (command id -Gn -- "$_u2" 2>/dev/null | string split ' ')
+        if test -n "$_post_uname"; and not contains -- i2c (command id -Gn -- "$_post_uname" 2>/dev/null | string split ' ')
             _info "  4. Add user to i2c group for ddcutil monitor control:"
-            _info "       sudo usermod -aG i2c $_u2  (then log out and back in)"
+            _info "       sudo usermod -aG i2c $_post_uname  (then log out and back in)"
         end
     end
     _info "Post-reboot verification: ./ry-install.fish --verify"
@@ -4761,7 +4803,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (12, _post_<tag> dynamic dispatch) ─────────────────────────
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (12 handlers / 17 patterns; _post_<tag> dispatch) ──────────
 function _pb_rebuild_cascade --argument-names target --description "_post_boot sub. mkinitcpio -P + sdboot-manage cascade"
     if not _run sudo -n mkinitcpio -P; _err "Mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     if not _sdboot_fallback_vfat_ok; _log "POST_BOOT_SDBOOT_REFUSED: target=$target"; return $EXIT_BOOT_CRIT; end
@@ -4812,7 +4854,7 @@ end
 
 function _post_nm --argument-names target --description "Post-hook: restart NetworkManager (+ try-restart iwd when iwd/main.conf changes); deferred when WiFi is active route" # iwd reads main.conf at startup; try-restart iwd first when it's the target.
     _echo
-    if not command -q pacman; or not command pacman -Qi iwd >/dev/null 2>&1 # iwd absent → skip restart cascade (backend can't function).
+    if not command -q pacman; or not command pacman -Qq iwd >/dev/null 2>&1 # iwd absent → skip restart cascade (backend can't function).
         _warn "iwd-related config target but iwd package not installed — NM restart cascade skipped"
         _log "POST_NM_SKIP_NO_IWD: target=$target"
         return 0
@@ -5015,8 +5057,7 @@ if test -f "$old_log"; and test "$old_log" != "$new_log"
             command rm -f -- "$old_log" 2>/dev/null
             test "$MODE" != check; and echo "[WARN] Log rename via mv failed; recovered via cp+rm: $old_log -> $new_log" >&2
         else
-            set _log_rename_ok false
-            not set -q _RY_LOG_WRITE_FAIL; and set -g _RY_LOG_WRITE_FAIL true
+            set _log_rename_ok false # Old path stays writable: keep logging there; do not latch _RY_LOG_WRITE_FAIL.
             test "$MODE" != check; and echo "[WARN] Log rename failed (mv and cp both): $old_log -> $new_log (keeping old path)" >&2
         end
     end

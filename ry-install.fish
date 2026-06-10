@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.25.0 (2026-06-09) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.25.1 (2026-06-09) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
-if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.25.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return: exit here would kill the sourcing shell.
+set -g VERSION "7.25.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -104,7 +104,7 @@ set -g _RY_NO_COLOR false
 set -q NO_COLOR; and set -g _RY_NO_COLOR true
 test "$TERM" = dumb; and set -g _RY_NO_COLOR true
 set -l fish_ver $FISH_VERSION; set -l parts (string split '.' -- "$fish_ver"); set -l _fish_minor (string replace -r '[^0-9].*' '' -- "$parts[2]"); test -z "$_fish_minor"; and set _fish_minor 0
-if not string match -qr '^\d+$' -- "$parts[1]"; or test -z "$_fish_minor"; or not string match -qr '^\d+$' -- "$_fish_minor"; echo "[ERR] fish version unparseable: '$fish_ver'" >&2; _ry_exit $EXIT_PREFLIGHT; end
+if not string match -qr '^\d+$' -- "$parts[1]"; or not string match -qr '^\d+$' -- "$_fish_minor"; echo "[ERR] fish version unparseable: '$fish_ver'" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -l _fish_ok 0
 test "$parts[1]" -gt 3; and set _fish_ok 1
 test "$parts[1]" -eq 3; and test "$_fish_minor" -ge 6; and set _fish_ok 1
@@ -270,7 +270,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
         test -d "$LOCK_DIR"; and return 2
         return 1
     end
-    set -g _RY_LOCK_MKDIR_OK true # mkdir succeeded: this process created LOCK_DIR; gates empty-pidfile rm in cleanup.
+    set -g _RY_LOCK_MKDIR_OK true # mkdir ok: we created LOCK_DIR; gates empty-pidfile rm in cleanup.
     command chmod -- 700 "$LOCK_DIR" 2>/dev/null
     set -l _pid_tmp (command mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
     if test -z "$_pid_tmp"; or not printf '%s\n' "$fish_pid" >"$_pid_tmp" 2>/dev/null
@@ -306,14 +306,18 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     test "$_fresh_rc" -ne 2; and return 1
     for _reclaim_attempt in 1 2 3 # Bounded stale-reclaim; re-checks PID liveness per pass.
         set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
+        if not string match -qr '^[1-9]\d*$' -- "$_stale_pid" # Absent/empty pidfile may be a peer mid-acquisition: settle, then re-read.
+            command sleep 0.2 </dev/null 2>/dev/null
+            set _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
+        end
         if string match -qr '^[1-9]\d*$' -- "$_stale_pid"
             command kill -0 "$_stale_pid" 2>/dev/null; and return 1
         else
-            functions -q _log; and _log "LOCK_PIDFILE_CORRUPT: '$_stale_pid' not a PID — reclaiming (attempt=$_reclaim_attempt)"
+            functions -q _log; and _log "LOCK_PIDFILE_CORRUPT: '$_stale_pid' not a PID after settle — reclaiming (attempt=$_reclaim_attempt)"
         end
         functions -q _log; and _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR attempt=$_reclaim_attempt (PID not running, reclaiming)"
         if test -L "$LOCK_DIR"; functions -q _log; and _log "LOCK_RECLAIM_REFUSED: $LOCK_DIR is a symlink"; return 1; end
-        set -l _recheck_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --) # Re-read pidfile right before rm: abort if another instance reclaimed mid-pass (TOCTOU narrowing).
+        set -l _recheck_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --) # Re-read right before rm; abort if pidfile changed (TOCTOU narrowing).
         if test "$_recheck_pid" != "$_stale_pid"; functions -q _log; and _log "LOCK_RECLAIM_ABORT: pidfile changed mid-pass ('$_stale_pid' → '$_recheck_pid') — another instance active"; return 1; end
         command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
         _acquire_lock_fresh
@@ -784,7 +788,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     _ir_validate_keys
     for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end # Backup-target generators must be side-effect-free (sysctl is stateful).
     _ir_precompute_caches
-    set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!]'
+    set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!#]'
     for _kp in $KERNEL_PARAMS
         if string match -qr -- "$_kp_metachar_re" "$_kp"
             _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"
@@ -878,7 +882,7 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "}"
 end
 
-function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in" # Malformed entries → _RY_SYSCTL_BAD_ENTRIES; count mismatch → EXIT_GEN_SYSCTL.
+function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in" # Malformed → _RY_SYSCTL_BAD_ENTRIES; count mismatch → EXIT_GEN_SYSCTL.
     printf '%s\n' "# ry-install sysctl tunables (priority 95 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
     for entry in $SYSCTL_VALUES
@@ -890,7 +894,7 @@ function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate con
     if test "$_printed" -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
 end
 
-function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)" # Strix Halo gfx1151 GTT sizing — ttm pages_limit + page_pool_size (ROCm#5595).
+function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)" # gfx1151 GTT sizing: ttm pages_limit + page_pool_size (ROCm#5595).
     printf '%s\n' \
         "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
         "options ttm pages_limit=$TTM_PAGES_LIMIT" \
@@ -1010,7 +1014,9 @@ function _rm_tmp --argument-names path use_sudo --description "Sudo-aware tmpfil
         end
         set _rm_rc $status
     end
-    if test "$_rm_rc" -eq 0; or not test -e "$path"
+    set -l _gone false
+    test "$use_sudo" != true; and not test -e "$path"; and set _gone true
+    if test "$_rm_rc" -eq 0; or test "$_gone" = true # Sudo path untracks only on rm success; root-only paths stay tracked for the sweep.
         _untrack_tmpfile "$path"
     else
         functions -q _log; and _log "RM_TMP_DEFER: path=$path use_sudo=$use_sudo is_dir=$_is_dir rc=$_rm_rc — left tracked for cleanup retry"
@@ -1081,7 +1087,7 @@ function _json_str --description "Escape a string for safe JSON embedding (RFC 8
     set s (string replace -a -- \t '\\t' "$s" | string collect)
     set s (string replace -a -- \b '\\b' "$s" | string collect)
     set s (string replace -a -- \f '\\f' "$s" | string collect)
-    for _hex in 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f; set s (string replace -a -- (printf '\x'$_hex) '\u00'$_hex "$s" | string collect); end # NUL omitted: fish strings cannot carry NUL — truncated at variable boundary.
+    for _hex in 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f; set s (string replace -a -- (printf '\x'$_hex) '\u00'$_hex "$s" | string collect); end # NUL omitted: fish strings cannot carry NUL.
     printf '%s' "$s" | string collect --allow-empty
 end
 
@@ -1305,7 +1311,7 @@ function _progress_on_winch --on-signal WINCH --description "Re-anchor progress 
     test "$_PROG_PINNED" = true; or return 0
     set -l _new_rows (command tput lines 2>/dev/null)
     string match -qr '^\d+$' -- "$_new_rows"; or return 0
-    if test "$_new_rows" -lt 10; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # Shrink <10 rows: tear down (mirrors _progress_init refusal); stale anchor otherwise.
+    if test "$_new_rows" -lt 10; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <10 rows: tear down (mirrors init refusal).
     set -g _PROG_ROWS $_new_rows
     printf '\e[s\e[1;%dr\e[u' (math $_PROG_ROWS - 1) >&2
     _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
@@ -1832,7 +1838,7 @@ function _grep_udev_entry --argument-names dst --description 'Validate ≥1 udev
     return 0
 end
 
-function _grep_nft_entry --argument-names dst --description 'Validate nftables ruleset skeleton (table + chain); loaded via nft -f, not INI' # nft ruleset has no [Section]; real syntax gate is nft -c at deploy (_post_nft) + service start.
+function _grep_nft_entry --argument-names dst --description 'Validate nftables ruleset skeleton (table + chain); loaded via nft -f, not INI' # nft has no [Section]; real gate is nft -c at deploy + service start.
     test (count $argv) -lt 2; and _log "BUG: _grep_nft_entry called without content (dst=$dst)"; and return 2
     string match -qre '^[[:space:]]*table[[:space:]]+\S' -- $argv[2..-1]; or begin
         _fail "  $dst: no nftables 'table <family> <name>' declaration found"
@@ -1845,7 +1851,7 @@ function _grep_nft_entry --argument-names dst --description 'Validate nftables r
     return 0
 end
 
-function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family" # Per-format validator; mkinitcpio/env/cpupower covered by their own validators.
+function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family" # mkinitcpio/env/cpupower have dedicated validators.
     set -l _content $argv[2..-1]
     switch "$dst"
         case '*/loader.conf' '*/sdboot-manage.conf'
@@ -2371,7 +2377,7 @@ function _verify_static_services --description "Verify masked services state"
     end
 end
 
-function _verify_static_syntax --description "Validate live mkinitcpio HOOKS presence" # Ordering enforced on embedded HOOKS at preflight; live-file drift caught by checksum match.
+function _verify_static_syntax --description "Validate live mkinitcpio HOOKS presence" # Ordering gated at preflight; live drift caught by checksum.
     _echo "SYNTAX VALIDATION"
     _echo "── mkinitcpio hooks ──"
     set -l hooks_syntax_line (command grep -E -- '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | command head -n 1)
@@ -2523,7 +2529,7 @@ function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MA
     return 0
 end
 
-function _ry_do_check --description "Silent idempotency probe" # Silent-probe: ERR_NO_DATA→EXIT_PREFLIGHT unless drift confirmed→EXIT_DRIFT.
+function _ry_do_check --description "Silent idempotency probe" # ERR_NO_DATA→preflight unless drift already confirmed→drift.
     _log_section "CHECK START"
     if not command -q sudo; or not sudo -n true 2>/dev/null; _log "CHECK_PREFLIGHT: sudo not cached"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
     if not command -q systemctl; _log "CHECK_PREFLIGHT: systemctl not available"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
@@ -3174,7 +3180,7 @@ function _vrs_installed_file_perms --description "Runtime session check: install
     test "$perm_vfat_skipped" -gt 0; and _info "  $perm_vfat_skipped file(s) skipped on boot partition (vfat or undetermined fstype — unix perms not verifiable)"
 end
 
-function _vrs_parent_dirs --description "Runtime session check: parent dirs of managed files"
+function _vrs_parent_dirs --description "Runtime session check: parent dirs of managed files (system root-owned; user dir user-owned)"
     _echo "── Parent directories ──"
     set -l dir_bad 0; set -l dir_checked 0; set -l checked_dirs
     for dst in $SYSTEM_DESTINATIONS
@@ -3193,6 +3199,24 @@ function _vrs_parent_dirs --description "Runtime session check: parent dirs of m
                 _fail "  $dir: $perms (writable by non-root)"
                 set dir_bad (math $dir_bad + 1)
             end
+        end
+    end
+    set -l _u_uname (command id -un)
+    for dst in $USER_DESTINATIONS
+        set -l dir (command dirname -- "$dst")
+        contains -- "$dir" $checked_dirs; and continue
+        set -a checked_dirs "$dir"
+        test -d "$dir"; or continue
+        set dir_checked (math $dir_checked + 1)
+        set -l _po (command stat -c '%a %U' -- "$dir" 2>/dev/null)
+        if test -z "$_po"; _fail "  $dir: stat failed"; set dir_bad (math $dir_bad + 1); continue; end
+        set -l _po_parts (string split ' ' -- "$_po"); set -l perms $_po_parts[1]; set -l owner $_po_parts[2]
+        if test "$owner" != "$_u_uname"
+            _fail "  $dir: $perms $owner (expected owner: $_u_uname)"
+            set dir_bad (math $dir_bad + 1)
+        else if _dir_group_or_world_writable "$perms"
+            _fail "  $dir: $perms (writable by group/other)"
+            set dir_bad (math $dir_bad + 1)
         end
     end
     if test "$dir_bad" -eq 0; and test "$dir_checked" -gt 0
@@ -3345,7 +3369,7 @@ function _dir_group_or_world_writable --argument-names mode --description "True 
     return 1
 end
 
-function _is_wifi_active_route --description "True if default route exits via wireless interface" # Overlay ifaces resolve to wireless phy; false positive only defers NM restart.
+function _is_wifi_active_route --description "True if default route exits via wireless interface" # Overlay→wireless false positive only defers NM restart.
     command -q ip; or return 1
     set -l _def_iface ""
     for _af in -4 -6; set _def_iface (command ip $_af route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}'); test -n "$_def_iface"; and break; end
@@ -3597,7 +3621,15 @@ function _install_packages --description "Install managed packages via pacman -S
     end
     if test (count $pkgs_to_install) -gt 0; _ip_run_and_verify $pkgs_to_install; or set _fn_err true; end
     _ip_scan_pacnew
-    set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
+    if set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"
+        if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true # Failed revert: keep snapshot for manual restore (tmpfs; gone on reboot).
+            _untrack_tmpfile "$_RY_MKI_BACKUP_FILE"
+            _warn "  mkinitcpio.conf snapshot preserved for manual restore (until reboot): $_RY_MKI_BACKUP_FILE"
+            _log "MKINITCPIO_SNAPSHOT_PRESERVED: $_RY_MKI_BACKUP_FILE (revert failed)"
+        else
+            _rm_tmp "$_RY_MKI_BACKUP_FILE" true
+        end
+    end
     set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
     sudo -n rmdir /run/ry-install 2>/dev/null; or true # Reclaim empty snapshot dir; rmdir no-op if absent/non-empty.
     if test "$_fn_err" = true; _phase_record "Packages: pacman -Syu" FAIL "see JSONL log"; return 1; end
@@ -3847,7 +3879,7 @@ function _configure_services_resolved_restart --description "Restart systemd-res
     return 0
 end
 
-function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when no external installed rdeps; emit nothing (blocked)" # pactree -ru; rdeps outside PKGS_DEL block → _RY_PKG_REMOVE_SKIPS; in-set rdeps removed by their own iteration.
+function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when no external installed rdeps; emit nothing (blocked)" # External rdeps block (→ _RY_PKG_REMOVE_SKIPS); in-set rdeps removed by their own pass.
     if not command -q pactree
         if not set -q _RY_PACTREE_MISSING_WARNED
             set -g _RY_PACTREE_MISSING_WARNED true
@@ -4061,7 +4093,7 @@ function _configure_services_enable --description "Batch-enable system units (pe
     return $_ret
 end
 
-function _apply_wireless_regdom --description "Apply the wireless regulatory domain ($COUNTRY) at runtime" # Sets _RY_REGDOM_RESULT/_RY_REGDOM_EVIDENCE; always returns 0 (deferral is non-fatal).
+function _apply_wireless_regdom --description "Apply the wireless regulatory domain ($COUNTRY) at runtime" # Sets _RY_REGDOM_RESULT/EVIDENCE; deferral non-fatal (rc 0).
     set -g _RY_REGDOM_RESULT DEFER; set -g _RY_REGDOM_EVIDENCE ""
     if not command -q iw
         _info "  wireless regdom: iw(8) absent — $COUNTRY applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
@@ -4797,7 +4829,7 @@ function _post_cpupower --argument-names target --description "Post-hook: restar
     return 0
 end
 
-function _post_modprobe --argument-names target --description "Post-hook: rebuild initramfs after /etc/modprobe.d/* change" # modprobe.d → mkinitcpio modconf hook — rebuild required for boot-time load.
+function _post_modprobe --argument-names target --description "Post-hook: rebuild initramfs after /etc/modprobe.d/* change" # modprobe.d feeds modconf hook; rebuild needed for boot-time load.
     _echo
     if not command -q mkinitcpio
         _warn "mkinitcpio(8) not found — module options will apply only after a kernel package install"

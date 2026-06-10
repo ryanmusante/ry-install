@@ -1,7 +1,17 @@
 ry-install changelog - newest first.
 
+7.25.1 - 2026-06-09
+- guard: sourced invocation returns 1 instead of exiting the caller's shell.
+- lock: settle 0.2s and re-read before reclaiming an empty/corrupt pidfile; a live peer now wins.
+- packages: preserve the /run mkinitcpio snapshot when revert fails (manual restore; cleared on reboot).
+- verify: parent-dir check covers the user environment.d dir (owner + group/other-write).
+- run: _rm_tmp keeps sudo-deleted paths tracked unless rm returned 0 (cleanup sweep retries).
+- preflight: drop dead fish-minor emptiness re-test; add '#' to the cmdline metachar reject set.
+- docs: README notes the boot-time near-miss tier, snapshot preservation, and lock settle.
+- style: trim longest inline comments.
+
 7.25.0 - 2026-06-09
-- cpupower: governor performance -> powersave; EPP no longer pinned, --verify reports EPP as advisory.
+- cpupower: governor performance -> powersave; EPP unpinned, reported advisory.
 - cmdline: drop preempt=full (linux-cachyos defaults to full preemption; KERNEL_PARAMS 13->12).
 - check: unreadable /proc/cmdline returns preflight (3), not drift (10).
 - services: ufw flush messages name nftables as the active host firewall.
@@ -10,11 +20,11 @@ ry-install changelog - newest first.
 - docs: README notes sdboot-manage injects root= into LINUX_OPTIONS.
 
 7.24.7 - 2026-06-09
-- progress: WINCH below 10 rows tears down the pinned bar (mirrors init-time refusal) instead of keeping a stale anchor.
-- docs: reword stale descriptions — _csp_filter_rdeps emits self only; _verify_static_syntax checks live-HOOKS presence (ordering enforced at preflight, drift via checksum).
-- docs: README Phase 2 documents managed-path .pacnew auto-resolution and .pacsave reporting (behaviour unchanged; present since the pacnew scan landed).
-- style: drop a redundant '| string split \n' in the dmesg capture (command substitution already line-splits).
-- build: archive ships ry-install.fish mode 0755 (7.24.6 stored 0644; README chmod step stays valid).
+- progress: WINCH below 10 rows tears down the pinned bar (mirrors init refusal).
+- docs: reword stale descriptions for _csp_filter_rdeps and _verify_static_syntax.
+- docs: README Phase 2 documents .pacnew auto-resolution and .pacsave reporting.
+- style: drop redundant string split in the dmesg capture.
+- build: archive ships ry-install.fish mode 0755 (7.24.6 stored 0644).
 
 7.24.6 - 2026-06-09
 - style: script comment lines trimmed to vital info; 7.24.3 changelog entry condensed.
@@ -27,18 +37,18 @@ ry-install changelog - newest first.
 - resolved: DNSOverTLS opportunistic -> no.
 
 7.24.3 - 2026-06-09
-- fix: wifi-route case 'br[0-9]*' never matched (fish lacks [..] globs); use 'br*' so NM defers over wlan-backed bridges.
-- fix: --install-file boot cascade refuses a non-vfat /boot ESP fallback via shared _sdboot_fallback_vfat_ok (Phase 5 parity).
-- verify: drirc xmllint sudo-reads root-only files; nft posture unknown/n-a handling; sys_units pinned to 5.
-- check: --check stderr-silent on post-parse anomaly paths; pre-parse TMPDIR warnings remain.
-- harden: lock pidfile write/install failures emit LOCK_PIDFILE_WRITE_FAIL/INSTALL_FAIL JSONL tags.
+- fix: wifi-route case 'br[0-9]*' never matched (fish lacks [..] globs); use 'br*'.
+- fix: --install-file boot cascade refuses a non-vfat /boot ESP fallback (Phase 5 parity).
+- verify: drirc xmllint sudo-reads root-only files; nft unknown/n-a posture; sys_units pinned to 5.
+- check: stderr-silent on post-parse anomalies; pre-parse TMPDIR warnings remain.
+- harden: lock pidfile write/install failures emit JSONL tags.
 - run: nftables is-active probe un-wrapped from _run (no EXIT noise when inactive).
-- docs: README synced — NTP wording, managed-files scope, orphan sweep, exit-5 note, --check stderr, non-vfat refusal.
-- style: fish literal-bracket glob notes at the THP check and overlay case list.
+- docs: README synced (NTP wording, managed-files scope, orphan sweep, exit-5, --check stderr, non-vfat refusal).
+- style: note fish literal-bracket globs at the THP check and overlay case list.
 
 7.24.2 - 2026-06-09
-- fix: nftables.conf fell through to _grep_ini_header (nft has no [Section]), failing _ry_validate_configs and aborting no-arg install at preflight; add _grep_nft_entry + dispatch case. 7.24.0 regression; --verify/--check/--install-file unaffected.
-- harden: stale-reclaim re-reads the pidfile right before rm -rf, aborting if it changed mid-pass (closes a fresh-start TOCTOU).
+- fix: nftables.conf fell through to _grep_ini_header, aborting no-arg install at preflight; add _grep_nft_entry + dispatch case (7.24.0 regression).
+- harden: stale-reclaim re-reads the pidfile right before rm -rf (closes a fresh-start TOCTOU).
 
 7.24.1 - 2026-06-09
 - docs: fix stale count comments (PKGS_ADD 14->15, post-hooks 11->12) lagging 7.24.0; invariants and README already correct.

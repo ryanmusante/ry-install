@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.25.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.25.1 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -58,7 +58,7 @@ Hardware: Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 G
 `--install-file` of a boot config (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade (which refuses a non-vfat `/boot` ESP fallback, exit 4); non-boot post-hook failures stay exit 0.
 
 > [!NOTE]
-> `--verify` is exhaustive: beyond the 16 managed files (byte-for-byte) and boot/service state, it also checks runtime state the installer does not itself write — `ntsync` (built-in/loaded), THP/KSM/ZRAM, the active `tcp_bbr` module, drirc XML well-formedness (`xmllint`), ext4 fstab mount options, the CachyOS-provided `vm.max_map_count` / `vm.compaction_proactiveness` (advisory), and boot time against a 15 s target.
+> `--verify` is exhaustive: beyond the 16 managed files (byte-for-byte) and boot/service state, it also checks runtime state the installer does not itself write — `ntsync` (built-in/loaded), THP/KSM/ZRAM, the active `tcp_bbr` module, drirc XML well-formedness (`xmllint`), ext4 fstab mount options, the CachyOS-provided `vm.max_map_count` / `vm.compaction_proactiveness` (advisory), and boot time against a 15 s target (≥ 90 % of target reports a near-miss `WARN`).
 
 > [!CAUTION]
 > A boot-cascade failure during `--install-file` exits 4 — **do not reboot** until it succeeds.
@@ -210,9 +210,9 @@ Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-confi
 |---|---|
 | Atomic writes | render → `tmp` → symlink-probe → backup-target `.ry.bak` (pre-write) → chmod → `mv -T` → re-read + restore on mismatch |
 | Auto backups | `<path>.ry.bak` before overwriting `loader.conf` / `mkinitcpio.conf` / `fstab` |
-| mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
+| mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal; a failed revert preserves the `/run` snapshot (until reboot) for manual restore |
 | fstab | mandatory `findmnt --verify` gate; symlinked `/etc/fstab` refused |
-| Instance lock | atomic `mkdir 0700`; dead-PID reclaim via `kill -0` |
+| Instance lock | atomic `mkdir 0700`; dead-PID reclaim via `kill -0`; empty pidfile settles 0.2 s before reclaim |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
 
 | Code | Meaning |

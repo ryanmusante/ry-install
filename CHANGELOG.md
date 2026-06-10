@@ -1,5 +1,18 @@
 ry-install changelog - newest first.
 
+7.25.2 - 2026-06-09
+- cleanup: failed/skipped signal-time mkinitcpio revert preserves the /run snapshot (pacman-path parity).
+- cleanup: reap children before the revert; lock release moved after the sweeps (_dc_release_lock).
+- cleanup: child-reap grace polls up to 10s while db.lck is held (0.5s otherwise).
+- cleanup: ry-run.* inner-file sweep no longer breaks on TMPDIR glob metachars.
+- packages: after a -Syu revert, mkinitcpio.conf.pacnew is reported for pacdiff, not auto-resolved.
+- verify: boot-time parser accepts h/min/s/ms totals; >60s boots hit the target compare.
+- verify: NM wifi.backend probe distinguishes sudo lapse from a missing backend.
+- lock: live-but-unsignalable peer PID (/proc present, EPERM) is never reclaimed.
+- boot: _preflight_boot_sanity refuses an empty $BOOT explicitly.
+- docs: README trimmed to vital info; sdboot injects root=+rw; vm sysctls are linux-cachyos kernel defaults.
+- style: trim long inline comments; merge AUR noise-token log lines.
+
 7.25.1 - 2026-06-09
 - guard: sourced invocation returns 1 instead of exiting the caller's shell.
 - lock: settle 0.2s and re-read before reclaiming an empty/corrupt pidfile; a live peer now wins.
@@ -43,11 +56,11 @@ ry-install changelog - newest first.
 - check: stderr-silent on post-parse anomalies; pre-parse TMPDIR warnings remain.
 - harden: lock pidfile write/install failures emit JSONL tags.
 - run: nftables is-active probe un-wrapped from _run (no EXIT noise when inactive).
-- docs: README synced (NTP wording, managed-files scope, orphan sweep, exit-5, --check stderr, non-vfat refusal).
+- docs: README synced (NTP, managed-files scope, orphan sweep, exit-5, --check stderr, non-vfat).
 - style: note fish literal-bracket globs at the THP check and overlay case list.
 
 7.24.2 - 2026-06-09
-- fix: nftables.conf fell through to _grep_ini_header, aborting no-arg install at preflight; add _grep_nft_entry + dispatch case (7.24.0 regression).
+- fix: nftables.conf fell through to _grep_ini_header, aborting preflight; add _grep_nft_entry (7.24.0 regression).
 - harden: stale-reclaim re-reads the pidfile right before rm -rf (closes a fresh-start TOCTOU).
 
 7.24.1 - 2026-06-09
@@ -55,8 +68,8 @@ ry-install changelog - newest first.
 
 7.24.0 - 2026-06-08
 - cpupower: governor powersave -> performance (amd_pstate=active pins EPP=performance; no EPP rule, no ppd).
-- modprobe: ttm pages_limit 8388608 -> 25165824 (~96 GiB), page_pool_size 4194304 -> 12582912 (BIOS UMA=512 MB).
-- security: add nftables default-deny-inbound (pkg + /etc/nftables.conf + service; ufw stays masked); counts 14->15 / 3->4 / 15->16 / 16->17.
+- modprobe: ttm pages_limit 8388608 -> 25165824 (~96 GiB), page_pool_size 4194304 -> 12582912 (UMA=512 MB).
+- security: nftables default-deny-inbound (pkg + conf + service; ufw masked); counts 14->15 / 3->4 / 15->16 / 16->17.
 - services: ppd stays masked and unused; governor=performance is global, so game-performance/ppd are moot.
 - docs: recommend cachyos-znver4 (Zen5/AVX-512) repos.
 

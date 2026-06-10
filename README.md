@@ -1,8 +1,8 @@
 # ry-install
 
-CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
+CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.25.1 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.25.2 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -16,34 +16,23 @@ chmod +x ry-install.fish
 > [!IMPORTANT]
 > Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent.
 
-## Scope
-
-| Scope | Items |
-|---|---|
-| **In** | kernel cmdline, initramfs, systemd units (system + user), network (NetworkManager + iwd), sysctl, gaming env vars, pacman/AUR install + remove, systemd-boot BLS entries via `sdboot-manage` |
-| **Out** | dotfiles, shells, editors, secrets, backups, multi-user, non-CachyOS distros, laptops, UKI |
+In scope: kernel cmdline, initramfs, systemd units, network (NetworkManager + iwd), sysctl, gaming env vars, pacman/AUR add+remove, sdboot-manage BLS entries. Out: dotfiles, shells, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
 
 ## Requirements
 
-Hard requirements abort read-only in preflight (exit 3); `paru`, `pacman-contrib`, and NTP sync only warn.
-
-Recommended: enable the Zen 5 / AVX-512 repos (`cachyos-znver4`, `cachyos-core-znver4`, `cachyos-extra-znver4`) ordered above `[core]`/`[extra]`.
+Hard requirements abort read-only in preflight (exit 3); `paru`, `pacman-contrib`, and NTP sync only warn. Recommended: Zen 5 repos (`cachyos-znver4`, `cachyos-core-znver4`, `cachyos-extra-znver4`) above `[core]`/`[extra]`.
 
 | Requirement | Minimum |
 |---|---|
-| CachyOS | systemd-boot, ext4 root, GNU coreutils (busybox/uutils unsupported) |
+| CachyOS | systemd-boot, ext4 root, GNU coreutils |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
 | curl / findmnt | both required |
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
-| sudo | cached (`sudo -v`); may lapse mid-run — set `Defaults timestamp_timeout=60` or a NOPASSWD drop-in |
-| paru / pacman-contrib | recommended — `paru` ≥ 2.0.0 for AUR; `pactree` for rdep-safe `PKGS_DEL` removal |
-
-Hardware: Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 GB LPDDR5x-8000.
+| sudo | cached (`sudo -v`); may lapse mid-run — `Defaults timestamp_timeout=60` or NOPASSWD drop-in |
+| paru / pacman-contrib | recommended — paru ≥ 2.0.0 (AUR); pactree (rdep-safe removal) |
 
 ## Usage
-
-`--verify`/`--check` only read state; the no-arg run and `--install-file` write. `--check` compares the running `/proc/cmdline`, so a pending cmdline change reads as drift (`10`) until reboot. `--check` is stderr-silent after argument parsing; pre-parse environment warnings (an invalid `TMPDIR`, for example) can still print.
 
 | Flag | Action |
 |---|---|
@@ -55,49 +44,36 @@ Hardware: Ryzen AI Max+ 395 (Zen 5, gfx1151) · Radeon 8060S (RDNA 3.5) · 128 G
 | `--country=XX` | Wireless regdom (ISO-3166-1 alpha-2; default `US`; UK is `GB`) |
 | `-h, --help` · `-v, --version` | Help · Version |
 
-`--install-file` of a boot config (`loader.conf`, `kernel/cmdline`, `sdboot-manage.conf`, `mkinitcpio.conf`) runs the boot cascade (which refuses a non-vfat `/boot` ESP fallback, exit 4); non-boot post-hook failures stay exit 0.
-
-> [!NOTE]
-> `--verify` is exhaustive: beyond the 16 managed files (byte-for-byte) and boot/service state, it also checks runtime state the installer does not itself write — `ntsync` (built-in/loaded), THP/KSM/ZRAM, the active `tcp_bbr` module, drirc XML well-formedness (`xmllint`), ext4 fstab mount options, the CachyOS-provided `vm.max_map_count` / `vm.compaction_proactiveness` (advisory), and boot time against a 15 s target (≥ 90 % of target reports a near-miss `WARN`).
+`--verify`/`--check` only read state. `--check` compares the running `/proc/cmdline` (pending change reads as drift until reboot) and is stderr-silent after argument parsing. `--verify` also checks runtime state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML (`xmllint`), ext4 fstab options, linux-cachyos `vm.max_map_count`/`vm.compaction_proactiveness` (advisory), and boot time vs a 15 s target (h/min/s/ms parsed; ≥ 90 % = near-miss `WARN`).
 
 > [!CAUTION]
-> A boot-cascade failure during `--install-file` exits 4 — **do not reboot** until it succeeds.
+> `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
 
 ## Install Flow
 
-A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 rebuild; the advisory AUR phase never taints. Phase 3 writes are atomic renames; phases 1/5/6 write no managed files (Phase 5 regenerates `/boot` artifacts via `mkinitcpio`/`sdboot-manage`).
+A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 rebuild; the advisory AUR phase never taints. Phase 3 writes are atomic renames.
 
 | # | Phase | Action |
 |---|---|---|
-| 1 | Preflight | runtime invariants (CPU / array-count / key-collision) → instance lock (exit 5 on contention) → hard-requirement + free-space gates. Read-only apart from a non-fatal NTP repair (enables `systemd-timesyncd` when the clock is unsynced); any hard failure aborts before a managed write. |
-| 2 | Packages | `pacman -Syu --needed` → AUR via `paru` → index refresh (`updatedb`/`pkgfile`). `mkinitcpio.conf` is pre-deployed **before** `-Syu`. A transient failure retries once with `-Syyu` (forced db refresh + full upgrade). Managed-path `.pacnew` files are auto-resolved (managed content re-deployed, `.pacnew` removed); `.pacsave` is reported for `pacdiff` review. |
-| 3 | Configuration | deploy the 16 embedded files atomically (four boot configs feed Phase 5) |
+| 1 | Preflight | invariants → lock (exit 5) → hard gates; read-only except a non-fatal NTP repair |
+| 2 | Packages | `pacman -Syu --needed` → AUR (`paru`) → `updatedb`/`pkgfile`. `mkinitcpio.conf` pre-deployed before `-Syu`; one `-Syyu` retry. Managed `.pacnew` auto-resolved (left for `pacdiff` after a rollback); `.pacsave` reported |
+| 3 | Configuration | deploy the 16 embedded files atomically |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regdom |
-| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate. A non-vfat `/boot` ESP fallback refuses sdboot. |
+| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` → NetworkManager restart (deferred on active Wi-Fi) |
 
-`iwd`/`mesa`/`cpupower`/`iw`/`rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — missing `paru` or a partial failure is `WARN`, only an all-package failure is `FAIL` (with a single AUR package, any failure is therefore `FAIL`, exit 1). `vulkan-radeon` + `lib32-vulkan-radeon` (chwd) are verified present.
+`iwd`/`mesa`/`cpupower`/`iw`/`rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — partial failure is `WARN`; all-package failure is `FAIL` (single AUR package: any failure exits 1). `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 
 > [!NOTE]
-> With `REMOVE_EXISTING=yes`, `sdboot-manage gen` deletes every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched; hand-written BLS entries are not preserved.
+> With `REMOVE_EXISTING=yes`, `sdboot-manage gen` deletes every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries (`PRESERVE_FOREIGN=yes` would keep them). EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
 
 ## Run Summary
 
-A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phase result and a final summary. The verdict (`PASS` · `PASS-WITH-WARNINGS` · `FAIL` · `FAIL-BOOT-CRITICAL` · `PREFLIGHT`) maps to the exit code.
-
-| Result | Semantics |
-|---|---|
-| `PASS` | succeeded |
-| `WARN` | non-fatal anomaly; exit stays `0` |
-| `FAIL` | failed; the only result that sets `INSTALL_HAD_ERRORS` |
-| `DEFER` | deferred to next boot |
-| `SKIP` / `N/A` | by design / not applicable |
+A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phase and a final summary. Verdict (`PASS` · `PASS-WITH-WARNINGS` · `FAIL` · `FAIL-BOOT-CRITICAL` · `PREFLIGHT`) maps to the exit code. `WARN` keeps exit `0`; only `FAIL` sets `INSTALL_HAD_ERRORS`; `DEFER` applies next boot; `SKIP`/`N/A` by design.
 
 ## Configuration
 
-The script is the source of truth; retune via the `set -g` globals near the top.
-
-Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_TARGET=15` (s; `--verify` boot-time target), `PACTREE_TIMEOUT_S=60` (s; rdep query cap for `PKGS_DEL`), `NM_RESTART_DELAY=3` (s; NetworkManager settle window).
+The script is the source of truth; retune via the `set -g` globals near the top. In-script timing tunables (not env-overridable): `BOOT_TIME_TARGET=15` s, `PACTREE_TIMEOUT_S=60` s, `NM_RESTART_DELAY=3` s.
 
 **Packages**
 
@@ -123,8 +99,8 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 | File | Settings |
 |---|---|
 | `loader.conf` | `default=@saved`, `timeout=0`, `console-mode=keep`, `editor=no` |
-| `sdboot-manage.conf` | `LINUX_OPTIONS`=kernel params (`root=` injected by sdboot-manage), `LINUX_FALLBACK_OPTIONS=quiet`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING`/`OVERWRITE_EXISTING`/`REMOVE_OBSOLETE=yes` |
-| `mkinitcpio.conf` | `MODULES=(amdgpu)`, `BINARIES=()`, `FILES=()`, `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`, `COMPRESSION=zstd` `-1 -T0` |
+| `sdboot-manage.conf` | `LINUX_OPTIONS`=kernel params (`root=` + `rw` injected by sdboot-manage), `LINUX_FALLBACK_OPTIONS=quiet`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING`/`OVERWRITE_EXISTING`/`REMOVE_OBSOLETE=yes` |
+| `mkinitcpio.conf` | `MODULES=(amdgpu)`, `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`, `COMPRESSION=zstd` `-1 -T0` |
 
 **Service & device configs**
 
@@ -133,23 +109,23 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 | systemd-resolved | `MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` |
 | systemd-logind | `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `…LongPress`) = `ignore` |
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
-| NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2`, `[logging] level=WARN` |
-| cpupower | `GOVERNOR=powersave` (amd_pstate=active EPP mode; EPP not pinned by this profile) |
-| amdgpu/ttm | `pages_limit=25165824`/`page_pool_size=25165824` (GTT ~96 GiB; pool = limit; set BIOS UMA/GMA=512 MB) |
+| NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2` (disable), `[logging] level=WARN` |
+| cpupower | `GOVERNOR=powersave` (amd_pstate=active EPP mode; EPP not pinned) |
+| amdgpu/ttm | `pages_limit=25165824`/`page_pool_size=25165824` (GTT ~96 GiB; set BIOS UMA=512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
 | udev | NVMe whole-disk I/O scheduler → `none` |
-| wireless regdom | `COUNTRY=US` (override `--country=XX`), applied in Phase 4 |
+| wireless regdom | `COUNTRY=US` (`--country=XX`), applied Phase 4; persists via `/etc/iw-regdomain` → cachyos-iw-set-regdomain |
 
-**sysctl** → `/etc/sysctl.d/95-ry-overrides.conf`
+**sysctl** → `/etc/sysctl.d/95-ry-overrides.conf` (loads after CachyOS `70-cachyos-settings.conf`)
 
 | Scope | Settings |
 |---|---|
 | `net.core` | `default_qdisc=fq`, `netdev_budget=600`, `netdev_budget_usecs=5000` |
 | `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
 
-`vm.max_map_count` and `vm.compaction_proactiveness` are intentionally **not** set here — CachyOS ships suitable defaults; `--verify` reports their live values (advisory).
+`vm.max_map_count` and `vm.compaction_proactiveness` are intentionally **not** set — the linux-cachyos kernel ships raised defaults; `--verify` reports the live values (advisory).
 
-**Gaming env** → `~/.config/environment.d/10-environment.conf` (`0600`)
+**Gaming env** → `~/.config/environment.d/10-environment.conf` (`0600`; `PROTON_*` per proton-cachyos)
 
 | Category | Vars |
 |---|---|
@@ -159,13 +135,7 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 | Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
 | Wine | `WINEDEBUG=-all` |
 
-**fstab** → ext4 entries, in-place (not an embedded file)
-
-| Aspect | Detail |
-|---|---|
-| Applies | `noatime`, `lazytime`, `commit=10` |
-| Normalizes | strips conflicting atime opts + redundant `defaults`; rewrites any existing `commit=` |
-| Safety | mandatory `findmnt --verify` gate; snapshot to `/etc/fstab.ry.bak` first |
+**fstab** — ext4 entries rewritten in place: applies `noatime`, `lazytime`, `commit=10`; strips conflicting atime opts + redundant `defaults`; rewrites any `commit=`. Mandatory `findmnt --verify` gate; snapshot to `/etc/fstab.ry.bak`; symlinked `/etc/fstab` refused.
 
 **Units**
 
@@ -173,8 +143,6 @@ Internal timing tunables (in-script `set -g`, not env-overridable): `BOOT_TIME_T
 |---|---|
 | Masked (11) | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
 | Enabled (4) | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service` (+ `NetworkManager-dispatcher.service` if installed) |
-
-`power-profiles-daemon.service` stays masked; this profile sets `GOVERNOR=powersave` and does not manage EPP or per-launch profile switching. `gamemoderun` remains available for non-CPU niceties.
 
 ## Managed Files
 
@@ -201,37 +169,34 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 
 ## Safety & Reliability
 
-Atomic writes plus the gated Phase 5 rebuild keep a failed package or boot-config step from leaving a broken boot entry. Post-write re-read and auto-restore cover backup-targets; fstab has `findmnt --verify` gate and `.ry.bak`.
-
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset (`/etc/nftables.conf`, `nftables.service`): established/related, loopback, and ICMP are allowed, all other inbound is dropped, output is unrestricted. No inbound ports are opened by default — add them to the ruleset as needed. `--verify` reports its state.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, and ICMP allowed; all other inbound dropped; output unrestricted. Add inbound ports to `/etc/nftables.conf` as needed.
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | render → `tmp` → symlink-probe → backup-target `.ry.bak` (pre-write) → chmod → `mv -T` → re-read + restore on mismatch |
-| Auto backups | `<path>.ry.bak` before overwriting `loader.conf` / `mkinitcpio.conf` / `fstab` |
-| mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal; a failed revert preserves the `/run` snapshot (until reboot) for manual restore |
-| fstab | mandatory `findmnt --verify` gate; symlinked `/etc/fstab` refused |
-| Instance lock | atomic `mkdir 0700`; dead-PID reclaim via `kill -0`; empty pidfile settles 0.2 s before reclaim |
+| Atomic writes | render → tmp → symlink-probe → `.ry.bak` (backup targets) → chmod → `mv -T` → re-read + restore on mismatch |
+| Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` / `fstab` |
+| mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal; a failed or skipped revert preserves the `/run` snapshot (until reboot) |
+| Instance lock | atomic `mkdir 0700`; dead-PID reclaim via `kill -0` + `/proc` liveness; empty pidfile settles 0.2 s before reclaim |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
 
 | Code | Meaning |
 |---|---|
 | `0` / `1` / `2` | success / verify-FAIL or install-error / usage (incl. root-refused) |
-| `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock (contention or lock-dir I/O — the JSONL log disambiguates) |
+| `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock (JSONL disambiguates) |
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, …) |
-| `11` / `12` / `13` / `251` / `250` / `255` | internal sentinels — gen-nofn/nouuid/sysctl, `_run` tmpfile-alloc, `_as`/`_run` arg-misuse; **never a process exit** (surfaced in JSONL `gen_fail`; collapses to `1` install/verify, `3` `--check`) |
+| `11`/`12`/`13`/`251`/`250`/`255` | internal sentinels — never a process exit (JSONL `gen_fail`; collapses to `1` install/verify, `3` `--check`) |
 
 | Variable | Default | Effect |
 |---|---|---|
-| `RY_RUN_TIMEOUT` | `3600` | per-command wall-clock cap (s); `0` disables (pkg/boot/db ops bypass) |
+| `RY_RUN_TIMEOUT` | `3600` | per-command cap (s); `0` disables (pkg/boot/db ops bypass) |
 | `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses the torn-package gate |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses the CPU match |
 | `NO_COLOR` | unset | suppress ANSI color |
-| `TMPDIR` | `/tmp` | scratch dir; non-absolute/missing/non-writable falls back to `/tmp` |
+| `TMPDIR` | `/tmp` | scratch dir; invalid values fall back to `/tmp` |
 
-Logs are JSONL under `~/ry-install/logs/<date>/`, one file per run, **not auto-pruned**; `run-overflow/` holds full stdout/stderr spills. Prune: `find ~/ry-install/logs -type f \( -name '*.jsonl' -o -name '*.log' \) -mtime +30 -delete`. Query failures:
+Logs: JSONL under `~/ry-install/logs/<date>/`, one file per run, not auto-pruned (`run-overflow/` holds full spills). Prune: `find ~/ry-install/logs -type f \( -name '*.jsonl' -o -name '*.log' \) -mtime +30 -delete`. Query failures:
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):") or test("result=(FAIL|WARN)")))' ~/ry-install/logs/**/*.jsonl
@@ -242,15 +207,13 @@ jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):") or test("result=(FA
 No automated uninstaller; use Managed Files as the rollback reference.
 
 1. `sudo systemctl unmask` the masked units.
-2. `sudo rm` the deployed system paths; remove the user file `~/.config/environment.d/10-environment.conf` (no sudo).
-3. Restore `/etc/fstab` from `/etc/fstab.ry.bak`, then delete the `.ry.bak` backups (`/boot/loader/loader.conf.ry.bak`, `/etc/mkinitcpio.conf.ry.bak`, `/etc/fstab.ry.bak`).
+2. `sudo rm` the deployed system paths; remove `~/.config/environment.d/10-environment.conf` (no sudo).
+3. Restore `/etc/fstab` from `/etc/fstab.ry.bak`; delete the `.ry.bak` backups.
 4. Optionally reverse the package changes.
 5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
 6. Reboot.
 
 ## Known Issues
-
-Most clear up with a DKMS package; MT7925 TX-power/deauth and Strix Halo ACP audio are upstream-pending.
 
 | Component | Issue | Workaround |
 |---|---|---|

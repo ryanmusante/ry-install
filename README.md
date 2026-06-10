@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S).
 
-**Version 7.24.6 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.24.7 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -70,7 +70,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | # | Phase | Action |
 |---|---|---|
 | 1 | Preflight | runtime invariants (CPU / array-count / key-collision) → instance lock (exit 5 on contention) → hard-requirement + free-space gates. Read-only apart from a non-fatal NTP repair (enables `systemd-timesyncd` when the clock is unsynced); any hard failure aborts before a managed write. |
-| 2 | Packages | `pacman -Syu --needed` → AUR via `paru` → index refresh (`updatedb`/`pkgfile`). `mkinitcpio.conf` is pre-deployed **before** `-Syu`. A transient failure retries once with `-Syyu` (forced db refresh + full upgrade). |
+| 2 | Packages | `pacman -Syu --needed` → AUR via `paru` → index refresh (`updatedb`/`pkgfile`). `mkinitcpio.conf` is pre-deployed **before** `-Syu`. A transient failure retries once with `-Syyu` (forced db refresh + full upgrade). Managed-path `.pacnew` files are auto-resolved (managed content re-deployed, `.pacnew` removed); `.pacsave` is reported for `pacdiff` review. |
 | 3 | Configuration | deploy the 16 embedded files atomically (four boot configs feed Phase 5) |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regdom |
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → post-rebuild sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate. A non-vfat `/boot` ESP fallback refuses sdboot. |

@@ -1,5 +1,12 @@
 ry-install changelog - newest first.
 
+7.24.7 - 2026-06-09
+- progress: WINCH resize below 10 rows tears down the pinned bar (mirrors the init-time <10-row refusal) instead of keeping a stale row anchor.
+- docs: reword two stale function descriptions — _csp_filter_rdeps emits self only, never rdeps (in-set rdeps are removed by their own iteration); _verify_static_syntax validates live-HOOKS presence (ordering is enforced on embedded HOOKS at preflight; live drift is caught by checksum match).
+- docs: README Phase 2 documents managed-path .pacnew auto-resolution and .pacsave reporting (behaviour unchanged; present since the pacnew scan landed).
+- style: drop a redundant '| string split \n' in the dmesg capture (command substitution already line-splits).
+- build: release archive ships ry-install.fish with mode 0755 (7.24.6 zip stored 0644; README chmod step stays valid and idempotent).
+
 7.24.6 - 2026-06-09
 - style: script comment lines trimmed to vital info; 7.24.3 changelog entry condensed.
 

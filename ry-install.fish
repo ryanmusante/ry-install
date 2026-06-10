@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.24.6 (2026-06-09) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.24.7 (2026-06-09) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; exit 1; end
-set -g VERSION "7.24.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.24.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -1305,7 +1305,7 @@ function _progress_on_winch --on-signal WINCH --description "Re-anchor progress 
     test "$_PROG_PINNED" = true; or return 0
     set -l _new_rows (command tput lines 2>/dev/null)
     string match -qr '^\d+$' -- "$_new_rows"; or return 0
-    test "$_new_rows" -lt 10; and return 0
+    if test "$_new_rows" -lt 10; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # Shrink <10 rows: tear down (mirrors _progress_init refusal); stale anchor otherwise.
     set -g _PROG_ROWS $_new_rows
     printf '\e[s\e[1;%dr\e[u' (math $_PROG_ROWS - 1) >&2
     _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
@@ -2371,7 +2371,7 @@ function _verify_static_services --description "Verify masked services state"
     end
 end
 
-function _verify_static_syntax --description "Validate mkinitcpio hooks ordering"
+function _verify_static_syntax --description "Validate live mkinitcpio HOOKS presence" # Ordering enforced on embedded HOOKS at preflight; live-file drift caught by checksum match.
     _echo "SYNTAX VALIDATION"
     _echo "── mkinitcpio hooks ──"
     set -l hooks_syntax_line (command grep -E -- '^[[:space:]]*HOOKS=' /etc/mkinitcpio.conf 2>/dev/null | command head -n 1)
@@ -2734,7 +2734,7 @@ end
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource" # Scan full dmesg ring for preempt/TSC markers; _RY_DMESG_LINES = line count.
     set -g _RY_DMESG_LINES 0; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_TSC
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
-        set -l _full (sudo -n dmesg 2>/dev/null | string split \n); set -l _full_count (count $_full)
+        set -l _full (sudo -n dmesg 2>/dev/null); set -l _full_count (count $_full)
         if test (count $_full) -gt 0
             set -g _RY_DMESG_PREEMPT (printf '%s\n' $_full | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
             set -g _RY_DMESG_TSC (printf '%s\n' $_full | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
@@ -3847,7 +3847,7 @@ function _configure_services_resolved_restart --description "Restart systemd-res
     return 0
 end
 
-function _csp_filter_rdeps --argument-names pkg --description "Emit one-pkg-per-line: \$pkg + installed rdeps (cascade=1) or nothing (blocked)" # pactree -ru; cascade=1 emits self+rdeps; else→_RY_PKG_REMOVE_SKIPS.
+function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when no external installed rdeps; emit nothing (blocked)" # pactree -ru; rdeps outside PKGS_DEL block → _RY_PKG_REMOVE_SKIPS; in-set rdeps removed by their own iteration.
     if not command -q pactree
         if not set -q _RY_PACTREE_MISSING_WARNED
             set -g _RY_PACTREE_MISSING_WARNED true

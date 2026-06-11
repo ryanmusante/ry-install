@@ -7,12 +7,13 @@ ry-install changelog - newest first.
 - install-file: drop unreachable /efi/* post-hook pattern (17->16).
 - sysctl: generator key charset pinned to [A-Za-z0-9._-].
 - log: _err_loud bumps the footer fail counter.
-- cli: --help notes kernel-param drift reads rc=10 until reboot under --check.
+- cli: --help notes --check kernel-param drift reads rc=10 until reboot.
+- docs: trim README prose and managed-files table; condense changelog lines.
 
 7.25.5 - 2026-06-10
-- lock: every acquire-failure path logs a JSONL tag and reports the holder PID on stderr.
-- packages: a failed or db-locked pacman -Syu skips the AUR phase even without a rollback.
-- summary: revert-failed bail adds SKIP rows for updatedb, pkgfile, and regdom.
+- lock: every acquire-failure path logs a JSONL tag + holder PID on stderr.
+- packages: failed or db-locked -Syu skips the AUR phase even without rollback.
+- summary: revert-failed bail adds SKIP rows for updatedb, pkgfile, regdom.
 - preflight: network FAIL evidence reflects probe outcome (ICMP-ok vs unreachable).
 - style: lowercase command names in messages; _RY_ prefix on the wifi-backend flag.
 - style: command-prefix xmllint; drop three trailing description periods.
@@ -20,7 +21,7 @@ ry-install changelog - newest first.
 7.25.4 - 2026-06-10
 - cleanup: guard progress-bar teardown against pre-load signals.
 - docs: README firewall note: forward chain dropped, matching the ruleset.
-- style: trim two long inline comments; post-hook banner reads 12 handlers / 17 patterns.
+- style: trim two long comments; post-hook banner: 12 handlers / 17 patterns.
 
 7.25.3 - 2026-06-10
 - services: activate nftables before the ufw flush (no unfirewalled window).

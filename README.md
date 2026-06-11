@@ -44,7 +44,7 @@ Hard requirements abort read-only in preflight (exit 3); `paru`, `pacman-contrib
 | `--country=XX` | Wireless regdom (ISO-3166-1 alpha-2; default `US`; UK is `GB`) |
 | `-h, --help` · `-v, --version` | Help · Version |
 
-`--verify`/`--check` only read state. `--check` compares the running `/proc/cmdline` (pending change reads as drift until reboot) and is stderr-silent after argument parsing. `--verify` also checks runtime state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML (`xmllint`), ext4 fstab options, linux-cachyos `vm.max_map_count`/`vm.compaction_proactiveness` (advisory), and boot time vs a 15 s target (h/min/s/ms parsed; ≥ 90 % = near-miss `WARN`).
+`--verify`/`--check` only read state. `--check` compares the running `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing. `--verify` also reports runtime state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab options, CachyOS vm sysctls (advisory), and boot time vs a 15 s target (≥ 90 % = near-miss `WARN`).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
@@ -62,7 +62,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` → NetworkManager restart (deferred on active Wi-Fi) |
 
-`iwd`/`mesa`/`cpupower`/`iw`/`rtkit` are CachyOS defaults (not re-added); their configs still deploy. AUR is advisory — partial failure is `WARN`; all-package failure is `FAIL` (single AUR package: any failure exits 1). `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
+CachyOS-default packages (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; their configs still deploy. AUR is advisory: partial failure `WARN`, all-failed `FAIL` (a single-package set fails outright, exit 1). `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 
 > [!NOTE]
 > With `REMOVE_EXISTING=yes`, `sdboot-manage gen` deletes every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries (`PRESERVE_FOREIGN=yes` would keep them). EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
@@ -148,24 +148,13 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 
 The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 
-| Path | Mode |
+| Group | Files |
 |---|---|
-| `/boot/loader/loader.conf` | `0644` |
-| `/etc/kernel/cmdline` | `0644` |
-| `/etc/sdboot-manage.conf` | `0644` |
-| `/etc/mkinitcpio.conf` | `0644` |
-| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | `0644` |
-| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | `0644` |
-| `/etc/iwd/main.conf` | `0644` |
-| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `0644` |
-| `/etc/default/cpupower-service.conf` | `0644` |
-| `/etc/sysctl.d/95-ry-overrides.conf` | `0644` |
-| `/etc/drirc.d/95-ry-radv-apu.conf` | `0644` |
-| `/etc/modprobe.d/ry-amdgpu-strixhalo.conf` | `0644` |
-| `/etc/iw-regdomain` | `0644` |
-| `/etc/udev/rules.d/60-ry-ioschedulers.rules` | `0644` |
-| `/etc/nftables.conf` | `0644` |
-| `~/.config/environment.d/10-environment.conf` | `0600` |
+| Boot (4) | `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf` |
+| systemd (2) | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`, `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
+| Network (4) | `/etc/iwd/main.conf`, `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/nftables.conf` |
+| Tuning (5) | `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/default/cpupower-service.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/udev/rules.d/60-ry-ioschedulers.rules` |
+| User (1) | `~/.config/environment.d/10-environment.conf` |
 
 ## Safety & Reliability
 

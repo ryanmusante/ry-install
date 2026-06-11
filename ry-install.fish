@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.26.2 (2026-06-11) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.26.3 (2026-06-11) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return keeps a sourcing shell alive; stack-trace text not a stable API.
-set -g VERSION "7.26.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.26.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -830,7 +830,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
         set -l _cpu_model (string match -rg -- '^model name\s*:\s*(.*)$' < /proc/cpuinfo 2>/dev/null)[1]
         if test -z "$_cpu_model"
             if test "$RY_INSTALL_SKIP_HARDWARE_CHECK" = 1 # Fail-closed: empty model name → require explicit override.
-                _warn "Hardware check (override): CPU model unreadable from /proc/cpuinfo — proceeding"
+                _warn_loud "Hardware check (override): CPU model unreadable from /proc/cpuinfo — proceeding"
                 _log "HARDWARE_MODEL_UNREADABLE_OVERRIDE: /proc/cpuinfo missing 'model name'"
             else
                 _err_loud "Hardware check: CPU model unreadable from /proc/cpuinfo (no 'model name' field) — refusing to deploy"
@@ -840,7 +840,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
             end
         else if not string match -q -i -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"
             if test "$RY_INSTALL_SKIP_HARDWARE_CHECK" = 1
-                _warn "Hardware mismatch (override): expected $EXPECTED_CPU_MATCH, detected: $_cpu_model"
+                _warn_loud "Hardware mismatch (override): expected $EXPECTED_CPU_MATCH, detected: $_cpu_model"
                 _log "HARDWARE_MISMATCH_OVERRIDE: expected=$EXPECTED_CPU_MATCH detected=$_cpu_model"
             else
                 _err_loud "Hardware mismatch: profile $PROFILE_NAME expects $EXPECTED_CPU_MATCH, detected: $_cpu_model"
@@ -941,7 +941,7 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        iif \"lo\" accept" \
         "        ct state invalid drop" \
         "        ip protocol icmp accept" \
-        "        ip6 nexthdr ipv6-icmp accept" \
+        "        meta l4proto ipv6-icmp accept" \
         "    }" \
         "    chain forward { type filter hook forward priority filter; policy drop; }" \
         "    chain output { type filter hook output priority filter; policy accept; }" \
@@ -1129,12 +1129,12 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
     if _is_system_dst "$dst"
         sudo -n true 2>/dev/null; or return 2
         sudo -n test -r "$dst" 2>/dev/null; or return 1
-        set _bytes (sudo -n cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines)
+        set _bytes (sudo -n cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines --allow-empty)
         set -l _ps $pipestatus
         if test "$_ps[1]" -ne 0; sudo -n true 2>/dev/null; or return 2; return 1; end
     else
         test -r "$dst"; or return 1
-        set _bytes (command cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines)
+        set _bytes (command cat -- "$dst" 2>/dev/null | string collect --no-trim-newlines --allow-empty)
         set -l _ps $pipestatus
         test "$_ps[1]" -eq 0; or return 1
     end
@@ -1263,6 +1263,14 @@ function _err_loud --description "Fatal-preflight err: stderr regardless of QUIE
     set -q VERIFY_FAIL; and set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
     test "$MODE" = check; and return 0
     _msg_print --force ERR $argv
+end
+
+function _warn_loud --description "Override-path warn: stderr regardless of QUIET, except MODE=check (silent-probe contract)" # Mirrors _err_loud; unattended installs must surface explicit overrides.
+    set -l msg (string join -- " " $argv)
+    _log "WARN: $msg"
+    set -q VERIFY_WARN; and set -g VERIFY_WARN (math $VERIFY_WARN + 1)
+    test "$MODE" = check; and return 0
+    _msg_print --force WARN $argv
 end
 
 function _echo --description "Print a plain message without level prefix"
@@ -3612,7 +3620,9 @@ function _mr_copy_size_verify --argument-names backup_file _mki_tmp --descriptio
         _log "MKINITCPIO_REVERT_FAIL: cp $backup_file failed"
         return 1
     end
-    if command -q cmp; and not sudo -n cmp -s -- "$backup_file" "$_mki_tmp" 2>/dev/null # cmp -s: non-zero on any byte/length mismatch (size+content in one).
+    if not command -q cmp
+        _log "MKINITCPIO_REVERT_CMP_SKIP: cmp(1) absent — byte-exact verify skipped (cp rc=0 is the only gate)"
+    else if not sudo -n cmp -s -- "$backup_file" "$_mki_tmp" 2>/dev/null # cmp -s: non-zero on any byte/length mismatch (size+content in one).
         _err "  /etc/mkinitcpio.conf revert failed at cmp — content mismatch between backup and tmp"
         _log "MKINITCPIO_REVERT_FAIL: cmp content mismatch"
         return 1
@@ -3791,6 +3801,7 @@ function _install_packages --description "Install managed packages via pacman -S
         set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
         set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
         sudo -n rmdir /run/ry-install 2>/dev/null
+        set -g _RY_SYU_FAILED true # Pre-deploy abort: -Syu never ran; AUR phase must not dep-sync against this un-upgraded db.
         set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
         _phase_record "Packages: pacman -Syu" FAIL "mkinitcpio.conf pre-deploy failed"
         return 1
@@ -4821,16 +4832,19 @@ function _rdi_summary --description "Print final install summary"
     _info "Manual steps required:"
     _info "  1. Run 'rehash' or start new shell (updates command paths)"
     _info "  2. REBOOT to apply kernel cmdline and module changes"
+    set -l _hint_n 2 # Conditional hints continue the numbering; counter keeps it gap-free when a hint is skipped.
     set -l _post_uname (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}') # Single resolve; reused by the group hints below.
     if command -q pacman; and command pacman -Qq realtime-privileges >/dev/null 2>&1
         if test -n "$_post_uname"; and not contains -- realtime (command id -Gn -- "$_post_uname" 2>/dev/null | string split ' ')
-            _info "  3. Add user to realtime group for PipeWire RT scheduling:"
+            set _hint_n (math $_hint_n + 1)
+            _info "  $_hint_n. Add user to realtime group for PipeWire RT scheduling:"
             _info "       sudo usermod -aG realtime $_post_uname  (then log out and back in)"
         end
     end
     if command -q pacman; and command pacman -Qq ddcutil >/dev/null 2>&1
         if test -n "$_post_uname"; and not contains -- i2c (command id -Gn -- "$_post_uname" 2>/dev/null | string split ' ')
-            _info "  4. Add user to i2c group for ddcutil monitor control:"
+            set _hint_n (math $_hint_n + 1)
+            _info "  $_hint_n. Add user to i2c group for ddcutil monitor control:"
             _info "       sudo usermod -aG i2c $_post_uname  (then log out and back in)"
         end
     end

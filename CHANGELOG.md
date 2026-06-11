@@ -1,5 +1,15 @@
 ry-install changelog - newest first.
 
+# 7.26.3 - 2026-06-11
+
+- packages: a mkinitcpio.conf pre-deploy failure now arms the -Syu-failed gate — the AUR phase no longer dep-syncs against a never-upgraded db.
+- nftables: ICMPv6 accept switched to meta l4proto (ip6 nexthdr missed ICMPv6 behind extension headers); managed file redeploys on the next run.
+- preflight: hardware-override warnings force-print to stderr in quiet installs via _warn_loud (--check stays silent).
+- boot: mkinitcpio revert logs MKINITCPIO_REVERT_CMP_SKIP when cmp(1) is absent instead of skipping byte-verify silently.
+- finalize: conditional manual-step hints numbered by counter (no gap when a group hint is skipped).
+- style: _installed_bytes string collect gains --allow-empty (parity with callers; no behavior change).
+- docs: Finalize row documents the pacman -Sc fallback when paccache is absent.
+
 # 7.26.2 - 2026-06-11
 
 - lock: live-PID reclaim detects recycled PIDs (proc starttime vs pidfile mtime); unprovable stays fail-closed.

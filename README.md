@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.26.2 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.26.3 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -60,7 +60,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | 3 | Configuration | deploy the 16 embedded files atomically |
 | 4 | Services | fstab → resolved restart → package removal → nftables activation → mask (ufw flush) → enable → regdom |
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate |
-| 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` → NetworkManager restart (deferred on active Wi-Fi) |
+| 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` (`pacman -Sc --noconfirm` when paccache is absent) → NetworkManager restart (deferred on active Wi-Fi) |
 
 CachyOS-default packages (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; their configs still deploy. AUR is advisory: partial failure `WARN`, all-failed `FAIL` (a single-package set fails outright, exit 1). `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 

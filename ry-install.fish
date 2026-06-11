@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.25.6 (2026-06-10) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.25.7 (2026-06-10) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return: exit would kill the sourcing shell; stack-trace text is not a stable API — re-test per fish major.
-set -g VERSION "7.25.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.25.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -159,7 +159,7 @@ for _ld_path in "$_RY_HOME_DIR" "$_RY_HOME_DIR/logs" "$LOG_DIR"
     set -l _pre (command stat -c '%a' -- "$_ld_path" 2>/dev/null)
     command chmod -- 700 "$_ld_path" 2>/dev/null
     set -l _post (command stat -c '%a' -- "$_ld_path" 2>/dev/null)
-    if test -n "$_pre"; and test "$_pre" != "$_post"; not set -q _RY_PERM_FIX_NOTICES; and set -g _RY_PERM_FIX_NOTICES; set -ga _RY_PERM_FIX_NOTICES "LOG_DIR_PERM_FIX: $_ld_path $_pre→$_post"; end
+    if test -n "$_pre"; and test "$_pre" != "$_post"; set -ga _RY_PERM_FIX_NOTICES "LOG_DIR_PERM_FIX: $_ld_path $_pre→$_post"; end
     if test "$_post" != 700; echo "[ERR] Log dir mode is $_post (expected 700): $_ld_path" >&2; _ry_exit $EXIT_PREFLIGHT; end
 end
 set --erase _ld_path _prev_mkdir_umask
@@ -361,7 +361,7 @@ function _dc_mki_revert --description "_do_cleanup sub: signal-time mkinitcpio.c
     end
     if test "$_rv_tried" = true; and test "$_rv_rc" -eq 0
         command -q sudo; and functions -q _rm_tmp; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
-    else # Failed/skipped revert: keep /run snapshot for manual restore (tmpfs; gone on reboot).
+    else # Keep /run snapshot for manual restore (tmpfs; gone on reboot).
         functions -q _untrack_tmpfile; and _untrack_tmpfile "$_RY_MKI_BACKUP_FILE"
         functions -q _log; and _log "MKINITCPIO_SNAPSHOT_PRESERVED: $_RY_MKI_BACKUP_FILE (signal-time revert failed or skipped)"
     end
@@ -458,6 +458,7 @@ function _dc_kill_children --description "_do_cleanup sub. Reap child PIDs (TERM
         test (count (command pgrep -P "$fish_pid" 2>/dev/null)) -eq 0; and break
         command sleep 0.1 </dev/null 2>/dev/null
     end
+    command -q pgrep; and test (count (command pgrep -P "$fish_pid" 2>/dev/null)) -eq 0; and return 0 # Grace confirmed zero children: skip the KILL pass.
     command pkill -KILL -P "$fish_pid" 2>/dev/null
 end
 
@@ -1116,7 +1117,7 @@ end
 function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)"
     set -l s "$argv[1]"
     if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"; printf '%s' "$s" | string collect --allow-empty; return $status; end
-    set s "$s"x # Sentinel: each collect round-trip trims trailing newlines; stripped by position below.
+    set s "$s"x # Sentinel guards collect newline-trim; stripped by position below.
     set s (string replace -a -- \\ \\\\ "$s" | string collect)
     set s (string replace -a -- '"' '\\"' "$s" | string collect)
     set s (string replace -a -- \n '\\n' "$s" | string collect)
@@ -1593,7 +1594,7 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     end
 end
 
-function _chk_token_in --argument-names line token label --description "Verify a whole-word token is present in a config line" # \b word boundary; callers (MKINITCPIO_MODULES/HOOKS) use word-char start/end.
+function _chk_token_in --argument-names line token label --description "Verify a whole-word token is present in a config line" # \b boundary; module/hook tokens are word-char delimited.
     set -l _re (string escape --style=regex -- "$token")
     if string match -qr "\\b$_re\\b" -- "$line"
         _ok "  $label: present"
@@ -1618,7 +1619,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; return 1; end
     if test "$_RY_SYSTEMD_VER" -lt 250; _err "systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
     set -l _opt_missing
-    for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci kill; command -q $cmd; or set -a _opt_missing $cmd; end
+    for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci kill cmp; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
     if test (count $AUR_PKGS) -gt 0; and not command -q paru; _warn "paru not found — AUR phase will be skipped (advisory, non-fatal; AUR_PKGS=$AUR_PKGS)"; _info "  Install paru to enable AUR: sudo pacman -S --needed paru"; end
     if test (count $AUR_PKGS) -gt 0; and command -q paru
@@ -1831,7 +1832,7 @@ end
 
 function _grep_sysctl_kv --argument-names dst --description "Validate sysctl.d has ≥1 'key = value' line"
     test (count $argv) -lt 2; and _log "BUG: _grep_sysctl_kv called without content (dst=$dst)"; and return 2
-    string match -qre '^[a-zA-Z._0-9-]+\s*=\s*\S' -- $argv[2..-1]; or begin
+    string match -qr '^[a-zA-Z._0-9-]+\s*=\s*\S' -- $argv[2..-1]; or begin
         _fail "  $dst: no 'key = value' lines found"
         return 1
     end
@@ -1840,7 +1841,7 @@ end
 
 function _grep_ini_header --argument-names dst --description 'Validate ≥1 [Section] header present'
     test (count $argv) -lt 2; and _log "BUG: _grep_ini_header called without content (dst=$dst)"; and return 2
-    string match -qre '^\[[^]]+\]$' -- $argv[2..-1]; or begin
+    string match -qr '^\[[^]]+\]$' -- $argv[2..-1]; or begin
         _fail "  $dst: no [Section] header found"
         return 1
     end
@@ -1849,8 +1850,8 @@ end
 
 function _grep_drirc_entry --argument-names dst --description 'Validate drirc XML: <driconf> root + ≥1 <option name="…" value="…"/>'
     test (count $argv) -lt 2; and _log "BUG: _grep_drirc_entry called without content (dst=$dst)"; and return 2
-    string match -qre '<driconf>' -- $argv[2..-1]; or begin; _fail "  $dst: missing <driconf> root element"; return 1; end
-    string match -qre '<option[[:space:]]+name="[^"]+"[[:space:]]+value="[^"]+"[[:space:]]*/>' -- $argv[2..-1]; or begin
+    string match -qr '<driconf>' -- $argv[2..-1]; or begin; _fail "  $dst: missing <driconf> root element"; return 1; end
+    string match -qr '<option[[:space:]]+name="[^"]+"[[:space:]]+value="[^"]+"[[:space:]]*/>' -- $argv[2..-1]; or begin
         _fail "  $dst: no <option name=… value=…/> element found"
         return 1
     end
@@ -1859,7 +1860,7 @@ end
 
 function _grep_modprobe_entry --argument-names dst --description 'Validate ≥1 modprobe.d directive line (options/blacklist/install/alias/softdep/remove)'
     test (count $argv) -lt 2; and _log "BUG: _grep_modprobe_entry called without content (dst=$dst)"; and return 2
-    string match -qre '^[[:space:]]*(options|blacklist|install|remove|alias|softdep)[[:space:]]+\S' -- $argv[2..-1]; or begin
+    string match -qr '^[[:space:]]*(options|blacklist|install|remove|alias|softdep)[[:space:]]+\S' -- $argv[2..-1]; or begin
         _fail "  $dst: no modprobe directive (options/blacklist/install/alias/softdep/remove) found"
         return 1
     end
@@ -1868,7 +1869,7 @@ end
 
 function _grep_regdomain_entry --argument-names dst --description 'Validate a COUNTRY=<ISO-3166 alpha-2> line (/etc/iw-regdomain; # comments allowed)'
     test (count $argv) -lt 2; and _log "BUG: _grep_regdomain_entry called without content (dst=$dst)"; and return 2
-    string match -qre '^[[:space:]]*COUNTRY=[A-Z][A-Z][[:space:]]*$' -- $argv[2..-1]; or begin
+    string match -qr '^[[:space:]]*COUNTRY=[A-Z][A-Z][[:space:]]*$' -- $argv[2..-1]; or begin
         _fail "  $dst: no COUNTRY=<ISO-3166 alpha-2> line found"
         return 1
     end
@@ -1877,7 +1878,7 @@ end
 
 function _grep_udev_entry --argument-names dst --description 'Validate ≥1 udev rule line (KEY{...}op match/assignment, # comments allowed)'
     test (count $argv) -lt 2; and _log "BUG: _grep_udev_entry called without content (dst=$dst)"; and return 2
-    string match -qre '^[[:space:]]*[A-Z][A-Z_]*(\{[^}]*\})?[[:space:]]*(==|!=|\+=|:=|=)' -- $argv[2..-1]; or begin
+    string match -qr '^[[:space:]]*[A-Z][A-Z_]*(\{[^}]*\})?[[:space:]]*(==|!=|\+=|:=|=)' -- $argv[2..-1]; or begin
         _fail "  $dst: no udev rule directive (KEY[{attr}]op\"val\") found"
         return 1
     end
@@ -1886,11 +1887,11 @@ end
 
 function _grep_nft_entry --argument-names dst --description 'Validate nftables ruleset skeleton (table + chain); loaded via nft -f, not INI' # nft has no [Section]; real gate is nft -c at deploy + service start.
     test (count $argv) -lt 2; and _log "BUG: _grep_nft_entry called without content (dst=$dst)"; and return 2
-    string match -qre '^[[:space:]]*table[[:space:]]+\S' -- $argv[2..-1]; or begin
+    string match -qr '^[[:space:]]*table[[:space:]]+\S' -- $argv[2..-1]; or begin
         _fail "  $dst: no nftables 'table <family> <name>' declaration found"
         return 1
     end
-    string match -qre '^[[:space:]]*chain[[:space:]]+\S' -- $argv[2..-1]; or begin
+    string match -qr '^[[:space:]]*chain[[:space:]]+\S' -- $argv[2..-1]; or begin
         _fail "  $dst: no nftables 'chain' declaration found"
         return 1
     end
@@ -2078,7 +2079,11 @@ end
 function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination" # Deploy unconditionally; byte-match skips no-op; iwd/NM live-apply at Phase 6.
     set -l dir (command dirname -- "$dst")
     if test "$use_sudo" = true
-        if not _run sudo -n mkdir -p -m 0755 -- "$dir"; _fail "Cannot create directory: $dir"; return 1; end
+        set -l _pmk (umask); umask 0022 # -m hits the final dir only; pin intermediates to 0755.
+        _run sudo -n mkdir -p -m 0755 -- "$dir"
+        set -l _mk_rc $status
+        umask $_pmk
+        if test "$_mk_rc" -ne 0; _fail "Cannot create directory: $dir"; return 1; end
     else
         if not _run mkdir -p -- "$dir"; _fail "Cannot create directory: $dir"; return 1; end # Ambient umask: dir conventional, file 0600 via atomic-write chmod.
     end
@@ -2787,7 +2792,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     set -g _RY_DMESG_LINES 0; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_TSC
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null); set -l _full_count (count $_full)
-        if test (count $_full) -gt 0
+        if test "$_full_count" -gt 0
             set -g _RY_DMESG_PREEMPT (printf '%s\n' $_full | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
             set -g _RY_DMESG_TSC (printf '%s\n' $_full | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
         end
@@ -3192,6 +3197,14 @@ function _vrs_nm_perms --description "Runtime session check: NetworkManager syst
     end
 end
 
+function _vrs_vfat_skip --argument-names path boot_fstype --description "rc 0 = vfat/undetermined boot path (perms not verifiable, _info emitted); rc 1 = checkable"
+    set -l _fst (command findmnt -n -o FSTYPE --target "$path" 2>/dev/null | string trim --) # Per-path fstype; fall back to the $BOOT fstype.
+    test -z "$_fst"; and set _fst "$boot_fstype"
+    if test "$_fst" = vfat; _info "  $path: skipped (vfat — unix perms synthesized from mount options)"; return 0; end
+    if test -z "$_fst"; _info "  $path: skipped (boot fstype undetermined — vfat-safe default)"; return 0; end
+    return 1
+end
+
 function _vrs_installed_file_perms --description "Runtime session check: installed system/service/user file perms"
     _echo "── Installed files ──"
     set -l perm_bad 0; set -l perm_checked 0; set -l perm_vfat_skipped 0; set -l _boot_resolved (_resolve_boot_path)
@@ -3200,15 +3213,7 @@ function _vrs_installed_file_perms --description "Runtime session check: install
     for dst in $SYSTEM_DESTINATIONS
         if sudo -n test -f "$dst" 2>/dev/null
             if string match -q '/boot/*' -- "$dst"
-                set -l _dst_fstype (command findmnt -n -o FSTYPE --target "$dst" 2>/dev/null | string trim --) # Per-file fstype (the file's own mount); fall back to the $BOOT fstype.
-                test -z "$_dst_fstype"; and set _dst_fstype "$_boot_fstype"
-                if test "$_dst_fstype" = vfat; or test -z "$_dst_fstype"
-                    set perm_vfat_skipped (math $perm_vfat_skipped + 1)
-                    set -l _why "vfat — unix perms synthesized from mount options, not stored"
-                    test "$_dst_fstype" = vfat; or set _why "boot fstype undetermined — perm check skipped (vfat-safe default)"
-                    _info "  $dst: skipped ($_why)"
-                    continue
-                end
+                if _vrs_vfat_skip "$dst" "$_boot_fstype"; set perm_vfat_skipped (math $perm_vfat_skipped + 1); continue; end
             end
             set perm_checked (math $perm_checked + 1)
             _chk_perms "$dst" 644 root:root true; or set perm_bad (math $perm_bad + 1)
@@ -3223,11 +3228,8 @@ function _vrs_installed_file_perms --description "Runtime session check: install
             _chk_perms "$dst" 600 "$_u_uname:$_actual_grp" false; or set perm_bad (math $perm_bad + 1)
         end
     end
-    if test "$perm_bad" -eq 0; and test "$perm_checked" -gt 0
-        _ok "  All $perm_checked installed files: correct permissions and ownership"
-    else if test "$perm_checked" -eq 0
-        _warn "  No installed files found to check"
-    end
+    test "$perm_bad" -eq 0; and test "$perm_checked" -gt 0; and _ok "  All $perm_checked installed files: correct permissions and ownership"
+    test "$perm_checked" -eq 0; and _warn "  No installed files found to check"
     test "$perm_vfat_skipped" -gt 0; and _info "  $perm_vfat_skipped file(s) skipped on boot partition (vfat or undetermined fstype — unix perms not verifiable)"
 end
 
@@ -3242,16 +3244,8 @@ function _vrs_parent_dirs --description "Runtime session check: parent dirs of m
         contains -- "$dir" $checked_dirs; and continue
         set -a checked_dirs "$dir"
         if sudo -n test -d "$dir" 2>/dev/null
-            if test "$dir" = /boot; or string match -q '/boot/*' -- "$dir" # Mirror the per-file vfat skip: FAT stores no unix perms.
-                set -l _dir_fstype (command findmnt -n -o FSTYPE --target "$dir" 2>/dev/null | string trim --)
-                test -z "$_dir_fstype"; and set _dir_fstype "$_boot_fstype"
-                if test "$_dir_fstype" = vfat; or test -z "$_dir_fstype"
-                    set dir_vfat_skipped (math $dir_vfat_skipped + 1)
-                    set -l _why "vfat — unix perms synthesized from mount options, not stored"
-                    test "$_dir_fstype" = vfat; or set _why "boot fstype undetermined — perm check skipped (vfat-safe default)"
-                    _info "  $dir: skipped ($_why)"
-                    continue
-                end
+            if test "$dir" = /boot; or string match -q '/boot/*' -- "$dir" # FAT stores no unix perms; mirror the per-file skip.
+                if _vrs_vfat_skip "$dir" "$_boot_fstype"; set dir_vfat_skipped (math $dir_vfat_skipped + 1); continue; end
             end
             set dir_checked (math $dir_checked + 1)
             set -l _po (sudo -n stat -c '%a %U:%G' -- "$dir" 2>/dev/null)
@@ -3284,11 +3278,8 @@ function _vrs_parent_dirs --description "Runtime session check: parent dirs of m
             set dir_bad (math $dir_bad + 1)
         end
     end
-    if test "$dir_bad" -eq 0; and test "$dir_checked" -gt 0
-        _ok "  All $dir_checked parent directories: correct ownership, not world/group-writable"
-    else if test "$dir_checked" -eq 0
-        _warn "  No parent directories found to check"
-    end
+    test "$dir_bad" -eq 0; and test "$dir_checked" -gt 0; and _ok "  All $dir_checked parent directories: correct ownership, not world/group-writable"
+    test "$dir_checked" -eq 0; and _warn "  No parent directories found to check"
     test "$dir_vfat_skipped" -gt 0; and _info "  $dir_vfat_skipped dir(s) skipped on boot partition (vfat or undetermined fstype — unix perms not verifiable)"
 end
 
@@ -3700,7 +3691,7 @@ function _install_packages --description "Install managed packages via pacman -S
         _err "Aborting package installation — mkinitcpio.conf must be in place before -Syu"
         set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
         set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
-        sudo -n rmdir /run/ry-install 2>/dev/null; or true
+        sudo -n rmdir /run/ry-install 2>/dev/null
         set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
         _phase_record "Packages: pacman -Syu" FAIL "mkinitcpio.conf pre-deploy failed"
         return 1
@@ -3717,7 +3708,7 @@ function _install_packages --description "Install managed packages via pacman -S
         end
     end
     set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
-    sudo -n rmdir /run/ry-install 2>/dev/null; or true # Reclaim empty snapshot dir; rmdir no-op if absent/non-empty.
+    sudo -n rmdir /run/ry-install 2>/dev/null # Reclaim empty snapshot dir; rmdir no-op if absent/non-empty.
     if test "$_fn_err" = true; _phase_record "Packages: pacman -Syu" FAIL "see JSONL log"; return 1; end
     _phase_record "Packages: pacman -Syu" PASS "system upgraded (full -Syu)"
     return 0
@@ -3918,7 +3909,7 @@ function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp 
         return 1
     end
     _awf_make_backup /etc/fstab true
-    if not sudo -n mv -T -- "$tmpfstab" /etc/fstab; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: atomic move failed"; return 1; end
+    if not _run sudo -n mv -T -- "$tmpfstab" /etc/fstab; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: atomic move failed"; return 1; end
     _untrack_tmpfile "$tmpfstab"
     return 0
 end
@@ -4588,7 +4579,7 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/services phases" # Aggr
     end
     _rrp_optional_indexer updatedb updatedb
     _rrp_optional_indexer pkgfile "pkgfile --update" --update
-    set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0
+    set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0 # Phase-3 scope; Phase-2 pacnew redeploys are logged individually.
     if _install_system_files
         _phase_record "Configs: system file deployment" PASS "$_RY_DEPLOY_CHANGED_COUNT deployed, $_RY_DEPLOY_IDEMPOTENT_COUNT idempotent"
     else
@@ -4977,6 +4968,13 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
     if not command -q udevadm
         _warn "udevadm(8) not found — I/O scheduler rule applies at next boot"
         return 0
+    end
+    _resolve_systemd_ver
+    if set -q _RY_SYSTEMD_VER; and test "$_RY_SYSTEMD_VER" -ge 254 # udevadm verify landed in v254; older systemd skips straight to reload.
+        if not _run sudo -n udevadm verify -- "$target"
+            _warn "udevadm verify failed for $target — rules not reloaded; fix the rule file"
+            return 0
+        end
     end
     if not _run sudo -n udevadm control --reload-rules
         _warn "udevadm control --reload-rules failed — rule applies at next boot (non-fatal; file deployed)"

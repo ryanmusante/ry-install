@@ -1,8 +1,8 @@
 #!/usr/bin/env fish
-# ry-install v7.25.5 (2026-06-10) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.25.6 (2026-06-10) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
-if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return: exit here would kill the sourcing shell.
-set -g VERSION "7.25.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return: exit would kill the sourcing shell; stack-trace text is not a stable API — re-test per fish major.
+set -g VERSION "7.25.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -26,6 +26,7 @@ function _ry_show_help --description "Display usage information and available su
         "  --verify          Check config files + live system state (static, then runtime)" \
         "  --check           Silent idempotency probe (0=clean 3=preflight 10=drift). Requires functional sudo + systemctl;" \
         "                    a systemctl ERR_NO_DATA probe yields preflight (rc=3) only when no drift was already confirmed; confirmed drift returns rc=10" \
+        "                    kernel-param changes read as drift until reboot (compares live /proc/cmdline)" \
         "UTILITIES:" \
         "  --install-file <path>  Re-deploy a single managed file" \
         "OPTIONS:" \
@@ -70,6 +71,7 @@ set --erase _early_arg
 # ── PATH HARDENING (before first external command: id -u) ─────────────────────────────────────────
 set -l _ry_path_new
 for _ry_p in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin $PATH
+    string match -q -- '/*' $_ry_p; or continue # Drop empty/relative inherited PATH entries.
     not contains -- $_ry_p $_ry_path_new; and set -a _ry_path_new $_ry_p
 end
 set -gx PATH $_ry_path_new
@@ -129,6 +131,9 @@ end
 set --erase _ry_tmpprobe_dir
 if not command -q timeout; echo "[ERR] GNU coreutils timeout(1) required (used by _run for hang-protection)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command timeout --foreground --kill-after=1 1 true 2>/dev/null; echo "[ERR] timeout(1) lacks --foreground/--kill-after (need GNU coreutils ≥ 8.x; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
+set -l _ry_mv_a (command mktemp 2>/dev/null); set -l _ry_mv_b (command mktemp 2>/dev/null)
+if test -z "$_ry_mv_a"; or test -z "$_ry_mv_b"; or not command mv -T -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; command rm -f -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; echo "[ERR] mv(1) lacks -T no-target-directory (need GNU coreutils ≥ 8.x; busybox not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
+command rm -f -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; set --erase _ry_mv_a _ry_mv_b
 if not command -q stat; echo "[ERR] GNU coreutils stat(1) required (used for mode/owner verification)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command -q date; echo "[ERR] GNU coreutils date(1) required (used for timestamps in DATE_LABEL, TIMESTAMP, JSONL ts fields)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not string match -qr '^[+-]\d{4}$' -- (command date '+%z' 2>/dev/null); echo "[ERR] date(1) lacks %z timezone offset support (need GNU coreutils ≥ 8.x; rejects empty or literal-%z output)" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -589,7 +594,7 @@ set -g MKINITCPIO_HOOKS \
     fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
-set -g RESOLVED_MDNS resolve; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade # systemd-resolved drop-in keys (RESOLVED_*).
+set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade # systemd-resolved drop-in keys (RESOLVED_*); mDNS off — default-deny inbound drops its replies.
 set -g COUNTRY US # COUNTRY: wireless regdom; default US, override --country=XX.
 # _RY_ISO3166_ALPHA2: assigned ISO-3166-1 alpha-2 codes for --country validation.
 set -g _RY_ISO3166_ALPHA2 \
@@ -763,7 +768,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:4 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:17 \
+        _RY_POST_HOOKS:16 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         AUR_PKGS:1 \
         _RY_PHASE_NAMES:6 \
@@ -917,7 +922,7 @@ function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate con
     printf '%s\n' "# ry-install sysctl tunables (priority 95 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
     for entry in $SYSCTL_VALUES
-        if not string match -qr '^\s*\S[^=]*=\s*\S' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; functions -q _log; and _log "SYSCTL_SKIP_MALFORMED: '$entry' (require non-empty key=value)"; continue; end
+        if not string match -qr '^\s*[A-Za-z0-9._-]+\s*=\s*\S' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; functions -q _log; and _log "SYSCTL_SKIP_MALFORMED: '$entry' (require key=value, key charset [A-Za-z0-9._-])"; continue; end
         set -l parts (string split -m1 '=' -- "$entry"); set -l key (string trim -- "$parts[1]"); set -l val (string trim -- "$parts[2]")
         printf '%s = %s\n' "$key" "$val"
         set _printed (math $_printed + 1)
@@ -1225,6 +1230,7 @@ end
 function _err_loud --description "Fatal-preflight err: stderr regardless of QUIET, except MODE=check (silent-probe contract)" # Force-stderr on _RY_LOUD_ERR; --check stays silent.
     set -l msg (string join -- " " $argv)
     _log "ERR: $msg"
+    set -q VERIFY_FAIL; and set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
     test "$MODE" = check; and return 0
     _msg_print --force ERR $argv
 end
@@ -4751,7 +4757,6 @@ end
 # ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR (resolver, sudo gate) ───────────────────────────
 set -g _RY_POST_HOOKS \
     "/boot/*|boot" \
-    "/efi/*|boot" \
     "/etc/mkinitcpio.conf|boot" \
     "/etc/sdboot-manage.conf|boot" \
     "/etc/kernel/cmdline|boot" \
@@ -4825,7 +4830,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (12 handlers / 17 patterns; _post_<tag> dispatch) ──────────
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (12 handlers / 16 patterns; _post_<tag> dispatch) ──────────
 function _pb_rebuild_cascade --argument-names target --description "_post_boot sub. mkinitcpio -P + sdboot-manage cascade"
     if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     if not _sdboot_fallback_vfat_ok; _log "POST_BOOT_SDBOOT_REFUSED: target=$target"; return $EXIT_BOOT_CRIT; end

@@ -1,20 +1,29 @@
 ry-install changelog - newest first.
 
+7.25.6 - 2026-06-10
+- resolved: MulticastDNS resolve -> no (default-deny inbound drops mDNS replies).
+- preflight: probe mv -T capability with the other coreutils gates.
+- preflight: PATH hardening drops empty/relative inherited entries.
+- install-file: drop unreachable /efi/* post-hook pattern (17->16).
+- sysctl: generator key charset pinned to [A-Za-z0-9._-].
+- log: _err_loud bumps the footer fail counter.
+- cli: --help notes kernel-param drift reads rc=10 until reboot under --check.
+
 7.25.5 - 2026-06-10
 - lock: every acquire-failure path logs a JSONL tag and reports the holder PID on stderr.
 - packages: a failed or db-locked pacman -Syu skips the AUR phase even without a rollback.
 - summary: revert-failed bail adds SKIP rows for updatedb, pkgfile, and regdom.
-- preflight: network FAIL evidence reflects the probe outcome (ICMP-ok vs all-unreachable).
+- preflight: network FAIL evidence reflects probe outcome (ICMP-ok vs unreachable).
 - style: lowercase command names in messages; _RY_ prefix on the wifi-backend flag.
 - style: command-prefix xmllint; drop three trailing description periods.
 
 7.25.4 - 2026-06-10
-- cleanup: guard the progress-bar teardown; a pre-load signal no longer prints unknown-command.
-- docs: README firewall note states the forward chain is dropped, matching the shipped ruleset.
+- cleanup: guard progress-bar teardown against pre-load signals.
+- docs: README firewall note: forward chain dropped, matching the ruleset.
 - style: trim two long inline comments; post-hook banner reads 12 handlers / 17 patterns.
 
 7.25.3 - 2026-06-10
-- services: activate nftables.service before the ufw flush (no unfirewalled window in the handoff).
+- services: activate nftables before the ufw flush (no unfirewalled window).
 - verify: runtime unit batch covers nftables.service (pinned 5->6).
 - verify: parent-dir perms skip vfat/undetermined /boot dirs (per-file parity).
 - verify: HOOKS parse tolerates multi-line HOOKS=( ... ).
@@ -27,10 +36,10 @@ ry-install changelog - newest first.
 7.25.2 - 2026-06-09
 - cleanup: failed/skipped signal-time mkinitcpio revert preserves the /run snapshot.
 - cleanup: reap children before the revert; lock release moved after the sweeps.
-- cleanup: child-reap grace polls up to 10s while db.lck is held (0.5s otherwise).
+- cleanup: child-reap grace polls up to 10s while db.lck held (0.5s otherwise).
 - cleanup: ry-run.* inner-file sweep no longer breaks on TMPDIR glob metachars.
-- packages: after a -Syu revert, mkinitcpio.conf.pacnew is reported for pacdiff, not auto-resolved.
-- verify: boot-time parser accepts h/min/s/ms totals; >60s boots hit the target compare.
+- packages: post-revert mkinitcpio.conf.pacnew left for pacdiff, not auto-resolved.
+- verify: boot-time parser accepts h/min/s/ms; >60s boots hit target compare.
 - verify: NM wifi.backend probe distinguishes sudo lapse from a missing backend.
 - lock: live-but-unsignalable peer PID (/proc present, EPERM) is never reclaimed.
 - boot: _preflight_boot_sanity refuses an empty $BOOT.
@@ -75,8 +84,8 @@ ry-install changelog - newest first.
 
 7.24.3 - 2026-06-09
 - fix: wifi-route case 'br[0-9]*' never matched (fish lacks [..] globs); use 'br*'.
-- fix: --install-file boot cascade refuses a non-vfat /boot ESP fallback (Phase 5 parity).
-- verify: drirc xmllint sudo-reads root-only files; nft unknown/n-a posture; sys_units pinned to 5.
+- fix: --install-file boot cascade refuses non-vfat /boot ESP fallback.
+- verify: drirc xmllint sudo-reads root-only files; sys_units pinned to 5.
 - check: stderr-silent on post-parse anomalies; pre-parse TMPDIR warnings remain.
 - harden: lock pidfile write/install failures emit JSONL tags.
 - run: nftables is-active probe un-wrapped from _run.
@@ -84,7 +93,7 @@ ry-install changelog - newest first.
 - style: note fish literal-bracket globs at the THP check and overlay case list.
 
 7.24.2 - 2026-06-09
-- fix: nftables.conf fell through to _grep_ini_header; add _grep_nft_entry (7.24.0 regression).
+- fix: add _grep_nft_entry; nftables.conf fell through to INI validator (7.24.0).
 - harden: stale-reclaim re-reads the pidfile right before rm -rf.
 
 7.24.1 - 2026-06-09

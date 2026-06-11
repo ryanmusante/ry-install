@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.25.5 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.25.6 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -106,7 +106,7 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 
 | Config | Settings |
 |---|---|
-| systemd-resolved | `MulticastDNS=resolve`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` |
+| systemd-resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` |
 | systemd-logind | `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `…LongPress`) = `ignore` |
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
 | NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2` (disable), `[logging] level=WARN` |
@@ -170,7 +170,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, and ICMP allowed; all other inbound dropped; forwarding dropped; output unrestricted. Add inbound ports to `/etc/nftables.conf` as needed.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, and ICMP allowed; all other inbound dropped; forwarding dropped; output unrestricted. mDNS is disabled (`MulticastDNS=no`) to match. Add inbound ports to `/etc/nftables.conf` as needed.
 
 | Feature | Detail |
 |---|---|

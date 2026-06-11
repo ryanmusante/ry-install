@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.25.7 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.26.2 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -24,7 +24,7 @@ Hard requirements abort read-only in preflight (exit 3); `paru`, `pacman-contrib
 
 | Requirement | Minimum |
 |---|---|
-| CachyOS | systemd-boot, ext4 root, GNU coreutils |
+| CachyOS | systemd-boot, ext4 root, GNU coreutils + findutils |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
 | curl / findmnt | both required |
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
@@ -42,12 +42,12 @@ Hard requirements abort read-only in preflight (exit 3); `paru`, `pacman-contrib
 | `--check` | Idempotency probe (`0` clean · `3` preflight · `10` drift) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--country=XX` | Wireless regdom (ISO-3166-1 alpha-2; default `US`; UK is `GB`) |
-| `-h, --help` · `-v, --version` | Help · Version |
+| `-h, --help` · `-v, --version` | Help · Version (honored first, except as the `--install-file` value) |
 
-`--verify`/`--check` only read state. `--check` compares the running `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing. `--verify` also reports runtime state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab options, CachyOS vm sysctls (advisory), and boot time vs a 15 s target (≥ 90 % = near-miss `WARN`).
+`--verify`/`--check` only read state and run without the instance lock — a concurrent install can read as transient drift; re-run after it finishes. `--check` compares the running `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing; bootstrap failures before argument parsing still print to stderr. `--verify` also reports runtime state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab options, CachyOS vm sysctls (advisory), and boot time vs a 15 s target (≥ 90 % = near-miss `WARN`).
 
 > [!CAUTION]
-> `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
+> `--install-file` of a boot config runs the boot cascade (`/etc/kernel/cmdline` regenerates sdboot entries without an initramfs rebuild); a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
 
 ## Install Flow
 
@@ -111,7 +111,7 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
 | NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2` (disable), `[logging] level=WARN` |
 | cpupower | `GOVERNOR=powersave` (amd_pstate=active EPP mode; EPP not pinned) |
-| amdgpu/ttm | `pages_limit=25165824`/`page_pool_size=25165824` (GTT ~96 GiB; set BIOS UMA=512 MB) |
+| amdgpu/ttm | `pages_limit=8388608`/`page_pool_size=8388608` (GTT ~32 GiB; set BIOS UMA=512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
 | udev | NVMe whole-disk I/O scheduler → `none` |
 | wireless regdom | `COUNTRY=US` (`--country=XX`), applied Phase 4; persists via `/etc/iw-regdomain` → cachyos-iw-set-regdomain |
@@ -142,7 +142,7 @@ The script is the source of truth; retune via the `set -g` globals near the top.
 | Set | Units |
 |---|---|
 | Masked (11) | `ananicy-cpp.service`, `avahi-daemon.{service,socket}`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask, after nftables activates), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
-| Enabled (4) | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service` (+ `NetworkManager-dispatcher.service` if installed) |
+| Enabled (4) | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service` (+ `NetworkManager-dispatcher.service` if installed); the runtime verify batch is derived from this list + conf.d-implied units |
 
 ## Managed Files
 
@@ -166,7 +166,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 | Atomic writes | render → tmp → symlink-probe → `.ry.bak` (backup targets) → chmod → `mv -T` → re-read + restore on mismatch |
 | Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` / `fstab` |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal; a failed or skipped revert preserves the `/run` snapshot (until reboot) |
-| Instance lock | atomic `mkdir 0700`; dead-PID reclaim via `kill -0` + `/proc` liveness; empty pidfile settles 0.2 s before reclaim |
+| Instance lock | atomic `mkdir 0700`; dead-PID reclaim via `kill -0` + `/proc` liveness; a live PID started after the pidfile (recycled) is reclaimed via `/proc` starttime; empty pidfile settles 0.2 s before reclaim |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
 
 | Code | Meaning |

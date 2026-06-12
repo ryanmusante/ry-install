@@ -1,5 +1,32 @@
 ry-install changelog - newest first.
 
+7.28.0 - 2026-06-12
+
+- packages: mkinitcpio-firmware moved from the AUR set into PKGS_ADD (15 -> 16) — installed from the CachyOS repository in the same pacman -Syu transaction, gaining the package-verify and boot-taint gates the AUR path never had.
+- packages: AUR support removed end-to-end — no paru invocation, no AUR install phase, no paru/version preflight, no per-package AUR retry; the script is pacman-only.
+- verify: AUR package check dropped from static verification (mkinitcpio-firmware is now covered by the PKGS_ADD check).
+- cleanup: state that existed only to gate the AUR phase removed (_RY_SYU_FAILED, _RY_AUR_PARTIAL, _RY_IAP_RETRY_FAILED); paru dropped from the long-running-command timeout bypass list; taint-gate guidance no longer references an advisory phase.
+- counts: PKGS_ADD 15 -> 16; AUR_PKGS invariant retired (pinned-count set 22 -> 21); functions 291 -> 287.
+- docs: README is pacman-only — requirements row and intro, install-flow intro, Phase 2 row, package table (Install 16; AUR row removed), and Known Issues (paru workarounds replaced with unmanaged out-of-tree notes; AUR PGP row removed).
+
+7.27.1 - 2026-06-12
+
+- header: script banner comment synced to the release version and date (still read v7.26.10 / 2026-06-11 since the 7.26.10 cut; the VERSION constant, README, and changelog were already current).
+- progress: pinned bar now requires ≥ 64 terminal columns at init (longest rendered row is 63 columns: 40-char bar + brackets + percent + "Aborted (NNNNs)"); narrower terminals fall back to plain step logging — previously the bottom-row printf wrapped and corrupted the scroll region.
+- progress: the WINCH handler applies the same ≥ 64-column floor on resize, tearing the bar down exactly as a < 10-row resize does.
+- cleanup: TMPDIR sweep matches ownership by numeric UID (`find -uid`) instead of `-user`, removing the name-before-UID lookup ambiguity for all-digit usernames; identical files matched on every standard system (GNU findutils already a hard requirement).
+- docs: three within-cell README table trims (kernel-cmdline iommu rationale now changelog-only, instance-lock mechanics condensed with behavior intact, enabled-units internal derived-batch clause dropped); all tables, rows, alerts, commands, counts, and operational semantics unchanged.
+
+7.27.0 - 2026-06-12
+
+- cmdline: amd_iommu=off -> iommu=pt — DMA remapping restored in passthrough mode; USB4/boltd device authorization becomes meaningful (KERNEL_PARAMS count unchanged at 12; live /proc/cmdline reads as drift until the post-deploy reboot).
+- verify: nftables.service judged by live ruleset (inet/filter/input with policy drop) when not active — the Arch unit is Type=oneshot without RemainAfterExit, so is-active reads inactive after a clean boot-time load (false FAIL fixed; disabled unit still warns, missing ruleset still fails).
+- check: the silent probe applies the same oneshot semantics — an inactive nftables.service with a live default-deny ruleset no longer reads as permanent drift (rc 10) on a healthy system; missing ruleset or nft(8) still drifts.
+- install: firewall-handoff message no longer claims the unit is active after enable --now; evidence reworded to the probed reality (rc=0, oneshot semantics).
+- install-file: the nftables post-hook restarts the service after a clean nft -c instead of the old reload-if-active path, which was dead code twice over (the unit is never active and ships no ExecReload) — a re-deployed /etc/nftables.conf now applies live.
+- services: avahi-daemon.{service,socket} unmasked (MASK 11->9); firewall opens mDNS 5353/udp + KDE Connect 1714-1764 (tcp+udp) for KDE Connect discovery (resolved MulticastDNS=no unchanged — avahi owns 5353).
+- config: /etc/conf.d/wireless-regdom managed (WIRELESS_REGDOM="$COUNTRY"; silences the wireless-regdb set-wireless-regdom error; counts: files 16->17, SYSTEM_DESTINATIONS 15->16, post-hook patterns 16->17; pacman-owned — wireless-regdb .pacnew auto-resolved by the managed-destination pacnew scan).
+
 7.26.10 - 2026-06-11
 
 - color: NO_COLOR now requires a non-empty value per no-color.org; NO_COLOR="" no longer suppresses color; help text corrected from "any value" to "non-empty value".

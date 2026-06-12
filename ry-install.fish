@@ -1,16 +1,16 @@
 #!/usr/bin/env fish
-# ry-install v7.26.10 (2026-06-11) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.28.0 (2026-06-12) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return keeps a sourcing shell alive; stack-trace text not a stable API.
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──────────────────────────────────────────────
-set -g VERSION "7.26.10"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.28.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 16
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs (cachyos-settings/wine-cachyos); /etc overrides.
 
@@ -428,11 +428,11 @@ function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for l
     test (count $_tmp_globs) -gt 0; or return 0
     set -l _find_name_args
     for _g in $_tmp_globs; test -n "$_find_name_args"; and set -a _find_name_args -o; set -a _find_name_args -name "$_g"; end
-    command find "$_tmpdir" -xdev -maxdepth 1 \( $_find_name_args \) -type f -user "$_MY_UID" -delete 2>/dev/null
+    command find "$_tmpdir" -xdev -maxdepth 1 \( $_find_name_args \) -type f -uid "$_MY_UID" -delete 2>/dev/null
     for _rd in "$_tmpdir"/ry-run.* # Per-dir descent (not find -path): TMPDIR glob metachars stay literal.
-        test -d "$_rd"; and command find "$_rd" -xdev -maxdepth 1 -type f -user "$_MY_UID" -delete 2>/dev/null
+        test -d "$_rd"; and command find "$_rd" -xdev -maxdepth 1 -type f -uid "$_MY_UID" -delete 2>/dev/null
     end
-    command find "$_tmpdir" -xdev -maxdepth 1 -name 'ry-run.*' -type d -empty -user "$_MY_UID" -delete 2>/dev/null
+    command find "$_tmpdir" -xdev -maxdepth 1 -name 'ry-run.*' -type d -empty -uid "$_MY_UID" -delete 2>/dev/null
 end
 function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _KCONFIG_DATA _KCONFIG_LOADED _RY_ESP_PATH _RY_BOOT_PATH
@@ -441,14 +441,14 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_BOOT_COUNT _RY_BOOT_ENUM_OK _CPU_PATH
     set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
     set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_PACMAN_REVERT_ATTEMPTED
-    set --erase _RY_MKI_REVERT_FAILED _RY_AUR_PARTIAL _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED
+    set --erase _RY_MKI_REVERT_FAILED _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
     set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT _RY_DMESG_TSC
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
     set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_FSTAB_EVIDENCE _RY_FSTAB_RESULT
-    set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE _RY_SDBOOT_REFUSE_FS _RY_SYU_FAILED _RY_NET_FAIL_EVIDENCE
+    set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE _RY_SDBOOT_REFUSE_FS _RY_NET_FAIL_EVIDENCE
 end
 function _dc_release_lock --description "_do_cleanup sub. Release the instance lock (ownership-gated)"
     if begin; set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED; end; and set -q LOCK_DIR; and not test -L "$LOCK_DIR"
@@ -571,6 +571,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/drirc.d/95-ry-radv-apu.conf" \
     "/etc/modprobe.d/ry-amdgpu-strixhalo.conf" \
     "/etc/iw-regdomain" \
+    "/etc/conf.d/wireless-regdom" \
     "/etc/udev/rules.d/60-ry-ioschedulers.rules" \
     "/etc/nftables.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
@@ -584,9 +585,9 @@ set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_R
 # KERNEL_PARAMS (12, enforced) -> /etc/kernel/cmdline + sdboot LINUX_OPTIONS.
 set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
-    amd_iommu=off \
     amd_pstate=active \
     amdgpu.ppfeaturemask=0xffff7fff \
+    iommu=pt \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
     pcie_aspm.policy=performance \
@@ -667,12 +668,13 @@ set -g SYSCTL_VALUES \
     "net.ipv4.tcp_notsent_lowat=16384" \
     "net.ipv4.tcp_slow_start_after_idle=0"
 
-# ── EMBEDDED DATA: PACKAGES (ADD / DEL / AUR / VULKAN) — PKGS_ADD(15) → pacman -Syu (Phase 2) ─────
+# ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) — PKGS_ADD(16) → pacman -Syu (Phase 2) ──────────
 set -g PKGS_ADD \
     nvme-cli \
     cachyos-gaming-meta \
     cachyos-gaming-applications \
     lib32-mesa \
+    mkinitcpio-firmware \
     fd \
     sd \
     dust \
@@ -694,15 +696,12 @@ set -g PKGS_DEL \
     micro \
     cachyos-micro-settings \
     cachy-update
-set -g AUR_PKGS mkinitcpio-firmware # AUR packages — installed unconditionally (no hardware gating).
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # EXPECTED_VULKAN_PKGS (2) -> chwd Vulkan drivers (verified present).
 
-# ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS — MASK(11) → mask --now (Phase 4) ─────────
+# ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS — MASK(9) → mask --now (Phase 4) ─────────
 set -g MASK \
     ananicy-cpp.service \
-    avahi-daemon.service \
-    avahi-daemon.socket \
     power-profiles-daemon.service \
     NetworkManager-wait-online.service \
     ufw.service \
@@ -776,21 +775,20 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:10 \
         SYSCTL_VALUES:6 \
-        PKGS_ADD:15 \
+        PKGS_ADD:16 \
         PKGS_DEL:8 \
-        MASK:11 \
+        MASK:9 \
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:4 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:16 \
+        _RY_POST_HOOKS:17 \
         _RY_BOOT_CRITICAL_DSTS:4 \
-        AUR_PKGS:1 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_NTSYNC_MODLOAD_CONFS:3 \
         _RY_ISO3166_ALPHA2:249 \
         _RY_TMPDIR_GLOBS:6 \
-        SYSTEM_DESTINATIONS:15 \
+        SYSTEM_DESTINATIONS:16 \
         USER_DESTINATIONS:1
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -843,12 +841,12 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
             _pre_dispatch_exit $EXIT_PREFLIGHT
         end
     end
-    for _pn in $PKGS_ADD $PKGS_DEL $AUR_PKGS
-        if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman/paru would parse as flag, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    for _pn in $PKGS_ADD $PKGS_DEL
+        if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman would parse as flag, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 
-# ── CONTENT GENERATORS (16; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
+# ── CONTENT GENERATORS (17; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -914,6 +912,8 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        ct state invalid drop" \
         "        ip protocol icmp accept" \
         "        meta l4proto ipv6-icmp accept" \
+        "        udp dport 5353 accept comment \"mDNS (avahi)\"" \
+        "        meta l4proto { tcp, udp } th dport 1714-1764 accept comment \"KDE Connect\"" \
         "    }" \
         "    chain forward { type filter hook forward priority filter; policy drop; }" \
         "    chain output { type filter hook output priority filter; policy accept; }" \
@@ -950,6 +950,9 @@ function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate conte
 end
 function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)" # Consumed by cachyos-iw-set-regdomain (iw reg set $COUNTRY) at device add.
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
+end
+function _content__etc_conf.d_wireless-regdom --description "Generate content for /etc/conf.d/wireless-regdom (set-wireless-regdom input)" # Consumed by set-wireless-regdom (wireless-regdb) via 85-regulatory.rules at device add.
+    printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "WIRELESS_REGDOM=\"$COUNTRY\""
 end
 function _content__etc_udev_rules.d_60-ry-ioschedulers.rules --description "Generate content for NVMe I/O scheduler udev rule (none)" # NVMe scheduler none; DEVTYPE==disk guard spares partitions.
     printf '%s\n' \
@@ -1286,7 +1289,9 @@ function _progress_init --description "Open scroll region; draw initial bar" # _
     set -l rows (command tput lines 2>/dev/null)
     string match -qr '^\d+$' -- "$rows"; or return 0
     test "$rows" -ge 10; or return 0
-    command tput cols >/dev/null 2>&1; or return 0
+    set -l _cols (command tput cols 2>/dev/null)
+    string match -qr '^\d+$' -- "$_cols"; or return 0
+    test "$_cols" -ge 64; or return 0 # Longest rendered row = 63 cols (40-char bar + brackets + percent + "Aborted (NNNNs)"); narrower wraps and corrupts the scroll region.
     set -g _PROG_PINNED true; set -g _PROG_ROWS $rows; set -l _scroll_bot (math $_PROG_ROWS - 1)
     printf '\e[1;%dr\e[%d;1H' $_scroll_bot $_scroll_bot >&2
     _progress_redraw "" 0
@@ -1343,6 +1348,8 @@ function _progress_on_winch --on-signal WINCH --description "Re-anchor progress 
     set -l _new_rows (command tput lines 2>/dev/null)
     string match -qr '^\d+$' -- "$_new_rows"; or return 0
     if test "$_new_rows" -lt 10; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <10 rows: tear down (mirrors init refusal).
+    set -l _new_cols (command tput cols 2>/dev/null)
+    if string match -qr '^\d+$' -- "$_new_cols"; and test "$_new_cols" -lt 64; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <64 cols: tear down (mirrors init refusal; bar row would wrap).
     set -g _PROG_ROWS $_new_rows
     printf '\e[s\e[1;%dr\e[u' (math $_PROG_ROWS - 1) >&2
     _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
@@ -1422,7 +1429,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
         end
     end
     set _effective_cmd (command basename -- "$_effective_cmd")
-    if contains -- "$_effective_cmd" pacman paru mkinitcpio sdboot-manage paccache updatedb pkgfile
+    if contains -- "$_effective_cmd" pacman mkinitcpio sdboot-manage paccache updatedb pkgfile
         test "$_t" -gt 0 2>/dev/null; and _log "TIMEOUT_BYPASS: cmd=$_effective_cmd (long-running pkg/boot/db op; SIGKILL would bypass rollback)"
         set _t 0
     end
@@ -1599,21 +1606,6 @@ function _ry_check_deps --description "Verify required packages are installed"
     set -l _opt_missing
     for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci kill cmp; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
-    if test (count $AUR_PKGS) -gt 0; and not command -q paru; _warn "paru not found — AUR phase will be skipped (advisory, non-fatal; AUR_PKGS=$AUR_PKGS)"; _info "  Install paru to enable AUR: sudo pacman -S --needed paru"; end
-    if test (count $AUR_PKGS) -gt 0; and command -q paru
-        set -l _paru_ver (command paru --version 2>/dev/null | string match -rg '^paru v?(\d+\.\d+\.\d+)' | command head -n 1)
-        if test -n "$_paru_ver"
-            set -l _parts (string split '.' -- "$_paru_ver")
-            if test "$_parts[1]" -lt 2
-                _warn "paru $_paru_ver detected — recommend ≥ 2.0.0 (--skipreview semantics may differ)"
-                _log "PARU_VERSION_OLD: detected=$_paru_ver recommended_min=2.0.0"
-            end
-        else
-            set -l _paru_raw (command paru --version 2>/dev/null | command head -n 1 | string trim --)
-            _warn "paru version unparseable (got: '$_paru_raw') — cannot verify ≥ 2.0.0; assuming compatible"
-            _log "PARU_VERSION_UNPARSEABLE: raw='$_paru_raw'"
-        end
-    end
     _log DEPS_CHECK_OK
     return 0
 end
@@ -1848,6 +1840,14 @@ function _grep_regdomain_entry --argument-names dst --description 'Validate a CO
     end
     return 0
 end
+function _grep_wireless_regdom_entry --argument-names dst --description 'Validate a WIRELESS_REGDOM="<ISO-3166 alpha-2>" line (/etc/conf.d/wireless-regdom; # comments allowed)'
+    test (count $argv) -lt 2; and _log "BUG: _grep_wireless_regdom_entry called without content (dst=$dst)"; and return 2
+    string match -qr '^[[:space:]]*WIRELESS_REGDOM="[A-Z][A-Z]"[[:space:]]*$' -- $argv[2..-1]; or begin
+        _fail "  $dst: no WIRELESS_REGDOM=\"<ISO-3166 alpha-2>\" line found"
+        return 1
+    end
+    return 0
+end
 function _grep_udev_entry --argument-names dst --description 'Validate ≥1 udev rule line (KEY{...}op match/assignment, # comments allowed)'
     test (count $argv) -lt 2; and _log "BUG: _grep_udev_entry called without content (dst=$dst)"; and return 2
     string match -qr '^[[:space:]]*[A-Z][A-Z_]*(\{[^}]*\})?[[:space:]]*(==|!=|\+=|:=|=)' -- $argv[2..-1]; or begin
@@ -1899,6 +1899,8 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_modprobe_entry "$dst" $_content
         case '/etc/iw-regdomain'
             _grep_regdomain_entry "$dst" $_content
+        case '/etc/conf.d/wireless-regdom'
+            _grep_wireless_regdom_entry "$dst" $_content
         case '*/udev/rules.d/*'
             _grep_udev_entry "$dst" $_content
         case '*/nftables.conf'
@@ -2325,16 +2327,6 @@ function _vsp_required --description "Check PKGS_ADD against installed; emits OK
         end
     end
 end
-function _vsp_aur --description "Check AUR_PKGS against installed; warn on missing"
-    set -q AUR_PKGS; or return 0
-    for pkg in $AUR_PKGS
-        if contains -- "$pkg" $argv
-            _ok "  $pkg: installed (AUR)"
-        else
-            _warn "  $pkg: NOT INSTALLED (AUR — install via paru)"
-        end
-    end
-end
 function _vsp_removed --description "Check PKGS_DEL against installed; warn if still present" # Lists blocked rdep cascades; correlates with _RY_PKG_REMOVE_SKIPS.
     _echo "── Removed packages ──"
     for pkg in $PKGS_DEL
@@ -2361,14 +2353,13 @@ function _vsp_pacman_conf --description "Inspect IgnorePkg / ParallelDownloads i
         _info "  ParallelDownloads not set (sequential downloads — uncomment in /etc/pacman.conf to enable)"
     end
 end
-function _verify_static_packages --description "Verify PKGS_ADD, AUR_PKGS, PKGS_DEL, pacman.conf"
+function _verify_static_packages --description "Verify PKGS_ADD, PKGS_DEL, pacman.conf"
     _echo PACKAGES
     set -l _installed_pkgs
     if not command -q pacman; _warn "  pacman not found, skipping package verification"; return 0; end
     set _installed_pkgs (command pacman -Qq 2>/dev/null)
     if test "$status" -ne 0; _warn "  pacman -Qq failed (db locked or read error) — skipping package verification"; _log "VERIFY_PKGS_QQ_FAIL: pacman -Qq returned non-zero"; _vsp_pacman_conf; return 0; end
     _vsp_required $_installed_pkgs
-    _vsp_aur $_installed_pkgs
     _vsp_removed $_installed_pkgs
     _vsp_pacman_conf
 end
@@ -2513,7 +2504,11 @@ function _svc_chk_expected --description "Check EXPECTED_SERVICES units"
         else if test "$load" = not-found
             set -g _RY_CHECK_DRIFT 1
         else
-            test "$active" = active; or set -g _RY_CHECK_DRIFT 1 # Timers and services gate identically; RemainAfterExit oneshots read active ('exited' is a SubState, never ActiveState).
+            if test "$unit" = nftables.service; and test "$active" != active # Arch unit: Type=oneshot, no RemainAfterExit — inactive after a clean load; judge by live ruleset (mirrors _vrsv_chk_nftables).
+                command -q nft; and string match -q -- '*policy drop*' (_as true nft list chain inet filter input 2>/dev/null); or set -g _RY_CHECK_DRIFT 1
+            else
+                test "$active" = active; or set -g _RY_CHECK_DRIFT 1 # Timers and services gate identically; RemainAfterExit oneshots read active ('exited' is a SubState, never ActiveState).
+            end
             test "$ufs" = enabled; or set -g _RY_CHECK_DRIFT 1
         end
     end
@@ -2784,6 +2779,33 @@ function _vrsv_chk_active_enabled --argument-names label rec_str --description "
         _fail "  $label: $rec[2] (expected: active)"
     end
 end
+function _vrsv_chk_nftables --argument-names label rec_str --description "Check nftables.service: oneshot without RemainAfterExit reads inactive after a clean load — judge by live ruleset" # Arch unit: Type=oneshot, no RemainAfterExit/ExecStop.
+    set -l rec (string split ':' -- "$rec_str")
+    if test "$rec[1]" = not-found; _warn "  $label: not installed"; return 0; end
+    if test "$rec[2]" = active
+        _vrsv_chk_active_enabled $label "$rec_str"
+        return 0
+    end
+    if not command -q nft
+        _fail "  $label: $rec[2] and nft(8) absent — live ruleset unverifiable"
+        return 0
+    end
+    if not sudo -n true 2>/dev/null
+        _warn "  $label: $rec[2] — sudo cache lapsed, live ruleset unverifiable"
+        return 0
+    end
+    set -l _input (_as true nft list chain inet filter input 2>/dev/null)
+    if not string match -q -- '*policy drop*' $_input
+        _fail "  $label: $rec[2] and no live inet/filter/input chain with policy drop"
+        return 0
+    end
+    if test "$rec[3]" = enabled
+        _ok "  $label: ruleset live, input policy drop ($rec[2] — oneshot, no RemainAfterExit)"
+    else
+        _warn "  $label: ruleset live but unit $rec[3] (will not persist across boots)"
+    end
+    return 0
+end
 function _vrsv_chk_resolved --argument-names rec_str --description "Check systemd-resolved active state, only when conf.d drop-in is deployed" # Conf.d drop-in presence gates the check; absent drop-in = not our concern.
     set -l rec (string split ':' -- "$rec_str")
     test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
@@ -2828,6 +2850,8 @@ function _vrsv_sys_units --description "Runtime services check: conf.d-implied +
                 _vrsv_chk_nm_dispatcher "$_rec"
             case cpupower.service
                 _vrsv_chk_cpupower_governor "$_rec"
+            case nftables.service
+                _vrsv_chk_nftables $_u "$_rec"
             case '*'
                 _vrsv_chk_active_enabled $_u "$_rec"
         end
@@ -3526,14 +3550,12 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
     if test -f /var/lib/pacman/db.lck
         _err "pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or stale lock from a crashed run"
         _err "  Skipping package install — remove the lock file manually if no pacman process is active"
-        set -g _RY_SYU_FAILED true # No -Syu ran: AUR phase must not dep-sync against this db state.
         return 1
     end
     _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
     if not _run sudo -n pacman $_pacman_first -- $argv
         _warn "Package installation failed — retrying with forced db re-sync (handles transient mirror staleness; will not resolve pkg conflicts — see JSONL log for first-pass stderr)..."
         if not _run sudo -n pacman $_pacman_retry -- $argv
-            set -g _RY_SYU_FAILED true # Failed -Syu: AUR dep-sync against a stale/partial db is a partial-upgrade risk.
             if test -f /var/lib/pacman/db.lck
                 _err "pacman database became locked during install — aborting"
             else
@@ -3628,7 +3650,6 @@ function _install_packages --description "Install managed packages via pacman -S
         set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
         set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
         sudo -n rmdir /run/ry-install 2>/dev/null
-        set -g _RY_SYU_FAILED true # Pre-deploy abort: -Syu never ran; AUR phase must not dep-sync against this un-upgraded db.
         set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
         _phase_record "Packages: pacman -Syu" FAIL "mkinitcpio.conf pre-deploy failed"
         return 1
@@ -3648,78 +3669,6 @@ function _install_packages --description "Install managed packages via pacman -S
     sudo -n rmdir /run/ry-install 2>/dev/null # Reclaim empty snapshot dir; rmdir no-op if absent/non-empty.
     if test "$_fn_err" = true; _phase_record "Packages: pacman -Syu" FAIL "see JSONL log"; return 1; end
     _phase_record "Packages: pacman -Syu" PASS "system upgraded (full -Syu)"
-    return 0
-end
-
-# ── INSTALL PHASE 2 (AUR): PARU ───────────────────────────────────────────────────────────────────
-function _iap_per_pkg_retry --description "_install_aur_packages sub. Re-attempt AUR install one package at a time; returns failed count via _RY_IAP_RETRY_FAILED"
-    set -g _RY_IAP_RETRY_FAILED 0
-    for pkg in $AUR_PKGS
-        if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- "$pkg"; _warn "AUR install failed: $pkg"; set -g _RY_IAP_RETRY_FAILED (math $_RY_IAP_RETRY_FAILED + 1); end
-    end
-    test "$_RY_IAP_RETRY_FAILED" -gt 0; and test "$_RY_IAP_RETRY_FAILED" -lt (count $AUR_PKGS); and set -g _RY_AUR_PARTIAL true # Partial = some failed; all-failed = full failure.
-    return 0
-end
-function _iap_record_result --description "_install_aur_packages sub. Record final phase result" # paru rc=0 but pacman -T missing → PASS→WARN (non-tainting).
-    set -l _total (count $AUR_PKGS); set -l _missing; set -l _pt_rc 0
-    if command -q pacman
-        set _missing (command pacman -T -- $AUR_PKGS 2>/dev/null); set _pt_rc $status
-        if test "$_pt_rc" -ne 0; and test "$_pt_rc" -ne 127 # 0=all present, 127=some missing; else db lock/fatal — verify unavailable, not "missing".
-            _warn "AUR post-verify unavailable (pacman -T rc=$_pt_rc) — packages installed per paru rc=0"
-            _log "AUR_VERIFY_UNAVAILABLE: pacman -T rc=$_pt_rc"
-            _phase_record "Packages: AUR (paru)" WARN "$_total/$_total per paru (post-verify unavailable)"
-            return 0
-        end
-    end
-    if test (count $_missing) -gt 0
-        set -l _miss_n (count $_missing); set -l _ok_n (math $_total - $_miss_n)
-        _warn "AUR reported success but not installed: $_missing — non-fatal (paru -S $_missing)"
-        _log "AUR_VERIFY_MISSING: paru rc=0 but pacman -T reports missing=$_missing"
-        _phase_record "Packages: AUR (paru)" WARN "$_ok_n/$_total ($_miss_n missing post-verify)"
-        return 0
-    end
-    _phase_record "Packages: AUR (paru)" PASS "$_total/$_total"
-end
-function _install_aur_packages --description "Install AUR packages via paru (no --removemake for DKMS)"
-    if test (count $AUR_PKGS) -le 0; _phase_record "Packages: AUR (paru)" "--" "AUR_PKGS empty"; return 0; end
-    if not command -q paru
-        _warn "paru not found — skipping AUR packages (advisory; not a hard gate): $AUR_PKGS"
-        _info "  Install paru to enable AUR, then re-run: sudo pacman -S --needed paru"
-        _log "AUR_SKIP_PARU_ABSENT: paru not installed; AUR_PKGS=$AUR_PKGS skipped (non-fatal)"
-        _phase_record "Packages: AUR (paru)" WARN "paru absent — skipped (non-fatal)"
-        return 0
-    end
-    set -l _had_fail false; set -l _retry_failed 0; set -g _RY_AUR_PARTIAL false
-    _log "AUR_NOISE_NOTE: benign paru/makepkg tokens ('WARNING: Using existing \$srcdir/ tree' = cache reuse; 'error: command failed to execute correctly' = retried sub-step); non-zero paru exit is the failure signal"
-    if not _run paru -S --needed --noconfirm --skipreview --cleanafter -- $AUR_PKGS
-        if test (count $AUR_PKGS) -le 1
-            _warn "AUR install failed: $AUR_PKGS"
-            set _had_fail true
-            set _retry_failed 1
-        else
-            _warn "AUR batch install failed — retrying per-package to identify failures"
-            _iap_per_pkg_retry
-            set _retry_failed $_RY_IAP_RETRY_FAILED
-            test "$_retry_failed" -gt 0; and set _had_fail true
-        end
-    end
-    if test "$_had_fail" = true
-        _info "  Common cause: AUR maintainer PGP key not in keyring; interactive import prompt is auto-declined under --skipreview."
-        _info "  Inspect the stderr event in the JSONL log; if it mentions 'invalid or corrupted package (PGP signature)',"
-        _info "  pre-import the maintainer key: gpg --recv-keys <KEYID>, then re-run install."
-        _info "  Alternatively, install the affected package manually: paru -S <pkg> (without --skipreview)."
-        set -l _total (count $AUR_PKGS)
-        if test "$_RY_AUR_PARTIAL" = true
-            set -l _ok_count (math $_total - $_retry_failed)
-            _warn "AUR partial success ($_ok_count/$_total) — non-fatal; install proceeds"
-            _phase_record "Packages: AUR (paru)" WARN "$_ok_count/$_total (partial — see JSONL)"
-            return 0
-        end
-        set -g INSTALL_HAD_ERRORS true
-        _phase_record "Packages: AUR (paru)" FAIL "0/$_total (all failed)"
-        return 1
-    end
-    _iap_record_result
     return 0
 end
 
@@ -4009,7 +3958,7 @@ function _csm_enable_nftables_first --description "Activate nftables before the 
     set -l _state (command systemctl is-active nftables.service 2>/dev/null | string trim --)
     if test "$_state" = active; _log "NFT_PRE_ENABLE_SKIP: already active"; return 0; end
     if _run sudo -n systemctl enable --now -- nftables.service
-        _ok "nftables.service active — default-deny ruleset live before the ufw flush"
+        _ok "nftables.service enable --now rc=0 — default-deny ruleset live before the ufw flush (oneshot: unit state reads inactive)"
         _log "NFT_PRE_ENABLE_OK"
     else
         _warn "nftables.service failed to start before the ufw flush — inbound unfirewalled until the enable step or reboot"
@@ -4347,7 +4296,7 @@ function _check_boot_taint_gate --description "Verify boot state not tainted (sh
     end
     if test "$_RY_BOOT_TAINTED" = true; and test "$RY_INSTALL_FORCE_BOOT_REBUILD" != 1
         _err "Refusing initramfs rebuild — an earlier phase of THIS run tainted package or boot-critical config state"
-        _err "  (mkinitcpio.conf, kernel cmdline, loader, sdboot-manage, or pacman -Syu/package-verify failed; the advisory AUR phase never taints)"
+        _err "  (mkinitcpio.conf, kernel cmdline, loader, sdboot-manage, or pacman -Syu/package-verify failed)"
         _err "  Resolve manually then re-run, OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
         return 2
     end
@@ -4487,10 +4436,9 @@ function _rrp_optional_indexer --argument-names cmd label --description "_rdi_ru
         _phase_record "Packages: $label" WARN "failed (non-fatal)"
     end
 end
-function _rdi_run_phases --description "Run pkgs/aur/sys/services phases" # Aggregates INSTALL_HAD_ERRORS; mki-revert fail SKIPs the rest.
+function _rdi_run_phases --description "Run pkgs/sys/services phases" # Aggregates INSTALL_HAD_ERRORS; mki-revert fail SKIPs the rest.
     not _install_packages; and set -g INSTALL_HAD_ERRORS true
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
-        _phase_record "Packages: AUR (paru)" SKIP "mkinitcpio.conf revert failed — aborting"
         _phase_record "Packages: updatedb" SKIP "aborted"
         _phase_record "Packages: pkgfile --update" SKIP "aborted"
         _phase_record "Configs: system file deployment" SKIP "aborted"
@@ -4501,17 +4449,6 @@ function _rdi_run_phases --description "Run pkgs/aur/sys/services phases" # Aggr
         _phase_record "Services: regdom" SKIP "aborted"
         _err "Aborting remaining phases: mkinitcpio.conf revert failed (boot state inconsistent)"
         return 0
-    end
-    if set -q _RY_PACMAN_REVERT_ATTEMPTED; and test "$_RY_PACMAN_REVERT_ATTEMPTED" = true
-        _warn "Skipping AUR phase: pacman -Syu was rolled back (avoiding install against inconsistent mkinitcpio state)"
-        _log "AUR_SKIP_AFTER_REVERT: pacman rolled back; AUR phase bypassed"
-        _phase_record "Packages: AUR (paru)" SKIP "pacman rolled back"
-    else if set -q _RY_SYU_FAILED; and test "$_RY_SYU_FAILED" = true # Failed/blocked -Syu without rollback: paru would dep-sync a stale db.
-        _warn "Skipping AUR phase: pacman -Syu failed (avoiding dependency sync against a stale/partial db)"
-        _log "AUR_SKIP_AFTER_SYU_FAIL: -Syu failed or db locked; AUR phase bypassed"
-        _phase_record "Packages: AUR (paru)" SKIP "pacman -Syu failed"
-    else
-        not _install_aur_packages; and set -g INSTALL_HAD_ERRORS true
     end
     _rrp_optional_indexer updatedb updatedb
     _rrp_optional_indexer pkgfile "pkgfile --update" --update
@@ -4609,7 +4546,6 @@ function _rdi_summary --description "Print final install summary"
         _echo "INSTALLATION COMPLETE"
     end
     _rdi_render_matrix
-    set -q _RY_AUR_PARTIAL; and test "$_RY_AUR_PARTIAL" = true; and _warn "AUR phase completed with partial success — some packages failed (see JSONL log)"
     if set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true
         _msg_print --force ERR "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)" # Force bypasses QUIET; JSONL below survives post-SIGPIPE.
         _log "ERR: DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
@@ -4696,6 +4632,7 @@ set -g _RY_POST_HOOKS \
     "/etc/drirc.d/*|drirc" \
     "/etc/modprobe.d/*|modprobe" \
     "/etc/iw-regdomain|regdom" \
+    "/etc/conf.d/wireless-regdom|regdom" \
     "/etc/udev/rules.d/*|udev" \
     "/etc/nftables.conf|nft"
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path" # First-match-wins by declaration order.
@@ -4752,7 +4689,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (13 handlers / 16 patterns; _post_<tag> dispatch) ──────────
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (13 handlers / 17 patterns; _post_<tag> dispatch) ──────────
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot sub. mkinitcpio -P + sdboot-manage cascade" # skip_mki=true: cmdline is not an initramfs input.
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
@@ -4883,8 +4820,10 @@ function _post_nft --argument-names target --description "Post-hook: validate + 
         _warn "nftables ruleset failed validation (nft -c) — not reloaded; fix /etc/nftables.conf"
         return 0
     end
-    if sudo -n systemctl is-active --quiet nftables.service 2>/dev/null # Bare probe: avoids _run EXIT noise when inactive.
-        _run sudo -n systemctl reload nftables.service; or _warn "nftables reload failed (applies when service starts)"
+    if _run sudo -n systemctl restart nftables.service # Oneshot re-runs ExecStart (nft -f) — full atomic re-apply. Unit ships no ExecReload, and is-active is never true for a RemainAfterExit-less oneshot, so the old reload-if-active path was dead code.
+        _ok "nftables ruleset applied (systemctl restart — oneshot re-runs nft -f)"
+    else
+        _warn "nftables restart failed — validated ruleset applies when the service next starts (reboot)"
     end
     return 0
 end

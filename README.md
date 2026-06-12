@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.26.8 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.26.9 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -20,7 +20,7 @@ In scope: kernel cmdline, initramfs, systemd units, network (NetworkManager + iw
 
 ## Requirements
 
-Hard requirements abort read-only in preflight (exit 3); `paru`, `pacman-contrib`, and NTP sync only warn. Recommended: Zen 5 repos (`cachyos-znver4`, `cachyos-core-znver4`, `cachyos-extra-znver4`) above `[core]`/`[extra]`.
+Hard requirements abort read-only in preflight (exit 3); `paru`, `pacman-contrib`, and NTP sync only warn. Recommended Zen 5 repos above `[core]`/`[extra]`: `cachyos-znver4`, `cachyos-core-znver4`, `cachyos-extra-znver4`.
 
 | Requirement | Minimum |
 |---|---|
@@ -45,14 +45,14 @@ Hard requirements abort read-only in preflight (exit 3); `paru`, `pacman-contrib
 | `--` | End of options (no positional arguments accepted) |
 | `-h, --help` · `-v, --version` | Help · Version (honored first, except as the `--install-file` value) |
 
-`--verify`/`--check` only read state and run without the instance lock — a concurrent install can read as transient drift. `--check` compares the running `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing; bootstrap failures before argument parsing still print to stderr. `--verify` also reports runtime state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab options, CachyOS vm sysctls (advisory), and boot time vs a 15 s target (≥ 90 % = near-miss `WARN`).
+`--verify`/`--check` read state only and run lock-free — a concurrent install can read as transient drift. `--check` compares the live `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing (bootstrap failures still print). `--verify` also reports state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab options, CachyOS vm sysctls (advisory), boot time vs 15 s (≥ 90 % = near-miss `WARN`).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`/etc/kernel/cmdline` regenerates sdboot entries without an initramfs rebuild); a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
 
 ## Install Flow
 
-A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 rebuild; a failed `-Syu` also skips AUR; the advisory AUR phase never taints. Phase 3 writes are atomic renames.
+A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 rebuild; a failed `-Syu` also skips AUR; AUR (advisory) never taints. Phase 3 writes are atomic renames.
 
 | # | Phase | Action |
 |---|---|---|
@@ -63,7 +63,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate (never a failed mkinitcpio revert) |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` (skipped when no upgrade or removals; `pacman -Sc --noconfirm` when paccache is absent) → NetworkManager restart (deferred on active Wi-Fi) |
 
-CachyOS-default packages (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; their configs still deploy. AUR is advisory: partial failure `WARN`, all-failed `FAIL` (a single-package set fails outright, exit 1). `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
+CachyOS defaults (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; their configs still deploy. AUR grading: partial `WARN`, all-failed `FAIL` (single-package set fails outright, exit 1). `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 
 > [!NOTE]
 > With `REMOVE_EXISTING=yes`, `sdboot-manage gen` deletes every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries (`PRESERVE_FOREIGN=yes` would keep them). EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
@@ -74,7 +74,7 @@ A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phas
 
 ## Configuration
 
-The script is the source of truth; retune via the `set -g` globals near the top. In-script timing tunables (not env-overridable): `BOOT_TIME_TARGET=15` s, `PACTREE_TIMEOUT_S=60` s, `NM_RESTART_DELAY=3` s.
+The script is the source of truth — retune the `set -g` globals near the top. In-script timing tunables (not env-overridable): `BOOT_TIME_TARGET=15` s, `PACTREE_TIMEOUT_S=60` s, `NM_RESTART_DELAY=3` s.
 
 **Packages**
 
@@ -186,7 +186,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 | `NO_COLOR` | unset | suppress ANSI color |
 | `TMPDIR` | `/tmp` | scratch dir; invalid values fall back to `/tmp` |
 
-Logs: JSONL under `~/ry-install/logs/<date>/`, one file per run, not auto-pruned (`run-overflow/` holds full spills). Prune: `find ~/ry-install/logs -type f \( -name '*.jsonl' -o -name '*.log' \) -mtime +30 -delete`. Query failures:
+Logs: JSONL under `~/ry-install/logs/<date>/`, one per run, not auto-pruned; `run-overflow/` holds full spills. Prune: `find ~/ry-install/logs -type f \( -name '*.jsonl' -o -name '*.log' \) -mtime +30 -delete`. Query failures:
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):") or test("result=(FAIL|WARN)")))' ~/ry-install/logs/**/*.jsonl

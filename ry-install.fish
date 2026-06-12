@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.26.6 (2026-06-11) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.26.8 (2026-06-11) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return keeps a sourcing shell alive; stack-trace text not a stable API.
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──────────────────────────────────────────────
-set -g VERSION "7.26.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.26.8"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -449,7 +449,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
-    set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_FSTAB_EVIDENCE
+    set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_FSTAB_EVIDENCE _RY_FSTAB_RESULT
     set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE _RY_SDBOOT_REFUSE_FS _RY_SYU_FAILED _RY_NET_FAIL_EVIDENCE
 end
 function _dc_release_lock --description "_do_cleanup sub. Release the instance lock (ownership-gated)"
@@ -648,8 +648,7 @@ set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisab
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR powersave
 
-# ── EMBEDDED DATA: USER ENV VARS + SYSCTL ─────────────────────────────────────────────────────────
-# ENV_VARS (10, enforced) -> ~/.config/environment.d (gaming/Vulkan).
+# ── EMBEDDED DATA: USER ENV VARS + SYSCTL — ENV_VARS(10) → environment.d (gaming/Vulkan) ──────────
 set -g ENV_VARS \
     "AMD_VULKAN_ICD=RADV" \
     "DXVK_LOG_LEVEL=none" \
@@ -670,8 +669,7 @@ set -g SYSCTL_VALUES \
     "net.ipv4.tcp_notsent_lowat=16384" \
     "net.ipv4.tcp_slow_start_after_idle=0"
 
-# ── EMBEDDED DATA: PACKAGES (ADD / DEL / AUR / VULKAN) ────────────────────────────────────────────
-# PKGS_ADD (15, enforced) -> pacman -Syu --needed (Phase 2).
+# ── EMBEDDED DATA: PACKAGES (ADD / DEL / AUR / VULKAN) — PKGS_ADD(15) → pacman -Syu (Phase 2) ─────
 set -g PKGS_ADD \
     nvme-cli \
     cachyos-gaming-meta \
@@ -702,8 +700,7 @@ set -g AUR_PKGS mkinitcpio-firmware # AUR packages — installed unconditionally
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # EXPECTED_VULKAN_PKGS (2) -> chwd Vulkan drivers (verified present).
 
-# ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ───────────────────────────────────────────
-# MASK (11, enforced) -> systemctl mask --now (Phase 4).
+# ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS — MASK(11) → mask --now (Phase 4) ─────────
 set -g MASK \
     ananicy-cpp.service \
     avahi-daemon.service \
@@ -1529,8 +1526,8 @@ function _chk_file --argument-names filepath --description "Verify file exists; 
     _fail "File NOT FOUND: $filepath"
     return 1
 end
-function _cg_access_ok --argument-names file label is_boot --description "Pre-flight read access check"
-    if test "$is_boot" = false
+function _cg_access_ok --argument-names file label use_sudo --description "Pre-flight read access check (use_sudo: sudo-mediated probe)"
+    if test "$use_sudo" = false
         test -r "$file"; and return 0
         if test -f "$file"
             _fail "  $label: PERMISSION DENIED (need sudo?)"
@@ -1539,7 +1536,7 @@ function _cg_access_ok --argument-names file label is_boot --description "Pre-fl
         end
         return 1
     end
-    if not command -q sudo; _fail "  $label: sudo required for /boot path"; return 1; end
+    if not command -q sudo; _fail "  $label: sudo required to read $file"; return 1; end
     if not sudo -n true 2>/dev/null; _warn "  $label: sudo cache lapsed — re-run ry-install"; return 1; end
     if not sudo -n test -f "$file" 2>/dev/null; _fail "  $label: FILE NOT FOUND"; return 1; end
     return 0
@@ -1547,16 +1544,17 @@ end
 function _chk_grep --argument-names file pattern label --description "Verify a file contains an expected token"
     test -z "$label"; and set label "$pattern"
     _log "CHECK_GREP: $file for '$pattern'"
-    set -l is_boot false
-    string match -q '/boot/*' -- "$file"; and set is_boot true
-    _cg_access_ok "$file" "$label" $is_boot; or return 1
+    set -l use_sudo false
+    string match -q '/boot/*' -- "$file"; and set use_sudo true
+    if test "$use_sudo" = false; and not test -r "$file"; and _is_system_dst "$file"; set use_sudo true; end # Perms-drifted system file: sudo read beats a false PERMISSION DENIED (mirrors _ry_mkinitcpio_array).
+    _cg_access_ok "$file" "$label" $use_sudo; or return 1
     set -l _grep_flags -wF
-    _as $is_boot grep -v '^[[:space:]]*#' -- "$file" 2>/dev/null | command grep $_grep_flags -- "$pattern" >/dev/null 2>/dev/null
+    _as $use_sudo grep -v '^[[:space:]]*#' -- "$file" 2>/dev/null | command grep $_grep_flags -- "$pattern" >/dev/null 2>/dev/null
     set -l _stage1_rc $pipestatus[1]; set -l _grep_rc $pipestatus[2]
     switch "$_stage1_rc"
         case 0
         case 1
-            if test "$is_boot" = true; and not sudo -n true 2>/dev/null; _warn "  $label: sudo cache lapsed during read — cannot determine presence"; return 1; end
+            if test "$use_sudo" = true; and not sudo -n true 2>/dev/null; _warn "  $label: sudo cache lapsed during read — cannot determine presence"; return 1; end
             _fail "  $label: MISSING (file has no non-comment lines)"
             return 1
         case '*'
@@ -3857,8 +3855,8 @@ function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp 
     return 0
 end
 function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ext4 fstab entries" # Symlink-reject + idempotent (no-change skips rewrite); ext4 entries only.
-    set -g _RY_FSTAB_EVIDENCE "noatime,lazytime,commit=10"
-    if not test -f /etc/fstab; _warn "  /etc/fstab not found — skipping"; set -g _RY_FSTAB_EVIDENCE "fstab absent — skipped"; return 0; end
+    set -g _RY_FSTAB_EVIDENCE "noatime,lazytime,commit=10"; set -g _RY_FSTAB_RESULT PASS # Result feeds the summary row: PASS=applied/conformant, SKIP=fstab absent, --=no ext4 entries.
+    if not test -f /etc/fstab; _warn "  /etc/fstab not found — skipping"; set -g _RY_FSTAB_EVIDENCE "fstab absent — skipped"; set -g _RY_FSTAB_RESULT SKIP; return 0; end
     if test -L /etc/fstab; _fail "  /etc/fstab is a symlink — refusing to rewrite (resolve symlink first or skip fstab opts)"; return 1; end
     set -l ext4_lines
     if not test -r /etc/fstab
@@ -3868,7 +3866,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     else
         set ext4_lines (command awk "$_RY_AWK_EXT4_FILTER" /etc/fstab 2>/dev/null)
     end
-    if test -z "$ext4_lines"; _info "  No ext4 entries in /etc/fstab"; set -g _RY_FSTAB_EVIDENCE "no ext4 entries"; return 0; end
+    if test -z "$ext4_lines"; _info "  No ext4 entries in /etc/fstab"; set -g _RY_FSTAB_EVIDENCE "no ext4 entries"; set -g _RY_FSTAB_RESULT --; return 0; end
     _fstab_needs_change $ext4_lines
     if test "$_RY_FSTAB_NEEDS_CHANGE" = false
         set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES
@@ -4150,7 +4148,7 @@ function _install_configure_services --description "Enable, start, and configure
     _info "Post-installation tasks..."
     set -l _ret 0
     if _install_fstab_opts # Phase 4 step 1: fstab ext4 opts (noatime,lazytime,commit=10).
-        _phase_record "Services: fstab opts" PASS "$_RY_FSTAB_EVIDENCE"
+        _phase_record "Services: fstab opts" "$_RY_FSTAB_RESULT" "$_RY_FSTAB_EVIDENCE"
     else
         _phase_record "Services: fstab opts" FAIL "see JSONL log"
         set _ret 1

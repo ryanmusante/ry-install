@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.26.9 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.26.10 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -45,7 +45,7 @@ Hard requirements abort read-only in preflight (exit 3); `paru`, `pacman-contrib
 | `--` | End of options (no positional arguments accepted) |
 | `-h, --help` · `-v, --version` | Help · Version (honored first, except as the `--install-file` value) |
 
-`--verify`/`--check` read state only and run lock-free — a concurrent install can read as transient drift. `--check` compares the live `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing (bootstrap failures still print). `--verify` also reports state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab options, CachyOS vm sysctls (advisory), boot time vs 15 s (≥ 90 % = near-miss `WARN`).
+`--verify`/`--check` read state only and run lock-free — a concurrent install can read as transient drift. `--check` compares the live `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing (bootstrap failures still print). `--verify` also reports state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab options, CachyOS vm sysctls (advisory), boot time vs 15 s (≥90% = WARN).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`/etc/kernel/cmdline` regenerates sdboot entries without an initramfs rebuild); a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
@@ -57,7 +57,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | # | Phase | Action |
 |---|---|---|
 | 1 | Preflight | invariants → lock (exit 5) → hard gates; read-only except a non-fatal NTP repair (skipped when chronyd/ntpd is enabled or active) |
-| 2 | Packages | `pacman -Syu --needed` → AUR (`paru`) → `updatedb`/`pkgfile`. `mkinitcpio.conf` pre-deployed before `-Syu`; one `-Syyu` retry. Managed `.pacnew` auto-resolved (left for `pacdiff` after a rollback); `.pacsave` reported |
+| 2 | Packages | `pacman -Syu --needed` → AUR (`paru`) → `updatedb`/`pkgfile`. `mkinitcpio.conf` pre-deployed before `-Syu`; one `-Syyu` retry. Managed `.pacnew` auto-resolved (rollback: `pacdiff`); `.pacsave` reported |
 | 3 | Configuration | deploy the 16 embedded files atomically |
 | 4 | Services | fstab → resolved restart → package removal → nftables activation → mask (ufw flush) → enable → regdom |
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate (never a failed mkinitcpio revert) |
@@ -111,11 +111,11 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | systemd-logind | `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `…LongPress`) = `ignore` |
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
 | NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2` (disable), `[logging] level=WARN` |
-| cpupower | `GOVERNOR=powersave` (amd_pstate=active EPP mode; EPP not pinned) |
+| cpupower | `GOVERNOR=powersave` (EPP not pinned) |
 | amdgpu/ttm | `pages_limit=8388608`/`page_pool_size=8388608` (GTT ~32 GiB; set BIOS UMA=512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
 | udev | NVMe whole-disk I/O scheduler → `none` |
-| wireless regdom | `COUNTRY=US` (`--country=XX`), applied Phase 4; persists via `/etc/iw-regdomain` → cachyos-iw-set-regdomain |
+| wireless regdom | `COUNTRY=US` (`--country=XX`); persists via `/etc/iw-regdomain` → cachyos-iw-set-regdomain |
 
 **sysctl** → `/etc/sysctl.d/95-ry-overrides.conf` (loads after CachyOS `70-cachyos-settings.conf`)
 
@@ -136,7 +136,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
 | Wine | `WINEDEBUG=-all` |
 
-**fstab** — ext4 entries rewritten in place: applies `noatime`, `lazytime`, `commit=10`; strips conflicting atime opts + redundant `defaults`; rewrites any `commit=`; original field whitespace preserved. Mandatory `findmnt --verify` gate; snapshot to `/etc/fstab.ry.bak`; symlinked `/etc/fstab` refused.
+**fstab** — ext4 entries rewritten in place: applies `noatime`, `lazytime`, `commit=10`; strips conflicting atime opts + redundant `defaults`; rewrites any `commit=`. Mandatory `findmnt --verify` gate; snapshot to `/etc/fstab.ry.bak`; symlinked `/etc/fstab` refused.
 
 **Units**
 
@@ -160,14 +160,14 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, and ICMP allowed; all other inbound dropped; forwarding dropped; output unrestricted. mDNS is disabled (`MulticastDNS=no`) to match. Add inbound ports to `/etc/nftables.conf` as needed.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, and ICMP allowed (invalid-state dropped); all other inbound dropped; forwarding dropped; output unrestricted. mDNS is disabled (`MulticastDNS=no`) to match. Add inbound ports to `/etc/nftables.conf` as needed.
 
 | Feature | Detail |
 |---|---|
 | Atomic writes | render → tmp → symlink-probe → `.ry.bak` (backup targets) → chmod → `mv -T` → re-read + restore on mismatch |
 | Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` / `fstab` |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal; a failed or skipped revert preserves the `/run` snapshot (until reboot) |
-| Instance lock | atomic `mkdir 0700`; dead-PID reclaim via `kill -0` + `/proc` liveness; a live PID started after the pidfile (recycled) is reclaimed via `/proc` starttime; empty pidfile settles 0.2 s before reclaim |
+| Instance lock | atomic `mkdir 0700`; dead-PID reclaim (`kill -0` + `/proc`); recycled-PID via `/proc` starttime; empty pidfile settles 0.2 s before reclaim |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
 
 | Code | Meaning |
@@ -197,7 +197,7 @@ jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):") or test("result=(FA
 No automated uninstaller; use Managed Files as the rollback reference.
 
 1. `sudo systemctl unmask` the masked units.
-2. `sudo rm` the deployed system paths; remove `~/.config/environment.d/10-environment.conf` (no sudo).
+2. `sudo rm` the deployed system paths; `rm` the user env.d file (no sudo).
 3. Restore `/etc/fstab` from `/etc/fstab.ry.bak`; delete the `.ry.bak` backups.
 4. Optionally reverse the package changes.
 5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.

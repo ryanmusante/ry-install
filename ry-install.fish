@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.26.9 (2026-06-11) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.26.10 (2026-06-11) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return keeps a sourcing shell alive; stack-trace text not a stable API.
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──────────────────────────────────────────────
-set -g VERSION "7.26.9"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.26.10"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -49,7 +49,7 @@ function _ry_show_help --description "Display usage information and available su
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
         "  RY_INSTALL_FORCE_BOOT_REBUILD=1  Bypass torn-package gate (recovery; never bypasses a failed mkinitcpio revert)." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
-        "  NO_COLOR  Suppress ANSI color (any value, per no-color.org)." \
+        "  NO_COLOR  Suppress ANSI color (non-empty value, per no-color.org)." \
         "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl" \
         ""
 end
@@ -114,7 +114,7 @@ set -g QUIET true; set -g MODE bootstrap # MODE pinned pre-argparse: signal foot
 if not string match -qr '^\d+$' -- "$_MY_UID"; echo "[ERR] id -u returned non-numeric value: '$_MY_UID' — cannot determine user identity" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if test "$_MY_UID" -eq 0; echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2; _ry_exit $EXIT_USAGE; end
 set -g _RY_NO_COLOR false
-set -q NO_COLOR; and set -g _RY_NO_COLOR true
+set -q NO_COLOR; and test -n "$NO_COLOR"; and set -g _RY_NO_COLOR true # no-color.org: present AND non-empty.
 test "$TERM" = dumb; and set -g _RY_NO_COLOR true
 set -l fish_ver $FISH_VERSION; set -l parts (string split '.' -- "$fish_ver"); set -l _fish_minor (string replace -r '[^0-9].*' '' -- "$parts[2]"); test -z "$_fish_minor"; and set _fish_minor 0
 if not string match -qr '^\d+$' -- "$parts[1]"; or not string match -qr '^\d+$' -- "$_fish_minor"; echo "[ERR] fish version unparseable: '$fish_ver'" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -292,7 +292,6 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
         set --erase _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
         _log "LOCK_PIDFILE_WRITE_FAIL: $LOCK_FILE"
         echo "[ERR] Failed to write lock pid file: $LOCK_FILE" >&2
-        _pre_dispatch_log_cleanup
         return 1
     end
     if not command mv -Tf -- "$_pid_tmp" "$LOCK_FILE" 2>/dev/null
@@ -301,7 +300,6 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
         set --erase _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
         _log "LOCK_PIDFILE_INSTALL_FAIL: $LOCK_FILE"
         echo "[ERR] Failed to install lock pid file: $LOCK_FILE" >&2
-        _pre_dispatch_log_cleanup
         return 1
     end
     command chmod -- 600 "$LOCK_FILE" 2>/dev/null
@@ -338,7 +336,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
         end
         if string match -qr '^[1-9]\d*$' -- "$_stale_pid"
             set -l _pf_mtime (command stat -c '%Y' -- "$LOCK_FILE" 2>/dev/null)
-            if command kill -0 "$_stale_pid" 2>/dev/null
+            if command kill -0 "$_stale_pid" 2>/dev/null # kill(1) absent → rc 127 → /proc branch below (fail-closed).
                 if not _lock_pid_started_after "$_stale_pid" "$_pf_mtime" # Provably-newer start = recycled PID; anything else stays fail-closed.
                     _log "LOCK_HELD: pid=$_stale_pid dir=$LOCK_DIR (live instance)"
                     echo "[ERR] Another instance is running (pid=$_stale_pid) — lock: $LOCK_DIR" >&2
@@ -1105,7 +1103,7 @@ end
 # ── JSON ESCAPE ───────────────────────────────────────────────────────────────────────────────────
 function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)"
     set -l s "$argv[1]"
-    if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"; printf '%s' "$s" | string collect --allow-empty; return $status; end
+    if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"; printf '%s' "$s" | string collect --allow-empty; return 0; end # rc pinned 0: collect --allow-empty reads empty input as rc 1; callers consume stdout only.
     set s "$s"x # Sentinel guards collect newline-trim; stripped by position below.
     set s (string replace -a -- \\ \\\\ "$s" | string collect)
     set s (string replace -a -- '"' '\\"' "$s" | string collect)
@@ -1122,6 +1120,7 @@ function _json_str --description "Escape a string for safe JSON embedding (RFC 8
         set s ""
     end
     printf '%s' "$s" | string collect --allow-empty
+    return 0
 end
 
 # ── LOGGING + MESSAGING EMITTERS (JSONL + LEVELED STDERR) ─────────────────────────────────────────
@@ -1373,10 +1372,10 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     set -l _captured; set -l _head_cap (math "max(1, $cap - 100)"); set -l _tail_cap 100; set -l _need_tail false
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and set _need_tail true
     set -l _head_n $cap; test "$_need_tail" = true; and set _head_n $_head_cap
-    for _l in (command head -n $_head_n -- "$tmpfile"); set -a _captured "$_l"; end
+    for _l in (command head -n $_head_n -- "$tmpfile"); test (string length -- "$_l") -gt 2000; and set _l (string sub -l 2000 -- "$_l"); set -a _captured "$_l"; end # 2000-char/line cap: one long line must not bloat the JSONL event; spill keeps full bytes.
     if test "$_need_tail" = true
         set -a _captured "[... "(math $_total - $_head_cap - $_tail_cap)" lines elided ...]"
-        for _l in (command tail -n $_tail_cap -- "$tmpfile"); set -a _captured "$_l"; end
+        for _l in (command tail -n $_tail_cap -- "$tmpfile"); test (string length -- "$_l") -gt 2000; and set _l (string sub -l 2000 -- "$_l"); set -a _captured "$_l"; end
     end
     _log "$label_tag: "(string join -- " | " $_captured)
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and _log "$label_tag""_TRUNCATED: total_lines=$_total head_cap=$_head_cap tail_cap=$_tail_cap"
@@ -4218,10 +4217,10 @@ function _sdboot_fallback_vfat_ok --description "Refuse sdboot when ESP fell bac
 end
 
 # ── BOOT SANITY: ENTRIES + KERNEL/INITRAMFS PROBES + SIZE SCAN ────────────────────────────────────
-function _enum_boot_entries --argument-names esp --description "Enumerate \$esp/loader/entries/*.conf"
+function _enum_boot_entries --argument-names boot --description "Enumerate \$boot/loader/entries/*.conf"
     set -g _RY_BOOT_ENUM_OK true
-    set -l _basenames (sudo -n find "$esp/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | string split0); set -l _ps $pipestatus
-    if test "$_ps[1]" -ne 0; set -g _RY_BOOT_ENUM_OK false; set -g _RY_BOOT_COUNT 0; functions -q _log; and _log "BOOT_ENUM_FAIL: esp=$esp pipestatus=$_ps (sudo lapse or read error)"; return 0; end
+    set -l _basenames (sudo -n find "$boot/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | string split0); set -l _ps $pipestatus
+    if test "$_ps[1]" -ne 0; set -g _RY_BOOT_ENUM_OK false; set -g _RY_BOOT_COUNT 0; functions -q _log; and _log "BOOT_ENUM_FAIL: boot=$boot pipestatus=$_ps (sudo lapse or read error)"; return 0; end
     set -g _RY_BOOT_COUNT (count $_basenames)
 end
 function _pbs_check_boot_files --argument-names boot glob label --description "_preflight_boot_sanity sub: enumerate \$glob in \$boot root"
@@ -4320,16 +4319,16 @@ function _irb_sdboot_apply --description "Run sdboot-manage gen + update" # Refu
     _phase_record "Boot: sdboot-manage update" PASS "rc=0"
     return 0
 end
-function _irb_verify_entries --argument-names esp --description "Re-enumerate boot entries post-rebuild"
-    _enum_boot_entries "$esp"
+function _irb_verify_entries --argument-names boot --description "Re-enumerate boot entries post-rebuild"
+    _enum_boot_entries "$boot"
     if test "$_RY_BOOT_ENUM_OK" = false
-        _warn "Boot entries: cannot enumerate $esp/loader/entries (sudo lapsed or read error)"
+        _warn "Boot entries: cannot enumerate $boot/loader/entries (sudo lapsed or read error)"
     else
         set -l entry_count $_RY_BOOT_COUNT
         if test "$entry_count" -gt 0
-            _ok "Boot entries: $entry_count found in $esp/loader/entries/"
+            _ok "Boot entries: $entry_count found in $boot/loader/entries/"
         else
-            _err "No boot entries found in $esp/loader/entries/"
+            _err "No boot entries found in $boot/loader/entries/"
             _info "  System may not boot! Check /etc/sdboot-manage.conf LINUX_OPTIONS"
             _info "  Try: sudo sdboot-manage gen --verbose"
             set -g INSTALL_HAD_ERRORS true

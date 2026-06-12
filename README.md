@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.26.5 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.26.6 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -37,14 +37,15 @@ Hard requirements abort read-only in preflight (exit 3); `paru`, `pacman-contrib
 | Flag | Action |
 |---|---|
 | *(no args)* | Full unattended install |
-| `-V, --verbose` | Show install output (`--check` ignores it) |
+| `-V, --verbose` | Show install output (`--verify`/`--install-file` are always verbose; `--check` is always silent) |
 | `--verify` | Config files byte-for-byte, then live state |
 | `--check` | Idempotency probe (`0` clean · `3` preflight · `10` drift) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--country=XX` | Wireless regdom (ISO-3166-1 alpha-2; default `US`; UK is `GB`) |
+| `--` | End of options (no positional arguments accepted) |
 | `-h, --help` · `-v, --version` | Help · Version (honored first, except as the `--install-file` value) |
 
-`--verify`/`--check` only read state and run without the instance lock — a concurrent install can read as transient drift; re-run after it finishes. `--check` compares the running `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing; bootstrap failures before argument parsing still print to stderr. `--verify` also reports runtime state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab options, CachyOS vm sysctls (advisory), and boot time vs a 15 s target (≥ 90 % = near-miss `WARN`).
+`--verify`/`--check` only read state and run without the instance lock — a concurrent install can read as transient drift. `--check` compares the running `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing; bootstrap failures before argument parsing still print to stderr. `--verify` also reports runtime state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab options, CachyOS vm sysctls (advisory), and boot time vs a 15 s target (≥ 90 % = near-miss `WARN`).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`/etc/kernel/cmdline` regenerates sdboot entries without an initramfs rebuild); a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
@@ -55,12 +56,12 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 
 | # | Phase | Action |
 |---|---|---|
-| 1 | Preflight | invariants → lock (exit 5) → hard gates; read-only except a non-fatal NTP repair |
+| 1 | Preflight | invariants → lock (exit 5) → hard gates; read-only except a non-fatal NTP repair (skipped when chronyd/ntpd is enabled or active) |
 | 2 | Packages | `pacman -Syu --needed` → AUR (`paru`) → `updatedb`/`pkgfile`. `mkinitcpio.conf` pre-deployed before `-Syu`; one `-Syyu` retry. Managed `.pacnew` auto-resolved (left for `pacdiff` after a rollback); `.pacsave` reported |
 | 3 | Configuration | deploy the 16 embedded files atomically |
 | 4 | Services | fstab → resolved restart → package removal → nftables activation → mask (ufw flush) → enable → regdom |
-| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate |
-| 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` (`pacman -Sc --noconfirm` when paccache is absent) → NetworkManager restart (deferred on active Wi-Fi) |
+| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate (never a failed mkinitcpio revert) |
+| 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` (skipped when no upgrade or removals; `pacman -Sc --noconfirm` when paccache is absent) → NetworkManager restart (deferred on active Wi-Fi) |
 
 CachyOS-default packages (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; their configs still deploy. AUR is advisory: partial failure `WARN`, all-failed `FAIL` (a single-package set fails outright, exit 1). `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 
@@ -180,7 +181,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 | Variable | Default | Effect |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | per-command cap (s); `0` disables (pkg/boot/db ops bypass) |
-| `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses the torn-package gate |
+| `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses the torn-package gate (a failed mkinitcpio revert is never bypassed) |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses the CPU match |
 | `NO_COLOR` | unset | suppress ANSI color |
 | `TMPDIR` | `/tmp` | scratch dir; invalid values fall back to `/tmp` |

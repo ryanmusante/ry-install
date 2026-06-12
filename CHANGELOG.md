@@ -1,5 +1,15 @@
 ry-install changelog - newest first.
 
+# 7.26.6 - 2026-06-11
+
+- preflight: network probe uses an HTTPS GET instead of HEAD; hosts that reject HEAD no longer read as offline.
+- preflight: NTP repair gains a single-client guard — systemd-timesyncd auto-enable is skipped (WARN + TIME_SYNC_CONFLICT) when chronyd.service or ntpd.service is enabled or active.
+- verify: directory write-bit check fails closed — unparseable stat modes now flag the directory, the special-bits digit is dropped by keeping the last three digits, and short modes are zero-padded (a 066 directory previously read as not group/world-writable because stat -c %a prints it as 66).
+- verify: ENV_VARS runtime compare strips one matched surrounding quote pair instead of all leading and trailing quote characters; values ending in a quote are preserved.
+- install-file: NM post-hook skip message states that all drop-in keys defer when the iwd package is absent (restart behavior unchanged — restarting with wifi.backend=iwd and no iwd would unmanage Wi-Fi immediately).
+- help: RY_INSTALL_FORCE_BOOT_REBUILD line states the override never bypasses a failed mkinitcpio revert.
+- docs: usage table documents per-mode verbosity and the -- end-of-options terminator; install-flow table notes the NTP-repair guard, the revert-gate exception, and the cache-trim skip condition; env-var table mirrors the revert-gate exception.
+
 # 7.26.5 - 2026-06-11
 
 - structure: 16 section banners added for navigation and troubleshooting — header constants, help text, early -h/-v intercept, bail primitives, five embedded-data groups, three Phase-4 sub-sections (PKGS_DEL removal, mask + firewall handoff, enable + regdom), run-summary matrix renderer, non-boot post-hooks, and two main-block stages.

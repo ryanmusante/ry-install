@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.26.5 (2026-06-11) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.26.6 (2026-06-11) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return keeps a sourcing shell alive; stack-trace text not a stable API.
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──────────────────────────────────────────────
-set -g VERSION "7.26.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.26.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -47,7 +47,7 @@ function _ry_show_help --description "Display usage information and available su
         "  canonical code recorded in JSONL footer.exit_code (130 INT / 143 TERM / 129 HUP / 131 QUIT / 134 ABRT / 138 USR1 / 140 USR2)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
-        "  RY_INSTALL_FORCE_BOOT_REBUILD=1  Bypass torn-package gate (recovery)." \
+        "  RY_INSTALL_FORCE_BOOT_REBUILD=1  Bypass torn-package gate (recovery; never bypasses a failed mkinitcpio revert)." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
         "  NO_COLOR  Suppress ANSI color (any value, per no-color.org)." \
         "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl" \
@@ -1620,12 +1620,12 @@ function _ry_check_deps --description "Verify required packages are installed"
     _log DEPS_CHECK_OK
     return 0
 end
-function _ry_check_network --description "Verify network connectivity (HTTPS primary + secondary + raw-IP fallback)" # HTTPS primary; ICMP fallback separates no-DNS/443 from no-link.
+function _ry_check_network --description "Verify network connectivity (HTTPS primary + secondary + raw-IP fallback)" # HTTPS GET (HEAD-rejecting hosts misread as down); ICMP fallback separates no-DNS/443 from no-link.
     _log NET_CHECK_START
     set -l _idx 0
     for _host in archlinux.org cloudflare.com
         set _idx (math $_idx + 1)
-        if command curl -sfI --connect-timeout 3 --max-time 5 "https://$_host" >/dev/null 2>&1
+        if command curl -sf -o /dev/null --connect-timeout 3 --max-time 5 "https://$_host" 2>/dev/null
             if test "$_idx" -eq 1
                 _ok "Network connectivity: OK"
             else
@@ -1651,6 +1651,15 @@ function _ry_check_time_sync --description "Verify NTP time sync; enable systemd
     _warn "  Time sync: clock NOT NTP-synchronized (NTPSynchronized=$_synced) — pacman signature checks can fail"
     _log "TIME_SYNC_UNSYNCED: NTPSynchronized=$_synced"
     if not command -q systemctl; _info "    systemctl absent — start an NTP client manually"; return 1; end
+    for _ntp_alt in chronyd.service ntpd.service # Single-NTP-client guard: never stack timesyncd on an existing client.
+        set -l _alt_en (command systemctl is-enabled -- $_ntp_alt 2>/dev/null | string trim --)
+        set -l _alt_act (command systemctl is-active -- $_ntp_alt 2>/dev/null | string trim --)
+        if begin; test -n "$_alt_en"; and not contains -- "$_alt_en" disabled masked not-found; end; or contains -- "$_alt_act" active activating
+            _warn "  Time sync: $_ntp_alt is present ($_alt_en/$_alt_act) but the clock is unsynced — not enabling systemd-timesyncd (two NTP clients would conflict); repair $_ntp_alt manually"
+            _log "TIME_SYNC_CONFLICT: $_ntp_alt is-enabled=$_alt_en is-active=$_alt_act — timesyncd auto-enable skipped"
+            return 1
+        end
+    end
     if _run sudo -n systemctl enable --now systemd-timesyncd.service
         command sleep 2 </dev/null 2>/dev/null
         set -l _resynced (command timedatectl show -p NTPSynchronized --value 2>/dev/null | string trim --)
@@ -2928,7 +2937,7 @@ function _vre_envvars --description "Runtime env check: ENV_VARS via systemctl -
     set -l _user_env (command systemctl --user show-environment 2>/dev/null)
     for exp in $ENV_VARS
         set -l _ev_parts (string split -m1 '=' -- "$exp"); set -l var_name $_ev_parts[1]; set -l expected $_ev_parts[2]; set -l actual ""
-        if test -n "$_user_env"; set -l _vn_re (string escape --style=regex -- $var_name); set actual (printf '%s\n' $_user_env | string match -rg -- "^"$_vn_re"=(.*)"); set actual (string trim -c '"' -- "$actual"); end
+        if test -n "$_user_env"; set -l _vn_re (string escape --style=regex -- $var_name); set actual (printf '%s\n' $_user_env | string match -rg -- "^"$_vn_re"=(.*)"); set actual (string replace -r -- '^"(.*)"$' '$1' "$actual"); end # One matched quote pair only; values may legitimately end in a quote char.
         if test "$actual" = "$expected"
             _ok "  $var_name=$actual"
         else if test -n "$actual"
@@ -3365,10 +3374,10 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
 end
 
 # ── MISC HELPERS: PERM CHECK, WIFI ROUTE, USER-BUS, SUDO BANNER ───────────────────────────────────
-function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit"
-    test (string length -- "$mode") -gt 3; and set mode (string sub -s 2 -- "$mode")
-    not string match -qr '^[0-7]+$' -- "$mode"; and return 1
-    test (string length -- "$mode") -eq 3; or return 1 # Reject modes <3 chars; stat -c %a yields ≥3 digits (defence-in-depth).
+function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit (unparseable mode reads as writable — fail-closed)"
+    not string match -qr '^[0-7]+$' -- "$mode"; and return 0 # Unparseable/empty mode: report writable so the caller flags the dir (fail-closed).
+    test (string length -- "$mode") -gt 3; and set mode (string sub -s -3 -- "$mode") # Drop special-bits digit; keep the ugo triplet.
+    while test (string length -- "$mode") -lt 3; set mode "0$mode"; end # stat -c %a strips leading zeros (e.g. 066 → '66'); restore the triplet.
     set -l group_w (string sub -s 2 -l 1 -- "$mode"); set -l other_w (string sub -s 3 -l 1 -- "$mode"); set -l group_has_w (math "floor($group_w / 2) % 2"); set -l other_has_w (math "floor($other_w / 2) % 2")
     test "$group_has_w" -eq 1; and return 0
     test "$other_has_w" -eq 1; and return 0
@@ -4803,8 +4812,8 @@ function _post_logind --argument-names target --description "Post-hook: notify r
 end
 function _post_nm --argument-names target --description "Post-hook: restart NetworkManager (+ try-restart iwd when iwd/main.conf changes); deferred when WiFi is active route" # iwd reads main.conf at startup; try-restart iwd first when it's the target.
     _echo
-    if not command -q pacman; or not command pacman -Qq iwd >/dev/null 2>&1 # iwd absent → skip restart cascade (backend can't function).
-        _warn "iwd-related config target but iwd package not installed — NM restart cascade skipped"
+    if not command -q pacman; or not command pacman -Qq iwd >/dev/null 2>&1 # iwd absent → skip restart cascade (wifi.backend=iwd without iwd would leave Wi-Fi unmanaged now).
+        _warn "NM/iwd config deployed but iwd package not installed — restart skipped; all drop-in keys apply once iwd is installed or at next boot"
         _log "POST_NM_SKIP_NO_IWD: target=$target"
         return 0
     end

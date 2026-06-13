@@ -111,10 +111,10 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
 | NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2` (disable), `[logging] level=WARN` |
 | cpupower | `GOVERNOR=powersave`; EPP pinned `performance` via udev (`amd_pstate=active` driver-governed) |
-| amdgpu/ttm | `pages_limit=8388608`/`page_pool_size=8388608` (GTT ~32 GiB; set BIOS UMA=512 MB) |
+| amdgpu/ttm | `pages_limit=8388608`/`page_pool_size=8388608` (GTT ~32 GiB; requires BIOS UMA 512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
 | udev | NVMe whole-disk I/O scheduler → `none`; CPU EPP → `performance` |
-| wireless regdom | `COUNTRY=US` (`--country=XX`); persists via `/etc/iw-regdomain` → cachyos-iw-set-regdomain |
+| wireless regdom | `COUNTRY=US` (`--country=XX`); persists via `/etc/iw-regdomain` → `cachyos-iw-set-regdomain` |
 
 **sysctl** → `/etc/sysctl.d/95-ry-overrides.conf` (loads after CachyOS `70-cachyos-settings.conf`)
 
@@ -124,7 +124,7 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 | `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
 | `vm` | `compaction_proactiveness=0`, `max_map_count=2147483642` |
 
-**Gaming env** → `~/.config/environment.d/10-environment.conf` (`0600`; `PROTON_*` per proton-cachyos)
+**Gaming env** → `~/.config/environment.d/10-environment.conf` (`0600`; `PROTON_*` per `proton-cachyos`)
 
 | Category | Vars |
 |---|---|
@@ -216,7 +216,7 @@ No automated uninstaller; use Managed Files as the rollback reference.
 | RTL8127 10GbE | throughput drops under load | out-of-tree DKMS module (unmanaged) |
 | Strix Halo ACP | no ASoC machine driver | pending upstream (HDMI/USB audio unaffected) |
 | NM + iwd | intermittent boot connectivity | `nmcli radio wifi off; and nmcli radio wifi on` |
-| NM + iwd | WPA2/3 Enterprise GUI broken | CLI or wpa_supplicant |
+| NM + iwd | WPA2/3 Enterprise GUI broken | CLI or `wpa_supplicant` |
 
 ## Troubleshooting
 

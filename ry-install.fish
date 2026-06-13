@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.35.2 (2026-06-13)
+# ry-install v7.36.0 (2026-06-13)
 # Style: dense semicolon one-liners intentional
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.35.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.36.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels; never a process exit
@@ -482,7 +482,7 @@ end
 
 # ── CLEANUP: MASTER ORCHESTRATOR (_do_cleanup; children → revert → sweep → lock → globals) ──
 function _do_cleanup --description "Master cleanup: reap children → revert → tmpfiles → fs sweep → lock release → globals"
-    _dc_kill_children # Quiesce children first: revert must not race a live pacman writing /et
+    _dc_kill_children # Quiesce children first: revert must not race a live pacman writing /etc
     _dc_mki_revert
     _dc_sweep_tmpfiles
     _dc_sweep_filesystem
@@ -582,9 +582,9 @@ if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_
 set --erase _ry_dst_count
 
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
-set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no # Bootloader keys: loader.conf (LOADER_*) + sdboot-manage.conf (SDBOOT_*
+set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no # Bootloader keys: loader.conf (LOADER_*) + sdboot-manage.conf (SDBOOT_*)
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-# KERNEL_PARAMS (12, enforced) → /etc/kernel/cmdline + sdboot LINUX_OPTI
+# KERNEL_PARAMS (12, enforced) → /etc/kernel/cmdline + sdboot LINUX_OPTIONS
 set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
     amd_pstate=active \
@@ -616,7 +616,7 @@ set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 # ── EMBEDDED DATA: SERVICE KEYS (RESOLVED / REGDOM / RADV / LOGIND / IWD / NM / CPUPOWER) ──
 set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade # resolved drop-in keys
 set -g COUNTRY US # COUNTRY: wireless regdom
-# _RY_ISO3166_ALPHA2: assigned ISO-3166-1 alpha-2 codes for --country va
+# _RY_ISO3166_ALPHA2: assigned ISO-3166-1 alpha-2 codes for --country validation
 set -g _RY_ISO3166_ALPHA2 \
     AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ \
     BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS \
@@ -645,7 +645,7 @@ set -g LOGIND_IGNORE_KEYS \
     HandleHibernateKeyLongPress \
     HandleRebootKey \
     HandleRebootKeyLongPress
-set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd # Network/power keys: iwd (IWD_*), NetworkManager (NM_*), cpupower gover
+set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd # Network/power keys: iwd (IWD_*), NetworkManager (NM_*), cpupower governor
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR powersave
 
@@ -690,7 +690,7 @@ set -g PKGS_ADD \
     realtime-privileges \
     ddcutil \
     nftables
-# Opt-in: append shelly to PKGS_DEL + bump invariant 9→10 (CachyOS Shell
+# Opt-in: append shelly to PKGS_DEL + bump invariant 9→10 (CachyOS Shelly TUI; not removed by default)
 set -g PKGS_DEL \
     plymouth \
     cachyos-plymouth-bootanimation \
@@ -853,8 +853,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
 end
 
-# ── CONTENT GENERATORS (17; dispatched by _ry_get_file_content via _tmpfile_key) ──
-# ·· gen group: boot/loader (loader.conf, cmdline, sdboot-manage, mkinit
+# ── CONTENT GENERATORS (18; dispatched by _ry_get_file_content via _tmpfile_key) — gen group boot/loader [4]: loader.conf, kernel/cmdline, sdboot-manage.conf, mkinitcpio.conf ──
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -882,7 +881,7 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
         "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"; printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"; end
 end
-# ·· gen group: systemd + network (resolved, logind, iwd, NetworkManager
+# ·· gen group: systemd + network + user [6] — resolved, logind, iwd, NetworkManager, environment.d (user), cpupower-service
 function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
     printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
 end
@@ -908,7 +907,7 @@ end
 function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
 end
-# ·· gen group: firewall + gpu + storage + wireless (nftables, sysctl, m
+# ·· gen group: firewall + gpu + storage + wireless [8] — nftables, sysctl, modprobe(ttm), drirc(RADV), iw-regdomain, wireless-regdom, udev ioscheduler, udev EPP
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset" # ufw masked; this is the active host firewall.
     printf '%s\n' \
         "#!/usr/bin/nft -f" \
@@ -938,7 +937,7 @@ function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate con
     end
     if test "$_printed" -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
 end
-function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)" # gfx1151 GTT sizing ~32 GiB: ttm pages_limit + page_pool_size (ROCm#559
+function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)" # gfx1151 GTT sizing ~32 GiB: ttm pages_limit + page_pool_size (ROCm#559)
     printf '%s\n' \
         "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
         "options ttm pages_limit=$TTM_PAGES_LIMIT" \
@@ -956,7 +955,7 @@ function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate conte
         '    </device>' \
         '</driconf>'
 end
-function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)" # Consumed by cachyos-iw-set-regdomain (iw reg set $COUNTRY) at device a
+function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)" # Consumed by cachyos-iw-set-regdomain (iw reg set $COUNTRY) at device add
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
 end
 function _content__etc_conf.d_wireless-regdom --description "Generate content for /etc/conf.d/wireless-regdom (set-wireless-regdom input)" # consumed by set-wireless-regdom at device add
@@ -1119,7 +1118,7 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
 end
 
 # ── JSON ESCAPE ──
-function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)"
+function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)" # callers pre-flatten newlines (e.g. _log space-joins argv); embedded-newline inputs are out of contract
     set -l s "$argv[1]"
     if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"; printf '%s' "$s" | string collect --allow-empty; return 0; end # rc pinned 0; stdout-only
     set s "$s"x # Sentinel guards collect newline-trim
@@ -1208,7 +1207,7 @@ function _msg_nocount --argument-names level --description "Like _msg but skips 
     _log "$level: $msg"
     _msg_print $argv
 end
-function _ok --description "Emit OK-level message and increment VERIFY_OK"; _msg OK $argv; return 0; end # _ok/_fail/_warn/_info/_err always return 0 (callers chain via
+function _ok --description "Emit OK-level message and increment VERIFY_OK"; _msg OK $argv; return 0; end # _ok/_fail/_warn/_info/_err always return 0 (callers chain via 'and')
 function _fail --description "Emit FAIL-level message and increment VERIFY_FAIL"; _msg FAIL $argv; return 0; end
 function _fail_no_count --description "Emit FAIL-level message without incrementing VERIFY_FAIL"; _msg_nocount FAIL $argv; return 0; end
 function _info --description "Emit INFO-level message (no counter)"; _msg INFO $argv; return 0; end
@@ -1364,7 +1363,7 @@ function _progress_on_winch --on-signal WINCH --description "Re-anchor progress 
     string match -qr '^\d+$' -- "$_new_rows"; or return 0
     if test "$_new_rows" -lt 10; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <10 rows: tear down (mirrors init refusal).
     set -l _new_cols (command tput cols 2>/dev/null)
-    if string match -qr '^\d+$' -- "$_new_cols"; and test "$_new_cols" -lt 64; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <64 cols: tear down (mirrors init refusal
+    if string match -qr '^\d+$' -- "$_new_cols"; and test "$_new_cols" -lt 64; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <64 cols: tear down (mirrors init refusal)
     set -g _PROG_ROWS $_new_rows
     printf '\e[s\e[1;%dr\e[u' (math $_PROG_ROWS - 1) >&2
     _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
@@ -3197,7 +3196,7 @@ function _vrs_installed_file_perms --description "Runtime session check: install
             end
             set perm_checked (math $perm_checked + 1)
             _chk_perms "$dst" 644 root:root true; or set perm_bad (math $perm_bad + 1)
-        else if not sudo -n true 2>/dev/null # lapse mid-loop: warn once, stop (silent skip would misreport "no files
+        else if not sudo -n true 2>/dev/null # lapse mid-loop: warn once, stop (silent skip would misreport "no files found")
             _warn "  Installed-file perms: sudo cache lapsed — remaining system files skipped"
             break
         end
@@ -3638,8 +3637,9 @@ function _ip_run_and_verify --description "_install_packages sub: run pacman -Sy
     set -l pkgs_to_install $argv; set -l _err false
     if not _ip_pacman_invoke $pkgs_to_install; set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; set _err true; end
     _info "Verifying package installation..."
+    if not command -q pacman; _err "pacman binary unavailable after install — cannot verify package state"; set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; set _err true; return 1; end # rc 127 from a vanished pacman must not read as all-present
     set -l missing_pkgs (command pacman -T -- $pkgs_to_install 2>/dev/null); set -l _pt_rc $status
-    if test "$_pt_rc" -ne 0; and test "$_pt_rc" -ne 127 # pacman -T rc: 0=present 127=missing
+    if test "$_pt_rc" -ne 0; and test "$_pt_rc" -ne 127 # pacman -T rc: 0=present 127=targets-missing (pacman present; binary-absent caught above)
         _err "pacman -T failed (rc=$_pt_rc) — cannot verify install state"
         set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
         set _err true
@@ -3680,7 +3680,7 @@ function _install_packages --description "Install managed packages via pacman -S
     if test (count $pkgs_to_install) -gt 0; _ip_run_and_verify $pkgs_to_install; or set _fn_err true; end
     _ip_scan_pacnew
     if set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"
-        if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true # Failed revert: keep snapshot for manual restore (tmpfs
+        if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true # Failed revert: keep snapshot for manual restore (tmpfs, lost on reboot)
             _untrack_tmpfile "$_RY_MKI_BACKUP_FILE"
             _warn "  mkinitcpio.conf snapshot preserved for manual restore (until reboot): $_RY_MKI_BACKUP_FILE"
             _log "MKINITCPIO_SNAPSHOT_PRESERVED: $_RY_MKI_BACKUP_FILE (revert failed)"
@@ -4640,7 +4640,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
-# ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR (resolver, sudo gate) ──
+# ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR (resolver, sudo gate); _RY_POST_HOOKS = 17 glob|tag patterns covering all 18 managed files (udev glob maps both rule files to one tag), first-match-wins by list order ──
 set -g _RY_POST_HOOKS \
     "/boot/*|boot" \
     "/etc/mkinitcpio.conf|boot" \
@@ -4844,7 +4844,7 @@ function _post_nft --argument-names target --description "Post-hook: validate + 
         _warn "nftables ruleset failed validation (nft -c) — not reloaded; fix /etc/nftables.conf"
         return 0
     end
-    if _run sudo -n systemctl restart nftables.service # oneshot re-runs nft -f (no ExecReload
+    if _run sudo -n systemctl restart nftables.service # oneshot re-runs nft -f (no ExecReload)
         _ok "nftables ruleset applied (systemctl restart — oneshot re-runs nft -f)"
     else
         _warn "nftables restart failed — validated ruleset applies when the service next starts (reboot)"

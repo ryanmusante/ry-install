@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.36.1 (2026-06-13)
+# ry-install v7.37.0 (2026-06-13)
 # Style: dense semicolon one-liners intentional
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.36.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.37.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels; never a process exit
@@ -654,7 +654,7 @@ set -g LOGIND_IGNORE_KEYS \
     HandleRebootKeyLongPress
 set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd # Network/power keys: iwd (IWD_*), NetworkManager (NM_*), cpupower governor
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
-set -g CPUPOWER_GOVERNOR powersave
+set -g CPUPOWER_GOVERNOR performance
 
 # ── EMBEDDED DATA: USER ENV VARS + SYSCTL — ENV_VARS(10) → environment.d (gaming/Vulkan) ──
 set -g ENV_VARS \

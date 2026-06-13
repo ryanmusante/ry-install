@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+# 7.37.0 - 2026-06-13
+
+- cpupower-service GOVERNOR changed from powersave to performance; under amd_pstate=active the scaling governor is driver-governed (valid values powersave/performance) and EPP stays pinned performance via 61-ry-epp.rules. Static and runtime governor checks compare against the new value.
+
 # 7.36.1 - 2026-06-13
 
 - PID-recycle starttime math recovers USER_HZ from CONFIG_HZ (/proc/config.gz) when getconf CLK_TCK is unavailable, before falling back to 100; prevents a false lock-reclaim of a live instance on CONFIG_HZ!=100 kernels.

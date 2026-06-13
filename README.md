@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.36.1 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.37.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -16,7 +16,7 @@ chmod +x ry-install.fish
 > [!IMPORTANT]
 > Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent.
 
-In scope: kernel cmdline, initramfs, systemd units, network (NetworkManager + iwd), sysctl, gaming env vars, pacman add+remove, sdboot-manage BLS entries. Out: dotfiles, shells, secrets, backups, multi-user, non-CachyOS, laptop.
+In scope: kernel cmdline, initramfs, systemd units, network (NetworkManager + iwd), sysctl, gaming env vars, pacman add+remove, sdboot-manage BLS entries. Out: dotfiles, shells, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
 
 ## Requirements
 
@@ -110,7 +110,7 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 | systemd-logind | `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `…LongPress`) = `ignore` |
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
 | NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2` (disable), `[logging] level=WARN` |
-| cpupower | `GOVERNOR=powersave`; EPP pinned `performance` via udev (`amd_pstate=active` driver-governed) |
+| cpupower | `GOVERNOR=performance`; EPP pinned `performance` via udev (`amd_pstate=active` driver-governed) |
 | amdgpu/ttm | `pages_limit=8388608`/`page_pool_size=8388608` (GTT ~32 GiB; requires BIOS UMA 512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
 | udev | NVMe whole-disk I/O scheduler → `none`; CPU EPP → `performance` |

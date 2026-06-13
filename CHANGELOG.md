@@ -1,5 +1,11 @@
 ry-install changelog - newest first.
 
+7.32.0 - 2026-06-12
+
+- deps: cmp(1) (GNU diffutils) promoted from optional to a hard preflight dependency — it is the sole byte-exact gate for the mkinitcpio.conf revert (a boot-critical file); an absent cmp no longer silently degrades the rollback to a cp-rc-only check.
+- net: _is_wifi_active_route falls back to `ip route show default table all` when no default route is in the main table, so policy-routing setups no longer read as non-wireless and skip the Wi-Fi-active NM-restart deferral.
+- style: 3 content-generator sub-group dividers + 1 INSTALL SUMMARY section banner added (79 -> 80 section banners); 5035 lines, 287 functions.
+
 7.31.4 - 2026-06-12
 
 - docs: README condensed (duplicate MT7925/ppfeaturemask links dropped; lead-ins tightened). No code or invariant change from 7.31.3; 5027 lines.

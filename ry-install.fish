@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.31.4 (2026-06-12) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.32.0 (2026-06-12) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text is not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.31.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.32.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -851,6 +851,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
 end
 
 # ── CONTENT GENERATORS (17; dispatched by _ry_get_file_content via _tmpfile_key) ──
+# ·· gen group: boot/loader (loader.conf, cmdline, sdboot-manage, mkinitcpio) ··
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -878,6 +879,7 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
         "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"; printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"; end
 end
+# ·· gen group: systemd + network (resolved, logind, iwd, NetworkManager, environment.d, cpupower) ··
 function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
     printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
 end
@@ -903,6 +905,7 @@ end
 function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
 end
+# ·· gen group: firewall + gpu + storage + wireless (nftables, sysctl, modprobe, drirc, regdom, udev) ··
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset" # ufw masked; this is the active host firewall.
     printf '%s\n' \
         "#!/usr/bin/nft -f" \
@@ -1602,7 +1605,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
         timeout mktemp awk grep curl getent sudo head df mv \
         tee stat find cp chmod chown install cat rm date wc \
-        tail basename dirname mkdir rmdir touch env sleep
+        tail basename dirname mkdir rmdir touch env sleep cmp
         command -q $cmd; or set -a missing $cmd
     end
     if test (count $missing) -gt 0; _err "missing: $missing"; return 1; end
@@ -1611,7 +1614,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; return 1; end
     if test "$_RY_SYSTEMD_VER" -lt 250; _err "systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
     set -l _opt_missing
-    for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci kill cmp; command -q $cmd; or set -a _opt_missing $cmd; end
+    for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci kill; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
     _log DEPS_CHECK_OK
     return 0
@@ -3423,6 +3426,9 @@ function _is_wifi_active_route --description "True if default route exits via wi
     command -q ip; or return 1
     set -l _def_iface ""
     for _af in -4 -6; set _def_iface (command ip $_af route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}'); test -n "$_def_iface"; and break; end
+    if test -z "$_def_iface" # Policy routing: default may live only in a non-main table; scan all tables before concluding non-wireless.
+        for _af in -4 -6; set _def_iface (command ip $_af route show default table all 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}'); test -n "$_def_iface"; and break; end
+    end
     test -z "$_def_iface"; and return 1
     test -d "/sys/class/net/$_def_iface/wireless"; and return 0
     switch "$_def_iface"
@@ -4551,6 +4557,8 @@ function _rdi_render_matrix --description "Render install phase matrix as box-dr
     _rdi_matrix_rows $_w_check $_w_result $_w_evidence
     _rdi_matrix_footer $_bar_top $_inner $_sep_c $_sep_r $_sep_e
 end
+
+# ── INSTALL SUMMARY: FINAL VERDICT + MANUAL STEPS + DO-NOT-REBOOT GATE ──
 function _rdi_summary --description "Print final install summary"
     if test "$INSTALL_HAD_ERRORS" = true
         _echo "INSTALLATION FINISHED WITH ERRORS"

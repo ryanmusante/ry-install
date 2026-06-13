@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.31.4 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.32.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -24,9 +24,9 @@ Hard requirements abort read-only in preflight (exit 3); `pacman-contrib` and NT
 
 | Requirement | Minimum |
 |---|---|
-| CachyOS | systemd-boot, ext4 root, GNU coreutils + findutils |
+| CachyOS | systemd-boot, ext4 root, GNU coreutils + findutils + diffutils |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
-| curl / findmnt | both required |
+| curl / findmnt / cmp | all required (cmp gates byte-exact mkinitcpio.conf revert) |
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
 | sudo | cached (`sudo -v`); may lapse mid-run — `Defaults timestamp_timeout=60` or NOPASSWD drop-in |

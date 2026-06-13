@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.35.1 (2026-06-13)
+# ry-install v7.35.2 (2026-06-13)
 # Style: dense semicolon one-liners intentional
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.35.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.35.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels; never a process exit
@@ -317,7 +317,7 @@ function _lock_pid_started_after --argument-names pid mtime --description "rc 0 
     set -l _btime (command awk '/^btime /{print $2; exit}' /proc/stat 2>/dev/null)
     string match -qr '^\d+$' -- "$_btime"; or return 1
     set -l _hz (command getconf CLK_TCK 2>/dev/null)
-    string match -qr '^[1-9]\d*$' -- "$_hz"; or set _hz 100 # getconf absent: USER_HZ=100 default
+    if not string match -qr '^[1-9]\d*$' -- "$_hz"; set _hz 100; functions -q _log; and _log "LOCK_CLK_TCK_DEFAULT: getconf CLK_TCK unavailable — assuming USER_HZ=100 for PID-recycle starttime math"; end # getconf absent: USER_HZ=100 default (logged; fail-closed on mismatch)
     test (math "floor($_btime + $_ticks / $_hz)") -gt (math "$mtime + 2")
 end
 function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale-lock reclaim)" # mkdir is POSIX-atomic
@@ -3019,7 +3019,7 @@ function _vre_tcp --description "Runtime env check: tcp_bbr module version (acti
     if command -q modinfo
         set -l _bbr_ver (command modinfo tcp_bbr 2>/dev/null | command grep -i '^version:' | string replace -r -- '^version:\s*' '')
         if test -n "$_bbr_ver"
-            _ok "  tcp_bbr module version: $_bbr_ver"
+            _info "  tcp_bbr module version: $_bbr_ver (advisory — active selection asserted in sysctl block)" # _info not _ok: module presence is not load+select; tcp_congestion_control is the gate
         else
             _info "  tcp_bbr: version field not available"
         end
@@ -4423,7 +4423,8 @@ function _if_nm_restart --description "Restart NetworkManager when iwd backend s
     else
         _phase_record "Finalize: NetworkManager restart" PASS "restarted"
     end
-    command sleep $NM_RESTART_DELAY </dev/null 2>/dev/null; or _warn "Sleep interrupted during NM restart settle window"
+    set -l _nm_delay $NM_RESTART_DELAY; string match -qr '^\d+$' -- "$_nm_delay"; or set _nm_delay 3 # guard against non-integer retune
+    command sleep $_nm_delay </dev/null 2>/dev/null; or _warn "Sleep interrupted during NM restart settle window"
     return 0
 end
 function _install_finalize --description "Run post-install verification, cleanup, and summary"

@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+7.35.2 - 2026-06-13
+
+- verify: tcp_bbr module-version line demoted to advisory (was counted as a PASS); active congestion-control selection is still asserted via net.ipv4.tcp_congestion_control. No false PASS on a present-but-unloaded module.
+- harden: NM_RESTART_DELAY validated as a non-negative integer before sleep; log the assumed USER_HZ=100 when getconf CLK_TCK is unavailable in the stale-lock PID-recycle check. No functional change to the install flow.
+
 7.35.1 - 2026-06-13
 
 - docs: condensed inline comments to vital information; trimmed README and changelog. No functional change.

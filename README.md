@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.28.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.29.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -159,7 +159,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, ICMP (invalid-state dropped), mDNS (5353/udp), and KDE Connect (1714-1764 tcp+udp) allowed; all other inbound dropped; forwarding dropped; output unrestricted. systemd-resolved keeps `MulticastDNS=no` (avahi owns 5353; the two mDNS stacks must not both bind it). Add inbound ports to `/etc/nftables.conf` as needed.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, and ICMPv4 (invalid-state dropped) allowed; all other inbound dropped — including ICMPv6/NDP, so inbound IPv6, mDNS discovery, and KDE Connect pairing are blocked; forwarding dropped; output unrestricted. systemd-resolved keeps `MulticastDNS=no` (avahi owns 5353; the two mDNS stacks must not both bind it). Add inbound ports to `/etc/nftables.conf` as needed.
 
 | Feature | Detail |
 |---|---|

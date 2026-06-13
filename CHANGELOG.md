@@ -1,5 +1,11 @@
 ry-install changelog - newest first.
 
+7.29.0 - 2026-06-12
+
+- firewall: inbound allow set reduced to established/related, loopback, and ICMPv4 — the ipv6-icmp, mDNS (5353/udp), and KDE Connect (1714-1764 tcp+udp) accept rules are removed (input chain 7 -> 4 rules; policies unchanged: input drop, forward drop, output accept).
+- firewall: consequences — ICMPv6/NDP is no longer accepted, which disables inbound IPv6 (neighbor discovery and RA/SLAAC are not conntrack-established); mDNS service discovery of this host and inbound KDE Connect pairing are blocked. Outbound-initiated traffic still returns via the established/related rule.
+- docs: README firewall alert synced to the 4-rule ruleset.
+
 7.28.0 - 2026-06-12
 
 - packages: mkinitcpio-firmware moved from the AUR set into PKGS_ADD (15 -> 16) — installed from the CachyOS repository in the same pacman -Syu transaction, gaining the package-verify and boot-taint gates the AUR path never had.

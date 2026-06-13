@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.36.0 (2026-06-13)
+# ry-install v7.36.1 (2026-06-13)
 # Style: dense semicolon one-liners intentional
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.36.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.36.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels; never a process exit
@@ -317,7 +317,14 @@ function _lock_pid_started_after --argument-names pid mtime --description "rc 0 
     set -l _btime (command awk '/^btime /{print $2; exit}' /proc/stat 2>/dev/null)
     string match -qr '^\d+$' -- "$_btime"; or return 1
     set -l _hz (command getconf CLK_TCK 2>/dev/null)
-    if not string match -qr '^[1-9]\d*$' -- "$_hz"; set _hz 100; functions -q _log; and _log "LOCK_CLK_TCK_DEFAULT: getconf CLK_TCK unavailable — assuming USER_HZ=100 for PID-recycle starttime math"; end # getconf absent: USER_HZ=100 default (logged; fail-closed on mismatch)
+    if not string match -qr '^[1-9]\d*$' -- "$_hz" # getconf absent: recover USER_HZ from CONFIG_HZ before any default (wrong HZ skews starttime → false reclaim)
+        set -l _cfg_hz (_kconfig_cache | string match -rg -- '^CONFIG_HZ=([1-9][0-9]*)$' | command head -n 1)
+        if string match -qr '^[1-9]\d*$' -- "$_cfg_hz"
+            set _hz $_cfg_hz; functions -q _log; and _log "LOCK_CLK_TCK_FROM_CONFIG: getconf CLK_TCK unavailable — using CONFIG_HZ=$_hz from /proc/config.gz"
+        else
+            set _hz 100; functions -q _log; and _log "LOCK_CLK_TCK_DEFAULT: getconf CLK_TCK and CONFIG_HZ both unavailable — assuming USER_HZ=100 (fail-open on non-100 HZ kernels without /proc/config.gz)"
+        end
+    end
     test (math "floor($_btime + $_ticks / $_hz)") -gt (math "$mtime + 2")
 end
 function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale-lock reclaim)" # mkdir is POSIX-atomic
@@ -2529,7 +2536,7 @@ function _svc_chk_expected --description "Check EXPECTED_SERVICES units"
             set -g _RY_CHECK_DRIFT 1
         else
             if test "$unit" = nftables.service; and test "$active" != active # oneshot reads inactive after clean load
-                command -q nft; and string match -q -- '*policy drop*' (_as true nft list chain inet filter input 2>/dev/null); or set -g _RY_CHECK_DRIFT 1
+                command -q nft; and string match -q -- '*policy drop*' (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null); or set -g _RY_CHECK_DRIFT 1
             else
                 test "$active" = active; or set -g _RY_CHECK_DRIFT 1 # RemainAfterExit oneshots read active
             end
@@ -2820,7 +2827,7 @@ function _vrsv_chk_nftables --argument-names label rec_str --description "Check 
         _warn "  $label: $rec[2] — sudo cache lapsed, live ruleset unverifiable"
         return 0
     end
-    set -l _input (_as true nft list chain inet filter input 2>/dev/null)
+    set -l _input (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)
     if not string match -q -- '*policy drop*' $_input
         _fail "  $label: $rec[2] and no live inet/filter/input chain with policy drop"
         return 0
@@ -2943,7 +2950,7 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state
     set -l _nft n/a # n/a=nft absent, unknown=sudo lapse, else count
     if command -q nft
         if sudo -n true 2>/dev/null
-            set _nft (_as true nft -a list ruleset 2>/dev/null | command grep -E -- '# handle [0-9]+$' | command grep -cvE -- '\{ # handle [0-9]+$')
+            set _nft (_as true env LC_ALL=C nft -a list ruleset 2>/dev/null | command grep -E -- '# handle [0-9]+$' | command grep -cvE -- '\{ # handle [0-9]+$')
             string match -qr '^\d+$' -- "$_nft"; or set _nft unknown
         else
             set _nft unknown
@@ -3141,7 +3148,7 @@ function _vre_regdom --description "Runtime env check: wireless regulatory domai
         _echo
         return 0
     end
-    if command iw reg get 2>/dev/null | string match -qr -- "^country $COUNTRY"
+    if command env LC_ALL=C iw reg get 2>/dev/null | string match -qr -- "^country $COUNTRY"
         _ok "regdom: country $COUNTRY active"
     else
         _warn "regdom: country $COUNTRY not active — sudo iw reg set $COUNTRY (persists via /etc/iw-regdomain → cachyos-iw-set-regdomain)"

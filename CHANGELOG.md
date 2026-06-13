@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+# 7.36.1 - 2026-06-13
+
+- PID-recycle starttime math recovers USER_HZ from CONFIG_HZ (/proc/config.gz) when getconf CLK_TCK is unavailable, before falling back to 100; prevents a false lock-reclaim of a live instance on CONFIG_HZ!=100 kernels.
+- nft and iw runtime/verify probes run under LC_ALL=C (matches df/lsmod), so ruleset and regdom checks are locale-stable.
+
 # 7.36.0 - 2026-06-13
 
 - package-verify refuses when the pacman binary is unavailable after the upgrade, instead of letting a 127 exit read as all-present; the run is tainted so the Phase 5 rebuild is skipped.

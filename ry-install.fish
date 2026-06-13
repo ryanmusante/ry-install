@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.32.0 (2026-06-12) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.34.0 (2026-06-12) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text is not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.32.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.34.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -660,14 +660,16 @@ set -g ENV_VARS \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
     "WINEDEBUG=-all"
-# SYSCTL_VALUES (6, enforced) -> /etc/sysctl.d/95-ry-overrides.conf.
+# SYSCTL_VALUES (8, enforced) -> /etc/sysctl.d/95-ry-overrides.conf.
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
     "net.core.netdev_budget_usecs=5000" \
     "net.ipv4.tcp_congestion_control=bbr" \
     "net.ipv4.tcp_notsent_lowat=16384" \
-    "net.ipv4.tcp_slow_start_after_idle=0"
+    "net.ipv4.tcp_slow_start_after_idle=0" \
+    "vm.compaction_proactiveness=0" \
+    "vm.max_map_count=2147483642"
 
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) — PKGS_ADD(16) → pacman -Syu (Phase 2) ──
 set -g PKGS_ADD \
@@ -776,7 +778,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:10 \
-        SYSCTL_VALUES:6 \
+        SYSCTL_VALUES:8 \
         PKGS_ADD:16 \
         PKGS_DEL:9 \
         MASK:9 \
@@ -2999,18 +3001,6 @@ function _vre_sysctl_runtime --description "Runtime env check: sysctl values via
     end
     _echo
 end
-function _vre_vm_delegated --description "Runtime env check: CachyOS-set vm tunables (advisory; not managed by this profile)"
-    _echo "── vm tunables (CachyOS-set) ──"
-    for _key in vm.max_map_count vm.compaction_proactiveness
-        set -l _proc_path (string replace -a '.' '/' -- "$_key"); set -l _val (command cat -- "/proc/sys/$_proc_path" 2>/dev/null | string trim --)
-        if test -n "$_val"
-            _info "  $_key: $_val (advisory — provided by CachyOS, not managed by this profile)"
-        else
-            _info "  $_key: not readable (advisory — expected from CachyOS base)"
-        end
-    end
-    _echo
-end
 function _vre_tcp --description "Runtime env check: tcp_bbr module version (active bbr value verified in sysctl block)"
     _echo "── TCP congestion control ──"
     if command -q modinfo
@@ -3148,10 +3138,9 @@ function _vre_regdom --description "Runtime env check: wireless regulatory domai
 end
 
 # ── VERIFY-RUNTIME: ENV ORCHESTRATOR (_verify_runtime_env) ──
-function _verify_runtime_env --description "Verify ENV_VARS, sysctl, vm-delegated, TCP, THP/KSM/ZRAM, fstab, ntsync runtime"
+function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KSM/ZRAM, fstab, ntsync runtime"
     _vre_envvars
     _vre_sysctl_runtime
-    _vre_vm_delegated
     _vre_tcp
     _vre_thp_ksm
     _vre_zram

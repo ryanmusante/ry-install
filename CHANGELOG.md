@@ -1,5 +1,16 @@
 ry-install changelog - newest first.
 
+7.34.0 - 2026-06-12
+
+- cmdline: pcie_aspm=off -> pcie_aspm.policy=performance (restored; actively sets the performance ASPM policy, disabling PCIe link power-saving, rather than deferring to firmware; 12 params).
+- size: 5024 lines, 286 functions, 80 section banners.
+
+7.33.0 - 2026-06-12
+
+- cmdline: pcie_aspm.policy=performance -> pcie_aspm=off (12 params; per kernel-parameters.txt corrected Apr 2024, `off` leaves firmware ASPM configuration untouched rather than forcing the performance policy).
+- sysctl: add vm.compaction_proactiveness=0 and vm.max_map_count=2147483642 (SYSCTL_VALUES 6 -> 8, enforced + verified static and runtime); supersedes the advisory _vre_vm_delegated reporter, now removed (functions 287 -> 286).
+- size: 5024 lines, 286 functions, 80 section banners.
+
 7.32.0 - 2026-06-12
 
 - deps: cmp(1) (GNU diffutils) promoted from optional to a hard preflight dependency — it is the sole byte-exact gate for the mkinitcpio.conf revert (a boot-critical file); an absent cmp no longer silently degrades the rollback to a cp-rc-only check.

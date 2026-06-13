@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.32.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.34.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -45,7 +45,7 @@ Hard requirements abort read-only in preflight (exit 3); `pacman-contrib` and NT
 | `--` | End of options (no positional arguments accepted) |
 | `-h, --help` · `-v, --version` | Help · Version (honored first, except as the `--install-file` value) |
 
-`--verify`/`--check` read state only, lock-free (a concurrent install can read as transient drift). `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing (bootstrap failures still print). `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, CachyOS vm sysctls (advisory), boot time vs 15 s (≥90% = WARN).
+`--verify`/`--check` read state only, lock-free (a concurrent install can read as transient drift). `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing (bootstrap failures still print). `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, boot time vs 15 s (≥90% = WARN).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`/etc/kernel/cmdline` regenerates sdboot entries without an initramfs rebuild); a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
@@ -122,8 +122,9 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 |---|---|
 | `net.core` | `default_qdisc=fq`, `netdev_budget=600`, `netdev_budget_usecs=5000` |
 | `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
+| `vm` | `compaction_proactiveness=0`, `max_map_count=2147483642` |
 
-`vm.max_map_count` and `vm.compaction_proactiveness` are intentionally **not** set — the linux-cachyos kernel ships raised defaults; `--verify` reports the live values (advisory).
+`vm.max_map_count` (Proton/SteamOS maximum) and `vm.compaction_proactiveness=0` are set at priority 95, overriding the linux-cachyos base values; `--verify` checks both as enforced.
 
 **Gaming env** → `~/.config/environment.d/10-environment.conf` (`0600`; `PROTON_*` per proton-cachyos)
 

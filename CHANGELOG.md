@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+7.34.1 - 2026-06-13
+
+- docs: README firewall description now lists the ct-state-invalid drop rule (ruleset already shipped it).
+- docs: removed PRESERVE_FOREIGN reference from the sdboot REMOVE_EXISTING note (never a script-emitted key). No functional change.
+
 7.34.0 - 2026-06-12
 
 - cmdline: pcie_aspm=off -> pcie_aspm.policy=performance (restored performance ASPM policy; 12 params).

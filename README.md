@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.34.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.34.1 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -66,7 +66,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run (skips th
 CachyOS defaults (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; their configs still deploy. `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 
 > [!NOTE]
-> With `REMOVE_EXISTING=yes`, `sdboot-manage gen` deletes every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries (`PRESERVE_FOREIGN=yes` would keep them). EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
+> With `REMOVE_EXISTING=yes` (set in `sdboot-manage.conf`), `sdboot-manage gen` deletes every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
 
 ## Run Summary
 
@@ -158,7 +158,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: only established/related, loopback, and ICMPv4 are allowed; all other inbound is dropped — including ICMPv6/NDP and mDNS, so inbound IPv6 and local discovery are blocked. Add inbound ports to `/etc/nftables.conf` as needed.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback are accepted, invalid conntrack states are dropped, and ICMPv4 is accepted; all other inbound is dropped — including ICMPv6/NDP and mDNS, so inbound IPv6 and local discovery are blocked. Add inbound ports to `/etc/nftables.conf` as needed.
 
 | Feature | Detail |
 |---|---|

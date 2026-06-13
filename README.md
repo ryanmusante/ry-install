@@ -3,7 +3,7 @@
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
 
-**Version 7.34.5 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.35.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -59,7 +59,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run (skips th
 |---|---|---|
 | 1 | Preflight | invariants → lock (exit 5) → hard gates; read-only except a non-fatal NTP repair (skipped when chronyd/ntpd is enabled or active) |
 | 2 | Packages | `pacman -Syu --needed` → `updatedb`/`pkgfile`. `mkinitcpio.conf` pre-deployed before `-Syu`; one `-Syyu` retry. Managed `.pacnew` auto-resolved (rollback: `pacdiff`); `.pacsave` reported |
-| 3 | Configuration | deploy the 17 embedded files atomically |
+| 3 | Configuration | deploy the 18 embedded files atomically |
 | 4 | Services | fstab → resolved restart → package removal → nftables activation → mask (ufw flush) → enable → regdom |
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. A tainted run skips the rebuild; resolve and re-run |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` (skipped when no upgrade or removals; `pacman -Sc` when paccache is absent) → NetworkManager restart (deferred on active Wi-Fi) |
@@ -111,10 +111,10 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 | systemd-logind | `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `…LongPress`) = `ignore` |
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
 | NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2` (disable), `[logging] level=WARN` |
-| cpupower | `GOVERNOR=powersave` (EPP not pinned) |
+| cpupower | `GOVERNOR=powersave`; EPP pinned `performance` via udev (`amd_pstate=active` driver-governed) |
 | amdgpu/ttm | `pages_limit=8388608`/`page_pool_size=8388608` (GTT ~32 GiB; set BIOS UMA=512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
-| udev | NVMe whole-disk I/O scheduler → `none` |
+| udev | NVMe whole-disk I/O scheduler → `none`; CPU EPP → `performance` |
 | wireless regdom | `COUNTRY=US` (`--country=XX`); persists via `/etc/iw-regdomain` → cachyos-iw-set-regdomain |
 
 **sysctl** → `/etc/sysctl.d/95-ry-overrides.conf` (loads after CachyOS `70-cachyos-settings.conf`)
@@ -153,13 +153,13 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 | Boot (4) | `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf` |
 | systemd (2) | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`, `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
 | Network (5) | `/etc/iwd/main.conf`, `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/conf.d/wireless-regdom`, `/etc/nftables.conf` |
-| Tuning (5) | `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/default/cpupower-service.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/udev/rules.d/60-ry-ioschedulers.rules` |
+| Tuning (6) | `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/default/cpupower-service.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/udev/rules.d/60-ry-ioschedulers.rules`, `/etc/udev/rules.d/61-ry-epp.rules` |
 | User (1) | `~/.config/environment.d/10-environment.conf` |
 
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback are accepted, invalid conntrack states are dropped, and ICMPv4 is accepted; all other inbound is dropped — including ICMPv6/NDP and mDNS, so inbound IPv6 and local discovery are blocked. Add inbound ports to `/etc/nftables.conf` as needed.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback are accepted, invalid conntrack states are dropped, and ICMPv4 plus essential ICMPv6 (NDP and PMTUD: neighbor/router solicit+advert, echo-request, packet-too-big, time-exceeded, parameter-problem) are accepted; all other inbound is dropped — including mDNS, so local service discovery is blocked. Add inbound ports to `/etc/nftables.conf` as needed.
 
 Every managed write is crash-safe and reversible: rendered to a same-filesystem tempfile, symlink-probed, backed up, `mv -T`-swapped, then re-read and restored on mismatch.
 

@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+7.35.0 - 2026-06-13
+
+- feat: pin AMD P-State EPP to performance via new managed udev rule /etc/udev/rules.d/61-ry-epp.rules (amd_pstate=active is driver-governed and otherwise leaves EPP at the BIOS default). Managed files 17→18: SYSTEM_DESTINATIONS 16→17, _RY_MANAGED_FILE_COUNT 17→18; _RY_POST_HOOKS unchanged (existing /etc/udev/rules.d/* glob dispatches to _post_udev). _vrk_cpu_state EPP check promoted from advisory to enforced; _vss_epp static check added.
+- fix: nftables ruleset now accepts inbound ICMPv6 NDP and PMTUD (nd-neighbor/router solicit+advert, echo-request, packet-too-big, time-exceeded, parameter-problem); prior ruleset dropped all ICMPv6 via policy, breaking IPv6 once the NDP cache expired. ICMPv4 and mDNS behavior unchanged.
+
 7.34.5 - 2026-06-13
 
 - consistency: quoted the 5 bare-token _log markers (DEPS_CHECK_START etc.) and 2 bare _echo section headers (PACKAGES, SERVICES) to match the quoted-string form used everywhere else. No functional change.

@@ -1,16 +1,16 @@
 #!/usr/bin/env fish
-# ry-install v7.34.5 (2026-06-13) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.35.0 (2026-06-13) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text is not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.34.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.35.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs (cachyos-settings/wine-cachyos); /etc overrides.
 
@@ -574,6 +574,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/iw-regdomain" \
     "/etc/conf.d/wireless-regdom" \
     "/etc/udev/rules.d/60-ry-ioschedulers.rules" \
+    "/etc/udev/rules.d/61-ry-epp.rules" \
     "/etc/nftables.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
@@ -792,7 +793,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         _RY_NTSYNC_MODLOAD_CONFS:3 \
         _RY_ISO3166_ALPHA2:249 \
         _RY_TMPDIR_GLOBS:6 \
-        SYSTEM_DESTINATIONS:16 \
+        SYSTEM_DESTINATIONS:17 \
         USER_DESTINATIONS:1
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -919,6 +920,7 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        ct state established,related accept" \
         "        iif \"lo\" accept" \
         "        ct state invalid drop" \
+        "        ip6 nexthdr ipv6-icmp icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert, nd-router-solicit, echo-request, packet-too-big, time-exceeded, parameter-problem } accept" \
         "        ip protocol icmp accept" \
         "    }" \
         "    chain forward { type filter hook forward priority filter; policy drop; }" \
@@ -964,6 +966,11 @@ function _content__etc_udev_rules.d_60-ry-ioschedulers.rules --description "Gene
     printf '%s\n' \
         "# ry-install: NVMe I/O scheduler none (managed file, do not edit by hand)" \
         'ACTION=="add|change", KERNEL=="nvme[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"'
+end
+function _content__etc_udev_rules.d_61-ry-epp.rules --description "Generate content for AMD P-State EPP udev rule (performance)" # Pins energy_performance_preference=performance; amd_pstate=active leaves EPP at BIOS default otherwise.
+    printf '%s\n' \
+        "# ry-install: AMD P-State EPP performance (managed file, do not edit by hand)" \
+        'ACTION=="add", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="performance"'
 end
 
 # ── CONTENT DISPATCH (_ry_get_file_content; fn = _content_$(_tmpfile_key dst)) ──
@@ -2287,6 +2294,11 @@ function _vss_udev --description "_verify_static_system sub: NVMe I/O scheduler 
     _chk_file /etc/udev/rules.d/60-ry-ioschedulers.rules; or return 0
     _chk_grep /etc/udev/rules.d/60-ry-ioschedulers.rules 'queue/scheduler}="none"' "nvme scheduler=none"
 end
+function _vss_epp --description "_verify_static_system sub: AMD P-State EPP udev rule"
+    _echo "── udev (EPP) ──"
+    _chk_file /etc/udev/rules.d/61-ry-epp.rules; or return 0
+    _chk_grep /etc/udev/rules.d/61-ry-epp.rules 'energy_performance_preference}="performance"' "EPP=performance"
+end
 function _vss_drirc --description "_verify_static_system sub: RADV drirc"
     _echo "── drirc (RADV) ──"
     _chk_file /etc/drirc.d/95-ry-radv-apu.conf; or return 0
@@ -2317,6 +2329,7 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _vss_sysctl
     _vss_modprobe
     _vss_udev
+    _vss_epp
     _vss_drirc
     _echo "── nftables ──"
     _vss_nft
@@ -2651,9 +2664,9 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
             set -l parts (string split ':' -- "$check"); set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
             _chk_eq "$parts[3]" "$sysfs_val" "$parts[2]"
         end
-        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # Profile sets governor only; EPP reported as advisory.
+        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # Profile pins EPP=performance via 61-ry-epp.rules.
         if test -n "$_epp"
-            _info "  EPP: $_epp (advisory — profile sets governor, not EPP)"
+            _chk_eq "EPP" "$_epp" performance
         else
             _info "  EPP: unreadable"
         end

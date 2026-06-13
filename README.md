@@ -16,7 +16,7 @@ chmod +x ry-install.fish
 > [!IMPORTANT]
 > Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent.
 
-In scope: kernel cmdline, initramfs, systemd units, network (NetworkManager + iwd), sysctl, gaming env vars, pacman add+remove, sdboot-manage BLS entries. Out: dotfiles, shells, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
+In scope: kernel cmdline, initramfs, systemd units, network (NetworkManager + iwd), sysctl, gaming env vars, pacman add+remove, sdboot-manage BLS entries. Out: dotfiles, shells, secrets, backups, multi-user, non-CachyOS, laptop.
 
 ## Requirements
 

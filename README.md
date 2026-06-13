@@ -52,7 +52,7 @@ Hard requirements abort read-only in preflight (exit 3); `pacman-contrib` and NT
 
 ## Install Flow
 
-A `pacman -Syu`, package-verify, or boot-config failure taints the run (skips the Phase 5 rebuild — see below). Phase 3 writes are atomic renames.
+A `pacman -Syu`, package-verify, or boot-config failure taints the run (skips the Phase 5 rebuild). Phase 3 writes are atomic renames.
 
 | # | Phase | Action |
 |---|---|---|
@@ -158,29 +158,29 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback are accepted, invalid conntrack states are dropped, and ICMPv4 plus essential ICMPv6 (NDP and PMTUD: neighbor/router solicit+advert, echo-request, packet-too-big, time-exceeded, parameter-problem) are accepted; all other inbound is dropped — including mDNS, so local service discovery is blocked. Add inbound ports to `/etc/nftables.conf` as needed.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, invalid conntrack dropped, ICMPv4 plus essential ICMPv6 (NDP + PMTUD) accepted, all other inbound dropped — including mDNS. Add inbound ports to `/etc/nftables.conf` as needed.
 
-Every managed write is crash-safe and reversible: rendered to a same-filesystem tempfile, symlink-probed, backed up, `mv -T`-swapped, then re-read and restored on mismatch.
+Every managed write is crash-safe: render → same-FS tmp → symlink-probe → `.ry.bak` → chmod → `mv -T` → re-read + restore on mismatch.
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | render → tmp → symlink-probe → `.ry.bak` (backup targets) → chmod → `mv -T` → re-read + restore on mismatch |
+| Atomic writes | render → tmp → symlink-probe → backup → chmod → `mv -T` → restore on mismatch |
 | Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` / `fstab` |
-| mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal; a failed or skipped revert preserves the `/run` snapshot (until reboot) |
-| Instance lock | atomic `mkdir 0700`; dead/recycled-PID reclaim via `/proc` starttime (fail-closed); empty pidfile settles 0.2 s before reclaim |
+| mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal; failed revert keeps the `/run` snapshot |
+| Instance lock | atomic `mkdir 0700`; dead/recycled-PID reclaim via `/proc` (fail-closed) |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
 
-The process exit code is the single source of truth for automation; internal sentinels never surface as a process status and are recorded only in the JSONL log.
+The process exit code is the single source of truth; internal sentinels stay in the JSONL log only.
 
 | Code | Meaning |
 |---|---|
 | `0` / `1` / `2` | success / verify-FAIL or install-error / usage (incl. root-refused) |
-| `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock (holder PID on stderr; JSONL disambiguates) |
+| `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock |
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, …) |
-| `11`/`12`/`13`/`251`/`250`/`255` | internal sentinels — never a process exit (JSONL `gen_fail`; collapses to `1` install/verify, `3` `--check`) |
+| `11`/`12`/`13`/`251`/`250`/`255` | internal sentinels — never a process exit (JSONL `gen_fail`) |
 
-All runtime behavior is controlled by the in-script globals; these environment variables are the only external overrides, and each falls back safely when unset or invalid.
+These environment variables are the only external overrides; each falls back safely when unset or invalid.
 
 | Variable | Default | Effect |
 |---|---|---|

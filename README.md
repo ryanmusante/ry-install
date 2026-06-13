@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.29.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.31.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -81,7 +81,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | Action | Packages |
 |---|---|
 | Install (16) | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil`, `nftables` |
-| Remove (8) | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update` |
+| Remove (9) | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 
 **Kernel cmdline** → `/etc/kernel/cmdline` + sdboot `LINUX_OPTIONS`
 
@@ -159,7 +159,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, and ICMPv4 (invalid-state dropped) allowed; all other inbound dropped — including ICMPv6/NDP, so inbound IPv6, mDNS discovery, and KDE Connect pairing are blocked; forwarding dropped; output unrestricted. systemd-resolved keeps `MulticastDNS=no` (avahi owns 5353; the two mDNS stacks must not both bind it). Add inbound ports to `/etc/nftables.conf` as needed.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, and ICMPv4 (invalid-state dropped) allowed; all other inbound dropped — including ICMPv6/NDP, so inbound IPv6 and mDNS discovery are blocked; forwarding dropped; output unrestricted. systemd-resolved keeps `MulticastDNS=no` (avahi owns 5353; the two mDNS stacks must not both bind it). Add inbound ports to `/etc/nftables.conf` as needed.
 
 | Feature | Detail |
 |---|---|

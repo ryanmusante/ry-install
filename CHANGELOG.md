@@ -1,5 +1,19 @@
 ry-install changelog - newest first.
 
+7.31.0 - 2026-06-12
+
+- kdeconnect: KDE Connect is now removed instead of disabled — kdeconnect added to PKGS_DEL (8 -> 9), removed via the rdep-safe pacman -Rns path (pactree-gated, skipped if absent or held by an external reverse dependency). -Rns also drops the package's /etc/xdg/autostart entry and kdeconnectd binary, so no autostart override is needed.
+- kdeconnect: the 7.30.0 disable machinery is fully reverted — the ~/.config/autostart override managed file, its content generator, preflight validator, deploy post-hook, and the --verify advisory check are all removed (managed files 18 -> 17; USER_DESTINATIONS 2 -> 1; post-hook patterns 18 -> 17; functions 291 -> 287).
+- firewall: unchanged from 7.29.0 (KDE Connect ports were already removed there); README firewall note no longer cites KDE Connect pairing since the package is gone.
+- docs: README synced — Remove (9) package row, service-config KDE Connect row removed, Managed Files User (1), 17-file deploy phase, advisory list.
+
+7.30.0 - 2026-06-12
+
+- kdeconnect: KDE Connect disabled for the profile user — new managed file ~/.config/autostart/org.kde.kdeconnect.daemon.desktop (Hidden=true), an XDG-precedence override of the package's /etc/xdg/autostart entry (managed files 17 -> 18; USER_DESTINATIONS 1 -> 2; post-hook patterns 17 -> 18).
+- kdeconnect: deploy post-hook stops a running kdeconnectd (pkill -x, user scope, non-fatal); a dedicated preflight validator gates [Desktop Entry] + Hidden=true; static verify checks the deployed override; --verify reports kdeconnectd state (advisory).
+- kdeconnect: limits — D-Bus activation (/usr/share/dbus-1/services/org.kde.kdeconnect.service) can still start the daemon on demand (e.g. opening its settings module); inbound discovery and pairing remain blocked by the 7.29.0 firewall. Package paths confirmed against the Arch kdeconnect package contents.
+- docs: README synced — service-config row, Managed Files User (2), 18-file deploy phase, advisory list.
+
 7.29.0 - 2026-06-12
 
 - firewall: inbound allow set reduced to established/related, loopback, and ICMPv4 — the ipv6-icmp, mDNS (5353/udp), and KDE Connect (1714-1764 tcp+udp) accept rules are removed (input chain 7 -> 4 rules; policies unchanged: input drop, forward drop, output accept).

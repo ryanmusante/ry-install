@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.29.0 (2026-06-12) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.31.0 (2026-06-12) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return keeps a sourcing shell alive; stack-trace text not a stable API.
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──────────────────────────────────────────────
-set -g VERSION "7.29.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.31.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -695,7 +695,8 @@ set -g PKGS_DEL \
     plymouth-kcm \
     micro \
     cachyos-micro-settings \
-    cachy-update
+    cachy-update \
+    kdeconnect
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # EXPECTED_VULKAN_PKGS (2) -> chwd Vulkan drivers (verified present).
 
@@ -776,7 +777,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         ENV_VARS:10 \
         SYSCTL_VALUES:6 \
         PKGS_ADD:16 \
-        PKGS_DEL:8 \
+        PKGS_DEL:9 \
         MASK:9 \
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:4 \

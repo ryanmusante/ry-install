@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.31.3 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.31.4 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -45,14 +45,14 @@ Hard requirements abort read-only in preflight (exit 3); `pacman-contrib` and NT
 | `--` | End of options (no positional arguments accepted) |
 | `-h, --help` · `-v, --version` | Help · Version (honored first, except as the `--install-file` value) |
 
-`--verify`/`--check` read state only, lock-free — a concurrent install can read as transient drift. `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot); stderr-silent after parsing (bootstrap failures still print). `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, CachyOS vm sysctls (advisory), boot time vs 15 s (≥90% = WARN).
+`--verify`/`--check` read state only, lock-free (a concurrent install can read as transient drift). `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing (bootstrap failures still print). `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, CachyOS vm sysctls (advisory), boot time vs 15 s (≥90% = WARN).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`/etc/kernel/cmdline` regenerates sdboot entries without an initramfs rebuild); a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
 
 ## Install Flow
 
-A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 rebuild. Phase 3 writes are atomic renames.
+A `pacman -Syu`, package-verify, or boot-config failure taints the run (skips the Phase 5 rebuild — see below). Phase 3 writes are atomic renames.
 
 | # | Phase | Action |
 |---|---|---|
@@ -60,8 +60,8 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | 2 | Packages | `pacman -Syu --needed` → `updatedb`/`pkgfile`. `mkinitcpio.conf` pre-deployed before `-Syu`; one `-Syyu` retry. Managed `.pacnew` auto-resolved (rollback: `pacdiff`); `.pacsave` reported |
 | 3 | Configuration | deploy the 17 embedded files atomically |
 | 4 | Services | fstab → resolved restart → package removal → nftables activation → mask (ufw flush) → enable → regdom |
-| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. A tainted run (failed `-Syu`/verify or boot-config write) skips the rebuild; resolve and re-run |
-| 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` (skipped when no upgrade or removals; `pacman -Sc --noconfirm` when paccache is absent) → NetworkManager restart (deferred on active Wi-Fi) |
+| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. A tainted run skips the rebuild; resolve and re-run |
+| 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` (skipped when no upgrade or removals; `pacman -Sc` when paccache is absent) → NetworkManager restart (deferred on active Wi-Fi) |
 
 CachyOS defaults (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; their configs still deploy. `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 
@@ -70,11 +70,11 @@ CachyOS defaults (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; th
 
 ## Run Summary
 
-A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phase and a final summary. Verdict (`PASS` · `PASS-WITH-WARNINGS` · `FAIL` · `FAIL-BOOT-CRITICAL` · `PREFLIGHT`) maps to the exit code. `WARN` keeps exit `0`; only `FAIL` sets `INSTALL_HAD_ERRORS`; `DEFER` applies next boot; `SKIP`/`N/A` by design.
+A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phase and a final summary. Verdict (`PASS` · `PASS-WITH-WARNINGS` · `FAIL` · `FAIL-BOOT-CRITICAL` · `PREFLIGHT`) maps to the exit code: `WARN` keeps exit `0`; only `FAIL` sets `INSTALL_HAD_ERRORS`; `DEFER` applies next boot; `SKIP`/`N/A` by design.
 
 ## Configuration
 
-The script is the source of truth — retune the `set -g` globals near the top. In-script timing tunables (not env-overridable): `BOOT_TIME_TARGET=15` s, `PACTREE_TIMEOUT_S=60` s, `NM_RESTART_DELAY=3` s.
+The script is the source of truth (retune the `set -g` globals near the top). In-script timing tunables, not env-overridable: `BOOT_TIME_TARGET=15` s, `PACTREE_TIMEOUT_S=60` s, `NM_RESTART_DELAY=3` s.
 
 **Packages**
 
@@ -141,7 +141,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 
 | Set | Units |
 |---|---|
-| Masked (9) | `ananicy-cpp.service`, `power-profiles-daemon.service`, `ufw.service` (rules flushed pre-mask, after nftables activates), `NetworkManager-wait-online.service`, `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
+| Masked (9) | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `ufw.service` (rules flushed pre-mask, after nftables activates), `{sleep,suspend,hibernate,hybrid-sleep,suspend-then-hibernate}.target` |
 | Enabled (4) | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service` (+ `NetworkManager-dispatcher.service` if installed) |
 
 ## Managed Files
@@ -218,7 +218,7 @@ No automated uninstaller; use Managed Files as the rollback reference.
 | Problem | Fix |
 |---|---|
 | Boot failure | live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
-| Initramfs rebuild refused | a phase tainted boot state — fix the cause, then re-run `./ry-install.fish` (idempotent) |
+| Initramfs rebuild refused | a phase tainted boot state — fix the cause, then re-run (idempotent) |
 | `--verify` drift | `./ry-install.fish --install-file /etc/...` |
 | `.ry-install.*` orphan | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete; find ~/.config/environment.d -xdev -name '.ry-install.*' -delete`, then re-run |
 | Lock held, no live PID | `rm -rf ~/ry-install/.lock`; re-run |
@@ -227,9 +227,7 @@ No automated uninstaller; use Managed Files as the rollback reference.
 ## References
 
 - NM + iwd: <https://wiki.archlinux.org/title/NetworkManager#Using_iwd_as_the_Wi-Fi_backend>
-- MT7925: <https://wiki.archlinux.org/title/Network_configuration/Wireless#MediaTek>
 - gfx1151: <https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name=gfx1151>
-- ppfeaturemask: <https://wiki.archlinux.org/title/AMDGPU#Boot_parameter>
 
 ## License
 

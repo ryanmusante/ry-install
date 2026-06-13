@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.31.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.31.3 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -45,7 +45,7 @@ Hard requirements abort read-only in preflight (exit 3); `pacman-contrib` and NT
 | `--` | End of options (no positional arguments accepted) |
 | `-h, --help` · `-v, --version` | Help · Version (honored first, except as the `--install-file` value) |
 
-`--verify`/`--check` read state only and run lock-free — a concurrent install can read as transient drift. `--check` compares the live `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing (bootstrap failures still print). `--verify` also reports state the installer does not write: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab options, CachyOS vm sysctls (advisory), boot time vs 15 s (≥90% = WARN).
+`--verify`/`--check` read state only, lock-free — a concurrent install can read as transient drift. `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot); stderr-silent after parsing (bootstrap failures still print). `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, CachyOS vm sysctls (advisory), boot time vs 15 s (≥90% = WARN).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`/etc/kernel/cmdline` regenerates sdboot entries without an initramfs rebuild); a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
@@ -60,7 +60,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | 2 | Packages | `pacman -Syu --needed` → `updatedb`/`pkgfile`. `mkinitcpio.conf` pre-deployed before `-Syu`; one `-Syyu` retry. Managed `.pacnew` auto-resolved (rollback: `pacdiff`); `.pacsave` reported |
 | 3 | Configuration | deploy the 17 embedded files atomically |
 | 4 | Services | fstab → resolved restart → package removal → nftables activation → mask (ufw flush) → enable → regdom |
-| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. `RY_INSTALL_FORCE_BOOT_REBUILD=1` bypasses the taint gate (never a failed mkinitcpio revert) |
+| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. A tainted run (failed `-Syu`/verify or boot-config write) skips the rebuild; resolve and re-run |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` (skipped when no upgrade or removals; `pacman -Sc --noconfirm` when paccache is absent) → NetworkManager restart (deferred on active Wi-Fi) |
 
 CachyOS defaults (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; their configs still deploy. `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
@@ -180,7 +180,6 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 | Variable | Default | Effect |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` | per-command cap (s); `0` disables (pkg/boot/db ops bypass) |
-| `RY_INSTALL_FORCE_BOOT_REBUILD` | unset | `=1` bypasses the torn-package gate (a failed mkinitcpio revert is never bypassed) |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset | `=1` bypasses the CPU match |
 | `NO_COLOR` | unset | suppress ANSI color |
 | `TMPDIR` | `/tmp` | scratch dir; invalid values fall back to `/tmp` |
@@ -219,7 +218,7 @@ No automated uninstaller; use Managed Files as the rollback reference.
 | Problem | Fix |
 |---|---|
 | Boot failure | live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
-| Initramfs rebuild refused | fix the cause, then `RY_INSTALL_FORCE_BOOT_REBUILD=1 ./ry-install.fish` |
+| Initramfs rebuild refused | a phase tainted boot state — fix the cause, then re-run `./ry-install.fish` (idempotent) |
 | `--verify` drift | `./ry-install.fish --install-file /etc/...` |
 | `.ry-install.*` orphan | `sudo find /etc /boot/loader -xdev -name '.ry-install.*' -delete; find ~/.config/environment.d -xdev -name '.ry-install.*' -delete`, then re-run |
 | Lock held, no live PID | `rm -rf ~/ry-install/.lock`; re-run |

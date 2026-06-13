@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.31.0 (2026-06-12) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.31.3 (2026-06-12) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # return keeps a sourcing shell alive; stack-trace text not a stable API.
 
-# ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──────────────────────────────────────────────
-set -g VERSION "7.31.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+# ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
+set -g VERSION "7.31.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -14,7 +14,7 @@ set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs (cachyos-settings/wine-cachyos); /etc overrides.
 
-# ── HELP TEXT ─────────────────────────────────────────────────────────────────────────────────────
+# ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
     printf '%s\n' \
         "" \
@@ -47,14 +47,13 @@ function _ry_show_help --description "Display usage information and available su
         "  canonical code recorded in JSONL footer.exit_code (130 INT / 143 TERM / 129 HUP / 131 QUIT / 134 ABRT / 138 USR1 / 140 USR2)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
-        "  RY_INSTALL_FORCE_BOOT_REBUILD=1  Bypass torn-package gate (recovery; never bypasses a failed mkinitcpio revert)." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
         "  NO_COLOR  Suppress ANSI color (non-empty value, per no-color.org)." \
         "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl" \
         ""
 end
 
-# ── EARLY ARG INTERCEPT: -h/-v BEFORE ROOT GUARD ──────────────────────────────────────────────────
+# ── EARLY ARG INTERCEPT: -h/-v BEFORE ROOT GUARD ──
 set -l _skip_if_val false
 for _early_arg in $argv
     if test "$_skip_if_val" = true; set _skip_if_val false; continue; end # --install-file value: leave -h/-v for argparse path validation.
@@ -78,7 +77,7 @@ for _early_arg in $argv
 end
 set --erase _early_arg _skip_if_val
 
-# ── PATH HARDENING (before first external command: id -u) ─────────────────────────────────────────
+# ── PATH HARDENING (before first external command: id -u) ──
 set -l _ry_path_new
 for _ry_p in /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin $PATH
     string match -q -- '/*' $_ry_p; or continue # Drop empty/relative inherited PATH entries.
@@ -89,7 +88,7 @@ set --erase _ry_path_new _ry_p
 command -q id; or begin; echo "[ERR] GNU coreutils id(1) required (resolves UID before privilege checks)" >&2; exit $EXIT_PREFLIGHT; end # id(1) is the first external command; guard presence before use.
 set -g _MY_UID (command id -u)
 
-# ── BAIL PRIMITIVES: _RY_EXIT + HANDLER ERASE ─────────────────────────────────────────────────────
+# ── BAIL PRIMITIVES: _RY_EXIT + HANDLER ERASE ──
 function _ry_erase_handlers --description "Erase signal/exit handler functions"; functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null; end
 function _ry_exit --argument-names code --description "Set bail sentinel and exit" # Pre-bootstrap callers: functions -q guards _log/_write_footer/_do_cleanup.
     test -z "$code"; and set code 0
@@ -109,7 +108,7 @@ function _ry_exit --argument-names code --description "Set bail sentinel and exi
     exit $code
 end
 
-# ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ───────────────────────────────────────────────────
+# ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
 set -g QUIET true; set -g MODE bootstrap # MODE pinned pre-argparse: signal footers and check-gates never see an empty mode.
 if not string match -qr '^\d+$' -- "$_MY_UID"; echo "[ERR] id -u returned non-numeric value: '$_MY_UID' — cannot determine user identity" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if test "$_MY_UID" -eq 0; echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2; _ry_exit $EXIT_USAGE; end
@@ -124,7 +123,7 @@ test "$parts[1]" -eq 3; and test "$_fish_minor" -ge 6; and set _fish_ok 1
 if test "$_fish_ok" -eq 0; echo "[ERR] fish 3.6+ required (found: $fish_ver)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set --erase fish_ver parts _fish_minor _fish_ok
 
-# ── TMPDIR + COREUTILS PROBES ─────────────────────────────────────────────────────────────────────
+# ── TMPDIR + COREUTILS PROBES ──
 if set -q TMPDIR; and test -n "$TMPDIR"; and not string match -q -- '/*' "$TMPDIR"; echo "[WARN] TMPDIR is not an absolute path ($TMPDIR) — falling back to /tmp" >&2; set -gx TMPDIR /tmp; end
 if set -q TMPDIR; and test -n "$TMPDIR"; and not test -d "$TMPDIR"; echo "[WARN] TMPDIR does not exist ($TMPDIR) — falling back to /tmp" >&2; set -gx TMPDIR /tmp; end
 set -l _ry_tmpprobe_dir /tmp
@@ -150,7 +149,7 @@ if not command -q stat; echo "[ERR] GNU coreutils stat(1) required (used for mod
 if not command -q date; echo "[ERR] GNU coreutils date(1) required (used for timestamps in DATE_LABEL, TIMESTAMP, JSONL ts fields)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not string match -qr '^[+-]\d{4}$' -- (command date '+%z' 2>/dev/null); echo "[ERR] date(1) lacks %z timezone offset support (need GNU coreutils ≥ 8.x; rejects empty or literal-%z output)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
-# ── TIMESTAMPS + HOME + LOG_DIR ───────────────────────────────────────────────────────────────────
+# ── TIMESTAMPS + HOME + LOG_DIR ──
 set -l _ry_now (command date '+%Y-%m-%d|%Y%m%d-%H%M%S%z'); set -l _ry_dt (string split -m1 '|' -- "$_ry_now"); set -g DATE_LABEL $_ry_dt[1]; set -g TIMESTAMP (string join '-' $_ry_dt[2] $fish_pid); set --erase _ry_now _ry_dt
 if test -z "$HOME"; or not test -d "$HOME"
     set -gx HOME (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $6}')
@@ -177,7 +176,7 @@ end
 set --erase _ld_path _prev_mkdir_umask
 set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS false
 
-# ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──────────────────────────────────────
+# ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──
 set -g _RY_BOOT_TAINTED false
 set -g _RY_BOOT_CRITICAL_DSTS \
     "/boot/loader/loader.conf" \
@@ -192,7 +191,7 @@ set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 set -g NM_RESTART_DELAY 3; set -g _PROG_BAR_WIDTH 40
 
-# ── KERNEL / SYSTEMD STATE PROBES ─────────────────────────────────────────────────────────────────
+# ── KERNEL / SYSTEMD STATE PROBES ──
 function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy-loaded; empty on missing config)"
     if not set -q _KCONFIG_LOADED
         if test -f /proc/config.gz; and command -q zcat
@@ -240,7 +239,7 @@ function _unit_state_padded --argument-names unit --description "Return _unit_st
     end
 end
 
-# ── JSONL FOOTER + TMPFILE CLEANUP ────────────────────────────────────────────────────────────────
+# ── JSONL FOOTER + TMPFILE CLEANUP ──
 function _write_footer --argument-names exit_code extra_key --description "Append JSONL footer to LOG_FILE"
     set -q _FOOTER_WRITTEN; and return 0
     set -q LOG_FILE; or return 0
@@ -268,7 +267,7 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
 end
 set -g _CLEANUP_DONE false
 
-# ── INSTANCE LOCK: ATOMIC MKDIR + STALE-PID RECLAIM ───────────────────────────────────────────────
+# ── INSTANCE LOCK: ATOMIC MKDIR + STALE-PID RECLAIM ──
 function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     set -l _prev_umask (umask)
     umask 0077
@@ -370,7 +369,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     return 1
 end
 
-# ── CLEANUP ORCHESTRATION: REVERT → TMPFILES → CHILDREN → GLOBALS ─────────────────────────────────
+# ── CLEANUP ORCHESTRATION: REVERT → TMPFILES → CHILDREN → GLOBALS ──
 function _dc_mki_revert --description "_do_cleanup sub: signal-time mkinitcpio.conf revert"
     set -q _RY_MKI_HAD_ORIG; and test "$_RY_MKI_HAD_ORIG" = true; or return 0
     set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; or return 0
@@ -489,7 +488,7 @@ function _do_cleanup --description "Master cleanup: reap children → revert →
     _dc_erase_globals
 end
 
-# ── VERIFY COUNTERS + TEARDOWN + SIGNAL/EXIT HANDLERS ─────────────────────────────────────────────
+# ── VERIFY COUNTERS + TEARDOWN + SIGNAL/EXIT HANDLERS ──
 set -g VERIFY_OK 0; set -g VERIFY_FAIL 0; set -g VERIFY_WARN 0; set -g VERIFY_GEN_FAIL 0
 function _teardown --argument-names mode --description "Unified cleanup: progress teardown, footer, resources" # Mode 'signal' marks footer interrupted; 'exit' writes a normal footer.
     functions -q _progress_teardown; and _progress_teardown # Guard: signals can land before the progress module is defined.
@@ -556,7 +555,7 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
     _teardown exit $_exit_status
 end
 
-# ── EMBEDDED CONFIGURATION: DESTINATIONS, KERNEL PARAMS, PKGS, MASK ───────────────────────────────
+# ── EMBEDDED CONFIGURATION: DESTINATIONS, KERNEL PARAMS, PKGS, MASK ──
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" \
     "/etc/kernel/cmdline" \
@@ -579,7 +578,7 @@ set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set --erase _ry_dst_count
 
-# ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ───────────────────────────────────
+# ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no # Bootloader keys: loader.conf (LOADER_*) + sdboot-manage.conf (SDBOOT_*).
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
 # KERNEL_PARAMS (12, enforced) -> /etc/kernel/cmdline + sdboot LINUX_OPTIONS.
@@ -611,7 +610,7 @@ set -g MKINITCPIO_HOOKS \
     fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
-# ── EMBEDDED DATA: SERVICE KEYS (RESOLVED / REGDOM / RADV / LOGIND / IWD / NM / CPUPOWER) ─────────
+# ── EMBEDDED DATA: SERVICE KEYS (RESOLVED / REGDOM / RADV / LOGIND / IWD / NM / CPUPOWER) ──
 set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade # systemd-resolved drop-in keys (RESOLVED_*); mDNS off — default-deny inbound drops its replies.
 set -g COUNTRY US # COUNTRY: wireless regdom; default US, override --country=XX.
 # _RY_ISO3166_ALPHA2: assigned ISO-3166-1 alpha-2 codes for --country validation.
@@ -647,7 +646,7 @@ set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisab
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR powersave
 
-# ── EMBEDDED DATA: USER ENV VARS + SYSCTL — ENV_VARS(10) → environment.d (gaming/Vulkan) ──────────
+# ── EMBEDDED DATA: USER ENV VARS + SYSCTL — ENV_VARS(10) → environment.d (gaming/Vulkan) ──
 set -g ENV_VARS \
     "AMD_VULKAN_ICD=RADV" \
     "DXVK_LOG_LEVEL=none" \
@@ -668,7 +667,7 @@ set -g SYSCTL_VALUES \
     "net.ipv4.tcp_notsent_lowat=16384" \
     "net.ipv4.tcp_slow_start_after_idle=0"
 
-# ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) — PKGS_ADD(16) → pacman -Syu (Phase 2) ──────────
+# ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) — PKGS_ADD(16) → pacman -Syu (Phase 2) ──
 set -g PKGS_ADD \
     nvme-cli \
     cachyos-gaming-meta \
@@ -700,7 +699,7 @@ set -g PKGS_DEL \
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # EXPECTED_VULKAN_PKGS (2) -> chwd Vulkan drivers (verified present).
 
-# ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS — MASK(9) → mask --now (Phase 4) ─────────
+# ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS — MASK(9) → mask --now (Phase 4) ──
 set -g MASK \
     ananicy-cpp.service \
     power-profiles-daemon.service \
@@ -719,7 +718,7 @@ set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 set -g TTM_PAGES_LIMIT 8388608
 set -g TTM_PAGE_POOL_SIZE 8388608
 
-# ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ─────────────────────────────
+# ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ──
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
     set -g _ROOT_UUID (command findmnt -no UUID / 2>/dev/null)
     set -l _reason "findmnt failed"
@@ -847,7 +846,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
 end
 
-# ── CONTENT GENERATORS (17; dispatched by _ry_get_file_content via _tmpfile_key) ──────────────────
+# ── CONTENT GENERATORS (17; dispatched by _ry_get_file_content via _tmpfile_key) ──
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -963,7 +962,7 @@ function _ry_get_file_content --argument-names dst --description "Generate expec
     $fn
 end
 
-# ── SUDO CREDENTIAL CACHE + COMMAND ESCALATION ────────────────────────────────────────────────────
+# ── SUDO CREDENTIAL CACHE + COMMAND ESCALATION ──
 function _ensure_sudo_cached --description "Cache sudo credential once before repeated sudo -n calls"
     if not command -q sudo; _err "sudo credential cache failed: sudo not found"; return 1; end
     set -l _sudo_err (_mktemp_or_null -p (_tmp_dir) ry-sudo-err.XXXXXX)
@@ -1003,7 +1002,7 @@ function _as --argument-names use_sudo --description "Prefix command with sudo o
     end
 end
 
-# ── TMPFILE TRACKING + KEY DERIVATION ─────────────────────────────────────────────────────────────
+# ── TMPFILE TRACKING + KEY DERIVATION ──
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path"
     set -l p $path
     set -l _hlen (string length -- "$HOME") # Literal HOME-prefix match (not glob); avoids metachar misroute.
@@ -1071,7 +1070,7 @@ function _tmp_dir --description "Return \$TMPDIR if set+exists, else /tmp"
     end
 end
 
-# ── FILESYSTEM PROBES (symlink, system-dst, byte read) ────────────────────────────────────────────
+# ── FILESYSTEM PROBES (symlink, system-dst, byte read) ──
 function _is_symlink --argument-names path use_sudo --description "Sudo-aware test -L (rc 0/1/2 = symlink/not/sudo-lapse)"
     if test "$use_sudo" = true
         sudo -n true 2>/dev/null; or return 2
@@ -1101,7 +1100,7 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
     return 0
 end
 
-# ── JSON ESCAPE ───────────────────────────────────────────────────────────────────────────────────
+# ── JSON ESCAPE ──
 function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)"
     set -l s "$argv[1]"
     if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"; printf '%s' "$s" | string collect --allow-empty; return 0; end # rc pinned 0: collect --allow-empty reads empty input as rc 1; callers consume stdout only.
@@ -1124,7 +1123,7 @@ function _json_str --description "Escape a string for safe JSON embedding (RFC 8
     return 0
 end
 
-# ── LOGGING + MESSAGING EMITTERS (JSONL + LEVELED STDERR) ─────────────────────────────────────────
+# ── LOGGING + MESSAGING EMITTERS (JSONL + LEVELED STDERR) ──
 function _log_section --argument-names name --description "Emit a section boundary marker line via _log"; _log "=== $name ==="; end
 function _log --description "Append a timestamped JSONL line to LOG_FILE" # _RY_LOG_WRITE_FAIL: first write fail short-circuits subsequent attempts.
     set -q _RY_LOG_WRITE_FAIL; and test "$_RY_LOG_WRITE_FAIL" = true; and return 0
@@ -1230,7 +1229,7 @@ function _echo --description "Print a plain message without level prefix"
     if test "$QUIET" = false; and not set -q _RY_OUTPUT_BROKEN; printf '%s\n' (string join ' ' -- $argv) >&2; end
 end
 
-# ── VERIFY SUMMARY ────────────────────────────────────────────────────────────────────────────────
+# ── VERIFY SUMMARY ──
 function _verify_summary --description "Print verification pass/fail/warn summary"
     _echo "VERIFICATION SUMMARY"
     set -l snap_ok $VERIFY_OK; set -l snap_fail $VERIFY_FAIL; set -l snap_warn $VERIFY_WARN; set -l snap_gen_fail 0
@@ -1254,7 +1253,7 @@ function _verify_summary --description "Print verification pass/fail/warn summar
     end
 end
 
-# ── PROGRESS BAR (PINNED BOTTOM ROW WITH SCROLL REGION) ───────────────────────────────────────────
+# ── PROGRESS BAR (PINNED BOTTOM ROW WITH SCROLL REGION) ──
 function _progress_now --description "Monotonic seconds (cached uptime or epoch)"
     if set -q _PROG_CLOCK; and test "$_PROG_CLOCK" = uptime
         set -l _u (command cat -- /proc/uptime 2>/dev/null | string split ' ')[1]
@@ -1353,7 +1352,7 @@ function _progress_on_winch --on-signal WINCH --description "Re-anchor progress 
     _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
 end
 
-# ── COMMAND RUNNER: _run + STDOUT/STDERR CAPTURE + TIMEOUT DISPATCH ───────────────────────────────
+# ── COMMAND RUNNER: _run + STDOUT/STDERR CAPTURE + TIMEOUT DISPATCH ──
 function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable seconds integer (0 = disabled)"
     if not set -q RY_RUN_TIMEOUT; echo $_RY_RUN_TIMEOUT_DEFAULT; return 0; end
     if test -z "$RY_RUN_TIMEOUT"; echo $_RY_RUN_TIMEOUT_DEFAULT; return 0; end
@@ -1466,7 +1465,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     return $ret
 end
 
-# ── GENERIC CHECK HELPERS (file, grep, perms, sysfs, token) ───────────────────────────────────────
+# ── GENERIC CHECK HELPERS (file, grep, perms, sysfs, token) ──
 function _chk_eq --argument-names label actual expected --description "Compare actual vs expected; emit _ok or _fail"
     if test "$actual" = "$expected"
         _ok "  $label: $actual"
@@ -1586,7 +1585,7 @@ function _chk_token_in --argument-names line token label --description "Verify a
     end
 end
 
-# ── PREFLIGHT GATES: DEPS + NETWORK + DISK + SYSTEMD ──────────────────────────────────────────────
+# ── PREFLIGHT GATES: DEPS + NETWORK + DISK + SYSTEMD ──
 function _ry_check_deps --description "Verify required packages are installed"
     _log DEPS_CHECK_START
     set -l missing
@@ -1687,7 +1686,7 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
     return 0
 end
 
-# ── MKINITCPIO HOOK + MODULE VALIDATORS (10 ORDERING INVARIANTS) ──────────────────────────────────
+# ── MKINITCPIO HOOK + MODULE VALIDATORS (10 ORDERING INVARIANTS) ──
 function _mkinitcpio_hook_exists --argument-names hook --description "True iff hook file exists in any mkinitcpio install/hooks dir"
     test -z "$hook"; and return 1
     for _d in /usr/lib/initcpio/install /usr/lib/initcpio/hooks /etc/initcpio/install /etc/initcpio/hooks; test -f "$_d/$hook"; and return 0; end
@@ -1756,7 +1755,7 @@ function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODU
     return 0
 end
 
-# ── CONFIG-FORMAT VALIDATORS (KV, KPARAM, SYSCTL, INI, TMPFILES) ──────────────────────────────────
+# ── CONFIG-FORMAT VALIDATORS (KV, KPARAM, SYSCTL, INI, TMPFILES) ──
 function _grep_kv --argument-names dst --description "Validate kv pairs (loader.conf space-sep; sdboot-manage.conf eq-sep)"
     test (count $argv) -lt 2; and _log "BUG: _grep_kv called without content (dst=$dst)"; and return 2
     set -l content $argv[2..-1]; set -l keys; set -l sep
@@ -1930,7 +1929,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     return 0
 end
 
-# ── ATOMIC FILE INSTALL: RENDER → SYMLINK CHECK → CHMOD → MV -T ───────────────────────────────────
+# ── ATOMIC FILE INSTALL: RENDER → SYMLINK CHECK → CHMOD → MV -T ──
 function _ry_mkinitcpio_array --argument-names key file --description "First non-comment KEY=... line from a conf file" # Perms-drifted file: sudo read beats misreporting the key as absent.
     test -z "$file"; and set file /etc/mkinitcpio.conf
     set -l _key_re (string escape --style=regex -- "$key"); set -l _all_lines
@@ -2086,7 +2085,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     return $_aw_rc
 end
 
-# ── VERIFY-STATIC: BOOT (LOADER + SDBOOT + CMDLINE + MKINITCPIO + ENTRIES) ────────────────────────
+# ── VERIFY-STATIC: BOOT (LOADER + SDBOOT + CMDLINE + MKINITCPIO + ENTRIES) ──
 function _vsb_loader --description "_verify_static_boot sub: /boot/loader/loader.conf key/value verification"
     _echo "── loader.conf ──"
     _chk_file /boot/loader/loader.conf; or return 0
@@ -2209,7 +2208,7 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
     _vsb_entries
 end
 
-# ── VERIFY-STATIC: SYSTEM + USER (drop-ins, modprobe, drirc, env.d) ───────────────────────────────
+# ── VERIFY-STATIC: SYSTEM + USER (drop-ins, modprobe, drirc, env.d) ──
 function _vss_ntsync_modules --description "_verify_static_system sub: ntsync state + autoload check"
     _echo "── ntsync state ──"
     set -l _ns (_ntsync_state)
@@ -2314,7 +2313,7 @@ function _verify_static_user --description "Verify environment.d ENV_VARS"
     end
 end
 
-# ── VERIFY-STATIC: PACKAGES + SERVICES + SYNTAX (presence, masks, unit/hook syntax) ───────────────
+# ── VERIFY-STATIC: PACKAGES + SERVICES + SYNTAX (presence, masks, unit/hook syntax) ──
 function _vsp_required --description "Check PKGS_ADD against installed; emits OK/FAIL per pkg"
     _echo "── Required packages ──"
     for pkg in $PKGS_ADD
@@ -2403,7 +2402,7 @@ function _verify_static_syntax --description "Validate live mkinitcpio HOOKS pre
     end
 end
 
-# ── VERIFY-STATIC: CHECKSUM + DRIVER (SHA256 match + _ry_verify_static) ───────────────────────────
+# ── VERIFY-STATIC: CHECKSUM + DRIVER (SHA256 match + _ry_verify_static) ──
 function _vsc_check_one --argument-names dst --description "_verify_static_checksum sub. Compare one destination's expected vs installed bytes"
     set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _gen_rc $pipestatus[1]
@@ -2463,7 +2462,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     return $ret
 end
 
-# ── --CHECK MODE: SILENT IDEMPOTENCY PROBE (0=clean / 3=preflight / 10=drift) ─────────────────────
+# ── --CHECK MODE: SILENT IDEMPOTENCY PROBE (0=clean / 3=preflight / 10=drift) ──
 function _check_phase_files --description "--check phase: file content hash compare"
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
         set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _gen_rc $pipestatus[1]
@@ -2565,7 +2564,7 @@ function _ry_do_check --description "Silent idempotency probe" # ERR_NO_DATA→p
     return $EXIT_OK
 end
 
-# ── VERIFY-RUNTIME: KERNEL CMDLINE + GPU + CPU + MODULES + CLOCKSOURCE ────────────────────────────
+# ── VERIFY-RUNTIME: KERNEL CMDLINE + GPU + CPU + MODULES + CLOCKSOURCE ──
 function _vrk_cmdline --description "Runtime kparam check: /proc/cmdline + preemption model"
     _echo "KERNEL CMDLINE"
     _echo
@@ -2761,7 +2760,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT _RY_DMESG_TSC
 end
 
-# ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, wifi, masks) ─────────────────────────
+# ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, wifi, masks) ──
 function _vrsv_chk_active_enabled --argument-names label rec_str --description "Helper: ok if active+enabled, warn if active only, fail otherwise"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found
@@ -2948,7 +2947,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
     return 0
 end
 
-# ── VERIFY-RUNTIME: ENVIRONMENT (env vars, sysctl, TCP, THP/KSM, zram, fstab, ntsync) ─────────────
+# ── VERIFY-RUNTIME: ENVIRONMENT (env vars, sysctl, TCP, THP/KSM, zram, fstab, ntsync) ──
 function _vre_envvars --description "Runtime env check: ENV_VARS via systemctl --user show-environment"
     _echo "ENVIRONMENT STATE"
     _echo
@@ -3142,7 +3141,7 @@ function _verify_runtime_env --description "Verify ENV_VARS, sysctl, vm-delegate
     _vre_regdom
 end
 
-# ── VERIFY-RUNTIME: SESSION + PERMS (file/dir perms, Vulkan, drirc, boot-perf) ────────────────────
+# ── VERIFY-RUNTIME: SESSION + PERMS (file/dir perms, Vulkan, drirc, boot-perf) ──
 function _vrs_nm_perms --description "Runtime session check: NetworkManager system-connections perms (0600 root:root)"
     set -l nm_conn_dir /etc/NetworkManager/system-connections
     if not test -d "$nm_conn_dir"; _info "  NetworkManager connections: directory not found"; return 0; end
@@ -3344,7 +3343,7 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
     _vrs_boot_perf
 end
 
-# ── VERIFY: TOP-LEVEL ORCHESTRATORS (_ry_verify_runtime + _ry_verify_all) ─────────────────────────
+# ── VERIFY: TOP-LEVEL ORCHESTRATORS (_ry_verify_runtime + _ry_verify_all) ──
 function _ry_verify_runtime --description "Verify runtime kernel params, services, and modules"
     _log_section "RUNTIME VERIFICATION START"
     _ensure_sudo_cached; or begin
@@ -3392,7 +3391,7 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
     return $_rc_s
 end
 
-# ── MISC HELPERS: PERM CHECK, WIFI ROUTE, USER-BUS, SUDO BANNER ───────────────────────────────────
+# ── MISC HELPERS: PERM CHECK, WIFI ROUTE, USER-BUS, SUDO BANNER ──
 function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit (unparseable mode reads as writable — fail-closed)"
     not string match -qr '^[0-7]+$' -- "$mode"; and return 0 # Unparseable/empty mode: report writable so the caller flags the dir (fail-closed).
     test (string length -- "$mode") -gt 3; and set mode (string sub -s -3 -- "$mode") # Drop special-bits digit; keep the ugo triplet.
@@ -3434,7 +3433,7 @@ function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache m
         "" >&2
 end
 
-# ── INSTALL PHASE 1: PREFLIGHT ────────────────────────────────────────────────────────────────────
+# ── INSTALL PHASE 1: PREFLIGHT ──
 function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_ERR, mark progress skip"; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; end
 function _install_preflight --description "Run all preflight checks before installation" # _RY_LOUD_ERR forces preflight errs to stderr; cleared on success/bail.
     _progress Preflight
@@ -3468,7 +3467,7 @@ function _install_preflight --description "Run all preflight checks before insta
     return 0
 end
 
-# ── MKINITCPIO.CONF: SNAPSHOT + REVERT (cp + size + cmp byte-exact) ───────────────────────────────
+# ── MKINITCPIO.CONF: SNAPSHOT + REVERT (cp + size + cmp byte-exact) ──
 function _mr_copy_size_verify --argument-names backup_file _mki_tmp --description "_mkinitcpio_revert sub: cp + byte-exact content verify"
     if not sudo -n cp -- "$backup_file" "$_mki_tmp" 2>/dev/null
         _err "  /etc/mkinitcpio.conf revert failed at copy — current conf may reference uninstalled modules"
@@ -3542,7 +3541,7 @@ function _ip_snapshot_mkinitcpio --description "Snapshot /etc/mkinitcpio.conf fo
     set -g _RY_MKI_BACKUP_FILE "$_snap"; set -g _RY_MKI_HAD_ORIG true # Snapshot mode moot: revert chmods --reference=destination.
 end
 
-# ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + VERIFY + PACNEW SCAN) ────────────────────────────────
+# ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + VERIFY + PACNEW SCAN) ──
 function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial upgrades forbidden — Arch policy)"
     set -l _pacman_first -Syu --needed --noconfirm; set -l _pacman_retry -Syyu --needed --noconfirm
     if test -f /var/lib/pacman/db.lck
@@ -3670,7 +3669,7 @@ function _install_packages --description "Install managed packages via pacman -S
     return 0
 end
 
-# ── INSTALL PHASE 3: SYSTEM + USER + SERVICE FILES (ATOMIC WRITES) ────────────────────────────────
+# ── INSTALL PHASE 3: SYSTEM + USER + SERVICE FILES (ATOMIC WRITES) ──
 function _isf_deploy_set --argument-names use_sudo phase --description "Deploy all destinations from argv[3..]"
     set -l _had_failure false
     for dst in $argv[3..]
@@ -3692,7 +3691,7 @@ function _install_system_files --description "Deploy all embedded config files"
     return 0
 end
 
-# ── INSTALL PHASE 4 (FSTAB): EXT4 OPTS REWRITE (noatime,lazytime,commit=10) ───────────────────────
+# ── INSTALL PHASE 4 (FSTAB): EXT4 OPTS REWRITE (noatime,lazytime,commit=10) ──
 function _fstab_needs_change --description "Scan ext4 entries for missing noatime/lazytime/commit=10"
     set -g _RY_FSTAB_NEEDS_CHANGE false; set -g _RY_FSTAB_COMMIT_OVERRIDES; set -l _malformed_warned false
     for line in $argv
@@ -3830,7 +3829,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     return 0
 end
 
-# ── INSTALL PHASE 4 (SERVICES): RESOLVED + PKG REMOVE + MASK + ENABLE ─────────────────────────────
+# ── INSTALL PHASE 4 (SERVICES): RESOLVED + PKG REMOVE + MASK + ENABLE ──
 function _configure_services_resolved_restart --description "Restart systemd-resolved when its conf.d drop-in is in place"
     test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
     if _run sudo -n systemctl restart systemd-resolved
@@ -3842,7 +3841,7 @@ function _configure_services_resolved_restart --description "Restart systemd-res
     return 0
 end
 
-# ── INSTALL PHASE 4 SUB: PKGS_DEL REMOVAL (RDEP-AWARE VIA PACTREE) ────────────────────────────────
+# ── INSTALL PHASE 4 SUB: PKGS_DEL REMOVAL (RDEP-AWARE VIA PACTREE) ──
 function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when no external installed rdeps; emit nothing (blocked)" # External rdeps block (→ _RY_PKG_REMOVE_SKIPS); in-set rdeps get their own pass.
     if not command -q pactree
         if not set -q _RY_PACTREE_MISSING_WARNED
@@ -3928,7 +3927,7 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
     return 0
 end
 
-# ── INSTALL PHASE 4 SUB: MASK + FIREWALL HANDOFF (NFTABLES LIVE BEFORE UFW FLUSH) ─────────────────
+# ── INSTALL PHASE 4 SUB: MASK + FIREWALL HANDOFF (NFTABLES LIVE BEFORE UFW FLUSH) ──
 function _csm_filter_units --description "_configure_services_mask sub. Pre-filter unit list"
     for _unit in $argv # Per-unit: batched is-enabled elides not-found → positional drift.
         set -l _state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
@@ -4009,7 +4008,7 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     return $_rc
 end
 
-# ── INSTALL PHASE 4 SUB: ENABLE UNITS + REGDOM ────────────────────────────────────────────────────
+# ── INSTALL PHASE 4 SUB: ENABLE UNITS + REGDOM ──
 function _cse_collect_units --description "Collect system units to enable"
     set -l _enable; set -l _ndsp (command systemctl is-enabled NetworkManager-dispatcher.service 2>/dev/null | string trim --)
     if test "$_ndsp" = enabled
@@ -4108,7 +4107,7 @@ function _install_configure_services --description "Enable, start, and configure
     return $_ret
 end
 
-# ── BOOT PATH RESOLUTION (ESP + $BOOT via bootctl / findmnt) ──────────────────────────────────────
+# ── BOOT PATH RESOLUTION (ESP + $BOOT via bootctl / findmnt) ──
 function _bootctl_dir --argument-names flag logtag fallnote --description "bootctl path probe (user then sudo); empty on failure"
     command -q bootctl; or return 0
     set -l _p (command bootctl $flag 2>/dev/null | string trim -- | string trim -r -c / --)
@@ -4163,7 +4162,7 @@ function _sdboot_fallback_vfat_ok --description "Refuse sdboot when ESP fell bac
     return 1
 end
 
-# ── BOOT SANITY: ENTRIES + KERNEL/INITRAMFS PROBES + SIZE SCAN ────────────────────────────────────
+# ── BOOT SANITY: ENTRIES + KERNEL/INITRAMFS PROBES + SIZE SCAN ──
 function _enum_boot_entries --argument-names boot --description "Enumerate \$boot/loader/entries/*.conf"
     set -g _RY_BOOT_ENUM_OK true
     set -l _basenames (sudo -n find "$boot/loader/entries" -maxdepth 1 -type f -name '*.conf' -printf '%f\0' 2>/dev/null | string split0); set -l _ps $pipestatus
@@ -4237,7 +4236,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     return 0
 end
 
-# ── INSTALL PHASE 5: BOOT REBUILD (MKINITCPIO -P + SDBOOT GEN/UPDATE) ─────────────────────────────
+# ── INSTALL PHASE 5: BOOT REBUILD (MKINITCPIO -P + SDBOOT GEN/UPDATE) ──
 function _irb_skip_post_mki --description "Record SKIP rows for sdboot-gen, sdboot-update, post-rebuild sanity"
     _phase_record "Boot: sdboot-manage gen" SKIP "aborted"
     _phase_record "Boot: sdboot-manage update" SKIP "aborted"
@@ -4282,20 +4281,16 @@ function _irb_verify_entries --argument-names boot --description "Re-enumerate b
         end
     end
 end
-function _check_boot_taint_gate --description "Verify boot state not tainted (shared by _irb_taint_gate + _post_boot); rc=0 ok, 1=revert-failed, 2=tainted-no-force"
-    if test "$_RY_BOOT_TAINTED" = true; and test "$RY_INSTALL_FORCE_BOOT_REBUILD" = 1
-        _warn "Boot-rebuild forced by RY_INSTALL_FORCE_BOOT_REBUILD=1 — _RY_BOOT_TAINTED gate bypassed" # Surface override; post-mortem cannot distinguish forced vs clean.
-        _log "BOOT_TAINTED_OVERRIDE: RY_INSTALL_FORCE_BOOT_REBUILD=1 bypassed taint flag"
-    end
+function _check_boot_taint_gate --description "Verify boot state not tainted (shared by _irb_taint_gate + _post_boot); rc=0 ok, 1=revert-failed, 2=tainted"
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
         _err "Refusing initramfs rebuild — mkinitcpio.conf revert failed (boot state inconsistent)"
-        _err "  Manual recovery required; RY_INSTALL_FORCE_BOOT_REBUILD does NOT bypass this gate"
+        _err "  Manual recovery required before re-running"
         return 1
     end
-    if test "$_RY_BOOT_TAINTED" = true; and test "$RY_INSTALL_FORCE_BOOT_REBUILD" != 1
+    if test "$_RY_BOOT_TAINTED" = true
         _err "Refusing initramfs rebuild — an earlier phase of THIS run tainted package or boot-critical config state"
         _err "  (mkinitcpio.conf, kernel cmdline, loader, sdboot-manage, or pacman -Syu/package-verify failed)"
-        _err "  Resolve manually then re-run, OR set RY_INSTALL_FORCE_BOOT_REBUILD=1 to force"
+        _err "  Resolve the cause manually, then re-run (idempotent)"
         return 2
     end
     return 0
@@ -4349,7 +4344,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     return 0
 end
 
-# ── INSTALL PHASE 6: FINALIZE (USER RELOAD + PACCACHE + NM RESTART) ───────────────────────────────
+# ── INSTALL PHASE 6: FINALIZE (USER RELOAD + PACCACHE + NM RESTART) ──
 function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk2 -ruk0"
     set -l _upgraded false; set -l _removed_n 0
     set -q SYSTEM_UPGRADED; and test "$SYSTEM_UPGRADED" = true; and set _upgraded true
@@ -4423,7 +4418,7 @@ function _install_finalize --description "Run post-install verification, cleanup
     return 0
 end
 
-# ── PHASE DISPATCH (_rdi_run_phases) + RUN-SUMMARY MATRIX RENDERER ────────────────────────────────
+# ── PHASE DISPATCH (_rdi_run_phases) + RUN-SUMMARY MATRIX RENDERER ──
 function _rrp_optional_indexer --argument-names cmd label --description "_rdi_run_phases sub. Run an optional indexer (updatedb / pkgfile) and record phase"
     set -l flag $argv[3..-1]
     if not command -q $cmd; _phase_record "Packages: $label" "--" "not installed"; return 0; end
@@ -4462,7 +4457,7 @@ function _rdi_run_phases --description "Run pkgs/sys/services phases" # Aggregat
     return 0
 end
 
-# ── RUN-SUMMARY MATRIX RENDERER (STDERR-ONLY; JSONL IS THE DURABLE RECORD) ────────────────────────
+# ── RUN-SUMMARY MATRIX RENDERER (STDERR-ONLY; JSONL IS THE DURABLE RECORD) ──
 function _rdi_elapsed --description "Format wall-clock elapsed since _PROG_START as 'Nm Ms'"
     set -q _PROG_START; or begin; printf '%s' "?"; return 0; end
     set -l _now (_progress_now); set -l _secs (math $_now - $_PROG_START)
@@ -4584,7 +4579,7 @@ function _rdi_summary --description "Print final install summary"
     end
 end
 
-# ── INSTALL: TOP-LEVEL ORCHESTRATOR (preflight → phases → boot → finalize) ────────────────────────
+# ── INSTALL: TOP-LEVEL ORCHESTRATOR (preflight → phases → boot → finalize) ──
 function _ry_do_install --description "Full installation: preflight, packages, configs, services, boot"
     _log_section "INSTALLATION START"
     _log "VERSION: $VERSION"
@@ -4614,7 +4609,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
-# ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR (resolver, sudo gate) ───────────────────────────
+# ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR (resolver, sudo gate) ──
 set -g _RY_POST_HOOKS \
     "/boot/*|boot" \
     "/etc/mkinitcpio.conf|boot" \
@@ -4687,7 +4682,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (13 handlers / 17 patterns; _post_<tag> dispatch) ──────────
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (13 handlers / 17 patterns; _post_<tag> dispatch) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot sub. mkinitcpio -P + sdboot-manage cascade" # skip_mki=true: cmdline is not an initramfs input.
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
@@ -4729,7 +4724,7 @@ function _post_cmdline --argument-names target --description "Post-hook: regener
     _post_boot_apply "$target" true
 end
 
-# ── POST-HOOKS: NON-BOOT LIVE-APPLY (SERVICE/CONFIG; FAILURES NON-FATAL, EXIT 0) ──────────────────
+# ── POST-HOOKS: NON-BOOT LIVE-APPLY (SERVICE/CONFIG; FAILURES NON-FATAL, EXIT 0) ──
 function _post_resolved --argument-names target --description "Post-hook: restart systemd-resolved"
     _echo
     if not _run sudo -n systemctl restart systemd-resolved
@@ -4851,7 +4846,7 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
     return 0
 end
 
-# ── PRE-DISPATCH EXIT (ARGPARSE-ERROR + EARLY-BAIL LOG CLEANUP) ───────────────────────────────────
+# ── PRE-DISPATCH EXIT (ARGPARSE-ERROR + EARLY-BAIL LOG CLEANUP) ──
 function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/dir (no exit; for caller-managed return paths)"
     set -l _preserve false
     set -q _RY_HEADER_WRITTEN; and test "$_RY_HEADER_WRITTEN" = true; and set _preserve true
@@ -4870,7 +4865,7 @@ function _early_usage_exit --description "Print usage error to stderr, remove pr
     _pre_dispatch_exit $EXIT_USAGE
 end
 
-# ── MAIN: ARGPARSE + MODE DISPATCH + LOG HEADER + EXIT ────────────────────────────────────────────
+# ── MAIN: ARGPARSE + MODE DISPATCH + LOG HEADER + EXIT ──
 set -g MODE install; set -g INSTALL_FILE_TARGET ""
 set -l _ORIG_ARGV $argv; set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) ry-argparse-err.XXXXXX)
 _track_tmpfile "$_ap_errfile"
@@ -4936,7 +4931,7 @@ else if set -q _flag_verbose; or test "$MODE" != install
     set -g QUIET false
 end
 
-# ── MAIN: LOG RENAME + 0600 CREATE + JSONL HEADER ─────────────────────────────────────────────────
+# ── MAIN: LOG RENAME + 0600 CREATE + JSONL HEADER ──
 set -l mode_label $MODE
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"; set -l old_log "$LOG_FILE"; set -l _log_rename_ok true
 if test -f "$old_log"; and test "$old_log" != "$new_log"
@@ -4979,7 +4974,7 @@ if set -q _RY_PERM_FIX_NOTICES
     set --erase _RY_PERM_FIX_NOTICES _n
 end
 
-# ── MAIN: RUNTIME INIT + LOCK + MODE DISPATCH + FOOTER ────────────────────────────────────────────
+# ── MAIN: RUNTIME INIT + LOCK + MODE DISPATCH + FOOTER ──
 set -g _RY_EXIT_CODE 0
 function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE and _INTENDED_EXIT_CODE atomically"; set -g _RY_EXIT_CODE $_code; set -g _INTENDED_EXIT_CODE $_code; end
 _init_runtime

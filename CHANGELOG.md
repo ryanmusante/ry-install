@@ -1,5 +1,22 @@
 ry-install changelog - newest first.
 
+7.31.3 - 2026-06-12
+
+- boot: RY_INSTALL_FORCE_BOOT_REBUILD removed — the boot-taint gate is now unconditional. A run tainted by a failed pacman -Syu/package-verify or a boot-critical config write always skips the Phase 5 initramfs rebuild; the only recovery is to fix the cause and re-run (idempotent). The taint mechanism itself (_RY_BOOT_TAINTED) is unchanged; only the human override that bypassed it is gone.
+- boot: _check_boot_taint_gate simplified to two refusal paths — rc 1 (mkinitcpio.conf revert failed) and rc 2 (tainted); the prior "forced" warn/log branch and the rc=2 "no-force" qualifier are dropped. Caller messaging (_irb_taint_gate, _post_boot_apply) is unchanged.
+- docs: help ENVIRONMENT block, README Phase 5 row, env-var table, and the "rebuild refused" troubleshooting row no longer reference the variable.
+- no other behavior change — function count (287) unchanged; all managed-file/package/unit/invariant counts byte-identical to 7.31.2 apart from version strings and the removed override.
+
+7.31.2 - 2026-06-12
+
+- size: section-banner comment lines trimmed — the decorative trailing box-drawing run (── padding to col ~100) on all 69 `# ── LABEL ──` headers reduced to a fixed two-char tail. Labels, section markers, and line count (5012) unchanged; saves ~7.2 KB.
+- no code, behavior, or invariant changes — function count (287), banner count (69), and every managed-file/package/unit count are byte-identical to 7.31.1 apart from version strings; non-padding content verified unchanged line-by-line.
+
+7.31.1 - 2026-06-12
+
+- docs: README Usage advisory paragraph (--verify/--check state-only note) condensed — run-on prose rewritten as a compact comma-list; no facts removed (ntsync, THP/KSM/ZRAM, tcp_bbr, drirc XML, ext4 fstab opts, vm sysctls, boot-time WARN all retained).
+- no code changes — script behavior, invariants, function count (287), and all managed-file/package/unit counts are byte-identical to 7.31.0; version strings bumped for release sync only.
+
 7.31.0 - 2026-06-12
 
 - kdeconnect: KDE Connect is now removed instead of disabled — kdeconnect added to PKGS_DEL (8 -> 9), removed via the rdep-safe pacman -Rns path (pactree-gated, skipped if absent or held by an external reverse dependency). -Rns also drops the package's /etc/xdg/autostart entry and kdeconnectd binary, so no autostart override is needed.

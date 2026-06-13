@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.34.4 (2026-06-13) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.34.5 (2026-06-13) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text is not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.34.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.34.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -1602,7 +1602,7 @@ end
 
 # ── PREFLIGHT GATES: DEPS + NETWORK + DISK + SYSTEMD ──
 function _ry_check_deps --description "Verify required packages are installed"
-    _log DEPS_CHECK_START
+    _log "DEPS_CHECK_START"
     set -l missing
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
         timeout mktemp awk grep curl getent sudo head df mv \
@@ -1618,11 +1618,11 @@ function _ry_check_deps --description "Verify required packages are installed"
     set -l _opt_missing
     for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci kill; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
-    _log DEPS_CHECK_OK
+    _log "DEPS_CHECK_OK"
     return 0
 end
 function _ry_check_network --description "Verify network connectivity (HTTPS primary + secondary + raw-IP fallback)" # HTTPS GET then ICMP fallback separates no-DNS/443 from no-link
-    _log NET_CHECK_START
+    _log "NET_CHECK_START"
     set -l _idx 0
     for _host in archlinux.org cloudflare.com
         set _idx (math $_idx + 1)
@@ -1645,7 +1645,7 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
     return 1
 end
 function _ry_check_time_sync --description "Verify NTP time sync; enable systemd-timesyncd if drifted (non-fatal)" # GPG signature checks need a correct clock; repair NTP pre-pacman.
-    _log TIME_SYNC_CHECK_START
+    _log "TIME_SYNC_CHECK_START"
     if not command -q timedatectl; _warn "  Time sync: timedatectl not found — cannot verify (pacman GPG checks may fail on a skewed clock)"; _log "TIME_SYNC_SKIP: timedatectl absent"; return 1; end
     set -l _synced (command timedatectl show -p NTPSynchronized --value 2>/dev/null | string trim --)
     if test "$_synced" = yes; _ok "  Time sync: NTP synchronized"; _log "TIME_SYNC_OK"; return 0; end
@@ -1695,7 +1695,7 @@ function _check_avail --argument-names path divisor unit crit warn --description
     return 0
 end
 function _ry_check_disk_space --description "Verify sufficient free disk space for installation"
-    _log DISK_CHECK_START
+    _log "DISK_CHECK_START"
     _check_avail / 1073741824 GiB $ROOT_AVAIL_CRIT $ROOT_AVAIL_WARN; or return 1
     _check_avail /boot 1048576 MiB $BOOT_SPACE_CRIT $BOOT_SPACE_WARN; or return 1
     return 0
@@ -2366,7 +2366,7 @@ function _vsp_pacman_conf --description "Inspect IgnorePkg / ParallelDownloads i
     end
 end
 function _verify_static_packages --description "Verify PKGS_ADD, PKGS_DEL, pacman.conf"
-    _echo PACKAGES
+    _echo "PACKAGES"
     set -l _installed_pkgs
     if not command -q pacman; _warn "  pacman not found, skipping package verification"; return 0; end
     set _installed_pkgs (command pacman -Qq 2>/dev/null)
@@ -2376,7 +2376,7 @@ function _verify_static_packages --description "Verify PKGS_ADD, PKGS_DEL, pacma
     _vsp_pacman_conf
 end
 function _verify_static_services --description "Verify masked services state"
-    _echo SERVICES
+    _echo "SERVICES"
     _echo "── Masked services ──"
     set -l _check_mask $MASK; set -l _mask_parsed
     for _u in $_check_mask

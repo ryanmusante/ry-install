@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+7.34.5 - 2026-06-13
+
+- consistency: quoted the 5 bare-token _log markers (DEPS_CHECK_START etc.) and 2 bare _echo section headers (PACKAGES, SERVICES) to match the quoted-string form used everywhere else. No functional change.
+
 7.34.4 - 2026-06-13
 
 - comments: unified sub-function description separator (sub. -> sub:), normalized data-flow arrows to → in embedded-data comments, fixed stale shelly opt-in note (PKGS_DEL is 9, so a shelly add is 9→10). No functional change.

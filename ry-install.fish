@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.34.3 (2026-06-13) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.34.4 (2026-06-13) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text is not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.34.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.34.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -390,7 +390,7 @@ function _dc_mki_revert --description "_do_cleanup sub: signal-time mkinitcpio.c
     end
     set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
 end
-function _dc_sweep_tmpfiles --description "_do_cleanup sub. Remove tracked tmpfiles/dirs"
+function _dc_sweep_tmpfiles --description "_do_cleanup sub: Remove tracked tmpfiles/dirs"
     _cleanup_tmpfiles
     set -l _stuck_tmpfiles
     for _tf in $_TRACKED_TMPFILES
@@ -421,7 +421,7 @@ function _dc_sweep_tmpfiles --description "_do_cleanup sub. Remove tracked tmpfi
     end
     set --erase _TRACKED_TMPFILES
 end
-function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for leftover ry-* tmpfiles"
+function _dc_sweep_filesystem --description "_do_cleanup sub: Sweep TMPDIR for leftover ry-* tmpfiles"
     functions -q _tmp_dir; or return 0
     set -l _tmpdir (_tmp_dir); set -l _tmp_globs $_RY_TMPDIR_GLOBS
     test (count $_tmp_globs) -gt 0; or return 0
@@ -433,7 +433,7 @@ function _dc_sweep_filesystem --description "_do_cleanup sub. Sweep TMPDIR for l
     end
     command find "$_tmpdir" -xdev -maxdepth 1 -name 'ry-run.*' -type d -empty -uid "$_MY_UID" -delete 2>/dev/null
 end
-function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
+function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _KCONFIG_DATA _KCONFIG_LOADED _RY_ESP_PATH _RY_BOOT_PATH
     set --erase _RY_ESP_TRIED _RY_BOOT_TRIED
     set --erase _RY_SYSTEMD_VER _RY_SYSTEMD_VER_TRIED
@@ -449,7 +449,7 @@ function _dc_erase_globals --description "_do_cleanup sub. Erase cached globals"
     set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_FSTAB_EVIDENCE _RY_FSTAB_RESULT
     set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE _RY_SDBOOT_REFUSE_FS _RY_NET_FAIL_EVIDENCE
 end
-function _dc_release_lock --description "_do_cleanup sub. Release the instance lock (ownership-gated)"
+function _dc_release_lock --description "_do_cleanup sub: Release the instance lock (ownership-gated)"
     if begin; set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED; end; and set -q LOCK_DIR; and not test -L "$LOCK_DIR"
         set -l _own false # rm only if we hold the lock or its pid file is empty/ours.
         if set -q _RY_HOLDS_LOCK
@@ -461,7 +461,7 @@ function _dc_release_lock --description "_do_cleanup sub. Release the instance l
         test "$_own" = true; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
     end
 end
-function _dc_kill_children --description "_do_cleanup sub. Reap child PIDs (TERM → bounded grace → KILL)" # KILL reaches direct children only; grace extends during db.lck
+function _dc_kill_children --description "_do_cleanup sub: Reap child PIDs (TERM → bounded grace → KILL)" # KILL reaches direct children only; grace extends during db.lck
     command -q pkill; or return 0
     set -l _have_kids unknown # No children → skip TERM/grace/KILL fast-path; pgrep absent → fixed grace.
     command -q pgrep; and begin
@@ -583,7 +583,7 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no # Bootloader keys: loader.conf (LOADER_*) + sdboot-manage.conf (SDBOOT_*).
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-# KERNEL_PARAMS (12, enforced) -> /etc/kernel/cmdline + sdboot LINUX_OPTIONS.
+# KERNEL_PARAMS (12, enforced) → /etc/kernel/cmdline + sdboot LINUX_OPTIONS.
 set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
     amd_pstate=active \
@@ -634,7 +634,7 @@ set -g _RY_ISO3166_ALPHA2 \
     TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI \
     VN VU WF WS YE YT ZA ZM ZW
 set -g RADV_APU_OPTION radv_enable_unified_heap_on_apu # RADV_APU_OPTION: drirc option name; single source for content-gen + verify.
-# LOGIND_IGNORE_KEYS (8, enforced) -> logind.conf.d (Handle*Key=ignore).
+# LOGIND_IGNORE_KEYS (8, enforced) → logind.conf.d (Handle*Key=ignore).
 set -g LOGIND_IGNORE_KEYS \
     HandlePowerKey \
     HandlePowerKeyLongPress \
@@ -660,7 +660,7 @@ set -g ENV_VARS \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
     "WINEDEBUG=-all"
-# SYSCTL_VALUES (8, enforced) -> /etc/sysctl.d/95-ry-overrides.conf.
+# SYSCTL_VALUES (8, enforced) → /etc/sysctl.d/95-ry-overrides.conf.
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
@@ -689,7 +689,7 @@ set -g PKGS_ADD \
     realtime-privileges \
     ddcutil \
     nftables
-# Opt-in: append shelly to PKGS_DEL + bump invariant 8→9 (CachyOS Shelly pkg mgr).
+# Opt-in: append shelly to PKGS_DEL + bump invariant 9→10 (CachyOS Shelly pkg mgr).
 set -g PKGS_DEL \
     plymouth \
     cachyos-plymouth-bootanimation \
@@ -701,7 +701,7 @@ set -g PKGS_DEL \
     cachy-update \
     kdeconnect
 set -g _RY_PKG_REMOVE_SKIPS
-set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # EXPECTED_VULKAN_PKGS (2) -> chwd Vulkan drivers (verified present).
+set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # EXPECTED_VULKAN_PKGS (2) → chwd Vulkan drivers (verified present).
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS — MASK(9) → mask --now (Phase 4) ──
 set -g MASK \
@@ -714,7 +714,7 @@ set -g MASK \
     hibernate.target \
     hybrid-sleep.target \
     suspend-then-hibernate.target
-set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # EXPECTED_SERVICES (4, enforced) -> enabled + verified (Phase 4/6).
+set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # EXPECTED_SERVICES (4, enforced) → enabled + verified (Phase 4/6).
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # Thresholds: disk, boot-time, CPU match, TTM GTT caps.
 set -g BOOT_TIME_TARGET 15
@@ -1380,7 +1380,7 @@ function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable 
     end
     echo $_RY_RUN_TIMEOUT_DEFAULT
 end
-function _run_emit_stream --argument-names label_tag tmpfile ret cap --description "_run sub. Capture stream, log, emit per QUIET/rc" # head+tail keeps context + error; QUIET surfaces 5 stderr lines on rc≠0.
+function _run_emit_stream --argument-names label_tag tmpfile ret cap --description "_run sub: Capture stream, log, emit per QUIET/rc" # head+tail keeps context + error; QUIET surfaces 5 stderr lines on rc≠0.
     test -s "$tmpfile"; or return 0
     set -l _total (command wc -l <"$tmpfile" 2>/dev/null | string trim --); set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
     test -n "$_last_byte"; and string match -qr '^\d+$' -- "$_total"; and set _total (math $_total + 1)
@@ -1707,7 +1707,7 @@ function _mkinitcpio_hook_exists --argument-names hook --description "True iff h
     for _d in /usr/lib/initcpio/install /usr/lib/initcpio/hooks /etc/initcpio/install /etc/initcpio/hooks; test -f "$_d/$hook"; and return 0; end
     return 1
 end
-function _vmh_existence_only --description "_ry_validate_mkinitcpio_hooks sub. Existence-only path: emit _ok/_fail per hook"
+function _vmh_existence_only --description "_ry_validate_mkinitcpio_hooks sub: Existence-only path: emit _ok/_fail per hook"
     set -l errors 0
     for hook in $argv
         test -z "$hook"; and continue
@@ -2418,7 +2418,7 @@ function _verify_static_syntax --description "Validate live mkinitcpio HOOKS pre
 end
 
 # ── VERIFY-STATIC: CHECKSUM + DRIVER (SHA256 match + _ry_verify_static) ──
-function _vsc_check_one --argument-names dst --description "_verify_static_checksum sub. Compare one destination's expected vs installed bytes"
+function _vsc_check_one --argument-names dst --description "_verify_static_checksum sub: Compare one destination's expected vs installed bytes"
     set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _gen_rc $pipestatus[1]
     if test "$_gen_rc" -ne 0
@@ -3496,7 +3496,7 @@ function _mr_copy_size_verify --argument-names backup_file _mki_tmp --descriptio
     end
     return 0
 end
-function _mr_chmod_chown_mv --argument-names _mki_tmp --description "_mkinitcpio_revert sub. chmod/chown --reference + atomic mv"
+function _mr_chmod_chown_mv --argument-names _mki_tmp --description "_mkinitcpio_revert sub: chmod/chown --reference + atomic mv"
     if not sudo -n chmod --reference=/etc/mkinitcpio.conf -- "$_mki_tmp" 2>/dev/null
         _err "  /etc/mkinitcpio.conf revert failed at chmod — current conf may reference uninstalled modules"
         _log "MKINITCPIO_REVERT_FAIL: chmod failed"
@@ -3724,7 +3724,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
         end
     end
 end
-function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk script for ext4 mount-opt rewrite" # idempotent: conformant/non-ext4 pass through, keep whitespace
+function _far_build_awk_script --description "_far_awk_rewrite sub: Emit awk script for ext4 mount-opt rewrite" # idempotent: conformant/non-ext4 pass through, keep whitespace
     string join -- \n \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
         '$3 != "ext4" { print; next }' \
@@ -3941,7 +3941,7 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
 end
 
 # ── INSTALL PHASE 4 SUB: MASK + FIREWALL HANDOFF (NFTABLES LIVE BEFORE UFW FLUSH) ──
-function _csm_filter_units --description "_configure_services_mask sub. Pre-filter unit list"
+function _csm_filter_units --description "_configure_services_mask sub: Pre-filter unit list"
     for _unit in $argv # Per-unit: batched is-enabled elides not-found → positional drift.
         set -l _state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
         if test "$_state" = masked; _log "MASK_ALREADY: $_unit"; continue; end
@@ -3949,7 +3949,7 @@ function _csm_filter_units --description "_configure_services_mask sub. Pre-filt
         printf '%s\n' "$_unit"
     end
 end
-function _csm_retry_individual --description "_configure_services_mask sub. Per-unit retry after batch mask failed (argv pre-filtered by _csm_filter_units)"
+function _csm_retry_individual --description "_configure_services_mask sub: Per-unit retry after batch mask failed (argv pre-filtered by _csm_filter_units)"
     set -l _ret 0
     for _unit in $argv
         if _run sudo -n systemctl mask --now -- $_unit
@@ -4308,7 +4308,7 @@ function _check_boot_taint_gate --description "Verify boot state not tainted (sh
     end
     return 0
 end
-function _irb_taint_gate --description "_install_rebuild_boot sub. Verify mkinitcpio.conf is consistent and boot state is not tainted; returns non-zero with _phase_record + _irb_skip_post_mki on bail"
+function _irb_taint_gate --description "_install_rebuild_boot sub: Verify mkinitcpio.conf is consistent and boot state is not tainted; returns non-zero with _phase_record + _irb_skip_post_mki on bail"
     _check_boot_taint_gate
     set -l _gate_rc $status
     test "$_gate_rc" -eq 0; and return 0
@@ -4434,7 +4434,7 @@ function _install_finalize --description "Run post-install verification, cleanup
 end
 
 # ── PHASE DISPATCH (_rdi_run_phases) + RUN-SUMMARY MATRIX RENDERER ──
-function _rrp_optional_indexer --argument-names cmd label --description "_rdi_run_phases sub. Run an optional indexer (updatedb / pkgfile) and record phase"
+function _rrp_optional_indexer --argument-names cmd label --description "_rdi_run_phases sub: Run an optional indexer (updatedb / pkgfile) and record phase"
     set -l flag $argv[3..-1]
     if not command -q $cmd; _phase_record "Packages: $label" "--" "not installed"; return 0; end
     if _run sudo -n $cmd $flag
@@ -4483,7 +4483,7 @@ function _rdi_elapsed --description "Format wall-clock elapsed since _PROG_START
         printf '%dm %ds' $_m $_s
     end
 end
-function _rdi_matrix_header --description "_rdi_render_matrix sub. Emit top bar, title, column header, separator"
+function _rdi_matrix_header --description "_rdi_render_matrix sub: Emit top bar, title, column header, separator"
     set -l _bar_top $argv[1]; set -l _sep_c $argv[2]; set -l _sep_r $argv[3]; set -l _sep_e $argv[4]
     set -l _inner $argv[5]; set -l _w_c $argv[6]; set -l _w_r $argv[7]; set -l _w_e $argv[8]
     set -l _title "ry-install v$VERSION — RUN SUMMARY"; set -l _title_lpad (math -s0 "max(0, ($_inner - "(string length -- $_title)") / 2)"); set -l _title_padded $_title
@@ -4495,7 +4495,7 @@ function _rdi_matrix_header --description "_rdi_render_matrix sub. Emit top bar,
     printf '║ %s ║ %s ║ %s ║\n' (string pad -r -w $_w_c -- CHECK) (string pad -r -w $_w_r -- RESULT) (string pad -r -w $_w_e -- EVIDENCE) >&2
     printf '╠%s╬%s╬%s╣\n' $_sep_c $_sep_r $_sep_e >&2
 end
-function _rdi_matrix_rows --description "_rdi_render_matrix sub. Emit data rows; tally buckets via _RY_MTX_* globals" # Truncated cols logged; _RY_MTX_* tallies feed _rdi_matrix_footer verdict.
+function _rdi_matrix_rows --description "_rdi_render_matrix sub: Emit data rows; tally buckets via _RY_MTX_* globals" # Truncated cols logged; _RY_MTX_* tallies feed _rdi_matrix_footer verdict.
     set -l _w_c $argv[1]; set -l _w_r $argv[2]; set -l _w_e $argv[3]
     set -g _RY_MTX_PASS 0; set -g _RY_MTX_WARN 0; set -g _RY_MTX_FAIL 0
     set -g _RY_MTX_DEFER 0; set -g _RY_MTX_SKIP 0; set -g _RY_MTX_NA 0
@@ -4518,7 +4518,7 @@ function _rdi_matrix_rows --description "_rdi_render_matrix sub. Emit data rows;
         end
     end
 end
-function _rdi_matrix_footer --description "_rdi_render_matrix sub. Emit verdict-bearing footer rows + bottom bar" # Verdict precedence: PREFLIGHT>BOOT_CRIT>FAIL>WARN>PASS.
+function _rdi_matrix_footer --description "_rdi_render_matrix sub: Emit verdict-bearing footer rows + bottom bar" # Verdict precedence: PREFLIGHT>BOOT_CRIT>FAIL>WARN>PASS.
     set -l _bar_top $argv[1]; set -l _inner $argv[2]; set -l _sep_c $argv[3]; set -l _sep_r $argv[4]; set -l _sep_e $argv[5]
     set -l _verdict PASS
     test "$_RY_MTX_WARN" -gt 0; and set _verdict PASS-WITH-WARNINGS
@@ -4700,7 +4700,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
 end
 
 # ── --INSTALL-FILE: POST-HOOK HANDLERS (13 handlers / 17 patterns; _post_<tag> dispatch) ──
-function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot sub. mkinitcpio -P + sdboot-manage cascade" # skip_mki=true: cmdline is not an initramfs input.
+function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot sub: mkinitcpio -P + sdboot-manage cascade" # skip_mki=true: cmdline is not an initramfs input.
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     end

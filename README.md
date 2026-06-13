@@ -2,8 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-
-**Version 7.35.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.35.1 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -46,10 +45,10 @@ Hard requirements abort read-only in preflight (exit 3); `pacman-contrib` and NT
 | `--` | End of options (no positional arguments accepted) |
 | `-h, --help` · `-v, --version` | Help · Version (honored first, except as the `--install-file` value) |
 
-`--verify`/`--check` read state only, lock-free (a concurrent install can read as transient drift). `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot) and is stderr-silent after parsing (bootstrap failures still print). `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, boot time vs 15 s (≥90% = WARN).
+`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot) and is silent after parsing. `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, boot time vs 15 s (≥90% = WARN).
 
 > [!CAUTION]
-> `--install-file` of a boot config runs the boot cascade (`/etc/kernel/cmdline` regenerates sdboot entries without an initramfs rebuild); a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
+> `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
 
 ## Install Flow
 
@@ -62,7 +61,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run (skips th
 | 3 | Configuration | deploy the 18 embedded files atomically |
 | 4 | Services | fstab → resolved restart → package removal → nftables activation → mask (ufw flush) → enable → regdom |
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. A tainted run skips the rebuild; resolve and re-run |
-| 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` (skipped when no upgrade or removals; `pacman -Sc` when paccache is absent) → NetworkManager restart (deferred on active Wi-Fi) |
+| 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` (`pacman -Sc` fallback) → NetworkManager restart (deferred on active Wi-Fi) |
 
 CachyOS defaults (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; their configs still deploy. `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 
@@ -71,7 +70,7 @@ CachyOS defaults (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; th
 
 ## Run Summary
 
-A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phase and a final summary. Verdict (`PASS` · `PASS-WITH-WARNINGS` · `FAIL` · `FAIL-BOOT-CRITICAL` · `PREFLIGHT`) maps to the exit code: `WARN` keeps exit `0`; only `FAIL` sets `INSTALL_HAD_ERRORS`; `DEFER` applies next boot; `SKIP`/`N/A` by design.
+A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phase. Verdict (`PASS` · `PASS-WITH-WARNINGS` · `FAIL` · `FAIL-BOOT-CRITICAL` · `PREFLIGHT`) maps to the exit code: `WARN` keeps exit `0`; `DEFER` applies next boot.
 
 ## Configuration
 

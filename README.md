@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.34.1 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.34.2 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -160,6 +160,8 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 > [!WARNING]
 > This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback are accepted, invalid conntrack states are dropped, and ICMPv4 is accepted; all other inbound is dropped — including ICMPv6/NDP and mDNS, so inbound IPv6 and local discovery are blocked. Add inbound ports to `/etc/nftables.conf` as needed.
 
+Every managed write is crash-safe and reversible: rendered to a same-filesystem tempfile, symlink-probed, backed up, `mv -T`-swapped, then re-read and restored on mismatch.
+
 | Feature | Detail |
 |---|---|
 | Atomic writes | render → tmp → symlink-probe → `.ry.bak` (backup targets) → chmod → `mv -T` → re-read + restore on mismatch |
@@ -168,6 +170,8 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 | Instance lock | atomic `mkdir 0700`; dead/recycled-PID reclaim via `/proc` starttime (fail-closed); empty pidfile settles 0.2 s before reclaim |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
 
+The process exit code is the single source of truth for automation; internal sentinels never surface as a process status and are recorded only in the JSONL log.
+
 | Code | Meaning |
 |---|---|
 | `0` / `1` / `2` | success / verify-FAIL or install-error / usage (incl. root-refused) |
@@ -175,6 +179,8 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, …) |
 | `11`/`12`/`13`/`251`/`250`/`255` | internal sentinels — never a process exit (JSONL `gen_fail`; collapses to `1` install/verify, `3` `--check`) |
+
+All runtime behavior is controlled by the in-script globals; these environment variables are the only external overrides, and each falls back safely when unset or invalid.
 
 | Variable | Default | Effect |
 |---|---|---|

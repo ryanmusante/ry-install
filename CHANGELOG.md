@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+7.34.2 - 2026-06-13
+
+- docs: added a one-line lead-in before each table in the README Safety & Reliability section (atomic writes, exit codes, environment variables). No functional change.
+
 7.34.1 - 2026-06-13
 
 - docs: README firewall description now lists the ct-state-invalid drop rule (ruleset already shipped it).

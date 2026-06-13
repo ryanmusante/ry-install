@@ -124,8 +124,6 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 | `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
 | `vm` | `compaction_proactiveness=0`, `max_map_count=2147483642` |
 
-`vm.max_map_count` (Proton/SteamOS maximum) and `vm.compaction_proactiveness=0` are set at priority 95, overriding the linux-cachyos base values; `--verify` checks both as enforced.
-
 **Gaming env** → `~/.config/environment.d/10-environment.conf` (`0600`; `PROTON_*` per proton-cachyos)
 
 | Category | Vars |
@@ -160,7 +158,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related, loopback, and ICMPv4 (invalid-state dropped) allowed; all other inbound dropped — including ICMPv6/NDP, so inbound IPv6 and mDNS discovery are blocked; forwarding dropped; output unrestricted. systemd-resolved keeps `MulticastDNS=no` (avahi owns 5353; the two mDNS stacks must not both bind it). Add inbound ports to `/etc/nftables.conf` as needed.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: only established/related, loopback, and ICMPv4 are allowed; all other inbound is dropped — including ICMPv6/NDP and mDNS, so inbound IPv6 and local discovery are blocked. Add inbound ports to `/etc/nftables.conf` as needed.
 
 | Feature | Detail |
 |---|---|

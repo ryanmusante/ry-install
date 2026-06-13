@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.34.2 (2026-06-13) — CachyOS config manager | Ryan Musante | MIT.
+# ry-install v7.34.3 (2026-06-13) — CachyOS config manager | Ryan Musante | MIT.
 # Style: dense semicolon one-liners intentional; fish -n is the syntax gate.
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text is not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.34.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.34.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels (never a process exit).
@@ -1056,7 +1056,7 @@ function _rm_tmp --argument-names path use_sudo --description "Sudo-aware tmpfil
     end
     set -l _gone false
     test "$use_sudo" != true; and not test -e "$path"; and set _gone true
-    if test "$_rm_rc" -eq 0; or test "$_gone" = true # Sudo path untracks only on rm success; root-only paths stay tracked for sweep.
+    if test "$_rm_rc" -eq 0; or test "$_gone" = true # sudo path untracks only on rm success; root-only paths stay tracked for sweep
         _untrack_tmpfile "$path"
     else
         functions -q _log; and _log "RM_TMP_DEFER: path=$path use_sudo=$use_sudo is_dir=$_is_dir rc=$_rm_rc — left tracked for cleanup retry"
@@ -1429,7 +1429,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
         set -l _skip_next false
         for _ec_arg in $argv[2..-1]
             if test "$_skip_next" = true; set _skip_next false; continue; end
-            if contains -- "$_ec_arg" -u -g -h -p -C -D -R -T -U; set _skip_next true; continue; end # Value-taking sudo flags: skip flag + value (--flag=val caught by the dash rule).
+            if contains -- "$_ec_arg" -u -g -h -p -C -D -R -T -U; set _skip_next true; continue; end # value-taking sudo flags: skip flag + value
             string match -q -- '-*' "$_ec_arg"; and continue
             test "$_ec_arg" = env; and continue
             string match -qr -- '^[A-Za-z_][A-Za-z0-9_]*=' "$_ec_arg"; and continue
@@ -3184,7 +3184,7 @@ function _vrs_installed_file_perms --description "Runtime session check: install
             end
             set perm_checked (math $perm_checked + 1)
             _chk_perms "$dst" 644 root:root true; or set perm_bad (math $perm_bad + 1)
-        else if not sudo -n true 2>/dev/null # Lapse mid-loop: warn once, stop — silent skips would misreport "no files found".
+        else if not sudo -n true 2>/dev/null # lapse mid-loop: warn once, stop (silent skip would misreport "no files")
             _warn "  Installed-file perms: sudo cache lapsed — remaining system files skipped"
             break
         end
@@ -3403,7 +3403,7 @@ end
 
 # ── MISC HELPERS: PERM CHECK, WIFI ROUTE, USER-BUS, SUDO BANNER ──
 function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit (unparseable mode reads as writable — fail-closed)"
-    not string match -qr '^[0-7]+$' -- "$mode"; and return 0 # Unparseable/empty mode: report writable so the caller flags the dir (fail-closed).
+    not string match -qr '^[0-7]+$' -- "$mode"; and return 0 # unparseable mode → report writable so caller flags it (fail-closed)
     test (string length -- "$mode") -gt 3; and set mode (string sub -s -3 -- "$mode") # Drop special-bits digit; keep the ugo triplet.
     while test (string length -- "$mode") -lt 3; set mode "0$mode"; end # stat -c %a strips leading zeros (e.g. 066 → '66'); restore the triplet.
     set -l group_w (string sub -s 2 -l 1 -- "$mode"); set -l other_w (string sub -s 3 -l 1 -- "$mode"); set -l group_has_w (math "floor($group_w / 2) % 2"); set -l other_has_w (math "floor($other_w / 2) % 2")
@@ -3415,7 +3415,7 @@ function _is_wifi_active_route --description "True if default route exits via wi
     command -q ip; or return 1
     set -l _def_iface ""
     for _af in -4 -6; set _def_iface (command ip $_af route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}'); test -n "$_def_iface"; and break; end
-    if test -z "$_def_iface" # Policy routing: default may live only in a non-main table; scan all tables before concluding non-wireless.
+    if test -z "$_def_iface" # default route may live in a non-main table; scan all before concluding non-wireless
         for _af in -4 -6; set _def_iface (command ip $_af route show default table all 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}'); test -n "$_def_iface"; and break; end
     end
     test -z "$_def_iface"; and return 1
@@ -3724,7 +3724,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
         end
     end
 end
-function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk script for ext4 mount-opt rewrite" # Idempotent: conformant/non-ext4 pass through; splice opts field, keep whitespace.
+function _far_build_awk_script --description "_far_awk_rewrite sub. Emit awk script for ext4 mount-opt rewrite" # idempotent: conformant/non-ext4 pass through, keep whitespace
     string join -- \n \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
         '$3 != "ext4" { print; next }' \
@@ -3855,7 +3855,7 @@ function _configure_services_resolved_restart --description "Restart systemd-res
 end
 
 # ── INSTALL PHASE 4 SUB: PKGS_DEL REMOVAL (RDEP-AWARE VIA PACTREE) ──
-function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when no external installed rdeps; emit nothing (blocked)" # External rdeps block (→ _RY_PKG_REMOVE_SKIPS); in-set rdeps get their own pass.
+function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when no external installed rdeps; emit nothing (blocked)" # external rdeps block; in-set rdeps get their own pass
     if not command -q pactree
         if not set -q _RY_PACTREE_MISSING_WARNED
             set -g _RY_PACTREE_MISSING_WARNED true
@@ -3867,7 +3867,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when n
         return 0
     end
     set -l _pkg_re (string escape --style=regex -- "$pkg"); set -l _t $PACTREE_TIMEOUT_S
-    set -l _raw (command timeout "$_t" pactree -ru "$pkg" 2>/dev/null) # pactree rc authoritative; string-filter rc=1 on no-match (benign).
+    set -l _raw (command timeout --kill-after=5 "$_t" pactree -ru "$pkg" 2>/dev/null) # --kill-after escalates wedged probe to SIGKILL; rc=1 on no-match is benign
     if test "$status" -ne 0; _warn "  $pkg: pactree probe failed — skipping for safety"; _log "PACTREE_PROBE_FAIL: pkg=$pkg (timeout, missing pkg, or db error)"; return 0; end
     set -l _trimmed (string trim -- $_raw); set -l _stripped (string replace -r '[=<>].*$' '' -- $_trimmed); set -l _nonempty (string match -rv -- '^$' $_stripped); set -l _rdeps_raw (string match -rv -- "^$_pkg_re\$" $_nonempty); set -l _rdeps
     for _r in $_rdeps_raw; contains -- "$_r" $PKGS_DEL; and continue; set -a _rdeps "$_r"; end
@@ -4830,7 +4830,7 @@ function _post_nft --argument-names target --description "Post-hook: validate + 
         _warn "nftables ruleset failed validation (nft -c) — not reloaded; fix /etc/nftables.conf"
         return 0
     end
-    if _run sudo -n systemctl restart nftables.service # oneshot restart re-runs nft -f (no ExecReload; is-active never true for this unit)
+    if _run sudo -n systemctl restart nftables.service # oneshot re-runs nft -f (no ExecReload; never reads active)
         _ok "nftables ruleset applied (systemctl restart — oneshot re-runs nft -f)"
     else
         _warn "nftables restart failed — validated ruleset applies when the service next starts (reboot)"
@@ -4853,6 +4853,8 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
             _warn "udevadm verify failed for $target — rules not reloaded; fix the rule file"
             return 0
         end
+    else
+        _log "UDEV_VERIFY_SKIP: systemd "(set -q _RY_SYSTEMD_VER; and echo $_RY_SYSTEMD_VER; or echo unknown)" < 254 — udevadm verify unavailable; reloading rule unvalidated"
     end
     if not _run sudo -n udevadm control --reload-rules
         _warn "udevadm control --reload-rules failed — rule applies at next boot (non-fatal; file deployed)"

@@ -1,10 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.37.0 (2026-06-13)
-# Style: dense semicolon one-liners intentional
+# ry-install v7.38.1 (2026-06-13) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.37.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.38.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels; never a process exit
@@ -2312,9 +2311,10 @@ function _vss_drirc --description "_verify_static_system sub: RADV drirc"
     _chk_grep /etc/drirc.d/95-ry-radv-apu.conf "$RADV_APU_OPTION" "$RADV_APU_OPTION"
     _chk_grep /etc/drirc.d/95-ry-radv-apu.conf 'value="true"' 'unified_heap value=true'
 end
-function _vss_nft --description "_verify_static_system sub: nftables default-deny-inbound"
+function _vss_nft --description "_verify_static_system sub: nftables default-deny-inbound + ICMPv6 NDP/PMTUD accept (IPv6 break-glass)"
     _chk_file /etc/nftables.conf; or return 0
     _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
+    _chk_grep /etc/nftables.conf "nd-neighbor-solicit" "nftables ICMPv6 NDP/PMTUD accept" # regression guard: dropping this breaks IPv6 after NDP cache expiry
 end
 function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, iwd, NM, cpupower-service.conf, sysctl"
     _echo "SYSTEM CONFIGURATION"
@@ -2812,18 +2812,29 @@ function _vrsv_chk_active_enabled --argument-names label rec_str --description "
         _fail "  $label: $rec[2] (expected: active)"
     end
 end
+function _vrsv_nft_assert_ndp --description "_vrsv_chk_nftables sub: assert live input chain accepts ICMPv6 NDP (warn-only; missing breaks IPv6 after NDP cache expiry)" # sudo+nft assumed available by caller
+    set -l _chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)
+    if string match -q -- '*nd-neighbor-solicit*' $_chain
+        _ok "  nftables: live ICMPv6 NDP/PMTUD accept present"
+    else
+        _warn "  nftables: live input chain has no ICMPv6 NDP accept — IPv6 may break after NDP cache expiry"
+    end
+end
 function _vrsv_chk_nftables --argument-names label rec_str --description "Check nftables.service: oneshot without RemainAfterExit reads inactive after a clean load — judge by live ruleset" # Arch unit oneshot, no RemainAfterExit
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found; _warn "  $label: not installed"; return 0; end
+    set -l _nft_probe_ok false
+    command -q nft; and sudo -n true 2>/dev/null; and set _nft_probe_ok true
     if test "$rec[2]" = active
         _vrsv_chk_active_enabled $label "$rec_str"
+        test "$_nft_probe_ok" = true; and _vrsv_nft_assert_ndp # NDP assert independent of unit-state path
         return 0
     end
     if not command -q nft
         _fail "  $label: $rec[2] and nft(8) absent — live ruleset unverifiable"
         return 0
     end
-    if not sudo -n true 2>/dev/null
+    if test "$_nft_probe_ok" = false
         _warn "  $label: $rec[2] — sudo cache lapsed, live ruleset unverifiable"
         return 0
     end
@@ -2837,6 +2848,7 @@ function _vrsv_chk_nftables --argument-names label rec_str --description "Check 
     else
         _warn "  $label: ruleset live but unit $rec[3] (will not persist across boots)"
     end
+    _vrsv_nft_assert_ndp
     return 0
 end
 function _vrsv_chk_resolved --argument-names rec_str --description "Check systemd-resolved active state, only when conf.d drop-in is deployed" # conf.d drop-in presence gates check
@@ -3795,6 +3807,16 @@ function _far_awk_rewrite --argument-names tmpfstab --description "awk-rewrite f
     end
     _rm_tmp "$_awk_err" false
     _rm_tmp "$_tee_err" false
+    set -l _src_lines (sudo -n awk 'END{print NR}' /etc/fstab 2>/dev/null); set -l _tmp_lines (sudo -n awk 'END{print NR}' -- "$tmpfstab" 2>/dev/null) # awk emits exactly 1 line per input line on every path → counts must match
+    if string match -qr '^[0-9]+$' -- "$_src_lines"; and string match -qr '^[0-9]+$' -- "$_tmp_lines"
+        if test "$_src_lines" -ne "$_tmp_lines"
+            _fail "  /etc/fstab: rewrite changed line count ($_src_lines → $_tmp_lines) — refusing to install (awk is 1-in-1-out)"
+            _log "FSTAB_LINECOUNT_MISMATCH: src=$_src_lines tmp=$_tmp_lines"
+            return 1
+        end
+    else
+        _log "FSTAB_LINECOUNT_PROBE_SKIP: src='$_src_lines' tmp='$_tmp_lines' (non-numeric; falling back to size gate + findmnt)"
+    end
     set -l _tmp_size (sudo -n stat -c '%s' -- "$tmpfstab" 2>/dev/null); set -l _src_size (command stat -c '%s' -- /etc/fstab 2>/dev/null); set -l _min_size 20
     if string match -qr '^[0-9]+$' -- "$_src_size"; and test "$_src_size" -gt 80
         set _min_size (math "floor($_src_size / 4)")

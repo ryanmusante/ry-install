@@ -1,22 +1,32 @@
 ry-install changelog - newest first.
 
+# 7.38.1 - 2026-06-13
+
+- collapse the remaining multiline header comment to a single line; trim verbose changelog entries to one line each.
+- no functional change to install, verify, check, or install-file behavior.
+
+# 7.38.0 - 2026-06-13
+
+- --verify asserts the nftables ICMPv6 NDP/PMTUD accept rule statically (greps nd-neighbor-solicit) and against the live input chain, independent of unit state.
+- fstab rewrite adds a line-count parity gate (awk is 1-in-1-out) ahead of the size-sanity floor and findmnt --verify.
+
 # 7.37.0 - 2026-06-13
 
-- cpupower-service GOVERNOR changed from powersave to performance; under amd_pstate=active the scaling governor is driver-governed (valid values powersave/performance) and EPP stays pinned performance via 61-ry-epp.rules. Static and runtime governor checks compare against the new value.
+- cpupower-service GOVERNOR powersave to performance; EPP stays pinned performance via 61-ry-epp.rules under amd_pstate=active.
 
 # 7.36.1 - 2026-06-13
 
-- PID-recycle starttime math recovers USER_HZ from CONFIG_HZ (/proc/config.gz) when getconf CLK_TCK is unavailable, before falling back to 100; prevents a false lock-reclaim of a live instance on CONFIG_HZ!=100 kernels.
-- nft and iw runtime/verify probes run under LC_ALL=C (matches df/lsmod), so ruleset and regdom checks are locale-stable.
+- PID-recycle starttime math recovers USER_HZ from CONFIG_HZ (/proc/config.gz) before falling back to 100, preventing false lock-reclaim on CONFIG_HZ!=100 kernels.
+- nft and iw runtime/verify probes run under LC_ALL=C for locale-stable ruleset and regdom checks.
 
 # 7.36.0 - 2026-06-13
 
-- package-verify refuses when the pacman binary is unavailable after the upgrade, instead of letting a 127 exit read as all-present; the run is tainted so the Phase 5 rebuild is skipped.
+- package-verify refuses when the pacman binary is unavailable after the upgrade; the run is tainted so the Phase 5 rebuild is skipped.
 - collapse multiline header comments to single lines; flatten changelog styling.
 
 # 7.35.2 - 2026-06-13
 
-- tcp_bbr module-version line demoted to advisory; congestion-control selection stays asserted via net.ipv4.tcp_congestion_control.
+- tcp_bbr module-version line demoted to advisory; selection stays asserted via net.ipv4.tcp_congestion_control.
 - validate NM_RESTART_DELAY as a non-negative integer before sleep; log assumed USER_HZ=100 when getconf CLK_TCK is unavailable.
 
 # 7.35.1 - 2026-06-13
@@ -26,7 +36,7 @@ ry-install changelog - newest first.
 # 7.35.0 - 2026-06-13
 
 - pin AMD P-State EPP to performance via /etc/udev/rules.d/61-ry-epp.rules; managed files 17 to 18; EPP check enforced.
-- nftables ruleset accepts inbound ICMPv6 NDP and PMTUD; prior ruleset dropped all ICMPv6, breaking IPv6 after NDP cache expiry.
+- nftables ruleset accepts inbound ICMPv6 NDP and PMTUD; prior ruleset dropped all ICMPv6.
 
 # 7.34.0 - 2026-06-12
 

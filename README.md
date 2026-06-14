@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.37.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.38.1 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -45,7 +45,7 @@ Hard requirements abort read-only in preflight (exit 3); `pacman-contrib` and NT
 | `--` | End of options (no positional arguments accepted) |
 | `-h, --help` · `-v, --version` | Help · Version (honored first, except as the `--install-file` value) |
 
-`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot) and is silent after parsing. `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, boot time vs 15 s (≥90% = WARN).
+`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot) and is silent after parsing. `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, nftables ICMPv6 NDP/PMTUD accept (static + live ruleset), boot time vs 15 s (≥90% = WARN).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
@@ -134,7 +134,7 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 | Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
 | Wine | `WINEDEBUG=-all` |
 
-**fstab** — ext4 entries rewritten in place: applies `noatime`, `lazytime`, `commit=10`; strips conflicting atime opts + redundant `defaults`; rewrites any `commit=`. Mandatory `findmnt --verify` gate; snapshot to `/etc/fstab.ry.bak`; symlinked `/etc/fstab` refused.
+**fstab** — ext4 entries rewritten in place: applies `noatime`, `lazytime`, `commit=10`; strips conflicting atime opts + redundant `defaults`; rewrites any `commit=`. Mandatory `findmnt --verify` gate; line-count parity check (awk is 1-in-1-out) + size-sanity floor as defense-in-depth; snapshot to `/etc/fstab.ry.bak`; symlinked `/etc/fstab` refused.
 
 **Units**
 
@@ -178,7 +178,7 @@ The process exit code is the single source of truth; internal sentinels stay in 
 | `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock |
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, …) |
-| `11`/`12`/`13`/`251`/`250`/`255` | internal sentinels — never a process exit (JSONL `gen_fail`) |
+| `11`/`12`/`13`/`251`/`250`/`255` | internal sentinels (gen-nofn/gen-nouuid/gen-sysctl/run-tmpfail/`_as`/`_run` misuse) — never a process exit (JSONL `gen_fail`) |
 
 These environment variables are the only external overrides; each falls back safely when unset or invalid.
 

@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+7.39.6 - 2026-06-14
+
+- README: correct the kernel-cmdline row — root=UUID=/rw are written into /etc/kernel/cmdline by the generator, not injected by sdboot-manage. Doc-only.
+
 7.39.5 - 2026-06-14
 
 - stop enabling and verifying NetworkManager-dispatcher.service; it is socket/D-Bus-activated on demand and needs no explicit enable. NetworkManager.service itself is unchanged.

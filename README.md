@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.39.5 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.39.6 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -68,7 +68,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 
 | File | Purpose |
 |---|---|
-| kernel cmdline | CPU/GPU/IOMMU/storage/USB tuning for gfx1151; `root=`/`rw` injected by sdboot-manage |
+| kernel cmdline | CPU/GPU/IOMMU/storage/USB tuning for gfx1151; `root=UUID=`/`rw` written into `/etc/kernel/cmdline` |
 | loader.conf / sdboot-manage.conf | systemd-boot entry generation (`REMOVE_EXISTING=yes`) |
 | mkinitcpio.conf | `MODULES=(amdgpu)`, systemd hooks, zstd compression |
 | resolved / logind | disable mDNS/LLMNR/DoT; ignore power/suspend/hibernate/reboot keys |

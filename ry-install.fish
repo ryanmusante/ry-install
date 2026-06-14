@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.39.0 (2026-06-13) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.39.1 (2026-06-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.39.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.39.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels; never a process exit
@@ -798,7 +798,7 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         _RY_NTSYNC_MODLOAD_CONFS:3 \
         _RY_ISO3166_ALPHA2:249 \
         _RY_TMPDIR_GLOBS:6 \
-        SYSTEM_DESTINATIONS:17 \
+        SYSTEM_DESTINATIONS:16 \
         USER_DESTINATIONS:1
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -1121,7 +1121,7 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
 end
 
 # ── JSON ESCAPE ──
-function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)" # callers pre-flatten newlines (e.g. _log space-joins argv); embedded-newline inputs are out of contract
+function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)" # callers pre-flatten newlines; embedded-newline inputs out of contract
     set -l s "$argv[1]"
     if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"; printf '%s' "$s" | string collect --allow-empty; return 0; end # rc pinned 0; stdout-only
     set s "$s"x # Sentinel guards collect newline-trim
@@ -3748,7 +3748,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
         end
     end
 end
-function _far_build_awk_script --description "_far_awk_rewrite sub: Emit awk script for ext4 mount-opt rewrite" # idempotent: conformant/non-ext4 pass through, keep whitespace; rewriting an existing commit= drops it in place and re-appends commit=10 at the tail (option order not preserved; kernel is order-insensitive)
+function _far_build_awk_script --description "_far_awk_rewrite sub: Emit awk script for ext4 mount-opt rewrite" # idempotent 1-in-1-out; non-ext4/conformant pass through; commit= rewritten in place (kernel order-insensitive)
     string join -- \n \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
         '$3 != "ext4" { print; next }' \

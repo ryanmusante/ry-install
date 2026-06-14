@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+7.39.1 - 2026-06-14
+
+- fix _ir_validate_counts SYSTEM_DESTINATIONS invariant 17 to 16 (array is 16 system dests; USER_DESTINATIONS is the 17th): the stale count aborted every mode at preflight via _init_runtime. _RY_MANAGED_FILE_COUNT=17 total check unchanged; no deployed-file or behavior change.
+
 7.39.0 - 2026-06-13
 
 - merge /etc/udev/rules.d/60-ry-ioschedulers.rules and /etc/udev/rules.d/61-ry-epp.rules into a single /etc/udev/rules.d/60-ry-perf.rules (NVMe scheduler=none + AMD P-State EPP=performance); managed files 18 to 17. The _content/_vss_udev pair now emits and verifies both directives from one file; _vss_epp folded into _vss_udev. _RY_POST_HOOKS unchanged (the /etc/udev/rules.d/* glob already mapped to one udev tag). No change to deployed rule semantics — same scheduler and EPP assignments, one fewer file.

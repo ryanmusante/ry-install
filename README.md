@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.38.1 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.38.2 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -29,7 +29,7 @@ Hard requirements abort read-only in preflight (exit 3); `pacman-contrib` and NT
 | curl / findmnt / cmp | all required (cmp gates byte-exact mkinitcpio.conf revert) |
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
-| sudo | cached (`sudo -v`); may lapse mid-run — `Defaults timestamp_timeout=60` or NOPASSWD drop-in |
+| sudo | cached (`sudo -v`); may lapse mid-run — set `timestamp_timeout` or a NOPASSWD drop-in |
 | pacman-contrib | recommended — pactree (rdep-safe removal) |
 
 ## Usage
@@ -37,15 +37,15 @@ Hard requirements abort read-only in preflight (exit 3); `pacman-contrib` and NT
 | Flag | Action |
 |---|---|
 | *(no args)* | Full unattended install |
-| `-V, --verbose` | Show install output (`--verify`/`--install-file` are always verbose; `--check` is always silent) |
+| `-V, --verbose` | Show install output (`--verify`/`--install-file` always verbose; `--check` always silent) |
 | `--verify` | Config files byte-for-byte, then live state |
 | `--check` | Idempotency probe (`0` clean · `3` preflight · `10` drift) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--country=XX` | Wireless regdom (ISO-3166-1 alpha-2; default `US`; UK is `GB`) |
-| `--` | End of options (no positional arguments accepted) |
-| `-h, --help` · `-v, --version` | Help · Version (honored first, except as the `--install-file` value) |
+| `--` | End of options (no positional args) |
+| `-h, --help` · `-v, --version` | Honored first, except as the `--install-file` value |
 
-`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot) and is silent after parsing. `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, nftables ICMPv6 NDP/PMTUD accept (static + live ruleset), boot time vs 15 s (≥90% = WARN).
+`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot). `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, nftables ICMPv6 NDP/PMTUD accept (static + live), boot time vs 15 s (≥90% = WARN).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
@@ -66,15 +66,13 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run (skips th
 CachyOS defaults (`iwd`, `mesa`, `cpupower`, `iw`, `rtkit`) are not re-added; their configs still deploy. `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 
 > [!NOTE]
-> With `REMOVE_EXISTING=yes` (set in `sdboot-manage.conf`), `sdboot-manage gen` deletes every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
+> With `REMOVE_EXISTING=yes`, `sdboot-manage gen` deletes every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
 
-## Run Summary
-
-A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phase. Verdict (`PASS` · `PASS-WITH-WARNINGS` · `FAIL` · `FAIL-BOOT-CRITICAL` · `PREFLIGHT`) maps to the exit code: `WARN` keeps exit `0`; `DEFER` applies next boot.
+A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phase. Verdict (`PASS` · `PASS-WITH-WARNINGS` · `FAIL` · `FAIL-BOOT-CRITICAL` · `PREFLIGHT`) maps to the exit code; `WARN` keeps exit `0`; `DEFER` applies next boot.
 
 ## Configuration
 
-The script is the source of truth (retune the `set -g` globals near the top). In-script timing tunables, not env-overridable: `BOOT_TIME_TARGET=15` s, `PACTREE_TIMEOUT_S=60` s, `NM_RESTART_DELAY=3` s.
+The script is the source of truth — retune the `set -g` globals near the top. Non-env-overridable tunables: `BOOT_TIME_TARGET=15` s, `PACTREE_TIMEOUT_S=60` s, `NM_RESTART_DELAY=3` s.
 
 **Packages**
 
@@ -83,7 +81,7 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 | Install (16) | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil`, `nftables` |
 | Remove (9) | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 
-**Kernel cmdline** → `/etc/kernel/cmdline` + sdboot `LINUX_OPTIONS`
+**Kernel cmdline (12)** → `/etc/kernel/cmdline` + sdboot `LINUX_OPTIONS` (`root=`/`rw` injected by sdboot-manage)
 
 | Category | Params |
 |---|---|
@@ -99,8 +97,8 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 | File | Settings |
 |---|---|
 | `loader.conf` | `default=@saved`, `timeout=0`, `console-mode=keep`, `editor=no` |
-| `sdboot-manage.conf` | `LINUX_OPTIONS`=kernel params (`root=` + `rw` injected by sdboot-manage), `LINUX_FALLBACK_OPTIONS=quiet`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING`/`OVERWRITE_EXISTING`/`REMOVE_OBSOLETE=yes` |
-| `mkinitcpio.conf` | `MODULES=(amdgpu)`, `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`, `COMPRESSION=zstd` `-1 -T0` |
+| `sdboot-manage.conf` | `LINUX_OPTIONS`=cmdline, `LINUX_FALLBACK_OPTIONS=quiet`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING`/`OVERWRITE_EXISTING`/`REMOVE_OBSOLETE=yes` |
+| `mkinitcpio.conf` | `MODULES=(amdgpu)`, `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`, `COMPRESSION=zstd -1 -T0` |
 
 **Service & device configs**
 
@@ -109,14 +107,14 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 | systemd-resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` |
 | systemd-logind | `Handle{Power,Suspend,Hibernate,Reboot}Key` (+ `…LongPress`) = `ignore` |
 | iwd | `EnableNetworkConfiguration=false`, `PowerSaveDisable=*`, `NameResolvingService=systemd` |
-| NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2` (disable), `[logging] level=WARN` |
-| cpupower | `GOVERNOR=performance`; EPP pinned `performance` via udev (`amd_pstate=active` driver-governed) |
-| amdgpu/ttm | `pages_limit=8388608`/`page_pool_size=8388608` (GTT ~32 GiB; requires BIOS UMA 512 MB) |
+| NetworkManager | `wifi.backend=iwd`, `wifi.powersave=2`, `[logging] level=WARN` |
+| cpupower | `GOVERNOR=performance`; EPP pinned `performance` via udev (`amd_pstate=active`) |
+| amdgpu/ttm | `pages_limit`/`page_pool_size=8388608` (GTT ~32 GiB; requires BIOS UMA 512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
 | udev | NVMe whole-disk I/O scheduler → `none`; CPU EPP → `performance` |
-| wireless regdom | `COUNTRY=US` (`--country=XX`); persists via `/etc/iw-regdomain` → `cachyos-iw-set-regdomain` |
+| wireless regdom | `COUNTRY=US` (`--country=XX`) via `/etc/iw-regdomain` → `cachyos-iw-set-regdomain` |
 
-**sysctl** → `/etc/sysctl.d/95-ry-overrides.conf` (loads after CachyOS `70-cachyos-settings.conf`)
+**sysctl (8)** → `/etc/sysctl.d/95-ry-overrides.conf` (after CachyOS `70-cachyos-settings.conf`)
 
 | Scope | Settings |
 |---|---|
@@ -124,7 +122,7 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 | `net.ipv4` | `tcp_congestion_control=bbr`, `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0` |
 | `vm` | `compaction_proactiveness=0`, `max_map_count=2147483642` |
 
-**Gaming env** → `~/.config/environment.d/10-environment.conf` (`0600`; `PROTON_*` per `proton-cachyos`)
+**Gaming env (10)** → `~/.config/environment.d/10-environment.conf` (`0600`; `PROTON_*` per `proton-cachyos`)
 
 | Category | Vars |
 |---|---|
@@ -134,7 +132,7 @@ The script is the source of truth (retune the `set -g` globals near the top). In
 | Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
 | Wine | `WINEDEBUG=-all` |
 
-**fstab** — ext4 entries rewritten in place: applies `noatime`, `lazytime`, `commit=10`; strips conflicting atime opts + redundant `defaults`; rewrites any `commit=`. Mandatory `findmnt --verify` gate; line-count parity check (awk is 1-in-1-out) + size-sanity floor as defense-in-depth; snapshot to `/etc/fstab.ry.bak`; symlinked `/etc/fstab` refused.
+**fstab** — ext4 entries rewritten in place: adds `noatime`, `lazytime`, `commit=10`; strips conflicting atime opts + redundant `defaults`; rewrites any `commit=`. Gates: line-count parity (awk is 1-in-1-out) + size floor + mandatory `findmnt --verify`; snapshot to `/etc/fstab.ry.bak`; symlinked `/etc/fstab` refused.
 
 **Units**
 
@@ -160,11 +158,9 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 > [!WARNING]
 > This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, invalid conntrack dropped, ICMPv4 plus essential ICMPv6 (NDP + PMTUD) accepted, all other inbound dropped — including mDNS. Add inbound ports to `/etc/nftables.conf` as needed.
 
-Every managed write is crash-safe: render → same-FS tmp → symlink-probe → `.ry.bak` → chmod → `mv -T` → re-read + restore on mismatch.
-
 | Feature | Detail |
 |---|---|
-| Atomic writes | render → tmp → symlink-probe → backup → chmod → `mv -T` → restore on mismatch |
+| Atomic writes | render → same-FS tmp → symlink-probe → `.ry.bak` → chmod → `mv -T` → re-read + restore on mismatch |
 | Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` / `fstab` |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal; failed revert keeps the `/run` snapshot |
 | Instance lock | atomic `mkdir 0700`; dead/recycled-PID reclaim via `/proc` (fail-closed) |
@@ -178,9 +174,9 @@ The process exit code is the single source of truth; internal sentinels stay in 
 | `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock |
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, …) |
-| `11`/`12`/`13`/`251`/`250`/`255` | internal sentinels (gen-nofn/gen-nouuid/gen-sysctl/run-tmpfail/`_as`/`_run` misuse) — never a process exit (JSONL `gen_fail`) |
+| `11`/`12`/`13`/`251`/`250`/`255` | internal sentinels (gen-nofn/nouuid/sysctl, run-tmpfail, `_as`/`_run` misuse) — never a process exit (JSONL `gen_fail`) |
 
-These environment variables are the only external overrides; each falls back safely when unset or invalid.
+Environment overrides (each falls back safely when unset or invalid):
 
 | Variable | Default | Effect |
 |---|---|---|

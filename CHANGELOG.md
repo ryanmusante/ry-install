@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+# 7.38.2 - 2026-06-13
+
+- condense README to vital information only: fold the Run Summary section into Install Flow and collapse duplicated atomic-write prose; configuration tables retained verbatim.
+- no functional change to install, verify, check, or install-file behavior; script logic byte-identical to 7.38.1.
+
 # 7.38.1 - 2026-06-13
 
 - collapse the remaining multiline header comment to a single line; trim verbose changelog entries to one line each.

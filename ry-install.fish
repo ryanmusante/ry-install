@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.39.1 (2026-06-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.39.3 (2026-06-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.39.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.39.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels; never a process exit
@@ -1405,11 +1405,11 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and _log "$label_tag""_TRUNCATED: total_lines=$_total head_cap=$_head_cap tail_cap=$_tail_cap"
     if test "$_need_tail" = true
         set -l _ovf "$LOG_DIR/run-overflow"
-        command mkdir -p -m 700 -- "$_ovf" 2>/dev/null
+        if not test -d "$_ovf"; command mkdir -p -m 700 -- "$_ovf" 2>/dev/null; and _track_tmpfile "$_ovf"; end # ephemeral: tracked so _dc_sweep_tmpfiles removes it post-footer (no remnants after unattended/--verify)
         set -l _dest (command mktemp --suffix=.log -p "$_ovf" "$label_tag-$TIMESTAMP-XXXXXX" 2>/dev/null)
         if test -n "$_dest"; and command cp -- "$tmpfile" "$_dest" 2>/dev/null
             set -l _sha (command sha256sum -- "$_dest" 2>/dev/null | string match -rg -- '^(\S+)')
-            _log "$label_tag""_FULL_SPILL: path=$_dest sha256=$_sha lines=$_total"
+            _log "$label_tag""_FULL_SPILL: path=$_dest sha256=$_sha lines=$_total ephemeral=true (swept at teardown)"
         else
             _log "$label_tag""_FULL_SPILL_FAIL: could not write spill file under $_ovf"
         end

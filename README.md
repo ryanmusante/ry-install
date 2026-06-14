@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.39.1 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.39.3 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -132,7 +132,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | Proton | `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1` |
 | Wine | `WINEDEBUG=-all` |
 
-**fstab** — ext4 entries rewritten in place: adds `noatime`, `lazytime`, `commit=10`; strips conflicting atime opts + redundant `defaults`; rewrites any `commit=`. Gates: line-count parity (awk is 1-in-1-out) + size floor + mandatory `findmnt --verify`; snapshot to `/etc/fstab.ry.bak`; symlinked `/etc/fstab` refused.
+**fstab** — ext4 entries rewritten in place: adds `noatime`, `lazytime`, `commit=10`; strips conflicting atime opts + redundant `defaults`; rewrites any `commit=`. The mount-option field is rewritten in place, preserving every other column byte-for-byte (option order is not preserved; the kernel is order-insensitive). Gates: line-count parity (awk is 1-in-1-out) + size floor + mandatory `findmnt --verify`; snapshot to `/etc/fstab.ry.bak`; symlinked `/etc/fstab` refused.
 
 **Units**
 
@@ -156,13 +156,15 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, invalid conntrack dropped, ICMPv4 plus essential ICMPv6 (NDP + PMTUD) accepted, all other inbound dropped — including mDNS. Add inbound ports to `/etc/nftables.conf` as needed.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, invalid conntrack dropped, ICMPv4 plus essential ICMPv6 (NDP + PMTUD) accepted, all other inbound dropped — including mDNS. nftables is brought up before the ufw flush, so the host is never left unfirewalled during the handoff. Add inbound ports to `/etc/nftables.conf` as needed.
 
 | Feature | Detail |
 |---|---|
 | Atomic writes | same-FS tmp → render → symlink-probe → `.ry.bak` → chmod → `mv -T` → re-read + restore on mismatch |
 | Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` / `fstab` |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal; failed revert keeps the `/run` snapshot |
+| Boot-taint gate | a tainted package/boot phase refuses the Phase 5 rebuild on every path into `mkinitcpio -P` |
+| Boot-wipe gate | `REMOVE_EXISTING=yes` refuses `sdboot-manage gen` when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; dead/recycled-PID reclaim via `/proc` (fail-closed) |
 | Permissions | system `0644`, user `0600`, `~/ry-install/` `0700` |
 
@@ -173,7 +175,7 @@ The process exit code is the single source of truth; internal sentinels stay in 
 | `0` / `1` / `2` | success / verify-FAIL or install-error / usage (incl. root-refused) |
 | `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock |
 | `10` | `--check` drift |
-| `128+N` | signal exit (130 INT, 143 TERM, …) |
+| `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT, 138 USR1, 140 USR2) |
 | `11`/`12`/`13`/`251`/`250`/`255` | internal sentinels (gen-nofn/nouuid/sysctl, run-tmpfail, `_as`/`_run` misuse) — never a process exit (JSONL `gen_fail`) |
 
 Environment overrides (each falls back safely when unset or invalid):
@@ -185,7 +187,7 @@ Environment overrides (each falls back safely when unset or invalid):
 | `NO_COLOR` | unset | suppress ANSI color |
 | `TMPDIR` | `/tmp` | scratch dir; invalid values fall back to `/tmp` |
 
-Logs: JSONL under `~/ry-install/logs/<date>/`, one per run, not auto-pruned; `run-overflow/` holds full spills. Prune: `find ~/ry-install/logs -type f \( -name '*.jsonl' -o -name '*.log' \) -mtime +30 -delete`. Query failures:
+Logs: JSONL under `~/ry-install/logs/<date>/`, one per run, not auto-pruned. Full command-output spills land in `run-overflow/` during a run but are ephemeral — swept at teardown, so nothing remains after an unattended install or `--verify` (`_FULL_SPILL` records are tagged `ephemeral=true`). Prune old logs: `find ~/ry-install/logs -type f \( -name '*.jsonl' -o -name '*.log' \) -mtime +30 -delete`. Query failures:
 
 ```fish
 jq 'select(.event == "log" and (.data | test("^(FAIL|ERR):") or test("result=(FAIL|WARN)")))' ~/ry-install/logs/**/*.jsonl

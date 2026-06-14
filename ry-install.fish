@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.39.4 (2026-06-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.39.5 (2026-06-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.39.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.39.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels; never a process exit
@@ -2521,8 +2521,6 @@ function _implicit_confd_units --description "Units implied by managed conf.d dr
         switch "$_dst"
             case '*/systemd/resolved.conf.d/*'
                 contains -- systemd-resolved.service $_u; or set -a _u systemd-resolved.service
-            case '*/NetworkManager/conf.d/*'
-                contains -- NetworkManager-dispatcher.service $_u; or set -a _u NetworkManager-dispatcher.service
         end
     end
     test (count $_u) -gt 0; and printf '%s\n' $_u
@@ -2830,16 +2828,6 @@ function _vrsv_chk_resolved --argument-names rec_str --description "Check system
         _fail "  systemd-resolved: $rec[2] (expected: active — DNS may be broken)"
     end
 end
-function _vrsv_chk_nm_dispatcher --argument-names rec_str --description "Check NM-dispatcher: enabled or static + (active|inactive) acceptable (on-demand)"
-    set -l rec (string split ':' -- "$rec_str")
-    if test "$rec[1]" = not-found; _warn "  NetworkManager-dispatcher: not installed"; return 0; end
-    if test "$rec[3]" != enabled; and test "$rec[3]" != static; _fail "  NetworkManager-dispatcher: $rec[3] (expected: enabled or static)"; return 0; end
-    if test "$rec[2]" = active; or test "$rec[2]" = inactive
-        _ok "  NetworkManager-dispatcher: $rec[3] ($rec[2])"
-    else
-        _warn "  NetworkManager-dispatcher: $rec[2] ($rec[3] but unexpected state)"
-    end
-end
 function _vrsv_chk_cpupower_governor --argument-names rec_str --description "Check cpupower.service (RemainAfterExit oneshot reads active); governor applied from /etc/default/cpupower-service.conf"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found; _warn "  cpupower.service: not installed (cpupower is a CachyOS default; pacman db may be stale)"; return 0; end
@@ -2861,8 +2849,6 @@ function _vrsv_sys_units --description "Runtime services check: conf.d-implied +
         switch "$_u"
             case systemd-resolved.service
                 _vrsv_chk_resolved "$_rec"
-            case NetworkManager-dispatcher.service
-                _vrsv_chk_nm_dispatcher "$_rec"
             case cpupower.service
                 _vrsv_chk_cpupower_governor "$_rec"
             case nftables.service
@@ -4035,16 +4021,7 @@ end
 
 # ── INSTALL PHASE 4 SUB: ENABLE UNITS + REGDOM ──
 function _cse_collect_units --description "Collect system units to enable"
-    set -l _enable; set -l _ndsp (command systemctl is-enabled NetworkManager-dispatcher.service 2>/dev/null | string trim --)
-    if test "$_ndsp" = enabled
-        _ok "NetworkManager-dispatcher.service: already enabled"
-    else if test "$_ndsp" = static
-        _ok "NetworkManager-dispatcher.service: static (socket/D-Bus-activated; no enable needed)" # static has no [Install]
-    else if test -z "$_ndsp"
-        _info "NetworkManager-dispatcher.service: not installed — skipping enable"
-    else
-        set -a _enable NetworkManager-dispatcher.service
-    end
+    set -l _enable
     for _exp in $EXPECTED_SERVICES
         if not contains -- "$_exp" $_RY_PKG_MANAGED_SERVICES
             set -a _enable "$_exp"; continue

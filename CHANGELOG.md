@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+7.39.5 - 2026-06-14
+
+- stop enabling and verifying NetworkManager-dispatcher.service; it is socket/D-Bus-activated on demand and needs no explicit enable. NetworkManager.service itself is unchanged.
+
 7.39.4 - 2026-06-14
 
 - remove the --country flag and its ISO-3166 validation table; wireless regdom is fixed at US (retune COUNTRY in the script to change it).

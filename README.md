@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.39.4 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.39.5 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 

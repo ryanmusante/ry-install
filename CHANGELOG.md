@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+# 7.38.3 - 2026-06-13
+
+- README rewritten in GitHub-flavored Markdown; tighten wording, no logic change.
+- version bump only; install, verify, check, and install-file behavior byte-identical to 7.38.2.
+
 # 7.38.2 - 2026-06-13
 
 - condense README to vital information only: fold the Run Summary section into Install Flow and collapse duplicated atomic-write prose; configuration tables retained verbatim.

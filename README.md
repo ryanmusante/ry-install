@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.38.6 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.39.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -58,7 +58,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run (skips th
 |---|---|---|
 | 1 | Preflight | invariants → lock (exit 5) → hard gates; read-only except a non-fatal NTP repair (skipped when chronyd/ntpd is enabled or active) |
 | 2 | Packages | `pacman -Syu --needed` → `updatedb`/`pkgfile`. `mkinitcpio.conf` pre-deployed before `-Syu`; one `-Syyu` retry. Managed `.pacnew` auto-resolved (rollback: `pacdiff`); `.pacsave` reported |
-| 3 | Configuration | deploy the 18 embedded files atomically |
+| 3 | Configuration | deploy the 17 embedded files atomically |
 | 4 | Services | fstab → resolved restart → package removal → nftables activation → mask (ufw flush) → enable → regdom |
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity. A tainted run skips the rebuild; resolve and re-run |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2 -ruk0` (`pacman -Sc` fallback) → NetworkManager restart (deferred on active Wi-Fi) |
@@ -111,7 +111,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | cpupower | `GOVERNOR=performance`; EPP pinned `performance` via udev (`amd_pstate=active`) |
 | amdgpu/ttm | `pages_limit`/`page_pool_size=8388608` (GTT ~32 GiB; requires BIOS UMA 512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` |
-| udev | NVMe whole-disk I/O scheduler → `none`; CPU EPP → `performance` |
+| udev | `60-ry-perf.rules`: NVMe whole-disk I/O scheduler → `none`; CPU EPP → `performance` |
 | wireless regdom | `COUNTRY=US` (`--country=XX`) via `/etc/iw-regdomain` → `cachyos-iw-set-regdomain` |
 
 **sysctl (8)** → `/etc/sysctl.d/95-ry-overrides.conf` (after CachyOS `70-cachyos-settings.conf`)
@@ -150,7 +150,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 | Boot (4) | `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf` |
 | systemd (2) | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`, `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
 | Network (5) | `/etc/iwd/main.conf`, `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/conf.d/wireless-regdom`, `/etc/nftables.conf` |
-| Tuning (6) | `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/default/cpupower-service.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/udev/rules.d/60-ry-ioschedulers.rules`, `/etc/udev/rules.d/61-ry-epp.rules` |
+| Tuning (5) | `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/default/cpupower-service.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
 | User (1) | `~/.config/environment.d/10-environment.conf` |
 
 ## Safety & Reliability

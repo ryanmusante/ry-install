@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.38.6 (2026-06-13) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.39.0 (2026-06-13) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.38.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.39.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels; never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -579,8 +579,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/modprobe.d/ry-amdgpu-strixhalo.conf" \
     "/etc/iw-regdomain" \
     "/etc/conf.d/wireless-regdom" \
-    "/etc/udev/rules.d/60-ry-ioschedulers.rules" \
-    "/etc/udev/rules.d/61-ry-epp.rules" \
+    "/etc/udev/rules.d/60-ry-perf.rules" \
     "/etc/nftables.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
@@ -859,7 +858,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
 end
 
-# ── CONTENT GENERATORS (18; dispatched by _ry_get_file_content via _tmpfile_key) — gen group boot/loader [4]: loader.conf, kernel/cmdline, sdboot-manage.conf, mkinitcpio.conf ──
+# ── CONTENT GENERATORS (17; dispatched by _ry_get_file_content via _tmpfile_key) — gen group boot/loader [4]: loader.conf, kernel/cmdline, sdboot-manage.conf, mkinitcpio.conf ──
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -913,7 +912,7 @@ end
 function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
 end
-# ·· gen group: firewall + gpu + storage + wireless [8] — nftables, sysctl, modprobe(ttm), drirc(RADV), iw-regdomain, wireless-regdom, udev ioscheduler, udev EPP
+# ·· gen group: firewall + gpu + storage + wireless [7] — nftables, sysctl, modprobe(ttm), drirc(RADV), iw-regdomain, wireless-regdom, udev perf (ioscheduler + EPP)
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset" # ufw masked; this is the active host firewall.
     printf '%s\n' \
         "#!/usr/bin/nft -f" \
@@ -967,14 +966,12 @@ end
 function _content__etc_conf.d_wireless-regdom --description "Generate content for /etc/conf.d/wireless-regdom (set-wireless-regdom input)" # consumed by set-wireless-regdom at device add
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "WIRELESS_REGDOM=\"$COUNTRY\""
 end
-function _content__etc_udev_rules.d_60-ry-ioschedulers.rules --description "Generate content for NVMe I/O scheduler udev rule (none)" # NVMe scheduler none
+function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP performance)" # NVMe scheduler none + EPP performance
     printf '%s\n' \
-        "# ry-install: NVMe I/O scheduler none (managed file, do not edit by hand)" \
-        'ACTION=="add|change", KERNEL=="nvme[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"'
-end
-function _content__etc_udev_rules.d_61-ry-epp.rules --description "Generate content for AMD P-State EPP udev rule (performance)" # Pins energy_performance_preference=performance
-    printf '%s\n' \
-        "# ry-install: AMD P-State EPP performance (managed file, do not edit by hand)" \
+        "# ry-install: udev performance rules (managed file, do not edit by hand)" \
+        "# NVMe I/O scheduler none" \
+        'ACTION=="add|change", KERNEL=="nvme[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
+        "# AMD P-State EPP performance" \
         'ACTION=="add", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="performance"'
 end
 
@@ -2294,15 +2291,11 @@ function _vss_regdom --description "_verify_static_system sub: wireless regdom (
     _chk_file /etc/iw-regdomain; or return 0
     _chk_grep /etc/iw-regdomain "COUNTRY=$COUNTRY" "regdom COUNTRY=$COUNTRY"
 end
-function _vss_udev --description "_verify_static_system sub: NVMe I/O scheduler udev rule"
-    _echo "── udev (I/O scheduler) ──"
-    _chk_file /etc/udev/rules.d/60-ry-ioschedulers.rules; or return 0
-    _chk_grep /etc/udev/rules.d/60-ry-ioschedulers.rules 'queue/scheduler}="none"' "nvme scheduler=none"
-end
-function _vss_epp --description "_verify_static_system sub: AMD P-State EPP udev rule"
-    _echo "── udev (EPP) ──"
-    _chk_file /etc/udev/rules.d/61-ry-epp.rules; or return 0
-    _chk_grep /etc/udev/rules.d/61-ry-epp.rules 'energy_performance_preference}="performance"' "EPP=performance"
+function _vss_udev --description "_verify_static_system sub: combined udev perf rules (NVMe scheduler + EPP)"
+    _echo "── udev (perf: I/O scheduler + EPP) ──"
+    _chk_file /etc/udev/rules.d/60-ry-perf.rules; or return 0
+    _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'queue/scheduler}="none"' "nvme scheduler=none"
+    _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'energy_performance_preference}="performance"' "EPP=performance"
 end
 function _vss_drirc --description "_verify_static_system sub: RADV drirc"
     _echo "── drirc (RADV) ──"
@@ -2335,7 +2328,6 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _vss_sysctl
     _vss_modprobe
     _vss_udev
-    _vss_epp
     _vss_drirc
     _echo "── nftables ──"
     _vss_nft
@@ -2670,7 +2662,7 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
             set -l parts (string split ':' -- "$check"); set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
             _chk_eq "$parts[3]" "$sysfs_val" "$parts[2]"
         end
-        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # EPP pinned via 61-ry-epp.rules
+        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # EPP pinned via 60-ry-perf.rules
         if test -n "$_epp"
             _chk_eq "EPP" "$_epp" performance
         else
@@ -4669,7 +4661,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
-# ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR (resolver, sudo gate); _RY_POST_HOOKS = 17 glob|tag patterns covering all 18 managed files (udev glob maps both rule files to one tag), first-match-wins by list order ──
+# ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR (resolver, sudo gate); _RY_POST_HOOKS = 17 glob|tag patterns covering all 17 managed files, first-match-wins by list order ──
 set -g _RY_POST_HOOKS \
     "/boot/*|boot" \
     "/etc/mkinitcpio.conf|boot" \

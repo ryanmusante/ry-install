@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+7.39.0 - 2026-06-13
+
+- merge /etc/udev/rules.d/60-ry-ioschedulers.rules and /etc/udev/rules.d/61-ry-epp.rules into a single /etc/udev/rules.d/60-ry-perf.rules (NVMe scheduler=none + AMD P-State EPP=performance); managed files 18 to 17. The _content/_vss_udev pair now emits and verifies both directives from one file; _vss_epp folded into _vss_udev. _RY_POST_HOOKS unchanged (the /etc/udev/rules.d/* glob already mapped to one udev tag). No change to deployed rule semantics — same scheduler and EPP assignments, one fewer file.
+
 7.38.6 - 2026-06-13
 
 - BOOT_TIME_TARGET 15 to 20 s: --verify now warns only when systemd-analyze boot time exceeds 20 s (near-miss WARN band stays at >=90% of target, i.e. >=18 s). Verify-only threshold; no install behavior change.

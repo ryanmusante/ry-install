@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S, gfx1151, 128 GB LPDDR5x).
 
-**Version 7.38.3 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.38.6 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -45,7 +45,7 @@ Hard requirements abort read-only in preflight (exit 3); `pacman-contrib` and NT
 | `--` | End of options (no positional args) |
 | `-h, --help` · `-v, --version` | Honored first, except as the `--install-file` value |
 
-`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot). `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, nftables ICMPv6 NDP/PMTUD accept (static + live), boot time vs 15 s (≥90% = WARN).
+`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline` (pending changes read as drift until reboot). `--verify` also reports unwritten state: ntsync, THP/KSM/ZRAM, `tcp_bbr`, drirc XML, ext4 fstab opts, nftables ICMPv6 NDP/PMTUD accept (static + live), boot time vs 20 s (≥90% = WARN).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. Non-boot post-hook failures stay exit 0. A non-vfat `/boot` ESP fallback refuses sdboot (exit 4).
@@ -72,7 +72,7 @@ A CHECK/RESULT/EVIDENCE matrix prints to stderr; the JSONL log records each phas
 
 ## Configuration
 
-The script is the source of truth — retune the `set -g` globals near the top. Non-env-overridable tunables: `BOOT_TIME_TARGET=15` s, `PACTREE_TIMEOUT_S=60` s, `NM_RESTART_DELAY=3` s.
+The script is the source of truth — retune the `set -g` globals near the top. Non-env-overridable tunables: `BOOT_TIME_TARGET=20` s, `PACTREE_TIMEOUT_S=60` s, `NM_RESTART_DELAY=3` s.
 
 **Packages**
 
@@ -160,7 +160,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | render → same-FS tmp → symlink-probe → `.ry.bak` → chmod → `mv -T` → re-read + restore on mismatch |
+| Atomic writes | same-FS tmp → render → symlink-probe → `.ry.bak` → chmod → `mv -T` → re-read + restore on mismatch |
 | Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` / `fstab` |
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal; failed revert keeps the `/run` snapshot |
 | Instance lock | atomic `mkdir 0700`; dead/recycled-PID reclaim via `/proc` (fail-closed) |

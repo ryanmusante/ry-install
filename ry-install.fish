@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.38.3 (2026-06-13) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.38.6 (2026-06-13) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.38.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.38.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels; never a process exit
@@ -724,7 +724,7 @@ set -g MASK \
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # EXPECTED_SERVICES (4, enforced) → enabled + verified (Phase 4/6).
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # Thresholds: disk, boot-time, CPU match, TTM GTT caps.
-set -g BOOT_TIME_TARGET 15
+set -g BOOT_TIME_TARGET 20
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 set -g TTM_PAGES_LIMIT 8388608
 set -g TTM_PAGE_POOL_SIZE 8388608
@@ -3512,7 +3512,7 @@ function _install_preflight --description "Run all preflight checks before insta
 end
 
 # ── MKINITCPIO.CONF: SNAPSHOT + REVERT (cp + size + cmp byte-exact) ──
-function _mr_copy_size_verify --argument-names backup_file _mki_tmp --description "_mkinitcpio_revert sub: cp + byte-exact content verify"
+function _mr_copy_cmp_verify --argument-names backup_file _mki_tmp --description "_mkinitcpio_revert sub: cp + byte-exact content verify (cmp)"
     if not sudo -n cp -- "$backup_file" "$_mki_tmp" 2>/dev/null
         _err "  /etc/mkinitcpio.conf revert failed at copy — current conf may reference uninstalled modules"
         _log "MKINITCPIO_REVERT_FAIL: cp $backup_file failed"
@@ -3561,7 +3561,7 @@ function _mkinitcpio_revert --argument-names backup_file --description "Restore 
         _log "MKINITCPIO_REVERT_FAIL: tmp is symlink"
         return 1
     end
-    if not _mr_copy_size_verify "$backup_file" "$_mki_tmp"; _rm_tmp "$_mki_tmp" true; return 1; end
+    if not _mr_copy_cmp_verify "$backup_file" "$_mki_tmp"; _rm_tmp "$_mki_tmp" true; return 1; end
     if not _mr_chmod_chown_mv "$_mki_tmp"; _rm_tmp "$_mki_tmp" true; return 1; end
     _untrack_tmpfile "$_mki_tmp"
     _warn "  /etc/mkinitcpio.conf restored to pre-install content"
@@ -3756,7 +3756,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
         end
     end
 end
-function _far_build_awk_script --description "_far_awk_rewrite sub: Emit awk script for ext4 mount-opt rewrite" # idempotent: conformant/non-ext4 pass through, keep whitespace
+function _far_build_awk_script --description "_far_awk_rewrite sub: Emit awk script for ext4 mount-opt rewrite" # idempotent: conformant/non-ext4 pass through, keep whitespace; rewriting an existing commit= drops it in place and re-appends commit=10 at the tail (option order not preserved; kernel is order-insensitive)
     string join -- \n \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
         '$3 != "ext4" { print; next }' \

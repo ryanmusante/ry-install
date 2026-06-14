@@ -1,5 +1,20 @@
 ry-install changelog - newest first.
 
+7.38.6 - 2026-06-13
+
+- BOOT_TIME_TARGET 15 to 20 s: --verify now warns only when systemd-analyze boot time exceeds 20 s (near-miss WARN band stays at >=90% of target, i.e. >=18 s). Verify-only threshold; no install behavior change.
+
+7.38.5 - 2026-06-13
+
+- rename _mkinitcpio_revert helper _mr_copy_size_verify to _mr_copy_cmp_verify: the body is cp + cmp byte-exact (no size comparison); the name now matches its description and the README "byte-exact revert" wording.
+- comment _far_build_awk_script: rewriting an existing commit= drops it in place and re-appends commit=10 at the tail, so ext4 option order is not preserved (the kernel is order-insensitive); 1-in-1-out and idempotency are unchanged.
+- no functional change to install, verify, check, or install-file behavior; script logic byte-identical to 7.38.4 aside from the rename.
+
+7.38.4 - 2026-06-13
+
+- README: correct the atomic-write order in the Safety table to "same-FS tmp → render" (the tmpfile is created before content is rendered into it); matches _atomic_write_file. Doc-only.
+- version bump only; install, verify, check, and install-file behavior byte-identical to 7.38.3.
+
 7.38.3 - 2026-06-13
 
 - README rewritten in GitHub-flavored Markdown; tighten wording, no logic change.

@@ -2,7 +2,7 @@ ry-install changelog - newest first.
 
 7.39.3 - 2026-06-14
 
-- README: list all seven signal exit codes; document boot-taint and boot-wipe gates; note fstab in-place rewrite and nftables-before-ufw ordering.
+- README trimmed to vital information: per-key config tables collapsed to a per-file purpose summary (script remains the source of truth); document boot and wipe gates and nftables-before-ufw ordering.
 - changelog reflowed to a single flat font; verbose entries trimmed.
 
 7.39.2 - 2026-06-14

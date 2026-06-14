@@ -1,8 +1,14 @@
 ry-install changelog - newest first.
 
+7.39.4 - 2026-06-14
+
+- remove the --country flag and its ISO-3166 validation table; wireless regdom is fixed at US (retune COUNTRY in the script to change it).
+- drop internal count annotations from README, changelog, and script comments.
+- collapse the sub-group label comments in the content-generator section.
+
 7.39.3 - 2026-06-14
 
-- README trimmed to vital information: per-key config tables collapsed to a per-file purpose summary (script remains the source of truth); document boot and wipe gates and nftables-before-ufw ordering.
+- README trimmed to vital information: config tables collapsed to a per-file summary; document boot/wipe gates and nftables-before-ufw ordering.
 - changelog reflowed to a single flat font; verbose entries trimmed.
 
 7.39.2 - 2026-06-14
@@ -11,7 +17,7 @@ ry-install changelog - newest first.
 
 7.39.1 - 2026-06-14
 
-- fix _ir_validate_counts SYSTEM_DESTINATIONS invariant 17 to 16 (USER_DESTINATIONS is the 17th); stale count aborted every mode at preflight.
+- fix the SYSTEM_DESTINATIONS count check (17 to 16; USER_DESTINATIONS is the 17th); the stale count aborted every mode at preflight.
 
 7.39.0 - 2026-06-13
 

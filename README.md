@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.39.3 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.39.4 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -40,7 +40,6 @@ Hard requirements abort read-only in preflight (exit 3); NTP sync and `pacman-co
 | `--verify` | Config files byte-for-byte, then live system state |
 | `--check` | Idempotency probe (`0` clean · `3` preflight · `10` drift) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
-| `--country=XX` | Wireless regdom (ISO-3166-1 alpha-2; default `US`; UK is `GB`) |
 | `-h, --help` · `-v, --version` | Honored first, except as the `--install-file` value |
 
 `--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline`, so pending changes read as drift until reboot.
@@ -54,9 +53,9 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 
 | # | Phase | Action |
 |---|---|---|
-| 1 | Preflight | invariants → lock (exit 5) → hard gates; read-only except a non-fatal NTP repair |
+| 1 | Preflight | config checks → lock (exit 5) → hard gates; read-only except a non-fatal NTP repair |
 | 2 | Packages | `pacman -Syu` (one `-Syyu` retry); `mkinitcpio.conf` pre-deployed first; managed `.pacnew` auto-resolved |
-| 3 | Configuration | deploy the 17 embedded files atomically |
+| 3 | Configuration | deploy the embedded config files atomically |
 | 4 | Services | fstab → resolved → package removal → nftables → mask (ufw flush) → enable → regdom |
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity (tainted run skips this) |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart (deferred on active Wi-Fi) |
@@ -69,7 +68,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 
 | File | Purpose |
 |---|---|
-| kernel cmdline (12 params) | CPU/GPU/IOMMU/storage/USB tuning for gfx1151; `root=`/`rw` injected by sdboot-manage |
+| kernel cmdline | CPU/GPU/IOMMU/storage/USB tuning for gfx1151; `root=`/`rw` injected by sdboot-manage |
 | loader.conf / sdboot-manage.conf | systemd-boot entry generation (`REMOVE_EXISTING=yes`) |
 | mkinitcpio.conf | `MODULES=(amdgpu)`, systemd hooks, zstd compression |
 | resolved / logind | disable mDNS/LLMNR/DoT; ignore power/suspend/hibernate/reboot keys |
@@ -77,12 +76,12 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | cpupower / udev | `performance` governor + EPP, NVMe scheduler `none` |
 | amdgpu/ttm modprobe | GTT ~32 GiB (`pages_limit`/`page_pool_size`; needs BIOS UMA 512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu` for the APU |
-| sysctl (8 values) | BBR + `fq`, TCP/network tuning, `vm` tuning |
-| environment.d (10 vars) | Mesa/RADV/DXVK/VKD3D/Proton gaming env (`0600`) |
+| sysctl | BBR + `fq`, TCP/network tuning, `vm` tuning |
+| environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env (`0600`) |
 
-**Packages** — installs 16 (`cachyos-gaming-meta`, `nvme-cli`, `lib32-mesa`, `nftables`, CLI tools); removes 9 (plymouth stack, `micro`, `cachy-update`, `kdeconnect`). `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
+**Packages** — installs `cachyos-gaming-meta`, `nvme-cli`, `lib32-mesa`, `nftables`, and CLI tools; removes the plymouth stack, `micro`, `cachy-update`, and `kdeconnect`. `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 
-**Units** — masks 9 (`ufw`, `power-profiles-daemon`, `ananicy-cpp`, sleep/suspend/hibernate targets, `NetworkManager-wait-online`); enables 4 (`fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`).
+**Units** — masks `ufw`, `power-profiles-daemon`, `ananicy-cpp`, the sleep/suspend/hibernate targets, and `NetworkManager-wait-online`; enables `fstrim.timer`, `NetworkManager`, `cpupower`, and `nftables`.
 
 **fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place, every other column preserved byte-for-byte. Gated by line-count parity, a size floor, and mandatory `findmnt --verify`; symlinked `/etc/fstab` is refused.
 
@@ -92,11 +91,11 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 
 | Group | Files |
 |---|---|
-| Boot (4) | `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf` |
-| systemd (2) | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`, `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
-| Network (5) | `/etc/iwd/main.conf`, `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/conf.d/wireless-regdom`, `/etc/nftables.conf` |
-| Tuning (5) | `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/default/cpupower-service.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
-| User (1) | `~/.config/environment.d/10-environment.conf` |
+| Boot | `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf` |
+| systemd | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`, `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
+| Network | `/etc/iwd/main.conf`, `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/conf.d/wireless-regdom`, `/etc/nftables.conf` |
+| Tuning | `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/default/cpupower-service.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
+| User | `~/.config/environment.d/10-environment.conf` |
 
 ## Safety & Reliability
 
@@ -114,7 +113,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; dead/recycled-PID reclaim via `/proc` (fail-closed) |
 
-The process exit code is the single source of truth; internal sentinels stay in the JSONL log only.
+The process exit code is the single source of truth.
 
 | Code | Meaning |
 |---|---|

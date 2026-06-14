@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.39.3 (2026-06-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.39.4 (2026-06-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # stack-trace text not a stable API
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.39.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.39.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # _as/_run arg-misuse sentinels; never a process exit
@@ -36,7 +36,6 @@ function _ry_show_help --description "Display usage information and available su
         "  --                End of options (no positional arguments are accepted)" \
         "  -h, --help        Show this help" \
         "  -v, --version     Show version" \
-        "  --country=XX      Wireless regulatory domain (ISO-3166 alpha-2); opt-in, honored in all modes" \
         "  Note: -h/--help and -v/--version are honored before all checks (root guard, argparse), except as the --install-file value" \
         "EXIT CODES:" \
         "  0 ok · 1 verify-FAIL/install-error · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
@@ -589,7 +588,7 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no # Bootloader keys: loader.conf (LOADER_*) + sdboot-manage.conf (SDBOOT_*)
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-# KERNEL_PARAMS (12, enforced) → /etc/kernel/cmdline + sdboot LINUX_OPTIONS
+# KERNEL_PARAMS → /etc/kernel/cmdline + sdboot LINUX_OPTIONS
 set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
     amd_pstate=active \
@@ -603,7 +602,7 @@ set -g KERNEL_PARAMS \
     tsc=reliable \
     usbcore.autosuspend=-1 \
     zswap.enabled=0
-set -g MKINITCPIO_MODULES amdgpu # MODULES(1)+HOOKS(11,enforced)+COMPRESSION.
+set -g MKINITCPIO_MODULES amdgpu # MODULES + HOOKS + COMPRESSION
 set -g MKINITCPIO_HOOKS \
     base \
     systemd \
@@ -621,26 +620,8 @@ set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 # ── EMBEDDED DATA: SERVICE KEYS ──
 set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade # resolved drop-in keys
 set -g COUNTRY US # COUNTRY: wireless regdom
-# _RY_ISO3166_ALPHA2: assigned ISO-3166-1 alpha-2 codes for --country validation
-set -g _RY_ISO3166_ALPHA2 \
-    AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ \
-    BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS \
-    BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN \
-    CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE \
-    EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF \
-    GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM \
-    HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM \
-    JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC \
-    LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK \
-    ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA \
-    NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG \
-    PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW \
-    SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS \
-    ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO \
-    TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI \
-    VN VU WF WS YE YT ZA ZM ZW
 set -g RADV_APU_OPTION radv_enable_unified_heap_on_apu # RADV_APU_OPTION: drirc option name
-# LOGIND_IGNORE_KEYS (8, enforced) → logind.conf.d (Handle*Key=ignore).
+# LOGIND_IGNORE_KEYS → logind.conf.d (Handle*Key=ignore)
 set -g LOGIND_IGNORE_KEYS \
     HandlePowerKey \
     HandlePowerKeyLongPress \
@@ -666,7 +647,7 @@ set -g ENV_VARS \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
     "WINEDEBUG=-all"
-# SYSCTL_VALUES (8, enforced) → /etc/sysctl.d/95-ry-overrides.conf.
+# SYSCTL_VALUES → /etc/sysctl.d/95-ry-overrides.conf
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
@@ -695,7 +676,7 @@ set -g PKGS_ADD \
     realtime-privileges \
     ddcutil \
     nftables
-# Opt-in: append shelly to PKGS_DEL + bump invariant 9→10
+# Opt-in: append shelly to PKGS_DEL
 set -g PKGS_DEL \
     plymouth \
     cachyos-plymouth-bootanimation \
@@ -720,7 +701,7 @@ set -g MASK \
     hibernate.target \
     hybrid-sleep.target \
     suspend-then-hibernate.target
-set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # EXPECTED_SERVICES (4, enforced) → enabled + verified (Phase 4/6).
+set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # enabled + verified (Phase 4/6)
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # Thresholds: disk, boot-time, CPU match, TTM GTT caps.
 set -g BOOT_TIME_TARGET 20
@@ -777,7 +758,7 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
     set -l _usr_in (count $USER_DESTINATIONS); set -l _usr_out (count $_RY_CANON_USER_DSTS)
     if test "$_usr_in" -ne "$_usr_out"; _err_loud "BUG: _RY_CANON_USER_DSTS count drift: in=$_usr_in out=$_usr_out"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
 end
-function _ir_validate_counts --description "Refuse to deploy when documented array counts drift from invariants" # refuse deploy on count drift
+function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
     set -l _expect \
         KERNEL_PARAMS:12 \
         MKINITCPIO_HOOKS:11 \
@@ -796,13 +777,12 @@ function _ir_validate_counts --description "Refuse to deploy when documented arr
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_NTSYNC_MODLOAD_CONFS:3 \
-        _RY_ISO3166_ALPHA2:249 \
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:16 \
         USER_DESTINATIONS:1
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
-        if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — README/script desync, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     if test "$TTM_PAGE_POOL_SIZE" -ne "$TTM_PAGES_LIMIT"; _err_loud "TTM_PAGE_POOL_SIZE=$TTM_PAGE_POOL_SIZE must equal TTM_PAGES_LIMIT=$TTM_PAGES_LIMIT — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
 end
@@ -816,7 +796,7 @@ function _ir_validate_keys --description "Refuse deploy on _tmpfile_key collisio
 end
 
 # ── RUNTIME INIT: ORCHESTRATOR (_init_runtime) ──
-function _init_runtime --description "Cache root UUID + validate invariants + precompute caches" # CPU hard-fail guards non-Strix-Halo
+function _init_runtime --description "Cache root UUID + validate config + precompute caches" # CPU hard-fail guards non-Strix-Halo
     _ir_resolve_root_uuid
     if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
         set -l _cpu_model (string match -rg -- '^model name\s*:\s*(.*)$' < /proc/cpuinfo 2>/dev/null)[1]
@@ -844,7 +824,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
     _ir_validate_counts
     _ir_validate_keys
-    for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end # backup-target generators must be side-effect-free
+    for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
     _ir_precompute_caches
     set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!#]'
     for _kp in $KERNEL_PARAMS
@@ -886,7 +866,6 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
         "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"; printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"; end
 end
-# ·· gen group: systemd + network + user
 function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
     printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
 end
@@ -912,7 +891,6 @@ end
 function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
 end
-# ·· gen group: firewall + gpu + storage + wireless
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset" # ufw masked; this is the active host firewall.
     printf '%s\n' \
         "#!/usr/bin/nft -f" \
@@ -1729,7 +1707,7 @@ function _vmh_existence_only --description "_ry_validate_mkinitcpio_hooks sub: E
     end
     test "$errors" -eq 0
 end
-function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: ordering invariants" # 10 invariants: base-first + 8 pairs + fsck-last
+function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: hook ordering" # base-first + ordered pairs + fsck-last
     set -l hooks $argv; set -l errors 0
     if test (count $hooks) -eq 0; echo 0; return 0; end
     if test "$hooks[1]" != base; _err "mkinitcpio hook order: 'base' must be first (found: $hooks[1])"; set errors (math $errors + 1); end
@@ -4926,7 +4904,7 @@ _track_tmpfile "$_ap_errfile"
 argparse --name=(status basename) \
     --exclusive=verify,check,install-file \
     h/help v/version V/verbose \
-    verify check install-file= country= \
+    verify check install-file= \
     -- $argv 2>"$_ap_errfile"
 set -l _argparse_rc $status
 if test "$_argparse_rc" -ne 0
@@ -4948,12 +4926,6 @@ if set -q _flag_help; _ry_show_help; _pre_dispatch_exit $EXIT_OK; end
 if set -q _flag_version; echo "v$VERSION"; _pre_dispatch_exit $EXIT_OK; end
 set -q _flag_verify; and set -g MODE verify
 set -q _flag_check; and set -g MODE check
-if set -q _flag_country
-    test -z "$_flag_country"; and _early_usage_exit "--country requires a value (assigned ISO-3166-1 alpha-2, e.g. US, GB, DE)"
-    set -l _cc (string upper -- "$_flag_country")
-    contains -- "$_cc" $_RY_ISO3166_ALPHA2; or _early_usage_exit "--country must be an assigned ISO-3166-1 alpha-2 code (e.g. US, GB, DE; UK is GB; 00/EU not valid); got '$_flag_country'"
-    set -g COUNTRY $_cc
-end
 if set -q _flag_install_file
     set -g MODE install-file; set -l _if_val "$_flag_install_file"
     test -z "$_if_val"; and _early_usage_exit "--install-file requires a non-empty absolute path"

@@ -316,7 +316,7 @@ function _lock_pid_started_after --argument-names pid mtime --description "rc 0 
     set -l _btime (command awk '/^btime /{print $2; exit}' /proc/stat 2>/dev/null)
     string match -qr '^\d+$' -- "$_btime"; or return 1
     set -l _hz (command getconf CLK_TCK 2>/dev/null)
-    if not string match -qr '^[1-9]\d*$' -- "$_hz" # getconf absent: recover USER_HZ from CONFIG_HZ before any default (wrong HZ skews starttime → false reclaim)
+    if not string match -qr '^[1-9]\d*$' -- "$_hz" # getconf absent: recover USER_HZ from CONFIG_HZ before default 100
         set -l _cfg_hz (_kconfig_cache | string match -rg -- '^CONFIG_HZ=([1-9][0-9]*)$' | command head -n 1)
         if string match -qr '^[1-9]\d*$' -- "$_cfg_hz"
             set _hz $_cfg_hz; functions -q _log; and _log "LOCK_CLK_TCK_FROM_CONFIG: getconf CLK_TCK unavailable — using CONFIG_HZ=$_hz from /proc/config.gz"
@@ -486,7 +486,7 @@ function _dc_kill_children --description "_do_cleanup sub: Reap child PIDs (TERM
     command pkill -KILL -P "$fish_pid" 2>/dev/null
 end
 
-# ── CLEANUP: MASTER ORCHESTRATOR (_do_cleanup; children → revert → sweep → lock → globals) ──
+# ── CLEANUP: MASTER ORCHESTRATOR (_do_cleanup) ──
 function _do_cleanup --description "Master cleanup: reap children → revert → tmpfiles → fs sweep → lock release → globals"
     _dc_kill_children # Quiesce children first: revert must not race a live pacman writing /etc
     _dc_mki_revert
@@ -618,7 +618,7 @@ set -g MKINITCPIO_HOOKS \
     fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
-# ── EMBEDDED DATA: SERVICE KEYS (RESOLVED / REGDOM / RADV / LOGIND / IWD / NM / CPUPOWER) ──
+# ── EMBEDDED DATA: SERVICE KEYS ──
 set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade # resolved drop-in keys
 set -g COUNTRY US # COUNTRY: wireless regdom
 # _RY_ISO3166_ALPHA2: assigned ISO-3166-1 alpha-2 codes for --country validation
@@ -654,7 +654,7 @@ set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisab
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR performance
 
-# ── EMBEDDED DATA: USER ENV VARS + SYSCTL — ENV_VARS(10) → environment.d (gaming/Vulkan) ──
+# ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS \
     "AMD_VULKAN_ICD=RADV" \
     "DXVK_LOG_LEVEL=none" \
@@ -677,7 +677,7 @@ set -g SYSCTL_VALUES \
     "vm.compaction_proactiveness=0" \
     "vm.max_map_count=2147483642"
 
-# ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) — PKGS_ADD(16) → pacman -Syu (Phase 2) ──
+# ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) ──
 set -g PKGS_ADD \
     nvme-cli \
     cachyos-gaming-meta \
@@ -695,7 +695,7 @@ set -g PKGS_ADD \
     realtime-privileges \
     ddcutil \
     nftables
-# Opt-in: append shelly to PKGS_DEL + bump invariant 9→10 (CachyOS Shelly TUI; not removed by default)
+# Opt-in: append shelly to PKGS_DEL + bump invariant 9→10
 set -g PKGS_DEL \
     plymouth \
     cachyos-plymouth-bootanimation \
@@ -709,7 +709,7 @@ set -g PKGS_DEL \
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # EXPECTED_VULKAN_PKGS (2) → chwd Vulkan drivers (verified present).
 
-# ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS — MASK(9) → mask --now (Phase 4) ──
+# ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
 set -g MASK \
     ananicy-cpp.service \
     power-profiles-daemon.service \
@@ -815,7 +815,7 @@ function _ir_validate_keys --description "Refuse deploy on _tmpfile_key collisio
     end
 end
 
-# ── RUNTIME INIT: ORCHESTRATOR (_init_runtime; UUID + CPU gate + invariants + caches) ──
+# ── RUNTIME INIT: ORCHESTRATOR (_init_runtime) ──
 function _init_runtime --description "Cache root UUID + validate invariants + precompute caches" # CPU hard-fail guards non-Strix-Halo
     _ir_resolve_root_uuid
     if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
@@ -858,7 +858,7 @@ function _init_runtime --description "Cache root UUID + validate invariants + pr
     end
 end
 
-# ── CONTENT GENERATORS (17; dispatched by _ry_get_file_content via _tmpfile_key) — gen group boot/loader [4]: loader.conf, kernel/cmdline, sdboot-manage.conf, mkinitcpio.conf ──
+# ── CONTENT GENERATORS (17; via _ry_get_file_content) ──
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -886,7 +886,7 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
         "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"; printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"; end
 end
-# ·· gen group: systemd + network + user [6] — resolved, logind, iwd, NetworkManager, environment.d (user), cpupower-service
+# ·· gen group: systemd + network + user
 function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
     printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
 end
@@ -912,7 +912,7 @@ end
 function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
 end
-# ·· gen group: firewall + gpu + storage + wireless [7] — nftables, sysctl, modprobe(ttm), drirc(RADV), iw-regdomain, wireless-regdom, udev perf (ioscheduler + EPP)
+# ·· gen group: firewall + gpu + storage + wireless
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset" # ufw masked; this is the active host firewall.
     printf '%s\n' \
         "#!/usr/bin/nft -f" \
@@ -2339,7 +2339,7 @@ function _verify_static_user --description "Verify environment.d ENV_VARS"
     end
 end
 
-# ── VERIFY-STATIC: PACKAGES + SERVICES + SYNTAX (presence, masks, unit/hook syntax) ──
+# ── VERIFY-STATIC: PACKAGES + SERVICES + SYNTAX ──
 function _vsp_required --description "Check PKGS_ADD against installed; emits OK/FAIL per pkg"
     _echo "── Required packages ──"
     for pkg in $PKGS_ADD
@@ -2488,7 +2488,7 @@ function _ry_verify_static --description "Verify installed configs match embedde
     return $ret
 end
 
-# ── --CHECK MODE: SILENT IDEMPOTENCY PROBE (0=clean / 3=preflight / 10=drift) ──
+# ── --CHECK MODE: SILENT IDEMPOTENCY PROBE ──
 function _check_phase_files --description "--check phase: file content hash compare"
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
         set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _gen_rc $pipestatus[1]
@@ -2758,7 +2758,7 @@ function _vrk_clocksource --description "Runtime kparam check: clocksource (with
     _echo
 end
 
-# ── VERIFY-RUNTIME: KPARAMS ORCHESTRATOR (_verify_runtime_kparams; dmesg scan + sub-checks) ──
+# ── VERIFY-RUNTIME: KPARAMS ORCHESTRATOR (_verify_runtime_kparams) ──
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource" # scan dmesg ring for preempt/TSC
     set -g _RY_DMESG_LINES 0; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_TSC
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
@@ -2989,7 +2989,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
     return 0
 end
 
-# ── VERIFY-RUNTIME: ENVIRONMENT (env vars, sysctl, TCP, THP/KSM, zram, fstab, ntsync) ──
+# ── VERIFY-RUNTIME: ENVIRONMENT ──
 function _vre_envvars --description "Runtime env check: ENV_VARS via systemctl --user show-environment"
     _echo "ENVIRONMENT STATE"
     _echo
@@ -3029,7 +3029,7 @@ function _vre_tcp --description "Runtime env check: tcp_bbr module version (acti
     if command -q modinfo
         set -l _bbr_ver (command modinfo tcp_bbr 2>/dev/null | command grep -i '^version:' | string replace -r -- '^version:\s*' '')
         if test -n "$_bbr_ver"
-            _info "  tcp_bbr module version: $_bbr_ver (advisory — active selection asserted in sysctl block)" # _info not _ok: module presence is not load+select; tcp_congestion_control is the gate
+            _info "  tcp_bbr module version: $_bbr_ver (advisory — active selection asserted in sysctl block)" # module presence is not load+select; tcp_congestion_control is the gate
         else
             _info "  tcp_bbr: version field not available"
         end
@@ -3172,7 +3172,7 @@ function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KS
     _vre_regdom
 end
 
-# ── VERIFY-RUNTIME: SESSION + PERMS (file/dir perms, Vulkan, drirc, boot-perf) ──
+# ── VERIFY-RUNTIME: SESSION + PERMS ──
 function _vrs_nm_perms --description "Runtime session check: NetworkManager system-connections perms (0600 root:root)"
     set -l nm_conn_dir /etc/NetworkManager/system-connections
     if not test -d "$nm_conn_dir"; _info "  NetworkManager connections: directory not found"; return 0; end
@@ -3650,7 +3650,7 @@ function _ip_run_and_verify --description "_install_packages sub: run pacman -Sy
     _info "Verifying package installation..."
     if not command -q pacman; _err "pacman binary unavailable after install — cannot verify package state"; set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; set _err true; return 1; end # rc 127 from a vanished pacman must not read as all-present
     set -l missing_pkgs (command pacman -T -- $pkgs_to_install 2>/dev/null); set -l _pt_rc $status
-    if test "$_pt_rc" -ne 0; and test "$_pt_rc" -ne 127 # pacman -T rc: 0=present 127=targets-missing (pacman present; binary-absent caught above)
+    if test "$_pt_rc" -ne 0; and test "$_pt_rc" -ne 127 # pacman -T rc: 0=present 127=targets-missing
         _err "pacman -T failed (rc=$_pt_rc) — cannot verify install state"
         set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
         set _err true
@@ -3748,7 +3748,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
         end
     end
 end
-function _far_build_awk_script --description "_far_awk_rewrite sub: Emit awk script for ext4 mount-opt rewrite" # idempotent 1-in-1-out; non-ext4/conformant pass through; commit= rewritten in place (kernel order-insensitive)
+function _far_build_awk_script --description "_far_awk_rewrite sub: Emit awk script for ext4 mount-opt rewrite" # idempotent 1-in-1-out; commit= rewritten in place
     string join -- \n \
         '/^[ \t]*#/ || NF < 4 { print; next }' \
         '$3 != "ext4" { print; next }' \
@@ -4355,7 +4355,7 @@ function _irb_taint_gate --description "_install_rebuild_boot sub: Verify mkinit
     return $EXIT_BOOT_CRIT
 end
 
-# ── INSTALL PHASE 5: REBUILD ORCHESTRATOR (_install_rebuild_boot; taint-gate → cascade → sanity) ──
+# ── INSTALL PHASE 5: REBUILD ORCHESTRATOR (_install_rebuild_boot) ──
 function _install_rebuild_boot --description "Regenerate initramfs and bootloader entries" # taint-gate->mkinitcpio->sdboot->sanity
     _progress Boot
     _irb_taint_gate
@@ -4661,7 +4661,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
-# ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR (resolver, sudo gate); _RY_POST_HOOKS = 17 glob|tag patterns covering all 17 managed files, first-match-wins by list order ──
+# ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR ──
 set -g _RY_POST_HOOKS \
     "/boot/*|boot" \
     "/etc/mkinitcpio.conf|boot" \
@@ -4734,7 +4734,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (13 handlers / 17 patterns; _post_<tag> dispatch) ──
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (13 handlers / 17 patterns) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot sub: mkinitcpio -P + sdboot-manage cascade" # skip_mki: cmdline not an initramfs input
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end

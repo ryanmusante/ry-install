@@ -1,5 +1,11 @@
 ry-install changelog - newest first.
 
+7.39.7 - 2026-06-14
+
+- sourced-execution guard also refuses when status filename is '-' (piped source); stack-trace match still catches source-by-path.
+- PID-recycle: fail closed when getconf CLK_TCK and CONFIG_HZ are both unavailable; the prior USER_HZ=100 fallback could reclaim a live lock.
+- README: name cachyos-gaming-applications and mkinitcpio-firmware in the Packages summary; enumerate the CLI tools.
+
 7.39.6 - 2026-06-14
 
 - README: correct the kernel-cmdline row — root=UUID=/rw are written into /etc/kernel/cmdline by the generator, not injected by sdboot-manage. Doc-only.

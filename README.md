@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.39.6 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.39.7 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -79,7 +79,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | sysctl | BBR + `fq`, TCP/network tuning, `vm` tuning |
 | environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env (`0600`) |
 
-**Packages** — installs `cachyos-gaming-meta`, `nvme-cli`, `lib32-mesa`, `nftables`, and CLI tools; removes the plymouth stack, `micro`, `cachy-update`, and `kdeconnect`. `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
+**Packages** — installs `cachyos-gaming-meta` + `cachyos-gaming-applications`, `nvme-cli`, `lib32-mesa`, `mkinitcpio-firmware`, `nftables`, and CLI tools (`fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil`); removes the plymouth stack, `micro`, `cachy-update`, and `kdeconnect`. `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 
 **Units** — masks `ufw`, `power-profiles-daemon`, `ananicy-cpp`, the sleep/suspend/hibernate targets, and `NetworkManager-wait-online`; enables `fstrim.timer`, `NetworkManager`, `cpupower`, and `nftables`.
 

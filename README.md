@@ -41,7 +41,7 @@ Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreuti
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `-h`/`--help` · `-v`/`--version` | Honored first |
 
-`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline`, so pending changes read as drift until reboot. `--verify` and `--install-file` are always verbose; `--check` is always silent. `-h`/`-v` are honored before all checks, except as the `--install-file` value. The `--install-file` path must be absolute, free of control characters, within PATH_MAX (4096 bytes) with each component within NAME_MAX (255 bytes), and must resolve to a managed destination — anything else is refused (exit 2).
+`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline`, so pending changes read as drift until reboot. `--verify` and `--install-file` are always verbose; `--check` is always silent. `-h`/`-v` are honored before all checks, except as the `--install-file` value. `--install-file` requires an absolute path that resolves to a managed destination; anything else is refused (exit 2).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. A non-vfat `/boot` ESP fallback also refuses sdboot (exit 4).
@@ -63,18 +63,15 @@ A CHECK/RESULT/EVIDENCE matrix prints to stderr and the JSONL log records each p
 
 ## Configuration
 
-The script is the source of truth — retune the `set -g` globals near the top. Each managed file is a single profile concern: kernel cmdline (CPU/GPU/IOMMU/storage/USB tuning for gfx1151; `root=UUID=`/`rw`), loader and sdboot-manage entry generation, `mkinitcpio.conf` (`MODULES=(amdgpu)`, systemd hooks, zstd), resolved/logind (disable mDNS/LLMNR/DoT; ignore power/suspend/hibernate/reboot keys), iwd/NetworkManager (iwd backend, powersave, regdom), cpupower/udev (`performance` governor + EPP, NVMe scheduler `none`), amdgpu/ttm modprobe (GTT ~32 GiB; needs BIOS UMA 512 MB), RADV drirc (unified heap on the APU), sysctl (BBR + `fq`, TCP/network/vm tuning), environment.d (Mesa/RADV/DXVK/VKD3D/Proton gaming env), and baloofilerc (disable KDE Baloo indexing).
+The script is the source of truth — retune the `set -g` globals near the top; each managed file (listed under [Managed Files](#managed-files)) is one profile concern. The non-obvious knobs: `mkinitcpio.conf` ships `MODULES=(amdgpu)` + systemd hooks + zstd; the amdgpu/ttm modprobe sets a ~32 GiB GTT cap that assumes BIOS UMA 512 MB; cpupower/udev pin the `performance` governor + EPP and NVMe scheduler `none`; sysctl enables BBR + `fq`; environment.d carries the Mesa/RADV/DXVK/VKD3D/Proton gaming env. Wireless regdom is fixed at `US` (retune `COUNTRY`).
 
-**Packages**
+**Packages** — the no-args run removes the listed packages with `pacman -Rns` (rdep-aware: skipped for any package with an external installed reverse-dependency). Edit `PKGS_DEL` to keep any; removal is reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
 | Install | `cachyos-gaming-meta`, `cachyos-gaming-applications`, `nvme-cli`, `lib32-mesa`, `mkinitcpio-firmware`, `nftables`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil` |
 | Remove (`-Rns`) | plymouth stack, `micro`, `cachy-update`, `kdeconnect` |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` |
-
-> [!WARNING]
-> The default no-args run **removes `kdeconnect`, `micro`, `cachy-update`, and the entire plymouth stack** with `pacman -Rns` (rdep-aware: removal is skipped for any package with an external installed reverse-dependency). To keep any of these, edit `PKGS_DEL` near the top of the script before running. Removal is reversible via the [Uninstall](#uninstall) steps.
 
 **Units**
 
@@ -84,7 +81,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | Disable (not mask) | `iwd.service` — NetworkManager is sole Wi-Fi manager, D-Bus-activates iwd on demand |
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables` |
 
-**fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place, every other column preserved byte-for-byte.
+**fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place; every other row and column is preserved byte-for-byte.
 
 | Aspect | Detail |
 |---|---|

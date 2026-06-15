@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.44.0 (2026-06-15) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.44.3 (2026-06-15) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.44.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.44.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -21,28 +21,16 @@ function _ry_show_help --description "Display usage information and available su
         "Self-contained CachyOS configuration for $PROFILE_DESC" \
         "Single fish script, $_RY_MANAGED_FILE_COUNT embedded configs, no external dependencies." \
         "Usage: "(status filename)" [OPTIONS]" \
-        "INSTALLATION:" \
-        "  (no args)         Default mode: unattended install" \
-        "  -V, --verbose     Show install output (install: silent by default; check: always silent; install-file/verify: always verbose)" \
-        "VERIFICATION:" \
-        "  --verify          Check config files + live system state (static, then runtime)" \
-        "  --check           Silent idempotency probe (0=clean 3=preflight 10=drift). Requires functional sudo + systemctl;" \
-        "                    a systemctl ERR_NO_DATA probe yields preflight (rc=3) only when no drift was already confirmed; confirmed drift returns rc=10" \
-        "                    kernel-param changes read as drift until reboot (compares live /proc/cmdline)" \
-        "                    bootstrap failures before argument parsing still print to stderr" \
-        "UTILITIES:" \
+        "  (no args)              Unattended install" \
+        "  -V, --verbose          Show install output (check is always silent)" \
+        "  --verify               Check config files + live system state" \
+        "  --check                Silent idempotency probe (0=clean 3=preflight 10=drift)" \
         "  --install-file <path>  Re-deploy a single managed file" \
-        "OPTIONS:" \
-        "  --                End of options (no positional arguments are accepted)" \
-        "  -h, --help        Show this help" \
-        "  -v, --version     Show version" \
-        "  Note: -h/--help and -v/--version are honored before all checks (root guard, argparse), except as the --install-file value" \
-        "EXIT CODES:" \
-        "  0 ok · 1 verify-FAIL/install-error · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
-        "  11 gen-nofn · 12 gen-nouuid · 13 gen-sysctl · 251 run-tmpfail · 250/255 _as/_run arg-misuse" \
-        "    — all internal sentinels, never a process exit code (surfaced in JSONL gen_fail; process exit collapses to 1 install/verify or 3 --check)" \
-        "  Signal-induced runs: process \$status may not match signal (fish --on-signal limitation);" \
-        "  canonical code recorded in JSONL footer.exit_code (130 INT / 143 TERM / 129 HUP / 131 QUIT / 134 ABRT / 138 USR1 / 140 USR2)" \
+        "  --                     End of options (no positional arguments accepted)" \
+        "  -h, --help             Show this help (honored before all checks)" \
+        "  -v, --version          Show version (honored before all checks)" \
+        "EXIT CODES: 0 ok · 1 verify-FAIL/install-error · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
+        "  (gen/run sentinels 11-13/250/251/255 and signal codes 128+N are recorded in the JSONL footer; see README.md)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
@@ -445,7 +433,7 @@ function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_SYSTEMD_VER _RY_SYSTEMD_VER_TRIED
     set --erase _RY_BOOT_COUNT _RY_BOOT_ENUM_OK _CPU_PATH
     set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
-    set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_PACMAN_REVERT_ATTEMPTED
+    set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK
     set --erase _RY_MKI_REVERT_FAILED _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
     set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT _RY_DMESG_TSC
@@ -3604,7 +3592,7 @@ function _ip_snapshot_mkinitcpio --description "Snapshot /etc/mkinitcpio.conf fo
     set -g _RY_MKI_BACKUP_FILE "$_snap"; set -g _RY_MKI_HAD_ORIG true # revert chmods --reference=destination
 end
 
-# ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + VERIFY + PACNEW SCAN) ──
+# ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + VERIFY) ──
 function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial upgrades forbidden — Arch policy)"
     set -l _pacman_first -Syu --needed --noconfirm; set -l _pacman_retry -Syyu --needed --noconfirm
     if test -f /var/lib/pacman/db.lck
@@ -3622,7 +3610,6 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
                 _err "Package installation failed after retry"
             end
             if test "$_RY_MKI_HAD_ORIG" = true; and test -n "$_RY_MKI_BACKUP_FILE"
-                set -g _RY_PACMAN_REVERT_ATTEMPTED true # Snapshot kept
                 if not _mkinitcpio_revert "$_RY_MKI_BACKUP_FILE"; set -g _RY_MKI_REVERT_FAILED true; _err "mkinitcpio revert failed — boot state may be inconsistent; aborting"; end
             end
             return 1
@@ -3630,46 +3617,6 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
     end
     set -g SYSTEM_UPGRADED true
     return 0
-end
-function _ip_scan_pacnew --description "Scan managed destinations for .pacnew/.pacsave remnants" # re-deploy managed content + rm .pacnew
-    set -l _pacnew_handled; set -l _pacnew_failed; set -l _pacsave_found
-    for _dst in $SYSTEM_DESTINATIONS
-        if sudo -n test -f "$_dst.pacnew" 2>/dev/null
-            if test "$_dst" = /etc/mkinitcpio.conf; and set -q _RY_PACMAN_REVERT_ATTEMPTED; and test "$_RY_PACMAN_REVERT_ATTEMPTED" = true # auto-resolve would undo rollback
-                set -a _pacnew_failed "$_dst.pacnew"
-                _log "PACNEW_SKIP_AFTER_REVERT: $_dst.pacnew (mkinitcpio.conf rolled back; review with pacdiff)"
-                continue
-            end
-            if _ry_install_file "$_dst" true
-                if _run sudo -n rm -f -- "$_dst.pacnew"
-                    set -a _pacnew_handled "$_dst.pacnew"
-                    _log "PACNEW_AUTO_HANDLED: $_dst.pacnew (managed content re-deployed)"
-                else
-                    set -a _pacnew_failed "$_dst.pacnew"
-                    _log "PACNEW_AUTO_HANDLE_RM_FAIL: $_dst.pacnew"
-                end
-            else
-                set -a _pacnew_failed "$_dst.pacnew"
-                _log "PACNEW_AUTO_HANDLE_DEPLOY_FAIL: $_dst"
-            end
-        end
-        sudo -n test -f "$_dst.pacsave" 2>/dev/null; and set -a _pacsave_found "$_dst.pacsave"
-    end
-    if test (count $_pacnew_handled) -gt 0
-        _info "Resolved pacman config remnants at managed destinations:"
-        for _f in $_pacnew_handled; _info "  $_f (re-deployed managed content, removed)"; end
-    end
-    if test (count $_pacnew_failed) -gt 0
-        _warn "pacman config remnants could not be auto-resolved:"
-        for _f in $_pacnew_failed; _warn "  $_f"; end
-        _warn "  Review with: sudo pacdiff (then re-run install to redeploy managed configs)"
-    end
-    if test (count $_pacsave_found) -gt 0
-        _warn "pacman .pacsave files at managed destinations (package removed but config preserved):"
-        for _f in $_pacsave_found; _warn "  $_f"; end
-        _warn "  Review with: sudo pacdiff"
-        _log "PACSAVE_FOUND: $_pacsave_found"
-    end
 end
 function _ip_run_and_verify --description "_install_packages sub: run pacman -Syu + verify + revalidate hooks"
     set -l pkgs_to_install $argv; set -l _err false
@@ -3716,7 +3663,6 @@ function _install_packages --description "Install managed packages via pacman -S
         return 1
     end
     if test (count $pkgs_to_install) -gt 0; _ip_run_and_verify $pkgs_to_install; or set _fn_err true; end
-    _ip_scan_pacnew
     if set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"
         if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true # failed revert: keep snapshot (tmpfs, lost on reboot)
             _untrack_tmpfile "$_RY_MKI_BACKUP_FILE"

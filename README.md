@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.44.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.44.3 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -12,7 +12,7 @@ CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx115
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
-git checkout v7.44.0
+git checkout v7.44.3
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -59,7 +59,7 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | # | Phase | Action |
 |---|---|---|
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
-| 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed; `.pacnew` auto-resolved |
+| 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed |
 | 3 | Configuration | deploy embedded configs atomically |
 | 4 | Services | fstab → resolved → package removal → nftables → mask → enable → regdom |
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |

@@ -1,5 +1,18 @@
 ry-install changelog - newest first.
 
+7.44.3 - 2026-06-15
+
+- cleanup: remove the now-dead _RY_PACMAN_REVERT_ATTEMPTED global. Its only reader was _ip_scan_pacnew (removed in 7.44.2), leaving it write-only; drop the assignment in the pacman-revert path and its entry in the cleanup erase-list. No behavior change — the mkinitcpio.conf revert itself is unaffected.
+
+7.44.2 - 2026-06-15
+
+- packages: remove the _ip_scan_pacnew post-upgrade scan and its call from the package phase. The package phase no longer reconciles .pacnew/.pacsave files left by pacman -Syu; a .pacnew written over a managed config now persists until the next full install run re-deploys that file. No other phase behavior changes.
+
+7.44.1 - 2026-06-15
+
+- help: condense _ry_show_help to the essential per-flag usage and exit-code line; the gen/run sentinel internals, signal-code table, and multi-line --check semantics now defer to README.md (where they already live). All flags and primary exit codes still listed.
+- pacnew: drop the "sudo pacdiff" suggestion from the .pacnew/.pacsave advisory warnings and the post-revert log line; the script never ran pacdiff (it re-deploys managed content and removes .pacnew itself). The remnant detection and handling are unchanged.
+
 7.44.0 - 2026-06-15
 
 - mangohud: add ~/.config/MangoHud/MangoHud.conf, a readout-only HUD for the Radeon 8060S (gfx1151): horizontal top bar with FPS/frametime, GPU/CPU load and clocks, and the unified vram/ram/swap pool. New generator, _grep_mangohud validator, verify check, and notify-only _post_mangohud hook (config read at game launch under mangohud %command%, no service restart).

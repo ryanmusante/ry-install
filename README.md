@@ -26,8 +26,8 @@ chmod +x ry-install.fish
 | Sysctl | Non-CachyOS |
 | Gaming env vars | Laptops |
 | KDE Baloo indexing | UKI |
-| Pacman add/remove | |
-| sdboot-manage BLS entries | |
+| Pacman add/remove | — |
+| sdboot-manage BLS entries | — |
 
 ## Requirements
 
@@ -150,9 +150,9 @@ No automated uninstaller; use Managed Files as the rollback reference.
 | 1 | Unmask the masked units | `sudo systemctl unmask` |
 | 2 | Remove deployed system paths; remove user env.d file | `sudo rm` / `rm` |
 | 3 | Restore fstab, then delete `.ry.bak` backups | restore `/etc/fstab` from `/etc/fstab.ry.bak` |
-| 4 | Optionally reverse the package changes | — |
+| 4 | Optionally reverse the package changes | `sudo pacman -S` the removed set (plymouth stack, `micro`, `cachy-update`, `kdeconnect`); `sudo pacman -Rns` the installed set |
 | 5 | Rebuild initramfs and boot entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
-| 6 | Reboot | — |
+| 6 | Reboot | `sudo systemctl reboot` |
 
 ## Known Issues
 

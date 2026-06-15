@@ -2,14 +2,14 @@
 
 CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.43.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.43.1 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
-git checkout v7.43.0          # pin to a released tag; the exit-code/path contract below is version-coupled
+git checkout v7.43.1          # pin to a released tag; the exit-code/path contract below is version-coupled
 chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
@@ -17,7 +17,17 @@ chmod +x ry-install.fish
 > [!IMPORTANT]
 > Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent. The unattended run **removes packages** (plymouth stack, `micro`, `cachy-update`, `kdeconnect`) — see [Configuration](#configuration) before first run.
 
-In scope: kernel cmdline, initramfs, systemd units, network (NetworkManager + iwd), sysctl, gaming env vars, KDE Baloo indexing, pacman add/remove, sdboot-manage BLS entries. Out of scope: dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
+| In scope | Out of scope |
+|---|---|
+| Kernel cmdline | Dotfiles |
+| Initramfs | Secrets |
+| Systemd units | Backups |
+| Network (NetworkManager + iwd) | Multi-user |
+| Sysctl | Non-CachyOS |
+| Gaming env vars | Laptops |
+| KDE Baloo indexing | UKI |
+| Pacman add/remove | |
+| sdboot-manage BLS entries | |
 
 ## Requirements
 
@@ -135,12 +145,14 @@ Logs: one JSONL file per run under `~/ry-install/logs/<date>/`, not auto-pruned.
 
 No automated uninstaller; use Managed Files as the rollback reference.
 
-1. `sudo systemctl unmask` the masked units.
-2. `sudo rm` the deployed system paths; `rm` the user env.d file.
-3. Restore `/etc/fstab` from `/etc/fstab.ry.bak`; delete the `.ry.bak` backups.
-4. Optionally reverse the package changes.
-5. `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
-6. Reboot.
+| # | Step | Command |
+|---|---|---|
+| 1 | Unmask the masked units | `sudo systemctl unmask` |
+| 2 | Remove deployed system paths; remove user env.d file | `sudo rm` / `rm` |
+| 3 | Restore fstab, then delete `.ry.bak` backups | restore `/etc/fstab` from `/etc/fstab.ry.bak` |
+| 4 | Optionally reverse the package changes | — |
+| 5 | Rebuild initramfs and boot entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
+| 6 | Reboot | — |
 
 ## Known Issues
 

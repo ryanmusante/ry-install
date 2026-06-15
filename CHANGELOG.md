@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+7.43.1 - 2026-06-15
+
+- docs: README scope paragraph reformatted as an in-scope/out-of-scope table; Uninstall numbered list reformatted as a numbered step/command table. Same content, no semantic change.
+- No script logic changes: content generators, validators, install phases, exit codes, and the lock/timeout/firewall paths are byte-identical to 7.43.0.
+
 7.43.0 - 2026-06-14
 
 - install-file: reject any path component longer than NAME_MAX (255 bytes) before realpath/dispatch. A path under the 4096-byte PATH_MAX ceiling but with an over-long single component previously passed argument validation and failed later at mktemp/mv with ENAMETOOLONG; it now fails early with a precise usage error. Defense-in-depth — such a path could never match a managed destination anyway.

@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.39.7 (2026-06-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.42.0 (2026-06-14) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.39.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.42.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -581,7 +581,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/conf.d/wireless-regdom" \
     "/etc/udev/rules.d/60-ry-perf.rules" \
     "/etc/nftables.conf"
-set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf"
+set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/baloofilerc"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set --erase _ry_dst_count
@@ -593,7 +593,6 @@ set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_R
 set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
     amd_pstate=active \
-    amdgpu.ppfeaturemask=0xffff7fff \
     iommu=pt \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
@@ -643,7 +642,6 @@ set -g ENV_VARS \
     "DXVK_LOG_PATH=none" \
     "MESA_SHADER_CACHE_MAX_SIZE=16G" \
     "PROTON_ENABLE_WAYLAND=1" \
-    "PROTON_FSR4_RDNA3_UPGRADE=1" \
     "PROTON_LOCAL_SHADER_CACHE=1" \
     "VKD3D_DEBUG=none" \
     "VKD3D_SHADER_DEBUG=none" \
@@ -761,11 +759,11 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
     set -l _expect \
-        KERNEL_PARAMS:12 \
+        KERNEL_PARAMS:11 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
-        ENV_VARS:10 \
+        ENV_VARS:9 \
         SYSCTL_VALUES:8 \
         PKGS_ADD:16 \
         PKGS_DEL:9 \
@@ -773,14 +771,14 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:4 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:17 \
+        _RY_POST_HOOKS:18 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_NTSYNC_MODLOAD_CONFS:3 \
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:16 \
-        USER_DESTINATIONS:1
+        USER_DESTINATIONS:2
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -886,8 +884,11 @@ function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "G
     printf '%s\n' "# NetworkManager configuration - iwd backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"
 end
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
-    printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (COSMIC, Flatpak, D-Bus activated apps)"
+    printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (KDE Plasma, Flatpak, D-Bus activated apps)"
     for var in $ENV_VARS; printf '%s\n' "$var"; end
+end
+function _content_HOME_.config_baloofilerc --description "Generate content for ~/.config/baloofilerc (KDE Baloo file indexing disabled)"
+    printf '%s\n' "# ry-install: KDE Baloo file indexing disabled (managed file, do not edit by hand)" "[Basic Settings]" "Indexing-Enabled=false"
 end
 function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
@@ -2311,10 +2312,14 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _echo "── nftables ──"
     _vss_nft
 end
-function _verify_static_user --description "Verify environment.d ENV_VARS"
+function _verify_static_user --description "Verify environment.d ENV_VARS + baloo indexing disabled"
     _echo "USER CONFIGURATION"
     if _chk_file "$HOME/.config/environment.d/10-environment.conf"
         for exp in $ENV_VARS; _chk_grep "$HOME/.config/environment.d/10-environment.conf" "$exp" "$exp"; end
+    end
+    _echo "── baloo (KDE file indexing) ──"
+    if _chk_file "$HOME/.config/baloofilerc"
+        _chk_grep "$HOME/.config/baloofilerc" "Indexing-Enabled=false" "baloo indexing disabled"
     end
 end
 
@@ -2657,8 +2662,9 @@ function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (h
     test -d /sys/module/amdgpu/parameters; or return 0
     set -l _pairs
     for _kp in $KERNEL_PARAMS
-        string match -q 'amdgpu.ppfeaturemask=*' -- "$_kp"; and set -a _pairs "ppfeaturemask:"(string replace 'amdgpu.ppfeaturemask=' '' -- "$_kp")
+        string match -q 'amdgpu.*=*' -- "$_kp"; and set -a _pairs (string replace -r '^amdgpu\.([^=]+)=' '$1:' -- "$_kp")
     end
+    test (count $_pairs) -eq 0; and return 0 # no amdgpu.* module params in KERNEL_PARAMS
     for pair in $_pairs
         set -l _p (string split ':' -- "$pair"); set -l pname $_p[1]; set -l expected $_p[2]; set -l ppath /sys/module/amdgpu/parameters/$pname
         test -f "$ppath"; or continue
@@ -2872,15 +2878,15 @@ function _vrsv_wifi_nm_backend --description "_vrsv_wifi sub: verify NM effectiv
             _warn "  NM effective wifi.backend: sudo cache lapsed — cannot determine"
             return 0
         end
-        _info "  NM effective wifi.backend: unset (default wpa_supplicant)"
-        test "$NM_WIFI_BACKEND" = iwd; and _fail "  NM backend: expected iwd, none configured"
+        _info "  NM effective wifi.backend: unset (NM default is wpa_supplicant)"
+        test "$NM_WIFI_BACKEND" != wpa_supplicant; and _fail "  NM backend: expected $NM_WIFI_BACKEND, none configured (drop-in not active)"
     else if test "$_eff" = "$NM_WIFI_BACKEND"
         _ok "  NM effective wifi.backend: $_eff"
     else
         _fail "  NM effective wifi.backend: $_eff (expected: $NM_WIFI_BACKEND)"
     end
 end
-function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state"
+function _vrsv_wifi --description "Runtime services check: WiFi + iwd backend + NM state"
     _echo
     _echo "WIFI STATE"
     _echo
@@ -2897,12 +2903,14 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd + NM state
     else
         _warn "  WiFi interface: NOT DETECTED"
     end
-    if not command -q pgrep
-        _warn "  iwd process: pgrep not installed — cannot determine"
-    else if command pgrep -x iwd >/dev/null
-        _ok "  iwd process: running"
-    else
-        _fail "  iwd process: NOT running"
+    # iwd is D-Bus-activated by NetworkManager on demand; iwd.service is disabled (not masked), so a running
+    # process is informational (present once NM has brought the radio up), never a failure.
+    if command -q pgrep
+        if command pgrep -x iwd >/dev/null
+            _info "  iwd process: running (NM-activated)"
+        else
+            _info "  iwd process: not currently active (NM activates it on demand)"
+        end
     end
     _vrsv_wifi_nm_backend
     if command -q nmcli
@@ -3147,7 +3155,7 @@ function _vrs_nm_perms --description "Runtime session check: NetworkManager syst
         set -l bad_perms 0
         for conn_file in $conn_files; _chk_perms "$conn_file" 600 root:root true; or set bad_perms (math $bad_perms + 1); end
         if test "$bad_perms" -eq 0; set -l conn_count (count $conn_files); _ok "  NetworkManager connections: $conn_count files with correct permissions"; end
-    else if command grep -q -- 'wifi.backend=iwd' /etc/NetworkManager/conf.d/99-cachyos-nm.conf 2>/dev/null
+    else if command grep -q -- 'wifi.backend=' /etc/NetworkManager/conf.d/99-cachyos-nm.conf 2>/dev/null
         _warn "  NetworkManager connections: no .nmconnection files (WiFi may not auto-connect)"
     else
         _info "  NetworkManager connections: no .nmconnection files found"
@@ -3436,6 +3444,21 @@ end
 
 # ── INSTALL PHASE 1: PREFLIGHT ──
 function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_ERR, mark progress skip"; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; end
+function _ry_check_ttm_uma_precondition --description "WARN when BIOS UMA split does not match the TTM GTT cap assumption (non-fatal)" # 32 GiB GTT cap assumes BIOS UMA=512 MB
+    set -l _vram_total ""
+    for _f in /sys/class/drm/card*/device/mem_info_vram_total
+        test -r "$_f"; or continue
+        set _vram_total (string trim -- (command cat -- "$_f" 2>/dev/null))
+        string match -qr '^\d+$' -- "$_vram_total"; and break
+    end
+    string match -qr '^\d+$' -- "$_vram_total"; or return 0 # sysfs unreadable: silent (probe is best-effort)
+    set -l _vram_mib (math "$_vram_total / 1048576")
+    if test "$_vram_mib" -gt 1024 # >1 GiB dedicated VRAM => BIOS is carving a large fixed UMA, not the expected 512 MB
+        _warn "TTM 32 GiB GTT cap assumes BIOS UMA=512 MB; detected dedicated VRAM=$_vram_mib MiB — verify BIOS UMA/Auto or GTT sizing may mis-apply"
+        _log "TTM_UMA_PRECONDITION: vram_mib=$_vram_mib expected<=1024"
+    end
+    return 0
+end
 function _install_preflight --description "Run all preflight checks before installation" # _RY_LOUD_ERR forces preflight errs to stderr
     _progress Preflight
     _ry_sudo_cache_banner
@@ -3464,6 +3487,7 @@ function _install_preflight --description "Run all preflight checks before insta
     _echo
     if not _ry_validate_configs; _phase_record "Preflight: config validation" FAIL "see JSONL log"; _err "Configuration validation failed - aborting"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
     _phase_record "Preflight: config validation" PASS "$_RY_MANAGED_FILE_COUNT/$_RY_MANAGED_FILE_COUNT destinations"
+    _ry_check_ttm_uma_precondition
     set --erase _RY_LOUD_ERR
     return 0
 end
@@ -4091,6 +4115,30 @@ function _apply_wireless_regdom --description "Apply the wireless regulatory dom
     set -g _RY_REGDOM_EVIDENCE "iw reg set failed — applies via /etc/iw-regdomain"
     return 0
 end
+function _configure_services_iwd_handoff --description "Disable standalone iwd.service so NetworkManager is the sole Wi-Fi manager" # NM D-Bus-activates iwd; a separately-enabled iwd.service races NM ('not a Wifi device')
+    test "$NM_WIFI_BACKEND" = iwd; or return 0 # only relevant for the iwd backend
+    if not command -q systemctl; _phase_record "Services: iwd handoff" "--" "systemctl absent"; return 0; end
+    set -l _state (command systemctl is-enabled iwd.service 2>/dev/null | string trim --)
+    if test -z "$_state"; _phase_record "Services: iwd handoff" "--" "iwd.service not present"; return 0; end
+    if test "$_state" = masked
+        # masked blocks the D-Bus activation NM relies on — unmask, then disable (not mask)
+        _run sudo -n systemctl unmask iwd.service
+    end
+    # disable (do not mask): stops boot auto-start that races NM, but keeps NM's on-demand D-Bus activation working
+    if _run sudo -n systemctl disable --now iwd.service
+        _ok "iwd.service disabled (NetworkManager activates iwd on demand)"
+        _phase_record "Services: iwd handoff" PASS "iwd.service disabled; NM is sole manager"
+    else
+        set -l _now (command systemctl is-enabled iwd.service 2>/dev/null | string trim --)
+        if test "$_now" = disabled; or test "$_now" = static
+            _phase_record "Services: iwd handoff" PASS "iwd.service $_now (NM is sole manager)"
+        else
+            _warn "Could not disable iwd.service (is-enabled=$_now) — if Wi-Fi misbehaves, run: sudo systemctl disable --now iwd.service"
+            _phase_record "Services: iwd handoff" WARN "iwd.service still $_now"
+        end
+    end
+    return 0
+end
 function _install_configure_services --description "Enable, start, and configure systemd services (fstab opts + resolved + PKGS_DEL + mask + enable)"
     _progress Services
     _info "Post-installation tasks..."
@@ -4104,6 +4152,7 @@ function _install_configure_services --description "Enable, start, and configure
     _configure_services_resolved_restart
     _configure_services_pkg_remove
     _configure_services_mask; or set _ret 1
+    _configure_services_iwd_handoff
     _configure_services_enable; or set _ret 1
     _apply_wireless_regdom
     _phase_record "Services: regdom" $_RY_REGDOM_RESULT "$_RY_REGDOM_EVIDENCE"
@@ -4378,21 +4427,21 @@ function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk
     end
     return 0
 end
-function _if_nm_restart --description "Restart NetworkManager when iwd backend switch is in effect" # deferred on active WiFi route
-    if test "$_RY_PROFILE_USES_WIFI_BACKEND" = false; _info "iwd/NetworkManager not managed — skipping NM restart"; _phase_record "Finalize: NetworkManager restart" SKIP "iwd backend not active"; return 0; end
+function _if_nm_restart --description "Restart NetworkManager when the iwd backend switch is in effect" # deferred on active WiFi route
+    if test "$_RY_PROFILE_USES_WIFI_BACKEND" = false; _info "NetworkManager not managed — skipping NM restart"; _phase_record "Finalize: NetworkManager restart" SKIP "NM backend not active"; return 0; end
     if not command -q pacman; or not command pacman -Qq iwd >/dev/null 2>&1
-        _warn "iwd configs deployed but iwd package is not installed (advisory; install iwd to activate the backend)"
-        _phase_record "Finalize: NetworkManager restart" WARN "iwd package not installed"
+        _warn "NetworkManager configs deployed but iwd is not installed (advisory; install iwd to activate the backend)"
+        _phase_record "Finalize: NetworkManager restart" WARN "iwd not installed"
         return 0
     end
     if _is_wifi_active_route
-        _warn "NetworkManager restart deferred — WiFi is the active route; iwd backend switch takes effect on reboot."
+        _warn "NetworkManager restart deferred — WiFi is the active route; backend switch takes effect on reboot."
         _info "  Or, after switching to ethernet: sudo systemctl restart NetworkManager"
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=finalize_backend_switch"
         _phase_record "Finalize: NetworkManager restart" DEFER "over WiFi — applies on reboot"
         return 0
     end
-    _info "iwd will restart with NetworkManager (D-Bus disconnect expected)"
+    _info "NetworkManager will restart (D-Bus disconnect expected)"
     if not _run sudo -n systemctl restart NetworkManager
         _warn "NetworkManager restart failed (will recover on reboot)"
         _log "NM_RESTART_FAILED: context=finalize_backend_switch"
@@ -4629,6 +4678,7 @@ set -g _RY_POST_HOOKS \
     "*/NetworkManager/conf.d/*|nm" \
     "*/sysctl.d/*|sysctl" \
     "*/environment.d/*|envd" \
+    "*/baloofilerc|baloo" \
     "/etc/default/cpupower-service.conf|cpupower" \
     "/etc/drirc.d/*|drirc" \
     "/etc/modprobe.d/*|modprobe" \
@@ -4747,18 +4797,18 @@ function _post_logind --argument-names target --description "Post-hook: notify r
 end
 function _post_nm --argument-names target --description "Post-hook: restart NetworkManager (+ try-restart iwd when iwd/main.conf changes); deferred when WiFi is active route" # iwd reads main.conf at startup
     _echo
-    if not command -q pacman; or not command pacman -Qq iwd >/dev/null 2>&1 # iwd absent: skip restart
-        _warn "NM/iwd config deployed but iwd package not installed — restart skipped; all drop-in keys apply once iwd is installed or at next boot"
-        _log "POST_NM_SKIP_NO_IWD: target=$target"
+    if not command -q NetworkManager
+        _warn "NetworkManager config deployed but NetworkManager not installed — restart skipped; drop-in keys apply once installed or at next boot"
+        _log "POST_NM_SKIP_NO_NM: target=$target"
         return 0
     end
     if _is_wifi_active_route
-        _warn "NM/iwd config installed but NetworkManager restart deferred — WiFi is the active route."
+        _warn "NetworkManager config installed but restart deferred — WiFi is the active route."
         _info "  Config change will not take effect until next reboot or manual restart."
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=install_file target=$target"
         return 0
     end
-    if string match -q '*/iwd/main.conf' -- "$target" # iwd reads main.conf at startup
+    if string match -q '*/iwd/main.conf' -- "$target" # iwd reads main.conf only at startup; try-restart applies it without forcing a start
         if not _run sudo -n systemctl try-restart iwd.service
             _warn "iwd try-restart failed — config applies on next reboot (non-fatal; file deployed)"
         end
@@ -4791,6 +4841,23 @@ function _post_envd --argument-names target --description "Post-hook: notify ses
     _info "environment.d $target changed — log out and back in (or restart user session) to apply"
     _info "  OR for live apply: systemctl --user import-environment + restart active user units"
     _info "  Active systemd --user services retain old environment until restarted"
+    return 0
+end
+function _post_baloo --argument-names target --description "Post-hook: disable + purge KDE Baloo index after baloofilerc change" # config stops re-index at next login; balooctl disables + purges now
+    _echo
+    set -l _balooctl
+    for _b in balooctl6 balooctl
+        command -q $_b; and set _balooctl $_b; and break
+    end
+    if test -z "$_balooctl"
+        _info "baloofilerc deployed; balooctl not found — indexing stays disabled via config at next login (no live purge)"
+        return 0
+    end
+    if _run $_balooctl disable # user-scope; no sudo (runs against the caller's session)
+        _ok "Baloo indexing disabled and index purged ($_balooctl disable)"
+    else
+        _warn "$_balooctl disable failed — config still disables indexing at next login (non-fatal; file deployed)"
+    end
     return 0
 end
 function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change" # Restart re-sources the conf

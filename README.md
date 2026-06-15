@@ -1,22 +1,23 @@
 # ry-install
 
-CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, gfx1151).
+CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.39.7 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.42.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
+git checkout v7.42.0          # pin to a released tag; the exit-code/path contract below is version-coupled
 chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
 
 > [!IMPORTANT]
-> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent.
+> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent. The unattended run **removes packages** (plymouth stack, `micro`, `cachy-update`, `kdeconnect`) — see [Configuration](#configuration) before first run.
 
-In scope: kernel cmdline, initramfs, systemd units, network (NetworkManager + iwd), sysctl, gaming env vars, pacman add/remove, sdboot-manage BLS entries. Out of scope: dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
+In scope: kernel cmdline, initramfs, systemd units, network (NetworkManager + iwd), sysctl, gaming env vars, KDE Baloo indexing, pacman add/remove, sdboot-manage BLS entries. Out of scope: dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
 
 ## Requirements
 
@@ -72,16 +73,20 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | loader.conf / sdboot-manage.conf | systemd-boot entry generation (`REMOVE_EXISTING=yes`) |
 | mkinitcpio.conf | `MODULES=(amdgpu)`, systemd hooks, zstd compression |
 | resolved / logind | disable mDNS/LLMNR/DoT; ignore power/suspend/hibernate/reboot keys |
-| iwd / NetworkManager | iwd Wi-Fi backend, powersave, regdom |
+| iwd / NetworkManager | iwd Wi-Fi backend (iwd.service disabled — NM activates on demand), powersave, regdom |
 | cpupower / udev | `performance` governor + EPP, NVMe scheduler `none` |
 | amdgpu/ttm modprobe | GTT ~32 GiB (`pages_limit`/`page_pool_size`; needs BIOS UMA 512 MB) |
 | RADV drirc | `radv_enable_unified_heap_on_apu` for the APU |
 | sysctl | BBR + `fq`, TCP/network tuning, `vm` tuning |
 | environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env (`0600`) |
+| baloofilerc | disable KDE Baloo file indexing (`0600`) |
 
 **Packages** — installs `cachyos-gaming-meta` + `cachyos-gaming-applications`, `nvme-cli`, `lib32-mesa`, `mkinitcpio-firmware`, `nftables`, and CLI tools (`fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil`); removes the plymouth stack, `micro`, `cachy-update`, and `kdeconnect`. `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
 
-**Units** — masks `ufw`, `power-profiles-daemon`, `ananicy-cpp`, the sleep/suspend/hibernate targets, and `NetworkManager-wait-online`; enables `fstrim.timer`, `NetworkManager`, `cpupower`, and `nftables`.
+> [!WARNING]
+> The default no-args run **removes `kdeconnect`, `micro`, `cachy-update`, and the entire plymouth stack** with `pacman -Rns` (rdep-aware: removal is skipped for any package with an external installed reverse-dependency). To keep any of these, edit `PKGS_DEL` near the top of the script before running. Removal is reversible via the [Uninstall](#uninstall) steps.
+
+**Units** — masks `ufw`, `power-profiles-daemon`, `ananicy-cpp`, the sleep/suspend/hibernate targets, and `NetworkManager-wait-online`; **disables** (not masks) `iwd.service` so NetworkManager is the sole Wi-Fi manager and activates iwd on demand via D-Bus; enables `fstrim.timer`, `NetworkManager`, `cpupower`, and `nftables`.
 
 **fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place, every other column preserved byte-for-byte. Gated by line-count parity, a size floor, and mandatory `findmnt --verify`; symlinked `/etc/fstab` is refused.
 
@@ -95,7 +100,7 @@ The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
 | systemd | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`, `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
 | Network | `/etc/iwd/main.conf`, `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/conf.d/wireless-regdom`, `/etc/nftables.conf` |
 | Tuning | `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/default/cpupower-service.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
-| User | `~/.config/environment.d/10-environment.conf` |
+| User | `~/.config/environment.d/10-environment.conf`, `~/.config/baloofilerc` |
 
 ## Safety & Reliability
 
@@ -122,7 +127,7 @@ The process exit code is the single source of truth.
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT) |
 
-Environment overrides (each falls back safely when unset or invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables), `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (bypass CPU match), `NO_COLOR`, `TMPDIR`.
+Environment overrides (each falls back safely when unset or invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; **bypassed for `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile`**, since a SIGKILL mid-transaction corrupts `db.lck` or skips the mkinitcpio rollback — a hung package/boot op is not time-capped), `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (bypass CPU match), `NO_COLOR`, `TMPDIR`.
 
 Logs: one JSONL file per run under `~/ry-install/logs/<date>/`, not auto-pruned.
 
@@ -145,7 +150,6 @@ No automated uninstaller; use Managed Files as the rollback reference.
 | MT7925 | kernel panics, low TX power, random deauth | out-of-tree DKMS module; some upstream |
 | RTL8127 10GbE | throughput drops under load | out-of-tree DKMS module (unmanaged) |
 | Strix Halo ACP | no ASoC machine driver | pending upstream (HDMI/USB audio unaffected) |
-| NM + iwd | intermittent boot connectivity | `nmcli radio wifi off; and nmcli radio wifi on` |
 
 ## Troubleshooting
 

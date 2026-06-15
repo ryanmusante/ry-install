@@ -118,7 +118,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 
 ## Managed Files
 
-The Phase-3 files — the uninstall reference (system `0644`, user `0600`):
+The Phase-3 files (system `0644`, user `0600`):
 
 | Group | Files |
 |---|---|

@@ -2,10 +2,10 @@ ry-install changelog - newest first.
 
 7.43.2 - 2026-06-15
 
-- docs: restore the Configuration File/Purpose table dropped in 7.42.1, expanded to cover every managed file (adds nftables.conf and the regdom files; notes DNSSEC allow-downgrade). The dense one-line prose summary it replaced is removed.
-- docs: Configuration Remove row now enumerates all nine PKGS_DEL packages (previously summarized; cachyos-micro-settings and the individual plymouth-stack members were implicit). README↔script audit: all 18 managed paths, both package lists, mask/enable sets, sysctl/kernel/env values, exit codes, timeout-bypass set, nftables ruleset, and backup/lock/log paths confirmed in sync.
-- docs: Quick Start trimmed to the five vital commands with inline code comments removed; the version-pin rationale moved to a prose line.
-- No script logic changes: content generators, validators, install phases, exit codes, and the lock/timeout/firewall paths are byte-identical to 7.43.1.
+- docs: restore the Configuration File/Purpose table dropped in 7.42.1, expanded to cover every managed file (adds nftables.conf and the regdom files; notes DNSSEC allow-downgrade). The one-line prose summary it replaced is removed.
+- docs: Configuration Remove row enumerates all nine PKGS_DEL packages (cachyos-micro-settings and the plymouth-stack members were previously implicit).
+- docs: Quick Start trimmed to the five vital commands; inline code comments removed.
+- No script logic changes: byte-identical to 7.43.1.
 
 7.43.1 - 2026-06-15
 
@@ -14,8 +14,8 @@ ry-install changelog - newest first.
 
 7.43.0 - 2026-06-14
 
-- install-file: reject any path component longer than NAME_MAX (255 bytes) before realpath/dispatch. A path under the 4096-byte PATH_MAX ceiling but with an over-long single component previously passed argument validation and failed later at mktemp/mv with ENAMETOOLONG; it now fails early with a precise usage error. Defense-in-depth — such a path could never match a managed destination anyway.
-- No other logic changes: content generators, validators, install phases, exit codes, and the lock/timeout/firewall paths are byte-identical to 7.42.1.
+- install-file: reject any path component longer than NAME_MAX (255 bytes) before realpath/dispatch. Previously such a path passed argument validation and failed later at mktemp/mv with ENAMETOOLONG; it now fails early with a usage error.
+- No other logic changes: byte-identical to 7.42.1.
 
 7.42.1 - 2026-06-14
 

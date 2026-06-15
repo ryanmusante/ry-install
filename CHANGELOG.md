@@ -1,31 +1,34 @@
 ry-install changelog - newest first.
 
+7.42.1 - 2026-06-14
+
+- comment: correct the content-generator section header count from 17 to 18 (18 generators map 1:1 to the managed destinations). Comment-only; dispatch and validators unchanged.
+- docs: README Requirements table trimmed to the hard preflight gates; the duplicate Configuration file table folded into prose.
+- No script logic changes: content generators, validators, install phases, and exit codes are byte-identical to 7.42.0.
+
 7.42.0 - 2026-06-14
 
-- docs: README Quick Start pins a released tag (git checkout v7.42.0) and notes the contract is version-coupled; the unpinned clone could drift from the documented exit-code/path contract.
-- docs: document the RY_RUN_TIMEOUT bypass list (pacman/mkinitcpio/sdboot-manage/paccache/updatedb/pkgfile) in README — these long-running ops are intentionally not time-capped because a SIGKILL mid-transaction corrupts db.lck or skips the mkinitcpio rollback (behavior was code-only via _run_effective_timeout).
-- docs: add a destructive-default WARNING to README Configuration — the no-args run removes kdeconnect/micro/cachy-update/plymouth via rdep-aware pacman -Rns; edit PKGS_DEL to retain. Mirrors the existing IMPORTANT note in Quick Start.
-- comment: fix a stale code comment in _vrsv_wifi that still read "iwd.service is masked" — the 7.41.0 handoff disables (not masks) iwd.service. Comment-only; the disable-not-mask logic was already correct.
-- No script logic changes: content generators, validators, install phases, and exit codes are byte-identical to 7.41.0. Version bump tracks the documentation sync only.
+- docs: README Quick Start pins a released tag and notes the contract is version-coupled.
+- docs: document the RY_RUN_TIMEOUT bypass list (pacman/mkinitcpio/sdboot-manage/paccache/updatedb/pkgfile) in README; these long-running ops are not time-capped because a SIGKILL mid-transaction corrupts db.lck or skips the mkinitcpio rollback.
+- docs: add a destructive-default WARNING to README Configuration (no-args run removes kdeconnect/micro/cachy-update/plymouth; edit PKGS_DEL to retain).
+- comment: fix a stale _vrsv_wifi comment that read "iwd.service is masked"; the handoff disables, not masks. Comment-only.
+- No script logic changes: byte-identical to 7.41.0.
 
 7.41.0 - 2026-06-14
 
-- network: keep iwd as the NM Wi-Fi backend (reverts the 7.40.0 wpa_supplicant switch) and fix the actual fault behind the "IWD device named wlan0 is not a Wifi device" / IPv4-forwarding errors: the profile never stopped the standalone iwd.service, so iwd and NetworkManager raced for wlan0. New _configure_services_iwd_handoff disables (not masks) iwd.service after the mask phase, so NM is the sole manager and still D-Bus-activates iwd on demand; unmasks first if a prior run masked it. Restores /etc/iwd/main.conf, its generator, IWD_* globals, _vss_iwd, the iwd post-hook, and _post_nm iwd try-restart. SYSTEM_DESTINATIONS 15 to 16; managed files 17 to 18 (baloo retained).
-- verify: iwd runtime check is now informational, not a hard fail — a non-running iwd process is correct under NM on-demand activation (was FAIL "iwd process: NOT running").
-- packages: drop wpa_supplicant from PKGS_ADD (17 to 16); iwd is provided by the CachyOS base.
+- network: keep iwd as the NM Wi-Fi backend (reverts the 7.40.0 wpa_supplicant switch); new _configure_services_iwd_handoff disables (not masks) iwd.service after the mask phase, so NM is the sole manager and still D-Bus-activates iwd on demand. Fixes the iwd/NetworkManager race for wlan0.
+- verify: iwd runtime check is now informational, not a hard fail; a non-running iwd process is correct under NM on-demand activation.
+- packages: drop wpa_supplicant from PKGS_ADD; iwd is provided by the CachyOS base.
 - count assertions: SYSTEM_DESTINATIONS 15 to 16, PKGS_ADD 17 to 16, _RY_POST_HOOKS 17 to 18, _RY_MANAGED_FILE_COUNT 17 to 18.
-- docs: README scope/config/managed-files/units revert to iwd and document the iwd.service-disabled handoff.
 
 7.40.0 - 2026-06-14
 
-- network: switch NM Wi-Fi backend iwd to wpa_supplicant. NM+iwd is upstream-experimental with documented KDE Plasma login/reconnect breakage and was failing on the target hardware. Drops managed file /etc/iwd/main.conf, its generator, the IWD_* globals, and the iwd-specific verify/restart paths; SYSTEM_DESTINATIONS 16 to 15. Removes the "NM + iwd intermittent" known-issue row.
-- baloo: add ~/.config/baloofilerc (Indexing-Enabled=false) to disable KDE file indexing; new generator, _verify_static_user check, and _post_baloo hook running balooctl6 disable. USER_DESTINATIONS 1 to 2; managed files stay 17 (-1 iwd, +1 baloo).
-- cmdline: remove amdgpu.ppfeaturemask=0xffff7fff (force-enabled Overdrive; voids upstream bug reports, hang risk on Strix Halo). KERNEL_PARAMS 12 to 11. _vrkm_amdgpu generalized to any amdgpu.* param.
-- environment.d: remove PROTON_FSR4_RDNA3_UPGRADE (RDNA3-named, unverified on gfx1151/RDNA 3.5). ENV_VARS 10 to 9.
-- modprobe: add non-fatal preflight WARN when dedicated VRAM exceeds 1 GiB, since the 32 GiB TTM GTT cap assumes BIOS UMA=512 MB.
-- docs: correct model GTR9 Pro to GTR Pro (matches DMI); PROFILE_NAME gtr9_pro to gtr_pro. Fix environment.d header comment COSMIC to KDE Plasma.
-- _RY_PKG_REMOVE_SKIPS preflight count assertions updated: KERNEL_PARAMS 12 to 11, ENV_VARS 10 to 9, PKGS_ADD 16 to 17, SYSTEM_DESTINATIONS 16 to 15, USER_DESTINATIONS 1 to 2 (stale counts abort preflight).
-- packages: add wpa_supplicant to PKGS_ADD (16 to 17).
+- network: switch NM Wi-Fi backend iwd to wpa_supplicant (NM+iwd was upstream-experimental with KDE login/reconnect breakage). SYSTEM_DESTINATIONS 16 to 15.
+- baloo: add ~/.config/baloofilerc (Indexing-Enabled=false); new generator, verify check, and _post_baloo hook. USER_DESTINATIONS 1 to 2.
+- cmdline: remove amdgpu.ppfeaturemask=0xffff7fff (Overdrive hang risk on Strix Halo). KERNEL_PARAMS 12 to 11.
+- environment.d: remove PROTON_FSR4_RDNA3_UPGRADE (unverified on gfx1151). ENV_VARS 10 to 9.
+- modprobe: non-fatal preflight WARN when dedicated VRAM exceeds 1 GiB (32 GiB TTM GTT cap assumes BIOS UMA=512 MB).
+- docs: correct model GTR9 Pro to GTR Pro; PROFILE_NAME gtr9_pro to gtr_pro.
 
 7.39.7 - 2026-06-14
 
@@ -35,11 +38,11 @@ ry-install changelog - newest first.
 
 7.39.6 - 2026-06-14
 
-- README: correct the kernel-cmdline row — root=UUID=/rw are written into /etc/kernel/cmdline by the generator, not injected by sdboot-manage. Doc-only.
+- README: correct the kernel-cmdline row; root=UUID=/rw are written into /etc/kernel/cmdline by the generator, not injected by sdboot-manage. Doc-only.
 
 7.39.5 - 2026-06-14
 
-- stop enabling and verifying NetworkManager-dispatcher.service; it is socket/D-Bus-activated on demand and needs no explicit enable. NetworkManager.service itself is unchanged.
+- stop enabling and verifying NetworkManager-dispatcher.service; it is socket/D-Bus-activated on demand. NetworkManager.service itself is unchanged.
 
 7.39.4 - 2026-06-14
 

@@ -2,14 +2,14 @@
 
 CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.42.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.42.1 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
-git checkout v7.42.0          # pin to a released tag; the exit-code/path contract below is version-coupled
+git checkout v7.42.1          # pin to a released tag; the exit-code/path contract below is version-coupled
 chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
@@ -21,29 +21,27 @@ In scope: kernel cmdline, initramfs, systemd units, network (NetworkManager + iw
 
 ## Requirements
 
-Hard requirements abort read-only in preflight (exit 3); NTP sync and `pacman-contrib` (pactree, for rdep-safe removal) only warn.
+Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreutils, findutils, diffutils — `cmp` gates the byte-exact `mkinitcpio.conf` revert), plus `curl` and `findmnt`. NTP sync and `pacman-contrib` (pactree, for rdep-safe removal) only warn. sudo must be cached (`sudo -v`) and may lapse mid-run — set `timestamp_timeout` or a NOPASSWD drop-in.
 
 | Requirement | Minimum |
 |---|---|
-| CachyOS | systemd-boot, ext4 root, GNU coreutils + findutils + diffutils |
+| Platform | CachyOS · systemd-boot · ext4 root |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
-| curl / findmnt / cmp | all required (cmp gates byte-exact mkinitcpio.conf revert) |
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/`, 200 MiB `/boot` |
-| sudo | cached (`sudo -v`); may lapse mid-run — set `timestamp_timeout` or a NOPASSWD drop-in |
 
 ## Usage
 
 | Flag | Action |
 |---|---|
 | *(no args)* | Full unattended install |
-| `-V, --verbose` | Show install output (`--verify`/`--install-file` always verbose; `--check` always silent) |
+| `-V, --verbose` | Show install output |
 | `--verify` | Config files byte-for-byte, then live system state |
 | `--check` | Idempotency probe (`0` clean · `3` preflight · `10` drift) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
-| `-h, --help` · `-v, --version` | Honored first, except as the `--install-file` value |
+| `-h`/`--help` · `-v`/`--version` | Honored first |
 
-`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline`, so pending changes read as drift until reboot.
+`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline`, so pending changes read as drift until reboot. `--verify` and `--install-file` are always verbose; `--check` is always silent. `-h`/`-v` are honored before all checks, except as the `--install-file` value.
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. A non-vfat `/boot` ESP fallback also refuses sdboot (exit 4).
@@ -54,41 +52,46 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 
 | # | Phase | Action |
 |---|---|---|
-| 1 | Preflight | config checks → lock (exit 5) → hard gates; read-only except a non-fatal NTP repair |
-| 2 | Packages | `pacman -Syu` (one `-Syyu` retry); `mkinitcpio.conf` pre-deployed first; managed `.pacnew` auto-resolved |
-| 3 | Configuration | deploy the embedded config files atomically |
-| 4 | Services | fstab → resolved → package removal → nftables → mask (ufw flush) → enable → regdom |
-| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity (tainted run skips this) |
-| 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart (deferred on active Wi-Fi) |
+| 1 | Preflight | config checks → lock → hard gates (read-only) |
+| 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed; `.pacnew` auto-resolved |
+| 3 | Configuration | deploy embedded configs atomically |
+| 4 | Services | fstab → resolved → package removal → nftables → mask → enable → regdom |
+| 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
+| 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
 A CHECK/RESULT/EVIDENCE matrix prints to stderr and the JSONL log records each phase. The verdict maps to the exit code; `WARN` keeps exit `0`, `DEFER` applies next boot.
 
 ## Configuration
 
-The script is the source of truth — retune the `set -g` globals near the top. Each managed file is a single profile concern:
+The script is the source of truth — retune the `set -g` globals near the top. Each managed file is a single profile concern: kernel cmdline (CPU/GPU/IOMMU/storage/USB tuning for gfx1151; `root=UUID=`/`rw`), loader and sdboot-manage entry generation, `mkinitcpio.conf` (`MODULES=(amdgpu)`, systemd hooks, zstd), resolved/logind (disable mDNS/LLMNR/DoT; ignore power/suspend/hibernate/reboot keys), iwd/NetworkManager (iwd backend, powersave, regdom), cpupower/udev (`performance` governor + EPP, NVMe scheduler `none`), amdgpu/ttm modprobe (GTT ~32 GiB; needs BIOS UMA 512 MB), RADV drirc (unified heap on the APU), sysctl (BBR + `fq`, TCP/network/vm tuning), environment.d (Mesa/RADV/DXVK/VKD3D/Proton gaming env), and baloofilerc (disable KDE Baloo indexing).
 
-| File | Purpose |
+**Packages**
+
+| Action | Packages |
 |---|---|
-| kernel cmdline | CPU/GPU/IOMMU/storage/USB tuning for gfx1151; `root=UUID=`/`rw` written into `/etc/kernel/cmdline` |
-| loader.conf / sdboot-manage.conf | systemd-boot entry generation (`REMOVE_EXISTING=yes`) |
-| mkinitcpio.conf | `MODULES=(amdgpu)`, systemd hooks, zstd compression |
-| resolved / logind | disable mDNS/LLMNR/DoT; ignore power/suspend/hibernate/reboot keys |
-| iwd / NetworkManager | iwd Wi-Fi backend (iwd.service disabled — NM activates on demand), powersave, regdom |
-| cpupower / udev | `performance` governor + EPP, NVMe scheduler `none` |
-| amdgpu/ttm modprobe | GTT ~32 GiB (`pages_limit`/`page_pool_size`; needs BIOS UMA 512 MB) |
-| RADV drirc | `radv_enable_unified_heap_on_apu` for the APU |
-| sysctl | BBR + `fq`, TCP/network tuning, `vm` tuning |
-| environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env (`0600`) |
-| baloofilerc | disable KDE Baloo file indexing (`0600`) |
-
-**Packages** — installs `cachyos-gaming-meta` + `cachyos-gaming-applications`, `nvme-cli`, `lib32-mesa`, `mkinitcpio-firmware`, `nftables`, and CLI tools (`fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil`); removes the plymouth stack, `micro`, `cachy-update`, and `kdeconnect`. `vulkan-radeon` + `lib32-vulkan-radeon` are verified present.
+| Install | `cachyos-gaming-meta`, `cachyos-gaming-applications`, `nvme-cli`, `lib32-mesa`, `mkinitcpio-firmware`, `nftables`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil` |
+| Remove (`-Rns`) | plymouth stack, `micro`, `cachy-update`, `kdeconnect` |
+| Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` |
 
 > [!WARNING]
 > The default no-args run **removes `kdeconnect`, `micro`, `cachy-update`, and the entire plymouth stack** with `pacman -Rns` (rdep-aware: removal is skipped for any package with an external installed reverse-dependency). To keep any of these, edit `PKGS_DEL` near the top of the script before running. Removal is reversible via the [Uninstall](#uninstall) steps.
 
-**Units** — masks `ufw`, `power-profiles-daemon`, `ananicy-cpp`, the sleep/suspend/hibernate targets, and `NetworkManager-wait-online`; **disables** (not masks) `iwd.service` so NetworkManager is the sole Wi-Fi manager and activates iwd on demand via D-Bus; enables `fstrim.timer`, `NetworkManager`, `cpupower`, and `nftables`.
+**Units**
 
-**fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place, every other column preserved byte-for-byte. Gated by line-count parity, a size floor, and mandatory `findmnt --verify`; symlinked `/etc/fstab` is refused.
+| Action | Units |
+|---|---|
+| Mask | `ufw`, `power-profiles-daemon`, `ananicy-cpp`, `NetworkManager-wait-online`, sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
+| Disable (not mask) | `iwd.service` — NetworkManager is sole Wi-Fi manager, D-Bus-activates iwd on demand |
+| Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables` |
+
+**fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place, every other column preserved byte-for-byte.
+
+| Aspect | Detail |
+|---|---|
+| Applied opts | `noatime,lazytime,commit=10` (existing `commit=` replaced) |
+| Scope | ext4 entries only; other rows and all columns preserved byte-for-byte |
+| Gates | line-count parity · size floor · mandatory `findmnt --verify` |
+| Refused | symlinked `/etc/fstab` |
 
 ## Managed Files
 

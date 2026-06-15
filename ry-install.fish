@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.42.0 (2026-06-14) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.42.1 (2026-06-14) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.42.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.42.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -837,7 +837,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     end
 end
 
-# ── CONTENT GENERATORS (17; via _ry_get_file_content) ──
+# ── CONTENT GENERATORS (18; via _ry_get_file_content) ──
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -2903,8 +2903,7 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd backend + 
     else
         _warn "  WiFi interface: NOT DETECTED"
     end
-    # iwd is D-Bus-activated by NetworkManager on demand; iwd.service is disabled (not masked), so a running
-    # process is informational (present once NM has brought the radio up), never a failure.
+    # iwd is D-Bus-activated by NetworkManager on demand; iwd.service is disabled (not masked), so a running process is informational (present once NM has brought the radio up), never a failure.
     if command -q pgrep
         if command pgrep -x iwd >/dev/null
             _info "  iwd process: running (NM-activated)"

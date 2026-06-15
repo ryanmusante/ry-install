@@ -9,10 +9,12 @@ CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx115
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
-git checkout v7.43.2          # pin to a released tag; the exit-code/path contract below is version-coupled
+git checkout v7.43.2
 chmod +x ry-install.fish
-./ry-install.fish              # unattended install
+./ry-install.fish
 ```
+
+Pin to a released tag — the exit-code and path contract is version-coupled.
 
 > [!IMPORTANT]
 > Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent. The unattended run **removes packages** — see [Configuration](#configuration) before first run.

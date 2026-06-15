@@ -15,7 +15,7 @@ chmod +x ry-install.fish
 ```
 
 > [!IMPORTANT]
-> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent. The unattended run **removes packages** (plymouth stack, `micro`, `cachy-update`, `kdeconnect`) — see [Configuration](#configuration) before first run.
+> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent. The unattended run **removes packages** — see [Configuration](#configuration) before first run.
 
 | In scope | Out of scope |
 |---|---|
@@ -28,6 +28,8 @@ chmod +x ry-install.fish
 | KDE Baloo indexing | UKI |
 | Pacman add/remove | — |
 | sdboot-manage BLS entries | — |
+
+A `—` marks an in-scope item with no out-of-scope counterpart; the two columns are independent lists, not paired rows.
 
 ## Requirements
 
@@ -42,6 +44,8 @@ Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreuti
 
 ## Usage
 
+Invoke as the normal user; flags are parsed left to right, with `--help`/`--version` honored before anything else.
+
 | Flag | Action |
 |---|---|
 | *(no args)* | Full unattended install |
@@ -51,7 +55,7 @@ Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreuti
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `-h`/`--help` · `-v`/`--version` | Honored first |
 
-`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline`, so pending changes read as drift until reboot. `--verify` and `--install-file` are always verbose; `--check` is always silent. `-h`/`-v` are honored before all checks, except as the `--install-file` value. `--install-file` requires an absolute path that resolves to a managed destination; anything else is refused (exit 2).
+`--verify`/`--check` are lock-free and read-only; `--check` compares live `/proc/cmdline`, so pending changes read as drift until reboot. `--install-file` requires an absolute path resolving to a managed destination — anything else is refused (exit 2).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. A non-vfat `/boot` ESP fallback also refuses sdboot (exit 4).
@@ -91,14 +95,7 @@ The script is the source of truth — retune the `set -g` globals near the top; 
 | Disable (not mask) | `iwd.service` — NetworkManager is sole Wi-Fi manager, D-Bus-activates iwd on demand |
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables` |
 
-**fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place; every other row and column is preserved byte-for-byte.
-
-| Aspect | Detail |
-|---|---|
-| Applied opts | `noatime,lazytime,commit=10` (existing `commit=` replaced) |
-| Scope | ext4 entries only; other rows and all columns preserved byte-for-byte |
-| Gates | line-count parity · size floor · mandatory `findmnt --verify` |
-| Refused | symlinked `/etc/fstab` |
+**fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place (existing `commit=` replaced); every other row and column is preserved byte-for-byte. Gated by line-count parity, a size floor, and a mandatory `findmnt --verify`; a symlinked `/etc/fstab` is refused.
 
 ## Managed Files
 
@@ -150,11 +147,13 @@ No automated uninstaller; use Managed Files as the rollback reference.
 | 1 | Unmask the masked units | `sudo systemctl unmask` |
 | 2 | Remove deployed system paths; remove user env.d file | `sudo rm` / `rm` |
 | 3 | Restore fstab, then delete `.ry.bak` backups | restore `/etc/fstab` from `/etc/fstab.ry.bak` |
-| 4 | Optionally reverse the package changes | `sudo pacman -S` the removed set (plymouth stack, `micro`, `cachy-update`, `kdeconnect`); `sudo pacman -Rns` the installed set |
+| 4 | Optionally reverse the package changes | reinstall the removed set with `sudo pacman -S`; `sudo pacman -Rns` the installed set (both listed under [Configuration](#configuration)) |
 | 5 | Rebuild initramfs and boot entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
 ## Known Issues
+
+Hardware gaps specific to this Strix Halo platform; each is handled by an out-of-tree package this script does not manage.
 
 | Component | Issue | Workaround |
 |---|---|---|
@@ -164,6 +163,8 @@ No automated uninstaller; use Managed Files as the rollback reference.
 | Strix Halo ACP | no ASoC machine driver | pending upstream (HDMI/USB audio unaffected) |
 
 ## Troubleshooting
+
+Common failure modes and their recovery; boot-critical paths assume a live USB is on hand.
 
 | Problem | Fix |
 |---|---|

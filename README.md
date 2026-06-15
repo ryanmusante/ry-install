@@ -2,14 +2,14 @@
 
 CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.43.1 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.43.2 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
-git checkout v7.43.1          # pin to a released tag; the exit-code/path contract below is version-coupled
+git checkout v7.43.2          # pin to a released tag; the exit-code/path contract below is version-coupled
 chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
@@ -77,14 +77,31 @@ A CHECK/RESULT/EVIDENCE matrix prints to stderr and the JSONL log records each p
 
 ## Configuration
 
-The script is the source of truth — retune the `set -g` globals near the top; each managed file (listed under [Managed Files](#managed-files)) is one profile concern. The non-obvious knobs: `mkinitcpio.conf` ships `MODULES=(amdgpu)` + systemd hooks + zstd; the amdgpu/ttm modprobe sets a ~32 GiB GTT cap that assumes BIOS UMA 512 MB; cpupower/udev pin the `performance` governor + EPP and NVMe scheduler `none`; sysctl enables BBR + `fq`; environment.d carries the Mesa/RADV/DXVK/VKD3D/Proton gaming env. Wireless regdom is fixed at `US` (retune `COUNTRY`).
+The script is the source of truth — retune the `set -g` globals near the top. Each managed file (paths under [Managed Files](#managed-files)) is one profile concern:
+
+| File | Purpose |
+|---|---|
+| kernel cmdline | CPU/GPU/IOMMU/storage/USB tuning for gfx1151; `root=UUID=`/`rw` written into `/etc/kernel/cmdline` by the generator |
+| loader.conf / sdboot-manage.conf | systemd-boot entry generation (`REMOVE_EXISTING=yes` wipes `loader/entries/` before regen) |
+| mkinitcpio.conf | `MODULES=(amdgpu)`, systemd hooks, zstd compression |
+| resolved | disable mDNS/LLMNR/DoT; DNSSEC `allow-downgrade` |
+| logind | ignore power/suspend/hibernate/reboot keys |
+| iwd / NetworkManager | iwd Wi-Fi backend (`iwd.service` disabled — NM D-Bus-activates on demand), powersave |
+| iw-regdomain / wireless-regdom | wireless regulatory domain fixed at `US` (retune `COUNTRY`) |
+| cpupower / udev | `performance` governor + EPP, NVMe I/O scheduler `none` |
+| amdgpu/ttm modprobe | GTT ~32 GiB (`pages_limit`/`page_pool_size`; assumes BIOS UMA 512 MB) |
+| RADV drirc | `radv_enable_unified_heap_on_apu` for the APU |
+| sysctl | BBR + `fq`, TCP/network and `vm` tuning |
+| nftables.conf | default-deny-inbound ruleset (see [Safety & Reliability](#safety--reliability)) |
+| environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env (`0600`) |
+| baloofilerc | disable KDE Baloo file indexing (`0600`) |
 
 **Packages** — the no-args run removes the listed packages with `pacman -Rns` (rdep-aware: skipped for any package with an external installed reverse-dependency). Edit `PKGS_DEL` to keep any; removal is reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
 | Install | `cachyos-gaming-meta`, `cachyos-gaming-applications`, `nvme-cli`, `lib32-mesa`, `mkinitcpio-firmware`, `nftables`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil` |
-| Remove (`-Rns`) | plymouth stack, `micro`, `cachy-update`, `kdeconnect` |
+| Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` |
 
 **Units**

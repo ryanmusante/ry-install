@@ -1,5 +1,11 @@
 ry-install changelog - newest first.
 
+7.43.2 - 2026-06-15
+
+- docs: restore the Configuration File/Purpose table dropped in 7.42.1, expanded to cover every managed file (adds nftables.conf and the regdom files; notes DNSSEC allow-downgrade). The dense one-line prose summary it replaced is removed.
+- docs: Configuration Remove row now enumerates all nine PKGS_DEL packages (previously summarized; cachyos-micro-settings and the individual plymouth-stack members were implicit). README↔script audit: all 18 managed paths, both package lists, mask/enable sets, sysctl/kernel/env values, exit codes, timeout-bypass set, nftables ruleset, and backup/lock/log paths confirmed in sync.
+- No script logic changes: content generators, validators, install phases, exit codes, and the lock/timeout/firewall paths are byte-identical to 7.43.1.
+
 7.43.1 - 2026-06-15
 
 - docs: README scope paragraph reformatted as an in-scope/out-of-scope table; Uninstall numbered list reformatted as a numbered step/command table. Same content, no semantic change.

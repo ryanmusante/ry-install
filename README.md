@@ -6,6 +6,9 @@ CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx115
 
 ## Quick Start
 
+> [!IMPORTANT]
+> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent. The unattended run **removes packages** — see [Configuration](#configuration) before first run.
+
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
@@ -16,22 +19,9 @@ chmod +x ry-install.fish
 
 Pin to a released tag — the exit-code and path contract is version-coupled.
 
-> [!IMPORTANT]
-> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent. The unattended run **removes packages** — see [Configuration](#configuration) before first run.
-
 | In scope | Out of scope |
 |---|---|
-| Kernel cmdline | Dotfiles |
-| Initramfs | Secrets |
-| Systemd units | Backups |
-| Network (NetworkManager + iwd) | Multi-user |
-| Sysctl | Non-CachyOS |
-| Gaming env vars | Laptops |
-| KDE Baloo indexing | UKI |
-| Pacman add/remove | — |
-| sdboot-manage BLS entries | — |
-
-A `—` marks an in-scope item with no out-of-scope counterpart; the two columns are independent lists, not paired rows.
+| Kernel cmdline, Initramfs, Systemd units, Network (NetworkManager + iwd), Sysctl, Gaming env vars, KDE Baloo indexing, Pacman add/remove, sdboot-manage BLS entries | Dotfiles, Secrets, Backups, Multi-user, Non-CachyOS, Laptops, UKI |
 
 ## Requirements
 
@@ -46,6 +36,9 @@ Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreuti
 
 ## Usage
 
+> [!CAUTION]
+> `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. A non-vfat `/boot` ESP fallback also refuses sdboot (exit 4).
+
 Invoke as the normal user; flags are parsed left to right, with `--help`/`--version` honored before anything else.
 
 | Flag | Action |
@@ -58,9 +51,6 @@ Invoke as the normal user; flags are parsed left to right, with `--help`/`--vers
 | `-h`/`--help` · `-v`/`--version` | Honored first |
 
 `--verify`/`--check` are lock-free and read-only; `--check` compares live `/proc/cmdline`, so pending changes read as drift until reboot. `--install-file` requires an absolute path resolving to a managed destination — anything else is refused (exit 2).
-
-> [!CAUTION]
-> `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. A non-vfat `/boot` ESP fallback also refuses sdboot (exit 4).
 
 ## Install Flow
 
@@ -130,6 +120,12 @@ The Phase-3 files (system `0644`, user `0600`):
 
 ## Safety & Reliability
 
+> [!WARNING]
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, ICMPv4 plus essential ICMPv6 (NDP + PMTUD) accepted, all other inbound dropped — including mDNS. nftables comes up before the ufw flush, so the host is never unfirewalled during the handoff. Add inbound ports to `/etc/nftables.conf` as needed.
+
+> [!NOTE]
+> `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
+
 Every managed write is atomic and reversible; the process exit code is the single source of truth.
 
 | Feature | Detail |
@@ -150,12 +146,6 @@ Every managed write is atomic and reversible; the process exit code is the singl
 Environment overrides (each falls back safely when unset or invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; **bypassed for `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile`**, since a SIGKILL mid-transaction corrupts `db.lck` or skips the mkinitcpio rollback — a hung package/boot op is not time-capped), `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (bypass CPU match), `NO_COLOR`, `TMPDIR`.
 
 Logs: one JSONL file per run under `~/ry-install/logs/<date>/`, not auto-pruned.
-
-> [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, ICMPv4 plus essential ICMPv6 (NDP + PMTUD) accepted, all other inbound dropped — including mDNS. nftables comes up before the ufw flush, so the host is never unfirewalled during the handoff. Add inbound ports to `/etc/nftables.conf` as needed.
-
-> [!NOTE]
-> `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
 
 ## Uninstall
 

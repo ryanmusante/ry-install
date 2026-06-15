@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.43.2 (2026-06-15) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.44.0 (2026-06-15) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.43.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.44.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -581,7 +581,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/conf.d/wireless-regdom" \
     "/etc/udev/rules.d/60-ry-perf.rules" \
     "/etc/nftables.conf"
-set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/baloofilerc"
+set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/baloofilerc" "$HOME/.config/MangoHud/MangoHud.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set --erase _ry_dst_count
@@ -771,14 +771,14 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:4 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:18 \
+        _RY_POST_HOOKS:19 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_NTSYNC_MODLOAD_CONFS:3 \
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:16 \
-        USER_DESTINATIONS:2
+        USER_DESTINATIONS:3
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -837,7 +837,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     end
 end
 
-# ── CONTENT GENERATORS (18; via _ry_get_file_content) ──
+# ── CONTENT GENERATORS (19; via _ry_get_file_content) ──
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -889,6 +889,30 @@ function _content_HOME_.config_environment.d_10-environment.conf --description "
 end
 function _content_HOME_.config_baloofilerc --description "Generate content for ~/.config/baloofilerc (KDE Baloo file indexing disabled)"
     printf '%s\n' "# ry-install: KDE Baloo file indexing disabled (managed file, do not edit by hand)" "[Basic Settings]" "Indexing-Enabled=false"
+end
+function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)"
+    printf '%s\n' \
+        "# ry-install: MangoHud readout-only HUD (managed file, do not edit by hand)" \
+        "# Beelink GTR Pro · Radeon 8060S (Strix Halo, gfx1151) · CachyOS Wayland · RADV" \
+        "horizontal" \
+        "legacy_layout=0" \
+        "position=top-left" \
+        "fps" \
+        "frametime" \
+        "frame_timing" \
+        "gpu_stats" \
+        "gpu_temp" \
+        "gpu_core_clock" \
+        "cpu_stats" \
+        "cpu_mhz" \
+        "vram" \
+        "gpu_mem_clock" \
+        "ram" \
+        "swap" \
+        "font_size=20" \
+        "background_alpha=0.4" \
+        "text_outline" \
+        "toggle_hud=Shift_R+F12"
 end
 function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
     printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
@@ -1885,6 +1909,14 @@ function _grep_cpupower_entry --argument-names dst --description "Validate a GOV
     end
     return 0
 end
+function _grep_mangohud_entry --argument-names dst --description 'Validate ≥1 MangoHud directive line (bareword token or key=value; # comments allowed)'
+    test (count $argv) -lt 2; and _log "BUG: _grep_mangohud_entry called without content (dst=$dst)"; and return 2
+    string match -qr '^[a-z][a-z0-9_]*(=\S+)?[[:space:]]*$' -- $argv[2..-1]; or begin
+        _fail "  $dst: no MangoHud directive (bareword or key=value) found"
+        return 1
+    end
+    return 0
+end
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family" # mkinitcpio has dedicated validators
     set -l _content $argv[2..-1]
     switch "$dst"
@@ -1910,6 +1942,8 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_envd_entry "$dst" $_content
         case '*/default/cpupower-service.conf'
             _grep_cpupower_entry "$dst" $_content
+        case '*/MangoHud/MangoHud.conf'
+            _grep_mangohud_entry "$dst" $_content
         case '*/mkinitcpio.conf'
             return 0
         case '*'
@@ -2312,7 +2346,7 @@ function _verify_static_system --description "Verify ntsync, modules-load, resol
     _echo "── nftables ──"
     _vss_nft
 end
-function _verify_static_user --description "Verify environment.d ENV_VARS + baloo indexing disabled"
+function _verify_static_user --description "Verify environment.d ENV_VARS + baloo indexing disabled + MangoHud HUD config"
     _echo "USER CONFIGURATION"
     if _chk_file "$HOME/.config/environment.d/10-environment.conf"
         for exp in $ENV_VARS; _chk_grep "$HOME/.config/environment.d/10-environment.conf" "$exp" "$exp"; end
@@ -2320,6 +2354,11 @@ function _verify_static_user --description "Verify environment.d ENV_VARS + balo
     _echo "── baloo (KDE file indexing) ──"
     if _chk_file "$HOME/.config/baloofilerc"
         _chk_grep "$HOME/.config/baloofilerc" "Indexing-Enabled=false" "baloo indexing disabled"
+    end
+    _echo "── MangoHud (readout-only HUD) ──"
+    if _chk_file "$HOME/.config/MangoHud/MangoHud.conf"
+        _chk_grep "$HOME/.config/MangoHud/MangoHud.conf" "fps" "MangoHud fps readout"
+        _chk_grep "$HOME/.config/MangoHud/MangoHud.conf" "toggle_hud=Shift_R+F12" "MangoHud toggle keybind"
     end
 end
 
@@ -4678,6 +4717,7 @@ set -g _RY_POST_HOOKS \
     "*/sysctl.d/*|sysctl" \
     "*/environment.d/*|envd" \
     "*/baloofilerc|baloo" \
+    "*/MangoHud/MangoHud.conf|mangohud" \
     "/etc/default/cpupower-service.conf|cpupower" \
     "/etc/drirc.d/*|drirc" \
     "/etc/modprobe.d/*|modprobe" \
@@ -4739,7 +4779,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (13 handlers / 17 patterns) ──
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (15 handlers / 19 patterns) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot sub: mkinitcpio -P + sdboot-manage cascade" # skip_mki: cmdline not an initramfs input
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
@@ -4834,6 +4874,11 @@ end
 function _post_drirc --argument-names target --description "Post-hook: notify drirc.d change (Mesa reads at next Vulkan/GL app launch)" # drirc read by Mesa at process start
     _info "drirc.d $target changed — applies at next Vulkan/OpenGL application launch (no service restart needed)"
     _info "  Verify with: vulkaninfo | grep -i 'memory heap' (after restarting the target app)"
+    return 0
+end
+function _post_mangohud --argument-names target --description "Post-hook: notify MangoHud.conf change (read at next game/Vulkan app launch)" # MangoHud reads config at process start
+    _info "MangoHud $target changed — applies at next launch under 'mangohud %command%' (no service restart needed)"
+    _info "  Toggle the HUD in-app with Shift_R+F12"
     return 0
 end
 function _post_envd --argument-names target --description "Post-hook: notify session restart needed for environment.d" # environment.d read at session start

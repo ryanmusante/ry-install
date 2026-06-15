@@ -1,5 +1,11 @@
 ry-install changelog - newest first.
 
+7.44.0 - 2026-06-15
+
+- mangohud: add ~/.config/MangoHud/MangoHud.conf, a readout-only HUD for the Radeon 8060S (gfx1151): horizontal top bar with FPS/frametime, GPU/CPU load and clocks, and the unified vram/ram/swap pool. New generator, _grep_mangohud validator, verify check, and notify-only _post_mangohud hook (config read at game launch under mangohud %command%, no service restart).
+- count assertions: USER_DESTINATIONS 2 to 3, _RY_POST_HOOKS 18 to 19, _RY_MANAGED_FILE_COUNT 18 to 19.
+- comment: correct the post-hook section header to 15 handlers / 19 patterns (was a stale 13/17).
+
 7.43.2 - 2026-06-15
 
 - docs: restore the Configuration File/Purpose table dropped in 7.42.1, expanded to cover every managed file (adds nftables.conf and the regdom files; notes DNSSEC allow-downgrade). The one-line prose summary it replaced is removed.

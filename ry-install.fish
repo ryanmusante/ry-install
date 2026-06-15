@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.44.3 (2026-06-15) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.44.4 (2026-06-15) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.44.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.44.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1430,7 +1430,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
         set -l _skip_next false
         for _ec_arg in $argv[2..-1]
             if test "$_skip_next" = true; set _skip_next false; continue; end
-            if contains -- "$_ec_arg" -u -g -h -p -C -D -R -T -U; set _skip_next true; continue; end # value-taking sudo flags: skip flag + value
+            if contains -- "$_ec_arg" -u -g -p -C -D -R -T -U; set _skip_next true; continue; end # value-taking sudo flags: skip flag + value (-h is sudo --help, no value)
             string match -q -- '-*' "$_ec_arg"; and continue
             test "$_ec_arg" = env; and continue
             string match -qr -- '^[A-Za-z_][A-Za-z0-9_]*=' "$_ec_arg"; and continue
@@ -1698,7 +1698,13 @@ end
 function _ry_check_disk_space --description "Verify sufficient free disk space for installation"
     _log "DISK_CHECK_START"
     _check_avail / 1073741824 GiB $ROOT_AVAIL_CRIT $ROOT_AVAIL_WARN; or return 1
-    _check_avail /boot 1048576 MiB $BOOT_SPACE_CRIT $BOOT_SPACE_WARN; or return 1
+    set -l _boot_mnt (command findmnt -no TARGET /boot 2>/dev/null | string trim --) # dedicated /boot gate only when /boot is its own mount
+    if test "$_boot_mnt" = /boot
+        _check_avail /boot 1048576 MiB $BOOT_SPACE_CRIT $BOOT_SPACE_WARN; or return 1
+    else
+        _info "  /boot is not a separate mount — its free space is covered by the / check"
+        _log "DISK_CHECK_BOOT_NOT_SEPARATE: findmnt target='$_boot_mnt' (expected /boot); skipping dedicated /boot gate"
+    end
     return 0
 end
 

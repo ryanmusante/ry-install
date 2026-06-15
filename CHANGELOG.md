@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+7.44.4 - 2026-06-15
+
+- timeout: drop -h from the value-taking sudo-flag skip list in _run_effective_timeout. -h is sudo's --help and takes no value, so listing it caused the token after it to be skipped when resolving the wrapped command name for the timeout-bypass decision. Unreachable in practice (_run only ever invokes sudo -n <cmd>), but the list now matches sudo semantics; no timeout-bypass change for pacman/mkinitcpio/sdboot-manage/paccache/updatedb/pkgfile.
+- disk: _ry_check_disk_space runs the dedicated /boot MiB free-space gate only when findmnt reports /boot as its own mountpoint; when /boot is not a separate mount its free space is covered by the / GiB gate, avoiding a /boot figure that actually reflects /. No change on the target layout (ESP mounted at /boot).
+
 7.44.3 - 2026-06-15
 
 - cleanup: remove the now-dead _RY_PACMAN_REVERT_ATTEMPTED global. Its only reader was _ip_scan_pacnew (removed in 7.44.2), leaving it write-only; drop the assignment in the pacman-revert path and its entry in the cleanup erase-list. No behavior change — the mkinitcpio.conf revert itself is unaffected.

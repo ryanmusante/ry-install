@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.44.3 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.44.4 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -12,7 +12,7 @@ CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx115
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
-git checkout v7.44.3
+git checkout v7.44.4
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -25,7 +25,7 @@ Pin to a released tag — the exit-code and path contract is version-coupled.
 
 ## Requirements
 
-Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreutils, findutils, diffutils — `cmp` gates the byte-exact `mkinitcpio.conf` revert), plus `curl` and `findmnt`. NTP sync and `pacman-contrib` (pactree, for rdep-safe removal) only warn. sudo must be cached (`sudo -v`) and may lapse mid-run — set `timestamp_timeout` or a NOPASSWD drop-in.
+Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreutils, findutils, diffutils — `cmp` gates the byte-exact `mkinitcpio.conf` revert), plus `curl` and `findmnt`. NTP sync and `pacman-contrib` (pactree, for rdep-safe removal) only warn. sudo must be cached (`sudo -v`) and may lapse mid-run — set `timestamp_timeout` or a NOPASSWD drop-in. The dedicated `/boot` free-space gate runs only when `findmnt` reports `/boot` as its own mountpoint; otherwise its space is covered by the `/` gate.
 
 | Requirement | Minimum |
 |---|---|

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.42.1 (2026-06-14) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.43.0 (2026-06-14) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.42.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.43.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -4986,6 +4986,10 @@ if set -q _flag_install_file
     set -l _byte_len (printf '%s' "$_if_val" | command wc -c | string trim --)
     if not string match -qr '^\d+$' -- "$_byte_len"; _early_usage_exit "--install-file path byte-length probe failed (wc -c returned '$_byte_len') — refusing"; end
     test "$_byte_len" -gt 4096; and _early_usage_exit "--install-file path exceeds PATH_MAX (4096 bytes)"
+    for _comp in (string split / -- "$_if_val") # NAME_MAX 255 per component (mktemp/mv would fail later with ENAMETOOLONG)
+        test (printf '%s' "$_comp" | command wc -c | string trim --) -gt 255; and _early_usage_exit "--install-file path component exceeds NAME_MAX (255 bytes): $_comp"
+    end
+    set --erase _comp
     set -l _canon (command realpath -m -- "$_if_val" 2>/dev/null)
     if test -n "$_canon"
         set -g INSTALL_FILE_TARGET "$_canon"

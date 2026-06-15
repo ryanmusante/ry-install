@@ -2,14 +2,14 @@
 
 CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.42.1 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.43.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
-git checkout v7.42.1          # pin to a released tag; the exit-code/path contract below is version-coupled
+git checkout v7.43.0          # pin to a released tag; the exit-code/path contract below is version-coupled
 chmod +x ry-install.fish
 ./ry-install.fish              # unattended install
 ```
@@ -41,7 +41,7 @@ Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreuti
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `-h`/`--help` · `-v`/`--version` | Honored first |
 
-`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline`, so pending changes read as drift until reboot. `--verify` and `--install-file` are always verbose; `--check` is always silent. `-h`/`-v` are honored before all checks, except as the `--install-file` value.
+`--verify`/`--check` read state only, lock-free. `--check` compares live `/proc/cmdline`, so pending changes read as drift until reboot. `--verify` and `--install-file` are always verbose; `--check` is always silent. `-h`/`-v` are honored before all checks, except as the `--install-file` value. The `--install-file` path must be absolute, free of control characters, within PATH_MAX (4096 bytes) with each component within NAME_MAX (255 bytes), and must resolve to a managed destination — anything else is refused (exit 2).
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. A non-vfat `/boot` ESP fallback also refuses sdboot (exit 4).

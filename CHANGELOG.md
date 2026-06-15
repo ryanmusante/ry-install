@@ -5,6 +5,7 @@ ry-install changelog - newest first.
 - docs: restore the Configuration File/Purpose table dropped in 7.42.1, expanded to cover every managed file (adds nftables.conf and the regdom files; notes DNSSEC allow-downgrade). The one-line prose summary it replaced is removed.
 - docs: Configuration Remove row enumerates all nine PKGS_DEL packages (cachyos-micro-settings and the plymouth-stack members were previously implicit).
 - docs: Quick Start trimmed to the five vital commands; inline code comments removed.
+- docs: README list order (Install, Mask, File/Purpose, Managed Files groups) reordered to match script definition order; admonitions moved to trail their section content.
 - No script logic changes: byte-identical to 7.43.1.
 
 7.43.1 - 2026-06-15

@@ -83,17 +83,17 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 
 | File | Purpose |
 |---|---|
-| kernel cmdline | CPU/GPU/IOMMU/storage/USB tuning for gfx1151; `root=UUID=`/`rw` written into `/etc/kernel/cmdline` by the generator |
 | loader.conf / sdboot-manage.conf | systemd-boot entry generation (`REMOVE_EXISTING=yes` wipes `loader/entries/` before regen) |
+| kernel cmdline | CPU/GPU/IOMMU/storage/USB tuning for gfx1151; `root=UUID=`/`rw` written into `/etc/kernel/cmdline` by the generator |
 | mkinitcpio.conf | `MODULES=(amdgpu)`, systemd hooks, zstd compression |
 | resolved | disable mDNS/LLMNR/DoT; DNSSEC `allow-downgrade` |
 | logind | ignore power/suspend/hibernate/reboot keys |
 | iwd / NetworkManager | iwd Wi-Fi backend (`iwd.service` disabled — NM D-Bus-activates on demand), powersave |
-| iw-regdomain / wireless-regdom | wireless regulatory domain fixed at `US` (retune `COUNTRY`) |
 | cpupower / udev | `performance` governor + EPP, NVMe I/O scheduler `none` |
-| amdgpu/ttm modprobe | GTT ~32 GiB (`pages_limit`/`page_pool_size`; assumes BIOS UMA 512 MB) |
-| RADV drirc | `radv_enable_unified_heap_on_apu` for the APU |
 | sysctl | BBR + `fq`, TCP/network and `vm` tuning |
+| RADV drirc | `radv_enable_unified_heap_on_apu` for the APU |
+| amdgpu/ttm modprobe | GTT ~32 GiB (`pages_limit`/`page_pool_size`; assumes BIOS UMA 512 MB) |
+| iw-regdomain / wireless-regdom | wireless regulatory domain fixed at `US` (retune `COUNTRY`) |
 | nftables.conf | default-deny-inbound ruleset (see [Safety & Reliability](#safety--reliability)) |
 | environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env (`0600`) |
 | baloofilerc | disable KDE Baloo file indexing (`0600`) |
@@ -102,7 +102,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 
 | Action | Packages |
 |---|---|
-| Install | `cachyos-gaming-meta`, `cachyos-gaming-applications`, `nvme-cli`, `lib32-mesa`, `mkinitcpio-firmware`, `nftables`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil` |
+| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil`, `nftables` |
 | Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` |
 
@@ -110,7 +110,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 
 | Action | Units |
 |---|---|
-| Mask | `ufw`, `power-profiles-daemon`, `ananicy-cpp`, `NetworkManager-wait-online`, sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
+| Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
 | Disable (not mask) | `iwd.service` — NetworkManager is sole Wi-Fi manager, D-Bus-activates iwd on demand |
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables` |
 
@@ -125,16 +125,12 @@ The Phase-3 files (system `0644`, user `0600`):
 | Boot | `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf` |
 | systemd | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`, `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
 | Network | `/etc/iwd/main.conf`, `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/conf.d/wireless-regdom`, `/etc/nftables.conf` |
-| Tuning | `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/default/cpupower-service.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
+| Tuning | `/etc/default/cpupower-service.conf`, `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
 | User | `~/.config/environment.d/10-environment.conf`, `~/.config/baloofilerc` |
 
 ## Safety & Reliability
 
-> [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, ICMPv4 plus essential ICMPv6 (NDP + PMTUD) accepted, all other inbound dropped — including mDNS. nftables comes up before the ufw flush, so the host is never unfirewalled during the handoff. Add inbound ports to `/etc/nftables.conf` as needed.
-
-> [!NOTE]
-> `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
+Every managed write is atomic and reversible; the process exit code is the single source of truth.
 
 | Feature | Detail |
 |---|---|
@@ -143,8 +139,6 @@ The Phase-3 files (system `0644`, user `0600`):
 | mkinitcpio rollback | byte-exact revert on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; dead/recycled-PID reclaim via `/proc` (fail-closed) |
-
-The process exit code is the single source of truth.
 
 | Code | Meaning |
 |---|---|
@@ -156,6 +150,12 @@ The process exit code is the single source of truth.
 Environment overrides (each falls back safely when unset or invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; **bypassed for `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile`**, since a SIGKILL mid-transaction corrupts `db.lck` or skips the mkinitcpio rollback — a hung package/boot op is not time-capped), `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (bypass CPU match), `NO_COLOR`, `TMPDIR`.
 
 Logs: one JSONL file per run under `~/ry-install/logs/<date>/`, not auto-pruned.
+
+> [!WARNING]
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, ICMPv4 plus essential ICMPv6 (NDP + PMTUD) accepted, all other inbound dropped — including mDNS. nftables comes up before the ufw flush, so the host is never unfirewalled during the handoff. Add inbound ports to `/etc/nftables.conf` as needed.
+
+> [!NOTE]
+> `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
 
 ## Uninstall
 

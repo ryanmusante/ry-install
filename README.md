@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.44.5 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.44.6 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -12,12 +12,10 @@ CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx115
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
-git checkout v7.44.5
+git checkout v7.44.6
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
-
-Pin to a released tag — the exit-code and path contract is version-coupled.
 
 | In scope | Out of scope |
 |---|---|
@@ -25,7 +23,7 @@ Pin to a released tag — the exit-code and path contract is version-coupled.
 
 ## Requirements
 
-Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreutils, findutils, diffutils — `cmp` gates the byte-exact `mkinitcpio.conf` revert), plus `curl` and `findmnt`. NTP sync and `pacman-contrib` (pactree, for rdep-safe removal) only warn. sudo must be cached (`sudo -v`) and may lapse mid-run — set `timestamp_timeout` or a NOPASSWD drop-in. The dedicated `/boot` free-space gate runs only when `findmnt` reports `/boot` as its own mountpoint; otherwise its space is covered by the `/` gate.
+Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreutils, findutils, diffutils — `cmp` gates the byte-exact `mkinitcpio.conf` revert), plus `curl` and `findmnt`. NTP sync and `pacman-contrib` (pactree, for rdep-safe removal) only warn. sudo must be cached (`sudo -v`) and may lapse mid-run — set `timestamp_timeout` or a NOPASSWD drop-in.
 
 | Requirement | Minimum |
 |---|---|
@@ -38,8 +36,6 @@ Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreuti
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. A non-vfat `/boot` ESP fallback also refuses sdboot (exit 4).
-
-Invoke as the normal user; flags are parsed left to right, with `--help`/`--version` honored before anything else.
 
 | Flag | Action |
 |---|---|
@@ -54,7 +50,7 @@ Invoke as the normal user; flags are parsed left to right, with `--help`/`--vers
 
 ## Install Flow
 
-A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 boot rebuild; resolve the cause and re-run. All config writes are atomic renames.
+A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 boot rebuild; resolve the cause and re-run.
 
 | # | Phase | Action |
 |---|---|---|
@@ -87,7 +83,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | nftables.conf | default-deny-inbound ruleset (see [Safety & Reliability](#safety--reliability)) |
 | environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env (`0600`) |
 | baloofilerc | disable KDE Baloo file indexing (`0600`) |
-| MangoHud.conf | readout-only performance HUD for gfx1151; applied per-game via `mangohud %command%` (`0600`) |
+| MangoHud.conf | readout-only performance HUD for gfx1151; auto-enabled for Vulkan apps via `MANGOHUD=1` in environment.d, toggle with `Shift_R+F12` (`0600`) |
 
 **Packages** — the no-args run removes the listed packages with `pacman -Rns` (rdep-aware: skipped for any package with an external installed reverse-dependency). Edit `PKGS_DEL` to keep any; removal is reversible via [Uninstall](#uninstall).
 
@@ -127,8 +123,6 @@ The Phase-3 files (system `0644`, user `0600`):
 > [!NOTE]
 > `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
 
-Every managed write is atomic and reversible; the process exit code is the single source of truth.
-
 | Feature | Detail |
 |---|---|
 | Atomic writes | same-FS tmp → render → symlink-probe → backup → chmod → `mv -T` → re-read + restore on mismatch |
@@ -163,7 +157,7 @@ No automated uninstaller; use Managed Files as the rollback reference.
 
 ## Known Issues
 
-Hardware gaps specific to this Strix Halo platform; each is handled by an out-of-tree package this script does not manage.
+Hardware gaps specific to this Strix Halo platform; each needs an out-of-tree package this script does not manage.
 
 | Component | Issue | Workaround |
 |---|---|---|
@@ -174,7 +168,7 @@ Hardware gaps specific to this Strix Halo platform; each is handled by an out-of
 
 ## Troubleshooting
 
-Common failure modes and their recovery; boot-critical paths assume a live USB is on hand.
+Common failure modes and their recovery.
 
 | Problem | Fix |
 |---|---|

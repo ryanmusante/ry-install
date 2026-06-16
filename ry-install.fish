@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.46.0 (2026-06-16) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.47.0 (2026-06-16) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.46.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.47.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -881,25 +881,26 @@ end
 function _content_HOME_.config_baloofilerc --description "Generate content for ~/.config/baloofilerc (KDE Baloo file indexing disabled)"
     printf '%s\n' "# ry-install: KDE Baloo file indexing disabled (managed file, do not edit by hand)" "[Basic Settings]" "Indexing-Enabled=false"
 end
-function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)"
+function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)" # GTR9-pro config v1.11.1; MangoHud >= 0.8.4, kernel >= 6.14, RADV (Mesa 24+)
     printf '%s\n' \
         "# ry-install: MangoHud readout-only HUD (managed file, do not edit by hand)" \
         "# Beelink GTR Pro · Radeon 8060S (Strix Halo, gfx1151) · CachyOS Wayland · RADV" \
         "horizontal" \
         "legacy_layout=0" \
         "position=top-left" \
-        "fps" \
-        "frametime" \
-        "frame_timing" \
         "gpu_stats" \
         "gpu_temp" \
         "gpu_core_clock" \
+        "gpu_power" \
         "cpu_stats" \
         "cpu_mhz" \
+        "cpu_temp" \
         "vram" \
-        "gpu_mem_clock" \
         "ram" \
-        "swap" \
+        "fps" \
+        "frametime" \
+        "frame_timing" \
+        "fps_metrics=avg,0.01,0.001" \
         "font_size=20" \
         "background_alpha=0.4" \
         "text_outline" \

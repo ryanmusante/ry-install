@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.46.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.47.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -12,7 +12,7 @@ CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx115
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
-git checkout v7.46.0
+git checkout v7.47.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -23,7 +23,7 @@ chmod +x ry-install.fish
 
 ## Requirements
 
-Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreutils, findutils, diffutils — `cmp` gates the byte-exact `mkinitcpio.conf` revert), plus `curl` and `findmnt`. NTP sync and `pacman-contrib` (pactree, for rdep-safe removal) only warn. sudo must be cached (`sudo -v`) and may lapse mid-run — set `timestamp_timeout` or a NOPASSWD drop-in.
+Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreutils, findutils, diffutils — `cmp` gates the `mkinitcpio.conf` revert), `curl`, and `findmnt`. NTP sync and `pacman-contrib` only warn. sudo must be cached (`sudo -v`).
 
 | Requirement | Minimum |
 |---|---|
@@ -46,11 +46,11 @@ Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreuti
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `-h`/`--help` · `-v`/`--version` | Honored first |
 
-`--verify`/`--check` are lock-free and read-only; `--check` compares live `/proc/cmdline`, so pending changes read as drift until reboot. `--install-file` requires an absolute path resolving to a managed destination — anything else is refused (exit 2).
+`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path resolving to a managed destination (else exit 2).
 
 ## Install Flow
 
-A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 boot rebuild; resolve the cause and re-run.
+A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips the Phase 5 rebuild; fix the cause and re-run.
 
 | # | Phase | Action |
 |---|---|---|
@@ -61,16 +61,16 @@ A `pacman -Syu`, package-verify, or boot-config failure taints the run and skips
 | 5 | Boot | `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
-A CHECK/RESULT/EVIDENCE matrix prints to stderr and the JSONL log records each phase. The verdict maps to the exit code; `WARN` keeps exit `0`, `DEFER` applies next boot.
+A CHECK/RESULT/EVIDENCE matrix prints to stderr; a JSONL log records each phase. `WARN` keeps exit `0`, `DEFER` applies next boot.
 
 ## Configuration
 
-The script is the source of truth — retune the `set -g` globals near the top. Each managed file (paths under [Managed Files](#managed-files)) is one profile concern:
+The script is the source of truth — retune the `set -g` globals near the top. Each managed file is one profile concern:
 
 | File | Purpose |
 |---|---|
 | loader.conf / sdboot-manage.conf | systemd-boot entry generation (`REMOVE_EXISTING=yes` wipes `loader/entries/` before regen) |
-| kernel cmdline | CPU/GPU/IOMMU/storage/USB tuning for gfx1151; `root=UUID=`/`rw` written into `/etc/kernel/cmdline` by the generator |
+| kernel cmdline | CPU/GPU/IOMMU/storage/USB tuning for gfx1151 (`root=UUID=`/`rw` added by the generator) |
 | mkinitcpio.conf | `MODULES=(amdgpu)`, systemd hooks, zstd compression |
 | resolved | disable mDNS/LLMNR/DoT; DNSSEC `allow-downgrade` |
 | logind | ignore power/suspend/hibernate/reboot keys |
@@ -83,9 +83,9 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | nftables.conf | default-deny-inbound ruleset (see [Safety & Reliability](#safety--reliability)) |
 | environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env (`0600`) |
 | baloofilerc | disable KDE Baloo file indexing (`0600`) |
-| MangoHud.conf | readout-only performance HUD for gfx1151; auto-enabled for Vulkan apps via `MANGOHUD=1` in environment.d, toggle with `Shift_R+F12` (`0600`) |
+| MangoHud.conf | readout-only HUD: GPU/CPU sensors, unified-memory (`vram`+`ram`), FPS with lows. Auto-enabled via `MANGOHUD=1`; toggle `Shift_R+F12` (`0600`) |
 
-**Packages** — the no-args run removes the listed packages with `pacman -Rns` (rdep-aware: skipped for any package with an external installed reverse-dependency). Edit `PKGS_DEL` to keep any; removal is reversible via [Uninstall](#uninstall).
+**Packages** — the no-args run removes `PKGS_DEL` with `pacman -Rns` (rdep-aware: skipped if an external package depends on it). Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
@@ -101,11 +101,11 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | Disable (not mask) | `iwd.service` — NetworkManager is sole Wi-Fi manager, D-Bus-activates iwd on demand |
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables` |
 
-**fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place (existing `commit=` replaced); every other row and column is preserved byte-for-byte. Gated by line-count parity, a size floor, and a mandatory `findmnt --verify`; a symlinked `/etc/fstab` is refused.
+**fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place; all other rows/columns preserved byte-for-byte. Gated by line-count parity, a size floor, and `findmnt --verify`; a symlinked `/etc/fstab` is refused.
 
 ## Managed Files
 
-The Phase-3 files (system `0644`, user `0600`):
+Phase-3 files (system `0644`, user `0600`):
 
 | Group | Files |
 |---|---|
@@ -138,7 +138,7 @@ The Phase-3 files (system `0644`, user `0600`):
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT) |
 
-Environment overrides (each falls back safely when unset or invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; **bypassed for `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile`**, since a SIGKILL mid-transaction corrupts `db.lck` or skips the mkinitcpio rollback — a hung package/boot op is not time-capped), `RY_INSTALL_SKIP_HARDWARE_CHECK=1` (bypass CPU match), `NO_COLOR`, `TMPDIR`.
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; bypassed for `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` to avoid mid-transaction SIGKILL), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR`.
 
 Logs: one JSONL file per run under `~/ry-install/logs/<date>/`, not auto-pruned.
 
@@ -157,7 +157,7 @@ No automated uninstaller; use Managed Files as the rollback reference.
 
 ## Known Issues
 
-Hardware gaps specific to this Strix Halo platform; each needs an out-of-tree package this script does not manage.
+Hardware gaps on this Strix Halo platform; each needs an out-of-tree package not managed here.
 
 | Component | Issue | Workaround |
 |---|---|---|
@@ -167,8 +167,6 @@ Hardware gaps specific to this Strix Halo platform; each needs an out-of-tree pa
 | Strix Halo ACP | no ASoC machine driver | pending upstream (HDMI/USB audio unaffected) |
 
 ## Troubleshooting
-
-Common failure modes and their recovery.
 
 | Problem | Fix |
 |---|---|

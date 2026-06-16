@@ -1,5 +1,12 @@
 ry-install changelog - newest first.
 
+7.47.0 - 2026-06-16
+
+- mangohud: replace the MangoHud.conf generator with the GTR9-pro v1.11.1 config — add gpu_power, cpu_temp, fps_metrics=avg,0.01,0.001; drop gpu_mem_clock and swap; reorder to GPU/CPU/memory/FPS. Directive count 18 to 20.
+- mangohud: drop the in-config comment lines except the two-line header.
+- docs: trim README prose and table cells to vital information.
+- version: bump to 7.47.0.
+
 7.46.0 - 2026-06-16
 
 - modprobe: TTM GTT cap documented as a tunable (default 32 GiB=8388608; LLM profile 116 GiB=30408704); ttm.* prefix noted, amdgpu.gttsize forbidden. Values unchanged.

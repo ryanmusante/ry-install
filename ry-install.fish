@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.45.0 (2026-06-15) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.46.0 (2026-06-16) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.45.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.46.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -619,6 +619,7 @@ set -g LOGIND_IGNORE_KEYS \
     HandleHibernateKeyLongPress \
     HandleRebootKey \
     HandleRebootKeyLongPress
+# Wi-Fi power-save OFF: MT7925/mt76 does PS in software (latency spikes). NM wifi.powersave=2=DISABLE + iwd PowerSaveDisable=* agree.
 set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd # net/power keys: IWD_* / NM_* / cpupower
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR performance
@@ -694,6 +695,7 @@ set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # thresholds: disk, boot-time, CPU, TTM caps
 set -g BOOT_TIME_TARGET 20
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
+# TTM GTT cap, tunable (pages = GiB × 262144, PAGE_SIZE 4096): default 32 GiB=8388608; LLM profile 116 GiB=30408704. page_pool_size MUST equal pages_limit.
 set -g TTM_PAGES_LIMIT 8388608
 set -g TTM_PAGE_POOL_SIZE 8388608
 
@@ -935,13 +937,15 @@ function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate con
     end
     if test "$_printed" -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
 end
-function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)" # gfx1151 GTT ~32 GiB: ttm pages_limit + page_pool_size
+function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)" # gfx1151 GTT: in-kernel ttm.* (not amdttm.*); default 32 GiB
     printf '%s\n' \
         "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
+        "# Uses ttm.* (in-kernel module). Do NOT add amdgpu.gttsize (deprecated; emits a dmesg warning)." \
         "options ttm pages_limit=$TTM_PAGES_LIMIT" \
         "options ttm page_pool_size=$TTM_PAGE_POOL_SIZE"
 end
 function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate content for RADV drirc drop-in (unified heap on APU)" # gfx1151 unified-heap RADV drirc
+    # radv_enable_unified_heap_on_apu: Mesa MR !18884 (Pitoiset/Valve), Mesa 22.3, commit 0974b67a — https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/18884
     printf '%s\n' \
         '<?xml version="1.0" standalone="yes"?>' \
         '<!-- ry-install: RADV unified-heap on APU (managed file, do not edit by hand) -->' \

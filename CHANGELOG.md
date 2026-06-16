@@ -1,5 +1,13 @@
 ry-install changelog - newest first.
 
+7.46.0 - 2026-06-16
+
+- modprobe: TTM GTT cap documented as a tunable (default 32 GiB=8388608; LLM profile 116 GiB=30408704); ttm.* prefix noted, amdgpu.gttsize forbidden. Values unchanged.
+- network: document Wi-Fi power-save-off rationale for MT7925/mt76 (wifi.powersave=2 + iwd PowerSaveDisable=*). Values unchanged.
+- drirc: restore radv_enable_unified_heap_on_apu provenance (Mesa MR !18884, 22.3). Comment only; deployed content byte-identical.
+- comment: collapse multiline comments to single lines.
+- version: bump to 7.46.0.
+
 7.45.0 - 2026-06-15
 
 - docs: changelog reflowed to a single plain font throughout (version lines no longer rendered as headers).

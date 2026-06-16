@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.45.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.46.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -12,7 +12,7 @@ CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx115
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
-git checkout v7.45.0
+git checkout v7.46.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -74,11 +74,11 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | mkinitcpio.conf | `MODULES=(amdgpu)`, systemd hooks, zstd compression |
 | resolved | disable mDNS/LLMNR/DoT; DNSSEC `allow-downgrade` |
 | logind | ignore power/suspend/hibernate/reboot keys |
-| iwd / NetworkManager | iwd Wi-Fi backend (`iwd.service` disabled — NM D-Bus-activates on demand), powersave |
+| iwd / NetworkManager | iwd Wi-Fi backend (`iwd.service` disabled — NM D-Bus-activates on demand); Wi-Fi power-save off (`wifi.powersave=2` + iwd `PowerSaveDisable=*`) for MT7925 latency |
 | cpupower / udev | `performance` governor + EPP, NVMe I/O scheduler `none` |
 | sysctl | BBR + `fq`, TCP/network and `vm` tuning |
 | RADV drirc | `radv_enable_unified_heap_on_apu` for the APU |
-| amdgpu/ttm modprobe | GTT ~32 GiB (`pages_limit`/`page_pool_size`; assumes BIOS UMA 512 MB) |
+| amdgpu/ttm modprobe | GTT cap via `ttm.*` (not `amdttm.*`); tunable, default 32 GiB, LLM profile 116 GiB (`page_pool_size` = `pages_limit`; assumes BIOS UMA 512 MB) |
 | iw-regdomain / wireless-regdom | wireless regulatory domain fixed at `US` (retune `COUNTRY`) |
 | nftables.conf | default-deny-inbound ruleset (see [Safety & Reliability](#safety--reliability)) |
 | environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env (`0600`) |

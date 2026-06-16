@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.44.4 (2026-06-15) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.44.5 (2026-06-15) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.44.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.44.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1113,25 +1113,18 @@ function _installed_bytes --argument-names dst --description "Raw bytes of insta
 end
 
 # ── JSON ESCAPE ──
-function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)" # callers pre-flatten newlines (out of contract otherwise)
-    set -l s "$argv[1]"
-    if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"; printf '%s' "$s" | string collect --allow-empty; return 0; end # rc pinned 0; stdout-only
-    set s "$s"x # Sentinel guards collect newline-trim
-    set s (string replace -a -- \\ \\\\ "$s" | string collect)
-    set s (string replace -a -- '"' '\\"' "$s" | string collect)
-    set s (string replace -a -- \n '\\n' "$s" | string collect)
-    set s (string replace -a -- \r '\\r' "$s" | string collect)
-    set s (string replace -a -- \t '\\t' "$s" | string collect)
-    set s (string replace -a -- \b '\\b' "$s" | string collect)
-    set s (string replace -a -- \f '\\f' "$s" | string collect)
-    for _hex in 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f; set s (string replace -a -- (printf '\x'$_hex) '\u00'$_hex "$s" | string collect); end # NUL omitted; fish strings cannot carry NUL
-    set -l _slen (string length -- "$s")
-    if test "$_slen" -gt 1
-        set s (string sub --length (math "$_slen - 1") -- "$s") # no raw newlines post-escape
-    else
-        set s ""
-    end
-    printf '%s' "$s" | string collect --allow-empty
+function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)" # regex-mode replace matches embedded newlines; no caller pre-flatten required
+    set -l s $argv[1]
+    if not string match -qr -- '[\x00-\x1f"\\\\\x7f]' "$s"; printf '%s' "$s"; return 0; end # fast path: no escape needed
+    set s (string replace -ar -- '\\\\' '\\\\\\\\' "$s" | string collect)
+    set s (string replace -ar -- '"' '\\\\"' "$s" | string collect)
+    set s (string replace -ar -- '\n' '\\\\n' "$s" | string collect)
+    set s (string replace -ar -- '\r' '\\\\r' "$s" | string collect)
+    set s (string replace -ar -- '\t' '\\\\t' "$s" | string collect)
+    set s (string replace -ar -- '\x08' '\\\\b' "$s" | string collect)
+    set s (string replace -ar -- '\f' '\\\\f' "$s" | string collect)
+    for _hex in 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f; set s (string replace -ar -- '\x'$_hex '\\\\u00'$_hex "$s" | string collect); end # NUL omitted: fish strings cannot carry NUL
+    printf '%s' "$s"
     return 0
 end
 

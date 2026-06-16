@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+7.44.5 - 2026-06-15
+
+- json: _json_str now escapes embedded newlines and other control characters correctly. The prior implementation matched control bytes in literal mode after a command-substitution capture, which split a multi-line value across list elements and dropped everything after the first newline; the escape was applied per-element, never to the embedded byte. The function now matches in regex mode against the whole value, so a single argument containing a newline (e.g. an invocation argument logged in the JSONL header) is escaped to \n in place instead of corrupting the record. The "x" sentinel and the trailing string-sub strip are removed.
+
 7.44.4 - 2026-06-15
 
 - timeout: drop -h from the value-taking sudo-flag skip list in _run_effective_timeout. -h is sudo's --help and takes no value, so listing it caused the token after it to be skipped when resolving the wrapped command name for the timeout-bypass decision. Unreachable in practice (_run only ever invokes sudo -n <cmd>), but the list now matches sudo semantics; no timeout-bypass change for pacman/mkinitcpio/sdboot-manage/paccache/updatedb/pkgfile.

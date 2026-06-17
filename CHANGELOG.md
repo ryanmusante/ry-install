@@ -7,6 +7,7 @@ ry-install changelog - newest first.
 - check: nft-absent during the nftables probe logs CHECK_NFT_UNPROBEABLE before treating the unit as drift, so exit 10 from a missing nft is distinguishable from real drift.
 - preflight: network ICMP fallback probes 1.1.1.1 and 8.8.8.8, so a single ICMP-firewalled host no longer mislabels HTTPS/DNS failure.
 - comment: trim version-stamp parenthetical and pure-restatement comments.
+- docs: trim README connective prose (intro, Configuration, Known Issues); all tables and data rows preserved.
 - version: bump to 7.53.0.
 
 7.52.0 - 2026-06-17

@@ -4,7 +4,7 @@ CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeo
 
 **Version 7.53.0 · fish ≥ 3.6 · CachyOS · MIT**
 
-A single self-contained fish script with 19 embedded config generators and no external dependencies. It deploys a tuned gaming/LLM desktop profile — boot, initramfs, network, performance, firewall, and gaming environment — idempotently and reversibly.
+A single self-contained fish script with 19 embedded config generators, no external dependencies. Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
 
 ## Quick Start
 
@@ -67,7 +67,7 @@ A CHECK/RESULT/EVIDENCE matrix prints to stderr; a JSONL log records each phase.
 
 ## Configuration
 
-The script is the source of truth — retune the `set -g` globals near the top. Each managed file is one profile concern.
+The script is the source of truth — retune the `set -g` globals near the top.
 
 | File | Purpose & key values |
 |---|---|
@@ -161,7 +161,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 ## Known Issues
 
-Hardware gaps on this Strix Halo platform. MES page faults and RTL8127 are resolved upstream — a current CachyOS kernel and `linux-firmware` carry the fixes (the shipped `mkinitcpio-firmware` covers the firmware side); no out-of-tree package is needed for those. MT7925 and ACP remain open.
+Hardware gaps on Strix Halo. MES page faults and RTL8127 are resolved upstream (current kernel + `linux-firmware`; the shipped `mkinitcpio-firmware` covers the firmware side). MT7925 and ACP remain open.
 
 | Component | Issue | Status |
 |---|---|---|

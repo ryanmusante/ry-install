@@ -2,17 +2,16 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.51.1 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.51.2 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
 > [!IMPORTANT]
-> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. Reboot, then `--verify`. Re-running is idempotent. The unattended run **removes packages** — see [Configuration](#configuration) before first run.
+> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally. The unattended run **removes packages** — see [Configuration](#configuration) first. Reboot, then `--verify`. Re-running is idempotent.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install
-git checkout v7.51.1
+cd ry-install && git checkout v7.51.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -23,7 +22,7 @@ chmod +x ry-install.fish
 
 ## Requirements
 
-Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreutils, findutils, diffutils — `cmp` gates the `mkinitcpio.conf` revert), `curl`, and `findmnt`. NTP sync and `pacman-contrib` only warn. sudo must be cached (`sudo -v`).
+Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreutils, findutils, diffutils), `curl`, `findmnt`, and cached sudo (`sudo -v`). NTP sync and `pacman-contrib` only warn.
 
 | Requirement | Minimum |
 |---|---|
@@ -35,7 +34,7 @@ Hard requirements abort read-only in preflight (exit 3): a GNU userland (coreuti
 ## Usage
 
 > [!CAUTION]
-> `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. A non-vfat `/boot` ESP fallback also refuses sdboot (exit 4).
+> `--install-file` of a boot config runs the boot cascade; a cascade failure exits 4 — **do not reboot** until it succeeds. A non-vfat `/boot` ESP also refuses sdboot (exit 4).
 
 | Flag | Action |
 |---|---|
@@ -138,20 +137,18 @@ Phase-3 files (system `0644`, user `0600`):
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT) |
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; bypassed for `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` to avoid mid-transaction SIGKILL), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR`.
-
-Logs: one JSONL file per run under `~/ry-install/logs/<date>/`, not auto-pruned.
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; bypassed for `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile`), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR`. Logs: one JSONL file per run under `~/ry-install/logs/<date>/`, not auto-pruned.
 
 ## Uninstall
 
-No automated uninstaller; use Managed Files as the rollback reference.
+No automated uninstaller; use [Managed Files](#managed-files) as the rollback reference.
 
 | # | Step | Command |
 |---|---|---|
 | 1 | Unmask the masked units | `sudo systemctl unmask` |
 | 2 | Remove deployed system paths; remove user env.d file | `sudo rm` / `rm` |
 | 3 | Restore fstab, then delete `.ry.bak` backups | restore `/etc/fstab` from `/etc/fstab.ry.bak` |
-| 4 | Optionally reverse the package changes | reinstall the removed set with `sudo pacman -S`; `sudo pacman -Rns` the installed set (both listed under [Configuration](#configuration)) |
+| 4 | Optionally reverse package changes | reinstall removed set with `sudo pacman -S`; `sudo pacman -Rns` the installed set |
 | 5 | Rebuild initramfs and boot entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 

@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+7.51.2 - 2026-06-16
+
+- docs: trim README to vital information only — removed redundant restatements and over-explanatory parentheticals (Quick Start clone steps, cmp-revert note, ESP-fallback wording, RY_RUN_TIMEOUT SIGKILL rationale, Uninstall cross-refs). All 13 tables and 80 data rows preserved verbatim. Doc-only.
+- version: bump to 7.51.2.
+
 7.51.1 - 2026-06-16
 
 - comment: _awf_make_backup description now lists fstab alongside loader.conf/mkinitcpio.conf; the helper backs up all three. Doc-only.

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.50.0 (2026-06-16) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.51.0 (2026-06-16) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.50.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.51.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -814,6 +814,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     end
     _ir_validate_counts
     _ir_validate_keys
+    _ir_validate_post_hooks
     for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
     _ir_precompute_caches
     set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!#]'
@@ -881,7 +882,7 @@ end
 function _content_HOME_.config_baloofilerc --description "Generate content for ~/.config/baloofilerc (KDE Baloo file indexing disabled)"
     printf '%s\n' "# ry-install: KDE Baloo file indexing disabled (managed file, do not edit by hand)" "[Basic Settings]" "Indexing-Enabled=false"
 end
-function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)" # GTR9 Pro MangoHud config v7.50.0; MangoHud >= 0.8.4, RADV (Mesa 24+)
+function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)" # GTR9 Pro MangoHud config v7.51.0; MangoHud >= 0.8.4, RADV (Mesa 24+)
     printf '%s\n' \
         "# ry-install: MangoHud readout-only HUD (managed file, do not edit by hand)" \
         "# Beelink GTR9 Pro · Radeon 8060S (Strix Halo, gfx1151) · CachyOS Wayland · RADV" \
@@ -4678,6 +4679,16 @@ set -g _RY_POST_HOOKS \
     "/etc/conf.d/wireless-regdom|regdom" \
     "/etc/udev/rules.d/*|udev" \
     "/etc/nftables.conf|nft"
+function _ir_validate_post_hooks --description "Refuse deploy when any _RY_POST_HOOKS tag lacks a _post_<tag> handler" # mirrors _ir_validate_keys; dispatch-time check only covers the installed target
+    set -l _seen_tags
+    for _entry in $_RY_POST_HOOKS
+        set -l _parts (string split -m1 '|' -- "$_entry"); set -l _tag $_parts[2]
+        if test -z "$_tag"; _err_loud "_RY_POST_HOOKS entry has empty tag: '$_entry' — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        contains -- "$_tag" $_seen_tags; and continue
+        set -a _seen_tags "$_tag"
+        if not functions -q "_post_$_tag"; _err_loud "_RY_POST_HOOKS tag '$_tag' has no handler '_post_$_tag' (entry '$_entry') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+end
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path" # first-match-wins by order
     for _entry in $_RY_POST_HOOKS
         set -l _parts (string split -m1 '|' -- $_entry)
@@ -4732,7 +4743,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (15 handlers / 19 patterns) ──
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (15 handlers / 19 patterns; coverage enforced by _ir_validate_post_hooks) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot sub: mkinitcpio -P + sdboot-manage cascade" # skip_mki: cmdline not an initramfs input
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end

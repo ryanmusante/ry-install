@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+7.51.0 - 2026-06-16
+
+- init: add _ir_validate_post_hooks — refuses to deploy when any _RY_POST_HOOKS pattern carries a tag with no _post_<tag> handler (or an empty tag). Closes the gap where _idf_dispatch_hook only validated the single installed target, so a missing handler for an unused pattern stayed latent until that file was installed. Mirrors _ir_validate_keys; runs in _init_runtime across all modes.
+- version: bump to 7.51.0.
+
 7.50.0 - 2026-06-16
 
 - docs: sync README version stamps (badge + checkout tag) to the script.

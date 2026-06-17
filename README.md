@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, gfx1151).
 
-**Version 7.50.0 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.51.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 ## Quick Start
 
@@ -12,7 +12,7 @@ CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, gfx11
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
-git checkout v7.50.0
+git checkout v7.51.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```

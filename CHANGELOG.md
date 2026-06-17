@@ -1,17 +1,26 @@
 ry-install changelog - newest first.
 
+7.53.0 - 2026-06-17
+
+- nftables: inbound IPv4 ICMP scoped to diagnostics (echo-reply, destination-unreachable, time-exceeded, parameter-problem); inbound echo-request/ping now dropped. Was a blanket ip-protocol-icmp accept. Validated with nft -c.
+- preflight: amdgpu (the gfx1151 KMS module) now hard-fails config validation when modinfo can't find it; other MODULES entries stay warn-only.
+- check: nft-absent during the nftables probe logs CHECK_NFT_UNPROBEABLE before treating the unit as drift, so exit 10 from a missing nft is distinguishable from real drift.
+- preflight: network ICMP fallback probes 1.1.1.1 and 8.8.8.8, so a single ICMP-firewalled host no longer mislabels HTTPS/DNS failure.
+- comment: trim version-stamp parenthetical and pure-restatement comments.
+- version: bump to 7.53.0.
+
 7.52.0 - 2026-06-17
 
-- ttm: relabel the 32 GiB GTT value as a cap, not the default; the in-kernel default is ~50% of RAM (~62 GiB on 128 GB). Comment-only; pages_limit/page_pool_size unchanged.
-- udev: note NVMe scheduler none is a deliberate divergence from the CachyOS kyber default (peak IOPS, lowest tail latency). Value unchanged.
+- ttm: relabel the 32 GiB GTT value as a cap, not the default (in-kernel default is ~50% of RAM, ~62 GiB on 128 GB). Comment-only.
+- udev: note NVMe scheduler none is a deliberate divergence from the CachyOS kyber default. Value unchanged.
 - resolved: note plaintext DNS with mDNS/LLMNR off is a deliberate divergence from the CachyOS DoH default. Values unchanged.
-- profile: annotate PROFILE_NAME — the gtr_pro token is retained for log-field continuity while the human-facing name is GTR9 Pro.
-- docs: Known Issues — MES page faults and RTL8127 resolved upstream (MES 0x86 firmware; in-tree r8169); MT7925 and ACP remain open. Note systemd-oomd left untouched (CachyOS disables it by default).
+- profile: annotate PROFILE_NAME — gtr_pro token retained for log-field continuity; human-facing name is GTR9 Pro.
+- docs: Known Issues — MES page faults and RTL8127 resolved upstream; MT7925 and ACP remain open. Note systemd-oomd left untouched.
 - version: bump to 7.52.0.
 
 7.51.6 - 2026-06-16
 
-- udev: EPP rule in 60-ry-perf.rules ACTION add to add|change, so EPP re-asserts after an AC/DC power-source switch. Matches the NVMe and GPU rules.
+- udev: EPP rule ACTION add->add|change so EPP re-asserts after AC/DC switch.
 - version: bump to 7.51.6.
 
 7.51.5 - 2026-06-16
@@ -21,28 +30,28 @@ ry-install changelog - newest first.
 
 7.51.4 - 2026-06-16
 
-- verify: _vss_udev asserts the GPU clock-floor rule (power_dpm_force_performance_level="high") alongside the NVMe scheduler and EPP checks.
-- verify: _vss_regdom asserts /etc/conf.d/wireless-regdom (WIRELESS_REGDOM) in addition to /etc/iw-regdomain (COUNTRY).
+- verify: _vss_udev asserts the GPU clock-floor rule alongside NVMe scheduler and EPP.
+- verify: _vss_regdom asserts /etc/conf.d/wireless-regdom in addition to /etc/iw-regdomain.
 - version: bump to 7.51.4.
 
 7.51.3 - 2026-06-16
 
-- docs: restore comprehensive README and sync concrete tuning values against the script (cmdline params, HOOKS, sysctl, env vars, nftables, loader/sdboot keys, TTM page math, iwd/NM keys). Doc-only.
+- docs: restore comprehensive README and sync tuning values against the script. Doc-only.
 - version: bump to 7.51.3.
 
 7.51.2 - 2026-06-16
 
-- docs: trim README to vital information; all 13 tables and 80 data rows preserved verbatim. Doc-only.
+- docs: trim README to vital information; all tables/rows preserved. Doc-only.
 - version: bump to 7.51.2.
 
 7.51.1 - 2026-06-16
 
-- comment: _awf_make_backup description now lists fstab alongside loader.conf/mkinitcpio.conf; the helper backs up all three. Doc-only.
+- comment: _awf_make_backup description lists fstab alongside loader.conf/mkinitcpio.conf. Doc-only.
 - version: bump to 7.51.1.
 
 7.51.0 - 2026-06-16
 
-- init: add _ir_validate_post_hooks — refuses to deploy when any _RY_POST_HOOKS pattern has a tag with no _post_<tag> handler (or an empty tag). Mirrors _ir_validate_keys; runs in _init_runtime across all modes.
+- init: add _ir_validate_post_hooks — refuse deploy when a _RY_POST_HOOKS tag has no _post_<tag> handler.
 - version: bump to 7.51.0.
 
 7.50.0 - 2026-06-16

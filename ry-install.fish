@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.52.0 (2026-06-17) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.53.0 (2026-06-17) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.52.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.53.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19 # PROFILE_NAME token kept as gtr_pro for log-field continuity; human-facing name is "GTR9 Pro" (7.49.0)
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19 # PROFILE_NAME token kept as gtr_pro for log-field continuity; human-facing name is "GTR9 Pro"
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -257,7 +257,7 @@ set -g _CLEANUP_DONE false
 function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     set -l _prev_umask (umask)
     umask 0077
-    set -g _RY_LOCK_DIR_OWNED true # pre-mkdir sentinel
+    set -g _RY_LOCK_DIR_OWNED true
     command mkdir -- "$LOCK_DIR" 2>/dev/null
     set -l _mk_rc $status
     umask $_prev_umask
@@ -268,7 +268,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
         echo "[ERR] Cannot create lock dir: $LOCK_DIR (mkdir rc=$_mk_rc)" >&2
         return 1
     end
-    set -g _RY_LOCK_MKDIR_OK true # mkdir ok; we created LOCK_DIR
+    set -g _RY_LOCK_MKDIR_OK true
     command chmod -- 700 "$LOCK_DIR" 2>/dev/null
     set -l _pid_tmp (command mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
     if test -z "$_pid_tmp"; or not printf '%s\n' "$fish_pid" >"$_pid_tmp" 2>/dev/null
@@ -922,7 +922,7 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        iif \"lo\" accept" \
         "        ct state invalid drop" \
         "        ip6 nexthdr ipv6-icmp icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert, nd-router-solicit, echo-request, packet-too-big, time-exceeded, parameter-problem } accept" \
-        "        ip protocol icmp accept" \
+        "        icmp type { echo-reply, destination-unreachable, time-exceeded, parameter-problem } accept" \
         "    }" \
         "    chain forward { type filter hook forward priority filter; policy drop; }" \
         "    chain output { type filter hook output priority filter; policy accept; }" \
@@ -1283,7 +1283,7 @@ function _progress_now --description "Monotonic seconds (cached uptime or epoch)
     set -g _PROG_CLOCK epoch
     command date +%s
 end
-function _progress_init --description "Open scroll region; draw initial bar" # canonical phase list
+function _progress_init --description "Open scroll region; draw initial bar"
     set -g _PROG_STEPS $_RY_PHASE_NAMES
     set -g _PROG_CUR 0; set -g _PROG_TOTAL (count $_PROG_STEPS); test "$_PROG_TOTAL" -gt 0; or set -g _PROG_TOTAL 1
     set -g _PROG_START (_progress_now); set -g _PROG_STEP_START $_PROG_START
@@ -1638,12 +1638,16 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
             return 0
         end
     end
-    if command -q ping; and command ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1
+    set -l _icmp_ok false
+    if command -q ping
+        for _ip in 1.1.1.1 8.8.8.8; command ping -c 1 -W 3 "$_ip" >/dev/null 2>&1; and set _icmp_ok true; and break; end
+    end
+    if test "$_icmp_ok" = true
         _err "Network connectivity: HTTPS or DNS unreachable (raw-IP ICMP works; check /etc/resolv.conf or 443 egress)"
         set -g _RY_NET_FAIL_EVIDENCE "HTTPS/DNS unreachable (raw-IP ICMP ok)"
     else
-        _err "Network connectivity: FAILED — cannot reach archlinux.org, cloudflare.com, or 1.1.1.1"
-        set -g _RY_NET_FAIL_EVIDENCE "archlinux.org, cloudflare.com, 1.1.1.1 unreachable"
+        _err "Network connectivity: FAILED — cannot reach archlinux.org, cloudflare.com, 1.1.1.1, or 8.8.8.8"
+        set -g _RY_NET_FAIL_EVIDENCE "archlinux.org, cloudflare.com, 1.1.1.1, 8.8.8.8 unreachable"
     end
     return 1
 end
@@ -1775,8 +1779,17 @@ function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS 
 end
 function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODULES array entries"
     not command -q modinfo; and return 0
-    for mod in $MKINITCPIO_MODULES; not command modinfo "$mod" >/dev/null 2>&1; and _warn "Module may not exist: $mod (continuing anyway)"; end
-    return 0
+    set -l _errors 0
+    for mod in $MKINITCPIO_MODULES
+        command modinfo "$mod" >/dev/null 2>&1; and continue
+        if test "$mod" = amdgpu
+            _err "Required module not found: amdgpu (gfx1151 KMS depends on it) — refusing to deploy"
+            set _errors (math $_errors + 1)
+        else
+            _warn "Module may not exist: $mod (continuing anyway)"
+        end
+    end
+    test "$_errors" -eq 0
 end
 
 # ── CONFIG-FORMAT VALIDATORS (KV, KPARAM, SYSCTL, INI, TMPFILES) ──
@@ -1950,7 +1963,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     _info "Validating configuration syntax..."
     set -l errors 0
     _ry_validate_mkinitcpio_hooks; or set errors (math $errors + 1)
-    _ry_validate_mkinitcpio_modules
+    _ry_validate_mkinitcpio_modules; or set errors (math $errors + 1)
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
         set -l fn "_content_"(_tmpfile_key "$dst")
         if not functions -q $fn; _fail "  $dst: content generator '$fn' not found"; set errors (math $errors + 1); continue; end
@@ -2548,7 +2561,12 @@ function _svc_chk_expected --description "Check EXPECTED_SERVICES units"
             set -g _RY_CHECK_DRIFT 1
         else
             if test "$unit" = nftables.service; and test "$active" != active # oneshot reads inactive after clean load
-                command -q nft; and string match -q -- '*policy drop*' (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null); or set -g _RY_CHECK_DRIFT 1
+                if not command -q nft
+                    _log "CHECK_NFT_UNPROBEABLE: nft(8) absent — live ruleset unverifiable, treating as drift (fail-closed)"
+                    set -g _RY_CHECK_DRIFT 1
+                else
+                    string match -q -- '*policy drop*' (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null); or set -g _RY_CHECK_DRIFT 1
+                end
             else
                 test "$active" = active; or set -g _RY_CHECK_DRIFT 1 # RemainAfterExit oneshots read active
             end
@@ -3889,7 +3907,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when n
     for _r in $_rdeps_raw; contains -- "$_r" $PKGS_DEL; and continue; set -a _rdeps "$_r"; end
     if test (count $_rdeps) -gt 0
         _info "  $pkg: skipped (reverse deps: $_rdeps)"
-        set -a _RY_PKG_REMOVE_SKIPS "$pkg" # global accumulator
+        set -a _RY_PKG_REMOVE_SKIPS "$pkg"
         return 0
     end
     printf '%s\n' "$pkg"

@@ -1,8 +1,13 @@
 ry-install changelog - newest first.
 
+7.51.1 - 2026-06-16
+
+- comment: _awf_make_backup description now lists fstab alongside loader.conf/mkinitcpio.conf; the helper backs up all three. Doc-only.
+- version: bump to 7.51.1.
+
 7.51.0 - 2026-06-16
 
-- init: add _ir_validate_post_hooks — refuses to deploy when any _RY_POST_HOOKS pattern carries a tag with no _post_<tag> handler (or an empty tag). Closes the gap where _idf_dispatch_hook only validated the single installed target, so a missing handler for an unused pattern stayed latent until that file was installed. Mirrors _ir_validate_keys; runs in _init_runtime across all modes.
+- init: add _ir_validate_post_hooks — refuses to deploy when any _RY_POST_HOOKS pattern has a tag with no _post_<tag> handler (or an empty tag). Mirrors _ir_validate_keys; runs in _init_runtime across all modes.
 - version: bump to 7.51.0.
 
 7.50.0 - 2026-06-16
@@ -12,7 +17,7 @@ ry-install changelog - newest first.
 
 7.49.0 - 2026-06-16
 
-- docs: model name GTR Pro to GTR9 Pro (header, PROFILE_DESC, MangoHud comment + deployed header, README); matches official Beelink name. PROFILE_NAME key and function names unchanged.
+- docs: model name GTR Pro to GTR9 Pro (header, PROFILE_DESC, MangoHud comment, README); matches official Beelink name. PROFILE_NAME and function names unchanged.
 - note: reverses the 7.47.0 F-01 rename; the gtr9 token is reintroduced.
 - version: bump to 7.49.0.
 
@@ -25,7 +30,7 @@ ry-install changelog - newest first.
 
 7.47.0 - 2026-06-16
 
-- mangohud: replace the MangoHud.conf generator config — add gpu_power, cpu_temp, fps_metrics=avg,0.01,0.001; drop gpu_mem_clock and swap; reorder GPU/CPU/memory/FPS. Directives 18 to 20.
+- mangohud: rework MangoHud.conf — add gpu_power, cpu_temp, fps_metrics=avg,0.01,0.001; drop gpu_mem_clock and swap; reorder. Directives 18 to 20.
 - mangohud: drop in-config comments except the two-line header.
 - docs: trim README prose and table cells.
 - version: bump to 7.47.0.

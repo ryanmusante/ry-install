@@ -1,10 +1,14 @@
 ry-install changelog - newest first.
 
+7.51.5 - 2026-06-16
+
+- comment: drop the version stamp from the MangoHud generator comment.
+- version: bump to 7.51.5.
+
 7.51.4 - 2026-06-16
 
-- verify: _vss_udev now asserts the GPU clock-floor rule (power_dpm_force_performance_level="high") alongside the NVMe scheduler and EPP checks.
-- verify: _vss_regdom now asserts /etc/conf.d/wireless-regdom (WIRELESS_REGDOM) in addition to /etc/iw-regdomain (COUNTRY); both managed regdom files are now statically verified.
-- comment: drop the version stamp from the MangoHud generator comment.
+- verify: _vss_udev asserts the GPU clock-floor rule (power_dpm_force_performance_level="high") alongside the NVMe scheduler and EPP checks.
+- verify: _vss_regdom asserts /etc/conf.d/wireless-regdom (WIRELESS_REGDOM) in addition to /etc/iw-regdomain (COUNTRY).
 - version: bump to 7.51.4.
 
 7.51.3 - 2026-06-16

@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeon 8060S, gfx1151 / Strix Halo).
 
-**Version 7.51.3 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.51.4 · fish ≥ 3.6 · CachyOS · MIT**
 
 A single self-contained fish script with 19 embedded config generators and no external dependencies. It deploys a tuned gaming/LLM desktop profile — boot, initramfs, network, performance, firewall, and gaming environment — idempotently and reversibly.
 
@@ -13,7 +13,7 @@ A single self-contained fish script with 19 embedded config generators and no ex
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.51.3
+cd ry-install && git checkout v7.51.4
 chmod +x ry-install.fish
 ./ry-install.fish
 ```

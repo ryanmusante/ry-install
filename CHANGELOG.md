@@ -1,13 +1,20 @@
 ry-install changelog - newest first.
 
+7.51.4 - 2026-06-16
+
+- verify: _vss_udev now asserts the GPU clock-floor rule (power_dpm_force_performance_level="high") alongside the NVMe scheduler and EPP checks.
+- verify: _vss_regdom now asserts /etc/conf.d/wireless-regdom (WIRELESS_REGDOM) in addition to /etc/iw-regdomain (COUNTRY); both managed regdom files are now statically verified.
+- comment: drop the version stamp from the MangoHud generator comment.
+- version: bump to 7.51.4.
+
 7.51.3 - 2026-06-16
 
-- docs: restore comprehensive README and exhaustively sync against the script — enumerate concrete tuning values previously summarized (kernel cmdline params, mkinitcpio HOOKS, sysctl tunables, gaming env vars, nftables rule specifics, loader/sdboot keys, TTM page math, iwd/NM keys), add GNU-userland requirement detail, RY_RUN_TIMEOUT bypass rationale, internal sentinel codes, and lock fail-closed semantics. Every documented value verified present in ry-install.fish. Doc-only.
+- docs: restore comprehensive README and sync concrete tuning values against the script (cmdline params, HOOKS, sysctl, env vars, nftables, loader/sdboot keys, TTM page math, iwd/NM keys). Doc-only.
 - version: bump to 7.51.3.
 
 7.51.2 - 2026-06-16
 
-- docs: trim README to vital information only — removed redundant restatements and over-explanatory parentheticals (Quick Start clone steps, cmp-revert note, ESP-fallback wording, RY_RUN_TIMEOUT SIGKILL rationale, Uninstall cross-refs). All 13 tables and 80 data rows preserved verbatim. Doc-only.
+- docs: trim README to vital information; all 13 tables and 80 data rows preserved verbatim. Doc-only.
 - version: bump to 7.51.2.
 
 7.51.1 - 2026-06-16

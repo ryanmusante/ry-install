@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.51.3 (2026-06-16) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.51.4 (2026-06-16) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.51.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.51.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -882,7 +882,7 @@ end
 function _content_HOME_.config_baloofilerc --description "Generate content for ~/.config/baloofilerc (KDE Baloo file indexing disabled)"
     printf '%s\n' "# ry-install: KDE Baloo file indexing disabled (managed file, do not edit by hand)" "[Basic Settings]" "Indexing-Enabled=false"
 end
-function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)" # GTR9 Pro MangoHud config v7.51.0; MangoHud >= 0.8.4, RADV (Mesa 24+)
+function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)" # GTR9 Pro MangoHud config; MangoHud >= 0.8.4, RADV (Mesa 24+)
     printf '%s\n' \
         "# ry-install: MangoHud readout-only HUD (managed file, do not edit by hand)" \
         "# Beelink GTR9 Pro · Radeon 8060S (Strix Halo, gfx1151) · CachyOS Wayland · RADV" \
@@ -2296,16 +2296,17 @@ function _vss_modprobe --description "_verify_static_system sub: amdgpu/ttm modp
     _chk_grep /etc/modprobe.d/ry-amdgpu-strixhalo.conf "pages_limit=$TTM_PAGES_LIMIT" "ttm pages_limit=$TTM_PAGES_LIMIT"
     _chk_grep /etc/modprobe.d/ry-amdgpu-strixhalo.conf "page_pool_size=$TTM_PAGE_POOL_SIZE" "ttm page_pool_size=$TTM_PAGE_POOL_SIZE"
 end
-function _vss_regdom --description "_verify_static_system sub: wireless regdom (/etc/iw-regdomain)"
-    _echo "── wireless regdom (/etc/iw-regdomain) ──"
-    _chk_file /etc/iw-regdomain; or return 0
-    _chk_grep /etc/iw-regdomain "COUNTRY=$COUNTRY" "regdom COUNTRY=$COUNTRY"
+function _vss_regdom --description "_verify_static_system sub: wireless regdom (/etc/iw-regdomain + /etc/conf.d/wireless-regdom)"
+    _echo "── wireless regdom (iw-regdomain + wireless-regdom) ──"
+    _chk_file /etc/iw-regdomain; and _chk_grep /etc/iw-regdomain "COUNTRY=$COUNTRY" "iw-regdomain COUNTRY=$COUNTRY"
+    _chk_file /etc/conf.d/wireless-regdom; and _chk_grep /etc/conf.d/wireless-regdom "WIRELESS_REGDOM=\"$COUNTRY\"" "wireless-regdom $COUNTRY"
 end
-function _vss_udev --description "_verify_static_system sub: combined udev perf rules (NVMe scheduler + EPP)"
-    _echo "── udev (perf: I/O scheduler + EPP) ──"
+function _vss_udev --description "_verify_static_system sub: combined udev perf rules (NVMe scheduler + EPP + GPU clock-floor)"
+    _echo "── udev (perf: I/O scheduler + EPP + GPU clock-floor) ──"
     _chk_file /etc/udev/rules.d/60-ry-perf.rules; or return 0
     _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'queue/scheduler}="none"' "nvme scheduler=none"
     _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'energy_performance_preference}="performance"' "EPP=performance"
+    _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'power_dpm_force_performance_level}="high"' "GPU dpm=high"
 end
 function _vss_drirc --description "_verify_static_system sub: RADV drirc"
     _echo "── drirc (RADV) ──"

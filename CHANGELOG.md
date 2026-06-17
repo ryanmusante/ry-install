@@ -1,5 +1,20 @@
 ry-install changelog - newest first.
 
+7.49.0 - 2026-06-16
+
+- docs: correct model name GTR Pro to GTR9 Pro across script header, PROFILE_DESC, MangoHud generator (comment + deployed header line), and README, matching the official Beelink product name (GTR9 Pro AMD Ryzen AI Max+ 395). PROFILE_NAME key and tmpfile-key function names unchanged.
+- note: reverses the v7.47.0 F-01 fix (GTR9-pro to GTR Pro). The gtr9 token is intentionally re-introduced; the prior "rg -ni gtr9 = 0" assertion no longer applies.
+- mangohud: deployed MangoHud.conf header line now reads "Beelink GTR9 Pro"; directive content unchanged, comment text only.
+- version: bump to 7.49.0.
+
+7.48.0 - 2026-06-16
+
+- cmdline: IOMMU mode iommu=pt to amd_iommu=off in KERNEL_PARAMS. Disables AMD-Vi; removes DMA isolation and breaks VFIO/PCI-passthrough and USB4 device isolation. Param count unchanged.
+- udev: add GPU clock-floor entry to 60-ry-perf.rules (amdgpu power_dpm_force_performance_level=high, pins Radeon 8060S SCLK to top state). Holds high clock at idle on the 140W APU.
+- verify: _vrk_gpu_state now asserts power_dpm == high (was auto), matching the new udev rule; fail/warn messages updated.
+- mangohud: correct stale MangoHud.conf generator comment GTR9-pro v1.11.1 to GTR Pro v7.48.0; drop kernel >= 6.14 clause. Deployed content unchanged. Last gtr9 token removed from the script.
+- version: bump to 7.48.0.
+
 7.47.0 - 2026-06-16
 
 - mangohud: replace the MangoHud.conf generator with the GTR9-pro v1.11.1 config — add gpu_power, cpu_temp, fps_metrics=avg,0.01,0.001; drop gpu_mem_clock and swap; reorder to GPU/CPU/memory/FPS. Directive count 18 to 20.

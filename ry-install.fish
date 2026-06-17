@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.47.0 (2026-06-16) - CachyOS config manager for Beelink GTR Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.49.0 (2026-06-16) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.47.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.49.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -581,7 +581,7 @@ set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_R
 set -g KERNEL_PARAMS \
     8250.nr_uarts=0 \
     amd_pstate=active \
-    iommu=pt \
+    amd_iommu=off \
     nowatchdog \
     nvme_core.default_ps_max_latency_us=0 \
     pcie_aspm.policy=performance \
@@ -881,10 +881,10 @@ end
 function _content_HOME_.config_baloofilerc --description "Generate content for ~/.config/baloofilerc (KDE Baloo file indexing disabled)"
     printf '%s\n' "# ry-install: KDE Baloo file indexing disabled (managed file, do not edit by hand)" "[Basic Settings]" "Indexing-Enabled=false"
 end
-function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)" # GTR9-pro config v1.11.1; MangoHud >= 0.8.4, kernel >= 6.14, RADV (Mesa 24+)
+function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)" # GTR9 Pro MangoHud config v7.49.0; MangoHud >= 0.8.4, RADV (Mesa 24+)
     printf '%s\n' \
         "# ry-install: MangoHud readout-only HUD (managed file, do not edit by hand)" \
-        "# Beelink GTR Pro · Radeon 8060S (Strix Halo, gfx1151) · CachyOS Wayland · RADV" \
+        "# Beelink GTR9 Pro · Radeon 8060S (Strix Halo, gfx1151) · CachyOS Wayland · RADV" \
         "horizontal" \
         "legacy_layout=0" \
         "position=top-left" \
@@ -970,7 +970,9 @@ function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate con
         "# NVMe I/O scheduler none" \
         'ACTION=="add|change", KERNEL=="nvme[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
         "# AMD P-State EPP performance" \
-        'ACTION=="add", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="performance"'
+        'ACTION=="add", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="performance"' \
+        "# GPU performance level (gfx1151 clock-floor; optional)" \
+        'ACTION=="add|change", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="high"'
 end
 
 # ── CONTENT DISPATCH (_ry_get_file_content; fn = _content_$(_tmpfile_key dst)) ──
@@ -2649,18 +2651,18 @@ function _vrk_gpu_state --description "Runtime kparam check: GPU performance lev
         if test -f "$f"
             set found_gpu true
             set -l level (command cat -- "$f" 2>/dev/null)
-            if test "$level" = auto
+            if test "$level" = high
                 _ok "  $f: $level"
                 set gpu_ok true
             else
-                _fail "  $f: $level (expected: auto)"
+                _fail "  $f: $level (expected: high)"
             end
         end
     end
     if test "$found_gpu" = false
         _warn "  No GPU DPM sysfs entries found"
     else if test "$gpu_ok" = false
-        _warn "  GPU not at 'auto' — check dmesg for amdgpu errors"
+        _warn "  GPU not at 'high' — check dmesg for amdgpu errors"
     end
 end
 function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + amd_pstate + boost"

@@ -1,6 +1,6 @@
 # ry-install
 
-CachyOS configuration manager for the Beelink GTR Pro (Ryzen AI Max+ 395, gfx1151).
+CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, gfx1151).
 
 **Version 7.47.0 · fish ≥ 3.6 · CachyOS · MIT**
 
@@ -75,7 +75,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | resolved | disable mDNS/LLMNR/DoT; DNSSEC `allow-downgrade` |
 | logind | ignore power/suspend/hibernate/reboot keys |
 | iwd / NetworkManager | iwd Wi-Fi backend (`iwd.service` disabled — NM D-Bus-activates on demand); Wi-Fi power-save off (`wifi.powersave=2` + iwd `PowerSaveDisable=*`) for MT7925 latency |
-| cpupower / udev | `performance` governor + EPP, NVMe I/O scheduler `none` |
+| cpupower / udev | `performance` governor + EPP, NVMe I/O scheduler `none`, GPU clock-floor (`power_dpm_force_performance_level=high`) |
 | sysctl | BBR + `fq`, TCP/network and `vm` tuning |
 | RADV drirc | `radv_enable_unified_heap_on_apu` for the APU |
 | amdgpu/ttm modprobe | GTT cap via `ttm.*` (not `amdttm.*`); tunable, default 32 GiB, LLM profile 116 GiB (`page_pool_size` = `pages_limit`; assumes BIOS UMA 512 MB) |

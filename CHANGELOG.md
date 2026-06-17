@@ -1,5 +1,11 @@
 ry-install changelog - newest first.
 
+7.51.6 - 2026-06-16
+
+- udev: EPP rule in 60-ry-perf.rules ACTION=="add" to "add|change"; amd-pstate re-emits a cpu 'change' uevent on AC/DC transitions (dynamic-EPP power-supply notifier), so the prior add-only match left energy_performance_preference unre-asserted after a power-source switch. Now matches the NVMe and GPU rules.
+- comment: document the intentional single-quote juxtaposition in the _kp_metachar_re character class (fish has no in-quote escapes). Regex behavior unchanged.
+- version: bump to 7.51.6.
+
 7.51.5 - 2026-06-16
 
 - comment: drop the version stamp from the MangoHud generator comment.

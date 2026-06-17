@@ -202,7 +202,7 @@ function _ntsync_state --description "Return: builtin|loaded|loaded_nodev|missin
     end
     return 0
 end
-function _resolve_systemd_ver --description "Cache systemd major version into _RY_SYSTEMD_VER" # cached via _RY_SYSTEMD_VER_TRIED
+function _resolve_systemd_ver --description "Cache systemd major version into _RY_SYSTEMD_VER"
     set -q _RY_SYSTEMD_VER_TRIED; and return 0
     set -l _v (command systemctl --version 2>/dev/null | command head -n 1 | string match -rg -- '^systemd (\d+)')
     if test -n "$_v"
@@ -692,8 +692,7 @@ set -g MASK \
     suspend-then-hibernate.target
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # enabled + verified (Phase 4/6)
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
-set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # thresholds: disk, boot-time, CPU, TTM caps
-set -g BOOT_TIME_TARGET 20
+set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # thresholds: disk, CPU, TTM caps
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 # TTM GTT cap, tunable (pages = GiB × 262144, PAGE_SIZE 4096): cap 32 GiB=8388608 (below the in-kernel ~50%-of-RAM default, ~62 GiB on 128 GB); LLM profile 116 GiB=30408704. page_pool_size MUST equal pages_limit.
 set -g TTM_PAGES_LIMIT 8388608
@@ -2687,7 +2686,7 @@ function _vrk_gpu_state --description "Runtime kparam check: GPU performance lev
 end
 function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + amd_pstate + boost"
     _echo "── CPU performance ──"
-    set -g _CPU_PATH ""; for cpu_dir in /sys/devices/system/cpu/cpu*/cpufreq; if test -d "$cpu_dir"; set -g _CPU_PATH "$cpu_dir"; break; end; end # representative: first cpufreq dir
+    set -g _CPU_PATH ""; for cpu_dir in /sys/devices/system/cpu/cpu*/cpufreq; if test -d "$cpu_dir"; set -g _CPU_PATH "$cpu_dir"; break; end; end
     if test -z "$_CPU_PATH"
         _warn "  No CPU frequency scaling found"
     else
@@ -3062,29 +3061,6 @@ function _vre_tcp --description "Runtime env check: tcp_bbr module version (acti
     end
     _echo
 end
-function _vre_thp_ksm --description "Runtime env check: THP enabled/defrag + KSM"
-    _echo "── THP / KSM / ZRAM ──"
-    for _kv in 'enabled:[always]:always:CachyOS default' 'defrag:[defer+madvise]:defer+madvise:' # fish [..] is literal
-        set -l _parts (string split ':' -- "$_kv"); set -l _f /sys/kernel/mm/transparent_hugepage/$_parts[1]
-        test -f "$_f"; or continue
-        set -l _val (command cat -- "$_f" 2>/dev/null)
-        if string match -q -- "*$_parts[2]*" "$_val"
-            _ok "  THP $_parts[1]: $_parts[3]"
-        else
-            set -l _m (string match -r '\[(\S+)\]' -- "$_val"); set -l _active $_m[2]
-            test -n "$_active"; or set _active "$_val"
-            _info "  THP $_parts[1]: $_active (advisory — not managed by this profile; CachyOS default: $_parts[3])"
-        end
-    end
-    if test -f /sys/kernel/mm/ksm/run
-        set -l _ksm (command cat -- /sys/kernel/mm/ksm/run 2>/dev/null | string trim --)
-        if test "$_ksm" = 0
-            _ok "  KSM run: 0 (disabled)"
-        else
-            _warn "  KSM run: $_ksm (recommended: 0 — breaks THP, wastes CPU with 128 GB)"
-        end
-    end
-end
 function _vre_zram --description "Runtime env check: zram service + active swap device"
     if not command -q swapon
         _warn "  ZRAM/swap check skipped: swapon(1) unavailable"
@@ -3109,7 +3085,7 @@ function _vre_zram --description "Runtime env check: zram service + active swap 
         case '*'
             _warn "  ZRAM service: $_zram_state (expected: enabled or static+active)"
     end
-    _echo "── ZRAM device ──"
+    _echo "── ZRAM ──"
     if test -n "$_zram_swap"
         set -l _zram_info ""
         command -q zramctl; and set _zram_info (command zramctl --output NAME,ALGORITHM,DISKSIZE,TOTAL,COMP-RATIO --noheadings 2>/dev/null | command head -n 1 | string trim --)
@@ -3187,11 +3163,10 @@ function _vre_regdom --description "Runtime env check: wireless regulatory domai
 end
 
 # ── VERIFY-RUNTIME: ENV ORCHESTRATOR (_verify_runtime_env) ──
-function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, THP/KSM/ZRAM, fstab, ntsync runtime"
+function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, ZRAM, fstab, ntsync runtime"
     _vre_envvars
     _vre_sysctl_runtime
     _vre_tcp
-    _vre_thp_ksm
     _vre_zram
     _vre_fstab
     _vre_ntsync
@@ -3344,54 +3319,9 @@ function _vrs_drirc_xml --description "Runtime session check: drirc XML well-for
     if not sudo -n true 2>/dev/null; _warn "  drirc: sudo cache lapsed — cannot read $_drc"; return 0; end
     _fail "  drirc: $_drc NOT FOUND"
 end
-function _vrs_boot_perf --description "Runtime session check: systemd-analyze boot time + slowest services"
-    _echo
-    _echo "BOOT PERFORMANCE"
-    _echo
-    if not command -q systemd-analyze; _warn "  systemd-analyze not available"; return 0; end
-    set -l boot_time (command systemd-analyze 2>/dev/null | command head -n 1)
-    test -n "$boot_time"; and _info "  $boot_time"
-    _log "BOOT_TIME_CHECK: parsing systemd-analyze output"
-    set -l _total_str (string match -rg -- '= ([^=]+)$' "$boot_time" | string trim --)
-    set -l _bt_m 0; set -l _bt_parsed false
-    for _tok in (string split ' ' -- "$_total_str") # systemd-analyze totals mix h/min/s/ms tokens.
-        set -l _tp (string match -rg -- '^([0-9]+(?:\.[0-9]+)?)(h|min|s|ms)$' "$_tok")
-        test (count $_tp) -eq 2; or continue
-        switch "$_tp[2]"
-            case h
-                set _bt_m (math "$_bt_m + round($_tp[1] * 3600000)")
-            case min
-                set _bt_m (math "$_bt_m + round($_tp[1] * 60000)")
-            case s
-                set _bt_m (math "$_bt_m + round($_tp[1] * 1000)")
-            case ms
-                set _bt_m (math "$_bt_m + round($_tp[1])")
-        end
-        set _bt_parsed true
-    end
-    if test "$_bt_parsed" = false
-        _info "  systemd-analyze output format unrecognized — skipping target compare"
-    else if not set -q BOOT_TIME_TARGET; or test -z "$BOOT_TIME_TARGET"
-        _info "  BOOT_TIME_TARGET not set — skipping target comparison"
-    else
-        set -l target $BOOT_TIME_TARGET
-        set -l _tgt_m (math "$target * 1000"); set -l _warn_m (math "round($target * 900)") # fish math lacks comparisons
-        if test "$_bt_m" -gt "$_tgt_m"
-            _warn "  Boot time $_total_str exceeds $target""s target"
-            _info "  Inspect: systemd-analyze critical-chain"
-        else if test "$_bt_m" -ge "$_warn_m"
-            _warn "  Boot time $_total_str within 10% of $target""s target (near-miss)"
-        else
-            _ok "  Boot time within $target""s target"
-        end
-    end
-    _echo "  Critical chain (boot-gating path):"
-    set -l _cc (command systemd-analyze critical-chain --no-pager 2>/dev/null | command head -n 10)
-    for line in $_cc; _info "    $line"; end
-end
 
 # ── VERIFY-RUNTIME: SESSION ORCHESTRATOR (_verify_runtime_session) ──
-function _verify_runtime_session --description "Verify file perms, parent dirs, Vulkan packages, drirc XML, boot performance"
+function _verify_runtime_session --description "Verify file perms, parent dirs, Vulkan packages, drirc XML"
     _echo "FILE PERMISSIONS"
     _echo "── Sensitive files ──"
     _vrs_nm_perms
@@ -3399,7 +3329,6 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
     _vrs_parent_dirs
     _vrs_vulkan
     _vrs_drirc_xml
-    _vrs_boot_perf
 end
 
 # ── VERIFY: TOP-LEVEL ORCHESTRATORS (_ry_verify_runtime + _ry_verify_all) ──

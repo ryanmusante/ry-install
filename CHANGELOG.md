@@ -2,12 +2,13 @@ ry-install changelog - newest first.
 
 7.53.0 - 2026-06-17
 
-- nftables: inbound IPv4 ICMP scoped to diagnostics (echo-reply, destination-unreachable, time-exceeded, parameter-problem); inbound echo-request/ping now dropped. Was a blanket ip-protocol-icmp accept. Validated with nft -c.
-- preflight: amdgpu (the gfx1151 KMS module) now hard-fails config validation when modinfo can't find it; other MODULES entries stay warn-only.
-- check: nft-absent during the nftables probe logs CHECK_NFT_UNPROBEABLE before treating the unit as drift, so exit 10 from a missing nft is distinguishable from real drift.
-- preflight: network ICMP fallback probes 1.1.1.1 and 8.8.8.8, so a single ICMP-firewalled host no longer mislabels HTTPS/DNS failure.
+- nftables: scope inbound IPv4 ICMP to diagnostics (echo-reply, destination-unreachable, time-exceeded, parameter-problem); drop inbound echo-request. Was a blanket icmp accept.
+- preflight: amdgpu now hard-fails config validation when modinfo cannot find it; other MODULES entries stay warn-only.
+- check: log CHECK_NFT_UNPROBEABLE when nft is absent during the nftables probe, so exit 10 from a missing nft is distinguishable from drift.
+- preflight: network ICMP fallback probes 1.1.1.1 and 8.8.8.8 so a single firewalled host no longer mislabels the failure.
+- verify: drop the systemd-analyze boot-time check and the THP/KSM check; remove BOOT_TIME_TARGET. Verify-only.
 - comment: trim version-stamp parenthetical and pure-restatement comments.
-- docs: trim README connective prose (intro, Configuration, Known Issues); all tables and data rows preserved.
+- docs: trim README connective prose; all tables and data rows preserved.
 - version: bump to 7.53.0.
 
 7.52.0 - 2026-06-17

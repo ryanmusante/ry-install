@@ -1,32 +1,35 @@
 ry-install changelog - newest first.
 
+7.50.0 - 2026-06-16
+
+- docs: sync README version stamps (badge + checkout tag) to the script.
+- version: bump to 7.50.0.
+
 7.49.0 - 2026-06-16
 
-- docs: correct model name GTR Pro to GTR9 Pro across script header, PROFILE_DESC, MangoHud generator (comment + deployed header line), and README, matching the official Beelink product name (GTR9 Pro AMD Ryzen AI Max+ 395). PROFILE_NAME key and tmpfile-key function names unchanged.
-- note: reverses the v7.47.0 F-01 fix (GTR9-pro to GTR Pro). The gtr9 token is intentionally re-introduced; the prior "rg -ni gtr9 = 0" assertion no longer applies.
-- mangohud: deployed MangoHud.conf header line now reads "Beelink GTR9 Pro"; directive content unchanged, comment text only.
+- docs: model name GTR Pro to GTR9 Pro (header, PROFILE_DESC, MangoHud comment + deployed header, README); matches official Beelink name. PROFILE_NAME key and function names unchanged.
+- note: reverses the 7.47.0 F-01 rename; the gtr9 token is reintroduced.
 - version: bump to 7.49.0.
 
 7.48.0 - 2026-06-16
 
-- cmdline: IOMMU mode iommu=pt to amd_iommu=off in KERNEL_PARAMS. Disables AMD-Vi; removes DMA isolation and breaks VFIO/PCI-passthrough and USB4 device isolation. Param count unchanged.
-- udev: add GPU clock-floor entry to 60-ry-perf.rules (amdgpu power_dpm_force_performance_level=high, pins Radeon 8060S SCLK to top state). Holds high clock at idle on the 140W APU.
-- verify: _vrk_gpu_state now asserts power_dpm == high (was auto), matching the new udev rule; fail/warn messages updated.
-- mangohud: correct stale MangoHud.conf generator comment GTR9-pro v1.11.1 to GTR Pro v7.48.0; drop kernel >= 6.14 clause. Deployed content unchanged. Last gtr9 token removed from the script.
+- cmdline: IOMMU iommu=pt to amd_iommu=off. Disables AMD-Vi; breaks VFIO/PCI-passthrough and USB4 isolation. Param count unchanged.
+- udev: add GPU clock-floor to 60-ry-perf.rules (power_dpm_force_performance_level=high); holds high clock at idle on the 140W APU.
+- verify: _vrk_gpu_state asserts power_dpm == high (was auto).
 - version: bump to 7.48.0.
 
 7.47.0 - 2026-06-16
 
-- mangohud: replace the MangoHud.conf generator with the GTR9-pro v1.11.1 config — add gpu_power, cpu_temp, fps_metrics=avg,0.01,0.001; drop gpu_mem_clock and swap; reorder to GPU/CPU/memory/FPS. Directive count 18 to 20.
-- mangohud: drop the in-config comment lines except the two-line header.
-- docs: trim README prose and table cells to vital information.
+- mangohud: replace the MangoHud.conf generator config — add gpu_power, cpu_temp, fps_metrics=avg,0.01,0.001; drop gpu_mem_clock and swap; reorder GPU/CPU/memory/FPS. Directives 18 to 20.
+- mangohud: drop in-config comments except the two-line header.
+- docs: trim README prose and table cells.
 - version: bump to 7.47.0.
 
 7.46.0 - 2026-06-16
 
-- modprobe: TTM GTT cap documented as a tunable (default 32 GiB=8388608; LLM profile 116 GiB=30408704); ttm.* prefix noted, amdgpu.gttsize forbidden. Values unchanged.
-- network: document Wi-Fi power-save-off rationale for MT7925/mt76 (wifi.powersave=2 + iwd PowerSaveDisable=*). Values unchanged.
-- drirc: restore radv_enable_unified_heap_on_apu provenance (Mesa MR !18884, 22.3). Comment only; deployed content byte-identical.
+- modprobe: document TTM GTT cap as a tunable (default 32 GiB, LLM profile 116 GiB); amdgpu.gttsize forbidden. Values unchanged.
+- network: document Wi-Fi power-save-off rationale for MT7925/mt76. Values unchanged.
+- drirc: restore radv_enable_unified_heap_on_apu provenance (Mesa MR !18884). Comment only.
 - comment: collapse multiline comments to single lines.
 - version: bump to 7.46.0.
 
@@ -63,16 +66,13 @@ ry-install changelog - newest first.
 
 7.44.0 - 2026-06-15
 
-- mangohud: add ~/.config/MangoHud/MangoHud.conf, a readout-only HUD for the Radeon 8060S (gfx1151). New generator, _grep_mangohud validator, verify check, notify-only _post_mangohud hook.
+- mangohud: add ~/.config/MangoHud/MangoHud.conf, a readout-only HUD for the Radeon 8060S. New generator, validator, verify check, notify-only hook.
 - count assertions: USER_DESTINATIONS 2 to 3, _RY_POST_HOOKS 18 to 19, _RY_MANAGED_FILE_COUNT 18 to 19.
-- comment: correct the post-hook section header to 15 handlers / 19 patterns.
 
 7.43.2 - 2026-06-15
 
-- docs: restore the Configuration File/Purpose table, expanded to every managed file (nftables.conf, regdom files; DNSSEC allow-downgrade).
-- docs: Configuration Remove row enumerates all nine PKGS_DEL packages.
-- docs: Quick Start trimmed to the five vital commands.
-- docs: README list order reordered to match script definition order; admonitions trail their sections.
+- docs: restore the Configuration File/Purpose table for every managed file.
+- docs: Quick Start trimmed to vital commands; list order matches script definition order.
 - No script logic changes: byte-identical to 7.43.1.
 
 7.43.1 - 2026-06-15
@@ -99,18 +99,17 @@ ry-install changelog - newest first.
 
 7.41.0 - 2026-06-14
 
-- network: keep iwd as the NM Wi-Fi backend (reverts the 7.40.0 wpa_supplicant switch); new _configure_services_iwd_handoff disables (not masks) iwd.service, fixing the iwd/NM race for wlan0.
+- network: keep iwd as the NM Wi-Fi backend (reverts the 7.40.0 wpa_supplicant switch); new handoff disables (not masks) iwd.service, fixing the iwd/NM race.
 - verify: iwd runtime check is informational, not a hard fail.
-- packages: drop wpa_supplicant from PKGS_ADD (provided by the CachyOS base).
+- packages: drop wpa_supplicant from PKGS_ADD (in the CachyOS base).
 - count assertions: SYSTEM_DESTINATIONS 15 to 16, PKGS_ADD 17 to 16, _RY_POST_HOOKS 17 to 18, _RY_MANAGED_FILE_COUNT 17 to 18.
 
 7.40.0 - 2026-06-14
 
-- network: switch NM Wi-Fi backend iwd to wpa_supplicant (NM+iwd was upstream-experimental). SYSTEM_DESTINATIONS 16 to 15.
-- baloo: add ~/.config/baloofilerc (Indexing-Enabled=false); new generator, verify check, _post_baloo hook. USER_DESTINATIONS 1 to 2.
-- cmdline: remove amdgpu.ppfeaturemask=0xffff7fff (Overdrive hang risk on Strix Halo). KERNEL_PARAMS 12 to 11.
+- network: switch NM Wi-Fi backend iwd to wpa_supplicant. SYSTEM_DESTINATIONS 16 to 15.
+- baloo: add ~/.config/baloofilerc (Indexing-Enabled=false). USER_DESTINATIONS 1 to 2.
+- cmdline: remove amdgpu.ppfeaturemask (Overdrive hang risk on Strix Halo). KERNEL_PARAMS 12 to 11.
 - environment.d: remove PROTON_FSR4_RDNA3_UPGRADE (unverified on gfx1151). ENV_VARS 10 to 9.
-- modprobe: non-fatal preflight WARN when dedicated VRAM exceeds 1 GiB.
 - docs: correct model GTR9 Pro to GTR Pro; PROFILE_NAME gtr9_pro to gtr_pro.
 
 7.39.7 - 2026-06-14

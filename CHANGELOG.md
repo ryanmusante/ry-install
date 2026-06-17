@@ -1,9 +1,17 @@
 ry-install changelog - newest first.
 
+7.52.0 - 2026-06-17
+
+- ttm: relabel the 32 GiB GTT value as a cap, not the default; the in-kernel default is ~50% of RAM (~62 GiB on 128 GB). Comment-only; pages_limit/page_pool_size unchanged.
+- udev: note NVMe scheduler none is a deliberate divergence from the CachyOS kyber default (peak IOPS, lowest tail latency). Value unchanged.
+- resolved: note plaintext DNS with mDNS/LLMNR off is a deliberate divergence from the CachyOS DoH default. Values unchanged.
+- profile: annotate PROFILE_NAME — the gtr_pro token is retained for log-field continuity while the human-facing name is GTR9 Pro.
+- docs: Known Issues — MES page faults and RTL8127 resolved upstream (MES 0x86 firmware; in-tree r8169); MT7925 and ACP remain open. Note systemd-oomd left untouched (CachyOS disables it by default).
+- version: bump to 7.52.0.
+
 7.51.6 - 2026-06-16
 
-- udev: EPP rule in 60-ry-perf.rules ACTION=="add" to "add|change"; amd-pstate re-emits a cpu 'change' uevent on AC/DC transitions (dynamic-EPP power-supply notifier), so the prior add-only match left energy_performance_preference unre-asserted after a power-source switch. Now matches the NVMe and GPU rules.
-- comment: document the intentional single-quote juxtaposition in the _kp_metachar_re character class (fish has no in-quote escapes). Regex behavior unchanged.
+- udev: EPP rule in 60-ry-perf.rules ACTION add to add|change, so EPP re-asserts after an AC/DC power-source switch. Matches the NVMe and GPU rules.
 - version: bump to 7.51.6.
 
 7.51.5 - 2026-06-16
@@ -51,8 +59,8 @@ ry-install changelog - newest first.
 7.48.0 - 2026-06-16
 
 - cmdline: IOMMU iommu=pt to amd_iommu=off. Disables AMD-Vi; breaks VFIO/PCI-passthrough and USB4 isolation. Param count unchanged.
-- udev: add GPU clock-floor to 60-ry-perf.rules (power_dpm_force_performance_level=high); holds high clock at idle on the 140W APU.
-- verify: _vrk_gpu_state asserts power_dpm == high (was auto).
+- udev: add GPU clock-floor to 60-ry-perf.rules (power_dpm_force_performance_level=high).
+- verify: _vrk_gpu_state asserts power_dpm == high.
 - version: bump to 7.48.0.
 
 7.47.0 - 2026-06-16

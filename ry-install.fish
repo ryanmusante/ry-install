@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.51.6 (2026-06-16) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.52.0 (2026-06-17) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.51.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.52.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19 # PROFILE_NAME token kept as gtr_pro for log-field continuity; human-facing name is "GTR9 Pro" (7.49.0)
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -695,7 +695,7 @@ set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # thresholds: disk, boot-time, CPU, TTM caps
 set -g BOOT_TIME_TARGET 20
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
-# TTM GTT cap, tunable (pages = GiB × 262144, PAGE_SIZE 4096): default 32 GiB=8388608; LLM profile 116 GiB=30408704. page_pool_size MUST equal pages_limit.
+# TTM GTT cap, tunable (pages = GiB × 262144, PAGE_SIZE 4096): cap 32 GiB=8388608 (below the in-kernel ~50%-of-RAM default, ~62 GiB on 128 GB); LLM profile 116 GiB=30408704. page_pool_size MUST equal pages_limit.
 set -g TTM_PAGES_LIMIT 8388608
 set -g TTM_PAGE_POOL_SIZE 8388608
 
@@ -857,8 +857,8 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
         "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"; printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"; end
 end
-function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
-    printf '%s\n' "# systemd-resolved configuration" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
+function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in" # plaintext DNS, mDNS/LLMNR off (latency-first; deliberate divergence from CachyOS DoH default; nftables also drops inbound mDNS)
+    printf '%s\n' "# systemd-resolved configuration (plaintext DNS, mDNS/LLMNR off — deliberate divergence from CachyOS DoH default)" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
 end
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
@@ -939,7 +939,7 @@ function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate con
     end
     if test "$_printed" -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
 end
-function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)" # gfx1151 GTT: in-kernel ttm.* (not amdttm.*); default 32 GiB
+function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)" # gfx1151 GTT: in-kernel ttm.* (not amdttm.*); cap 32 GiB (below ~62 GiB in-kernel default on 128 GB)
     printf '%s\n' \
         "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
         "# Uses ttm.* (in-kernel module). Do NOT add amdgpu.gttsize (deprecated; emits a dmesg warning)." \
@@ -965,10 +965,10 @@ end
 function _content__etc_conf.d_wireless-regdom --description "Generate content for /etc/conf.d/wireless-regdom (set-wireless-regdom input)" # consumed by set-wireless-regdom at device add
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "WIRELESS_REGDOM=\"$COUNTRY\""
 end
-function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP performance)" # NVMe scheduler none + EPP performance
+function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP performance)" # NVMe scheduler none (peak IOPS/lowest tail latency; deliberate divergence from CachyOS kyber default) + EPP performance
     printf '%s\n' \
         "# ry-install: udev performance rules (managed file, do not edit by hand)" \
-        "# NVMe I/O scheduler none" \
+        "# NVMe I/O scheduler none (peak IOPS/lowest tail latency on NVMe; deliberate divergence from CachyOS kyber default)" \
         'ACTION=="add|change", KERNEL=="nvme[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
         "# AMD P-State EPP performance" \
         'ACTION=="add|change", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="performance"' \
@@ -3479,7 +3479,7 @@ end
 
 # ── INSTALL PHASE 1: PREFLIGHT ──
 function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_ERR, mark progress skip"; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; end
-function _ry_check_ttm_uma_precondition --description "WARN when BIOS UMA split does not match the TTM GTT cap assumption (non-fatal)" # 32 GiB GTT cap assumes BIOS UMA=512 MB
+function _ry_check_ttm_uma_precondition --description "WARN when BIOS UMA split does not match the TTM GTT cap assumption (non-fatal)" # 32 GiB GTT cap (below ~62 GiB in-kernel default) assumes BIOS UMA=512 MB
     set -l _vram_total ""
     for _f in /sys/class/drm/card*/device/mem_info_vram_total
         test -r "$_f"; or continue

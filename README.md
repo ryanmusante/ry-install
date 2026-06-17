@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeon 8060S, gfx1151 / Strix Halo).
 
-**Version 7.51.6 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.52.0 · fish ≥ 3.6 · CachyOS · MIT**
 
 A single self-contained fish script with 19 embedded config generators and no external dependencies. It deploys a tuned gaming/LLM desktop profile — boot, initramfs, network, performance, firewall, and gaming environment — idempotently and reversibly.
 
@@ -13,7 +13,7 @@ A single self-contained fish script with 19 embedded config generators and no ex
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.51.6
+cd ry-install && git checkout v7.52.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -75,13 +75,13 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | sdboot-manage.conf | entry generation: `DEFAULT_ENTRY=manual`, `OVERWRITE_EXISTING=yes`, `REMOVE_EXISTING=yes` (wipes `loader/entries/` before regen), `REMOVE_OBSOLETE=yes`; `LINUX_OPTIONS` = the cmdline params, `LINUX_FALLBACK_OPTIONS="quiet"` |
 | kernel cmdline | `rw root=UUID=<root>` (UUID resolved by generator) + params: `amd_pstate=active`, `amd_iommu=off`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `usbcore.autosuspend=-1`, `split_lock_detect=off`, `tsc=reliable`, `zswap.enabled=0`, `nowatchdog`, `8250.nr_uarts=0`, `quiet` |
 | mkinitcpio.conf | `MODULES=(amdgpu)`; `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`; `COMPRESSION="zstd"` with `-1 -T0`; `BINARIES=()`, `FILES=()` |
-| resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` |
+| resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` (plaintext DNS, mDNS/LLMNR off — latency-first; deliberate divergence from CachyOS DoH default) |
 | logind | `Handle{Power,Suspend,Hibernate,Reboot}Key`=ignore (+ their `LongPress` variants) |
 | iwd / NetworkManager | iwd Wi-Fi backend (`wifi.backend=iwd`); `iwd.service` disabled (NM D-Bus-activates iwd on demand). Power-save off for MT7925 latency: NM `wifi.powersave=2` + iwd `[DriverQuirks] PowerSaveDisable=*`. iwd `EnableNetworkConfiguration=false`, `NameResolvingService=systemd`; NM `logging level=WARN` |
-| cpupower / udev | `performance` governor; udev rules set NVMe I/O scheduler `none`, AMD P-State EPP `performance`, and gfx1151 GPU clock-floor (`power_dpm_force_performance_level=high`) |
+| cpupower / udev | `performance` governor; udev rules set NVMe I/O scheduler `none` (peak IOPS/lowest tail latency; deliberate divergence from CachyOS kyber default), AMD P-State EPP `performance`, and gfx1151 GPU clock-floor (`power_dpm_force_performance_level=high`) |
 | sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642` (priority 95, after vendor `70-cachyos-settings.conf`) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` for the APU (Mesa MR !18884, Mesa 22.3+) |
-| amdgpu/ttm modprobe | GTT cap via in-kernel `ttm.*` (**not** deprecated `amdgpu.gttsize`/`amdttm.*`). `pages_limit` = `page_pool_size`; pages = GiB × 262144. Default 32 GiB = 8388608; LLM profile 116 GiB = 30408704. Assumes BIOS UMA 512 MB |
+| amdgpu/ttm modprobe | GTT cap via in-kernel `ttm.*` (**not** deprecated `amdgpu.gttsize`/`amdttm.*`). `pages_limit` = `page_pool_size`; pages = GiB × 262144. Cap 32 GiB = 8388608 — below the in-kernel ~50%-of-RAM default (~62 GiB on 128 GB); LLM profile 116 GiB = 30408704. Assumes BIOS UMA 512 MB |
 | iw-regdomain / wireless-regdom | wireless regulatory domain fixed at `US` (retune `COUNTRY`); consumed by CachyOS regdomain hooks at device-add |
 | nftables.conf | default-deny-inbound ruleset (see [Safety & Reliability](#safety--reliability)) |
 | environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
@@ -103,6 +103,7 @@ The script is the source of truth — retune the `set -g` globals near the top. 
 | Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, and the sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
 | Disable (not mask) | `iwd.service` — NetworkManager is sole Wi-Fi manager and D-Bus-activates iwd on demand (a separately-enabled iwd.service races NM) |
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables` |
+| Untouched (by design) | `systemd-oomd` — left as-is. CachyOS disables it by default (killed apps too early with le9); the kernel OOM-killer + zram is the intended path on 128 GB. Do not enable |
 
 **fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place; all other rows/columns preserved byte-for-byte. Gated by line-count parity, a size floor, and `findmnt --verify`; a symlinked `/etc/fstab` is refused; malformed ext4 rows are left untouched with a warning.
 
@@ -160,14 +161,14 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 ## Known Issues
 
-Hardware gaps on this Strix Halo platform; each needs an out-of-tree package not managed here.
+Hardware gaps on this Strix Halo platform. MES page faults and RTL8127 are resolved upstream — a current CachyOS kernel and `linux-firmware` carry the fixes (the shipped `mkinitcpio-firmware` covers the firmware side); no out-of-tree package is needed for those. MT7925 and ACP remain open.
 
-| Component | Issue | Workaround |
+| Component | Issue | Status |
 |---|---|---|
-| Strix Halo GPU | MES page faults | out-of-tree firmware package (unmanaged) |
-| MT7925 | kernel panics, low TX power, random deauth | out-of-tree DKMS module; some upstream |
-| RTL8127 10GbE | throughput drops under load | out-of-tree DKMS module (unmanaged) |
-| Strix Halo ACP | no ASoC machine driver | pending upstream (HDMI/USB audio unaffected) |
+| Strix Halo GPU | MES page faults | resolved upstream (MES 0x86); current `linux-firmware` + shipped `mkinitcpio-firmware` carry the fix |
+| RTL8127 10GbE | throughput drops under load | resolved upstream — in-tree `r8169` (mainlined; commit `f24f7b2f3af9` + suspend fix `ae1737e7339b`); no DKMS |
+| MT7925 | kernel panics, low TX power, random deauth | open — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
+| Strix Halo ACP | no ASoC machine driver | open — pending upstream (HDMI/USB audio unaffected) |
 
 ## Troubleshooting
 

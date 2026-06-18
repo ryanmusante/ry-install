@@ -1,8 +1,14 @@
 ry-install changelog - newest first.
 
+7.54.1 - 2026-06-17
+
+- vram probe: floor the dedicated-VRAM MiB division; a non-1-MiB-multiple total produced a float that the integer UMA-precondition test rejected, silently skipping the warning.
+- comment: tighten the iwd disable-not-mask notes.
+- version: bump to 7.54.1.
+
 7.54.0 - 2026-06-17
 
-- firewall: flush ufw only after the nftables default-deny ruleset is confirmed live (live inet/filter/input chain probe); retain ufw and warn when nftables cannot be confirmed, closing the unfirewalled window if nftables fails to start.
+- firewall: flush ufw only after the nftables default-deny ruleset is confirmed live (inet/filter/input chain probe); retain ufw and warn otherwise, closing the unfirewalled window.
 - install-file: a boot/cmdline post-hook exiting boot-critical now prints the DO-NOT-REBOOT recovery banner, matching the full install path.
 - udev: warn (not just log) when udevadm verify is unavailable (systemd < 254) and a rule is reloaded unvalidated.
 - comment: trim verbose trailing and standalone comments to single-line why-notes; safe-lint and header retained.
@@ -108,7 +114,7 @@ ry-install changelog - newest first.
 
 7.44.5 - 2026-06-15
 
-- json: _json_str escapes embedded newlines and other control chars in regex mode against the whole value; the prior literal-mode match dropped everything after the first newline.
+- json: _json_str escapes embedded newlines and other control chars over the whole value (regex mode); the prior literal match dropped everything after the first newline.
 
 7.44.4 - 2026-06-15
 

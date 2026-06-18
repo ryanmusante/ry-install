@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.54.0 (2026-06-17) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.54.1 (2026-06-17) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.54.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.54.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -2956,7 +2956,7 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd backend + 
     else
         _warn "  WiFi interface: NOT DETECTED"
     end
-    # iwd is D-Bus-activated by NM on demand; iwd.service disabled (not masked), so a running process is informational
+    # iwd.service disabled (not masked); NM D-Bus-activates it, so a running process is informational
     if command -q pgrep
         if command pgrep -x iwd >/dev/null
             _info "  iwd process: running (NM-activated)"
@@ -3434,7 +3434,7 @@ function _ry_check_ttm_uma_precondition --description "WARN when BIOS UMA split 
         string match -qr '^\d+$' -- "$_vram_total"; and break
     end
     string match -qr '^\d+$' -- "$_vram_total"; or return 0 # sysfs unreadable: silent (probe is best-effort)
-    set -l _vram_mib (math "$_vram_total / 1048576")
+    set -l _vram_mib (math -s0 "floor($_vram_total / 1048576)")
     if test "$_vram_mib" -gt 1024 # >1 GiB dedicated VRAM => BIOS is carving a large fixed UMA, not the expected 512 MB
         _warn "TTM 32 GiB GTT cap assumes BIOS UMA=512 MB; detected dedicated VRAM=$_vram_mib MiB — verify BIOS UMA/Auto or GTT sizing may mis-apply"
         _log "TTM_UMA_PRECONDITION: vram_mib=$_vram_mib expected<=1024"
@@ -4075,7 +4075,7 @@ function _configure_services_iwd_handoff --description "Disable standalone iwd.s
         # masked blocks NM D-Bus activation: unmask then disable
         _run sudo -n systemctl unmask iwd.service
     end
-    # disable (not mask): stops boot auto-start racing NM, keeps on-demand D-Bus activation
+    # disable (not mask): stops boot auto-start racing NM; keeps on-demand D-Bus activation
     if _run sudo -n systemctl disable --now iwd.service
         _ok "iwd.service disabled (NetworkManager activates iwd on demand)"
         _phase_record "Services: iwd handoff" PASS "iwd.service disabled; NM is sole manager"

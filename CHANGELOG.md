@@ -1,5 +1,13 @@
 ry-install changelog - newest first.
 
+7.54.0 - 2026-06-17
+
+- firewall: flush ufw only after the nftables default-deny ruleset is confirmed live (live inet/filter/input chain probe); retain ufw and warn when nftables cannot be confirmed, closing the unfirewalled window if nftables fails to start.
+- install-file: a boot/cmdline post-hook exiting boot-critical now prints the DO-NOT-REBOOT recovery banner, matching the full install path.
+- udev: warn (not just log) when udevadm verify is unavailable (systemd < 254) and a rule is reloaded unvalidated.
+- comment: trim verbose trailing and standalone comments to single-line why-notes; safe-lint and header retained.
+- version: bump to 7.54.0.
+
 7.53.0 - 2026-06-17
 
 - nftables: scope inbound IPv4 ICMP to diagnostics (echo-reply, destination-unreachable, time-exceeded, parameter-problem); drop inbound echo-request. Was a blanket icmp accept.

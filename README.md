@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeon 8060S, gfx1151 / Strix Halo).
 
-**Version 7.54.1 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.54.2 · fish ≥ 3.6 · CachyOS · MIT**
 
 A single self-contained fish script with 19 embedded config generators, no external dependencies. Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
 
@@ -13,7 +13,7 @@ A single self-contained fish script with 19 embedded config generators, no exter
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.54.1
+cd ry-install && git checkout v7.54.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -122,7 +122,7 @@ Phase-3 files (system `0644`, user `0600`):
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, `ct state invalid` dropped, inbound IPv4 ICMP scoped to diagnostics (`echo-reply`, `destination-unreachable`, `time-exceeded`, `parameter-problem` — inbound `echo-request`/ping is **dropped**) plus essential ICMPv6 (NDP + echo/PMTUD/time-exceeded/param-problem) accepted, all other inbound dropped — including mDNS. `forward` policy drop, `output` policy accept. The ufw flush runs only after the nftables default-deny ruleset is confirmed live (probed via the live `inet/filter/input` chain), so the host is never left unfirewalled during the handoff; if nftables cannot be confirmed live, ufw is retained and a warning is logged. Add inbound ports to `/etc/nftables.conf` as needed.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, `ct state invalid` dropped, inbound IPv4 ICMP scoped to diagnostics (`echo-reply`, `destination-unreachable`, `time-exceeded`, `parameter-problem` — inbound `echo-request`/ping is **dropped**) plus essential ICMPv6 (NDP + echo/PMTUD/time-exceeded/param-problem) accepted, all other inbound dropped — including mDNS. `forward` policy drop, `output` policy accept. The ufw flush runs only after the nftables default-deny ruleset is confirmed live (probed via the live `inet/filter/input` chain), so the host is never left unfirewalled during the handoff; if nftables cannot be confirmed live, ufw is retained **and left unmasked** (masking it while its rules are still loaded would block ufw's ruleset reload on the next boot) and a warning is logged. Add inbound ports to `/etc/nftables.conf` as needed.
 
 > [!NOTE]
 > `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.

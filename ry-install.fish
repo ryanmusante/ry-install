@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.54.1 (2026-06-17) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.54.2 (2026-06-17) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.54.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.54.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -502,7 +502,7 @@ function _teardown --argument-names mode --description "Unified cleanup: progres
             return 1
     end
 end
-function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal QUIT --on-signal USR1 --on-signal USR2 --on-signal ABRT --description "Signal handler for INT/TERM/HUP/QUIT/USR1/USR2/ABRT" # 128+N per signal convention
+function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal QUIT --on-signal ABRT --description "Signal handler for INT/TERM/HUP/QUIT/ABRT" # 128+N per signal convention; USR1/USR2 NOT trapped (app-defined, non-terminal)
     test "$_CLEANUP_DONE" = true; and return 0
     set -g _CLEANUP_DONE true; set -l _sig_label SIG$argv[1]
     string match -q 'SIG*' -- "$argv[1]"; and set _sig_label "$argv[1]"
@@ -665,7 +665,6 @@ set -g PKGS_ADD \
     realtime-privileges \
     ddcutil \
     nftables
-# Opt-in: append shelly to PKGS_DEL
 set -g PKGS_DEL \
     plymouth \
     cachyos-plymouth-bootanimation \
@@ -921,6 +920,7 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        iif \"lo\" accept" \
         "        ct state invalid drop" \
         "        ip6 nexthdr ipv6-icmp icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert, nd-router-solicit, echo-request, packet-too-big, time-exceeded, parameter-problem } accept" \
+        "        # IPv4: inbound echo-request (ping) intentionally NOT accepted; IPv6 echo-request is, since ICMPv6 is load-bearing for NDP/PMTUD" \
         "        icmp type { echo-reply, destination-unreachable, time-exceeded, parameter-problem } accept" \
         "    }" \
         "    chain forward { type filter hook forward priority filter; policy drop; }" \
@@ -968,7 +968,7 @@ function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate con
     printf '%s\n' \
         "# ry-install: udev performance rules (managed file, do not edit by hand)" \
         "# NVMe I/O scheduler none (peak IOPS/lowest tail latency on NVMe; deliberate divergence from CachyOS kyber default)" \
-        'ACTION=="add|change", KERNEL=="nvme[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
+        'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
         "# AMD P-State EPP performance" \
         'ACTION=="add|change", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="performance"' \
         "# GPU performance level (gfx1151 clock-floor; optional)" \
@@ -3121,6 +3121,10 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
             set -l _re (string escape --style=regex -- "$_tok")
             if not string match -qr '(^|,)'$_re'(,|$)' -- "$_opts"; _fail "  ext4 entry missing $_tok: $_fl"; set _fstab_ok false; end
         end
+        for _conflict in relatime atime strictatime # contradict noatime; kernel honours last, so co-occurrence is a latent footgun
+            set -l _cre (string escape --style=regex -- "$_conflict")
+            if string match -qr '(^|,)'$_cre'(,|$)' -- "$_opts"; _fail "  ext4 entry has $_conflict alongside noatime (contradictory): $_fl"; set _fstab_ok false; end
+        end
     end
     test "$_fstab_ok" = true; and _ok "  ext4 entries: noatime,lazytime,commit=10 present"
 end
@@ -3183,7 +3187,7 @@ function _vrs_nm_perms --description "Runtime session check: NetworkManager syst
         set -l bad_perms 0
         for conn_file in $conn_files; _chk_perms "$conn_file" 600 root:root true; or set bad_perms (math $bad_perms + 1); end
         if test "$bad_perms" -eq 0; set -l conn_count (count $conn_files); _ok "  NetworkManager connections: $conn_count files with correct permissions"; end
-    else if command grep -q -- 'wifi.backend=' /etc/NetworkManager/conf.d/99-cachyos-nm.conf 2>/dev/null
+    else if begin; command grep -q -- 'wifi.backend=' /etc/NetworkManager/conf.d/99-cachyos-nm.conf 2>/dev/null; or begin; not test -r /etc/NetworkManager/conf.d/99-cachyos-nm.conf; and sudo -n grep -q -- 'wifi.backend=' /etc/NetworkManager/conf.d/99-cachyos-nm.conf 2>/dev/null; end; end # sudo fallback if drop-in tightened to 0600
         _warn "  NetworkManager connections: no .nmconnection files (WiFi may not auto-connect)"
     else
         _info "  NetworkManager connections: no .nmconnection files found"
@@ -3830,7 +3834,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when n
         return 0
     end
     set -l _pkg_re (string escape --style=regex -- "$pkg"); set -l _t $PACTREE_TIMEOUT_S
-    set -l _raw (command timeout --kill-after=5 "$_t" pactree -ru "$pkg" 2>/dev/null) # --kill-after escalates to SIGKILL
+    set -l _raw (command timeout --foreground --kill-after=5 "$_t" pactree -ru "$pkg" 2>/dev/null) # --foreground: SIGINT reaches child; --kill-after escalates to SIGKILL
     if test "$status" -ne 0; _warn "  $pkg: pactree probe failed — skipping for safety"; _log "PACTREE_PROBE_FAIL: pkg=$pkg (timeout, missing pkg, or db error)"; return 0; end
     set -l _trimmed (string trim -- $_raw); set -l _stripped (string replace -r '[=<>].*$' '' -- $_trimmed); set -l _nonempty (string match -rv -- '^$' $_stripped); set -l _rdeps_raw (string match -rv -- "^$_pkg_re\$" $_nonempty); set -l _rdeps
     for _r in $_rdeps_raw; contains -- "$_r" $PKGS_DEL; and continue; set -a _rdeps "$_r"; end
@@ -3970,6 +3974,11 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     _csm_enable_nftables_first; and set _nft_live true
     _csm_disable_ufw_rules $_nft_live
     set -l safe_mask $MASK
+    if test "$_nft_live" != true; and contains -- ufw.service $safe_mask # masking ufw while its rules are retained would leave no firewall reloadable next boot
+        set safe_mask (string match -v -- ufw.service $safe_mask)
+        _warn "ufw.service mask skipped this run — nftables default-deny not confirmed live; masking ufw now would block its ruleset reload on next boot. Re-run after nftables.service is active."
+        _log "MASK_UFW_SKIP: nft_live=false — ufw.service left unmasked to preserve firewall coverage across reboot"
+    end
     if test (count $safe_mask) -eq 0
         _phase_record "Services: mask units" "--" "MASK list empty"
         return 0
@@ -4063,7 +4072,7 @@ function _apply_wireless_regdom --description "Apply the wireless regulatory dom
         return 0
     end
     _warn "iw reg set $COUNTRY failed — applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
-    set -g _RY_REGDOM_EVIDENCE "iw reg set failed — applies via /etc/iw-regdomain"
+    set -g _RY_REGDOM_RESULT WARN; set -g _RY_REGDOM_EVIDENCE "iw reg set failed — applies via /etc/iw-regdomain"
     return 0
 end
 function _configure_services_iwd_handoff --description "Disable standalone iwd.service so NetworkManager is the sole Wi-Fi manager"

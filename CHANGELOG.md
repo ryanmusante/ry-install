@@ -1,5 +1,18 @@
 ry-install changelog - newest first.
 
+7.54.2 - 2026-06-17
+
+- firewall: do not mask ufw.service when the nftables default-deny ruleset is not confirmed live; masking it while its rules are retained would block ufw's ruleset reload on the next boot, leaving the host unfirewalled if nftables also failed. ufw is now dropped from the mask set with a WARN until nftables is active.
+- signals: stop trapping SIGUSR1/SIGUSR2 as fatal; they are application-defined and an external kill -USR1 no longer tears down a mid-flight install.
+- udev: tighten the NVMe scheduler rule KERNEL match to nvme[0-9]*n[0-9]* (namespace block devices), excluding the controller char device; DEVTYPE==disk still excludes partitions. Matches the runtime verifier's device glob.
+- verify: _vre_fstab now fails an ext4 entry carrying relatime/atime/strictatime alongside noatime (contradictory hand-edit; kernel honours the last token).
+- verify: _vrs_nm_perms falls back to sudo grep when 99-cachyos-nm.conf is tightened to 0600, so the backend probe no longer misreports "no connections".
+- regdom: a failed iw reg set now records a WARN row (was DEFER), distinguishing tried-and-failed from deferred-by-absence.
+- pkg-remove: add --foreground to the pactree rdep probe timeout so SIGINT reaches pactree, matching _run.
+- nftables: comment the deliberate IPv4-vs-IPv6 echo-request asymmetry inline.
+- comment: drop the stale "append shelly to PKGS_DEL" note (no such package defined).
+- version: bump to 7.54.2.
+
 7.54.1 - 2026-06-17
 
 - vram probe: floor the dedicated-VRAM MiB division; a non-1-MiB-multiple total produced a float that the integer UMA-precondition test rejected, silently skipping the warning.

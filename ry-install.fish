@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.54.3 (2026-06-17) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.54.5 (2026-06-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.54.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.54.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -30,7 +30,7 @@ function _ry_show_help --description "Display usage information and available su
         "  -h, --help             Show this help (honored before all checks)" \
         "  -v, --version          Show version (honored before all checks)" \
         "EXIT CODES: 0 ok · 1 verify-FAIL/install-error · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
-        "  (gen/run sentinels 11-13/250/251/255 and signal codes 128+N are recorded in the JSONL footer; see README.md)" \
+        "  (gen/run sentinels 11-13/250/251/255 are internal, never a process exit; signal codes 128+N appear in the JSONL footer; see README.md)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
@@ -521,10 +521,6 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
             set _sig_exit 131
         case TERM SIGTERM
             set _sig_exit 143
-        case USR1 SIGUSR1
-            set _sig_exit 138
-        case USR2 SIGUSR2
-            set _sig_exit 140
         case ABRT SIGABRT
             set _sig_exit 134
         case '*'

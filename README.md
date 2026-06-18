@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeon 8060S, gfx1151 / Strix Halo).
 
-**Version 7.54.3 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.54.5 · fish ≥ 3.6 · CachyOS · MIT**
 
 A single self-contained fish script with 19 embedded config generators, no external dependencies. Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
 
@@ -13,7 +13,7 @@ A single self-contained fish script with 19 embedded config generators, no exter
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.54.3
+cd ry-install && git checkout v7.54.5
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -140,7 +140,7 @@ Phase-3 files (system `0644`, user `0600`):
 | `0` / `1` / `2` | success / verify-FAIL or install-error / usage (incl. root-refused) |
 | `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock |
 | `10` | `--check` drift |
-| `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT) |
+| `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT) |
 
 Internal generator/runtime sentinels `11`–`13` (`GEN_NOFN`/`GEN_NOUUID`/`GEN_SYSCTL`), `250`/`251`/`255` are recorded in the JSONL footer, never returned as a process exit.
 

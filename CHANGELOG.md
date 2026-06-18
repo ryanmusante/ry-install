@@ -2,8 +2,11 @@ ry-install changelog - newest first.
 
 7.54.5 - 2026-06-18
 
-- signals: remove the unreachable SIGUSR1/SIGUSR2 cases from the _cleanup switch; the handler has not trapped them since 7.54.2 (dead code, contradicted its own comment).
-- help: clarify the _ry_show_help exit-code note — the 11-13/250/251/255 sentinels are internal and never a process exit; only signal codes 128+N appear in the JSONL footer (matches README).
+- signals: remove the unreachable SIGUSR1/SIGUSR2 cases from the _cleanup switch (dead code since 7.54.2).
+- help: clarify the _ry_show_help exit-code note; sentinels 11-13/250/251/255 are internal, only 128+N appears in the JSONL footer.
+- docs: balance the environment-overrides parenthetical in the README.
+- docs: note the fstab backup is written during its atomic rewrite, not via the backup-target set.
+- comments: trim verbose inline comments to vital information.
 
 7.54.4 - 2026-06-18
 
@@ -11,14 +14,15 @@ ry-install changelog - newest first.
 
 7.54.3 - 2026-06-17
 
-- comment: clarify the mkinitcpio validator banner count (8 pairwise + base-first + fsck-last); label the two Phase 4 banners as the Services slot, fstab as a sub-step.
+- comment: clarify the mkinitcpio validator banner count; label the Phase 4 banners as the Services slot, fstab as a sub-step.
 
 7.54.2 - 2026-06-17
 
 - firewall: drop ufw.service from the mask set with a WARN until the nftables default-deny ruleset is confirmed live.
 - signals: stop trapping SIGUSR1/SIGUSR2 as fatal; they no longer tear down a mid-flight install.
 - udev: tighten the NVMe scheduler KERNEL match to nvme[0-9]*n[0-9]*, matching the runtime verifier glob.
-- verify: _vre_fstab fails an ext4 entry carrying relatime/atime/strictatime alongside noatime; _vrs_nm_perms falls back to sudo grep when 99-cachyos-nm.conf is 0600.
+- verify: _vre_fstab fails an ext4 entry carrying relatime/atime/strictatime alongside noatime.
+- verify: _vrs_nm_perms falls back to sudo grep when 99-cachyos-nm.conf is 0600.
 - regdom: a failed iw reg set records WARN (was DEFER).
 - pkg-remove: add --foreground to the pactree rdep probe timeout so SIGINT reaches pactree.
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.54.2 (2026-06-17) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.54.3 (2026-06-17) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (source-by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.54.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.54.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1713,7 +1713,7 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
     return 0
 end
 
-# ── MKINITCPIO HOOK + MODULE VALIDATORS (10 ORDERING INVARIANTS) ──
+# ── MKINITCPIO HOOK + MODULE VALIDATORS (10 ORDERING INVARIANTS: 8 pairwise + base-first + fsck-last) ──
 function _mkinitcpio_hook_exists --argument-names hook --description "True iff hook file exists in any mkinitcpio install/hooks dir"
     test -z "$hook"; and return 1
     for _d in /usr/lib/initcpio/install /usr/lib/initcpio/hooks /etc/initcpio/install /etc/initcpio/hooks; test -f "$_d/$hook"; and return 0; end
@@ -3661,7 +3661,7 @@ function _install_system_files --description "Deploy all embedded config files"
     return 0
 end
 
-# ── INSTALL PHASE 4 (FSTAB): EXT4 OPTS REWRITE (noatime,lazytime,commit=10) ──
+# ── INSTALL PHASE 4 (Services slot, fstab sub-step): EXT4 OPTS REWRITE (noatime,lazytime,commit=10) ──
 function _fstab_needs_change --description "Scan ext4 entries for missing noatime/lazytime/commit=10"
     set -g _RY_FSTAB_NEEDS_CHANGE false; set -g _RY_FSTAB_COMMIT_OVERRIDES; set -l _malformed_warned false
     for line in $argv
@@ -3809,7 +3809,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     return 0
 end
 
-# ── INSTALL PHASE 4 (SERVICES): RESOLVED + PKG REMOVE + MASK + ENABLE ──
+# ── INSTALL PHASE 4 (Services slot): RESOLVED + PKG REMOVE + MASK + ENABLE ──
 function _configure_services_resolved_restart --description "Restart systemd-resolved when its conf.d drop-in is in place"
     test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
     if _run sudo -n systemctl restart systemd-resolved

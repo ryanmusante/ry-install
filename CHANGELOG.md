@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+7.54.6 - 2026-06-18
+
+- docs: reorder the README kernel-cmdline param list to match the script emission order.
+
 7.54.5 - 2026-06-18
 
 - signals: remove the unreachable SIGUSR1/SIGUSR2 cases from the _cleanup switch (dead code since 7.54.2).
@@ -72,7 +76,7 @@ ry-install changelog - newest first.
 
 7.46.0 - 2026-06-16
 
-- docs: document the TTM GTT cap as a tunable, the Wi-Fi power-save-off rationale for MT7925/mt76, and the radv_enable_unified_heap_on_apu provenance.
+- docs: document the TTM GTT cap tunable, the MT7925/mt76 Wi-Fi power-save-off rationale, and radv_enable_unified_heap_on_apu provenance.
 
 7.44.6 - 2026-06-15
 

@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeon 8060S, gfx1151 / Strix Halo).
 
-**Version 7.54.5 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.54.6 · fish ≥ 3.6 · CachyOS · MIT**
 
 A single self-contained fish script with 19 embedded config generators, no external dependencies. Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
 
@@ -13,7 +13,7 @@ A single self-contained fish script with 19 embedded config generators, no exter
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.54.5
+cd ry-install && git checkout v7.54.6
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -73,7 +73,7 @@ The script is the source of truth — retune the `set -g` globals near the top.
 |---|---|
 | loader.conf | systemd-boot loader: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
 | sdboot-manage.conf | entry generation: `DEFAULT_ENTRY=manual`, `OVERWRITE_EXISTING=yes`, `REMOVE_EXISTING=yes` (wipes `loader/entries/` before regen), `REMOVE_OBSOLETE=yes`; `LINUX_OPTIONS` = the cmdline params, `LINUX_FALLBACK_OPTIONS="quiet"` |
-| kernel cmdline | `rw root=UUID=<root>` (UUID resolved by generator) + params: `amd_pstate=active`, `amd_iommu=off`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `usbcore.autosuspend=-1`, `split_lock_detect=off`, `tsc=reliable`, `zswap.enabled=0`, `nowatchdog`, `8250.nr_uarts=0`, `quiet` |
+| kernel cmdline | `rw root=UUID=<root>` (UUID resolved by generator) + params: `8250.nr_uarts=0`, `amd_pstate=active`, `amd_iommu=off`, `nowatchdog`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `quiet`, `split_lock_detect=off`, `tsc=reliable`, `usbcore.autosuspend=-1`, `zswap.enabled=0` |
 | mkinitcpio.conf | `MODULES=(amdgpu)`; `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`; `COMPRESSION="zstd"` with `-1 -T0`; `BINARIES=()`, `FILES=()` |
 | resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` (plaintext DNS, mDNS/LLMNR off — latency-first; deliberate divergence from CachyOS DoH default) |
 | logind | `Handle{Power,Suspend,Hibernate,Reboot}Key`=ignore (+ their `LongPress` variants) |

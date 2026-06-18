@@ -144,7 +144,7 @@ Phase-3 files (system `0644`, user `0600`):
 
 Internal generator/runtime sentinels `11`–`13` (`GEN_NOFN`/`GEN_NOUUID`/`GEN_SYSCTL`), `250`/`251`/`255` are recorded in the JSONL footer, never returned as a process exit.
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; bypassed for `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` so a SIGKILL never corrupts `db.lck` mid-transaction), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp` if absent/non-absolute/unwritable). Logs: one JSONL file per run at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, mode `0600`.
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp` if absent/non-absolute/unwritable). Logs: one JSONL file per run at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, mode `0600`.
 
 ## Uninstall
 

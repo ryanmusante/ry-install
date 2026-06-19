@@ -4,7 +4,7 @@ CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeo
 
 **Version 7.54.12 · fish ≥ 3.6 · systemd ≥ 250 · CachyOS · MIT**
 
-A single self-contained fish script with 19 embedded config generators and no bundled dependencies (the system toolchain in [Requirements](#requirements) is assumed present). Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
+A single self-contained fish script with 19 embedded config generators and no bundled dependencies. Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
 
 ## Quick Start
 
@@ -24,7 +24,7 @@ chmod +x ry-install.fish
 
 ## Requirements
 
-Hard requirements abort read-only in preflight (exit 3). The full set is the core toolchain (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, plus the coreutils/findutils/diffutils binaries listed below) — absence of any aborts. The GNU-specific feature gates that busybox/uutils fail: coreutils (`id`, `timeout` with `--foreground`/`--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth`/`-printf`), diffutils (`cmp`, which gates the `mkinitcpio.conf` revert's byte-exact verify). NTP sync and `pacman-contrib` (`paccache`) only warn. sudo must be cached (`sudo -v`). busybox/uutils replacements are explicitly rejected.
+Hard requirements abort read-only in preflight (exit 3): the core toolchain (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`) plus GNU coreutils (`id`, `timeout` with `--foreground`/`--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth`/`-printf`), and diffutils (`cmp`, gating the `mkinitcpio.conf` revert's byte-exact verify). busybox/uutils replacements are rejected. NTP sync and `pacman-contrib` (`paccache`) only warn. sudo must be cached (`sudo -v`).
 
 | Requirement | Minimum |
 |---|---|
@@ -142,13 +142,13 @@ Canonical path and permission index for the 19 files described by purpose in [Co
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT) |
 
-Internal generator/runtime sentinels `11`–`13` (`GEN_NOFN`/`GEN_NOUUID`/`GEN_SYSCTL`) and `250`/`251`/`255` (`AS_MISUSE`/`RUN_TMPFAIL`/`RUN_MISUSE`) are consumed internally and never returned as a process exit. They are not emitted as footer fields: a generator failure surfaces only as the footer's `gen_fail` count, and the run sentinels do not reach the footer at all. The only non-standard `exit_code` the footer records is `128+N` on signal.
+Internal sentinels `11`–`13` (`GEN_NOFN`/`GEN_NOUUID`/`GEN_SYSCTL`) and `250`/`251`/`255` (`AS_MISUSE`/`RUN_TMPFAIL`/`RUN_MISUSE`) never reach a process exit. A generator failure surfaces only as the footer's `gen_fail` count; the run sentinels never reach the footer. The only non-standard footer `exit_code` is `128+N` on signal.
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; long-running package/boot/db ops — `pacman`, `mkinitcpio`, `sdboot-manage`, `paccache`, `updatedb`, `pkgfile` — are always exempt, since a `SIGKILL` mid-transaction would corrupt `db.lck` or bypass rollback), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp` if absent/non-absolute/unwritable). Logs: one JSONL file per run at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, mode `0600`.
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; package/boot/db ops — `pacman`, `mkinitcpio`, `sdboot-manage`, `paccache`, `updatedb`, `pkgfile` — are exempt, since a mid-transaction `SIGKILL` would corrupt `db.lck` or bypass rollback), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp` if absent/non-absolute/unwritable). Logs: one JSONL file per run at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, mode `0600`.
 
 ## Uninstall
 
-No automated uninstaller; use [Managed Files](#managed-files) as the rollback reference. Replace `<user-env>` with `~/.config/environment.d/10-environment.conf` and the system-path list with the [Managed Files](#managed-files) entries.
+No automated uninstaller; use [Managed Files](#managed-files) as the rollback reference.
 
 | # | Step | Command |
 |---|---|---|

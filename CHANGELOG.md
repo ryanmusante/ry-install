@@ -2,12 +2,9 @@ ry-install changelog - newest first.
 
 7.54.12 - 2026-06-18
 
-- comment: correct eight stale function --description strings to match their bodies: the udev content generator (add GPU clock-floor), _verify_static_system, _verify_runtime_env, _ry_verify_runtime, _verify_runtime_session, _install_configure_services, _install_finalize, and _ry_verify_static.
-- docs: scope the README cmp note to the mkinitcpio.conf revert's byte-exact verify (the revert degrades gracefully when cmp is absent on the signal path).
-
-7.54.11 - 2026-06-18
-
-- fix: restore the $var""s quote-split in the RY_RUN_TIMEOUT invalid-value warning; {$var}s emitted the braces verbatim. Output is now 3600s.
+- comment: sync ten function --description strings to their bodies.
+- docs: trim README prose to vital information; scope the cmp note to the revert's byte-exact verify.
+- fix: restore the RY_RUN_TIMEOUT invalid-value warning's quote-split (now prints 3600s).
 
 7.54.10 - 2026-06-18
 

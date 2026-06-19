@@ -4289,7 +4289,7 @@ function _irb_verify_entries --argument-names boot --description "Re-enumerate b
         end
     end
 end
-function _check_boot_taint_gate --description "Verify boot state not tainted (shared by _irb_taint_gate + _post_boot); rc=0 ok, 1=revert-failed, 2=tainted"
+function _check_boot_taint_gate --description "Verify boot state not tainted (shared by _irb_taint_gate + _post_boot_apply); rc=0 ok, 1=revert-failed, 2=tainted"
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
         _err "Refusing initramfs rebuild — mkinitcpio.conf revert failed (boot state inconsistent)"
         _err "  Manual recovery required before re-running"
@@ -4712,7 +4712,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
 end
 
 # ── --INSTALL-FILE: POST-HOOK HANDLERS (15 dispatch tags / 19 patterns / 17 _post_* functions; coverage enforced by _ir_validate_post_hooks) ──
-function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot sub: mkinitcpio -P + sdboot-manage cascade"
+function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot_apply sub: mkinitcpio -P + sdboot-manage cascade"
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     end

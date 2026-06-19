@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.54.13 (2026-06-19) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.54.14 (2026-06-19) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.54.13"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.54.14"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -811,7 +811,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     _ir_validate_post_hooks
     for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
     _ir_precompute_caches
-    set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!#]' # the \' splits/rejoins the class (fish has no in-quote escapes); literal ' is intentional, edit with care
+    set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!#]' # \' splits/rejoins the class (no in-quote escapes); literal ' intentional, edit with care
     for _kp in $KERNEL_PARAMS
         if string match -qr -- "$_kp_metachar_re" "$_kp"
             _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"
@@ -3805,7 +3805,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     return 0
 end
 
-# ── INSTALL PHASE 4 (Services slot): RESOLVED + PKG REMOVE + MASK + ENABLE ──
+# ── INSTALL PHASE 4 (Services slot): RESOLVED + PKG REMOVE + MASK + IWD + ENABLE + REGDOM ──
 function _configure_services_resolved_restart --description "Restart systemd-resolved when its conf.d drop-in is in place"
     test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
     if _run sudo -n systemctl restart systemd-resolved
@@ -4429,7 +4429,7 @@ function _install_finalize --description "Finalize: user daemon-reload + pacman 
     return 0
 end
 
-# ── PHASE DISPATCH (_rdi_run_phases) + RUN-SUMMARY MATRIX RENDERER ──
+# ── PHASE DISPATCH (_rdi_run_phases) ──
 function _rrp_optional_indexer --argument-names cmd label --description "_rdi_run_phases sub: Run an optional indexer (updatedb / pkgfile) and record phase"
     set -l flag $argv[3..-1]
     if not command -q $cmd; _phase_record "Packages: $label" "--" "not installed"; return 0; end

@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+7.54.14 - 2026-06-19
+
+- comment: fix two section banners - phase-dispatch no longer claims the matrix renderer; Phase 4 banner lists iwd and regdom.
+- comment: trim the metachar-class regex note to vital information.
+
 7.54.13 - 2026-06-19
 
 - mangohud: order gpu_core_clock before gpu_temp in the HUD config.
@@ -11,7 +16,7 @@ ry-install changelog - newest first.
 - fix: restore the RY_RUN_TIMEOUT invalid-value warning's quote-split (now prints 3600s).
 - docs: clarify "no external dependencies" to "no bundled dependencies" in README and help text.
 - docs: give runnable commands for Uninstall steps 1-4; scope usermod troubleshooting rows per group.
-- docs: name the full hard-dependency set; note pacman/mkinitcpio/sdboot-manage/paccache/updatedb/pkgfile are RY_RUN_TIMEOUT-exempt; cross-reference Managed Files to Configuration.
+- docs: name the hard-dependency set; note the RY_RUN_TIMEOUT-exempt commands; cross-reference Managed Files to Configuration.
 - docs: correct the footer note - gen/run sentinels are internal-only.
 - comment: trim _RY_MANAGED_FILE_COUNT, _run_effective_timeout, and network-fallback comments; drop unverifiable EXPECTED_VULKAN_PKGS/EXPECTED_SERVICES notes.
 - preflight: list all four probe hosts in _install_preflight fallback evidence, matching _ry_check_network.

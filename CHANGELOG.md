@@ -1,15 +1,25 @@
 ry-install changelog - newest first.
 
+7.54.10 - 2026-06-18
+
+- docs: clarify "no external dependencies" to "no bundled dependencies" in the README intro and help text; the system toolchain in Requirements is assumed present.
+- docs: give runnable commands for README Uninstall steps 1-4; the prior table listed bare fragments without operands.
+- docs: scope the README usermod troubleshooting rows per group (realtime needs realtime-privileges, i2c needs ddcutil), matching the pkg-gated install hints.
+- comment: add the 17 _post_* functions count to the post-hook section header, matching the 7.54.7 disambiguation note.
+- comment: drop the unverifiable "verified present"/"verified" notes from EXPECTED_VULKAN_PKGS and EXPECTED_SERVICES.
+- comment: trim the _RY_MANAGED_FILE_COUNT, _run_effective_timeout, and network-fallback inline comments to vital information.
+- style: replace a load-bearing quote-split with brace interpolation in the RY_RUN_TIMEOUT warning.
+
 7.54.9 - 2026-06-18
 
-- preflight: correct the network-reachability fallback evidence string in _install_preflight to list all four probe hosts (archlinux.org, cloudflare.com, 1.1.1.1, 8.8.8.8), matching _ry_check_network; the literal is normally overridden by _RY_NET_FAIL_EVIDENCE and only surfaces if that global is unset.
+- preflight: list all four probe hosts in the _install_preflight fallback evidence string, matching _ry_check_network; the literal only surfaces when _RY_NET_FAIL_EVIDENCE is unset.
 
 7.54.8 - 2026-06-18
 
-- docs: correct the README footer note; gen/run sentinels 11-13/250/251/255 are internal-only, never footer fields. A generator failure shows only as the footer gen_fail count; run sentinels never reach the footer.
-- docs: name the full hard-dependency set in README Requirements; the prior text listed only the GNU-specific feature gates and read as exhaustive.
-- docs: note in README that pacman/mkinitcpio/sdboot-manage/paccache/updatedb/pkgfile are exempt from RY_RUN_TIMEOUT.
-- docs: cross-reference the README Managed Files index to the Configuration table; the two no longer enumerate the 19 files independently.
+- docs: correct the README footer note; gen/run sentinels 11-13/250/251/255 are internal-only, never footer fields.
+- docs: name the full hard-dependency set in README Requirements; the prior text read as exhaustive.
+- docs: note that pacman/mkinitcpio/sdboot-manage/paccache/updatedb/pkgfile are exempt from RY_RUN_TIMEOUT.
+- docs: cross-reference the README Managed Files index to the Configuration table.
 
 7.54.7 - 2026-06-18
 

@@ -2,9 +2,9 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeon 8060S, gfx1151 / Strix Halo).
 
-**Version 7.54.9 · fish ≥ 3.6 · systemd ≥ 250 · CachyOS · MIT**
+**Version 7.54.10 · fish ≥ 3.6 · systemd ≥ 250 · CachyOS · MIT**
 
-A single self-contained fish script with 19 embedded config generators, no external dependencies. Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
+A single self-contained fish script with 19 embedded config generators and no bundled dependencies (the system toolchain in [Requirements](#requirements) is assumed present). Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
 
 ## Quick Start
 
@@ -13,7 +13,7 @@ A single self-contained fish script with 19 embedded config generators, no exter
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.54.9
+cd ry-install && git checkout v7.54.10
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -148,16 +148,18 @@ Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-
 
 ## Uninstall
 
-No automated uninstaller; use [Managed Files](#managed-files) as the rollback reference.
+No automated uninstaller; use [Managed Files](#managed-files) as the rollback reference. Replace `<user-env>` with `~/.config/environment.d/10-environment.conf` and the system-path list with the [Managed Files](#managed-files) entries.
 
 | # | Step | Command |
 |---|---|---|
-| 1 | Unmask the masked units | `sudo systemctl unmask` |
-| 2 | Remove deployed system paths; remove user env.d file | `sudo rm` / `rm` |
-| 3 | Restore fstab, then delete `.ry.bak` backups | restore `/etc/fstab` from `/etc/fstab.ry.bak` |
-| 4 | Optionally reverse package changes | reinstall the removed set with `sudo pacman -S`; `sudo pacman -Rns` the installed set |
+| 1 | Unmask the masked units | `sudo systemctl unmask ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target` |
+| 2 | Remove deployed system paths, then the user env.d file | `sudo rm /etc/sdboot-manage.conf /etc/sysctl.d/95-ry-overrides.conf /etc/drirc.d/95-ry-radv-apu.conf /etc/modprobe.d/ry-amdgpu-strixhalo.conf /etc/udev/rules.d/60-ry-perf.rules /etc/iw-regdomain /etc/conf.d/wireless-regdom /etc/nftables.conf /etc/default/cpupower-service.conf /etc/iwd/main.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/systemd/logind.conf.d/99-cachyos-logind.conf` then `rm ~/.config/environment.d/10-environment.conf ~/.config/baloofilerc ~/.config/MangoHud/MangoHud.conf` |
+| 3 | Restore fstab, then delete `.ry.bak` backups | `sudo mv /etc/fstab.ry.bak /etc/fstab` then `sudo rm -f /boot/loader/loader.conf.ry.bak /etc/mkinitcpio.conf.ry.bak` |
+| 4 | Optionally reverse package changes | `sudo pacman -S --needed plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect` then `sudo pacman -Rns nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges ddcutil nftables` |
 | 5 | Rebuild initramfs and boot entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
+
+For the boot files (`/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/mkinitcpio.conf`), the Phase-5 rebuild regenerates loader entries from the restored/removed state; revert their contents (or restore the `.ry.bak` backups) before running step 5.
 
 ## Known Issues
 
@@ -178,7 +180,8 @@ Hardware gaps on Strix Halo. MES page faults and RTL8127 are resolved upstream (
 | Rebuild refused | a phase tainted boot state — fix the cause, then re-run |
 | `--verify` drift | `./ry-install.fish --install-file /etc/...` |
 | Lock held, no live PID | `rm -rf ~/ry-install/.lock`; re-run |
-| PipeWire / ddcutil permission denied | `sudo usermod -aG realtime,i2c $USER`, re-login |
+| PipeWire permission denied | `sudo usermod -aG realtime $USER`, re-login (needs `realtime-privileges`) |
+| ddcutil permission denied | `sudo usermod -aG i2c $USER`, re-login (needs `ddcutil`) |
 
 ## License
 

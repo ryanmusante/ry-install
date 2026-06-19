@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.54.9 (2026-06-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.54.10 (2026-06-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.54.9"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.54.10"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19 # token kept gtr_pro for log-field continuity
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -19,7 +19,7 @@ function _ry_show_help --description "Display usage information and available su
         "" \
         "ry-install v$VERSION" \
         "Self-contained CachyOS configuration for $PROFILE_DESC" \
-        "Single fish script, $_RY_MANAGED_FILE_COUNT embedded configs, no external dependencies." \
+        "Single fish script, $_RY_MANAGED_FILE_COUNT embedded configs, no bundled dependencies." \
         "Usage: "(status filename)" [OPTIONS]" \
         "  (no args)              Unattended install" \
         "  -V, --verbose          Show install output (check is always silent)" \
@@ -672,7 +672,7 @@ set -g PKGS_DEL \
     cachy-update \
     kdeconnect
 set -g _RY_PKG_REMOVE_SKIPS
-set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers (verified present)
+set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
 set -g MASK \
@@ -685,7 +685,7 @@ set -g MASK \
     hibernate.target \
     hybrid-sleep.target \
     suspend-then-hibernate.target
-set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # enabled + verified (Phase 4/6)
+set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # thresholds: disk, CPU, TTM caps
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
@@ -1373,7 +1373,7 @@ function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable 
     end
     if not set -q _RY_RUN_TIMEOUT_WARNED
         set -g _RY_RUN_TIMEOUT_WARNED true
-        _msg_nocount WARN "RY_RUN_TIMEOUT='$RY_RUN_TIMEOUT' is invalid (expected non-negative integer; 0 to disable) — using default "$_RY_RUN_TIMEOUT_DEFAULT"s"
+        _msg_nocount WARN "RY_RUN_TIMEOUT='$RY_RUN_TIMEOUT' is invalid (expected non-negative integer; 0 to disable) — using default {$_RY_RUN_TIMEOUT_DEFAULT}s"
         _log "RY_RUN_TIMEOUT_INVALID: value=$RY_RUN_TIMEOUT — using default $_RY_RUN_TIMEOUT_DEFAULT"
     end
     echo $_RY_RUN_TIMEOUT_DEFAULT
@@ -1421,7 +1421,7 @@ function _run_redact_cmd --description "_run sub: build logged cmd string with t
     end
     string replace -ar -- '/tmp/ry-[A-Za-z0-9_.-]+' '/tmp/ry-[REDACTED]' "$log_cmd"
 end
-function _run_effective_timeout --description "_run sub: resolve timeout; bypass for long-running pkg/boot/db ops (0 = disabled)" # bypass timeout for pkg/boot/db ops (SIGKILL corrupts db.lck)
+function _run_effective_timeout --description "_run sub: resolve timeout; bypass for long-running pkg/boot/db ops (0 = disabled)" # SIGKILL mid-txn corrupts db.lck
     set -l _t (_run_resolve_timeout); set -l _effective_cmd $argv[1]
     if test "$_effective_cmd" = sudo
         set -l _skip_next false
@@ -3453,7 +3453,7 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
     if not _ry_check_network
-        set -l _net_ev "archlinux.org, cloudflare.com, 1.1.1.1, 8.8.8.8 unreachable" # fallback host list mirrors _ry_check_network probes; normally overridden by the global below
+        set -l _net_ev "archlinux.org, cloudflare.com, 1.1.1.1, 8.8.8.8 unreachable" # normally overridden by _RY_NET_FAIL_EVIDENCE
         set -q _RY_NET_FAIL_EVIDENCE; and test -n "$_RY_NET_FAIL_EVIDENCE"; and set _net_ev "$_RY_NET_FAIL_EVIDENCE"
         _phase_record "Preflight: network reachability" FAIL "$_net_ev"
         _err "Network required for package installation — aborting"
@@ -4711,7 +4711,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (15 dispatch tags / 19 patterns; coverage enforced by _ir_validate_post_hooks) ──
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (15 dispatch tags / 19 patterns / 17 _post_* functions; coverage enforced by _ir_validate_post_hooks) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot sub: mkinitcpio -P + sdboot-manage cascade"
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end

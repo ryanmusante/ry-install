@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+7.54.9 - 2026-06-18
+
+- preflight: correct the network-reachability fallback evidence string in _install_preflight to list all four probe hosts (archlinux.org, cloudflare.com, 1.1.1.1, 8.8.8.8), matching _ry_check_network; the literal is normally overridden by _RY_NET_FAIL_EVIDENCE and only surfaces if that global is unset.
+
 7.54.8 - 2026-06-18
 
 - docs: correct the README footer note; gen/run sentinels 11-13/250/251/255 are internal-only, never footer fields. A generator failure shows only as the footer gen_fail count; run sentinels never reach the footer.

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.54.8 (2026-06-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.54.9 (2026-06-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.54.8"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.54.9"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -3453,7 +3453,7 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
     if not _ry_check_network
-        set -l _net_ev "archlinux.org, cloudflare.com, 1.1.1.1 unreachable"
+        set -l _net_ev "archlinux.org, cloudflare.com, 1.1.1.1, 8.8.8.8 unreachable" # fallback host list mirrors _ry_check_network probes; normally overridden by the global below
         set -q _RY_NET_FAIL_EVIDENCE; and test -n "$_RY_NET_FAIL_EVIDENCE"; and set _net_ev "$_RY_NET_FAIL_EVIDENCE"
         _phase_record "Preflight: network reachability" FAIL "$_net_ev"
         _err "Network required for package installation — aborting"

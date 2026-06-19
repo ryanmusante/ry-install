@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+7.54.13 - 2026-06-19
+
+- mangohud: order gpu_core_clock before gpu_temp in the HUD config.
+
 7.54.12 - 2026-06-18
 
 - comment: sync ten function --description strings to their bodies.

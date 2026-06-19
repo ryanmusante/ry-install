@@ -1,5 +1,9 @@
 ry-install changelog - newest first.
 
+7.54.11 - 2026-06-19
+
+- fix: the RY_RUN_TIMEOUT invalid-value warning printed the default as literal `{3600}s` — fish emits the braces verbatim for `{$var}s` inside a double-quoted string (brace stripping needs a comma or glob context). Restored the `$var""s` quote-split idiom used elsewhere in the file; output is now `3600s`. Reverses the 7.54.10 style change, which was incorrect.
+
 7.54.10 - 2026-06-18
 
 - docs: clarify "no external dependencies" to "no bundled dependencies" in the README intro and help text; the system toolchain in Requirements is assumed present.

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.54.11 (2026-06-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.54.12 (2026-06-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.54.11"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.54.12"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -960,7 +960,7 @@ end
 function _content__etc_conf.d_wireless-regdom --description "Generate content for /etc/conf.d/wireless-regdom (set-wireless-regdom input)"
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "WIRELESS_REGDOM=\"$COUNTRY\""
 end
-function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP performance)"
+function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP performance + gfx1151 GPU clock-floor)"
     printf '%s\n' \
         "# ry-install: udev performance rules (managed file, do not edit by hand)" \
         "# NVMe I/O scheduler none (peak IOPS/lowest tail latency on NVMe; deliberate divergence from CachyOS kyber default)" \
@@ -2328,7 +2328,7 @@ function _vss_nft --description "_verify_static_system sub: nftables default-den
     _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
     _chk_grep /etc/nftables.conf "nd-neighbor-solicit" "nftables ICMPv6 NDP/PMTUD accept" # regression guard: dropping breaks IPv6 post-NDP-expiry
 end
-function _verify_static_system --description "Verify ntsync, modules-load, resolved, logind, iwd, NM, cpupower-service.conf, sysctl"
+function _verify_static_system --description "Verify ntsync, resolved, logind, iwd, NM, regdom, cpupower-service.conf, sysctl, modprobe, udev, drirc, nftables"
     _echo "SYSTEM CONFIGURATION"
     _vss_ntsync_modules
     _echo "── resolved ──"
@@ -2495,7 +2495,7 @@ function _verify_static_checksum --description "Verify embedded content hash mat
     end
     _echo
 end
-function _ry_verify_static --description "Verify installed configs match embedded checksums"
+function _ry_verify_static --description "Verify installed configs: boot, system, user, packages, services, syntax, checksums"
     _log_section "STATIC VERIFICATION START"
     _ensure_sudo_cached; or begin
         _err_loud "sudo required for verification"
@@ -3163,7 +3163,7 @@ function _vre_regdom --description "Runtime env check: wireless regulatory domai
 end
 
 # ── VERIFY-RUNTIME: ENV ORCHESTRATOR (_verify_runtime_env) ──
-function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, ZRAM, fstab, ntsync runtime"
+function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, ZRAM, fstab, ntsync, regdom runtime"
     _vre_envvars
     _vre_sysctl_runtime
     _vre_tcp
@@ -3321,7 +3321,7 @@ function _vrs_drirc_xml --description "Runtime session check: drirc XML well-for
 end
 
 # ── VERIFY-RUNTIME: SESSION ORCHESTRATOR (_verify_runtime_session) ──
-function _verify_runtime_session --description "Verify file perms, parent dirs, Vulkan packages, drirc XML"
+function _verify_runtime_session --description "Verify NM connection perms, installed-file perms, parent dirs, Vulkan packages, drirc XML"
     _echo "FILE PERMISSIONS"
     _echo "── Sensitive files ──"
     _vrs_nm_perms
@@ -3332,7 +3332,7 @@ function _verify_runtime_session --description "Verify file perms, parent dirs, 
 end
 
 # ── VERIFY: TOP-LEVEL ORCHESTRATORS (_ry_verify_runtime + _ry_verify_all) ──
-function _ry_verify_runtime --description "Verify runtime kernel params, services, and modules"
+function _ry_verify_runtime --description "Verify runtime kernel params, services, environment, and session/permissions"
     _log_section "RUNTIME VERIFICATION START"
     _ensure_sudo_cached; or begin
         _err_loud "sudo required for verification"
@@ -4095,7 +4095,7 @@ function _configure_services_iwd_handoff --description "Disable standalone iwd.s
     end
     return 0
 end
-function _install_configure_services --description "Enable, start, and configure systemd services (fstab opts + resolved + PKGS_DEL + mask + enable)"
+function _install_configure_services --description "Enable, start, and configure systemd services (fstab opts + resolved + PKGS_DEL + mask + iwd handoff + enable + regdom)"
     _progress Services
     _info "Post-installation tasks..."
     set -l _ret 0
@@ -4409,7 +4409,7 @@ function _if_nm_restart --description "Restart NetworkManager when the iwd backe
     command sleep $_nm_delay </dev/null 2>/dev/null; or _warn "Sleep interrupted during NM restart settle window"
     return 0
 end
-function _install_finalize --description "Run post-install verification, cleanup, and summary"
+function _install_finalize --description "Finalize: user daemon-reload + pacman cache trim + NetworkManager restart"
     _progress Finalize
     if _has_user_bus_active
         if _run systemctl --user daemon-reload

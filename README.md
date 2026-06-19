@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeon 8060S, gfx1151 / Strix Halo).
 
-**Version 7.54.11 · fish ≥ 3.6 · systemd ≥ 250 · CachyOS · MIT**
+**Version 7.54.12 · fish ≥ 3.6 · systemd ≥ 250 · CachyOS · MIT**
 
 A single self-contained fish script with 19 embedded config generators and no bundled dependencies (the system toolchain in [Requirements](#requirements) is assumed present). Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
 
@@ -13,7 +13,7 @@ A single self-contained fish script with 19 embedded config generators and no bu
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.54.11
+cd ry-install && git checkout v7.54.12
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -24,7 +24,7 @@ chmod +x ry-install.fish
 
 ## Requirements
 
-Hard requirements abort read-only in preflight (exit 3). The full set is the core toolchain (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, plus the coreutils/findutils/diffutils binaries listed below) — absence of any aborts. The GNU-specific feature gates that busybox/uutils fail: coreutils (`id`, `timeout` with `--foreground`/`--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth`/`-printf`), diffutils (`cmp`, which gates the `mkinitcpio.conf` revert). NTP sync and `pacman-contrib` (`paccache`) only warn. sudo must be cached (`sudo -v`). busybox/uutils replacements are explicitly rejected.
+Hard requirements abort read-only in preflight (exit 3). The full set is the core toolchain (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, plus the coreutils/findutils/diffutils binaries listed below) — absence of any aborts. The GNU-specific feature gates that busybox/uutils fail: coreutils (`id`, `timeout` with `--foreground`/`--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth`/`-printf`), diffutils (`cmp`, which gates the `mkinitcpio.conf` revert's byte-exact verify). NTP sync and `pacman-contrib` (`paccache`) only warn. sudo must be cached (`sudo -v`). busybox/uutils replacements are explicitly rejected.
 
 | Requirement | Minimum |
 |---|---|

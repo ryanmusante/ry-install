@@ -1,5 +1,22 @@
 ry-install changelog - newest first.
 
+7.54.8 - 2026-06-18
+
+- docs: correct the README footer note; gen/run sentinels 11-13/250/251/255 are internal-only, never footer fields. A generator failure shows only as the footer gen_fail count; run sentinels never reach the footer.
+- docs: name the full hard-dependency set in README Requirements; the prior text listed only the GNU-specific feature gates and read as exhaustive.
+- docs: note in README that pacman/mkinitcpio/sdboot-manage/paccache/updatedb/pkgfile are exempt from RY_RUN_TIMEOUT.
+- docs: cross-reference the README Managed Files index to the Configuration table; the two no longer enumerate the 19 files independently.
+
+7.54.7 - 2026-06-18
+
+- docs: correct the Phase 4 sub-step order in the README install-flow table; nftables enables inside the mask step (nftables-first, then ufw flush), not standalone before mask.
+- docs: relabel the 116 GiB GTT figure as a retuning example; only the 32 GiB cap (8388608) ships.
+- docs: add the systemd >= 250 floor to the README version badge.
+- docs: clarify that both --install-file rejection paths exit 2.
+- argparse: replace the deprecated status basename with path basename -- (status filename).
+- modprobe: name amdttm.* alongside amdgpu.gttsize in the deprecation comment.
+- comment: disambiguate the post-hook section header (15 tags / 19 patterns / 17 _post_* functions).
+
 7.54.6 - 2026-06-18
 
 - docs: reorder the README kernel-cmdline param list to match the script emission order.

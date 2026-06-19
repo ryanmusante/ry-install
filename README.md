@@ -2,7 +2,7 @@
 
 CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeon 8060S, gfx1151 / Strix Halo).
 
-**Version 7.54.6 · fish ≥ 3.6 · CachyOS · MIT**
+**Version 7.54.8 · fish ≥ 3.6 · systemd ≥ 250 · CachyOS · MIT**
 
 A single self-contained fish script with 19 embedded config generators, no external dependencies. Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
 
@@ -13,7 +13,7 @@ A single self-contained fish script with 19 embedded config generators, no exter
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.54.6
+cd ry-install && git checkout v7.54.8
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -24,7 +24,7 @@ chmod +x ry-install.fish
 
 ## Requirements
 
-Hard requirements abort read-only in preflight (exit 3): a GNU userland — coreutils (`id`, `timeout` with `--foreground`/`--kill-after`, `mv -T`), findutils (`find -maxdepth`/`-printf`), diffutils (`cmp`, which gates the `mkinitcpio.conf` revert) — plus `curl` and `findmnt`. NTP sync and `pacman-contrib` (`paccache`) only warn. sudo must be cached (`sudo -v`). busybox/uutils replacements are explicitly rejected.
+Hard requirements abort read-only in preflight (exit 3). The full set is the core toolchain (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, plus the coreutils/findutils/diffutils binaries listed below) — absence of any aborts. The GNU-specific feature gates that busybox/uutils fail: coreutils (`id`, `timeout` with `--foreground`/`--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth`/`-printf`), diffutils (`cmp`, which gates the `mkinitcpio.conf` revert). NTP sync and `pacman-contrib` (`paccache`) only warn. sudo must be cached (`sudo -v`). busybox/uutils replacements are explicitly rejected.
 
 | Requirement | Minimum |
 |---|---|
@@ -48,7 +48,7 @@ Hard requirements abort read-only in preflight (exit 3): a GNU userland — core
 | `--` | End of options (no positional args accepted) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks (even before the root guard) |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path (PATH_MAX 4096, NAME_MAX 255 per component, no control characters) resolving via `realpath -m` to a managed destination; anything else exits 2.
+`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path (PATH_MAX 4096, NAME_MAX 255 per component, no control characters) resolving via `realpath -m` to a managed destination. A malformed argument is rejected before dispatch; a well-formed path that is not a managed destination is rejected after dispatch ("Not a managed file"). Both exit 2.
 
 ## Install Flow
 
@@ -59,7 +59,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
 | 3 | Configuration | deploy 19 embedded configs atomically |
-| 4 | Services | fstab → resolved → package removal → nftables → mask → iwd disable → enable → regdomain |
+| 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → iwd disable → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
@@ -81,7 +81,7 @@ The script is the source of truth — retune the `set -g` globals near the top.
 | cpupower / udev | `performance` governor; udev rules set NVMe I/O scheduler `none` (peak IOPS/lowest tail latency; deliberate divergence from CachyOS kyber default), AMD P-State EPP `performance`, and gfx1151 GPU clock-floor (`power_dpm_force_performance_level=high`) |
 | sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642` (priority 95, after vendor `70-cachyos-settings.conf`) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` for the APU (Mesa MR !18884, Mesa 22.3+) |
-| amdgpu/ttm modprobe | GTT cap via in-kernel `ttm.*` (**not** deprecated `amdgpu.gttsize`/`amdttm.*`). `pages_limit` = `page_pool_size`; pages = GiB × 262144. Cap 32 GiB = 8388608 — below the in-kernel ~50%-of-RAM default (~62 GiB on 128 GB); LLM profile 116 GiB = 30408704. Assumes BIOS UMA 512 MB |
+| amdgpu/ttm modprobe | GTT cap via in-kernel `ttm.*` (**not** deprecated `amdgpu.gttsize`/`amdttm.*`). `pages_limit` = `page_pool_size`; pages = GiB × 262144. Shipped cap 32 GiB = 8388608 — below the in-kernel ~50%-of-RAM default (~62 GiB on 128 GB). To retune, set both `TTM_*` globals (e.g. a 116 GiB cap would be 30408704). Assumes BIOS UMA 512 MB |
 | iw-regdomain / wireless-regdom | wireless regulatory domain fixed at `US` (retune `COUNTRY`); consumed by CachyOS regdomain hooks at device-add |
 | nftables.conf | default-deny-inbound ruleset (see [Safety & Reliability](#safety--reliability)) |
 | environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
@@ -109,7 +109,7 @@ The script is the source of truth — retune the `set -g` globals near the top.
 
 ## Managed Files
 
-Phase-3 files (system `0644`, user `0600`):
+Canonical path and permission index for the 19 files described by purpose in [Configuration](#configuration). Phase-3 files (system `0644`, user `0600`):
 
 | Group | Files |
 |---|---|
@@ -142,9 +142,9 @@ Phase-3 files (system `0644`, user `0600`):
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT) |
 
-Internal generator/runtime sentinels `11`–`13` (`GEN_NOFN`/`GEN_NOUUID`/`GEN_SYSCTL`), `250`/`251`/`255` are recorded in the JSONL footer, never returned as a process exit.
+Internal generator/runtime sentinels `11`–`13` (`GEN_NOFN`/`GEN_NOUUID`/`GEN_SYSCTL`) and `250`/`251`/`255` (`AS_MISUSE`/`RUN_TMPFAIL`/`RUN_MISUSE`) are consumed internally and never returned as a process exit. They are not emitted as footer fields: a generator failure surfaces only as the footer's `gen_fail` count, and the run sentinels do not reach the footer at all. The only non-standard `exit_code` the footer records is `128+N` on signal.
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp` if absent/non-absolute/unwritable). Logs: one JSONL file per run at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, mode `0600`.
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; long-running package/boot/db ops — `pacman`, `mkinitcpio`, `sdboot-manage`, `paccache`, `updatedb`, `pkgfile` — are always exempt, since a `SIGKILL` mid-transaction would corrupt `db.lck` or bypass rollback), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp` if absent/non-absolute/unwritable). Logs: one JSONL file per run at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, mode `0600`.
 
 ## Uninstall
 

@@ -24,14 +24,14 @@ chmod +x ry-install.fish
 
 ## Requirements
 
-Hard requirements abort read-only in preflight (exit 3): the core toolchain (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`) plus GNU coreutils (`id`, `timeout` with `--foreground`/`--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth`/`-printf`), and diffutils (`cmp`, gating the `mkinitcpio.conf` revert's byte-exact verify). busybox/uutils replacements are rejected. NTP sync and `pacman-contrib` (`paccache`) only warn. sudo must be cached (`sudo -v`).
-
 | Requirement | Minimum |
 |---|---|
 | Platform | CachyOS · systemd-boot · ext4 root |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
+
+Hard requirements abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, plus GNU coreutils (`id`, `timeout` with `--foreground`/`--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth`/`-printf`), and diffutils (`cmp`, gating the `mkinitcpio.conf` revert's byte-exact verify). busybox/uutils replacements are rejected. NTP sync and `pacman-contrib` (`paccache`) only warn. sudo must be cached (`sudo -v`).
 
 ## Usage
 
@@ -48,7 +48,7 @@ Hard requirements abort read-only in preflight (exit 3): the core toolchain (`pa
 | `--` | End of options (no positional args accepted) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks (even before the root guard) |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path (PATH_MAX 4096, NAME_MAX 255 per component, no control characters) resolving via `realpath -m` to a managed destination. A malformed argument is rejected before dispatch; a well-formed path that is not a managed destination is rejected after dispatch ("Not a managed file"). Both exit 2.
+`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path (PATH_MAX 4096, NAME_MAX 255 per component, no control characters) resolving via `realpath -m` to a managed destination. A malformed argument is rejected before dispatch; a well-formed non-managed path is rejected after dispatch ("Not a managed file"). Both exit 2.
 
 ## Install Flow
 
@@ -73,22 +73,22 @@ The script is the source of truth — retune the `set -g` globals near the top.
 |---|---|
 | loader.conf | systemd-boot loader: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
 | sdboot-manage.conf | entry generation: `DEFAULT_ENTRY=manual`, `OVERWRITE_EXISTING=yes`, `REMOVE_EXISTING=yes` (wipes `loader/entries/` before regen), `REMOVE_OBSOLETE=yes`; `LINUX_OPTIONS` = the cmdline params, `LINUX_FALLBACK_OPTIONS="quiet"` |
-| kernel cmdline | `rw root=UUID=<root>` (UUID resolved by generator) + params: `8250.nr_uarts=0`, `amd_pstate=active`, `amd_iommu=off`, `nowatchdog`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `quiet`, `split_lock_detect=off`, `tsc=reliable`, `usbcore.autosuspend=-1`, `zswap.enabled=0` |
-| mkinitcpio.conf | `MODULES=(amdgpu)`; `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`; `COMPRESSION="zstd"` with `-1 -T0`; `BINARIES=()`, `FILES=()` |
-| resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` (plaintext DNS, mDNS/LLMNR off — latency-first; deliberate divergence from CachyOS DoH default) |
-| logind | `Handle{Power,Suspend,Hibernate,Reboot}Key`=ignore (+ their `LongPress` variants) |
+| kernel cmdline | `rw root=UUID=<root>` (resolved by generator) + `8250.nr_uarts=0`, `amd_pstate=active`, `amd_iommu=off`, `nowatchdog`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `quiet`, `split_lock_detect=off`, `tsc=reliable`, `usbcore.autosuspend=-1`, `zswap.enabled=0` |
+| mkinitcpio.conf | `MODULES=(amdgpu)`; `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`; `COMPRESSION="zstd"` (`-1 -T0`); `BINARIES=()`, `FILES=()` |
+| resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` — plaintext DNS, mDNS/LLMNR off (latency-first; diverges from CachyOS DoH default) |
+| logind | `Handle{Power,Suspend,Hibernate,Reboot}Key`=ignore (+ `LongPress` variants) |
 | iwd / NetworkManager | iwd Wi-Fi backend (`wifi.backend=iwd`); `iwd.service` disabled (NM D-Bus-activates iwd on demand). Power-save off for MT7925 latency: NM `wifi.powersave=2` + iwd `[DriverQuirks] PowerSaveDisable=*`. iwd `EnableNetworkConfiguration=false`, `NameResolvingService=systemd`; NM `logging level=WARN` |
-| cpupower / udev | `performance` governor; udev rules set NVMe I/O scheduler `none` (peak IOPS/lowest tail latency; deliberate divergence from CachyOS kyber default), AMD P-State EPP `performance`, and gfx1151 GPU clock-floor (`power_dpm_force_performance_level=high`) |
+| cpupower / udev | `performance` governor; udev sets NVMe I/O scheduler `none` (peak IOPS/lowest tail latency; diverges from CachyOS kyber default), AMD P-State EPP `performance`, gfx1151 GPU clock-floor (`power_dpm_force_performance_level=high`) |
 | sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642` (priority 95, after vendor `70-cachyos-settings.conf`) |
-| RADV drirc | `radv_enable_unified_heap_on_apu=true` for the APU (Mesa MR !18884, Mesa 22.3+) |
-| amdgpu/ttm modprobe | GTT cap via in-kernel `ttm.*` (**not** deprecated `amdgpu.gttsize`/`amdttm.*`). `pages_limit` = `page_pool_size`; pages = GiB × 262144. Shipped cap 32 GiB = 8388608 — below the in-kernel ~50%-of-RAM default (~62 GiB on 128 GB). To retune, set both `TTM_*` globals (e.g. a 116 GiB cap would be 30408704). Assumes BIOS UMA 512 MB |
+| RADV drirc | `radv_enable_unified_heap_on_apu=true` (Mesa MR !18884, Mesa 22.3+) |
+| amdgpu/ttm modprobe | GTT cap via in-kernel `ttm.*` (not deprecated `amdgpu.gttsize`/`amdttm.*`). `pages_limit`=`page_pool_size`; pages = GiB × 262144. Shipped cap 32 GiB = 8388608 (below the in-kernel ~50%-of-RAM default, ~62 GiB on 128 GB). Retune both `TTM_*` globals (a 116 GiB cap = 30408704). Assumes BIOS UMA 512 MB |
 | iw-regdomain / wireless-regdom | wireless regulatory domain fixed at `US` (retune `COUNTRY`); consumed by CachyOS regdomain hooks at device-add |
 | nftables.conf | default-deny-inbound ruleset (see [Safety & Reliability](#safety--reliability)) |
-| environment.d | Mesa/RADV/DXVK/VKD3D/Proton gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
+| environment.d | gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
 | baloofilerc | KDE Baloo file indexing disabled (`0600`) |
 | MangoHud.conf | readout-only HUD: GPU/CPU sensors, unified memory (`vram`+`ram`), FPS with 1%/0.1% lows. Auto-enabled via `MANGOHUD=1`; toggle `Shift_R+F12` (`0600`) |
 
-**Packages** — the no-args run removes `PKGS_DEL` with `pacman -Rns` (rdep-aware: skipped if an external package depends on it; skips are logged). Reversible via [Uninstall](#uninstall).
+**Packages** — the no-args run removes `PKGS_DEL` with `pacman -Rns` (rdep-aware: skipped and logged if an external package depends on it). Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
@@ -101,7 +101,7 @@ The script is the source of truth — retune the `set -g` globals near the top.
 | Action | Units |
 |---|---|
 | Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, and the sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
-| Disable (not mask) | `iwd.service` — NetworkManager is sole Wi-Fi manager and D-Bus-activates iwd on demand (a separately-enabled iwd.service races NM) |
+| Disable (not mask) | `iwd.service` — NM is sole Wi-Fi manager and D-Bus-activates iwd on demand (a separately-enabled iwd.service races NM) |
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables` |
 | Untouched (by design) | `systemd-oomd` — left as-is. CachyOS disables it by default (killed apps too early with le9); the kernel OOM-killer + zram is the intended path on 128 GB. Do not enable |
 
@@ -109,7 +109,7 @@ The script is the source of truth — retune the `set -g` globals near the top.
 
 ## Managed Files
 
-Canonical path and permission index for the 19 files described by purpose in [Configuration](#configuration). Phase-3 files (system `0644`, user `0600`):
+Canonical path and permission index for the 19 files (described in [Configuration](#configuration)). System `0644`, user `0600`:
 
 | Group | Files |
 |---|---|
@@ -122,7 +122,7 @@ Canonical path and permission index for the 19 files described by purpose in [Co
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, `ct state invalid` dropped, inbound IPv4 ICMP scoped to diagnostics (`echo-reply`, `destination-unreachable`, `time-exceeded`, `parameter-problem` — inbound `echo-request`/ping is **dropped**) plus essential ICMPv6 (NDP + echo/PMTUD/time-exceeded/param-problem) accepted, all other inbound dropped — including mDNS. `forward` policy drop, `output` policy accept.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, `ct state invalid` dropped, inbound IPv4 ICMP scoped to diagnostics (`echo-reply`, `destination-unreachable`, `time-exceeded`, `parameter-problem` — inbound `echo-request`/ping is **dropped**) plus essential ICMPv6 (NDP + echo/PMTUD/time-exceeded/param-problem) accepted, all other inbound dropped (including mDNS). `forward` policy drop, `output` policy accept.
 
 > [!NOTE]
 > `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
@@ -130,10 +130,10 @@ Canonical path and permission index for the 19 files described by purpose in [Co
 | Feature | Detail |
 |---|---|
 | Atomic writes | same-FS tmp → render via generator → symlink-probe → backup → chmod → `mv -T` → re-read + restore on mismatch |
-| Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` (and `fstab`, written during its atomic rewrite) |
+| Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` (and `fstab`, during its atomic rewrite) |
 | mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
-| Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably recycled PID via `/proc` start-time (unsignalable/unknown ⇒ fail-closed, no reclaim) |
+| Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably recycled PID via `/proc` start-time (unsignalable/unknown ⇒ fail-closed) |
 
 | Code | Meaning |
 |---|---|
@@ -142,9 +142,9 @@ Canonical path and permission index for the 19 files described by purpose in [Co
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT) |
 
-Internal sentinels `11`–`13` (`GEN_NOFN`/`GEN_NOUUID`/`GEN_SYSCTL`) and `250`/`251`/`255` (`AS_MISUSE`/`RUN_TMPFAIL`/`RUN_MISUSE`) never reach a process exit. A generator failure surfaces only as the footer's `gen_fail` count; the run sentinels never reach the footer. The only non-standard footer `exit_code` is `128+N` on signal.
+Internal sentinels `11`–`13` (`GEN_NOFN`/`GEN_NOUUID`/`GEN_SYSCTL`) and `250`/`251`/`255` (`AS_MISUSE`/`RUN_TMPFAIL`/`RUN_MISUSE`) never reach a process exit; a generator failure surfaces only as the footer's `gen_fail` count. The only non-standard footer `exit_code` is `128+N` on signal.
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; package/boot/db ops — `pacman`, `mkinitcpio`, `sdboot-manage`, `paccache`, `updatedb`, `pkgfile` — are exempt, since a mid-transaction `SIGKILL` would corrupt `db.lck` or bypass rollback), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp` if absent/non-absolute/unwritable). Logs: one JSONL file per run at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, mode `0600`.
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` are exempt, since a mid-transaction `SIGKILL` would corrupt `db.lck` or bypass rollback), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp` if absent/non-absolute/unwritable). Logs: one JSONL file per run at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, mode `0600`.
 
 ## Uninstall
 
@@ -168,7 +168,7 @@ Hardware gaps on Strix Halo. MES page faults and RTL8127 are resolved upstream (
 | Component | Issue | Status |
 |---|---|---|
 | Strix Halo GPU | MES page faults | resolved upstream (MES 0x86); current `linux-firmware` + shipped `mkinitcpio-firmware` carry the fix |
-| RTL8127 10GbE | throughput drops under load | resolved upstream — in-tree `r8169` (mainlined; commit `f24f7b2f3af9` + suspend fix `ae1737e7339b`); no DKMS |
+| RTL8127 10GbE | throughput drops under load | resolved upstream — in-tree `r8169` (commit `f24f7b2f3af9` + suspend fix `ae1737e7339b`); no DKMS |
 | MT7925 | kernel panics, low TX power, random deauth | open — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
 | Strix Halo ACP | no ASoC machine driver | open — pending upstream (HDMI/USB audio unaffected) |
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env fish
-# ry-install v7.54.11 (2026-06-19) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
-if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing: filename='-' (piped) or stack-trace (by-path)
+# ry-install v7.54.11 (2026-06-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
 set -g VERSION "7.54.11"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
@@ -309,7 +309,7 @@ function _lock_pid_started_after --argument-names pid mtime --description "rc 0 
             set _hz $_cfg_hz; functions -q _log; and _log "LOCK_CLK_TCK_FROM_CONFIG: getconf CLK_TCK unavailable — using CONFIG_HZ=$_hz from /proc/config.gz"
         else
             functions -q _log; and _log "LOCK_CLK_TCK_UNKNOWN: getconf CLK_TCK and CONFIG_HZ both unavailable — cannot compute PID start time; treating as live (fail-closed, refusing reclaim)"
-            return 1 # USER_HZ unknown: fail closed (100-guess could steal a live lock)
+            return 1 # USER_HZ unknown: fail closed
         end
     end
     test (math "floor($_btime + $_ticks / $_hz)") -gt (math "$mtime + 2")
@@ -323,7 +323,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
     test "$_fresh_rc" -ne 2; and return 1
     for _reclaim_attempt in 1 2 3 # bounded stale-reclaim
         set -l _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
-        if not string match -qr '^[1-9]\d*$' -- "$_stale_pid" # empty pidfile: settle then recheck (peer mid-acquisition)
+        if not string match -qr '^[1-9]\d*$' -- "$_stale_pid" # empty pidfile: settle then recheck
             command sleep 0.2 </dev/null 2>/dev/null
             set _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
         end
@@ -502,7 +502,7 @@ function _teardown --argument-names mode --description "Unified cleanup: progres
             return 1
     end
 end
-function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal QUIT --on-signal ABRT --description "Signal handler for INT/TERM/HUP/QUIT/ABRT" # 128+N per signal; USR1/USR2 not trapped (non-terminal)
+function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal QUIT --on-signal ABRT --description "Signal handler for INT/TERM/HUP/QUIT/ABRT" # 128+N per signal
     test "$_CLEANUP_DONE" = true; and return 0
     set -g _CLEANUP_DONE true; set -l _sig_label SIG$argv[1]
     string match -q 'SIG*' -- "$argv[1]"; and set _sig_label "$argv[1]"
@@ -2952,7 +2952,7 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd backend + 
     else
         _warn "  WiFi interface: NOT DETECTED"
     end
-    # iwd disabled not masked; NM D-Bus-activates it, so a live process is informational
+    # iwd disabled not masked; NM D-Bus-activates on demand
     if command -q pgrep
         if command pgrep -x iwd >/dev/null
             _info "  iwd process: running (NM-activated)"
@@ -3117,7 +3117,7 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
             set -l _re (string escape --style=regex -- "$_tok")
             if not string match -qr '(^|,)'$_re'(,|$)' -- "$_opts"; _fail "  ext4 entry missing $_tok: $_fl"; set _fstab_ok false; end
         end
-        for _conflict in relatime atime strictatime # contradict noatime; kernel honours last (latent footgun)
+        for _conflict in relatime atime strictatime # contradict noatime (kernel honours last)
             set -l _cre (string escape --style=regex -- "$_conflict")
             if string match -qr '(^|,)'$_cre'(,|$)' -- "$_opts"; _fail "  ext4 entry has $_conflict alongside noatime (contradictory): $_fl"; set _fstab_ok false; end
         end
@@ -3435,7 +3435,7 @@ function _ry_check_ttm_uma_precondition --description "WARN when BIOS UMA split 
     end
     string match -qr '^\d+$' -- "$_vram_total"; or return 0 # sysfs unreadable: silent (probe is best-effort)
     set -l _vram_mib (math -s0 "floor($_vram_total / 1048576)")
-    if test "$_vram_mib" -gt 1024 # >1GiB dedicated VRAM = BIOS fixed UMA, not the expected 512MB
+    if test "$_vram_mib" -gt 1024 # >1GiB dedicated VRAM = fixed UMA, not 512MB
         _warn "TTM 32 GiB GTT cap assumes BIOS UMA=512 MB; detected dedicated VRAM=$_vram_mib MiB — verify BIOS UMA/Auto or GTT sizing may mis-apply"
         _log "TTM_UMA_PRECONDITION: vram_mib=$_vram_mib expected<=1024"
     end
@@ -3830,7 +3830,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when n
         return 0
     end
     set -l _pkg_re (string escape --style=regex -- "$pkg"); set -l _t $PACTREE_TIMEOUT_S
-    set -l _raw (command timeout --foreground --kill-after=5 "$_t" pactree -ru "$pkg" 2>/dev/null) # --foreground: SIGINT reaches child; --kill-after escalates
+    set -l _raw (command timeout --foreground --kill-after=5 "$_t" pactree -ru "$pkg" 2>/dev/null) # --foreground: SIGINT reaches child
     if test "$status" -ne 0; _warn "  $pkg: pactree probe failed — skipping for safety"; _log "PACTREE_PROBE_FAIL: pkg=$pkg (timeout, missing pkg, or db error)"; return 0; end
     set -l _trimmed (string trim -- $_raw); set -l _stripped (string replace -r '[=<>].*$' '' -- $_trimmed); set -l _nonempty (string match -rv -- '^$' $_stripped); set -l _rdeps_raw (string match -rv -- "^$_pkg_re\$" $_nonempty); set -l _rdeps
     for _r in $_rdeps_raw; contains -- "$_r" $PKGS_DEL; and continue; set -a _rdeps "$_r"; end
@@ -3970,7 +3970,7 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     _csm_enable_nftables_first; and set _nft_live true
     _csm_disable_ufw_rules $_nft_live
     set -l safe_mask $MASK
-    if test "$_nft_live" != true; and contains -- ufw.service $safe_mask # masking ufw with rules retained leaves no firewall reloadable next boot
+    if test "$_nft_live" != true; and contains -- ufw.service $safe_mask # masking ufw with rules retained = no firewall next boot
         set safe_mask (string match -v -- ufw.service $safe_mask)
         _warn "ufw.service mask skipped this run — nftables default-deny not confirmed live; masking ufw now would block its ruleset reload on next boot. Re-run after nftables.service is active."
         _log "MASK_UFW_SKIP: nft_live=false — ufw.service left unmasked to preserve firewall coverage across reboot"
@@ -4080,7 +4080,7 @@ function _configure_services_iwd_handoff --description "Disable standalone iwd.s
         # masked blocks NM D-Bus activation: unmask then disable
         _run sudo -n systemctl unmask iwd.service
     end
-    # disable not mask: stops boot auto-start racing NM; keeps D-Bus activation
+    # disable not mask: stops boot race, keeps D-Bus activation
     if _run sudo -n systemctl disable --now iwd.service
         _ok "iwd.service disabled (NetworkManager activates iwd on demand)"
         _phase_record "Services: iwd handoff" PASS "iwd.service disabled; NM is sole manager"
@@ -4964,7 +4964,7 @@ if set -q _flag_install_file
     set -l _byte_len (printf '%s' "$_if_val" | command wc -c | string trim --)
     if not string match -qr '^\d+$' -- "$_byte_len"; _early_usage_exit "--install-file path byte-length probe failed (wc -c returned '$_byte_len') — refusing"; end
     test "$_byte_len" -gt 4096; and _early_usage_exit "--install-file path exceeds PATH_MAX (4096 bytes)"
-    for _comp in (string split / -- "$_if_val") # NAME_MAX 255 per component (mktemp/mv fail with ENAMETOOLONG)
+    for _comp in (string split / -- "$_if_val") # NAME_MAX 255 per component
         test (printf '%s' "$_comp" | command wc -c | string trim --) -gt 255; and _early_usage_exit "--install-file path component exceeds NAME_MAX (255 bytes): $_comp"
     end
     set --erase _comp

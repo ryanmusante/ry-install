@@ -89,6 +89,8 @@ A CHECK/RESULT/EVIDENCE matrix prints to stderr; a JSONL log records each phase.
 
 The script is the source of truth — retune the `set -g` globals near the top.
 
+*Expand below for the full per-file key-value reference — all 19 files.*
+
 <details>
 <summary><strong>Full managed-file reference</strong> — all 19 files, key values</summary>
 
@@ -136,6 +138,8 @@ The script is the source of truth — retune the `set -g` globals near the top.
 
 Canonical path/permission index for the 19 files (described in [Configuration](#configuration)). System `0644`, user `0600`.
 
+*Expand below for the canonical path-and-permission listing by group.*
+
 <details>
 <summary><strong>Path and permission index</strong> — 19 files by group</summary>
 
@@ -164,6 +168,8 @@ Canonical path/permission index for the 19 files (described in [Configuration](#
 | mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably recycled PID via `/proc` start-time (unsignalable/unknown ⇒ fail-closed) |
+
+*Expand below for the full exit-code, sentinel, and environment-override reference.*
 
 <details>
 <summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>

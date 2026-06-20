@@ -5,6 +5,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 7.57.1 - 2026-06-20
 
 - docs: audit README against script; trim prose and tables to vital info, all values byte-identical.
+- docs: add expand-cue lines above each collapsible so folded content is signposted.
 - docs: standardize TTM UMA precondition wording on the code-enforced ≤ 1 GiB threshold.
 
 7.57.0 - 2026-06-20

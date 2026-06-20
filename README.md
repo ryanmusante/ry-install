@@ -1,10 +1,31 @@
 # ry-install
 
-CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeon 8060S, gfx1151 / Strix Halo).
+[![Release](https://img.shields.io/github/v/tag/ryanmusante/ry-install?label=release&sort=semver&style=flat-square)](https://github.com/ryanmusante/ry-install/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46?style=flat-square&logo=fishshell&logoColor=white)](https://fishshell.com)
+[![systemd](https://img.shields.io/badge/systemd-%E2%89%A5%20250-30b9db?style=flat-square)](https://systemd.io)
+[![CachyOS](https://img.shields.io/badge/distro-CachyOS-1793d1?style=flat-square)](https://cachyos.org)
 
-**Version 7.55.1 · fish ≥ 3.6 · systemd ≥ 250 · CachyOS · MIT**
+> Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro
+> (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
 
-A single self-contained fish script: 19 embedded config generators, no bundled dependencies. Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
+A single self-contained fish script — 19 embedded configs, no bundled dependencies — that deploys a tuned gaming/LLM desktop profile and can fully roll itself back.
+
+## Contents
+
+- [Quick Start](#quick-start)
+- [Requirements](#requirements)
+- [Usage](#usage)
+- [Install Flow](#install-flow)
+- [Configuration](#configuration)
+- [Managed Files](#managed-files)
+- [Safety & Reliability](#safety--reliability)
+- [Uninstall](#uninstall)
+- [Known Issues](#known-issues)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Security](#security)
+- [License](#license)
 
 ## Quick Start
 
@@ -13,7 +34,7 @@ A single self-contained fish script: 19 embedded config generators, no bundled d
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.55.1
+cd ry-install && git checkout v7.55.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -54,6 +75,12 @@ Hard requirements abort read-only in preflight (exit 3): `pacman`, `systemctl`, 
 
 A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and skips the Phase 5 rebuild; fix and re-run. mkinitcpio rollback restores the prior `mkinitcpio.conf` byte-for-byte on such failure or on signal.
 
+```mermaid
+flowchart LR
+    P1[1 Preflight] --> P2[2 Packages] --> P3[3 Configuration]
+    P3 --> P4[4 Services] --> P5[5 Boot] --> P6[6 Finalize]
+```
+
 | # | Phase | Action |
 |---|---|---|
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
@@ -68,6 +95,9 @@ A CHECK/RESULT/EVIDENCE matrix prints to stderr; a JSONL log records each phase.
 ## Configuration
 
 The script is the source of truth — retune the `set -g` globals near the top.
+
+<details>
+<summary><strong>Full managed-file reference</strong> — all 19 files, key values</summary>
 
 | File | Purpose & key values |
 |---|---|
@@ -87,6 +117,8 @@ The script is the source of truth — retune the `set -g` globals near the top.
 | environment.d | gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
 | baloofilerc | KDE Baloo file indexing disabled (`0600`) |
 | MangoHud.conf | readout-only HUD: GPU/CPU sensors, unified memory (`vram`+`ram`), FPS with 1%/0.1% lows. Auto-enabled via `MANGOHUD=1`; toggle `Shift_R+F12` (`0600`) |
+
+</details>
 
 **Packages** — the no-args run removes `PKGS_DEL` with `pacman -Rns` (rdep-aware: skipped + logged if an external package depends on it). Reversible via [Uninstall](#uninstall).
 
@@ -111,6 +143,9 @@ The script is the source of truth — retune the `set -g` globals near the top.
 
 Canonical path and permission index for the 19 files (described in [Configuration](#configuration)). System `0644`, user `0600`:
 
+<details>
+<summary><strong>Path and permission index</strong> — 19 files by group</summary>
+
 | Group | Files |
 |---|---|
 | Boot | `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf` |
@@ -118,6 +153,8 @@ Canonical path and permission index for the 19 files (described in [Configuratio
 | Network | `/etc/iwd/main.conf`, `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/conf.d/wireless-regdom`, `/etc/nftables.conf` |
 | Tuning | `/etc/default/cpupower-service.conf`, `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
 | User | `~/.config/environment.d/10-environment.conf`, `~/.config/baloofilerc`, `~/.config/MangoHud/MangoHud.conf` |
+
+</details>
 
 ## Safety & Reliability
 
@@ -135,6 +172,9 @@ Canonical path and permission index for the 19 files (described in [Configuratio
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably recycled PID via `/proc` start-time (unsignalable/unknown ⇒ fail-closed) |
 
+<details>
+<summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>
+
 | Code | Meaning |
 |---|---|
 | `0` / `1` / `2` | success / verify-FAIL or install-error / usage (incl. root-refused) |
@@ -145,6 +185,8 @@ Canonical path and permission index for the 19 files (described in [Configuratio
 Internal sentinels `11`–`13` (`GEN_NOFN`/`GEN_NOUUID`/`GEN_SYSCTL`) and `250`/`251`/`255` (`AS_MISUSE`/`RUN_TMPFAIL`/`RUN_MISUSE`) never reach a process exit; a generator failure surfaces only as the footer's `gen_fail` count. The only non-standard footer `exit_code` is `128+N` on signal.
 
 Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt — a mid-transaction `SIGKILL` would corrupt `db.lck` or bypass rollback), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp`). Logs: one JSONL per run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl`, mode `0600`.
+
+</details>
 
 ## Uninstall
 
@@ -160,6 +202,8 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 6 | Reboot | `sudo systemctl reboot` |
 
 For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), the Phase-5 rebuild regenerates entries from the restored/removed state; revert their contents (or restore `.ry.bak`) before step 5.
+
+---
 
 ## Known Issues
 
@@ -185,6 +229,14 @@ Hardware gaps on Strix Halo. MES page faults and RTL8127 are resolved upstream (
 
 > [!NOTE]
 > The installer detects missing `realtime`/`i2c` membership and prints these `usermod` commands, but does not run them. A group change is inert until re-login (it can't affect the running session), can't be cleanly reverted like the managed config files, and targets a user the root-run script must infer — so it hands you the exact command instead.
+
+## Contributing
+
+Issues and PRs welcome. For changes to managed configs, include the `--verify` and `--check` output before and after. Lint with `shellcheck` and `fish --no-execute` before submitting; keep comments single-line and update [CHANGELOG.md](CHANGELOG.md).
+
+## Security
+
+This script invokes `sudo` internally and modifies boot configuration, the firewall, and kernel cmdline. Review it before running. Report security concerns via GitHub issues, or privately to the maintainer.
 
 ## License
 

@@ -33,7 +33,7 @@ A single self-contained fish script — 19 embedded configs, no bundled dependen
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.56.0
+cd ry-install && git checkout v7.57.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -98,7 +98,7 @@ The script is the source of truth — retune the `set -g` globals near the top.
 |---|---|
 | loader.conf | systemd-boot loader: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
 | sdboot-manage.conf | entry generation: `DEFAULT_ENTRY=manual`, `OVERWRITE_EXISTING=yes`, `REMOVE_EXISTING=yes` (wipes `loader/entries/` before regen), `REMOVE_OBSOLETE=yes`; `LINUX_OPTIONS` = the cmdline params, `LINUX_FALLBACK_OPTIONS="quiet"` |
-| kernel cmdline | `rw root=UUID=<root>` (resolved) + `8250.nr_uarts=0`, `amd_pstate=active`, `amd_iommu=off`, `nowatchdog`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `quiet`, `split_lock_detect=off`, `tsc=reliable`, `usbcore.autosuspend=-1`, `zswap.enabled=0` |
+| kernel cmdline | `rw root=UUID=<root>` (resolved) + `8250.nr_uarts=0`, `amd_pstate=active`, `amd_iommu=off`, `clearcpuid=rdseed`, `nowatchdog`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `quiet`, `split_lock_detect=off`, `tsc=reliable`, `usbcore.autosuspend=-1`, `zswap.enabled=0` |
 | mkinitcpio.conf | `MODULES=(amdgpu)`; `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`; `COMPRESSION="zstd"` (`-1 -T0`); `BINARIES=()`, `FILES=()` |
 | resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` — plaintext DNS, mDNS/LLMNR off (latency-first; diverges from CachyOS DoH default) |
 | logind | `Handle{Power,Suspend,Hibernate,Reboot}Key`=ignore (+ `LongPress` variants) |
@@ -119,7 +119,7 @@ The script is the source of truth — retune the `set -g` globals near the top.
 
 | Action | Packages |
 |---|---|
-| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `realtime-privileges`, `ddcutil`, `nftables` |
+| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `rtkit`, `realtime-privileges`, `ddcutil`, `nftables` |
 | Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (chwd Vulkan drivers) |
 
@@ -196,7 +196,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 1 | Unmask the masked units | `sudo systemctl unmask ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target` |
 | 2 | Remove deployed system paths, then the user env.d file | `sudo rm /etc/sdboot-manage.conf /etc/sysctl.d/95-ry-overrides.conf /etc/drirc.d/95-ry-radv-apu.conf /etc/modprobe.d/ry-amdgpu-strixhalo.conf /etc/udev/rules.d/60-ry-perf.rules /etc/iw-regdomain /etc/conf.d/wireless-regdom /etc/nftables.conf /etc/default/cpupower-service.conf /etc/iwd/main.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/systemd/logind.conf.d/99-cachyos-logind.conf` then `rm ~/.config/environment.d/10-environment.conf ~/.config/baloofilerc ~/.config/MangoHud/MangoHud.conf` |
 | 3 | Restore fstab, then delete `.ry.bak` backups | `sudo mv /etc/fstab.ry.bak /etc/fstab` then `sudo rm -f /boot/loader/loader.conf.ry.bak /etc/mkinitcpio.conf.ry.bak` |
-| 4 | Optionally reverse package changes | `sudo pacman -S --needed plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect` then `sudo pacman -Rns nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs bottom htop git-delta lm_sensors realtime-privileges ddcutil nftables` |
+| 4 | Optionally reverse package changes | `sudo pacman -S --needed plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect` then `sudo pacman -Rns nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs bottom htop git-delta lm_sensors rtkit realtime-privileges ddcutil nftables` |
 | 5 | Rebuild initramfs and boot entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
@@ -214,6 +214,16 @@ Hardware gaps on Strix Halo. MES page faults and RTL8127 are resolved upstream (
 | RTL8127 10GbE | throughput drops under load | resolved upstream — in-tree `r8169` (commit `f24f7b2f3af9` + suspend fix `ae1737e7339b`); no DKMS |
 | MT7925 | kernel panics, low TX power, random deauth | open — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
 | Strix Halo ACP | no ASoC machine driver | open — pending upstream (HDMI/USB audio unaffected) |
+
+### Configuration-level (intended behavior, documented for awareness)
+
+These are consequences of deliberate profile choices, not defects. Each is what the profile is *supposed* to do; they are listed so the resulting log lines aren't mistaken for faults.
+
+| Item | Consequence | Rationale / action |
+|---|---|---|
+| `amd_iommu=off` (cmdline) | The NPU (`amdxdna`) cannot probe: `aie2_init: Running without IOMMU not supported`, `probe ... failed -22`. Expected; the NPU is disabled by this profile. | `amdxdna` requires IOMMU/SVA. Harmless if you don't use Ryzen AI. To enable the NPU, set `amd_iommu=on iommu=pt` in `KERNEL_PARAMS`, then re-run (or `--install-file /etc/kernel/cmdline`) and reboot. |
+| TTM GTT cap assumes BIOS UMA ≤ 1 GiB | Preflight emits a **non-fatal WARN** (`TTM_UMA_PRECONDITION: vram_mib=N expected<=1024`) when the firmware reports a large fixed dedicated VRAM (e.g. 32768 MiB), because the 32 GiB `ttm.pages_limit` cap may not apply as intended. Install continues (exit 0). | Set the BIOS iGPU/UMA frame buffer to **Auto** (or ≤ 512 MB) to match the cap assumption, or retune both `TTM_*` globals to your fixed split. Verify: `cat /sys/class/drm/card*/device/mem_info_vram_total`. |
+| RDSEED on Zen 5 / Strix Halo | On affected microcode the kernel flags RDSEED as broken (`RDSEED32 is broken. Please update your firmware.`), which can break `-march=znver*` Qt/crypto callers. The cmdline ships `clearcpuid=rdseed`, which masks the capability so software stops probing it and the warning is silenced (this taints the kernel — cosmetic). | CVE-2025-62626 / AMD SB-7055. To instead *restore* a working RDSEED, drop `clearcpuid=rdseed` from `KERNEL_PARAMS` and update microcode: `sudo pacman -Syu --needed amd-ucode linux-firmware && sudo mkinitcpio -P && reboot` (model `0x70` fixed at `0x0b700037`). The `microcode` initramfs hook is already in `MKINITCPIO_HOOKS`. |
 
 ## Troubleshooting
 

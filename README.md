@@ -4,7 +4,7 @@ CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395, Radeo
 
 **Version 7.55.0 · fish ≥ 3.6 · systemd ≥ 250 · CachyOS · MIT**
 
-A single self-contained fish script with 19 embedded config generators and no bundled dependencies. Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
+A single self-contained fish script: 19 embedded config generators, no bundled dependencies. Deploys a tuned gaming/LLM desktop profile idempotently and reversibly.
 
 ## Quick Start
 
@@ -31,7 +31,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Hard requirements abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, plus GNU coreutils (`id`, `timeout` with `--foreground`/`--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth`/`-printf`), and diffutils (`cmp`, gating the `mkinitcpio.conf` revert's byte-exact verify). busybox/uutils replacements are rejected. NTP sync and `pacman-contrib` (`paccache`) only warn. sudo must be cached (`sudo -v`).
+Hard requirements abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils (`id`, `timeout --foreground/--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth/-printf`), diffutils (`cmp`, gating the `mkinitcpio.conf` byte-exact revert). busybox/uutils are rejected. NTP sync and `paccache` only warn. sudo must be cached (`sudo -v`).
 
 ## Usage
 
@@ -48,11 +48,11 @@ Hard requirements abort read-only in preflight (exit 3): `pacman`, `systemctl`, 
 | `--` | End of options (no positional args accepted) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks (even before the root guard) |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path (PATH_MAX 4096, NAME_MAX 255 per component, no control characters) resolving via `realpath -m` to a managed destination. A malformed argument is rejected before dispatch; a well-formed non-managed path is rejected after dispatch ("Not a managed file"). Both exit 2.
+`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path (PATH_MAX 4096, NAME_MAX 255/component, no control chars) resolving via `realpath -m` to a managed destination. Malformed args are rejected before dispatch, well-formed non-managed paths after ("Not a managed file"); both exit 2.
 
 ## Install Flow
 
-A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and skips the Phase 5 rebuild; fix the cause and re-run. The mkinitcpio rollback restores the prior `mkinitcpio.conf` byte-for-byte on such a failure or on signal.
+A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and skips the Phase 5 rebuild; fix and re-run. mkinitcpio rollback restores the prior `mkinitcpio.conf` byte-for-byte on such failure or on signal.
 
 | # | Phase | Action |
 |---|---|---|
@@ -73,22 +73,22 @@ The script is the source of truth — retune the `set -g` globals near the top.
 |---|---|
 | loader.conf | systemd-boot loader: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
 | sdboot-manage.conf | entry generation: `DEFAULT_ENTRY=manual`, `OVERWRITE_EXISTING=yes`, `REMOVE_EXISTING=yes` (wipes `loader/entries/` before regen), `REMOVE_OBSOLETE=yes`; `LINUX_OPTIONS` = the cmdline params, `LINUX_FALLBACK_OPTIONS="quiet"` |
-| kernel cmdline | `rw root=UUID=<root>` (resolved by generator) + `8250.nr_uarts=0`, `amd_pstate=active`, `amd_iommu=off`, `nowatchdog`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `quiet`, `split_lock_detect=off`, `tsc=reliable`, `usbcore.autosuspend=-1`, `zswap.enabled=0` |
+| kernel cmdline | `rw root=UUID=<root>` (resolved) + `8250.nr_uarts=0`, `amd_pstate=active`, `amd_iommu=off`, `nowatchdog`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `quiet`, `split_lock_detect=off`, `tsc=reliable`, `usbcore.autosuspend=-1`, `zswap.enabled=0` |
 | mkinitcpio.conf | `MODULES=(amdgpu)`; `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`; `COMPRESSION="zstd"` (`-1 -T0`); `BINARIES=()`, `FILES=()` |
 | resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` — plaintext DNS, mDNS/LLMNR off (latency-first; diverges from CachyOS DoH default) |
 | logind | `Handle{Power,Suspend,Hibernate,Reboot}Key`=ignore (+ `LongPress` variants) |
 | iwd / NetworkManager | iwd Wi-Fi backend (`wifi.backend=iwd`); `iwd.service` disabled (NM D-Bus-activates iwd on demand). Power-save off for MT7925 latency: NM `wifi.powersave=2` + iwd `[DriverQuirks] PowerSaveDisable=*`. iwd `EnableNetworkConfiguration=false`, `NameResolvingService=systemd`; NM `logging level=WARN` |
-| cpupower / udev | `performance` governor; udev sets NVMe I/O scheduler `none` (peak IOPS/lowest tail latency; diverges from CachyOS kyber default), AMD P-State EPP `performance`, gfx1151 GPU clock-floor (`power_dpm_force_performance_level=high`) |
+| cpupower / udev | `performance` governor; udev sets NVMe I/O scheduler `none` (peak IOPS/lowest tail latency; diverges from CachyOS kyber default), AMD P-State EPP `performance`, gfx1151 GPU clock-floor (`power_dpm_force_performance_level=high`, card-scoped `KERNEL=="card[0-9]"`) |
 | sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642` (priority 95, after vendor `70-cachyos-settings.conf`) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` (Mesa MR !18884, Mesa 22.3+) |
-| amdgpu/ttm modprobe | GTT cap via in-kernel `ttm.*` (not deprecated `amdgpu.gttsize`/`amdttm.*`). `pages_limit`=`page_pool_size`; pages = GiB × 262144. Shipped cap 32 GiB = 8388608 (below the in-kernel ~50%-of-RAM default, ~62 GiB on 128 GB). Retune both `TTM_*` globals (a 116 GiB cap = 30408704). Assumes BIOS UMA 512 MB |
+| amdgpu/ttm modprobe | GTT cap via in-kernel `ttm.*` (not deprecated `amdgpu.gttsize`/`amdttm.*`). `pages_limit`=`page_pool_size`; pages = GiB × 262144. Shipped cap 32 GiB = 8388608 (below the in-kernel ~50%-of-RAM default, ~62 GiB on 128 GB). Retune both `TTM_*` globals (116 GiB = 30408704). Assumes BIOS UMA 512 MB |
 | iw-regdomain / wireless-regdom | wireless regulatory domain fixed at `US` (retune `COUNTRY`); consumed by CachyOS regdomain hooks at device-add |
 | nftables.conf | default-deny-inbound ruleset (see [Safety & Reliability](#safety--reliability)) |
 | environment.d | gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
 | baloofilerc | KDE Baloo file indexing disabled (`0600`) |
 | MangoHud.conf | readout-only HUD: GPU/CPU sensors, unified memory (`vram`+`ram`), FPS with 1%/0.1% lows. Auto-enabled via `MANGOHUD=1`; toggle `Shift_R+F12` (`0600`) |
 
-**Packages** — the no-args run removes `PKGS_DEL` with `pacman -Rns` (rdep-aware: skipped and logged if an external package depends on it). Reversible via [Uninstall](#uninstall).
+**Packages** — the no-args run removes `PKGS_DEL` with `pacman -Rns` (rdep-aware: skipped + logged if an external package depends on it). Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
@@ -105,7 +105,7 @@ The script is the source of truth — retune the `set -g` globals near the top.
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables` |
 | Untouched (by design) | `systemd-oomd` — left as-is. CachyOS disables it by default (killed apps too early with le9); the kernel OOM-killer + zram is the intended path on 128 GB. Do not enable |
 
-**fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place; all other rows/columns preserved byte-for-byte. Gated by line-count parity, a size floor, and `findmnt --verify`; a symlinked `/etc/fstab` is refused; malformed ext4 rows are left untouched with a warning.
+**fstab** — ext4 entries get `noatime,lazytime,commit=10` rewritten in place; all other rows/columns preserved byte-for-byte. Gated by line-count parity, a size floor, and `findmnt --verify`; a symlinked `/etc/fstab` is refused; malformed ext4 rows left untouched with a warning.
 
 ## Managed Files
 
@@ -144,7 +144,7 @@ Canonical path and permission index for the 19 files (described in [Configuratio
 
 Internal sentinels `11`–`13` (`GEN_NOFN`/`GEN_NOUUID`/`GEN_SYSCTL`) and `250`/`251`/`255` (`AS_MISUSE`/`RUN_TMPFAIL`/`RUN_MISUSE`) never reach a process exit; a generator failure surfaces only as the footer's `gen_fail` count. The only non-standard footer `exit_code` is `128+N` on signal.
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command wall-clock cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` are exempt, since a mid-transaction `SIGKILL` would corrupt `db.lck` or bypass rollback), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp` if absent/non-absolute/unwritable). Logs: one JSONL file per run at `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, mode `0600`.
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt — a mid-transaction `SIGKILL` would corrupt `db.lck` or bypass rollback), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp`). Logs: one JSONL per run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl`, mode `0600`.
 
 ## Uninstall
 
@@ -159,7 +159,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 5 | Rebuild initramfs and boot entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-For the boot files (`/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/mkinitcpio.conf`), the Phase-5 rebuild regenerates loader entries from the restored/removed state; revert their contents (or restore the `.ry.bak` backups) before running step 5.
+For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), the Phase-5 rebuild regenerates entries from the restored/removed state; revert their contents (or restore `.ry.bak`) before step 5.
 
 ## Known Issues
 
@@ -182,6 +182,9 @@ Hardware gaps on Strix Halo. MES page faults and RTL8127 are resolved upstream (
 | Lock held, no live PID | `rm -rf ~/ry-install/.lock`; re-run |
 | PipeWire permission denied | `sudo usermod -aG realtime $USER`, re-login (needs `realtime-privileges`) |
 | ddcutil permission denied | `sudo usermod -aG i2c $USER`, re-login (needs `ddcutil`) |
+
+> [!NOTE]
+> The installer detects missing `realtime`/`i2c` membership and prints these `usermod` commands, but does not run them. A group change is inert until re-login (it can't affect the running session), can't be cleanly reverted like the managed config files, and targets a user the root-run script must infer — so it hands you the exact command instead.
 
 ## License
 

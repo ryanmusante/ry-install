@@ -1,4 +1,14 @@
-ry-install changelog - newest first.
+ry-install - Changelog
+
+All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
+
+7.56.0 - 2026-06-20
+
+- cpu: governor performance -> powersave so the EPP hint is honored under amd_pstate=active.
+- cpu: EPP performance -> balance_performance (udev rule + static/runtime verify).
+- preflight: soft-warn mesa < 25.3 for gfx1151 RADV stability; non-fatal.
+- docs: README cpupower/udev row -> powersave + balance_performance.
+- docs: note PROFILE_NAME token retention.
 
 7.55.2 - 2026-06-20
 

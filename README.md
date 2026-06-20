@@ -33,7 +33,7 @@ A single self-contained fish script — 19 embedded configs, no bundled dependen
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.55.2
+cd ry-install && git checkout v7.56.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -103,7 +103,7 @@ The script is the source of truth — retune the `set -g` globals near the top.
 | resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` — plaintext DNS, mDNS/LLMNR off (latency-first; diverges from CachyOS DoH default) |
 | logind | `Handle{Power,Suspend,Hibernate,Reboot}Key`=ignore (+ `LongPress` variants) |
 | iwd / NetworkManager | iwd Wi-Fi backend (`wifi.backend=iwd`); `iwd.service` disabled (NM D-Bus-activates iwd on demand). Power-save off for MT7925 latency: NM `wifi.powersave=2` + iwd `[DriverQuirks] PowerSaveDisable=*`. iwd `EnableNetworkConfiguration=false`, `NameResolvingService=systemd`; NM `logging level=WARN` |
-| cpupower / udev | `performance` governor; udev sets NVMe I/O scheduler `none` (peak IOPS/lowest tail latency; diverges from CachyOS kyber default), AMD P-State EPP `performance`, gfx1151 GPU clock-floor (`power_dpm_force_performance_level=high`, card-scoped `KERNEL=="card[0-9]"`) |
+| cpupower / udev | `powersave` governor; udev sets NVMe I/O scheduler `none` (peak IOPS/lowest tail latency; diverges from CachyOS kyber default), AMD P-State EPP `balance_performance`, gfx1151 GPU clock-floor (`power_dpm_force_performance_level=high`, card-scoped `KERNEL=="card[0-9]"`) |
 | sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642` (priority 95, after vendor `70-cachyos-settings.conf`) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` (Mesa MR !18884, Mesa 22.3+) |
 | amdgpu/ttm modprobe | GTT cap via in-kernel `ttm.*` (not deprecated `amdgpu.gttsize`/`amdttm.*`). `pages_limit`=`page_pool_size`; pages = GiB × 262144. Shipped cap 32 GiB = 8388608 (below the in-kernel ~50%-of-RAM default, ~62 GiB on 128 GB). Retune both `TTM_*` globals (116 GiB = 30408704). Assumes BIOS UMA 512 MB |

@@ -1,6 +1,5 @@
 # ry-install
 
-[![Release](https://img.shields.io/github/v/tag/ryanmusante/ry-install?label=release&sort=semver&style=flat-square)](https://github.com/ryanmusante/ry-install/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46?style=flat-square&logo=fishshell&logoColor=white)](https://fishshell.com)
 [![systemd](https://img.shields.io/badge/systemd-%E2%89%A5%20250-30b9db?style=flat-square)](https://systemd.io)
@@ -75,12 +74,6 @@ Hard requirements abort read-only in preflight (exit 3): `pacman`, `systemctl`, 
 
 A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and skips the Phase 5 rebuild; fix and re-run. mkinitcpio rollback restores the prior `mkinitcpio.conf` byte-for-byte on such failure or on signal.
 
-```mermaid
-flowchart LR
-    P1[1 Preflight] --> P2[2 Packages] --> P3[3 Configuration]
-    P3 --> P4[4 Services] --> P5[5 Boot] --> P6[6 Finalize]
-```
-
 | # | Phase | Action |
 |---|---|---|
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
@@ -95,6 +88,8 @@ A CHECK/RESULT/EVIDENCE matrix prints to stderr; a JSONL log records each phase.
 ## Configuration
 
 The script is the source of truth — retune the `set -g` globals near the top.
+
+*Expand below for the full per-file key-value reference.*
 
 <details>
 <summary><strong>Full managed-file reference</strong> — all 19 files, key values</summary>
@@ -143,6 +138,8 @@ The script is the source of truth — retune the `set -g` globals near the top.
 
 Canonical path and permission index for the 19 files (described in [Configuration](#configuration)). System `0644`, user `0600`:
 
+*Expand below for the canonical path-and-permission listing by group.*
+
 <details>
 <summary><strong>Path and permission index</strong> — 19 files by group</summary>
 
@@ -171,6 +168,8 @@ Canonical path and permission index for the 19 files (described in [Configuratio
 | mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably recycled PID via `/proc` start-time (unsignalable/unknown ⇒ fail-closed) |
+
+*Expand below for the full exit-code, sentinel, and environment-override reference.*
 
 <details>
 <summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>

@@ -3,8 +3,8 @@ ry-install changelog - newest first.
 7.55.2 - 2026-06-20
 
 - docs: add shields.io badge row, Contents table, Contributing and Security sections to README.
-- docs: fold long Configuration, Managed Files, and exit-code tables behind <details>.
-- docs: split README intro into badge row, blockquote tagline, and pitch; add Mermaid phase diagram to Install Flow.
+- docs: fold long Configuration, Managed Files, and exit-code tables behind <details> with expand cues.
+- docs: split README intro into badge row, blockquote tagline, and pitch.
 - docs: README intro says "configs" (was "config generators") to match --help wording.
 
 7.55.1 - 2026-06-20

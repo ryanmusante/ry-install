@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+7.55.0 - 2026-06-20
+
+- udev: scope the gfx1151 GPU clock-floor rule to the card device only - KERNEL card[0-9]* -> card[0-9] and ACTION add|change -> add. The greedy card[0-9]* glob also matched DRM connectors (card1-DP-N, card1-HDMI-A-1, card1-Writeback-1), where ATTR{device/power_dpm_force_performance_level} cannot resolve; a bulk change re-trigger (e.g. udevadm reload during install) logged "Could not chase sysfs attribute ... ignoring: No such file or directory" once per connector. Harmless (writes ignored) but noise; card[0-9] excludes connectors (hyphen fails the bracket class) and add-only avoids the re-trigger. EPP rule retains add|change (AC/DC re-assertion).
+- verify: _vss_udev asserts the GPU rule is card-scoped (KERNEL=="card[0-9]") so a regression to an unconstrained match is caught by --verify.
+
 7.54.14 - 2026-06-19
 
 - comment: fix two section banners - phase-dispatch no longer claims the matrix renderer; Phase 4 banner lists iwd and regdom.

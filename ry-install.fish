@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.54.14 (2026-06-19) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.55.0 (2026-06-20) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.54.14"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.55.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -968,7 +968,7 @@ function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate con
         "# AMD P-State EPP performance" \
         'ACTION=="add|change", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="performance"' \
         "# GPU performance level (gfx1151 clock-floor; optional)" \
-        'ACTION=="add|change", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="high"'
+        'ACTION=="add", KERNEL=="card[0-9]", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="high"'
 end
 
 # ── CONTENT DISPATCH (_ry_get_file_content; fn = _content_$(_tmpfile_key dst)) ──
@@ -2315,6 +2315,7 @@ function _vss_udev --description "_verify_static_system sub: combined udev perf 
     _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'queue/scheduler}="none"' "nvme scheduler=none"
     _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'energy_performance_preference}="performance"' "EPP=performance"
     _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'power_dpm_force_performance_level}="high"' "GPU dpm=high"
+    _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'KERNEL=="card[0-9]"' "GPU rule card-scoped"
 end
 function _vss_drirc --description "_verify_static_system sub: RADV drirc"
     _echo "── drirc (RADV) ──"

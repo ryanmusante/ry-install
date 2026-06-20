@@ -1,5 +1,10 @@
 ry-install changelog - newest first.
 
+7.55.1 - 2026-06-20
+
+- json: rewrite _json_str backslash-doubling to '\x5c'/'\x5c\x5c' literals; fixes GitHub TextMate (PrettyLights) highlighter desync that mis-colored lines 1123-1568. Trailing-backslash single-quote literals broke the grammar's quote tracking. Output byte-identical (28-input differential incl. all C0 controls + DEL verified).
+- json: fast-path character class uses \x5c for backslash instead of embedded escaped quote.
+
 7.55.0 - 2026-06-20
 
 - udev: scope GPU clock-floor rule to card device; KERNEL card[0-9]* -> card[0-9], ACTION add|change -> add.

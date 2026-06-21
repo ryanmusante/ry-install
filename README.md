@@ -29,7 +29,7 @@ One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 ## Quick Start
 
 > [!IMPORTANT]
-> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally, cache it first (`sudo -v`). The unattended run **removes packages** (see [Configuration](#configuration)). Reboot afterward, then `--verify`. Re-runs are idempotent.
+> Run as your normal user — **root is refused (exit 2)**; cache sudo first (`sudo -v`). The unattended run **removes packages** (see [Configuration](#configuration)). Reboot afterward, then `--verify`. Re-runs are idempotent.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
@@ -51,7 +51,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Hard dependencies abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils (`id`, `timeout --foreground/--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth/-printf`), diffutils (`cmp`, gating the byte-exact `mkinitcpio.conf` revert). busybox/uutils are rejected. NTP sync and `paccache` only warn; sudo must be cached.
+Hard deps abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils (`id`, `timeout --foreground/--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth/-printf`), diffutils (`cmp`). busybox/uutils rejected. NTP sync and `paccache` only warn; sudo must be cached.
 
 ## Usage
 
@@ -68,7 +68,7 @@ Hard dependencies abort read-only in preflight (exit 3): `pacman`, `systemctl`, 
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path (PATH_MAX 4096, NAME_MAX 255, no control chars) resolving via `realpath -m` to a managed destination. Malformed args are rejected before dispatch (exit 2); well-formed non-managed paths after ("Not a managed file", exit 2).
+`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path (PATH_MAX 4096, NAME_MAX 255, no control chars) resolving via `realpath -m` to a managed destination. Malformed args rejected before dispatch (exit 2); well-formed non-managed paths after ("Not a managed file", exit 2).
 
 ## Install Flow
 
@@ -103,16 +103,16 @@ Source of truth is the script; retune the `set -g` globals near the top.
 | mkinitcpio.conf | `MODULES=(amdgpu)`; `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`; `COMPRESSION="zstd"` (`-1 -T0`); `BINARIES=()`, `FILES=()` |
 | resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` (plaintext DNS; diverges from CachyOS DoH default) |
 | logind | `Handle{Power,Suspend,Hibernate,Reboot}Key`=ignore (+ `LongPress` variants) |
-| NetworkManager-dispatcher | `LogLevelMax=notice` drop-in — silences routine info-level `req:N 'connectivity-change'` journal spam from `nm-dispatcher` (logs via journald transport, so `StandardError=null` is ineffective); keeps notice and above |
-| NetworkManager | wpa_supplicant backend (`wifi.backend=wpa_supplicant`, NM default — chosen over the experimental iwd backend for MT7925 stability; CachyOS ships wpa_supplicant by default). MT7925 power-save off via NM `wifi.powersave=2`; NM `logging level=WARN`. Opt into the iwd backend by setting `NM_WIFI_BACKEND=iwd` and re-running |
+| NetworkManager-dispatcher | `LogLevelMax=notice` drop-in — silences routine info-level `nm-dispatcher` journal spam (journald transport, so `StandardError=null` is ineffective) |
+| NetworkManager | wpa_supplicant backend (`wifi.backend=wpa_supplicant`, NM default — chosen over experimental iwd for MT7925 stability). MT7925 power-save off (`wifi.powersave=2`); `logging level=WARN`. Opt into iwd via `NM_WIFI_BACKEND=iwd` + re-run |
 | iw-regdomain / wireless-regdom | regulatory domain fixed `US` (retune `COUNTRY`); consumed by CachyOS hooks at device-add |
-| bluetooth main.conf | BlueZ adapter auto-power-on at service start/resume (`[Policy] AutoEnable=true`); `FastConnectable=true`; paired-sink reconnect backoff (`ReconnectAttempts=7`, `ReconnectIntervals=1,2,4,8,16,32,64`). Fixes BlueZ skipping its own `AutoEnable=true` default when `main.conf` is absent. Per-device auto-reconnect still needs a one-time `bluetoothctl trust <MAC>` |
+| bluetooth main.conf | adapter auto-power-on (`[Policy] AutoEnable=true`); `FastConnectable=true`; reconnect backoff (`ReconnectAttempts=7`, `ReconnectIntervals=1,2,4,8,16,32,64`). Fixes BlueZ skipping its own `AutoEnable` default when `main.conf` absent. Per-device reconnect still needs one-time `bluetoothctl trust <MAC>` |
 | nftables.conf | default-deny-inbound (see [Safety & Reliability](#safety--reliability)) |
-| cpupower / udev | `powersave` governor; udev sets NVMe scheduler `none`, AMD P-State EPP `balance_performance` (mid-bias toward performance, not max `performance` EPP), gfx1151 clock-floor (`power_dpm_force_performance_level=high`, `KERNEL=="card[0-9]"`) |
+| cpupower / udev | `powersave` governor; udev sets NVMe scheduler `none`, AMD P-State EPP `balance_performance`, gfx1151 clock-floor (`power_dpm_force_performance_level=high`, `KERNEL=="card[0-9]"`) |
 | sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`, `vm.page-cluster=0`, `vm.swappiness=150`, `vm.vfs_cache_pressure=50` (zram-tuned; priority 95, after vendor `70-cachyos-settings.conf`) |
 | environment.d | gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
 | baloofilerc | KDE Baloo indexing disabled (`0600`) |
-| MangoHud.conf | readout-only HUD: GPU/CPU sensors, unified memory (`vram`+`ram`), FPS + frametime. Auto-enabled via `MANGOHUD=1`; toggle on MangoHud's default `Shift_R+F12` (`0600`) |
+| MangoHud.conf | readout-only HUD: GPU/CPU sensors, unified memory (`vram`+`ram`), FPS + frametime. Auto-enabled via `MANGOHUD=1`; toggle `Shift_R+F12` (`0600`) |
 
 </details>
 
@@ -128,8 +128,8 @@ Source of truth is the script; retune the `set -g` globals near the top.
 
 | Action | Units |
 |---|---|
-| Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, `modemmanager` (optdep, not installed — stops KDE D-Bus activation), sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
-| Untouched (opt-in) | `iwd.service` — left as packaged; unused while the backend is wpa_supplicant. Set `NM_WIFI_BACKEND=iwd` and re-run to switch back (Phase 4 then disables iwd.service so NM activates it on demand) |
+| Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, `modemmanager`, sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
+| Untouched (opt-in) | `iwd.service` — unused while backend is wpa_supplicant. Set `NM_WIFI_BACKEND=iwd` + re-run to switch (Phase 4 then disables it so NM activates on demand) |
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
 | Untouched (by design) | `systemd-oomd` — kernel OOM-killer + zram is the intended path on 128 GB. Do not enable |
 
@@ -150,7 +150,7 @@ Path/permission index for the 18 files (values in [Configuration](#configuration
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, `ct state invalid` dropped, inbound IPv4 ICMP scoped to diagnostics (`echo-reply`, `destination-unreachable`, `time-exceeded`, `parameter-problem` — inbound `echo-request`/ping is **dropped**) plus essential ICMPv6 (NDP + echo/PMTUD/time-exceeded/param-problem) accepted, all other inbound dropped (including mDNS). `forward` drop, `output` accept.
+> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, `ct state invalid` dropped, inbound IPv4 ICMP scoped to diagnostics (`echo-reply`, `destination-unreachable`, `time-exceeded`, `parameter-problem` — inbound ping is **dropped**) plus essential ICMPv6 (NDP + echo/PMTUD/time-exceeded/param-problem) accepted, all other inbound dropped (including mDNS). `forward` drop, `output` accept.
 
 > [!NOTE]
 > `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
@@ -214,9 +214,9 @@ The log lines quoted below are expected, not errors.
 
 | Item | Consequence | Action |
 |---|---|---|
-| `amd_iommu=on iommu=pt` | IOMMU in passthrough so the `amdxdna` NPU can probe (`/dev/accel/accel0` appears). NPU use still needs a matched driver+firmware stack (kernel 7.0+ in-tree or `amdxdna-dkms`). Disabling IOMMU instead reportedly gains ~6–7% on llama.cpp prompt processing. | For that GPU gain over the NPU: set `amd_iommu=off` (drop `iommu=pt`) in `KERNEL_PARAMS` (count guard `14 → 13`), re-run or `--install-file /etc/kernel/cmdline`, reboot. NPU then cannot probe (`aie2_init: Running without IOMMU not supported`). |
+| `amd_iommu=on iommu=pt` | IOMMU in passthrough so the `amdxdna` NPU can probe (`/dev/accel/accel0`). NPU use still needs a matched driver+firmware stack (kernel 7.0+ in-tree or `amdxdna-dkms`). Disabling IOMMU reportedly gains ~6–7% on llama.cpp prompt processing. | For that GPU gain over the NPU: set `amd_iommu=off` (drop `iommu=pt`) in `KERNEL_PARAMS` (count guard `14 → 13`), re-run or `--install-file /etc/kernel/cmdline`, reboot. NPU then cannot probe (`aie2_init: Running without IOMMU not supported`). |
 | RDSEED on Zen 5 | Kernel flags RDSEED broken (`RDSEED32 is broken. Please update your firmware.`), which can break `-march=znver*` Qt/crypto callers. `clearcpuid=rdseed` masks it (taints kernel — cosmetic). | CVE-2025-62626 / AMD SB-7055. To restore: drop `clearcpuid=rdseed` (count guard `14 → 13`) and update microcode: `sudo pacman -Syu --needed amd-ucode linux-firmware && sudo mkinitcpio -P && reboot` (model `0x70` → `0x0b700037`). The `microcode` hook is already in `MKINITCPIO_HOOKS`. Preflight emits a non-fatal `INFO` (`RDSEED_WORKAROUND_STALE`) once running microcode reaches `0x0b700037`. |
-| UMIP (`umip_printk` bursts) | **Disabled by default** via `clearcpuid=514` — UMIP masked system-wide; the kernel no longer traps/emulates `SGDT`/`SIDT`/`SMSW` for 64-bit processes. Adds a 2nd kernel taint (cosmetic). | Deliberate latency choice. To restore UMIP protection: drop `clearcpuid=514` from `KERNEL_PARAMS` (count guard `14 → 13`) and reboot. Preflight emits a non-fatal `INFO` (`UMIP_DISABLED`) while the token is present. |
+| UMIP (`umip_printk` bursts) | **Disabled by default** via `clearcpuid=514` — UMIP masked system-wide; the kernel no longer traps/emulates `SGDT`/`SIDT`/`SMSW` for 64-bit processes. Adds a 2nd kernel taint (cosmetic). | Deliberate latency choice. To restore: drop `clearcpuid=514` from `KERNEL_PARAMS` (count guard `14 → 13`) and reboot. Preflight emits a non-fatal `INFO` (`UMIP_DISABLED`) while the token is present. |
 
 ## Troubleshooting
 

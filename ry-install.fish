@@ -803,8 +803,8 @@ end
 function _content__etc_systemd_system_NetworkManager-dispatcher.service.d_logging.conf --description "Generate content for NetworkManager-dispatcher logging drop-in (journal noise suppression)"
     printf '%s\n' "# NetworkManager-dispatcher journal noise suppression" "# nm-dispatcher logs via journald transport (not stdout), so StandardError=null is ineffective;" "# LogLevelMax drops the routine info-level req:N 'connectivity-change' lines while keeping notice+." "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
 end
-function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (wpa_supplicant backend)"
-    printf '%s\n' "# NetworkManager configuration - wpa_supplicant backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"
+function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (wifi.backend from NM_WIFI_BACKEND)"
+    printf '%s\n' "# NetworkManager configuration - $NM_WIFI_BACKEND backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"
 end
 function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"

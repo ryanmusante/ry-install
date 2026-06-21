@@ -8,7 +8,7 @@
 > Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro
 > (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
 
-One self-contained fish script — 18 embedded configs, no bundled dependencies — deploying a tuned gaming/LLM desktop profile, fully reversible.
+One self-contained fish script: 18 embedded configs, reversible gaming/LLM desktop profile.
 
 ## Contents
 
@@ -29,7 +29,7 @@ One self-contained fish script — 18 embedded configs, no bundled dependencies 
 ## Quick Start
 
 > [!IMPORTANT]
-> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally, cache it first (`sudo -v`). The unattended run **removes packages** (see [Configuration](#configuration)). Reboot afterward, then `--verify`. Re-running is idempotent.
+> Run as your normal user — **root is refused (exit 2)**; sudo is invoked internally, cache it first (`sudo -v`). The unattended run **removes packages** (see [Configuration](#configuration)). Reboot afterward, then `--verify`. Re-runs are idempotent.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
@@ -51,7 +51,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Hard dependencies abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils (`id`, `timeout --foreground/--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth/-printf`), diffutils (`cmp`, gating the `mkinitcpio.conf` byte-exact revert). busybox/uutils are rejected. NTP sync and `paccache` only warn; sudo must be cached (`sudo -v`).
+Hard dependencies abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils (`id`, `timeout --foreground/--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth/-printf`), diffutils (`cmp`, gating the byte-exact `mkinitcpio.conf` revert). busybox/uutils are rejected. NTP sync and `paccache` only warn; sudo must be cached.
 
 ## Usage
 
@@ -68,7 +68,7 @@ Hard dependencies abort read-only in preflight (exit 3): `pacman`, `systemctl`, 
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path (PATH_MAX 4096, NAME_MAX 255/component, no control chars) resolving via `realpath -m` to a managed destination. Malformed args are rejected before dispatch, well-formed non-managed paths after ("Not a managed file"); both exit 2.
+`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path (PATH_MAX 4096, NAME_MAX 255, no control chars) resolving via `realpath -m` to a managed destination. Malformed args are rejected before dispatch (exit 2); well-formed non-managed paths after ("Not a managed file", exit 2).
 
 ## Install Flow
 
@@ -83,13 +83,11 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
-A CHECK/RESULT/EVIDENCE matrix prints to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; `DEFER` applies on next boot (e.g. the regulatory domain, applied by CachyOS hooks at device-add).
+A CHECK/RESULT/EVIDENCE matrix prints to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; `DEFER` applies on next boot (e.g. regdomain, via CachyOS device-add hooks).
 
 ## Configuration
 
-The script is the source of truth — retune the `set -g` globals near the top.
-
-*Expand below for the full per-file key-value reference — all 18 files.*
+Source of truth is the script; retune the `set -g` globals near the top.
 
 <details>
 <summary><strong>Full managed-file reference</strong> — all 18 files, key values</summary>
@@ -105,8 +103,8 @@ The script is the source of truth — retune the `set -g` globals near the top.
 | iwd / NetworkManager | iwd backend (`wifi.backend=iwd`); `iwd.service` disabled (NM D-Bus-activates iwd on demand). MT7925 power-save off: NM `wifi.powersave=2` + iwd `[DriverQuirks] PowerSaveDisable=*`. iwd `EnableNetworkConfiguration=false`, `NameResolvingService=systemd`; NM `logging level=WARN` |
 | iw-regdomain / wireless-regdom | regulatory domain fixed `US` (retune `COUNTRY`); consumed by CachyOS hooks at device-add |
 | nftables.conf | default-deny-inbound (see [Safety & Reliability](#safety--reliability)) |
-| cpupower / udev | `powersave` governor; udev sets NVMe scheduler `none`, AMD P-State EPP `balance_performance` (deliberate mid-bias toward performance, not the max `performance` EPP), gfx1151 clock-floor (`power_dpm_force_performance_level=high`, `KERNEL=="card[0-9]"`) |
-| sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`, `vm.page-cluster=0`, `vm.swappiness=150`, `vm.vfs_cache_pressure=50` (zram-tuned: `page-cluster=0` + `swappiness=150` match compressed RAM-backed swap; priority 95, after vendor `70-cachyos-settings.conf`) |
+| cpupower / udev | `powersave` governor; udev sets NVMe scheduler `none`, AMD P-State EPP `balance_performance` (mid-bias toward performance, not max `performance` EPP), gfx1151 clock-floor (`power_dpm_force_performance_level=high`, `KERNEL=="card[0-9]"`) |
+| sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`, `vm.page-cluster=0`, `vm.swappiness=150`, `vm.vfs_cache_pressure=50` (zram-tuned; priority 95, after vendor `70-cachyos-settings.conf`) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` (Mesa 22.3 MR !18884) |
 | environment.d | gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
 | baloofilerc | KDE Baloo indexing disabled (`0600`) |
@@ -135,12 +133,7 @@ The script is the source of truth — retune the `set -g` globals near the top.
 
 ## Managed Files
 
-Canonical path/permission index for the 18 files (described in [Configuration](#configuration)). System `0644`, user `0600`.
-
-*Expand below for the canonical path-and-permission listing by group.*
-
-<details>
-<summary><strong>Path and permission index</strong> — 18 files by group</summary>
+Path/permission index for the 18 files (values in [Configuration](#configuration)). System `0644`, user `0600`.
 
 | Group | Files |
 |---|---|
@@ -149,8 +142,6 @@ Canonical path/permission index for the 18 files (described in [Configuration](#
 | Network | `/etc/iwd/main.conf`, `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/conf.d/wireless-regdom`, `/etc/nftables.conf` |
 | Tuning | `/etc/default/cpupower-service.conf`, `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
 | User | `~/.config/environment.d/10-environment.conf`, `~/.config/baloofilerc`, `~/.config/MangoHud/MangoHud.conf` |
-
-</details>
 
 ## Safety & Reliability
 
@@ -167,8 +158,6 @@ Canonical path/permission index for the 18 files (described in [Configuration](#
 | mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably recycled PID via `/proc` start-time (unsignalable/unknown ⇒ fail-closed) |
-
-*Expand below for the full exit-code, sentinel, and environment-override reference.*
 
 <details>
 <summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>
@@ -214,13 +203,13 @@ Hardware gaps on Strix Halo.
 
 ### Configuration-level (intended behavior)
 
-Deliberate profile choices, not defects — log lines below are expected.
+Deliberate profile choices, not defects; the log lines below are expected.
 
 | Item | Consequence | Action |
 |---|---|---|
-| `amd_iommu=off` | NPU (`amdxdna`) cannot probe (`aie2_init: Running without IOMMU not supported`, `probe ... failed -22`); the NPU is disabled. | To enable: set `amd_iommu=on iommu=pt` in `KERNEL_PARAMS`, re-run (or `--install-file /etc/kernel/cmdline`), reboot. |
-| RDSEED on Zen 5 | Kernel flags RDSEED broken (`RDSEED32 is broken. Please update your firmware.`), which can break `-march=znver*` Qt/crypto callers. `clearcpuid=rdseed` masks it and silences the warning (taints kernel — cosmetic). | CVE-2025-62626 / AMD SB-7055. To restore RDSEED, drop `clearcpuid=rdseed` (count guard `13 → 12`) and update microcode: `sudo pacman -Syu --needed amd-ucode linux-firmware && sudo mkinitcpio -P && reboot` (model `0x70` → `0x0b700037`). The `microcode` hook is already in `MKINITCPIO_HOOKS`. Preflight emits a non-fatal `INFO` (`RDSEED_WORKAROUND_STALE`) once the running microcode reaches `0x0b700037`, signalling the workaround + taint can be retired. |
-| UMIP (`umip_printk` bursts) | **Disabled by default** via `clearcpuid=514` — UMIP is masked system-wide, so the kernel no longer traps/emulates `SGDT`/`SIDT`/`SMSW` for 64-bit processes and `umip_printk: N callbacks suppressed` will not appear. Adds a 2nd kernel taint (cosmetic). | Deliberate latency choice. To restore UMIP protection, drop `clearcpuid=514` from `KERNEL_PARAMS` (count guard `13 → 12`) and reboot. Preflight emits a non-fatal `INFO` (`UMIP_DISABLED`) while the token is present, as a reminder the taint + loss of SGDT/SIDT/SMSW trapping are active. |
+| `amd_iommu=off` | NPU (`amdxdna`) cannot probe (`aie2_init: Running without IOMMU not supported`, `probe ... failed -22`); NPU disabled. | To enable: set `amd_iommu=on iommu=pt` in `KERNEL_PARAMS`, re-run (or `--install-file /etc/kernel/cmdline`), reboot. |
+| RDSEED on Zen 5 | Kernel flags RDSEED broken (`RDSEED32 is broken. Please update your firmware.`), which can break `-march=znver*` Qt/crypto callers. `clearcpuid=rdseed` masks it (taints kernel — cosmetic). | CVE-2025-62626 / AMD SB-7055. To restore: drop `clearcpuid=rdseed` (count guard `13 → 12`) and update microcode: `sudo pacman -Syu --needed amd-ucode linux-firmware && sudo mkinitcpio -P && reboot` (model `0x70` → `0x0b700037`). The `microcode` hook is already in `MKINITCPIO_HOOKS`. Preflight emits a non-fatal `INFO` (`RDSEED_WORKAROUND_STALE`) once running microcode reaches `0x0b700037`. |
+| UMIP (`umip_printk` bursts) | **Disabled by default** via `clearcpuid=514` — UMIP masked system-wide; the kernel no longer traps/emulates `SGDT`/`SIDT`/`SMSW` for 64-bit processes. Adds a 2nd kernel taint (cosmetic). | Deliberate latency choice. To restore UMIP protection: drop `clearcpuid=514` from `KERNEL_PARAMS` (count guard `13 → 12`) and reboot. Preflight emits a non-fatal `INFO` (`UMIP_DISABLED`) while the token is present. |
 
 ## Troubleshooting
 
@@ -234,15 +223,15 @@ Deliberate profile choices, not defects — log lines below are expected.
 | ddcutil permission denied | `sudo usermod -aG i2c $USER`, re-login (needs `ddcutil`) |
 
 > [!NOTE]
-> The installer detects missing `realtime`/`i2c` membership and prints these `usermod` commands but does not run them: a group change is inert until re-login, can't be cleanly reverted like the managed configs, and targets a user the root-run script must infer.
+> The installer detects missing `realtime`/`i2c` membership and prints these `usermod` commands but does not run them: a group change is inert until re-login and can't be cleanly reverted like the managed configs.
 
 ## Contributing
 
-Issues and PRs welcome. For managed-config changes, include `--verify` and `--check` output before and after. Lint with `shellcheck` and `fish --no-execute`; keep comments single-line; update [CHANGELOG.md](CHANGELOG.md).
+PRs welcome. For config changes, include before/after `--verify` and `--check` output; lint with `shellcheck` and `fish --no-execute`; keep comments single-line; update [CHANGELOG.md](CHANGELOG.md).
 
 ## Security
 
-This script invokes `sudo` internally and modifies boot configuration, the firewall, and kernel cmdline. Review it before running. Report security concerns via GitHub issues, or privately to the maintainer.
+Invokes `sudo` internally; modifies boot config, firewall, and kernel cmdline. Review before running. Report concerns via GitHub issues or privately to the maintainer.
 
 ## License
 

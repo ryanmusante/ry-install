@@ -3,7 +3,7 @@
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.57.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.58.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -544,6 +544,8 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
 end
 
 # ── EMBEDDED CONFIGURATION: DESTINATIONS, KERNEL PARAMS, PKGS, MASK ──
+# CANONICAL FILE ORDER (install-phase grouped): boot -> early-boot drop-ins -> network -> tuning -> user.
+# This array is the single source of truth; _content_ fns and _RY_POST_HOOKS mirror it. Keep all three in sync.
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" \
     "/etc/kernel/cmdline" \
@@ -553,14 +555,14 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
     "/etc/iwd/main.conf" \
     "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
+    "/etc/iw-regdomain" \
+    "/etc/conf.d/wireless-regdom" \
+    "/etc/nftables.conf" \
     "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" \
     "/etc/drirc.d/95-ry-radv-apu.conf" \
     "/etc/modprobe.d/ry-amdgpu-strixhalo.conf" \
-    "/etc/iw-regdomain" \
-    "/etc/conf.d/wireless-regdom" \
-    "/etc/udev/rules.d/60-ry-perf.rules" \
-    "/etc/nftables.conf"
+    "/etc/udev/rules.d/60-ry-perf.rules"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/baloofilerc" "$HOME/.config/MangoHud/MangoHud.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -808,6 +810,75 @@ end
 function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (iwd backend)"
     printf '%s\n' "# NetworkManager configuration - iwd backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"
 end
+function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"
+    printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
+end
+function _content__etc_conf.d_wireless-regdom --description "Generate content for /etc/conf.d/wireless-regdom (set-wireless-regdom input)"
+    printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "WIRELESS_REGDOM=\"$COUNTRY\""
+end
+function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset"
+    printf '%s\n' \
+        "#!/usr/bin/nft -f" \
+        "# ry-install: minimal default-deny-inbound (ufw masked). No inbound ports open by default — add them below." \
+        "flush ruleset" \
+        "table inet filter {" \
+        "    chain input {" \
+        "        type filter hook input priority filter; policy drop;" \
+        "        ct state established,related accept" \
+        "        iif \"lo\" accept" \
+        "        ct state invalid drop" \
+        "        ip6 nexthdr ipv6-icmp icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert, nd-router-solicit, echo-request, packet-too-big, time-exceeded, parameter-problem } accept" \
+        "        # IPv4: inbound echo-request (ping) intentionally NOT accepted; IPv6 echo-request is, since ICMPv6 is load-bearing for NDP/PMTUD" \
+        "        icmp type { echo-reply, destination-unreachable, time-exceeded, parameter-problem } accept" \
+        "    }" \
+        "    chain forward { type filter hook forward priority filter; policy drop; }" \
+        "    chain output { type filter hook output priority filter; policy accept; }" \
+        "}"
+end
+function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
+    printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
+end
+function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
+    printf '%s\n' "# ry-install sysctl tunables (priority 95 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
+    set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
+    for entry in $SYSCTL_VALUES
+        if not string match -qr '^\s*[A-Za-z0-9._-]+\s*=\s*\S' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; functions -q _log; and _log "SYSCTL_SKIP_MALFORMED: '$entry' (require key=value, key charset [A-Za-z0-9._-])"; continue; end
+        set -l parts (string split -m1 '=' -- "$entry"); set -l key (string trim -- "$parts[1]"); set -l val (string trim -- "$parts[2]")
+        printf '%s = %s\n' "$key" "$val"
+        set _printed (math $_printed + 1)
+    end
+    if test "$_printed" -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
+end
+function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate content for RADV drirc drop-in (unified heap on APU)"
+    # radv_enable_unified_heap_on_apu: Mesa 22.3 MR !18884
+    printf '%s\n' \
+        '<?xml version="1.0" standalone="yes"?>' \
+        '<!-- ry-install: RADV unified-heap on APU (managed file, do not edit by hand) -->' \
+        '<driconf>' \
+        '    <device driver="radv">' \
+        '        <application name="Default">' \
+        "            <option name=\"$RADV_APU_OPTION\" value=\"true\"/>" \
+        '        </application>' \
+        '    </device>' \
+        '</driconf>'
+end
+function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)"
+    printf '%s\n' \
+        "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
+        "# Uses ttm.* (in-kernel module). Do NOT add amdgpu.gttsize or amdttm.* (deprecated; emit a dmesg warning)." \
+        "options ttm pages_limit=$TTM_PAGES_LIMIT" \
+        "options ttm page_pool_size=$TTM_PAGE_POOL_SIZE"
+end
+function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP performance + gfx1151 GPU clock-floor)"
+    printf '%s\n' \
+        "# ry-install: udev performance rules (managed file, do not edit by hand)" \
+        "# NVMe I/O scheduler none (peak IOPS/lowest tail latency on NVMe; deliberate divergence from CachyOS kyber default)" \
+        'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
+        "# AMD P-State EPP performance" \
+        'ACTION=="add|change", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="balance_performance"' \
+        "# GPU performance level (gfx1151 clock-floor; optional)" \
+        'ACTION=="add", KERNEL=="card[0-9]", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="high"'
+end
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (KDE Plasma, Flatpak, D-Bus activated apps)"
     for var in $ENV_VARS; printf '%s\n' "$var"; end
@@ -839,75 +910,6 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
         "background_alpha=0.4" \
         "text_outline" \
         "toggle_hud=Shift_R+F12"
-end
-function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
-    printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
-end
-function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset"
-    printf '%s\n' \
-        "#!/usr/bin/nft -f" \
-        "# ry-install: minimal default-deny-inbound (ufw masked). No inbound ports open by default — add them below." \
-        "flush ruleset" \
-        "table inet filter {" \
-        "    chain input {" \
-        "        type filter hook input priority filter; policy drop;" \
-        "        ct state established,related accept" \
-        "        iif \"lo\" accept" \
-        "        ct state invalid drop" \
-        "        ip6 nexthdr ipv6-icmp icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert, nd-router-solicit, echo-request, packet-too-big, time-exceeded, parameter-problem } accept" \
-        "        # IPv4: inbound echo-request (ping) intentionally NOT accepted; IPv6 echo-request is, since ICMPv6 is load-bearing for NDP/PMTUD" \
-        "        icmp type { echo-reply, destination-unreachable, time-exceeded, parameter-problem } accept" \
-        "    }" \
-        "    chain forward { type filter hook forward priority filter; policy drop; }" \
-        "    chain output { type filter hook output priority filter; policy accept; }" \
-        "}"
-end
-function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
-    printf '%s\n' "# ry-install sysctl tunables (priority 95 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
-    set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
-    for entry in $SYSCTL_VALUES
-        if not string match -qr '^\s*[A-Za-z0-9._-]+\s*=\s*\S' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; functions -q _log; and _log "SYSCTL_SKIP_MALFORMED: '$entry' (require key=value, key charset [A-Za-z0-9._-])"; continue; end
-        set -l parts (string split -m1 '=' -- "$entry"); set -l key (string trim -- "$parts[1]"); set -l val (string trim -- "$parts[2]")
-        printf '%s = %s\n' "$key" "$val"
-        set _printed (math $_printed + 1)
-    end
-    if test "$_printed" -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
-end
-function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)"
-    printf '%s\n' \
-        "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
-        "# Uses ttm.* (in-kernel module). Do NOT add amdgpu.gttsize or amdttm.* (deprecated; emit a dmesg warning)." \
-        "options ttm pages_limit=$TTM_PAGES_LIMIT" \
-        "options ttm page_pool_size=$TTM_PAGE_POOL_SIZE"
-end
-function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate content for RADV drirc drop-in (unified heap on APU)"
-    # radv_enable_unified_heap_on_apu: Mesa 22.3 MR !18884
-    printf '%s\n' \
-        '<?xml version="1.0" standalone="yes"?>' \
-        '<!-- ry-install: RADV unified-heap on APU (managed file, do not edit by hand) -->' \
-        '<driconf>' \
-        '    <device driver="radv">' \
-        '        <application name="Default">' \
-        "            <option name=\"$RADV_APU_OPTION\" value=\"true\"/>" \
-        '        </application>' \
-        '    </device>' \
-        '</driconf>'
-end
-function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"
-    printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
-end
-function _content__etc_conf.d_wireless-regdom --description "Generate content for /etc/conf.d/wireless-regdom (set-wireless-regdom input)"
-    printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "WIRELESS_REGDOM=\"$COUNTRY\""
-end
-function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP performance + gfx1151 GPU clock-floor)"
-    printf '%s\n' \
-        "# ry-install: udev performance rules (managed file, do not edit by hand)" \
-        "# NVMe I/O scheduler none (peak IOPS/lowest tail latency on NVMe; deliberate divergence from CachyOS kyber default)" \
-        'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
-        "# AMD P-State EPP performance" \
-        'ACTION=="add|change", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="balance_performance"' \
-        "# GPU performance level (gfx1151 clock-floor; optional)" \
-        'ACTION=="add", KERNEL=="card[0-9]", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="high"'
 end
 
 # ── CONTENT DISPATCH (_ry_get_file_content; fn = _content_$(_tmpfile_key dst)) ──
@@ -3942,6 +3944,32 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     return $_rc
 end
 
+# ── INSTALL PHASE 4 SUB: IWD HANDOFF (disable standalone iwd.service; NM sole Wi-Fi manager) ──
+function _configure_services_iwd_handoff --description "Disable standalone iwd.service so NetworkManager is the sole Wi-Fi manager"
+    test "$NM_WIFI_BACKEND" = iwd; or return 0 # only relevant for the iwd backend
+    if not command -q systemctl; _phase_record "Services: iwd handoff" "--" "systemctl absent"; return 0; end
+    set -l _state (command systemctl is-enabled iwd.service 2>/dev/null | string trim --)
+    if test -z "$_state"; _phase_record "Services: iwd handoff" "--" "iwd.service not present"; return 0; end
+    if test "$_state" = masked
+        # masked blocks NM D-Bus activation: unmask then disable
+        _run sudo -n systemctl unmask iwd.service
+    end
+    # disable not mask: stops boot race, keeps D-Bus activation
+    if _run sudo -n systemctl disable --now iwd.service
+        _ok "iwd.service disabled (NetworkManager activates iwd on demand)"
+        _phase_record "Services: iwd handoff" PASS "iwd.service disabled; NM is sole manager"
+    else
+        set -l _now (command systemctl is-enabled iwd.service 2>/dev/null | string trim --)
+        if test "$_now" = disabled; or test "$_now" = static
+            _phase_record "Services: iwd handoff" PASS "iwd.service $_now (NM is sole manager)"
+        else
+            _warn "Could not disable iwd.service (is-enabled=$_now) — if Wi-Fi misbehaves, run: sudo systemctl disable --now iwd.service"
+            _phase_record "Services: iwd handoff" WARN "iwd.service still $_now"
+        end
+    end
+    return 0
+end
+
 # ── INSTALL PHASE 4 SUB: ENABLE UNITS + REGDOM ──
 function _cse_collect_units --description "Collect system units to enable"
     set -l _enable
@@ -4011,30 +4039,6 @@ function _apply_wireless_regdom --description "Apply the wireless regulatory dom
     end
     _warn "iw reg set $COUNTRY failed — applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
     set -g _RY_REGDOM_RESULT WARN; set -g _RY_REGDOM_EVIDENCE "iw reg set failed — applies via /etc/iw-regdomain"
-    return 0
-end
-function _configure_services_iwd_handoff --description "Disable standalone iwd.service so NetworkManager is the sole Wi-Fi manager"
-    test "$NM_WIFI_BACKEND" = iwd; or return 0 # only relevant for the iwd backend
-    if not command -q systemctl; _phase_record "Services: iwd handoff" "--" "systemctl absent"; return 0; end
-    set -l _state (command systemctl is-enabled iwd.service 2>/dev/null | string trim --)
-    if test -z "$_state"; _phase_record "Services: iwd handoff" "--" "iwd.service not present"; return 0; end
-    if test "$_state" = masked
-        # masked blocks NM D-Bus activation: unmask then disable
-        _run sudo -n systemctl unmask iwd.service
-    end
-    # disable not mask: stops boot race, keeps D-Bus activation
-    if _run sudo -n systemctl disable --now iwd.service
-        _ok "iwd.service disabled (NetworkManager activates iwd on demand)"
-        _phase_record "Services: iwd handoff" PASS "iwd.service disabled; NM is sole manager"
-    else
-        set -l _now (command systemctl is-enabled iwd.service 2>/dev/null | string trim --)
-        if test "$_now" = disabled; or test "$_now" = static
-            _phase_record "Services: iwd handoff" PASS "iwd.service $_now (NM is sole manager)"
-        else
-            _warn "Could not disable iwd.service (is-enabled=$_now) — if Wi-Fi misbehaves, run: sudo systemctl disable --now iwd.service"
-            _phase_record "Services: iwd handoff" WARN "iwd.service still $_now"
-        end
-    end
     return 0
 end
 function _install_configure_services --description "Enable, start, and configure systemd services (fstab opts + resolved + PKGS_DEL + mask + iwd handoff + enable + regdom)"
@@ -4570,24 +4574,24 @@ end
 # ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR ──
 set -g _RY_POST_HOOKS \
     "/boot/*|boot" \
-    "/etc/mkinitcpio.conf|boot" \
-    "/etc/sdboot-manage.conf|boot" \
     "/etc/kernel/cmdline|cmdline" \
+    "/etc/sdboot-manage.conf|boot" \
+    "/etc/mkinitcpio.conf|boot" \
     "*/resolved.conf.d/*|resolved" \
     "*/logind.conf.d/*|logind" \
     "*/iwd/main.conf|nm" \
     "*/NetworkManager/conf.d/*|nm" \
-    "*/sysctl.d/*|sysctl" \
-    "*/environment.d/*|envd" \
-    "*/baloofilerc|baloo" \
-    "*/MangoHud/MangoHud.conf|mangohud" \
-    "/etc/default/cpupower-service.conf|cpupower" \
-    "/etc/drirc.d/*|drirc" \
-    "/etc/modprobe.d/*|modprobe" \
     "/etc/iw-regdomain|regdom" \
     "/etc/conf.d/wireless-regdom|regdom" \
+    "/etc/nftables.conf|nft" \
+    "/etc/default/cpupower-service.conf|cpupower" \
+    "*/sysctl.d/*|sysctl" \
+    "/etc/drirc.d/*|drirc" \
+    "/etc/modprobe.d/*|modprobe" \
     "/etc/udev/rules.d/*|udev" \
-    "/etc/nftables.conf|nft"
+    "*/environment.d/*|envd" \
+    "*/baloofilerc|baloo" \
+    "*/MangoHud/MangoHud.conf|mangohud"
 function _ir_validate_post_hooks --description "Refuse deploy when any _RY_POST_HOOKS tag lacks a _post_<tag> handler" # mirrors _ir_validate_keys
     set -l _seen_tags
     for _entry in $_RY_POST_HOOKS

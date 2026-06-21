@@ -2,11 +2,20 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.58.0 - 2026-06-20
+
+- refactor: move _configure_services_iwd_handoff to its Phase 4 execution position (5th, before enable/regdom); source order now matches run order. Adds matching IWD HANDOFF sub-banner. Pure source move, function body and behavior unchanged.
+
+7.57.3 - 2026-06-20
+
+- refactor: unify managed-file order across all four structures (SYSTEM_DESTINATIONS, _content_ fns, _RY_POST_HOOKS) onto one phase-grouped canonical order: boot -> drop-ins -> network -> tuning -> user. SYSTEM_DESTINATIONS is now the documented source of truth.
+- docs: sync README Configuration and Managed Files tables to the canonical order.
+- verify: pure reorder — 19 rendered files byte-identical, dispatch globs disjoint, count guard 19=19.
+
 7.57.2 - 2026-06-20
 
-- style: collapse 8 flat embedded-data lists to single-line form (_RY_BOOT_CRITICAL_DSTS, KERNEL_PARAMS, MKINITCPIO_HOOKS, LOGIND_IGNORE_KEYS, ENV_VARS, PKGS_DEL, MASK, dep-probe loop); -66 source lines, zero behavior change.
-- verify: rendered cmdline/sdboot/HOOKS/env.d output byte-identical (SHA256 match), all list element counts unchanged, 10 mkinitcpio ordering invariants hold.
-- note: count-guarded lists (SYSTEM_DESTINATIONS, SYSCTL_VALUES, PKGS_ADD, _expect, _RY_POST_HOOKS) and embedded source (awk, nft, MangoHud) left vertical by design — layout is the audit surface.
+- style: collapse 8 flat embedded-data lists to single-line form (-66 lines, zero behavior change). Count-guarded lists and embedded source (awk, nft, MangoHud) left vertical by design.
+- verify: rendered output byte-identical, element counts unchanged, 10 mkinitcpio ordering invariants hold.
 
 7.57.1 - 2026-06-20
 

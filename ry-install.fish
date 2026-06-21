@@ -3,7 +3,7 @@
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.57.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.57.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -164,11 +164,7 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 
 # ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──
 set -g _RY_BOOT_TAINTED false
-set -g _RY_BOOT_CRITICAL_DSTS \
-    "/boot/loader/loader.conf" \
-    "/etc/kernel/cmdline" \
-    "/etc/sdboot-manage.conf" \
-    "/etc/mkinitcpio.conf"
+set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/mkinitcpio.conf"; set -g _RY_BACKUP_SUFFIX .ry.bak
 set -g _RY_TMPDIR_GLOBS 'ry-sudo-err.*' 'ry-tee-err.*' 'ry-run.*' 'ry-argparse-err.*' 'ry-fstab-tee-err.*' 'ry-fstab-awk-err.*' # TMPDIR sweep globs
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
@@ -574,32 +570,9 @@ set --erase _ry_dst_count
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no # bootloader keys: LOADER_* + SDBOOT_*
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
 # KERNEL_PARAMS → /etc/kernel/cmdline + sdboot LINUX_OPTIONS
-set -g KERNEL_PARAMS \
-    8250.nr_uarts=0 \
-    amd_pstate=active \
-    amd_iommu=off \
-    clearcpuid=rdseed \
-    nowatchdog \
-    nvme_core.default_ps_max_latency_us=0 \
-    pcie_aspm.policy=performance \
-    quiet \
-    split_lock_detect=off \
-    tsc=reliable \
-    usbcore.autosuspend=-1 \
-    zswap.enabled=0
+set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_pstate=active amd_iommu=off clearcpuid=rdseed nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu # MODULES + HOOKS + COMPRESSION
-set -g MKINITCPIO_HOOKS \
-    base \
-    systemd \
-    autodetect \
-    microcode \
-    modconf \
-    kms \
-    keyboard \
-    sd-vconsole \
-    block \
-    filesystems \
-    fsck
+set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
 # ── EMBEDDED DATA: SERVICE KEYS ──
@@ -607,32 +580,14 @@ set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -
 set -g COUNTRY US # COUNTRY: wireless regdom
 set -g RADV_APU_OPTION radv_enable_unified_heap_on_apu # RADV_APU_OPTION: drirc option name
 # LOGIND_IGNORE_KEYS → logind.conf.d (Handle*Key=ignore)
-set -g LOGIND_IGNORE_KEYS \
-    HandlePowerKey \
-    HandlePowerKeyLongPress \
-    HandleSuspendKey \
-    HandleSuspendKeyLongPress \
-    HandleHibernateKey \
-    HandleHibernateKeyLongPress \
-    HandleRebootKey \
-    HandleRebootKeyLongPress
+set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKey HandleSuspendKeyLongPress HandleHibernateKey HandleHibernateKeyLongPress HandleRebootKey HandleRebootKeyLongPress
 # Wi-Fi PS off: MT7925/mt76 PS in software causes latency spikes
 set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd # net/power keys: IWD_* / NM_* / cpupower
 set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR powersave
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
-set -g ENV_VARS \
-    "AMD_VULKAN_ICD=RADV" \
-    "DXVK_LOG_LEVEL=none" \
-    "DXVK_LOG_PATH=none" \
-    "MANGOHUD=1" \
-    "MESA_SHADER_CACHE_MAX_SIZE=16G" \
-    "PROTON_ENABLE_WAYLAND=1" \
-    "PROTON_LOCAL_SHADER_CACHE=1" \
-    "VKD3D_DEBUG=none" \
-    "VKD3D_SHADER_DEBUG=none" \
-    "WINEDEBUG=-all"
+set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
 # SYSCTL_VALUES → /etc/sysctl.d/95-ry-overrides.conf
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
@@ -663,30 +618,12 @@ set -g PKGS_ADD \
     realtime-privileges \
     ddcutil \
     nftables
-set -g PKGS_DEL \
-    plymouth \
-    cachyos-plymouth-bootanimation \
-    cachyos-plymouth-theme \
-    breeze-plymouth \
-    plymouth-kcm \
-    micro \
-    cachyos-micro-settings \
-    cachy-update \
-    kdeconnect
+set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
-set -g MASK \
-    ananicy-cpp.service \
-    power-profiles-daemon.service \
-    NetworkManager-wait-online.service \
-    ufw.service \
-    sleep.target \
-    suspend.target \
-    hibernate.target \
-    hybrid-sleep.target \
-    suspend-then-hibernate.target
+set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # thresholds: disk, CPU, TTM caps
@@ -1604,10 +1541,7 @@ end
 function _ry_check_deps --description "Verify required packages are installed"
     _log "DEPS_CHECK_START"
     set -l missing
-    for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum \
-        timeout mktemp awk grep curl getent sudo head df mv \
-        tee stat find cp chmod chown install cat rm date wc \
-        tail basename dirname mkdir rmdir touch env sleep cmp
+    for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum timeout mktemp awk grep curl getent sudo head df mv tee stat find cp chmod chown install cat rm date wc tail basename dirname mkdir rmdir touch env sleep cmp
         command -q $cmd; or set -a missing $cmd
     end
     if test (count $missing) -gt 0; _err "missing: $missing"; return 1; end

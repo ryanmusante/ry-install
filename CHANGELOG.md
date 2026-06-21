@@ -2,6 +2,12 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.57.2 - 2026-06-20
+
+- style: collapse 8 flat embedded-data lists to single-line form (_RY_BOOT_CRITICAL_DSTS, KERNEL_PARAMS, MKINITCPIO_HOOKS, LOGIND_IGNORE_KEYS, ENV_VARS, PKGS_DEL, MASK, dep-probe loop); -66 source lines, zero behavior change.
+- verify: rendered cmdline/sdboot/HOOKS/env.d output byte-identical (SHA256 match), all list element counts unchanged, 10 mkinitcpio ordering invariants hold.
+- note: count-guarded lists (SYSTEM_DESTINATIONS, SYSCTL_VALUES, PKGS_ADD, _expect, _RY_POST_HOOKS) and embedded source (awk, nft, MangoHud) left vertical by design — layout is the audit surface.
+
 7.57.1 - 2026-06-20
 
 - docs: audit README against script; trim prose and tables to vital info, all values byte-identical.

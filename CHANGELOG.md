@@ -9,7 +9,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 - sysctl: add vm.swappiness=150, vm.vfs_cache_pressure=50, vm.page-cluster=0 (zram-tuned). SYSCTL_VALUES guard 8 -> 11.
 - gpu: remove ry-amdgpu-strixhalo.conf and the TTM GTT cap (globals, generator, verify, UMA advisory, orphaned modprobe post-hook); kernel >= 6.16.9 auto-sizes GTT. SYSTEM_DESTINATIONS guard 16 -> 15, _RY_POST_HOOKS 19 -> 18, managed-file count 19 -> 18.
 - udev: note EPP balance_performance is a deliberate mid-bias, not max (value unchanged).
-- docs: add expand-cue note above each <details> block so collapsed content is signposted.
+- docs: add expand-cue note above each details block so collapsed content is signposted.
 - docs: README synced to all of the above; prose and tables trimmed, values byte-identical.
 
 7.58.1 - 2026-06-21

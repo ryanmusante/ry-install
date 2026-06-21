@@ -8,7 +8,7 @@
 > Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro
 > (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
 
-One self-contained fish script: 18 embedded configs, reversible gaming/LLM desktop profile.
+One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ## Contents
 
@@ -89,6 +89,9 @@ A CHECK/RESULT/EVIDENCE matrix prints to stderr; a JSONL log records each phase.
 
 Source of truth is the script; retune the `set -g` globals near the top.
 
+> [!NOTE]
+> The full per-file reference is collapsed below — click to expand.
+
 <details>
 <summary><strong>Full managed-file reference</strong> — all 18 files, key values</summary>
 
@@ -159,6 +162,9 @@ Path/permission index for the 18 files (values in [Configuration](#configuration
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably recycled PID via `/proc` start-time (unsignalable/unknown ⇒ fail-closed) |
 
+> [!NOTE]
+> Exit codes, internal sentinels, and environment overrides are collapsed below — click to expand.
+
 <details>
 <summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>
 
@@ -203,7 +209,7 @@ Hardware gaps on Strix Halo.
 
 ### Configuration-level (intended behavior)
 
-Deliberate profile choices, not defects; the log lines below are expected.
+The log lines quoted below are expected, not errors.
 
 | Item | Consequence | Action |
 |---|---|---|

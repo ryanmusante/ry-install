@@ -33,7 +33,7 @@ One self-contained fish script — 19 embedded configs, no bundled dependencies 
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.58.1
+cd ry-install && git checkout v7.59.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -106,7 +106,7 @@ The script is the source of truth — retune the `set -g` globals near the top.
 | iw-regdomain / wireless-regdom | regulatory domain fixed `US` (retune `COUNTRY`); consumed by CachyOS hooks at device-add |
 | nftables.conf | default-deny-inbound (see [Safety & Reliability](#safety--reliability)) |
 | cpupower / udev | `powersave` governor; udev sets NVMe scheduler `none`, AMD P-State EPP `balance_performance`, gfx1151 clock-floor (`power_dpm_force_performance_level=high`, `KERNEL=="card[0-9]"`) |
-| sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642` (priority 95, after vendor `70-cachyos-settings.conf`) |
+| sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`, `vm.swappiness=150`, `vm.vfs_cache_pressure=50` (zram-tuned; priority 95, after vendor `70-cachyos-settings.conf`) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` (Mesa 22.3 MR !18884) |
 | amdgpu/ttm modprobe | GTT cap via in-kernel `ttm.*` (not deprecated `amdgpu.gttsize`/`amdttm.*`). `pages_limit`=`page_pool_size`; pages = GiB × 262144. Shipped cap 32 GiB = 8388608; retune both `TTM_*` globals (116 GiB = 30408704). Assumes BIOS UMA ≤ 1 GiB |
 | environment.d | gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
@@ -221,7 +221,8 @@ Deliberate profile choices, not defects — log lines below are expected.
 |---|---|---|
 | `amd_iommu=off` | NPU (`amdxdna`) cannot probe (`aie2_init: Running without IOMMU not supported`, `probe ... failed -22`); the NPU is disabled. | To enable: set `amd_iommu=on iommu=pt` in `KERNEL_PARAMS`, re-run (or `--install-file /etc/kernel/cmdline`), reboot. |
 | TTM cap assumes UMA ≤ 1 GiB | Non-fatal WARN (`TTM_UMA_PRECONDITION: vram_mib=N expected<=1024`) when firmware reports large fixed VRAM (e.g. 32768 MiB); the 32 GiB cap may not apply. Install continues (exit 0). | Set BIOS UMA frame buffer to **Auto** (or ≤ 512 MB), or retune both `TTM_*` globals. Verify: `cat /sys/class/drm/card*/device/mem_info_vram_total`. |
-| RDSEED on Zen 5 | Kernel flags RDSEED broken (`RDSEED32 is broken. Please update your firmware.`), which can break `-march=znver*` Qt/crypto callers. `clearcpuid=rdseed` masks it and silences the warning (taints kernel — cosmetic). | CVE-2025-62626 / AMD SB-7055. To restore RDSEED, drop `clearcpuid=rdseed` and update microcode: `sudo pacman -Syu --needed amd-ucode linux-firmware && sudo mkinitcpio -P && reboot` (model `0x70` → `0x0b700037`). The `microcode` hook is already in `MKINITCPIO_HOOKS`. |
+| RDSEED on Zen 5 | Kernel flags RDSEED broken (`RDSEED32 is broken. Please update your firmware.`), which can break `-march=znver*` Qt/crypto callers. `clearcpuid=rdseed` masks it and silences the warning (taints kernel — cosmetic). | CVE-2025-62626 / AMD SB-7055. To restore RDSEED, drop `clearcpuid=rdseed` and update microcode: `sudo pacman -Syu --needed amd-ucode linux-firmware && sudo mkinitcpio -P && reboot` (model `0x70` → `0x0b700037`). The `microcode` hook is already in `MKINITCPIO_HOOKS`. Preflight emits a non-fatal `INFO` (`RDSEED_WORKAROUND_STALE`) once the running microcode reaches `0x0b700037`, signalling the workaround + taint can be retired. |
+| UMIP (`umip_printk` bursts) | Not set by default — UMIP stays on; the kernel emulates `SGDT`/`SIDT`/`SMSW` for 64-bit processes (since 5.4), so `umip_printk: N callbacks suppressed` is benign, not a fault. | Optional/conditional: only if a game/app shows *sustained* `umip_printk` growth with stutter, add `clearcpuid=514` to `KERNEL_PARAMS` (count guard `12 → 13`). Disables UMIP system-wide + adds a 2nd taint; leave off otherwise. |
 
 ## Troubleshooting
 

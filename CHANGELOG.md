@@ -2,6 +2,13 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.59.0 - 2026-06-21
+
+- sysctl: add vm.swappiness=150, vm.vfs_cache_pressure=50 to SYSCTL_VALUES (zram-tuned). Brings them under the managed/reversible set; verify picks them up automatically.
+- guard: bump _ir_validate_counts SYSCTL_VALUES 8 -> 10.
+- preflight: add _ry_check_rdseed_workaround_stale — non-fatal INFO when clearcpuid=rdseed is set and microcode has reached the SB-7055 fix (0x0b700037). Advisory only.
+- docs: README sysctl row + RDSEED row note the advisory; add Configuration-level row for the optional clearcpuid=514 (UMIP) knob.
+
 7.58.1 - 2026-06-21
 
 - fix: sync header-comment version to 7.58.0 (was stale 7.57.1; cosmetic, runtime reads $VERSION).

@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.60.0 (2026-06-21) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.62.0 (2026-06-21) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.60.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.62.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18 # gtr_pro token referenced by fn names + JSONL log
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19 # gtr_pro token referenced by fn names + JSONL log
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -544,7 +544,7 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
 end
 
 # ── EMBEDDED CONFIGURATION: DESTINATIONS, KERNEL PARAMS, PKGS, MASK ──
-# Canonical order (boot -> drop-ins -> network -> tuning -> user); source of truth, _content_ fns + _RY_POST_HOOKS mirror it.
+# Canonical order (boot->drop-ins->network->tuning->user); SYSTEM_DESTINATIONS is source of truth, _content_ fns + _RY_POST_HOOKS mirror it.
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" \
     "/etc/kernel/cmdline" \
@@ -552,6 +552,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/mkinitcpio.conf" \
     "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
     "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
+    "/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf" \
     "/etc/iwd/main.conf" \
     "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     "/etc/iw-regdomain" \
@@ -570,20 +571,21 @@ set --erase _ry_dst_count
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no # bootloader keys: LOADER_* + SDBOOT_*
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
 # KERNEL_PARAMS → /etc/kernel/cmdline + sdboot LINUX_OPTIONS
-set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_pstate=active amd_iommu=off clearcpuid=rdseed clearcpuid=514 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_pstate=active amd_iommu=on iommu=pt clearcpuid=rdseed clearcpuid=514 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu # MODULES + HOOKS + COMPRESSION
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
 # ── EMBEDDED DATA: SERVICE KEYS ──
 set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade # resolved drop-in keys
+set -g NM_DISPATCHER_LOGLEVELMAX notice # nm-dispatcher journal noise: drop info-level req:N 'connectivity-change' lines, keep notice+
 set -g COUNTRY US # COUNTRY: wireless regdom
 set -g RADV_APU_OPTION radv_enable_unified_heap_on_apu # RADV_APU_OPTION: drirc option name
 # LOGIND_IGNORE_KEYS → logind.conf.d (Handle*Key=ignore)
 set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKey HandleSuspendKeyLongPress HandleHibernateKey HandleHibernateKeyLongPress HandleRebootKey HandleRebootKeyLongPress
 # Wi-Fi PS off: MT7925/mt76 PS in software causes latency spikes
 set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd # net/power keys: IWD_* / NM_* / cpupower
-set -g NM_WIFI_BACKEND iwd; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
+set -g NM_WIFI_BACKEND wpa_supplicant; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR powersave
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
@@ -626,7 +628,7 @@ set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
-set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # thresholds: disk, CPU
@@ -683,7 +685,7 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
     set -l _expect \
-        KERNEL_PARAMS:13 \
+        KERNEL_PARAMS:14 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
@@ -691,17 +693,17 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         SYSCTL_VALUES:11 \
         PKGS_ADD:17 \
         PKGS_DEL:9 \
-        MASK:9 \
+        MASK:10 \
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:4 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:18 \
+        _RY_POST_HOOKS:19 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_NTSYNC_MODLOAD_CONFS:3 \
         _RY_TMPDIR_GLOBS:6 \
-        SYSTEM_DESTINATIONS:15 \
+        SYSTEM_DESTINATIONS:16 \
         USER_DESTINATIONS:3
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -799,13 +801,16 @@ function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --descriptio
         printf '%s\n' "$key=ignore"
     end
 end
-function _content__etc_iwd_main.conf --description "Generate content for /etc/iwd/main.conf"
-    printf '%s\n' "# iwd configuration - minimal config for NetworkManager backend" "[General]" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "" "[DriverQuirks]"
+function _content__etc_systemd_system_NetworkManager-dispatcher.service.d_logging.conf --description "Generate content for NetworkManager-dispatcher logging drop-in (journal noise suppression)"
+    printf '%s\n' "# NetworkManager-dispatcher journal noise suppression" "# nm-dispatcher logs via journald transport (not stdout), so StandardError=null is ineffective;" "# LogLevelMax drops the routine info-level req:N 'connectivity-change' lines while keeping notice+." "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
+end
+function _content__etc_iwd_main.conf --description "Generate content for /etc/iwd/main.conf (dormant; opt-in iwd backend)"
+    printf '%s\n' "# iwd configuration - kept for opt-in iwd backend (NM default backend is wpa_supplicant)" "[General]" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "" "[DriverQuirks]"
     for quirk in $IWD_DRIVER_QUIRKS; printf '%s\n' "$quirk"; end
     printf '%s\n' "" "[Network]" "NameResolvingService=$IWD_DNS_SERVICE"
 end
-function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (iwd backend)"
-    printf '%s\n' "# NetworkManager configuration - iwd backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"
+function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (wpa_supplicant backend)"
+    printf '%s\n' "# NetworkManager configuration - wpa_supplicant backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"
 end
 function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
@@ -2203,6 +2208,10 @@ function _vss_logind --description "_verify_static_system sub: logind.conf.d key
         _chk_grep /etc/systemd/logind.conf.d/99-cachyos-logind.conf "$key=ignore" "$key"
     end
 end
+function _vss_nmdispatch --description "_verify_static_system sub: NetworkManager-dispatcher logging drop-in"
+    _chk_file /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf; or return 0
+    _chk_grep /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX" "dispatcher LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
+end
 function _vss_iwd --description "_verify_static_system sub: iwd config"
     _chk_file /etc/iwd/main.conf; or return 0
     _chk_grep /etc/iwd/main.conf "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG"
@@ -2255,6 +2264,8 @@ function _verify_static_system --description "Verify ntsync, resolved, logind, i
     end
     _echo "── logind.conf ──"
     _vss_logind
+    _echo "── NetworkManager-dispatcher logging ──"
+    _vss_nmdispatch
     _echo "── iwd ──"
     _vss_iwd
     _echo "── NetworkManager ──"
@@ -2866,12 +2877,17 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd backend + 
     else
         _warn "  WiFi interface: NOT DETECTED"
     end
-    # iwd disabled not masked; NM D-Bus-activates on demand
     if command -q pgrep
         if command pgrep -x iwd >/dev/null
-            _info "  iwd process: running (NM-activated)"
-        else
+            if test "$NM_WIFI_BACKEND" = iwd
+                _info "  iwd process: running (NM-activated)"
+            else
+                _warn "  iwd process: running (unexpected — NM backend is $NM_WIFI_BACKEND; iwd should be inactive)"
+            end
+        else if test "$NM_WIFI_BACKEND" = iwd
             _info "  iwd process: not currently active (NM activates it on demand)"
+        else
+            _info "  iwd process: inactive (expected — NM backend is $NM_WIFI_BACKEND)"
         end
     end
     _vrsv_wifi_nm_backend
@@ -3383,9 +3399,13 @@ function _install_preflight --description "Run all preflight checks before insta
         _phase_record "Preflight: time sync" WARN "clock not NTP-synced or unverifiable"
     end
     set -l _mesa (pacman -Q mesa 2>/dev/null | string split ' ')[2]
-    if test -n "$_mesa"; and test (vercmp $_mesa 25.3) -lt 0
-        _warn_loud "mesa $_mesa < 25.3 — gfx1151 RADV may be unstable (soft floor)"
-        _log "MESA_BELOW_SOFT_FLOOR: $_mesa"
+    if test -n "$_mesa"
+        if not command -q vercmp
+            _log "MESA_SOFT_FLOOR_SKIP: vercmp absent (pacman-provided) — gfx1151 mesa version not compared"
+        else if test (command vercmp $_mesa 25.3) -lt 0
+            _warn_loud "mesa $_mesa < 25.3 — gfx1151 RADV may be unstable (soft floor)"
+            _log "MESA_BELOW_SOFT_FLOOR: $_mesa"
+        end
     end
     _echo
     if not _ry_validate_configs; _phase_record "Preflight: config validation" FAIL "see JSONL log"; _err "Configuration validation failed - aborting"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
@@ -4307,15 +4327,20 @@ function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk
     end
     return 0
 end
-function _if_nm_restart --description "Restart NetworkManager when the iwd backend switch is in effect"
+function _if_nm_restart --description "Restart NetworkManager so the deployed wifi.backend/powersave drop-in applies"
     if test "$_RY_PROFILE_USES_WIFI_BACKEND" = false; _info "NetworkManager not managed — skipping NM restart"; _phase_record "Finalize: NetworkManager restart" SKIP "NM backend not active"; return 0; end
-    if not command -q pacman; or not command pacman -Qq iwd >/dev/null 2>&1
-        _warn "NetworkManager configs deployed but iwd is not installed (advisory; install iwd to activate the backend)"
+    if not command -q NetworkManager
+        _warn "NetworkManager configs deployed but NetworkManager not installed — restart skipped; drop-in applies once installed or at next boot"
+        _phase_record "Finalize: NetworkManager restart" WARN "NetworkManager not installed"
+        return 0
+    end
+    if test "$NM_WIFI_BACKEND" = iwd; and begin; not command -q pacman; or not command pacman -Qq iwd >/dev/null 2>&1; end
+        _warn "NetworkManager configs deployed but iwd is not installed (advisory; install iwd to activate the iwd backend)"
         _phase_record "Finalize: NetworkManager restart" WARN "iwd not installed"
         return 0
     end
     if _is_wifi_active_route
-        _warn "NetworkManager restart deferred — WiFi is the active route; backend switch takes effect on reboot."
+        _warn "NetworkManager restart deferred — WiFi is the active route; drop-in takes effect on reboot."
         _info "  Or, after switching to ethernet: sudo systemctl restart NetworkManager"
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=finalize_backend_switch"
         _phase_record "Finalize: NetworkManager restart" DEFER "over WiFi — applies on reboot"
@@ -4557,6 +4582,7 @@ set -g _RY_POST_HOOKS \
     "/etc/mkinitcpio.conf|boot" \
     "*/resolved.conf.d/*|resolved" \
     "*/logind.conf.d/*|logind" \
+    "*/NetworkManager-dispatcher.service.d/*|nmdispatch" \
     "*/iwd/main.conf|nm" \
     "*/NetworkManager/conf.d/*|nm" \
     "/etc/iw-regdomain|regdom" \
@@ -4634,7 +4660,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (14 dispatch tags / 18 patterns / 16 _post_* functions; coverage enforced by _ir_validate_post_hooks) ──
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (15 dispatch tags / 19 patterns / 15 _post_* functions; coverage enforced by _ir_validate_post_hooks) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot_apply sub: mkinitcpio -P + sdboot-manage cascade"
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
@@ -4687,6 +4713,15 @@ function _post_resolved --argument-names target --description "Post-hook: restar
 end
 function _post_logind --argument-names target --description "Post-hook: notify reboot needed for logind"
     _info "Logind config $target changed — reboot required (restarting logind kills all sessions)"
+    return 0
+end
+function _post_nmdispatch --argument-names target --description "Post-hook: daemon-reload after NetworkManager-dispatcher logging drop-in change"
+    _echo
+    if not _run sudo -n systemctl daemon-reload
+        _warn "systemctl daemon-reload failed — dispatcher LogLevelMax applies at next boot (non-fatal; file deployed)"
+        return 0
+    end
+    _info "  nm-dispatcher LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX active on next dispatch activation"
     return 0
 end
 function _post_nm --argument-names target --description "Post-hook: restart NetworkManager (+ try-restart iwd when iwd/main.conf changes); deferred when WiFi is active route"

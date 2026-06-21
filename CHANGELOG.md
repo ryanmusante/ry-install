@@ -2,6 +2,20 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.62.0 - 2026-06-21
+
+- cmdline: amd_iommu=off -> amd_iommu=on iommu=pt to enable amdxdna NPU probe (/dev/accel appears); reverting to amd_iommu=off regains ~6-7% llama.cpp prompt processing. KERNEL_PARAMS guard 13 -> 14.
+- network: NM Wi-Fi backend iwd -> wpa_supplicant (explicit; NM default). The iwd backend is upstream-experimental and reported to trigger MT7925 panics / KDE login issues. /etc/iwd/main.conf kept for opt-in (set NM_WIFI_BACKEND=iwd). Power-save off now via NM wifi.powersave=2 alone; iwd handoff self-skips so iwd.service is untouched.
+- fix: NM finalize restart no longer gated on iwd being installed; the wpa_supplicant drop-in now applies live regardless of iwd presence.
+- services: mask modemmanager.service (optdep, not installed; stops KDE D-Bus activation). MASK guard 9 -> 10.
+- docs: README cmdline, Units, Phase 4, Known Issues, and Uninstall resynced.
+
+7.61.0 - 2026-06-21
+
+- systemd: add NetworkManager-dispatcher logging drop-in (logging.conf, LogLevelMax=notice) to silence routine info-level nm-dispatcher connectivity-change journal spam (StandardError=null is ineffective; it logs via journald). SYSTEM_DESTINATIONS guard 15 -> 16, _RY_POST_HOOKS 18 -> 19, managed-file count 18 -> 19.
+- fix: guard vercmp behind command -q in _install_preflight mesa soft-floor check; a missing vercmp (pacman-provided) now skips the comparison instead of aborting preflight with "Unknown command".
+- docs: README Configuration, Managed Files, and Uninstall updated for the dispatcher drop-in.
+
 7.60.0 - 2026-06-21
 
 - mangohud: remove fps_metrics, cpu_temp, gpu_power, text_outline, toggle_hud directives from MangoHud.conf. text_outline and toggle_hud=Shift_R+F12 were MangoHud defaults (unchanged at runtime); HUD now omits CPU temp, GPU power, and FPS percentile lows.
@@ -15,7 +29,6 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 - sysctl: add vm.swappiness=150, vm.vfs_cache_pressure=50, vm.page-cluster=0 (zram-tuned). SYSCTL_VALUES guard 8 -> 11.
 - gpu: remove ry-amdgpu-strixhalo.conf and the TTM GTT cap (globals, generator, verify, UMA advisory, orphaned modprobe post-hook); kernel >= 6.16.9 auto-sizes GTT. SYSTEM_DESTINATIONS guard 16 -> 15, _RY_POST_HOOKS 19 -> 18, managed-file count 19 -> 18.
 - udev: note EPP balance_performance is a deliberate mid-bias, not max (value unchanged).
-- docs: add expand-cue note above each <details> block so collapsed content is signposted.
 - docs: README synced to all of the above; prose and tables trimmed, values byte-identical.
 
 7.58.1 - 2026-06-21

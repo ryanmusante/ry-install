@@ -9,7 +9,7 @@ set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19 # 'gtr_pro' token kept: referenced by fn names + JSONL log
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18 # gtr_pro token referenced by fn names + JSONL log
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -560,7 +560,6 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" \
     "/etc/drirc.d/95-ry-radv-apu.conf" \
-    "/etc/modprobe.d/ry-amdgpu-strixhalo.conf" \
     "/etc/udev/rules.d/60-ry-perf.rules"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/baloofilerc" "$HOME/.config/MangoHud/MangoHud.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
@@ -571,7 +570,7 @@ set --erase _ry_dst_count
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no # bootloader keys: LOADER_* + SDBOOT_*
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
 # KERNEL_PARAMS → /etc/kernel/cmdline + sdboot LINUX_OPTIONS
-set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_pstate=active amd_iommu=off clearcpuid=rdseed nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_pstate=active amd_iommu=off clearcpuid=rdseed clearcpuid=514 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu # MODULES + HOOKS + COMPRESSION
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
@@ -599,6 +598,7 @@ set -g SYSCTL_VALUES \
     "net.ipv4.tcp_slow_start_after_idle=0" \
     "vm.compaction_proactiveness=0" \
     "vm.max_map_count=2147483642" \
+    "vm.page-cluster=0" \
     "vm.swappiness=150" \
     "vm.vfs_cache_pressure=50"
 
@@ -629,11 +629,8 @@ set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan driv
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
-set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # thresholds: disk, CPU, TTM caps
+set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # thresholds: disk, CPU
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
-# TTM GTT cap: pages=GiB*262144; 32GiB=8388608; page_pool_size must equal pages_limit
-set -g TTM_PAGES_LIMIT 8388608
-set -g TTM_PAGE_POOL_SIZE 8388608
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ──
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
@@ -686,31 +683,30 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
     set -l _expect \
-        KERNEL_PARAMS:12 \
+        KERNEL_PARAMS:13 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:10 \
-        SYSCTL_VALUES:10 \
+        SYSCTL_VALUES:11 \
         PKGS_ADD:17 \
         PKGS_DEL:9 \
         MASK:9 \
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:4 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:19 \
+        _RY_POST_HOOKS:18 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_NTSYNC_MODLOAD_CONFS:3 \
         _RY_TMPDIR_GLOBS:6 \
-        SYSTEM_DESTINATIONS:16 \
+        SYSTEM_DESTINATIONS:15 \
         USER_DESTINATIONS:3
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
-    if test "$TTM_PAGE_POOL_SIZE" -ne "$TTM_PAGES_LIMIT"; _err_loud "TTM_PAGE_POOL_SIZE=$TTM_PAGE_POOL_SIZE must equal TTM_PAGES_LIMIT=$TTM_PAGES_LIMIT — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
 end
 function _ir_validate_keys --description "Refuse deploy on _tmpfile_key collision"
     set -l _seen_keys
@@ -765,7 +761,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     end
 end
 
-# ── CONTENT GENERATORS (19; via _ry_get_file_content) ──
+# ── CONTENT GENERATORS (via _ry_get_file_content) ──
 function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
     printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
 end
@@ -863,19 +859,12 @@ function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate conte
         '    </device>' \
         '</driconf>'
 end
-function _content__etc_modprobe.d_ry-amdgpu-strixhalo.conf --description "Generate content for amdgpu/ttm modprobe.d drop-in (Strix Halo)"
-    printf '%s\n' \
-        "# ry-install: Strix Halo gfx1151 GTT sizing (managed file, do not edit by hand)" \
-        "# Uses ttm.* (in-kernel module). Do NOT add amdgpu.gttsize or amdttm.* (deprecated; emit a dmesg warning)." \
-        "options ttm pages_limit=$TTM_PAGES_LIMIT" \
-        "options ttm page_pool_size=$TTM_PAGE_POOL_SIZE"
-end
-function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP performance + gfx1151 GPU clock-floor)"
+function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP balance_performance mid-bias + gfx1151 GPU clock-floor)"
     printf '%s\n' \
         "# ry-install: udev performance rules (managed file, do not edit by hand)" \
         "# NVMe I/O scheduler none (peak IOPS/lowest tail latency on NVMe; deliberate divergence from CachyOS kyber default)" \
         'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
-        "# AMD P-State EPP performance" \
+        "# AMD P-State EPP balance_performance (deliberate mid-bias toward perf, not max EPP=performance)" \
         'ACTION=="add|change", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="balance_performance"' \
         "# GPU performance level (gfx1151 clock-floor; optional)" \
         'ACTION=="add", KERNEL=="card[0-9]", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="high"'
@@ -2189,7 +2178,7 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
     _vsb_entries
 end
 
-# ── VERIFY-STATIC: SYSTEM + USER (drop-ins, modprobe, drirc, env.d) ──
+# ── VERIFY-STATIC: SYSTEM + USER (drop-ins, drirc, env.d) ──
 function _vss_ntsync_modules --description "_verify_static_system sub: ntsync state + autoload check"
     _echo "── ntsync state ──"
     set -l _ns (_ntsync_state)
@@ -2237,12 +2226,6 @@ function _vss_sysctl --description "_verify_static_system sub: sysctl drop-in ke
         for entry in $SYSCTL_VALUES; set -l parts (string split -m1 '=' -- "$entry"); set -l key $parts[1]; set -l val $parts[2]; _chk_grep /etc/sysctl.d/95-ry-overrides.conf "$key = $val" "$key=$val"; end
     end
 end
-function _vss_modprobe --description "_verify_static_system sub: amdgpu/ttm modprobe.d"
-    _echo "── modprobe.d (amdgpu/ttm) ──"
-    _chk_file /etc/modprobe.d/ry-amdgpu-strixhalo.conf; or return 0
-    _chk_grep /etc/modprobe.d/ry-amdgpu-strixhalo.conf "pages_limit=$TTM_PAGES_LIMIT" "ttm pages_limit=$TTM_PAGES_LIMIT"
-    _chk_grep /etc/modprobe.d/ry-amdgpu-strixhalo.conf "page_pool_size=$TTM_PAGE_POOL_SIZE" "ttm page_pool_size=$TTM_PAGE_POOL_SIZE"
-end
 function _vss_regdom --description "_verify_static_system sub: wireless regdom (/etc/iw-regdomain + /etc/conf.d/wireless-regdom)"
     _echo "── wireless regdom (iw-regdomain + wireless-regdom) ──"
     _chk_file /etc/iw-regdomain; and _chk_grep /etc/iw-regdomain "COUNTRY=$COUNTRY" "iw-regdomain COUNTRY=$COUNTRY"
@@ -2268,7 +2251,7 @@ function _vss_nft --description "_verify_static_system sub: nftables default-den
     _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
     _chk_grep /etc/nftables.conf "nd-neighbor-solicit" "nftables ICMPv6 NDP/PMTUD accept" # regression guard: dropping breaks IPv6 post-NDP-expiry
 end
-function _verify_static_system --description "Verify ntsync, resolved, logind, iwd, NM, regdom, cpupower-service.conf, sysctl, modprobe, udev, drirc, nftables"
+function _verify_static_system --description "Verify ntsync, resolved, logind, iwd, NM, regdom, cpupower-service.conf, sysctl, udev, drirc, nftables"
     _echo "SYSTEM CONFIGURATION"
     _vss_ntsync_modules
     _echo "── resolved ──"
@@ -2285,7 +2268,6 @@ function _verify_static_system --description "Verify ntsync, resolved, logind, i
     _echo "── cpupower-service.conf ──"
     _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "GOVERNOR='$CPUPOWER_GOVERNOR'" "GOVERNOR=$CPUPOWER_GOVERNOR"
     _vss_sysctl
-    _vss_modprobe
     _vss_udev
     _vss_drirc
     _echo "── nftables ──"
@@ -2690,8 +2672,6 @@ function _vrk_module_state --description "Runtime kparam check: module parameter
     _chk_sysfs_eq /sys/module/usbcore/parameters/autosuspend -1 "usbcore.autosuspend"
     _chk_sysfs_eq /sys/module/nvme_core/parameters/default_ps_max_latency_us 0 "nvme_core.default_ps_max_latency_us"
     _vrkm_amdgpu
-    _chk_sysfs_eq /sys/module/ttm/parameters/pages_limit $TTM_PAGES_LIMIT ttm.pages_limit
-    _chk_sysfs_eq /sys/module/ttm/parameters/page_pool_size $TTM_PAGE_POOL_SIZE ttm.page_pool_size
     _echo "── Additional module parameters ──"
     _chk_sysfs_match /sys/module/zswap/parameters/enabled '^[N0]$' zswap.enabled
     _chk_sysfs_eq /proc/sys/kernel/nmi_watchdog 0 nmi_watchdog
@@ -3366,21 +3346,6 @@ end
 
 # ── INSTALL PHASE 1: PREFLIGHT ──
 function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_ERR, mark progress skip"; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; end
-function _ry_check_ttm_uma_precondition --description "WARN when BIOS UMA split does not match the TTM GTT cap assumption (non-fatal)"
-    set -l _vram_total ""
-    for _f in /sys/class/drm/card*/device/mem_info_vram_total
-        test -r "$_f"; or continue
-        set _vram_total (string trim -- (command cat -- "$_f" 2>/dev/null))
-        string match -qr '^\d+$' -- "$_vram_total"; and break
-    end
-    string match -qr '^\d+$' -- "$_vram_total"; or return 0 # sysfs unreadable: silent (probe is best-effort)
-    set -l _vram_mib (math -s0 "floor($_vram_total / 1048576)")
-    if test "$_vram_mib" -gt 1024 # >1GiB dedicated VRAM = fixed UMA, not 512MB
-        _warn "TTM 32 GiB GTT cap assumes BIOS UMA=512 MB; detected dedicated VRAM=$_vram_mib MiB — verify BIOS UMA/Auto or GTT sizing may mis-apply"
-        _log "TTM_UMA_PRECONDITION: vram_mib=$_vram_mib expected<=1024"
-    end
-    return 0
-end
 function _ry_check_rdseed_workaround_stale --description "INFO when clearcpuid=rdseed is active but microcode now carries the SB-7055 fix (advisory; non-fatal)"
     contains -- clearcpuid=rdseed $KERNEL_PARAMS; or return 0 # only relevant while the workaround is set
     set -l _ucode (string match -rg -- '^microcode\s*:\s*(\S+)$' < /proc/cpuinfo 2>/dev/null)[1]
@@ -3390,6 +3355,12 @@ function _ry_check_rdseed_workaround_stale --description "INFO when clearcpuid=r
         _info "  clearcpuid=rdseed still set, but microcode $_ucode >= 0x0b700037 (SB-7055 fix) — RDSEED clearing + its kernel taint can now be dropped from KERNEL_PARAMS"
         _log "RDSEED_WORKAROUND_STALE: microcode=$_ucode fixed>=0x0b700037"
     end
+    return 0
+end
+function _ry_check_umip_disabled --description "INFO when clearcpuid=514 (UMIP off) is active — flags the deliberate taint + loss of SGDT/SIDT/SMSW protection (advisory; non-fatal)"
+    contains -- clearcpuid=514 $KERNEL_PARAMS; or return 0 # only relevant while UMIP is masked
+    _info "  clearcpuid=514 active: UMIP disabled system-wide (SGDT/SIDT/SMSW no longer trapped) and kernel is tainted — intentional latency choice; drop the token to restore UMIP if no umip_printk stutter is observed"
+    _log "UMIP_DISABLED: clearcpuid=514 present in KERNEL_PARAMS"
     return 0
 end
 function _install_preflight --description "Run all preflight checks before installation"
@@ -3425,8 +3396,8 @@ function _install_preflight --description "Run all preflight checks before insta
     _echo
     if not _ry_validate_configs; _phase_record "Preflight: config validation" FAIL "see JSONL log"; _err "Configuration validation failed - aborting"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
     _phase_record "Preflight: config validation" PASS "$_RY_MANAGED_FILE_COUNT/$_RY_MANAGED_FILE_COUNT destinations"
-    _ry_check_ttm_uma_precondition
     _ry_check_rdseed_workaround_stale
+    _ry_check_umip_disabled
     set --erase _RY_LOUD_ERR
     return 0
 end
@@ -4600,7 +4571,6 @@ set -g _RY_POST_HOOKS \
     "/etc/default/cpupower-service.conf|cpupower" \
     "*/sysctl.d/*|sysctl" \
     "/etc/drirc.d/*|drirc" \
-    "/etc/modprobe.d/*|modprobe" \
     "/etc/udev/rules.d/*|udev" \
     "*/environment.d/*|envd" \
     "*/baloofilerc|baloo" \
@@ -4670,7 +4640,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (15 dispatch tags / 19 patterns / 17 _post_* functions; coverage enforced by _ir_validate_post_hooks) ──
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (14 dispatch tags / 18 patterns / 16 _post_* functions; coverage enforced by _ir_validate_post_hooks) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot_apply sub: mkinitcpio -P + sdboot-manage cascade"
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
@@ -4800,19 +4770,6 @@ function _post_cpupower --argument-names target --description "Post-hook: restar
     if not _run sudo -n systemctl restart cpupower.service
         _warn "cpupower.service restart failed — governor change applies on next boot (non-fatal; file deployed)"
         _info "  Governor from /etc/default/cpupower-service.conf re-applies on next boot"
-        return 0
-    end
-    return 0
-end
-function _post_modprobe --argument-names target --description "Post-hook: rebuild initramfs after /etc/modprobe.d/* change"
-    _echo
-    if not command -q mkinitcpio
-        _warn "mkinitcpio(8) not found — module options will apply only after a kernel package install"
-        return 0
-    end
-    if not _run sudo -n mkinitcpio -P
-        _warn "mkinitcpio -P failed — module options not in initramfs until next rebuild (non-fatal; file deployed, existing initramfs intact)"
-        _info "  Retry: sudo mkinitcpio -P"
         return 0
     end
     return 0

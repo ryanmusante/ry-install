@@ -4,10 +4,12 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.59.0 - 2026-06-21
 
-- sysctl: add vm.swappiness=150, vm.vfs_cache_pressure=50 to SYSCTL_VALUES (zram-tuned). Brings them under the managed/reversible set; verify picks them up automatically.
-- guard: bump _ir_validate_counts SYSCTL_VALUES 8 -> 10.
-- preflight: add _ry_check_rdseed_workaround_stale — non-fatal INFO when clearcpuid=rdseed is set and microcode has reached the SB-7055 fix (0x0b700037). Advisory only.
-- docs: README sysctl row + RDSEED row note the advisory; add Configuration-level row for the optional clearcpuid=514 (UMIP) knob.
+- boot: add clearcpuid=514 (UMIP off) alongside clearcpuid=rdseed; both tokens present. KERNEL_PARAMS guard 12 -> 13.
+- preflight: add _ry_check_umip_disabled (INFO while 514 set); keep _ry_check_rdseed_workaround_stale.
+- sysctl: add vm.swappiness=150, vm.vfs_cache_pressure=50, vm.page-cluster=0 (zram-tuned). SYSCTL_VALUES guard 8 -> 11.
+- gpu: remove ry-amdgpu-strixhalo.conf and the TTM GTT cap (globals, generator, verify, UMA advisory, orphaned modprobe post-hook); kernel >= 6.16.9 auto-sizes GTT. SYSTEM_DESTINATIONS guard 16 -> 15, _RY_POST_HOOKS 19 -> 18, managed-file count 19 -> 18.
+- udev: note EPP balance_performance is a deliberate mid-bias, not max (value unchanged).
+- docs: README synced to all of the above.
 
 7.58.1 - 2026-06-21
 
@@ -16,11 +18,11 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.58.0 - 2026-06-20
 
-- refactor: move _configure_services_iwd_handoff to its Phase 4 position (5th, before enable/regdom); source order matches run order. Adds IWD HANDOFF sub-banner. Behavior unchanged.
+- refactor: move _configure_services_iwd_handoff to its Phase 4 slot (5th, before enable/regdom); source order matches run order. Behavior unchanged.
 
 7.57.3 - 2026-06-20
 
-- refactor: unify managed-file order across SYSTEM_DESTINATIONS, _content_ fns, _RY_POST_HOOKS onto one canonical order (boot -> drop-ins -> network -> tuning -> user). SYSTEM_DESTINATIONS is the source of truth.
+- refactor: unify managed-file order across SYSTEM_DESTINATIONS, _content_ fns, _RY_POST_HOOKS onto one canonical order (boot -> drop-ins -> network -> tuning -> user); SYSTEM_DESTINATIONS is the source of truth.
 - docs: sync README Configuration and Managed Files tables to the canonical order.
 
 7.57.2 - 2026-06-20
@@ -159,5 +161,3 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 - packages: remove kdeconnect, add mkinitcpio-firmware, drop AUR.
 - firewall: reduce inbound to established/related, loopback, ICMPv4.
-
-Earlier releases: see git history.

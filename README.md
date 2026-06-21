@@ -8,7 +8,7 @@
 > Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro
 > (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
 
-One self-contained fish script — 19 embedded configs, no bundled dependencies — deploying a tuned gaming/LLM desktop profile, fully reversible.
+One self-contained fish script — 18 embedded configs, no bundled dependencies — deploying a tuned gaming/LLM desktop profile, fully reversible.
 
 ## Contents
 
@@ -78,7 +78,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 |---|---|---|
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
-| 3 | Configuration | deploy 19 embedded configs atomically |
+| 3 | Configuration | deploy 18 embedded configs atomically |
 | 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → iwd disable → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
@@ -89,15 +89,15 @@ A CHECK/RESULT/EVIDENCE matrix prints to stderr; a JSONL log records each phase.
 
 The script is the source of truth — retune the `set -g` globals near the top.
 
-*Expand below for the full per-file key-value reference — all 19 files.*
+*Expand below for the full per-file key-value reference — all 18 files.*
 
 <details>
-<summary><strong>Full managed-file reference</strong> — all 19 files, key values</summary>
+<summary><strong>Full managed-file reference</strong> — all 18 files, key values</summary>
 
 | File | Purpose & key values |
 |---|---|
 | loader.conf | `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
-| kernel cmdline | `rw root=UUID=<root>` (resolved) + `8250.nr_uarts=0`, `amd_pstate=active`, `amd_iommu=off`, `clearcpuid=rdseed`, `nowatchdog`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `quiet`, `split_lock_detect=off`, `tsc=reliable`, `usbcore.autosuspend=-1`, `zswap.enabled=0` |
+| kernel cmdline | `rw root=UUID=<root>` (resolved) + `8250.nr_uarts=0`, `amd_pstate=active`, `amd_iommu=off`, `clearcpuid=rdseed`, `clearcpuid=514`, `nowatchdog`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `quiet`, `split_lock_detect=off`, `tsc=reliable`, `usbcore.autosuspend=-1`, `zswap.enabled=0` |
 | sdboot-manage.conf | `DEFAULT_ENTRY=manual`, `OVERWRITE_EXISTING=yes`, `REMOVE_EXISTING=yes` (wipes `loader/entries/` before regen), `REMOVE_OBSOLETE=yes`; `LINUX_OPTIONS`=cmdline params, `LINUX_FALLBACK_OPTIONS="quiet"` |
 | mkinitcpio.conf | `MODULES=(amdgpu)`; `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`; `COMPRESSION="zstd"` (`-1 -T0`); `BINARIES=()`, `FILES=()` |
 | resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` (plaintext DNS; diverges from CachyOS DoH default) |
@@ -105,10 +105,9 @@ The script is the source of truth — retune the `set -g` globals near the top.
 | iwd / NetworkManager | iwd backend (`wifi.backend=iwd`); `iwd.service` disabled (NM D-Bus-activates iwd on demand). MT7925 power-save off: NM `wifi.powersave=2` + iwd `[DriverQuirks] PowerSaveDisable=*`. iwd `EnableNetworkConfiguration=false`, `NameResolvingService=systemd`; NM `logging level=WARN` |
 | iw-regdomain / wireless-regdom | regulatory domain fixed `US` (retune `COUNTRY`); consumed by CachyOS hooks at device-add |
 | nftables.conf | default-deny-inbound (see [Safety & Reliability](#safety--reliability)) |
-| cpupower / udev | `powersave` governor; udev sets NVMe scheduler `none`, AMD P-State EPP `balance_performance`, gfx1151 clock-floor (`power_dpm_force_performance_level=high`, `KERNEL=="card[0-9]"`) |
-| sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`, `vm.swappiness=150`, `vm.vfs_cache_pressure=50` (zram-tuned; priority 95, after vendor `70-cachyos-settings.conf`) |
+| cpupower / udev | `powersave` governor; udev sets NVMe scheduler `none`, AMD P-State EPP `balance_performance` (deliberate mid-bias toward performance, not the max `performance` EPP), gfx1151 clock-floor (`power_dpm_force_performance_level=high`, `KERNEL=="card[0-9]"`) |
+| sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`, `vm.page-cluster=0`, `vm.swappiness=150`, `vm.vfs_cache_pressure=50` (zram-tuned: `page-cluster=0` + `swappiness=150` match compressed RAM-backed swap; priority 95, after vendor `70-cachyos-settings.conf`) |
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` (Mesa 22.3 MR !18884) |
-| amdgpu/ttm modprobe | GTT cap via in-kernel `ttm.*` (not deprecated `amdgpu.gttsize`/`amdttm.*`). `pages_limit`=`page_pool_size`; pages = GiB × 262144. Shipped cap 32 GiB = 8388608; retune both `TTM_*` globals (116 GiB = 30408704). Assumes BIOS UMA ≤ 1 GiB |
 | environment.d | gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
 | baloofilerc | KDE Baloo indexing disabled (`0600`) |
 | MangoHud.conf | readout-only HUD: GPU/CPU sensors, unified memory (`vram`+`ram`), FPS with 1%/0.1% lows. Auto-enabled via `MANGOHUD=1`; toggle `Shift_R+F12` (`0600`) |
@@ -136,19 +135,19 @@ The script is the source of truth — retune the `set -g` globals near the top.
 
 ## Managed Files
 
-Canonical path/permission index for the 19 files (described in [Configuration](#configuration)). System `0644`, user `0600`.
+Canonical path/permission index for the 18 files (described in [Configuration](#configuration)). System `0644`, user `0600`.
 
 *Expand below for the canonical path-and-permission listing by group.*
 
 <details>
-<summary><strong>Path and permission index</strong> — 19 files by group</summary>
+<summary><strong>Path and permission index</strong> — 18 files by group</summary>
 
 | Group | Files |
 |---|---|
 | Boot | `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf` |
 | systemd | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`, `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` |
 | Network | `/etc/iwd/main.conf`, `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/conf.d/wireless-regdom`, `/etc/nftables.conf` |
-| Tuning | `/etc/default/cpupower-service.conf`, `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/modprobe.d/ry-amdgpu-strixhalo.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
+| Tuning | `/etc/default/cpupower-service.conf`, `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/drirc.d/95-ry-radv-apu.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
 | User | `~/.config/environment.d/10-environment.conf`, `~/.config/baloofilerc`, `~/.config/MangoHud/MangoHud.conf` |
 
 </details>
@@ -194,7 +193,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | # | Step | Command |
 |---|---|---|
 | 1 | Unmask | `sudo systemctl unmask ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target` |
-| 2 | Remove system paths, then user env.d | `sudo rm /etc/sdboot-manage.conf /etc/sysctl.d/95-ry-overrides.conf /etc/drirc.d/95-ry-radv-apu.conf /etc/modprobe.d/ry-amdgpu-strixhalo.conf /etc/udev/rules.d/60-ry-perf.rules /etc/iw-regdomain /etc/conf.d/wireless-regdom /etc/nftables.conf /etc/default/cpupower-service.conf /etc/iwd/main.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/systemd/logind.conf.d/99-cachyos-logind.conf` then `rm ~/.config/environment.d/10-environment.conf ~/.config/baloofilerc ~/.config/MangoHud/MangoHud.conf` |
+| 2 | Remove system paths, then user env.d | `sudo rm /etc/sdboot-manage.conf /etc/sysctl.d/95-ry-overrides.conf /etc/drirc.d/95-ry-radv-apu.conf /etc/udev/rules.d/60-ry-perf.rules /etc/iw-regdomain /etc/conf.d/wireless-regdom /etc/nftables.conf /etc/default/cpupower-service.conf /etc/iwd/main.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/systemd/logind.conf.d/99-cachyos-logind.conf` then `rm ~/.config/environment.d/10-environment.conf ~/.config/baloofilerc ~/.config/MangoHud/MangoHud.conf` |
 | 3 | Restore fstab, delete `.ry.bak` | `sudo mv /etc/fstab.ry.bak /etc/fstab` then `sudo rm -f /boot/loader/loader.conf.ry.bak /etc/mkinitcpio.conf.ry.bak` |
 | 4 | Reverse package changes (optional) | `sudo pacman -S --needed plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect` then `sudo pacman -Rns nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs bottom htop git-delta lm_sensors rtkit realtime-privileges ddcutil nftables` |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
@@ -220,9 +219,8 @@ Deliberate profile choices, not defects — log lines below are expected.
 | Item | Consequence | Action |
 |---|---|---|
 | `amd_iommu=off` | NPU (`amdxdna`) cannot probe (`aie2_init: Running without IOMMU not supported`, `probe ... failed -22`); the NPU is disabled. | To enable: set `amd_iommu=on iommu=pt` in `KERNEL_PARAMS`, re-run (or `--install-file /etc/kernel/cmdline`), reboot. |
-| TTM cap assumes UMA ≤ 1 GiB | Non-fatal WARN (`TTM_UMA_PRECONDITION: vram_mib=N expected<=1024`) when firmware reports large fixed VRAM (e.g. 32768 MiB); the 32 GiB cap may not apply. Install continues (exit 0). | Set BIOS UMA frame buffer to **Auto** (or ≤ 512 MB), or retune both `TTM_*` globals. Verify: `cat /sys/class/drm/card*/device/mem_info_vram_total`. |
-| RDSEED on Zen 5 | Kernel flags RDSEED broken (`RDSEED32 is broken. Please update your firmware.`), which can break `-march=znver*` Qt/crypto callers. `clearcpuid=rdseed` masks it and silences the warning (taints kernel — cosmetic). | CVE-2025-62626 / AMD SB-7055. To restore RDSEED, drop `clearcpuid=rdseed` and update microcode: `sudo pacman -Syu --needed amd-ucode linux-firmware && sudo mkinitcpio -P && reboot` (model `0x70` → `0x0b700037`). The `microcode` hook is already in `MKINITCPIO_HOOKS`. Preflight emits a non-fatal `INFO` (`RDSEED_WORKAROUND_STALE`) once the running microcode reaches `0x0b700037`, signalling the workaround + taint can be retired. |
-| UMIP (`umip_printk` bursts) | Not set by default — UMIP stays on; the kernel emulates `SGDT`/`SIDT`/`SMSW` for 64-bit processes (since 5.4), so `umip_printk: N callbacks suppressed` is benign, not a fault. | Optional/conditional: only if a game/app shows *sustained* `umip_printk` growth with stutter, add `clearcpuid=514` to `KERNEL_PARAMS` (count guard `12 → 13`). Disables UMIP system-wide + adds a 2nd taint; leave off otherwise. |
+| RDSEED on Zen 5 | Kernel flags RDSEED broken (`RDSEED32 is broken. Please update your firmware.`), which can break `-march=znver*` Qt/crypto callers. `clearcpuid=rdseed` masks it and silences the warning (taints kernel — cosmetic). | CVE-2025-62626 / AMD SB-7055. To restore RDSEED, drop `clearcpuid=rdseed` (count guard `13 → 12`) and update microcode: `sudo pacman -Syu --needed amd-ucode linux-firmware && sudo mkinitcpio -P && reboot` (model `0x70` → `0x0b700037`). The `microcode` hook is already in `MKINITCPIO_HOOKS`. Preflight emits a non-fatal `INFO` (`RDSEED_WORKAROUND_STALE`) once the running microcode reaches `0x0b700037`, signalling the workaround + taint can be retired. |
+| UMIP (`umip_printk` bursts) | **Disabled by default** via `clearcpuid=514` — UMIP is masked system-wide, so the kernel no longer traps/emulates `SGDT`/`SIDT`/`SMSW` for 64-bit processes and `umip_printk: N callbacks suppressed` will not appear. Adds a 2nd kernel taint (cosmetic). | Deliberate latency choice. To restore UMIP protection, drop `clearcpuid=514` from `KERNEL_PARAMS` (count guard `13 → 12`) and reboot. Preflight emits a non-fatal `INFO` (`UMIP_DISABLED`) while the token is present, as a reminder the taint + loss of SGDT/SIDT/SMSW trapping are active. |
 
 ## Troubleshooting
 

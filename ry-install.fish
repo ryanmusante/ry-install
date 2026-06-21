@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.62.0 (2026-06-21) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.64.0 (2026-06-21) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.62.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.64.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 19 # gtr_pro token referenced by fn names + JSONL log
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18 # gtr_pro token referenced by fn names + JSONL log
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -553,14 +553,13 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" \
     "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
     "/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf" \
-    "/etc/iwd/main.conf" \
     "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     "/etc/iw-regdomain" \
     "/etc/conf.d/wireless-regdom" \
+    "/etc/bluetooth/main.conf" \
     "/etc/nftables.conf" \
     "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" \
-    "/etc/drirc.d/95-ry-radv-apu.conf" \
     "/etc/udev/rules.d/60-ry-perf.rules"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/baloofilerc" "$HOME/.config/MangoHud/MangoHud.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
@@ -580,13 +579,13 @@ set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade # resolved drop-in keys
 set -g NM_DISPATCHER_LOGLEVELMAX notice # nm-dispatcher journal noise: drop info-level req:N 'connectivity-change' lines, keep notice+
 set -g COUNTRY US # COUNTRY: wireless regdom
-set -g RADV_APU_OPTION radv_enable_unified_heap_on_apu # RADV_APU_OPTION: drirc option name
 # LOGIND_IGNORE_KEYS → logind.conf.d (Handle*Key=ignore)
 set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKey HandleSuspendKeyLongPress HandleHibernateKey HandleHibernateKeyLongPress HandleRebootKey HandleRebootKeyLongPress
 # Wi-Fi PS off: MT7925/mt76 PS in software causes latency spikes
-set -g IWD_ENABLE_NETWORK_CONFIG false; set -g IWD_DRIVER_QUIRKS "PowerSaveDisable=*"; set -g IWD_DNS_SERVICE systemd # net/power keys: IWD_* / NM_* / cpupower
 set -g NM_WIFI_BACKEND wpa_supplicant; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR powersave
+# Bluetooth: power adapter on at service start/resume; reconnect backoff for paired sinks
+set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 7; set -g BT_RECONNECT_INTERVALS "1,2,4,8,16,32,64"
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
@@ -629,7 +628,7 @@ set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan driv
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
-set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service # enabled in Phase 4/6
+set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # thresholds: disk, CPU
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
@@ -672,7 +671,7 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
     for _d in $USER_DESTINATIONS; set -l _dir (command dirname -- "$_d"); contains -- "$_dir" $_USR_TMP_DIRS; or set -a _USR_TMP_DIRS "$_dir"; end
     set -g _RY_PROFILE_USES_WIFI_BACKEND false
     for _d in $SYSTEM_DESTINATIONS
-        if string match -q '*nm.conf' -- "$_d"; or string match -q '*/iwd/*' -- "$_d"; set -g _RY_PROFILE_USES_WIFI_BACKEND true; break; end
+        if string match -q '*nm.conf' -- "$_d"; set -g _RY_PROFILE_USES_WIFI_BACKEND true; break; end
     end
     set -g _RY_CANON_SYSTEM_DSTS
     for _d in $SYSTEM_DESTINATIONS; set -a _RY_CANON_SYSTEM_DSTS (command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
@@ -695,15 +694,15 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         PKGS_DEL:9 \
         MASK:10 \
         EXPECTED_VULKAN_PKGS:2 \
-        EXPECTED_SERVICES:4 \
+        EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:19 \
+        _RY_POST_HOOKS:18 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_NTSYNC_MODLOAD_CONFS:3 \
         _RY_TMPDIR_GLOBS:6 \
-        SYSTEM_DESTINATIONS:16 \
+        SYSTEM_DESTINATIONS:15 \
         USER_DESTINATIONS:3
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -804,11 +803,6 @@ end
 function _content__etc_systemd_system_NetworkManager-dispatcher.service.d_logging.conf --description "Generate content for NetworkManager-dispatcher logging drop-in (journal noise suppression)"
     printf '%s\n' "# NetworkManager-dispatcher journal noise suppression" "# nm-dispatcher logs via journald transport (not stdout), so StandardError=null is ineffective;" "# LogLevelMax drops the routine info-level req:N 'connectivity-change' lines while keeping notice+." "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
 end
-function _content__etc_iwd_main.conf --description "Generate content for /etc/iwd/main.conf (dormant; opt-in iwd backend)"
-    printf '%s\n' "# iwd configuration - kept for opt-in iwd backend (NM default backend is wpa_supplicant)" "[General]" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "" "[DriverQuirks]"
-    for quirk in $IWD_DRIVER_QUIRKS; printf '%s\n' "$quirk"; end
-    printf '%s\n' "" "[Network]" "NameResolvingService=$IWD_DNS_SERVICE"
-end
 function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (wpa_supplicant backend)"
     printf '%s\n' "# NetworkManager configuration - wpa_supplicant backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"
 end
@@ -817,6 +811,9 @@ function _content__etc_iw-regdomain --description "Generate content for /etc/iw-
 end
 function _content__etc_conf.d_wireless-regdom --description "Generate content for /etc/conf.d/wireless-regdom (set-wireless-regdom input)"
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "WIRELESS_REGDOM=\"$COUNTRY\""
+end
+function _content__etc_bluetooth_main.conf --description "Generate content for /etc/bluetooth/main.conf (adapter auto-power-on + paired-sink reconnect backoff)"
+    printf '%s\n' "# ry-install: BlueZ daemon config (managed file, do not edit by hand)" "[General]" "FastConnectable=$BT_FAST_CONNECTABLE" "" "[Policy]" "AutoEnable=$BT_AUTO_ENABLE" "ReconnectAttempts=$BT_RECONNECT_ATTEMPTS" "ReconnectIntervals=$BT_RECONNECT_INTERVALS"
 end
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset"
     printf '%s\n' \
@@ -850,19 +847,6 @@ function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate con
         set _printed (math $_printed + 1)
     end
     if test "$_printed" -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
-end
-function _content__etc_drirc.d_95-ry-radv-apu.conf --description "Generate content for RADV drirc drop-in (unified heap on APU)"
-    # radv_enable_unified_heap_on_apu: Mesa 22.3 MR !18884
-    printf '%s\n' \
-        '<?xml version="1.0" standalone="yes"?>' \
-        '<!-- ry-install: RADV unified-heap on APU (managed file, do not edit by hand) -->' \
-        '<driconf>' \
-        '    <device driver="radv">' \
-        '        <application name="Default">' \
-        "            <option name=\"$RADV_APU_OPTION\" value=\"true\"/>" \
-        '        </application>' \
-        '    </device>' \
-        '</driconf>'
 end
 function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP balance_performance mid-bias + gfx1151 GPU clock-floor)"
     printf '%s\n' \
@@ -1772,15 +1756,6 @@ function _grep_ini_header --argument-names dst --description 'Validate ≥1 [Sec
     end
     return 0
 end
-function _grep_drirc_entry --argument-names dst --description 'Validate drirc XML: <driconf> root + ≥1 <option name="…" value="…"/>'
-    test (count $argv) -lt 2; and _log "BUG: _grep_drirc_entry called without content (dst=$dst)"; and return 2
-    string match -qr '<driconf>' -- $argv[2..-1]; or begin; _fail "  $dst: missing <driconf> root element"; return 1; end
-    string match -qr '<option[[:space:]]+name="[^"]+"[[:space:]]+value="[^"]+"[[:space:]]*/>' -- $argv[2..-1]; or begin
-        _fail "  $dst: no <option name=… value=…/> element found"
-        return 1
-    end
-    return 0
-end
 function _grep_modprobe_entry --argument-names dst --description 'Validate ≥1 modprobe.d directive line (options/blacklist/install/alias/softdep/remove)'
     test (count $argv) -lt 2; and _log "BUG: _grep_modprobe_entry called without content (dst=$dst)"; and return 2
     string match -qr '^[[:space:]]*(options|blacklist|install|remove|alias|softdep)[[:space:]]+\S' -- $argv[2..-1]; or begin
@@ -1858,8 +1833,6 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_kparam "$dst" $_content
         case '*/sysctl.d/*'
             _grep_sysctl_kv "$dst" $_content
-        case '*/drirc.d/*'
-            _grep_drirc_entry "$dst" $_content
         case '*/modprobe.d/*'
             _grep_modprobe_entry "$dst" $_content
         case '/etc/iw-regdomain'
@@ -2178,7 +2151,7 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
     _vsb_entries
 end
 
-# ── VERIFY-STATIC: SYSTEM + USER (drop-ins, drirc, env.d) ──
+# ── VERIFY-STATIC: SYSTEM + USER (drop-ins, env.d) ──
 function _vss_ntsync_modules --description "_verify_static_system sub: ntsync state + autoload check"
     _echo "── ntsync state ──"
     set -l _ns (_ntsync_state)
@@ -2212,12 +2185,6 @@ function _vss_nmdispatch --description "_verify_static_system sub: NetworkManage
     _chk_file /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf; or return 0
     _chk_grep /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX" "dispatcher LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
 end
-function _vss_iwd --description "_verify_static_system sub: iwd config"
-    _chk_file /etc/iwd/main.conf; or return 0
-    _chk_grep /etc/iwd/main.conf "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG" "EnableNetworkConfiguration=$IWD_ENABLE_NETWORK_CONFIG"
-    for quirk in $IWD_DRIVER_QUIRKS; _chk_grep /etc/iwd/main.conf "$quirk" "DriverQuirks $quirk"; end
-    _chk_grep /etc/iwd/main.conf "NameResolvingService=$IWD_DNS_SERVICE" "DNS via $IWD_DNS_SERVICE"
-end
 function _vss_nm --description "_verify_static_system sub: NetworkManager config"
     _chk_file /etc/NetworkManager/conf.d/99-cachyos-nm.conf; or return 0
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.backend=$NM_WIFI_BACKEND" "wifi backend $NM_WIFI_BACKEND"
@@ -2235,6 +2202,13 @@ function _vss_regdom --description "_verify_static_system sub: wireless regdom (
     _chk_file /etc/iw-regdomain; and _chk_grep /etc/iw-regdomain "COUNTRY=$COUNTRY" "iw-regdomain COUNTRY=$COUNTRY"
     _chk_file /etc/conf.d/wireless-regdom; and _chk_grep /etc/conf.d/wireless-regdom "WIRELESS_REGDOM=\"$COUNTRY\"" "wireless-regdom $COUNTRY"
 end
+function _vss_bluetooth --description "_verify_static_system sub: BlueZ main.conf (adapter auto-power-on)"
+    _echo "── bluetooth (main.conf) ──"
+    _chk_file /etc/bluetooth/main.conf; or return 0
+    _chk_grep /etc/bluetooth/main.conf "AutoEnable=$BT_AUTO_ENABLE" "AutoEnable=$BT_AUTO_ENABLE"
+    _chk_grep /etc/bluetooth/main.conf "FastConnectable=$BT_FAST_CONNECTABLE" "FastConnectable=$BT_FAST_CONNECTABLE"
+    _chk_grep /etc/bluetooth/main.conf "ReconnectAttempts=$BT_RECONNECT_ATTEMPTS" "ReconnectAttempts=$BT_RECONNECT_ATTEMPTS"
+end
 function _vss_udev --description "_verify_static_system sub: combined udev perf rules (NVMe scheduler + EPP + GPU clock-floor)"
     _echo "── udev (perf: I/O scheduler + EPP + GPU clock-floor) ──"
     _chk_file /etc/udev/rules.d/60-ry-perf.rules; or return 0
@@ -2243,19 +2217,12 @@ function _vss_udev --description "_verify_static_system sub: combined udev perf 
     _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'power_dpm_force_performance_level}="high"' "GPU dpm=high"
     _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'KERNEL=="card[0-9]"' "GPU rule card-scoped"
 end
-function _vss_drirc --description "_verify_static_system sub: RADV drirc"
-    _echo "── drirc (RADV) ──"
-    _chk_file /etc/drirc.d/95-ry-radv-apu.conf; or return 0
-    _chk_grep /etc/drirc.d/95-ry-radv-apu.conf 'driver="radv"' 'driver=radv'
-    _chk_grep /etc/drirc.d/95-ry-radv-apu.conf "$RADV_APU_OPTION" "$RADV_APU_OPTION"
-    _chk_grep /etc/drirc.d/95-ry-radv-apu.conf 'value="true"' 'unified_heap value=true'
-end
 function _vss_nft --description "_verify_static_system sub: nftables default-deny-inbound + ICMPv6 NDP/PMTUD accept (IPv6 break-glass)"
     _chk_file /etc/nftables.conf; or return 0
     _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
     _chk_grep /etc/nftables.conf "nd-neighbor-solicit" "nftables ICMPv6 NDP/PMTUD accept" # regression guard: dropping breaks IPv6 post-NDP-expiry
 end
-function _verify_static_system --description "Verify ntsync, resolved, logind, iwd, NM, regdom, cpupower-service.conf, sysctl, udev, drirc, nftables"
+function _verify_static_system --description "Verify ntsync, resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, nftables"
     _echo "SYSTEM CONFIGURATION"
     _vss_ntsync_modules
     _echo "── resolved ──"
@@ -2266,16 +2233,14 @@ function _verify_static_system --description "Verify ntsync, resolved, logind, i
     _vss_logind
     _echo "── NetworkManager-dispatcher logging ──"
     _vss_nmdispatch
-    _echo "── iwd ──"
-    _vss_iwd
     _echo "── NetworkManager ──"
     _vss_nm
     _vss_regdom
+    _vss_bluetooth
     _echo "── cpupower-service.conf ──"
     _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "GOVERNOR='$CPUPOWER_GOVERNOR'" "GOVERNOR=$CPUPOWER_GOVERNOR"
     _vss_sysctl
     _vss_udev
-    _vss_drirc
     _echo "── nftables ──"
     _vss_nft
 end
@@ -3233,32 +3198,15 @@ function _vrs_vulkan --description "Runtime session check: Vulkan driver package
     end
     test (count $_vk_missing_list) -gt 0; and _info "  Install missing: sudo pacman -S --needed $_vk_missing_list"
 end
-function _vrs_drirc_xml --description "Runtime session check: drirc XML well-formedness via xmllint (sudo read fallback)"
-    _echo
-    _echo "── drirc XML (well-formedness) ──"
-    if not command -q xmllint; _info "  xmllint absent — drirc XML well-formedness not checked"; return 0; end
-    set -l _drc /etc/drirc.d/95-ry-radv-apu.conf
-    if test -r "$_drc"
-        if command xmllint --noout "$_drc" 2>/dev/null; _ok "  drirc XML well-formed (xmllint)"; else; _fail "  drirc XML malformed (xmllint --noout failed)"; end
-        return 0
-    end
-    if sudo -n test -r "$_drc" 2>/dev/null # root-only readable: sudo-validate
-        if sudo -n xmllint --noout "$_drc" 2>/dev/null; _ok "  drirc XML well-formed (xmllint via sudo; file not user-readable)"; else; _fail "  drirc XML malformed (xmllint --noout failed via sudo)"; end
-        return 0
-    end
-    if not sudo -n true 2>/dev/null; _warn "  drirc: sudo cache lapsed — cannot read $_drc"; return 0; end
-    _fail "  drirc: $_drc NOT FOUND"
-end
 
 # ── VERIFY-RUNTIME: SESSION ORCHESTRATOR (_verify_runtime_session) ──
-function _verify_runtime_session --description "Verify NM connection perms, installed-file perms, parent dirs, Vulkan packages, drirc XML"
+function _verify_runtime_session --description "Verify NM connection perms, installed-file perms, parent dirs, Vulkan packages"
     _echo "FILE PERMISSIONS"
     _echo "── Sensitive files ──"
     _vrs_nm_perms
     _vrs_installed_file_perms
     _vrs_parent_dirs
     _vrs_vulkan
-    _vrs_drirc_xml
 end
 
 # ── VERIFY: TOP-LEVEL ORCHESTRATORS (_ry_verify_runtime + _ry_verify_all) ──
@@ -4583,14 +4531,13 @@ set -g _RY_POST_HOOKS \
     "*/resolved.conf.d/*|resolved" \
     "*/logind.conf.d/*|logind" \
     "*/NetworkManager-dispatcher.service.d/*|nmdispatch" \
-    "*/iwd/main.conf|nm" \
     "*/NetworkManager/conf.d/*|nm" \
     "/etc/iw-regdomain|regdom" \
     "/etc/conf.d/wireless-regdom|regdom" \
+    "/etc/bluetooth/main.conf|bluetooth" \
     "/etc/nftables.conf|nft" \
     "/etc/default/cpupower-service.conf|cpupower" \
     "*/sysctl.d/*|sysctl" \
-    "/etc/drirc.d/*|drirc" \
     "/etc/udev/rules.d/*|udev" \
     "*/environment.d/*|envd" \
     "*/baloofilerc|baloo" \
@@ -4724,7 +4671,7 @@ function _post_nmdispatch --argument-names target --description "Post-hook: daem
     _info "  nm-dispatcher LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX active on next dispatch activation"
     return 0
 end
-function _post_nm --argument-names target --description "Post-hook: restart NetworkManager (+ try-restart iwd when iwd/main.conf changes); deferred when WiFi is active route"
+function _post_nm --argument-names target --description "Post-hook: restart NetworkManager; deferred when WiFi is active route"
     _echo
     if not command -q NetworkManager
         _warn "NetworkManager config deployed but NetworkManager not installed — restart skipped; drop-in keys apply once installed or at next boot"
@@ -4736,11 +4683,6 @@ function _post_nm --argument-names target --description "Post-hook: restart Netw
         _info "  Config change will not take effect until next reboot or manual restart."
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=install_file target=$target"
         return 0
-    end
-    if string match -q '*/iwd/main.conf' -- "$target" # iwd reads main.conf only at startup
-        if not _run sudo -n systemctl try-restart iwd.service
-            _warn "iwd try-restart failed — config applies on next reboot (non-fatal; file deployed)"
-        end
     end
     if not _run sudo -n systemctl restart NetworkManager
         _warn "NetworkManager restart failed — config applies on next reboot (non-fatal; file deployed)"
@@ -4759,11 +4701,6 @@ function _post_sysctl --argument-names target --description "Post-hook: apply sy
         _info "  Retry: sudo sysctl --system"
         return 0
     end
-    return 0
-end
-function _post_drirc --argument-names target --description "Post-hook: notify drirc.d change (Mesa reads at next Vulkan/GL app launch)"
-    _info "drirc.d $target changed — applies at next Vulkan/OpenGL application launch (no service restart needed)"
-    _info "  Verify with: vulkaninfo | grep -i 'memory heap' (after restarting the target app)"
     return 0
 end
 function _post_mangohud --argument-names target --description "Post-hook: notify MangoHud.conf change (read at next game/Vulkan app launch)"
@@ -4819,6 +4756,18 @@ end
 function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"
     _echo
     _apply_wireless_regdom
+end
+function _post_bluetooth --argument-names target --description "Post-hook: restart bluetooth.service after /etc/bluetooth/main.conf change"
+    _echo
+    if not command -q bluetoothctl; and not test -e /usr/lib/systemd/system/bluetooth.service
+        _warn "bluetooth/main.conf deployed but bluez not installed — restart skipped; keys apply once bluez is installed or at next boot"
+        _log "POST_BT_SKIP_NO_BLUEZ: target=$target"
+        return 0
+    end
+    if not _run sudo -n systemctl try-restart bluetooth.service
+        _warn "bluetooth.service try-restart failed — config applies on next reboot (non-fatal; file deployed)"
+    end
+    return 0
 end
 function _post_udev --argument-names target --description "Post-hook: reload udev rules + retrigger block devices after /etc/udev/rules.d/* change"
     _echo

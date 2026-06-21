@@ -2,12 +2,26 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.64.0 - 2026-06-21
+
+- drirc: remove /etc/drirc.d/95-ry-radv-apu.conf. radv_enable_unified_heap_on_apu is a per-game RADV workaround (whitelisted in Mesa 00-radv-defaults.conf for the titles that need it, e.g. RDR2); the global application name="Default" form was BC-250-specific and is not applicable to gfx1151, which already reports uma:1 natively. Drops RADV_APU_OPTION, _vss_drirc, _vrs_drirc_xml, _grep_drirc_entry, _post_drirc.
+- network: remove /etc/iwd/main.conf (the dormant iwd-backend config file). The NM_WIFI_BACKEND=iwd opt-in path is retained (handoff + runtime checks); CachyOS ships wpa_supplicant by default. Drops IWD_ENABLE_NETWORK_CONFIG / IWD_DRIVER_QUIRKS / IWD_DNS_SERVICE, _vss_iwd, the dead iwd branch in _post_nm, and the iwd glob in Wi-Fi-backend detection (nm.conf still triggers it).
+- guards: SYSTEM_DESTINATIONS 17 -> 15, _RY_POST_HOOKS 20 -> 18, managed-file count 20 -> 18.
+- docs: README in-scope, Phase 3, managed-file reference, Managed Files, and Uninstall synced.
+
+7.63.0 - 2026-06-21
+
+- bluetooth: add /etc/bluetooth/main.conf (AutoEnable=true powers the adapter on at service start/resume; FastConnectable=true; paired-sink reconnect backoff). Fixes BlueZ skipping its AutoEnable=true default when main.conf is absent. SYSTEM_DESTINATIONS guard 16 -> 17, _RY_POST_HOOKS 19 -> 20, managed-file count 19 -> 20.
+- services: enable bluetooth.service (ships preset=disabled on CachyOS). EXPECTED_SERVICES guard 4 -> 5.
+- verify: add _vss_bluetooth static check (AutoEnable / FastConnectable / ReconnectAttempts).
+- docs: README in-scope, Phase 3, managed-file reference, Managed Files, Units, Uninstall, and Troubleshooting synced.
+
 7.62.0 - 2026-06-21
 
-- cmdline: amd_iommu=off -> amd_iommu=on iommu=pt to enable amdxdna NPU probe (/dev/accel appears); reverting to amd_iommu=off regains ~6-7% llama.cpp prompt processing. KERNEL_PARAMS guard 13 -> 14.
-- network: NM Wi-Fi backend iwd -> wpa_supplicant (explicit; NM default). The iwd backend is upstream-experimental and reported to trigger MT7925 panics / KDE login issues. /etc/iwd/main.conf kept for opt-in (set NM_WIFI_BACKEND=iwd). Power-save off now via NM wifi.powersave=2 alone; iwd handoff self-skips so iwd.service is untouched.
-- fix: NM finalize restart no longer gated on iwd being installed; the wpa_supplicant drop-in now applies live regardless of iwd presence.
-- services: mask modemmanager.service (optdep, not installed; stops KDE D-Bus activation). MASK guard 9 -> 10.
+- cmdline: amd_iommu=off -> amd_iommu=on iommu=pt to enable amdxdna NPU probe. KERNEL_PARAMS guard 13 -> 14.
+- network: NM Wi-Fi backend iwd -> wpa_supplicant (NM default; iwd backend is upstream-experimental). /etc/iwd/main.conf kept for opt-in. Power-save off now via NM wifi.powersave=2; iwd.service untouched.
+- fix: NM finalize restart no longer gated on iwd being installed.
+- services: mask modemmanager.service (optdep, not installed). MASK guard 9 -> 10.
 - docs: README cmdline, Units, Phase 4, Known Issues, and Uninstall resynced.
 
 7.61.0 - 2026-06-21
@@ -24,12 +38,12 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.59.0 - 2026-06-21
 
-- boot: add clearcpuid=514 (UMIP off) alongside clearcpuid=rdseed; both tokens present. KERNEL_PARAMS guard 12 -> 13.
-- preflight: add _ry_check_umip_disabled (INFO while 514 set); keep _ry_check_rdseed_workaround_stale.
+- boot: add clearcpuid=514 (UMIP off) alongside clearcpuid=rdseed. KERNEL_PARAMS guard 12 -> 13.
+- preflight: add _ry_check_umip_disabled (INFO while 514 set).
 - sysctl: add vm.swappiness=150, vm.vfs_cache_pressure=50, vm.page-cluster=0 (zram-tuned). SYSCTL_VALUES guard 8 -> 11.
-- gpu: remove ry-amdgpu-strixhalo.conf and the TTM GTT cap (globals, generator, verify, UMA advisory, orphaned modprobe post-hook); kernel >= 6.16.9 auto-sizes GTT. SYSTEM_DESTINATIONS guard 16 -> 15, _RY_POST_HOOKS 19 -> 18, managed-file count 19 -> 18.
-- udev: note EPP balance_performance is a deliberate mid-bias, not max (value unchanged).
-- docs: README synced to all of the above; prose and tables trimmed, values byte-identical.
+- gpu: remove ry-amdgpu-strixhalo.conf and the TTM GTT cap (kernel >= 6.16.9 auto-sizes GTT). SYSTEM_DESTINATIONS guard 16 -> 15, _RY_POST_HOOKS 19 -> 18, managed-file count 19 -> 18.
+- udev: note EPP balance_performance is a deliberate mid-bias, not max.
+- docs: README synced; values byte-identical.
 
 7.58.1 - 2026-06-21
 

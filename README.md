@@ -33,7 +33,7 @@ One self-contained fish script — 19 embedded configs, no bundled dependencies 
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.58.0
+cd ry-install && git checkout v7.58.1
 chmod +x ry-install.fish
 ./ry-install.fish
 ```

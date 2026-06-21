@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.57.1 (2026-06-20) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.58.1 (2026-06-21) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.58.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.58.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -299,7 +299,7 @@ function _lock_pid_started_after --argument-names pid mtime --description "rc 0 
     set -l _btime (command awk '/^btime /{print $2; exit}' /proc/stat 2>/dev/null)
     string match -qr '^\d+$' -- "$_btime"; or return 1
     set -l _hz (command getconf CLK_TCK 2>/dev/null)
-    if not string match -qr '^[1-9]\d*$' -- "$_hz" # getconf absent: recover USER_HZ from CONFIG_HZ, else fail closed
+    if not string match -qr '^[1-9]\d*$' -- "$_hz" # getconf absent: recover USER_HZ from CONFIG_HZ
         set -l _cfg_hz (_kconfig_cache | string match -rg -- '^CONFIG_HZ=([1-9][0-9]*)$' | command head -n 1)
         if string match -qr '^[1-9]\d*$' -- "$_cfg_hz"
             set _hz $_cfg_hz; functions -q _log; and _log "LOCK_CLK_TCK_FROM_CONFIG: getconf CLK_TCK unavailable — using CONFIG_HZ=$_hz from /proc/config.gz"
@@ -544,8 +544,7 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
 end
 
 # ── EMBEDDED CONFIGURATION: DESTINATIONS, KERNEL PARAMS, PKGS, MASK ──
-# CANONICAL FILE ORDER (install-phase grouped): boot -> early-boot drop-ins -> network -> tuning -> user.
-# This array is the single source of truth; _content_ fns and _RY_POST_HOOKS mirror it. Keep all three in sync.
+# Canonical order (boot -> drop-ins -> network -> tuning -> user); source of truth, _content_ fns + _RY_POST_HOOKS mirror it.
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" \
     "/etc/kernel/cmdline" \
@@ -752,7 +751,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     _ir_validate_post_hooks
     for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
     _ir_precompute_caches
-    set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!#]' # \' splits/rejoins the class (no in-quote escapes); literal ' intentional, edit with care
+    set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!#]' # literal ' splits/rejoins the class; edit with care
     for _kp in $KERNEL_PARAMS
         if string match -qr -- "$_kp_metachar_re" "$_kp"
             _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"
@@ -1060,7 +1059,7 @@ end
 # ── JSON ESCAPE ──
 function _json_str --description "Escape a string for safe JSON embedding (RFC 8259 mandatory + DEL)"
     set -l s $argv[1]
-    if not string match -qr -- '[\x00-\x1f"\x5c\x7f]' "$s"; printf '%s' "$s"; return 0; end # fast path: no escape needed (\x5c = backslash; literal in class avoids GitHub TextMate grammar desync)
+    if not string match -qr -- '[\x00-\x1f"\x5c\x7f]' "$s"; printf '%s' "$s"; return 0; end # fast path: no escape needed (\x5c = backslash)
     set s (string replace -ar -- '\x5c' '\x5c\x5c' "$s" | string collect) # backslash first; \x5c literals avoid grammar desync
     set s (string replace -ar -- '"' '\\\\"' "$s" | string collect)
     set s (string replace -ar -- '\n' '\\\\n' "$s" | string collect)

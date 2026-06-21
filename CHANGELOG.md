@@ -2,24 +2,27 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.58.1 - 2026-06-21
+
+- fix: sync header-comment version to 7.58.0 (was stale 7.57.1; cosmetic, runtime reads $VERSION).
+- style: trim verbose source comments to vital information; rendered configs byte-identical.
+
 7.58.0 - 2026-06-20
 
-- refactor: move _configure_services_iwd_handoff to its Phase 4 execution position (5th, before enable/regdom); source order now matches run order. Adds matching IWD HANDOFF sub-banner. Pure source move, function body and behavior unchanged.
+- refactor: move _configure_services_iwd_handoff to its Phase 4 position (5th, before enable/regdom); source order matches run order. Adds IWD HANDOFF sub-banner. Behavior unchanged.
 
 7.57.3 - 2026-06-20
 
-- refactor: unify managed-file order across all four structures (SYSTEM_DESTINATIONS, _content_ fns, _RY_POST_HOOKS) onto one phase-grouped canonical order: boot -> drop-ins -> network -> tuning -> user. SYSTEM_DESTINATIONS is now the documented source of truth.
+- refactor: unify managed-file order across SYSTEM_DESTINATIONS, _content_ fns, _RY_POST_HOOKS onto one canonical order (boot -> drop-ins -> network -> tuning -> user). SYSTEM_DESTINATIONS is the source of truth.
 - docs: sync README Configuration and Managed Files tables to the canonical order.
-- verify: pure reorder — 19 rendered files byte-identical, dispatch globs disjoint, count guard 19=19.
 
 7.57.2 - 2026-06-20
 
-- style: collapse 8 flat embedded-data lists to single-line form (-66 lines, zero behavior change). Count-guarded lists and embedded source (awk, nft, MangoHud) left vertical by design.
-- verify: rendered output byte-identical, element counts unchanged, 10 mkinitcpio ordering invariants hold.
+- style: collapse 8 embedded-data lists to single-line form (-66 lines, zero behavior change). Count-guarded and source-bearing lists left vertical.
 
 7.57.1 - 2026-06-20
 
-- docs: audit README against script; trim prose and tables to vital info, all values byte-identical.
+- docs: reconcile README against script; trim prose and tables to vital info, all values byte-identical.
 - docs: add expand-cue lines above each collapsible so folded content is signposted.
 - docs: standardize TTM UMA precondition wording on the code-enforced ≤ 1 GiB threshold.
 

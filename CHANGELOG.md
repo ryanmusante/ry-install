@@ -2,6 +2,12 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.60.0 - 2026-06-21
+
+- mangohud: remove fps_metrics, cpu_temp, gpu_power, text_outline, toggle_hud directives from MangoHud.conf. text_outline and toggle_hud=Shift_R+F12 were MangoHud defaults (unchanged at runtime); HUD now omits CPU temp, GPU power, and FPS percentile lows.
+- verify: drop _verify_static_user toggle_hud=Shift_R+F12 assertion (directive no longer emitted); fps readout check retained.
+- docs: README MangoHud row resynced to the trimmed directive set.
+
 7.59.0 - 2026-06-21
 
 - boot: add clearcpuid=514 (UMIP off) alongside clearcpuid=rdseed; both tokens present. KERNEL_PARAMS guard 12 -> 13.
@@ -9,7 +15,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 - sysctl: add vm.swappiness=150, vm.vfs_cache_pressure=50, vm.page-cluster=0 (zram-tuned). SYSCTL_VALUES guard 8 -> 11.
 - gpu: remove ry-amdgpu-strixhalo.conf and the TTM GTT cap (globals, generator, verify, UMA advisory, orphaned modprobe post-hook); kernel >= 6.16.9 auto-sizes GTT. SYSTEM_DESTINATIONS guard 16 -> 15, _RY_POST_HOOKS 19 -> 18, managed-file count 19 -> 18.
 - udev: note EPP balance_performance is a deliberate mid-bias, not max (value unchanged).
-- docs: add expand-cue note above each details block so collapsed content is signposted.
+- docs: add expand-cue note above each <details> block so collapsed content is signposted.
 - docs: README synced to all of the above; prose and tables trimmed, values byte-identical.
 
 7.58.1 - 2026-06-21

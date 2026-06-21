@@ -33,7 +33,7 @@ One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.59.0
+cd ry-install && git checkout v7.60.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -111,7 +111,7 @@ Source of truth is the script; retune the `set -g` globals near the top.
 | RADV drirc | `radv_enable_unified_heap_on_apu=true` (Mesa 22.3 MR !18884) |
 | environment.d | gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
 | baloofilerc | KDE Baloo indexing disabled (`0600`) |
-| MangoHud.conf | readout-only HUD: GPU/CPU sensors, unified memory (`vram`+`ram`), FPS with 1%/0.1% lows. Auto-enabled via `MANGOHUD=1`; toggle `Shift_R+F12` (`0600`) |
+| MangoHud.conf | readout-only HUD: GPU/CPU sensors, unified memory (`vram`+`ram`), FPS + frametime. Auto-enabled via `MANGOHUD=1`; toggle on MangoHud's default `Shift_R+F12` (`0600`) |
 
 </details>
 

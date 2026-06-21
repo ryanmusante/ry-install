@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.59.0 (2026-06-21) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.60.0 (2026-06-21) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.59.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.60.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -886,20 +886,15 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
         "gpu_stats" \
         "gpu_core_clock" \
         "gpu_temp" \
-        "gpu_power" \
         "cpu_stats" \
         "cpu_mhz" \
-        "cpu_temp" \
         "vram" \
         "ram" \
         "fps" \
         "frametime" \
         "frame_timing" \
-        "fps_metrics=avg,0.01,0.001" \
         "font_size=20" \
-        "background_alpha=0.4" \
-        "text_outline" \
-        "toggle_hud=Shift_R+F12"
+        "background_alpha=0.4"
 end
 
 # ── CONTENT DISPATCH (_ry_get_file_content; fn = _content_$(_tmpfile_key dst)) ──
@@ -2285,7 +2280,6 @@ function _verify_static_user --description "Verify environment.d ENV_VARS + balo
     _echo "── MangoHud (readout-only HUD) ──"
     if _chk_file "$HOME/.config/MangoHud/MangoHud.conf"
         _chk_grep "$HOME/.config/MangoHud/MangoHud.conf" "fps" "MangoHud fps readout"
-        _chk_grep "$HOME/.config/MangoHud/MangoHud.conf" "toggle_hud=Shift_R+F12" "MangoHud toggle keybind"
     end
 end
 
@@ -4739,7 +4733,7 @@ function _post_drirc --argument-names target --description "Post-hook: notify dr
 end
 function _post_mangohud --argument-names target --description "Post-hook: notify MangoHud.conf change (read at next game/Vulkan app launch)"
     _info "MangoHud $target changed — applies at next launch under 'mangohud %command%' (no service restart needed)"
-    _info "  Toggle the HUD in-app with Shift_R+F12"
+    _info "  Toggle the HUD in-app with Shift_R+F12 (MangoHud default)"
     return 0
 end
 function _post_envd --argument-names target --description "Post-hook: notify session restart needed for environment.d"

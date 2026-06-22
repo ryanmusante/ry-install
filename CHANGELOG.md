@@ -2,39 +2,45 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.65.0 - 2026-06-21
+
+- mangohud: order fps/frametime/frame_timing ahead of GPU/CPU block; drop hardware-detail header comment. Rendered HUD element order changes; directive set unchanged.
+- style: trim redundant what-comments from embedded-data block (rendered configs byte-identical).
+- docs: condense 7.60.0-7.64.0 changelog entries; README synced.
+
 7.64.0 - 2026-06-21
 
-- drirc: remove /etc/drirc.d/95-ry-radv-apu.conf. radv_enable_unified_heap_on_apu is a per-game RADV workaround (whitelisted in Mesa 00-radv-defaults.conf, e.g. RDR2); the global name="Default" form was BC-250-specific, N/A to gfx1151 (reports uma:1 natively). Drops RADV_APU_OPTION, _vss_drirc, _vrs_drirc_xml, _grep_drirc_entry, _post_drirc.
-- network: remove /etc/iwd/main.conf (dormant iwd-backend config). NM_WIFI_BACKEND=iwd opt-in path retained. Drops IWD_ENABLE_NETWORK_CONFIG / IWD_DRIVER_QUIRKS / IWD_DNS_SERVICE, _vss_iwd, the dead iwd branch in _post_nm, and the iwd glob in backend detection.
-- network: 99-cachyos-nm.conf header comment tracks NM_WIFI_BACKEND instead of hardcoding "wpa_supplicant backend".
+- drirc: remove 95-ry-radv-apu.conf (BC-250-specific; gfx1151 reports uma:1 natively). Drops RADV_APU_OPTION, _vss_drirc, _vrs_drirc_xml, _grep_drirc_entry, _post_drirc.
+- network: remove dormant /etc/iwd/main.conf; NM_WIFI_BACKEND=iwd opt-in retained. Drops IWD_* vars, _vss_iwd, dead iwd branch in _post_nm, iwd backend-detection glob.
+- network: 99-cachyos-nm.conf header tracks NM_WIFI_BACKEND instead of hardcoding the backend.
 - guards: SYSTEM_DESTINATIONS 17 -> 15, _RY_POST_HOOKS 20 -> 18, managed-file count 20 -> 18.
 - docs: README synced.
 
 7.63.0 - 2026-06-21
 
-- bluetooth: add /etc/bluetooth/main.conf (AutoEnable=true, FastConnectable=true, paired-sink reconnect backoff). Fixes BlueZ skipping its AutoEnable default when main.conf absent. Guards SYSTEM_DESTINATIONS 16 -> 17, _RY_POST_HOOKS 19 -> 20, managed-file count 19 -> 20.
-- services: enable bluetooth.service (ships preset=disabled). EXPECTED_SERVICES guard 4 -> 5.
-- verify: add _vss_bluetooth (AutoEnable / FastConnectable / ReconnectAttempts).
+- bluetooth: add /etc/bluetooth/main.conf (AutoEnable, FastConnectable, reconnect backoff); fixes BlueZ skipping AutoEnable when absent. Guards SYSTEM_DESTINATIONS 16 -> 17, _RY_POST_HOOKS 19 -> 20, managed-file count 19 -> 20.
+- services: enable bluetooth.service (preset=disabled). EXPECTED_SERVICES 4 -> 5.
+- verify: add _vss_bluetooth.
 - docs: README synced.
 
 7.62.0 - 2026-06-21
 
-- cmdline: amd_iommu=off -> amd_iommu=on iommu=pt (amdxdna NPU probe). KERNEL_PARAMS guard 13 -> 14.
-- network: NM Wi-Fi backend iwd -> wpa_supplicant (NM default). /etc/iwd/main.conf kept for opt-in. Power-save off via NM wifi.powersave=2; iwd.service untouched.
-- fix: NM finalize restart no longer gated on iwd being installed.
-- services: mask modemmanager.service (optdep, not installed). MASK guard 9 -> 10.
+- cmdline: amd_iommu=off -> amd_iommu=on iommu=pt (amdxdna NPU probe). KERNEL_PARAMS 13 -> 14.
+- network: NM backend iwd -> wpa_supplicant; power-save off via wifi.powersave=2; iwd.service untouched.
+- fix: NM finalize restart no longer gated on iwd installed.
+- services: mask modemmanager.service. MASK 9 -> 10.
 - docs: README synced.
 
 7.61.0 - 2026-06-21
 
-- systemd: add NetworkManager-dispatcher logging drop-in (logging.conf, LogLevelMax=notice) to silence info-level nm-dispatcher journal spam (logs via journald, so StandardError=null is ineffective). Guards SYSTEM_DESTINATIONS 15 -> 16, _RY_POST_HOOKS 18 -> 19, managed-file count 18 -> 19.
-- fix: guard vercmp behind command -q in mesa soft-floor check; missing vercmp skips comparison instead of aborting preflight.
+- systemd: add NetworkManager-dispatcher logging.conf (LogLevelMax=notice) to silence info-level nm-dispatcher spam. Guards SYSTEM_DESTINATIONS 15 -> 16, _RY_POST_HOOKS 18 -> 19, managed-file count 18 -> 19.
+- fix: guard vercmp behind command -q in mesa soft-floor check.
 - docs: README synced.
 
 7.60.0 - 2026-06-21
 
-- mangohud: remove fps_metrics, cpu_temp, gpu_power, text_outline, toggle_hud from MangoHud.conf. text_outline and toggle_hud=Shift_R+F12 were defaults (unchanged at runtime).
-- verify: drop _verify_static_user toggle_hud assertion; fps readout check retained.
+- mangohud: remove fps_metrics, cpu_temp, gpu_power, text_outline, toggle_hud (last two were defaults).
+- verify: drop toggle_hud assertion; fps readout retained.
 - docs: README synced.
 
 7.59.0 - 2026-06-21

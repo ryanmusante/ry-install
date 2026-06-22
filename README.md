@@ -33,7 +33,7 @@ One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.64.0
+cd ry-install && git checkout v7.65.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.64.0 (2026-06-21) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.65.0 (2026-06-21) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.64.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.65.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -544,7 +544,7 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
 end
 
 # ── EMBEDDED CONFIGURATION: DESTINATIONS, KERNEL PARAMS, PKGS, MASK ──
-# Canonical order (boot->drop-ins->network->tuning->user); SYSTEM_DESTINATIONS is source of truth, _content_ fns + _RY_POST_HOOKS mirror it.
+# SYSTEM_DESTINATIONS is source of truth; _content_ fns + _RY_POST_HOOKS mirror this order
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" \
     "/etc/kernel/cmdline" \
@@ -567,19 +567,17 @@ if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_
 set --erase _ry_dst_count
 
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
-set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no # bootloader keys: LOADER_* + SDBOOT_*
+set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-# KERNEL_PARAMS → /etc/kernel/cmdline + sdboot LINUX_OPTIONS
 set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_pstate=active amd_iommu=on iommu=pt clearcpuid=rdseed clearcpuid=514 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
-set -g MKINITCPIO_MODULES amdgpu # MODULES + HOOKS + COMPRESSION
+set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
 # ── EMBEDDED DATA: SERVICE KEYS ──
-set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade # resolved drop-in keys
-set -g NM_DISPATCHER_LOGLEVELMAX notice # nm-dispatcher journal noise: drop info-level req:N 'connectivity-change' lines, keep notice+
-set -g COUNTRY US # COUNTRY: wireless regdom
-# LOGIND_IGNORE_KEYS → logind.conf.d (Handle*Key=ignore)
+set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade
+set -g NM_DISPATCHER_LOGLEVELMAX notice # drop info-level req:N 'connectivity-change' lines, keep notice+
+set -g COUNTRY US
 set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKey HandleSuspendKeyLongPress HandleHibernateKey HandleHibernateKeyLongPress HandleRebootKey HandleRebootKeyLongPress
 # Wi-Fi PS off: MT7925/mt76 PS in software causes latency spikes
 set -g NM_WIFI_BACKEND wpa_supplicant; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
@@ -589,7 +587,6 @@ set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
-# SYSCTL_VALUES → /etc/sysctl.d/95-ry-overrides.conf
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
@@ -868,10 +865,12 @@ end
 function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)"
     printf '%s\n' \
         "# ry-install: MangoHud readout-only HUD (managed file, do not edit by hand)" \
-        "# Beelink GTR9 Pro · Radeon 8060S (Strix Halo, gfx1151) · CachyOS Wayland · RADV" \
         "horizontal" \
         "legacy_layout=0" \
         "position=top-left" \
+        "fps" \
+        "frametime" \
+        "frame_timing" \
         "gpu_stats" \
         "gpu_core_clock" \
         "gpu_temp" \
@@ -879,9 +878,6 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
         "cpu_mhz" \
         "vram" \
         "ram" \
-        "fps" \
-        "frametime" \
-        "frame_timing" \
         "font_size=20" \
         "background_alpha=0.4"
 end

@@ -2,6 +2,10 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.67.0 - 2026-06-22
+
+- style: normalize lone $(string sub ...) inline command substitution in the RDSEED-microcode probe to fish (cmd) form; behavior byte-identical (math hex parse unchanged).
+
 7.66.0 - 2026-06-22
 
 - verify: split iwd-process state check out of _vrsv_wifi into _vrsv_wifi_iwd_proc; behavior unchanged.

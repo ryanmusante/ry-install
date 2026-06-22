@@ -3,7 +3,7 @@
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.66.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.67.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -3305,7 +3305,7 @@ function _ry_check_rdseed_workaround_stale --description "INFO when clearcpuid=r
     contains -- clearcpuid=rdseed $KERNEL_PARAMS; or return 0 # only relevant while the workaround is set
     set -l _ucode (string match -rg -- '^microcode\s*:\s*(\S+)$' < /proc/cpuinfo 2>/dev/null)[1]
     string match -qr '^0x[0-9a-fA-F]+$' -- "$_ucode"; or return 0 # microcode unreadable: silent (probe is best-effort)
-    set -l _have (math "0x$(string sub -s 3 -- $_ucode)"); set -l _fixed (math 0x0b700037) # model 0x70 RDSEED fix level
+    set -l _have (math "0x"(string sub -s 3 -- $_ucode)); set -l _fixed (math 0x0b700037) # model 0x70 RDSEED fix level
     if test "$_have" -ge "$_fixed"
         _info "  clearcpuid=rdseed still set, but microcode $_ucode >= 0x0b700037 (SB-7055 fix) — RDSEED clearing + its kernel taint can now be dropped from KERNEL_PARAMS"
         _log "RDSEED_WORKAROUND_STALE: microcode=$_ucode fixed>=0x0b700037"

@@ -4603,7 +4603,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (15 dispatch tags / 19 patterns / 15 _post_* functions; coverage enforced by _ir_validate_post_hooks) ──
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (15 dispatch tags / 18 patterns / 15 _post_* functions; coverage enforced by _ir_validate_post_hooks) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot_apply sub: mkinitcpio -P + sdboot-manage cascade"
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end

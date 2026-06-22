@@ -5,7 +5,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 7.65.0 - 2026-06-21
 
 - mangohud: order fps/frametime/frame_timing ahead of GPU/CPU block; drop hardware-detail header comment. Rendered HUD element order changes; directive set unchanged.
-- style: trim redundant what-comments from embedded-data block (rendered configs byte-identical).
+- style: trim redundant what-comments from embedded-data block (rendered configs byte-identical); fix stale post-hook banner count (19 -> 18 patterns).
 - docs: condense 7.60.0-7.64.0 changelog entries; README synced.
 
 7.64.0 - 2026-06-21

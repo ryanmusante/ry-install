@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.67.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.68.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46?style=flat-square&logo=fishshell&logoColor=white)](https://fishshell.com)
 [![systemd](https://img.shields.io/badge/systemd-%E2%89%A5%20250-30b9db?style=flat-square)](https://systemd.io)
@@ -34,7 +34,7 @@ One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.67.0
+cd ry-install && git checkout v7.68.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -99,7 +99,7 @@ Source of truth is the script; retune the `set -g` globals near the top.
 | File | Purpose & key values |
 |---|---|
 | loader.conf | `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
-| kernel cmdline | `rw root=UUID=<root>` (resolved) + `8250.nr_uarts=0`, `amd_pstate=active`, `amd_iommu=on`, `iommu=pt`, `clearcpuid=rdseed`, `clearcpuid=514`, `nowatchdog`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `quiet`, `split_lock_detect=off`, `tsc=reliable`, `usbcore.autosuspend=-1`, `zswap.enabled=0` |
+| kernel cmdline | `rw root=UUID=<root>` (resolved) + `8250.nr_uarts=0`, `amd_pstate=active`, `amd_iommu=on`, `iommu=pt`, `clearcpuid=514`, `nowatchdog`, `nvme_core.default_ps_max_latency_us=0`, `pcie_aspm.policy=performance`, `quiet`, `split_lock_detect=off`, `tsc=reliable`, `usbcore.autosuspend=-1`, `zswap.enabled=0` |
 | sdboot-manage.conf | `DEFAULT_ENTRY=manual`, `OVERWRITE_EXISTING=yes`, `REMOVE_EXISTING=yes` (wipes `loader/entries/` before regen), `REMOVE_OBSOLETE=yes`; `LINUX_OPTIONS`=cmdline params, `LINUX_FALLBACK_OPTIONS="quiet"` |
 | mkinitcpio.conf | `MODULES=(amdgpu)`; `HOOKS=(base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck)`; `COMPRESSION="zstd"` (`-1 -T0`); `BINARIES=()`, `FILES=()` |
 | resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` (plaintext DNS; diverges from CachyOS DoH default) |
@@ -151,10 +151,10 @@ Path/permission index for the 18 files (values in [Configuration](#configuration
 ## Safety & Reliability
 
 > [!WARNING]
-> This profile **masks `ufw`** and ships a minimal **nftables default-deny-inbound** ruleset: established/related and loopback accepted, `ct state invalid` dropped, inbound IPv4 ICMP scoped to diagnostics (`echo-reply`, `destination-unreachable`, `time-exceeded`, `parameter-problem` — inbound ping is **dropped**) plus essential ICMPv6 (NDP + echo/PMTUD/time-exceeded/param-problem) accepted, all other inbound dropped (including mDNS). `forward` drop, `output` accept.
+> Masks `ufw` and ships an nftables **default-deny-inbound** ruleset: established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 (NDP/PMTUD) accepted, all other inbound dropped. `forward` drop, `output` accept.
 
 > [!NOTE]
-> `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete every `loader/entries/` entry before regenerating — including foreign/other-OS BLS entries. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
+> `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
 
 | Feature | Detail |
 |---|---|
@@ -177,9 +177,9 @@ Path/permission index for the 18 files (values in [Configuration](#configuration
 | `10` | `--check` drift |
 | `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT) |
 
-Internal sentinels `11`–`13` (`GEN_NOFN`/`GEN_NOUUID`/`GEN_SYSCTL`) and `250`/`251`/`255` (`AS_MISUSE`/`RUN_TMPFAIL`/`RUN_MISUSE`) never reach a process exit; a generator failure surfaces only as the footer's `gen_fail` count. The only non-standard footer `exit_code` is `128+N` on signal.
+Sentinels `11`–`13` and `250`/`251`/`255` never reach a process exit (a generator failure surfaces as the footer `gen_fail` count).
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt — a mid-transaction `SIGKILL` corrupts `db.lck` or bypasses rollback), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR` (falls back to `/tmp`). Logs: one JSONL per run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl`, mode `0600`.
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `NO_COLOR`, `TMPDIR`. Logs: one JSONL per run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 
 </details>
 
@@ -208,16 +208,6 @@ Hardware gaps on Strix Halo.
 | RTL8127 10GbE | throughput drops under load | resolved — in-tree `r8169` (`f24f7b2f3af9` + suspend fix `ae1737e7339b`); no DKMS |
 | MT7925 | kernel panics, low TX power, random deauth | open — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
 | Strix Halo ACP | no ASoC machine driver | open — pending upstream (HDMI/USB audio unaffected) |
-
-### Configuration-level (intended behavior)
-
-The log lines quoted below are expected, not errors.
-
-| Item | Consequence | Action |
-|---|---|---|
-| `amd_iommu=on iommu=pt` | IOMMU in passthrough so the `amdxdna` NPU can probe (`/dev/accel/accel0`). NPU use still needs a matched driver+firmware stack (kernel 7.0+ in-tree or `amdxdna-dkms`). Disabling IOMMU reportedly gains ~6–7% on llama.cpp prompt processing. | For that GPU gain over the NPU: set `amd_iommu=off` (drop `iommu=pt`) in `KERNEL_PARAMS` (count guard `14 → 13`), re-run or `--install-file /etc/kernel/cmdline`, reboot. NPU then cannot probe (`aie2_init: Running without IOMMU not supported`). |
-| RDSEED on Zen 5 | Kernel flags RDSEED broken (`RDSEED32 is broken. Please update your firmware.`), which can break `-march=znver*` Qt/crypto callers. `clearcpuid=rdseed` masks it (taints kernel — cosmetic). | CVE-2025-62626 / AMD SB-7055. To restore: drop `clearcpuid=rdseed` (count guard `14 → 13`) and update microcode: `sudo pacman -Syu --needed amd-ucode linux-firmware && sudo mkinitcpio -P && reboot` (model `0x70` → `0x0b700037`). The `microcode` hook is already in `MKINITCPIO_HOOKS`. Preflight emits a non-fatal `INFO` (`RDSEED_WORKAROUND_STALE`) once running microcode reaches `0x0b700037`. |
-| UMIP (`umip_printk` bursts) | **Disabled by default** via `clearcpuid=514` — UMIP masked system-wide; the kernel no longer traps/emulates `SGDT`/`SIDT`/`SMSW` for 64-bit processes. Adds a 2nd kernel taint (cosmetic). | Deliberate latency choice. To restore: drop `clearcpuid=514` from `KERNEL_PARAMS` (count guard `14 → 13`) and reboot. Preflight emits a non-fatal `INFO` (`UMIP_DISABLED`) while the token is present. |
 
 ## Troubleshooting
 

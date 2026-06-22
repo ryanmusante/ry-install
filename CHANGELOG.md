@@ -2,6 +2,11 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.68.0 - 2026-06-22
+
+- boot: remove clearcpuid=rdseed from KERNEL_PARAMS. KERNEL_PARAMS 14 -> 13.
+- preflight: remove _ry_check_rdseed_workaround_stale.
+
 7.67.0 - 2026-06-22
 
 - style: normalize lone $(string sub ...) inline command substitution in the RDSEED-microcode probe to fish (cmd) form; behavior byte-identical (math hex parse unchanged).

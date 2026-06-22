@@ -2,6 +2,10 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.69.0 - 2026-06-22
+
+- cmdline: remove amd_iommu=on from KERNEL_PARAMS (redundant on AMD; IOMMU enabled by default, iommu=pt retained for passthrough mode). KERNEL_PARAMS 13 -> 12.
+
 7.68.0 - 2026-06-22
 
 - boot: remove clearcpuid=rdseed from KERNEL_PARAMS. KERNEL_PARAMS 14 -> 13.
@@ -148,53 +152,6 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 - verify: _vss_udev asserts GPU clock-floor; _vss_regdom asserts wireless-regdom.
 - init: _ir_validate_post_hooks refuses deploy on hook tag with no handler.
 
-7.48.0 - 2026-06-16
+7.48.0 and earlier - history trimmed
 
-- cmdline: iommu=pt -> amd_iommu=off.
-- udev: add gfx1151 GPU clock-floor to 60-ry-perf.rules.
-
-7.47.0 - 2026-06-16
-
-- mangohud: add gpu_power, cpu_temp, fps_metrics; drop gpu_mem_clock, swap.
-
-7.46.0 - 2026-06-16
-
-- docs: document TTM GTT cap, MT7925 power-save rationale, radv unified-heap provenance.
-
-7.44.0 - 2026-06-15
-
-- mangohud: add readout-only MangoHud.conf; env adds MANGOHUD=1.
-- json: _json_str escapes control chars over whole value.
-- disk: /boot free-space gate only when /boot is own mount.
-- help: condense _ry_show_help.
-
-7.43.0 - 2026-06-14
-
-- install-file: reject any path component longer than NAME_MAX (255).
-
-7.41.0 - 2026-06-14
-
-- network: keep iwd as NM backend; handoff disables iwd.service.
-- packages: drop wpa_supplicant from PKGS_ADD.
-- baloo: add baloofilerc (Indexing-Enabled=false).
-- cmdline: remove amdgpu.ppfeaturemask.
-- guard: sourced-execution guard refuses when status filename is '-'.
-- regdom: remove --country; regdomain fixed at US.
-
-7.39.0 - 2026-06-13
-
-- udev: merge ioscheduler + EPP rules into 60-ry-perf.rules; pin EPP performance.
-- verify: assert nftables ICMPv6 NDP/PMTUD accept.
-- fstab: add line-count parity gate ahead of size floor.
-- nftables: accept inbound ICMPv6 NDP and PMTUD.
-
-7.34.0 - 2026-06-12
-
-- cmdline: pcie_aspm=off -> pcie_aspm.policy=performance.
-- sysctl: add vm.compaction_proactiveness=0, vm.max_map_count=2147483642.
-- preflight: cmp is a hard dependency for the mkinitcpio.conf revert gate.
-
-7.28.0 - 2026-06-12
-
-- packages: remove kdeconnect, add mkinitcpio-firmware, drop AUR.
-- firewall: reduce inbound to established/related, loopback, ICMPv4.
+- Entries for 7.48.0 and earlier removed from this file. See git tags / history for the full record.

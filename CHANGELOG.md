@@ -2,87 +2,81 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.66.0 - 2026-06-22
+
+- verify: split iwd-process state check out of _vrsv_wifi into _vrsv_wifi_iwd_proc; behavior unchanged.
+- style: trim verbose source comments to vital information; rendered configs byte-identical.
+
 7.65.0 - 2026-06-21
 
-- mangohud: order fps/frametime/frame_timing ahead of GPU/CPU block; drop hardware-detail header comment. Rendered HUD element order changes; directive set unchanged.
-- style: trim redundant what-comments from embedded-data block (rendered configs byte-identical); fix stale post-hook banner count (19 -> 18 patterns).
-- docs: condense 7.60.0-7.64.0 changelog entries; README synced.
+- mangohud: order fps/frametime ahead of GPU/CPU block; drop header comment.
+- style: trim redundant embedded-data comments; fix post-hook banner count (19 -> 18).
 
 7.64.0 - 2026-06-21
 
-- drirc: remove 95-ry-radv-apu.conf (BC-250-specific; gfx1151 reports uma:1 natively). Drops RADV_APU_OPTION, _vss_drirc, _vrs_drirc_xml, _grep_drirc_entry, _post_drirc.
-- network: remove dormant /etc/iwd/main.conf; NM_WIFI_BACKEND=iwd opt-in retained. Drops IWD_* vars, _vss_iwd, dead iwd branch in _post_nm, iwd backend-detection glob.
-- network: 99-cachyos-nm.conf header tracks NM_WIFI_BACKEND instead of hardcoding the backend.
+- drirc: remove 95-ry-radv-apu.conf (gfx1151 reports uma:1 natively).
+- network: remove dormant iwd/main.conf; NM_WIFI_BACKEND=iwd opt-in retained.
+- network: 99-cachyos-nm.conf header tracks NM_WIFI_BACKEND.
 - guards: SYSTEM_DESTINATIONS 17 -> 15, _RY_POST_HOOKS 20 -> 18, managed-file count 20 -> 18.
-- docs: README synced.
 
 7.63.0 - 2026-06-21
 
-- bluetooth: add /etc/bluetooth/main.conf (AutoEnable, FastConnectable, reconnect backoff); fixes BlueZ skipping AutoEnable when absent. Guards SYSTEM_DESTINATIONS 16 -> 17, _RY_POST_HOOKS 19 -> 20, managed-file count 19 -> 20.
-- services: enable bluetooth.service (preset=disabled). EXPECTED_SERVICES 4 -> 5.
+- bluetooth: add main.conf (AutoEnable, FastConnectable, reconnect backoff).
+- services: enable bluetooth.service. EXPECTED_SERVICES 4 -> 5.
 - verify: add _vss_bluetooth.
-- docs: README synced.
 
 7.62.0 - 2026-06-21
 
-- cmdline: amd_iommu=off -> amd_iommu=on iommu=pt (amdxdna NPU probe). KERNEL_PARAMS 13 -> 14.
-- network: NM backend iwd -> wpa_supplicant; power-save off via wifi.powersave=2; iwd.service untouched.
-- fix: NM finalize restart no longer gated on iwd installed.
+- cmdline: amd_iommu=off -> amd_iommu=on iommu=pt. KERNEL_PARAMS 13 -> 14.
+- network: NM backend iwd -> wpa_supplicant; power-save off via wifi.powersave=2.
 - services: mask modemmanager.service. MASK 9 -> 10.
-- docs: README synced.
 
 7.61.0 - 2026-06-21
 
-- systemd: add NetworkManager-dispatcher logging.conf (LogLevelMax=notice) to silence info-level nm-dispatcher spam. Guards SYSTEM_DESTINATIONS 15 -> 16, _RY_POST_HOOKS 18 -> 19, managed-file count 18 -> 19.
+- systemd: add NetworkManager-dispatcher logging.conf (LogLevelMax=notice).
 - fix: guard vercmp behind command -q in mesa soft-floor check.
-- docs: README synced.
 
 7.60.0 - 2026-06-21
 
-- mangohud: remove fps_metrics, cpu_temp, gpu_power, text_outline, toggle_hud (last two were defaults).
+- mangohud: remove fps_metrics, cpu_temp, gpu_power, text_outline, toggle_hud.
 - verify: drop toggle_hud assertion; fps readout retained.
-- docs: README synced.
 
 7.59.0 - 2026-06-21
 
-- boot: add clearcpuid=514 (UMIP off) alongside clearcpuid=rdseed. KERNEL_PARAMS guard 12 -> 13.
+- boot: add clearcpuid=514 (UMIP off). KERNEL_PARAMS 12 -> 13.
 - preflight: add _ry_check_umip_disabled (INFO while 514 set).
-- sysctl: add vm.swappiness=150, vm.vfs_cache_pressure=50, vm.page-cluster=0 (zram-tuned). SYSCTL_VALUES guard 8 -> 11.
-- gpu: remove ry-amdgpu-strixhalo.conf and the TTM GTT cap (kernel >= 6.16.9 auto-sizes GTT). Guards SYSTEM_DESTINATIONS 16 -> 15, _RY_POST_HOOKS 19 -> 18, managed-file count 19 -> 18.
-- udev: note EPP balance_performance is a deliberate mid-bias, not max.
-- docs: README synced.
+- sysctl: add vm.swappiness=150, vm.vfs_cache_pressure=50, vm.page-cluster=0. SYSCTL_VALUES 8 -> 11.
+- gpu: remove ry-amdgpu-strixhalo.conf (kernel >= 6.16.9 auto-sizes GTT). SYSTEM_DESTINATIONS 16 -> 15.
 
 7.58.1 - 2026-06-21
 
-- fix: sync header-comment version (was stale 7.57.1; cosmetic, runtime reads $VERSION).
+- fix: sync header-comment version (cosmetic; runtime reads $VERSION).
 - style: trim verbose source comments; rendered configs byte-identical.
 
 7.58.0 - 2026-06-20
 
-- refactor: move _configure_services_iwd_handoff to its Phase 4 slot (5th, before enable/regdom); source order matches run order. Behavior unchanged.
+- refactor: move _configure_services_iwd_handoff to its Phase 4 slot. Behavior unchanged.
 
 7.57.3 - 2026-06-20
 
-- refactor: unify managed-file order across SYSTEM_DESTINATIONS, _content_ fns, _RY_POST_HOOKS onto one canonical order (boot -> drop-ins -> network -> tuning -> user); SYSTEM_DESTINATIONS is source of truth.
-- docs: README synced.
+- refactor: unify managed-file order onto one canonical order; SYSTEM_DESTINATIONS is source of truth.
 
 7.57.2 - 2026-06-20
 
-- style: collapse 8 embedded-data lists to single-line form (-66 lines, zero behavior change). Count-guarded and source-bearing lists left vertical.
+- style: collapse 8 embedded-data lists to single-line form (-66 lines, zero behavior change).
 
 7.57.1 - 2026-06-20
 
-- docs: reconcile README against script; trim prose and tables, values byte-identical. Add expand-cue lines above each collapsible. Standardize TTM UMA wording on the code-enforced <= 1 GiB threshold.
+- docs: reconcile README against script; trim prose and tables, values byte-identical.
 
 7.57.0 - 2026-06-20
 
-- pkg: add rtkit to PKGS_ADD; complements realtime-privileges.
-- boot: add clearcpuid=rdseed to KERNEL_PARAMS; masks the broken Zen5 RDSEED flag (CVE-2025-62626).
+- pkg: add rtkit to PKGS_ADD.
+- boot: add clearcpuid=rdseed (masks broken Zen5 RDSEED flag, CVE-2025-62626).
 - guard: _ir_validate_counts (KERNEL_PARAMS 11 -> 12, PKGS_ADD 16 -> 17).
 
 7.56.0 - 2026-06-20
 
-- docs: README Known Issues adds Configuration-level subsection (amd_iommu/NPU, TTM UMA WARN, Zen5 RDSEED).
 - cpu: governor performance -> powersave so EPP is honored under amd_pstate=active.
 - cpu: EPP performance -> balance_performance (udev rule + verify).
 - preflight: soft-warn mesa < 25.3 for gfx1151 RADV stability; non-fatal.
@@ -90,7 +84,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 7.55.2 - 2026-06-20
 
 - docs: add badge row, Contents table, Contributing and Security sections.
-- docs: fold long Configuration, Managed Files, and exit-code tables behind <details>.
+- docs: fold long tables behind <details>.
 
 7.55.1 - 2026-06-20
 
@@ -100,7 +94,6 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 - udev: scope GPU clock-floor rule to card device (KERNEL card[0-9], ACTION add).
 - verify: _vss_udev asserts GPU rule card-scoped.
-- docs: README notes why realtime/i2c group steps are hinted, not auto-run.
 
 7.54.14 - 2026-06-19
 
@@ -114,12 +107,11 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 - comment: sync ten --description strings to bodies.
 - fix: restore RY_RUN_TIMEOUT invalid-value warning quote-split.
-- docs: trim README; runnable Uninstall commands; name hard-dependency set.
 - preflight: list all four probe hosts in fallback.
 
 7.54.7 - 2026-06-18
 
-- docs: correct Phase 4 order, GTT label, systemd badge, exit-2 paths, cmdline order, ABRT 134.
+- docs: correct Phase 4 order, GTT label, systemd badge, exit-2 paths.
 - argparse: replace deprecated status basename with path basename.
 - signals: remove unreachable SIGUSR1/SIGUSR2 cases from _cleanup.
 
@@ -127,9 +119,8 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 - firewall: flush ufw only after nftables default-deny live; else retain + warn.
 - install-file: boot/cmdline post-hook exiting boot-critical prints DO-NOT-REBOOT.
-- udev: tighten NVMe match to nvme[0-9]*n[0-9]*; warn when udevadm verify unavailable.
+- udev: tighten NVMe match to nvme[0-9]*n[0-9]*.
 - verify: _vre_fstab fails noatime+relatime/atime/strictatime.
-- vram probe: floor dedicated-VRAM MiB division.
 
 7.53.0 - 2026-06-17
 
@@ -166,7 +157,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 - mangohud: add readout-only MangoHud.conf; env adds MANGOHUD=1.
 - json: _json_str escapes control chars over whole value.
 - disk: /boot free-space gate only when /boot is own mount.
-- help: condense _ry_show_help; drop pacdiff suggestion.
+- help: condense _ry_show_help.
 
 7.43.0 - 2026-06-14
 
@@ -180,7 +171,6 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 - cmdline: remove amdgpu.ppfeaturemask.
 - guard: sourced-execution guard refuses when status filename is '-'.
 - regdom: remove --country; regdomain fixed at US.
-- preflight: fix SYSTEM_DESTINATIONS count check (17 -> 16).
 
 7.39.0 - 2026-06-13
 
@@ -188,7 +178,6 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 - verify: assert nftables ICMPv6 NDP/PMTUD accept.
 - fstab: add line-count parity gate ahead of size floor.
 - nftables: accept inbound ICMPv6 NDP and PMTUD.
-- sysctl: demote tcp_bbr module-version line to advisory.
 
 7.34.0 - 2026-06-12
 

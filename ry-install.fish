@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.65.0 (2026-06-21) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.66.0 (2026-06-22) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.65.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.66.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18 # gtr_pro token referenced by fn names + JSONL log
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -543,8 +543,7 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
     _teardown exit $_exit_status
 end
 
-# ── EMBEDDED CONFIGURATION: DESTINATIONS, KERNEL PARAMS, PKGS, MASK ──
-# SYSTEM_DESTINATIONS is source of truth; _content_ fns + _RY_POST_HOOKS mirror this order
+# ── EMBEDDED CONFIG: DESTINATIONS (source of truth; _content_ fns + _RY_POST_HOOKS mirror order) ──
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" \
     "/etc/kernel/cmdline" \
@@ -576,7 +575,7 @@ set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
 
 # ── EMBEDDED DATA: SERVICE KEYS ──
 set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC allow-downgrade
-set -g NM_DISPATCHER_LOGLEVELMAX notice # drop info-level req:N 'connectivity-change' lines, keep notice+
+set -g NM_DISPATCHER_LOGLEVELMAX notice # drop info-level dispatcher spam, keep notice+
 set -g COUNTRY US
 set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKey HandleSuspendKeyLongPress HandleHibernateKey HandleHibernateKeyLongPress HandleRebootKey HandleRebootKeyLongPress
 # Wi-Fi PS off: MT7925/mt76 PS in software causes latency spikes
@@ -1473,7 +1472,7 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     _log "CHECK_GREP: $file for '$pattern'"
     set -l use_sudo false
     string match -q '/boot/*' -- "$file"; and set use_sudo true
-    if test "$use_sudo" = false; and not test -r "$file"; and _is_system_dst "$file"; set use_sudo true; end # sudo read avoids false DENIED on perms-drifted file
+    if test "$use_sudo" = false; and not test -r "$file"; and _is_system_dst "$file"; set use_sudo true; end # sudo read avoids false DENIED on perms drift
     _cg_access_ok "$file" "$label" $use_sudo; or return 1
     set -l _grep_flags -wF
     _as $use_sudo grep -v '^[[:space:]]*#' -- "$file" 2>/dev/null | command grep $_grep_flags -- "$pattern" >/dev/null 2>/dev/null
@@ -1607,7 +1606,7 @@ end
 function _ry_check_disk_space --description "Verify sufficient free disk space for installation"
     _log "DISK_CHECK_START"
     _check_avail / 1073741824 GiB $ROOT_AVAIL_CRIT $ROOT_AVAIL_WARN; or return 1
-    set -l _boot_mnt (command findmnt -no TARGET /boot 2>/dev/null | string trim --) # dedicated /boot gate only when /boot is its own mount
+    set -l _boot_mnt (command findmnt -no TARGET /boot 2>/dev/null | string trim --) # gate only when /boot is its own mount
     if test "$_boot_mnt" = /boot
         _check_avail /boot 1048576 MiB $BOOT_SPACE_CRIT $BOOT_SPACE_WARN; or return 1
     else
@@ -2821,6 +2820,20 @@ function _vrsv_wifi_nm_backend --description "_vrsv_wifi sub: verify NM effectiv
         _fail "  NM effective wifi.backend: $_eff (expected: $NM_WIFI_BACKEND)"
     end
 end
+function _vrsv_wifi_iwd_proc --description "_vrsv_wifi sub: report iwd process state vs NM_WIFI_BACKEND"
+    command -q pgrep; or return 0
+    if command pgrep -x iwd >/dev/null
+        if test "$NM_WIFI_BACKEND" = iwd
+            _info "  iwd process: running (NM-activated)"
+        else
+            _warn "  iwd process: running (unexpected — NM backend is $NM_WIFI_BACKEND; iwd should be inactive)"
+        end
+    else if test "$NM_WIFI_BACKEND" = iwd
+        _info "  iwd process: not currently active (NM activates it on demand)"
+    else
+        _info "  iwd process: inactive (expected — NM backend is $NM_WIFI_BACKEND)"
+    end
+end
 function _vrsv_wifi --description "Runtime services check: WiFi + iwd backend + NM state"
     _echo
     _echo "WIFI STATE"
@@ -2838,19 +2851,7 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd backend + 
     else
         _warn "  WiFi interface: NOT DETECTED"
     end
-    if command -q pgrep
-        if command pgrep -x iwd >/dev/null
-            if test "$NM_WIFI_BACKEND" = iwd
-                _info "  iwd process: running (NM-activated)"
-            else
-                _warn "  iwd process: running (unexpected — NM backend is $NM_WIFI_BACKEND; iwd should be inactive)"
-            end
-        else if test "$NM_WIFI_BACKEND" = iwd
-            _info "  iwd process: not currently active (NM activates it on demand)"
-        else
-            _info "  iwd process: inactive (expected — NM backend is $NM_WIFI_BACKEND)"
-        end
-    end
+    _vrsv_wifi_iwd_proc
     _vrsv_wifi_nm_backend
     if command -q nmcli
         set -l nm_wifi_enabled (command nmcli -t -f WIFI general 2>/dev/null | string trim --)
@@ -3464,7 +3465,7 @@ function _ip_run_and_verify --description "_install_packages sub: run pacman -Sy
     set -l pkgs_to_install $argv; set -l _err false
     if not _ip_pacman_invoke $pkgs_to_install; set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; set _err true; end
     _info "Verifying package installation..."
-    if not command -q pacman; _err "pacman binary unavailable after install — cannot verify package state"; set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; set _err true; return 1; end # rc 127 (vanished pacman) must not read as all-present
+    if not command -q pacman; _err "pacman binary unavailable after install — cannot verify package state"; set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; set _err true; return 1; end # vanished pacman must not read as all-present
     set -l missing_pkgs (command pacman -T -- $pkgs_to_install 2>/dev/null); set -l _pt_rc $status
     if test "$_pt_rc" -ne 0; and test "$_pt_rc" -ne 127 # pacman -T rc: 0=present 127=targets-missing
         _err "pacman -T failed (rc=$_pt_rc) — cannot verify install state"
@@ -4603,7 +4604,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (15 dispatch tags / 18 patterns / 15 _post_* functions; coverage enforced by _ir_validate_post_hooks) ──
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (18 patterns / 15 tags / 15 _post_* fns; coverage enforced by _ir_validate_post_hooks) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot_apply sub: mkinitcpio -P + sdboot-manage cascade"
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end

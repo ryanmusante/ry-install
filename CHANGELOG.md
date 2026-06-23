@@ -2,6 +2,10 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.69.1 - 2026-06-22
+
+- refactor: extract _content_fn_for helper to single-source the _content_$(_tmpfile_key dst) generator-name derivation; _ry_get_file_content and _ry_validate_configs now share it. Behavior byte-identical across all 18 embedded configs; no interface change.
+
 7.69.0 - 2026-06-22
 
 - cmdline: remove amd_iommu=on from KERNEL_PARAMS (redundant on AMD; IOMMU enabled by default, iommu=pt retained for passthrough mode). KERNEL_PARAMS 13 -> 12.

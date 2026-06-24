@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.69.1 (2026-06-22) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.70.0 (2026-06-23) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.69.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.70.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 
@@ -554,7 +554,6 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf" \
     "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     "/etc/iw-regdomain" \
-    "/etc/conf.d/wireless-regdom" \
     "/etc/bluetooth/main.conf" \
     "/etc/nftables.conf" \
     "/etc/default/cpupower-service.conf" \
@@ -581,8 +580,8 @@ set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKe
 # Wi-Fi PS off: MT7925/mt76 PS in software causes latency spikes
 set -g NM_WIFI_BACKEND wpa_supplicant; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
 set -g CPUPOWER_GOVERNOR powersave
-# Bluetooth: power adapter on at service start/resume; reconnect backoff for paired sinks
-set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 7; set -g BT_RECONNECT_INTERVALS "1,2,4,8,16,32,64"
+# Bluetooth: power adapter on at service start/resume; reconnect retry for paired sinks
+set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 3
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
@@ -692,13 +691,13 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:18 \
+        _RY_POST_HOOKS:17 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_NTSYNC_MODLOAD_CONFS:3 \
         _RY_TMPDIR_GLOBS:6 \
-        SYSTEM_DESTINATIONS:15 \
+        SYSTEM_DESTINATIONS:14 \
         USER_DESTINATIONS:3
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -805,11 +804,8 @@ end
 function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"
     printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
 end
-function _content__etc_conf.d_wireless-regdom --description "Generate content for /etc/conf.d/wireless-regdom (set-wireless-regdom input)"
-    printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "WIRELESS_REGDOM=\"$COUNTRY\""
-end
-function _content__etc_bluetooth_main.conf --description "Generate content for /etc/bluetooth/main.conf (adapter auto-power-on + paired-sink reconnect backoff)"
-    printf '%s\n' "# ry-install: BlueZ daemon config (managed file, do not edit by hand)" "[General]" "FastConnectable=$BT_FAST_CONNECTABLE" "" "[Policy]" "AutoEnable=$BT_AUTO_ENABLE" "ReconnectAttempts=$BT_RECONNECT_ATTEMPTS" "ReconnectIntervals=$BT_RECONNECT_INTERVALS"
+function _content__etc_bluetooth_main.conf --description "Generate content for /etc/bluetooth/main.conf (adapter auto-power-on + paired-sink reconnect)"
+    printf '%s\n' "# ry-install: BlueZ daemon config (managed file, do not edit by hand)" "[General]" "FastConnectable=$BT_FAST_CONNECTABLE" "" "[Policy]" "AutoEnable=$BT_AUTO_ENABLE" "ReconnectAttempts=$BT_RECONNECT_ATTEMPTS"
 end
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset"
     printf '%s\n' \
@@ -1619,7 +1615,7 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
     return 0
 end
 
-# ── MKINITCPIO HOOK + MODULE VALIDATORS (10 ORDERING INVARIANTS: 8 pairwise + base-first + fsck-last) ──
+# ── MKINITCPIO HOOK + MODULE VALIDATORS (ordering invariants) ──
 function _mkinitcpio_hook_exists --argument-names hook --description "True iff hook file exists in any mkinitcpio install/hooks dir"
     test -z "$hook"; and return 1
     for _d in /usr/lib/initcpio/install /usr/lib/initcpio/hooks /etc/initcpio/install /etc/initcpio/hooks; test -f "$_d/$hook"; and return 0; end
@@ -1770,14 +1766,6 @@ function _grep_regdomain_entry --argument-names dst --description 'Validate a CO
     end
     return 0
 end
-function _grep_wireless_regdom_entry --argument-names dst --description 'Validate a WIRELESS_REGDOM="<ISO-3166 alpha-2>" line (/etc/conf.d/wireless-regdom; # comments allowed)'
-    test (count $argv) -lt 2; and _log "BUG: _grep_wireless_regdom_entry called without content (dst=$dst)"; and return 2
-    string match -qr '^[[:space:]]*WIRELESS_REGDOM="[A-Z][A-Z]"[[:space:]]*$' -- $argv[2..-1]; or begin
-        _fail "  $dst: no WIRELESS_REGDOM=\"<ISO-3166 alpha-2>\" line found"
-        return 1
-    end
-    return 0
-end
 function _grep_udev_entry --argument-names dst --description 'Validate ≥1 udev rule line (KEY{...}op match/assignment, # comments allowed)'
     test (count $argv) -lt 2; and _log "BUG: _grep_udev_entry called without content (dst=$dst)"; and return 2
     string match -qr '^[[:space:]]*[A-Z][A-Z_]*(\{[^}]*\})?[[:space:]]*(==|!=|\+=|:=|=)' -- $argv[2..-1]; or begin
@@ -1835,8 +1823,6 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_modprobe_entry "$dst" $_content
         case '/etc/iw-regdomain'
             _grep_regdomain_entry "$dst" $_content
-        case '/etc/conf.d/wireless-regdom'
-            _grep_wireless_regdom_entry "$dst" $_content
         case '*/udev/rules.d/*'
             _grep_udev_entry "$dst" $_content
         case '*/nftables.conf'
@@ -2195,10 +2181,9 @@ function _vss_sysctl --description "_verify_static_system sub: sysctl drop-in ke
         for entry in $SYSCTL_VALUES; set -l parts (string split -m1 '=' -- "$entry"); set -l key $parts[1]; set -l val $parts[2]; _chk_grep /etc/sysctl.d/95-ry-overrides.conf "$key = $val" "$key=$val"; end
     end
 end
-function _vss_regdom --description "_verify_static_system sub: wireless regdom (/etc/iw-regdomain + /etc/conf.d/wireless-regdom)"
-    _echo "── wireless regdom (iw-regdomain + wireless-regdom) ──"
+function _vss_regdom --description "_verify_static_system sub: wireless regdom (/etc/iw-regdomain)"
+    _echo "── wireless regdom (iw-regdomain) ──"
     _chk_file /etc/iw-regdomain; and _chk_grep /etc/iw-regdomain "COUNTRY=$COUNTRY" "iw-regdomain COUNTRY=$COUNTRY"
-    _chk_file /etc/conf.d/wireless-regdom; and _chk_grep /etc/conf.d/wireless-regdom "WIRELESS_REGDOM=\"$COUNTRY\"" "wireless-regdom $COUNTRY"
 end
 function _vss_bluetooth --description "_verify_static_system sub: BlueZ main.conf (adapter auto-power-on)"
     _echo "── bluetooth (main.conf) ──"
@@ -3339,8 +3324,8 @@ function _install_preflight --description "Run all preflight checks before insta
     if test -n "$_mesa"
         if not command -q vercmp
             _log "MESA_SOFT_FLOOR_SKIP: vercmp absent (pacman-provided) — gfx1151 mesa version not compared"
-        else if test (command vercmp $_mesa 25.3) -lt 0
-            _warn_loud "mesa $_mesa < 25.3 — gfx1151 RADV may be unstable (soft floor)"
+        else if test (command vercmp $_mesa 26.0) -lt 0
+            _warn_loud "mesa $_mesa < 26.0 — gfx1151 RADV may be unstable (soft floor)"
             _log "MESA_BELOW_SOFT_FLOOR: $_mesa"
         end
     end
@@ -4521,7 +4506,6 @@ set -g _RY_POST_HOOKS \
     "*/NetworkManager-dispatcher.service.d/*|nmdispatch" \
     "*/NetworkManager/conf.d/*|nm" \
     "/etc/iw-regdomain|regdom" \
-    "/etc/conf.d/wireless-regdom|regdom" \
     "/etc/bluetooth/main.conf|bluetooth" \
     "/etc/nftables.conf|nft" \
     "/etc/default/cpupower-service.conf|cpupower" \
@@ -4595,7 +4579,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (18 patterns / 15 tags / 15 _post_* fns; coverage enforced by _ir_validate_post_hooks) ──
+# ── --INSTALL-FILE: POST-HOOK HANDLERS (coverage enforced by _ir_validate_post_hooks) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot_apply sub: mkinitcpio -P + sdboot-manage cascade"
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end

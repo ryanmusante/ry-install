@@ -2,6 +2,14 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.70.0 - 2026-06-23
+
+- regdom: remove /etc/conf.d/wireless-regdom (Gentoo/OpenRC; no systemd consumer); /etc/iw-regdomain retained. SYSTEM_DESTINATIONS 15 -> 14, managed configs 18 -> 17, _RY_POST_HOOKS 18 -> 17.
+- bluetooth: ReconnectAttempts 7 -> 3; remove ReconnectIntervals (BlueZ default backoff applies).
+- preflight: raise mesa soft-floor warn 25.3 -> 26.0 to track current stable RADV gfx1151 line; non-fatal.
+- style: trim verbose section-divider comments to vital; rendered configs byte-identical.
+- docs: trim README prose and tables to vital; reconcile managed-file count 18 -> 17.
+
 7.69.1 - 2026-06-22
 
 - refactor: extract _content_fn_for helper to single-source the _content_$(_tmpfile_key dst) generator-name derivation; _ry_get_file_content and _ry_validate_configs now share it. Behavior byte-identical across all 18 embedded configs; no interface change.

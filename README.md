@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.69.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.70.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46?style=flat-square&logo=fishshell&logoColor=white)](https://fishshell.com)
 [![systemd](https://img.shields.io/badge/systemd-%E2%89%A5%20250-30b9db?style=flat-square)](https://systemd.io)
@@ -9,7 +9,7 @@
 > Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro
 > (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
 
-One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
+One self-contained fish script: 17 embedded configs, gaming/LLM desktop profile.
 
 ## Contents
 
@@ -34,7 +34,7 @@ One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.69.1
+cd ry-install && git checkout v7.70.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -52,7 +52,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Hard deps abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils (`id`, `timeout --foreground/--kill-after`, `mv -T`, `df --output`), findutils (`find -maxdepth/-printf`), diffutils (`cmp`). busybox/uutils rejected. NTP sync and `paccache` only warn; sudo must be cached.
+Hard deps abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils, findutils, diffutils. busybox/uutils rejected. NTP sync and `paccache` only warn; sudo must be cached.
 
 ## Usage
 
@@ -69,7 +69,7 @@ Hard deps abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitc
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path (PATH_MAX 4096, NAME_MAX 255, no control chars) resolving via `realpath -m` to a managed destination. Malformed args rejected before dispatch (exit 2); well-formed non-managed paths after ("Not a managed file", exit 2).
+`--verify`/`--check` are lock-free and read-only. `--install-file` requires an absolute path resolving via `realpath -m` to a managed destination. Malformed args rejected before dispatch (exit 2); well-formed non-managed paths after ("Not a managed file", exit 2).
 
 ## Install Flow
 
@@ -79,7 +79,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 |---|---|---|
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
-| 3 | Configuration | deploy 18 embedded configs atomically |
+| 3 | Configuration | deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
@@ -94,7 +94,7 @@ Source of truth is the script; retune the `set -g` globals near the top.
 > The full per-file reference is collapsed below — click to expand.
 
 <details>
-<summary><strong>Full managed-file reference</strong> — all 18 files, key values</summary>
+<summary><strong>Full managed-file reference</strong> — all 17 files, key values</summary>
 
 | File | Purpose & key values |
 |---|---|
@@ -105,9 +105,9 @@ Source of truth is the script; retune the `set -g` globals near the top.
 | resolved | `MulticastDNS=no`, `LLMNR=no`, `DNSOverTLS=no`, `DNSSEC=allow-downgrade` (plaintext DNS; diverges from CachyOS DoH default) |
 | logind | `Handle{Power,Suspend,Hibernate,Reboot}Key`=ignore (+ `LongPress` variants) |
 | NetworkManager-dispatcher | `LogLevelMax=notice` drop-in — silences routine info-level `nm-dispatcher` journal spam (journald transport, so `StandardError=null` is ineffective) |
-| NetworkManager | wpa_supplicant backend (`wifi.backend=wpa_supplicant`, NM default — chosen over experimental iwd for MT7925 stability). MT7925 power-save off (`wifi.powersave=2`); `logging level=WARN`. Opt into iwd via `NM_WIFI_BACKEND=iwd` + re-run |
-| iw-regdomain / wireless-regdom | regulatory domain fixed `US` (retune `COUNTRY`); consumed by CachyOS hooks at device-add |
-| bluetooth main.conf | adapter auto-power-on (`[Policy] AutoEnable=true`); `FastConnectable=true`; reconnect backoff (`ReconnectAttempts=7`, `ReconnectIntervals=1,2,4,8,16,32,64`). Fixes BlueZ skipping its own `AutoEnable` default when `main.conf` absent. Per-device reconnect still needs one-time `bluetoothctl trust <MAC>` |
+| NetworkManager | wpa_supplicant backend (NM default; chosen over iwd for MT7925 stability). Power-save off (`wifi.powersave=2`); `logging level=WARN`. Opt into iwd via `NM_WIFI_BACKEND=iwd` + re-run |
+| iw-regdomain | regulatory domain fixed `US` (retune `COUNTRY`); consumed by CachyOS hooks at device-add |
+| bluetooth main.conf | `AutoEnable=true`, `FastConnectable=true`, `ReconnectAttempts=3` (intervals omitted → BlueZ default backoff). Fixes BlueZ skipping `AutoEnable` when `main.conf` absent. Per-device reconnect needs one-time `bluetoothctl trust <MAC>` |
 | nftables.conf | default-deny-inbound (see [Safety & Reliability](#safety--reliability)) |
 | cpupower / udev | `powersave` governor; udev sets NVMe scheduler `none`, AMD P-State EPP `balance_performance`, gfx1151 clock-floor (`power_dpm_force_performance_level=high`, `KERNEL=="card[0-9]"`) |
 | sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`, `vm.page-cluster=0`, `vm.swappiness=150`, `vm.vfs_cache_pressure=50` (zram-tuned; priority 95, after vendor `70-cachyos-settings.conf`) |
@@ -138,13 +138,13 @@ Source of truth is the script; retune the `set -g` globals near the top.
 
 ## Managed Files
 
-Path/permission index for the 18 files (values in [Configuration](#configuration)). System `0644`, user `0600`.
+Path/permission index for the 17 files (values in [Configuration](#configuration)). System `0644`, user `0600`.
 
 | Group | Files |
 |---|---|
 | Boot | `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf` |
 | systemd | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`, `/etc/systemd/logind.conf.d/99-cachyos-logind.conf`, `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` |
-| Network | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/conf.d/wireless-regdom`, `/etc/bluetooth/main.conf`, `/etc/nftables.conf` |
+| Network | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/bluetooth/main.conf`, `/etc/nftables.conf` |
 | Tuning | `/etc/default/cpupower-service.conf`, `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
 | User | `~/.config/environment.d/10-environment.conf`, `~/.config/baloofilerc`, `~/.config/MangoHud/MangoHud.conf` |
 
@@ -190,7 +190,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | # | Step | Command |
 |---|---|---|
 | 1 | Unmask | `sudo systemctl unmask ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target` |
-| 2 | Remove system paths, then user env.d | `sudo rm /etc/sdboot-manage.conf /etc/sysctl.d/95-ry-overrides.conf /etc/udev/rules.d/60-ry-perf.rules /etc/iw-regdomain /etc/conf.d/wireless-regdom /etc/bluetooth/main.conf /etc/nftables.conf /etc/default/cpupower-service.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/systemd/logind.conf.d/99-cachyos-logind.conf /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` then `rm ~/.config/environment.d/10-environment.conf ~/.config/baloofilerc ~/.config/MangoHud/MangoHud.conf` |
+| 2 | Remove system paths, then user env.d | `sudo rm /etc/sdboot-manage.conf /etc/sysctl.d/95-ry-overrides.conf /etc/udev/rules.d/60-ry-perf.rules /etc/iw-regdomain /etc/bluetooth/main.conf /etc/nftables.conf /etc/default/cpupower-service.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/systemd/logind.conf.d/99-cachyos-logind.conf /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` then `rm ~/.config/environment.d/10-environment.conf ~/.config/baloofilerc ~/.config/MangoHud/MangoHud.conf` |
 | 3 | Restore fstab, delete `.ry.bak` | `sudo mv /etc/fstab.ry.bak /etc/fstab` then `sudo rm -f /boot/loader/loader.conf.ry.bak /etc/mkinitcpio.conf.ry.bak` |
 | 4 | Reverse package changes (optional) | `sudo pacman -S --needed plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect` then `sudo pacman -Rns nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs bottom htop git-delta lm_sensors rtkit realtime-privileges ddcutil nftables` |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |

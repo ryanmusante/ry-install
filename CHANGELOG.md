@@ -2,44 +2,46 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.71.3 - 2026-06-26
+
+- mangohud: restore gpu_power (GPU block), text_outline (styling), toggle_hud=Shift_R+F12 (explicit keybind, matches README).
+- preflight: guard the x86-64-v4 repo-tier probe — resolve ld-linux via command -v and gate pacman-conf behind command -q (absent path no longer emits a stderr trace).
+
 7.71.2 - 2026-06-26
 
-- style: collapse the nm-dispatcher generator's 3-line comment header to one line; rendered drop-in keeps [Service] + LogLevelMax (comment-only churn).
-- docs: reconcile README against script (values byte-identical).
+- style: collapse the nm-dispatcher generator comment to one line (rendered drop-in unchanged).
+- docs: reconcile README against script.
 
 7.71.1 - 2026-06-26
 
-- preflight: add _ir_validate_keys — refuse deploy when an embedded scalar key is out of domain (bool/yes-no/int/ISO-3166/non-empty); call site existed with no definition, emitting a spurious stderr line.
-- docs: note fstab rewrite normalizes away redundant atime/defaults/commit tokens; cmdline rw/root prefix is separate from the 12 KERNEL_PARAMS.
+- preflight: add _ir_validate_keys — refuse deploy when an embedded scalar key is out of domain (bool/yes-no/int/ISO-3166/non-empty).
+- docs: note fstab rewrite normalizes redundant atime/defaults/commit tokens; cmdline rw/root prefix is separate from the 12 KERNEL_PARAMS.
 
 7.71.0 - 2026-06-26
 
-- preflight: add _ir_validate_kernel_floor — hard-fail when running kernel < KERNEL_MIN (6.18); override RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1. Closes RTL8127 suspend/shutdown hang (ae1737e7339b lands >= 6.18).
-- preflight: add _ir_validate_repo_tier — advisory warn when CPU supports x86-64-v4 but no v4 repo is active; non-fatal.
-- gpu: parameterize udev DPM level as GPU_DPM_LEVEL (default auto, was high); avoids pinning SCLK / stealing Zen5 boost on CPU-bound titles.
+- preflight: add _ir_validate_kernel_floor — hard-fail when running kernel < KERNEL_MIN (6.18); override RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1.
+- preflight: add _ir_validate_repo_tier — advisory warn when CPU supports x86-64-v4 but no v4 repo is active.
+- gpu: parameterize udev DPM level as GPU_DPM_LEVEL (default auto); avoids pinning SCLK on CPU-bound titles.
 - env: add PROTON_FSR4_RDNA3_UPGRADE=1 (FSR4 on RDNA3/3.5 via Proton-CachyOS). ENV_VARS 10 -> 11.
-- firewall: add RY_REMOTE_PLAY_PORTS gate (default false); true appends Sunshine/Moonlight + Steam Remote Play inbound ports. No rule at default.
-- docs: BIOS UMA carveout for >62 GiB compute (never amdgpu.gttsize); PROTON_NO_NTSYNC=1 per-game escape hatch.
+- firewall: add RY_REMOTE_PLAY_PORTS gate (default false); true appends Sunshine/Moonlight + Steam Remote Play inbound ports.
 
 7.70.1 - 2026-06-24
 
-- fix: guard _err VERIFY_FAIL increment with set -q, matching _err_loud and _warn_loud.
+- fix: guard _err VERIFY_FAIL increment with set -q.
 
 7.70.0 - 2026-06-23
 
-- regdom: remove /etc/conf.d/wireless-regdom (no systemd consumer); /etc/iw-regdomain retained. Managed configs 18 -> 17.
-- bluetooth: ReconnectAttempts 7 -> 3; remove ReconnectIntervals (BlueZ default backoff).
-- preflight: raise mesa soft-floor warn 25.3 -> 26.0; non-fatal.
-- style: trim verbose section-divider comments; rendered configs byte-identical.
-- docs: reconcile managed-file count 18 -> 17.
+- regdom: remove /etc/conf.d/wireless-regdom; /etc/iw-regdomain retained. Managed configs 18 -> 17, SYSTEM_DESTINATIONS 15 -> 14, _RY_POST_HOOKS 18 -> 17.
+- bluetooth: ReconnectAttempts 7 -> 3; remove ReconnectIntervals.
+- preflight: raise mesa soft-floor warn 25.3 -> 26.0.
 
 7.69.1 - 2026-06-22
 
-- refactor: extract _content_fn_for to single-source the generator-name derivation. Byte-identical output.
+- refactor: extract _content_fn_for to single-source generator-name derivation.
 
 7.69.0 - 2026-06-22
 
-- cmdline: remove amd_iommu=on from KERNEL_PARAMS (redundant on AMD; iommu=pt retained). KERNEL_PARAMS 13 -> 12.
+- cmdline: remove amd_iommu=on from KERNEL_PARAMS (redundant on AMD). KERNEL_PARAMS 13 -> 12.
 
 7.68.0 - 2026-06-22
 
@@ -48,23 +50,22 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.67.0 - 2026-06-22
 
-- style: normalize the lone inline command substitution in the RDSEED-microcode probe to fish (cmd) form; byte-identical.
+- style: normalize the RDSEED-microcode probe command substitution to fish (cmd) form.
 
 7.66.0 - 2026-06-22
 
-- verify: split iwd-process state check out of _vrsv_wifi into _vrsv_wifi_iwd_proc; behavior unchanged.
-- style: trim verbose source comments to vital information; rendered configs byte-identical.
+- verify: split iwd-process state check into _vrsv_wifi_iwd_proc.
+- style: trim verbose source comments.
 
 7.65.0 - 2026-06-21
 
-- mangohud: order fps/frametime ahead of GPU/CPU block; drop header comment.
-- style: trim redundant embedded-data comments; fix post-hook banner count (19 -> 18).
+- mangohud: order fps/frametime ahead of GPU/CPU block.
+- style: fix post-hook banner count.
 
 7.64.0 - 2026-06-21
 
 - drirc: remove 95-ry-radv-apu.conf (gfx1151 reports uma:1 natively).
 - network: remove dormant iwd/main.conf; NM_WIFI_BACKEND=iwd opt-in retained.
-- network: 99-cachyos-nm.conf header tracks NM_WIFI_BACKEND.
 - guards: SYSTEM_DESTINATIONS 17 -> 15, _RY_POST_HOOKS 20 -> 18, managed-file count 20 -> 18.
 
 7.63.0 - 2026-06-21
@@ -92,30 +93,29 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 7.59.0 - 2026-06-21
 
 - boot: add clearcpuid=514 (UMIP off). KERNEL_PARAMS 12 -> 13.
-- preflight: add _ry_check_umip_disabled (INFO while 514 set).
+- preflight: add _ry_check_umip_disabled.
 - sysctl: add vm.swappiness=150, vm.vfs_cache_pressure=50, vm.page-cluster=0. SYSCTL_VALUES 8 -> 11.
-- gpu: remove ry-amdgpu-strixhalo.conf (kernel >= 6.16.9 auto-sizes GTT). SYSTEM_DESTINATIONS 16 -> 15.
+- gpu: remove ry-amdgpu-strixhalo.conf. SYSTEM_DESTINATIONS 16 -> 15.
 
 7.58.1 - 2026-06-21
 
-- fix: sync header-comment version (cosmetic; runtime reads $VERSION).
-- style: trim verbose source comments; rendered configs byte-identical.
+- fix: sync header-comment version (runtime reads $VERSION).
 
 7.58.0 - 2026-06-20
 
-- refactor: move _configure_services_iwd_handoff to its Phase 4 slot. Behavior unchanged.
+- refactor: move _configure_services_iwd_handoff to its Phase 4 slot.
 
 7.57.3 - 2026-06-20
 
-- refactor: unify managed-file order onto one canonical order; SYSTEM_DESTINATIONS is source of truth.
+- refactor: unify managed-file order; SYSTEM_DESTINATIONS is source of truth.
 
 7.57.2 - 2026-06-20
 
-- style: collapse 8 embedded-data lists to single-line form (-66 lines, zero behavior change).
+- style: collapse embedded-data lists to single-line form.
 
 7.57.1 - 2026-06-20
 
-- docs: reconcile README against script; trim prose and tables, values byte-identical.
+- docs: reconcile README against script.
 
 7.57.0 - 2026-06-20
 
@@ -126,17 +126,16 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 7.56.0 - 2026-06-20
 
 - cpu: governor performance -> powersave so EPP is honored under amd_pstate=active.
-- cpu: EPP performance -> balance_performance (udev rule + verify).
-- preflight: soft-warn mesa < 25.3 for gfx1151 RADV stability; non-fatal.
+- cpu: EPP performance -> balance_performance.
+- preflight: soft-warn mesa < 25.3 for gfx1151 RADV stability.
 
 7.55.2 - 2026-06-20
 
 - docs: add badge row, Contents table, Contributing and Security sections.
-- docs: fold long tables behind <details>.
 
 7.55.1 - 2026-06-20
 
-- json: rewrite _json_str backslash-doubling to \x5c literals; byte-identical output.
+- json: rewrite _json_str backslash-doubling to \x5c literals.
 
 7.55.0 - 2026-06-20
 
@@ -145,7 +144,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.54.14 - 2026-06-19
 
-- comment: fix two section banners; trim metachar-class regex note.
+- comment: fix two section banners.
 
 7.54.13 - 2026-06-19
 

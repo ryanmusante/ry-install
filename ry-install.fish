@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.71.0 (2026-06-26) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.71.2 (2026-06-26) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.71.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.71.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -708,6 +708,21 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
+function _ir_validate_keys --description "Refuse to deploy when an embedded scalar key holds an out-of-domain value (empty/malformed would corrupt rendered configs)"
+    for _k in BT_AUTO_ENABLE BT_FAST_CONNECTABLE RY_REMOTE_PLAY_PORTS
+        if not contains -- "$$_k" true false; _err_loud "$_k must be true|false (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+    for _k in SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE RESOLVED_MDNS RESOLVED_LLMNR RESOLVED_DOT
+        if not contains -- "$$_k" yes no; _err_loud "$_k must be yes|no (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+    for _k in LOADER_TIMEOUT NM_WIFI_POWERSAVE BT_RECONNECT_ATTEMPTS
+        if not string match -qr '^\d+$' -- "$$_k"; _err_loud "$_k must be a non-negative integer (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+    if not string match -qr '^[A-Z]{2}$' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166 alpha-2 code (got: '$COUNTRY') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR GPU_DPM_LEVEL NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION
+        if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+end
 function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy when running kernel < KERNEL_MIN (override: RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1)"
     set -l _kr (command uname -r 2>/dev/null)
     set -l _kver (string match -rg -- '^([0-9]+\.[0-9]+)' "$_kr") # strip -arch1-1/-cachyos suffix to MAJOR.MINOR
@@ -829,7 +844,7 @@ function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --descriptio
     end
 end
 function _content__etc_systemd_system_NetworkManager-dispatcher.service.d_logging.conf --description "Generate content for NetworkManager-dispatcher logging drop-in (journal noise suppression)"
-    printf '%s\n' "# NetworkManager-dispatcher journal noise suppression" "# nm-dispatcher logs via journald transport (not stdout), so StandardError=null is ineffective;" "# LogLevelMax drops the routine info-level req:N 'connectivity-change' lines while keeping notice+." "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
+    printf '%s\n' "# nm-dispatcher logs via journald (not stdout), so StandardError=null is ineffective; LogLevelMax drops routine info-level lines, keeps notice+" "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
 end
 function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (wifi.backend from NM_WIFI_BACKEND)"
     printf '%s\n' "# NetworkManager configuration - $NM_WIFI_BACKEND backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"

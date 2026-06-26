@@ -2,13 +2,23 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.71.2 - 2026-06-26
+
+- style: collapse the nm-dispatcher generator's 3-line comment header to one line; rendered drop-in keeps [Service] + LogLevelMax (comment-only churn).
+- docs: reconcile README against script (values byte-identical).
+
+7.71.1 - 2026-06-26
+
+- preflight: add _ir_validate_keys — refuse deploy when an embedded scalar key is out of domain (bool/yes-no/int/ISO-3166/non-empty); call site existed with no definition, emitting a spurious stderr line.
+- docs: note fstab rewrite normalizes away redundant atime/defaults/commit tokens; cmdline rw/root prefix is separate from the 12 KERNEL_PARAMS.
+
 7.71.0 - 2026-06-26
 
 - preflight: add _ir_validate_kernel_floor — hard-fail when running kernel < KERNEL_MIN (6.18); override RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1. Closes RTL8127 suspend/shutdown hang (ae1737e7339b lands >= 6.18).
 - preflight: add _ir_validate_repo_tier — advisory warn when CPU supports x86-64-v4 but no v4 repo is active; non-fatal.
-- gpu: parameterize udev DPM level as GPU_DPM_LEVEL (default auto, was high); static + runtime verify track the value. Avoids pinning SCLK and stealing Zen5 boost on CPU-bound titles.
+- gpu: parameterize udev DPM level as GPU_DPM_LEVEL (default auto, was high); avoids pinning SCLK / stealing Zen5 boost on CPU-bound titles.
 - env: add PROTON_FSR4_RDNA3_UPGRADE=1 (FSR4 on RDNA3/3.5 via Proton-CachyOS). ENV_VARS 10 -> 11.
-- firewall: add RY_REMOTE_PLAY_PORTS gate (default false); true appends Sunshine/Moonlight + Steam Remote Play inbound ports to the nftables input chain. No rule emitted at default.
+- firewall: add RY_REMOTE_PLAY_PORTS gate (default false); true appends Sunshine/Moonlight + Steam Remote Play inbound ports. No rule at default.
 - docs: BIOS UMA carveout for >62 GiB compute (never amdgpu.gttsize); PROTON_NO_NTSYNC=1 per-game escape hatch.
 
 7.70.1 - 2026-06-24
@@ -17,7 +27,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.70.0 - 2026-06-23
 
-- regdom: remove /etc/conf.d/wireless-regdom (no systemd consumer); /etc/iw-regdomain retained. SYSTEM_DESTINATIONS 15 -> 14, managed configs 18 -> 17, _RY_POST_HOOKS 18 -> 17.
+- regdom: remove /etc/conf.d/wireless-regdom (no systemd consumer); /etc/iw-regdomain retained. Managed configs 18 -> 17.
 - bluetooth: ReconnectAttempts 7 -> 3; remove ReconnectIntervals (BlueZ default backoff).
 - preflight: raise mesa soft-floor warn 25.3 -> 26.0; non-fatal.
 - style: trim verbose section-divider comments; rendered configs byte-identical.
@@ -25,11 +35,11 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.69.1 - 2026-06-22
 
-- refactor: extract _content_fn_for helper to single-source the _content_$(_tmpfile_key dst) generator-name derivation; _ry_get_file_content and _ry_validate_configs now share it. Behavior byte-identical across all 18 embedded configs; no interface change.
+- refactor: extract _content_fn_for to single-source the generator-name derivation. Byte-identical output.
 
 7.69.0 - 2026-06-22
 
-- cmdline: remove amd_iommu=on from KERNEL_PARAMS (redundant on AMD; IOMMU enabled by default, iommu=pt retained for passthrough mode). KERNEL_PARAMS 13 -> 12.
+- cmdline: remove amd_iommu=on from KERNEL_PARAMS (redundant on AMD; iommu=pt retained). KERNEL_PARAMS 13 -> 12.
 
 7.68.0 - 2026-06-22
 
@@ -38,7 +48,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.67.0 - 2026-06-22
 
-- style: normalize lone $(string sub ...) inline command substitution in the RDSEED-microcode probe to fish (cmd) form; behavior byte-identical (math hex parse unchanged).
+- style: normalize the lone inline command substitution in the RDSEED-microcode probe to fish (cmd) form; byte-identical.
 
 7.66.0 - 2026-06-22
 

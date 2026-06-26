@@ -202,6 +202,12 @@ Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-
 
 No automated uninstaller; use [Managed Files](#managed-files) as the rollback reference.
 
+> [!NOTE]
+> Step-by-step reversal is collapsed below.
+
+<details>
+<summary><strong>Manual uninstall</strong> — 6 steps, in order</summary>
+
 | # | Step | Command |
 |---|---|---|
 | 1 | Unmask | `sudo systemctl unmask ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target` |
@@ -210,6 +216,8 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 4 | Reverse package changes (optional) | `sudo pacman -S --needed plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect` then `sudo pacman -Rns nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs bottom htop git-delta lm_sensors rtkit realtime-privileges ddcutil nftables` |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
+
+</details>
 
 For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), step 5 regenerates entries from the restored/removed state; revert their contents (or restore `.ry.bak`) before step 5.
 

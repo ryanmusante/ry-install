@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.71.3 (2026-06-26) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.73.0 (2026-06-26) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.71.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.73.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 set -g KERNEL_MIN 6.18 # hard preflight floor: RTL8127 suspend-hang fix (ae1737e7339b) + r8169 support land >=6.18
@@ -560,7 +560,8 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/nftables.conf" \
     "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" \
-    "/etc/udev/rules.d/60-ry-perf.rules"
+    "/etc/udev/rules.d/99-ry-perf.rules" \
+    "/etc/modprobe.d/60-ry-mt7925e.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/baloofilerc" "$HOME/.config/MangoHud/MangoHud.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -598,9 +599,7 @@ set -g SYSCTL_VALUES \
     "net.ipv4.tcp_slow_start_after_idle=0" \
     "vm.compaction_proactiveness=0" \
     "vm.max_map_count=2147483642" \
-    "vm.page-cluster=0" \
-    "vm.swappiness=150" \
-    "vm.vfs_cache_pressure=50"
+    "vm.swappiness=150"
 
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) ──
 set -g PKGS_ADD \
@@ -688,7 +687,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:11 \
-        SYSCTL_VALUES:11 \
+        SYSCTL_VALUES:9 \
         PKGS_ADD:17 \
         PKGS_DEL:9 \
         MASK:10 \
@@ -701,7 +700,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         _RY_BACKUP_TARGETS:2 \
         _RY_NTSYNC_MODLOAD_CONFS:3 \
         _RY_TMPDIR_GLOBS:6 \
-        SYSTEM_DESTINATIONS:14 \
+        SYSTEM_DESTINATIONS:15 \
         USER_DESTINATIONS:3
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -896,7 +895,7 @@ function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate con
     end
     if test "$_printed" -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
 end
-function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP balance_performance mid-bias + gfx1151 GPU clock-floor)"
+function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP balance_performance mid-bias + gfx1151 GPU clock-floor)"
     printf '%s\n' \
         "# ry-install: udev performance rules (managed file, do not edit by hand)" \
         "# NVMe I/O scheduler none (peak IOPS/lowest tail latency on NVMe; deliberate divergence from CachyOS kyber default)" \
@@ -905,6 +904,11 @@ function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate con
         'ACTION=="add|change", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="balance_performance"' \
         "# GPU performance level (gfx1151 clock-floor; optional)" \
         'ACTION=="add", KERNEL=="card[0-9]", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
+end
+function _content__etc_modprobe.d_60-ry-mt7925e.conf --description "Generate content for /etc/modprobe.d/60-ry-mt7925e.conf (disable PCIe ASPM on MT7925; symptomatic reserve fix)"
+    printf '%s\n' \
+        "# 60-ry-mt7925e.conf - disable PCIe ASPM on MT7925 (coredump/BT-reconnect/assoc-fail mitigation; symptomatic, drop if upstream resolves)" \
+        "options mt7925e disable_aspm=1"
 end
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (KDE Plasma, Flatpak, D-Bus activated apps)"
@@ -2253,16 +2257,19 @@ function _vss_bluetooth --description "_verify_static_system sub: BlueZ main.con
 end
 function _vss_udev --description "_verify_static_system sub: combined udev perf rules (NVMe scheduler + EPP + GPU clock-floor)"
     _echo "── udev (perf: I/O scheduler + EPP + GPU clock-floor) ──"
-    _chk_file /etc/udev/rules.d/60-ry-perf.rules; or return 0
-    _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'queue/scheduler}="none"' "nvme scheduler=none"
-    _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'energy_performance_preference}="balance_performance"' "EPP=balance_performance"
-    _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"' "GPU dpm=$GPU_DPM_LEVEL"
-    _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'KERNEL=="card[0-9]"' "GPU rule card-scoped"
+    _chk_file /etc/udev/rules.d/99-ry-perf.rules; or return 0
+    _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'queue/scheduler}="none"' "nvme scheduler=none"
+    _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'energy_performance_preference}="balance_performance"' "EPP=balance_performance"
+    _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"' "GPU dpm=$GPU_DPM_LEVEL"
+    _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'KERNEL=="card[0-9]"' "GPU rule card-scoped"
 end
 function _vss_nft --description "_verify_static_system sub: nftables default-deny-inbound + ICMPv6 NDP/PMTUD accept (IPv6 break-glass)"
     _chk_file /etc/nftables.conf; or return 0
     _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
     _chk_grep /etc/nftables.conf "nd-neighbor-solicit" "nftables ICMPv6 NDP/PMTUD accept" # regression guard: dropping breaks IPv6 post-NDP-expiry
+end
+function _vss_modprobe --description "_verify_static_system sub: mt7925e modprobe drop-in (ASPM disable)"
+    _chk_file /etc/modprobe.d/60-ry-mt7925e.conf; and _chk_grep /etc/modprobe.d/60-ry-mt7925e.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'
 end
 function _verify_static_system --description "Verify ntsync, resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, nftables"
     _echo "SYSTEM CONFIGURATION"
@@ -2283,6 +2290,8 @@ function _verify_static_system --description "Verify ntsync, resolved, logind, N
     _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "GOVERNOR='$CPUPOWER_GOVERNOR'" "GOVERNOR=$CPUPOWER_GOVERNOR"
     _vss_sysctl
     _vss_udev
+    _echo "-- modprobe (mt7925e ASPM) --"
+    _vss_modprobe
     _echo "── nftables ──"
     _vss_nft
 end
@@ -2627,7 +2636,7 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
             set -l parts (string split ':' -- "$check"); set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
             _chk_eq "$parts[3]" "$sysfs_val" "$parts[2]"
         end
-        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # EPP pinned via 60-ry-perf.rules
+        set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # EPP pinned via 99-ry-perf.rules
         if test -n "$_epp"
             _chk_eq "EPP" "$_epp" balance_performance
         else
@@ -3379,7 +3388,7 @@ function _install_preflight --description "Run all preflight checks before insta
     else
         _phase_record "Preflight: time sync" WARN "clock not NTP-synced or unverifiable"
     end
-    set -l _mesa (pacman -Q mesa 2>/dev/null | string split ' ')[2]
+    set -l _mesa (command pacman -Q mesa 2>/dev/null | string split ' ')[2]
     if test -n "$_mesa"
         if not command -q vercmp
             _log "MESA_SOFT_FLOOR_SKIP: vercmp absent (pacman-provided) — gfx1151 mesa version not compared"

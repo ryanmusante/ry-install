@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.71.3-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.73.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 [![fish](https://img.shields.io/badge/fish-%E2%89%A5%203.6-4aae46?style=flat-square&logo=fishshell&logoColor=white)](https://fishshell.com)
 [![systemd](https://img.shields.io/badge/systemd-%E2%89%A5%20250-30b9db?style=flat-square)](https://systemd.io)
@@ -9,7 +9,7 @@
 > Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro
 > (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
 
-One self-contained fish script: 17 embedded configs, gaming/LLM desktop profile.
+One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ## Contents
 
@@ -35,7 +35,7 @@ One self-contained fish script: 17 embedded configs, gaming/LLM desktop profile.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.71.3
+cd ry-install && git checkout v7.73.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -81,7 +81,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 |---|---|---|
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
-| 3 | Configuration | deploy 17 embedded configs atomically |
+| 3 | Configuration | deploy 18 embedded configs atomically |
 | 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
@@ -134,7 +134,7 @@ Source of truth is the script; retune the `set -g` globals near the top.
 > Full per-file reference is collapsed below.
 
 <details>
-<summary><strong>Full managed-file reference</strong> — all 17 files, key values</summary>
+<summary><strong>Full managed-file reference</strong> — all 18 files, key values</summary>
 
 | File | Purpose & key values |
 |---|---|
@@ -150,7 +150,7 @@ Source of truth is the script; retune the `set -g` globals near the top.
 | bluetooth main.conf | `AutoEnable=true`, `FastConnectable=true`, `ReconnectAttempts=3`. Per-device reconnect needs one-time `bluetoothctl trust <MAC>` |
 | nftables.conf | default-deny-inbound (see [Safety & Reliability](#safety--reliability)) |
 | cpupower / udev | `powersave` governor; udev sets NVMe scheduler `none`, AMD P-State EPP `balance_performance`, gfx1151 GPU DPM (`power_dpm_force_performance_level`, `KERNEL=="card[0-9]"`). DPM level is `GPU_DPM_LEVEL` (default `auto` — avoids pinning SCLK and stealing Zen5 boost on CPU-bound titles; set `high` to force) |
-| sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`, `vm.page-cluster=0`, `vm.swappiness=150`, `vm.vfs_cache_pressure=50` (priority 95, after vendor `70-cachyos-settings.conf`) |
+| sysctl | BBR + `fq`; `tcp_notsent_lowat=16384`, `tcp_slow_start_after_idle=0`, `netdev_budget=600`/`budget_usecs=5000`, `vm.compaction_proactiveness=0`, `vm.max_map_count=2147483642`, `vm.swappiness=150` (priority 95, after vendor `70-cachyos-settings.conf`) |
 | environment.d | gaming env: `AMD_VULKAN_ICD=RADV`, `MANGOHUD=1`, `MESA_SHADER_CACHE_MAX_SIZE=16G`, `PROTON_ENABLE_WAYLAND=1`, `PROTON_FSR4_RDNA3_UPGRADE=1`, `PROTON_LOCAL_SHADER_CACHE=1`, `WINEDEBUG=-all`, DXVK/VKD3D logging off (`0600`) |
 | baloofilerc | KDE Baloo indexing disabled (`0600`) |
 | MangoHud.conf | readout-only HUD: GPU sensors (clock/temp/power), CPU sensors, unified memory (`vram`+`ram`), FPS + frametime, `text_outline`. Auto-enabled via `MANGOHUD=1`; toggle `Shift_R+F12` (`0600`) |
@@ -174,18 +174,18 @@ Source of truth is the script; retune the `set -g` globals near the top.
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
 | Untouched (by design) | `systemd-oomd` — kernel OOM-killer + zram is the intended path on 128 GB. Do not enable |
 
-**fstab** — ext4 entries get `noatime,lazytime,commit=10` applied in place: on a rewritten ext4 row, redundant or conflicting options (`defaults`, `relatime`, `atime`, `strictatime`, and any existing `commit=`) are normalized away and the managed options appended; every other column on that row, and every non-ext4 row, is preserved byte-for-byte. Gated by line-count parity, a size floor, and `findmnt --verify`; a symlinked `/etc/fstab` is refused; malformed ext4 rows left untouched with a warning.
+**fstab** — ext4 entries get `noatime,lazytime,commit=10` applied in place: on a rewritten ext4 row, redundant or conflicting tokens within the comma-separated options column (`defaults`, `relatime`, `atime`, `strictatime`, and any existing `commit=`) are normalized away and the managed options appended; every other column on that row, and every non-ext4 row, is preserved byte-for-byte. Normalization operates on column 4 only — a row whose options are split by whitespace (already malformed, since mount options must not contain unescaped whitespace) is rejected by the mandatory `findmnt --verify` gate before install rather than silently corrected. Gated by line-count parity, a size floor, and `findmnt --verify`; a symlinked `/etc/fstab` is refused; malformed ext4 rows left untouched with a warning.
 
 ## Managed Files
 
-Path/permission index for the 17 files (values in [Configuration](#configuration)). System `0644`, user `0600`.
+Path/permission index for the 18 files (values in [Configuration](#configuration)). System `0644`, user `0600`.
 
 | Group | Files |
 |---|---|
 | Boot | `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf` |
 | systemd | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`, `/etc/systemd/logind.conf.d/99-cachyos-logind.conf`, `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` |
-| Network | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/bluetooth/main.conf`, `/etc/nftables.conf` |
-| Tuning | `/etc/default/cpupower-service.conf`, `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/udev/rules.d/60-ry-perf.rules` |
+| Network | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/bluetooth/main.conf`, `/etc/nftables.conf`, `/etc/modprobe.d/60-ry-mt7925e.conf` |
+| Tuning | `/etc/default/cpupower-service.conf`, `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/udev/rules.d/99-ry-perf.rules` |
 | User | `~/.config/environment.d/10-environment.conf`, `~/.config/baloofilerc`, `~/.config/MangoHud/MangoHud.conf` |
 
 ## Tuning Notes
@@ -197,6 +197,7 @@ Gaming and compute knobs outside the managed files, or defaults that warrant exp
 | Large-VRAM compute | Auto/GTT caps usable VRAM near 62 GiB on a 96 GB box. For a single allocation above ~62 GiB (ROCm / llama.cpp), raise the **BIOS UMA framebuffer carveout** (up to 96 GB) — not `amdgpu.gttsize`, which is deprecated. Gaming is unaffected. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 reached RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE` → `1`. |
 | NTSYNC | `/dev/ntsync` is asserted in preflight and verify (mainline ≥ 6.14, Proton-CachyOS default-on). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. Verify: `test -c /dev/ntsync`. |
+| MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` to mitigate coredump / BT-reconnect / assoc-fail on `mt7925e`. Distinct from `wifi.powersave` (software PS) and from the upstream `power_save` param (0444, software WiFi PM). Symptomatic reserve fix — remove if a kernel bump resolves it. Verify: `cat /sys/module/mt7925e/parameters/disable_aspm` → `Y`. The `mt7925e: disabling ASPM L0s L1` dmesg line is logged at probe regardless and is benign. |
 
 ## Uninstall
 
@@ -211,7 +212,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | # | Step | Command |
 |---|---|---|
 | 1 | Unmask | `sudo systemctl unmask ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target` |
-| 2 | Remove system paths, then user env.d | `sudo rm /etc/sdboot-manage.conf /etc/sysctl.d/95-ry-overrides.conf /etc/udev/rules.d/60-ry-perf.rules /etc/iw-regdomain /etc/bluetooth/main.conf /etc/nftables.conf /etc/default/cpupower-service.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/systemd/logind.conf.d/99-cachyos-logind.conf /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` then `rm ~/.config/environment.d/10-environment.conf ~/.config/baloofilerc ~/.config/MangoHud/MangoHud.conf` |
+| 2 | Remove system paths, then user env.d | `sudo rm /etc/sdboot-manage.conf /etc/sysctl.d/95-ry-overrides.conf /etc/udev/rules.d/99-ry-perf.rules /etc/modprobe.d/60-ry-mt7925e.conf /etc/iw-regdomain /etc/bluetooth/main.conf /etc/nftables.conf /etc/default/cpupower-service.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/systemd/logind.conf.d/99-cachyos-logind.conf /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` then `rm ~/.config/environment.d/10-environment.conf ~/.config/baloofilerc ~/.config/MangoHud/MangoHud.conf` |
 | 3 | Restore fstab, delete `.ry.bak` | `sudo mv /etc/fstab.ry.bak /etc/fstab` then `sudo rm -f /boot/loader/loader.conf.ry.bak /etc/mkinitcpio.conf.ry.bak` |
 | 4 | Reverse package changes (optional) | `sudo pacman -S --needed plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect` then `sudo pacman -Rns nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs bottom htop git-delta lm_sensors rtkit realtime-privileges ddcutil nftables` |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |

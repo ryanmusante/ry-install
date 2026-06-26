@@ -2,6 +2,21 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.73.0 - 2026-06-26
+
+- udev: rename 60-ry-perf.rules -> 99-ry-perf.rules so NVMe scheduler=none sorts after vendor 60-ioschedulers.rules and wins by explicit prefix. Scheduler unchanged (none); managed-file count unchanged (18).
+- sysctl: drop vm.page-cluster=0 and vm.vfs_cache_pressure=50 (identical to vendor 70-cachyos-settings.conf, no effect). SYSCTL_VALUES 11 -> 9.
+
+7.72.0 - 2026-06-26
+
+- network: add 60-ry-mt7925e.conf (disable_aspm=1) to mitigate MT7925 coredump/BT-reconnect/assoc-fail; applies on reboot. Managed configs 17 -> 18, SYSTEM_DESTINATIONS 14 -> 15.
+- verify: add _vss_modprobe assertion for the mt7925e drop-in.
+
+7.71.4 - 2026-06-26
+
+- preflight: prefix the mesa soft-floor probe with command (command pacman -Q mesa) — matches the command-pacman convention used by every other read-only pacman query; avoids resolving a shadowing pacman function.
+- docs: clarify fstab normalization operates on the comma-separated options column (field 4) only; a whitespace-split options row is already malformed and is rejected by the mandatory findmnt --verify gate rather than silently corrected.
+
 7.71.3 - 2026-06-26
 
 - mangohud: restore gpu_power (GPU block), text_outline (styling), toggle_hud=Shift_R+F12 (explicit keybind, matches README).
@@ -90,102 +105,6 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 - mangohud: remove fps_metrics, cpu_temp, gpu_power, text_outline, toggle_hud.
 - verify: drop toggle_hud assertion; fps readout retained.
 
-7.59.0 - 2026-06-21
+7.59.0 and earlier - history trimmed
 
-- boot: add clearcpuid=514 (UMIP off). KERNEL_PARAMS 12 -> 13.
-- preflight: add _ry_check_umip_disabled.
-- sysctl: add vm.swappiness=150, vm.vfs_cache_pressure=50, vm.page-cluster=0. SYSCTL_VALUES 8 -> 11.
-- gpu: remove ry-amdgpu-strixhalo.conf. SYSTEM_DESTINATIONS 16 -> 15.
-
-7.58.1 - 2026-06-21
-
-- fix: sync header-comment version (runtime reads $VERSION).
-
-7.58.0 - 2026-06-20
-
-- refactor: move _configure_services_iwd_handoff to its Phase 4 slot.
-
-7.57.3 - 2026-06-20
-
-- refactor: unify managed-file order; SYSTEM_DESTINATIONS is source of truth.
-
-7.57.2 - 2026-06-20
-
-- style: collapse embedded-data lists to single-line form.
-
-7.57.1 - 2026-06-20
-
-- docs: reconcile README against script.
-
-7.57.0 - 2026-06-20
-
-- pkg: add rtkit to PKGS_ADD.
-- boot: add clearcpuid=rdseed (masks broken Zen5 RDSEED flag, CVE-2025-62626).
-- guard: _ir_validate_counts (KERNEL_PARAMS 11 -> 12, PKGS_ADD 16 -> 17).
-
-7.56.0 - 2026-06-20
-
-- cpu: governor performance -> powersave so EPP is honored under amd_pstate=active.
-- cpu: EPP performance -> balance_performance.
-- preflight: soft-warn mesa < 25.3 for gfx1151 RADV stability.
-
-7.55.2 - 2026-06-20
-
-- docs: add badge row, Contents table, Contributing and Security sections.
-
-7.55.1 - 2026-06-20
-
-- json: rewrite _json_str backslash-doubling to \x5c literals.
-
-7.55.0 - 2026-06-20
-
-- udev: scope GPU clock-floor rule to card device (KERNEL card[0-9], ACTION add).
-- verify: _vss_udev asserts GPU rule card-scoped.
-
-7.54.14 - 2026-06-19
-
-- comment: fix two section banners.
-
-7.54.13 - 2026-06-19
-
-- mangohud: order gpu_core_clock before gpu_temp.
-
-7.54.12 - 2026-06-18
-
-- comment: sync ten --description strings to bodies.
-- fix: restore RY_RUN_TIMEOUT invalid-value warning quote-split.
-- preflight: list all four probe hosts in fallback.
-
-7.54.7 - 2026-06-18
-
-- docs: correct Phase 4 order, GTT label, systemd badge, exit-2 paths.
-- argparse: replace deprecated status basename with path basename.
-- signals: remove unreachable SIGUSR1/SIGUSR2 cases from _cleanup.
-
-7.54.2 - 2026-06-17
-
-- firewall: flush ufw only after nftables default-deny live; else retain + warn.
-- install-file: boot/cmdline post-hook exiting boot-critical prints DO-NOT-REBOOT.
-- udev: tighten NVMe match to nvme[0-9]*n[0-9]*.
-- verify: _vre_fstab fails noatime+relatime/atime/strictatime.
-
-7.53.0 - 2026-06-17
-
-- nftables: scope inbound IPv4 ICMP to diagnostics; drop echo-request.
-- preflight: amdgpu hard-fails when modinfo misses it; ICMP fallback 1.1.1.1 + 8.8.8.8.
-- verify: drop systemd-analyze boot-time, THP/KSM, BOOT_TIME_TARGET.
-
-7.52.0 - 2026-06-17
-
-- ttm: relabel 32 GiB GTT value as a cap.
-- docs: note CachyOS divergences; record Known Issues (MES, RTL8127, MT7925, ACP).
-
-7.51.0 - 2026-06-16
-
-- udev: EPP rule add -> add|change (re-asserts after AC/DC).
-- verify: _vss_udev asserts GPU clock-floor; _vss_regdom asserts wireless-regdom.
-- init: _ir_validate_post_hooks refuses deploy on hook tag with no handler.
-
-7.48.0 and earlier - history trimmed
-
-- Entries for 7.48.0 and earlier removed from this file. See git tags / history for the full record.
+- Entries for 7.59.0 and earlier removed from this file. See git tags / history for the full record.

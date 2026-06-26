@@ -17,10 +17,10 @@ One self-contained fish script: 17 embedded configs, gaming/LLM desktop profile.
 - [Requirements](#requirements)
 - [Usage](#usage)
 - [Install Flow](#install-flow)
+- [Safety & Reliability](#safety--reliability)
 - [Configuration](#configuration)
 - [Managed Files](#managed-files)
 - [Tuning Notes](#tuning-notes)
-- [Safety & Reliability](#safety--reliability)
 - [Uninstall](#uninstall)
 - [Known Issues](#known-issues)
 - [Troubleshooting](#troubleshooting)
@@ -87,6 +87,44 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
 A results summary prints to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; `DEFER` applies on next boot (e.g. regdomain).
+
+## Safety & Reliability
+
+> [!WARNING]
+> Masks `ufw` and ships an nftables **default-deny-inbound** ruleset: established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 (NDP/PMTUD) accepted, all other inbound dropped. `forward` drop, `output` accept.
+
+> [!NOTE]
+> Host-side game streaming is off by default — `RY_REMOTE_PLAY_PORTS` is `false`, so no inbound stream ports open. Set it `true` (retune the `set -g` global, re-run) to append Sunshine/Moonlight (`tcp 47984,47989,48010`, `udp 47998-48010`) and Steam Remote Play (`tcp 27036`, `udp 27031-27036`) accepts to the input chain.
+
+> [!NOTE]
+> `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
+
+| Feature | Detail |
+|---|---|
+| Atomic writes | same-FS tmp → render → symlink-probe → backup → chmod → `mv -T` → re-read + restore on mismatch |
+| Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` (and `fstab`, during its rewrite) |
+| mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
+| Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
+| Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably recycled PID via `/proc` start-time (unsignalable/unknown ⇒ fail-closed) |
+
+> [!NOTE]
+> Exit codes, sentinels, and environment overrides are collapsed below.
+
+<details>
+<summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>
+
+| Code | Meaning |
+|---|---|
+| `0` / `1` / `2` | success / verify-FAIL or install-error / usage (incl. root-refused) |
+| `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock |
+| `10` | `--check` drift |
+| `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT) |
+
+Sentinels `11`–`13` and `250`/`251`/`255` never reach a process exit (surface as the footer `gen_fail` count).
+
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `NO_COLOR`, `TMPDIR`. Logs: one JSONL per run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
+
+</details>
 
 ## Configuration
 
@@ -159,44 +197,6 @@ Gaming and compute knobs outside the managed files, or defaults that warrant exp
 | Large-VRAM compute | Auto/GTT caps usable VRAM near 62 GiB on a 96 GB box. For a single allocation above ~62 GiB (ROCm / llama.cpp), raise the **BIOS UMA framebuffer carveout** (up to 96 GB) — not `amdgpu.gttsize`, which is deprecated. Gaming is unaffected. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 reached RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE` → `1`. |
 | NTSYNC | `/dev/ntsync` is asserted in preflight and verify (mainline ≥ 6.14, Proton-CachyOS default-on). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. Verify: `test -c /dev/ntsync`. |
-
-## Safety & Reliability
-
-> [!WARNING]
-> Masks `ufw` and ships an nftables **default-deny-inbound** ruleset: established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 (NDP/PMTUD) accepted, all other inbound dropped. `forward` drop, `output` accept.
-
-> [!NOTE]
-> Host-side game streaming is off by default — `RY_REMOTE_PLAY_PORTS` is `false`, so no inbound stream ports open. Set it `true` (retune the `set -g` global, re-run) to append Sunshine/Moonlight (`tcp 47984,47989,48010`, `udp 47998-48010`) and Steam Remote Play (`tcp 27036`, `udp 27031-27036`) accepts to the input chain.
-
-> [!NOTE]
-> `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
-
-| Feature | Detail |
-|---|---|
-| Atomic writes | same-FS tmp → render → symlink-probe → backup → chmod → `mv -T` → re-read + restore on mismatch |
-| Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` (and `fstab`, during its rewrite) |
-| mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
-| Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
-| Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably recycled PID via `/proc` start-time (unsignalable/unknown ⇒ fail-closed) |
-
-> [!NOTE]
-> Exit codes, sentinels, and environment overrides are collapsed below.
-
-<details>
-<summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>
-
-| Code | Meaning |
-|---|---|
-| `0` / `1` / `2` | success / verify-FAIL or install-error / usage (incl. root-refused) |
-| `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock |
-| `10` | `--check` drift |
-| `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT) |
-
-Sentinels `11`–`13` and `250`/`251`/`255` never reach a process exit (surface as the footer `gen_fail` count).
-
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `NO_COLOR`, `TMPDIR`. Logs: one JSONL per run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
-
-</details>
 
 ## Uninstall
 

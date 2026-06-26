@@ -92,6 +92,9 @@ A results summary prints to stderr; a JSONL log records each phase. `WARN` keeps
 
 Source of truth is the script; retune the `set -g` globals near the top.
 
+> [!NOTE]
+> Full per-file reference is collapsed below.
+
 <details>
 <summary><strong>Full managed-file reference</strong> — all 17 files, key values</summary>
 
@@ -175,6 +178,9 @@ Gaming and compute knobs outside the managed files, or defaults that warrant exp
 | mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably recycled PID via `/proc` start-time (unsignalable/unknown ⇒ fail-closed) |
+
+> [!NOTE]
+> Exit codes, sentinels, and environment overrides are collapsed below.
 
 <details>
 <summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>

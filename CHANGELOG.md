@@ -2,6 +2,15 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.71.0 - 2026-06-26
+
+- preflight: add _ir_validate_kernel_floor — hard-fail when running kernel < KERNEL_MIN (6.18); override RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1. Closes RTL8127 suspend/shutdown hang (ae1737e7339b lands >= 6.18).
+- preflight: add _ir_validate_repo_tier — advisory warn when CPU supports x86-64-v4 but no v4 repo is active; non-fatal.
+- gpu: parameterize udev DPM level as GPU_DPM_LEVEL (default auto, was high); static + runtime verify track the value. Avoids pinning SCLK and stealing Zen5 boost on CPU-bound titles.
+- env: add PROTON_FSR4_RDNA3_UPGRADE=1 (FSR4 on RDNA3/3.5 via Proton-CachyOS). ENV_VARS 10 -> 11.
+- firewall: add RY_REMOTE_PLAY_PORTS gate (default false); true appends Sunshine/Moonlight + Steam Remote Play inbound ports to the nftables input chain. No rule emitted at default.
+- docs: BIOS UMA carveout for >62 GiB compute (never amdgpu.gttsize); PROTON_NO_NTSYNC=1 per-game escape hatch.
+
 7.70.1 - 2026-06-24
 
 - fix: guard _err VERIFY_FAIL increment with set -q, matching _err_loud and _warn_loud.

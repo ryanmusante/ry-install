@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.70.1 (2026-06-24) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.71.0 (2026-06-26) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.70.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.71.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -12,6 +12,7 @@ set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g _RY_NTSYNC_MODLOAD_CONFS /usr/lib/modules-load.d/ntsync.conf /usr/lib/modules-load.d/10-ntsync.conf /etc/modules-load.d/ntsync.conf # ntsync autoload confs
+set -g KERNEL_MIN 6.18 # hard preflight floor: RTL8127 suspend-hang fix (ae1737e7339b) + r8169 support land >=6.18
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -34,6 +35,7 @@ function _ry_show_help --description "Display usage information and available su
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
+        "  RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1  Bypass KERNEL_MIN hard-fail." \
         "  NO_COLOR  Suppress ANSI color (non-empty value, per no-color.org)." \
         "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl" \
         ""
@@ -582,9 +584,11 @@ set -g NM_WIFI_BACKEND wpa_supplicant; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG
 set -g CPUPOWER_GOVERNOR powersave
 # Bluetooth: power adapter on at service start/resume; reconnect retry for paired sinks
 set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 3
+set -g GPU_DPM_LEVEL auto # gfx1151 dpm floor; auto avoids pinning SCLK / stealing Zen5 boost on CPU-bound titles
+set -g RY_REMOTE_PLAY_PORTS false # default-deny inbound; true appends Sunshine/Steam stream ports to nftables input chain
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
-set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
+set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_FSR4_RDNA3_UPGRADE=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
@@ -683,7 +687,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
-        ENV_VARS:10 \
+        ENV_VARS:11 \
         SYSCTL_VALUES:11 \
         PKGS_ADD:17 \
         PKGS_DEL:9 \
@@ -704,14 +708,41 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _ir_validate_keys --description "Refuse deploy on _tmpfile_key collision"
-    set -l _seen_keys
-    for _d in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
-        set -l _k (_tmpfile_key "$_d")
-        if contains -- "$_k" $_seen_keys; _err_loud "Destination key collision: '$_d' produces key '_content_$_k' already in use — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-        set -a _seen_keys "$_k"
+function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy when running kernel < KERNEL_MIN (override: RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1)"
+    set -l _kr (command uname -r 2>/dev/null)
+    set -l _kver (string match -rg -- '^([0-9]+\.[0-9]+)' "$_kr") # strip -arch1-1/-cachyos suffix to MAJOR.MINOR
+    if test -z "$_kver"
+        if test "$RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK" = 1 # fail-closed: unreadable release requires override
+            _warn_loud "Kernel floor (override): release unreadable from uname -r ('$_kr') — proceeding"
+            _log "KERNEL_FLOOR_UNREADABLE_OVERRIDE: uname -r='$_kr'"
+        else
+            _err_loud "Kernel floor: release unreadable from uname -r ('$_kr') — refusing to deploy"
+            _err_loud "  RTL8127 suspend/shutdown hang fix + r8169 support land only >=$KERNEL_MIN; deploying below risks suspend lockup."
+            _err_loud "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
+            _pre_dispatch_exit $EXIT_PREFLIGHT
+        end
+        return 0
+    end
+    set -l _cur_parts (string split '.' -- "$_kver"); set -l _min_parts (string split '.' -- "$KERNEL_MIN")
+    if test "$_cur_parts[1]" -lt "$_min_parts[1]"; or begin; test "$_cur_parts[1]" -eq "$_min_parts[1]"; and test "$_cur_parts[2]" -lt "$_min_parts[2]"; end
+        _err_loud "Kernel floor: running $_kver, profile $PROFILE_NAME requires >=$KERNEL_MIN — refusing to deploy"
+        _err_loud "  RTL8127 suspend/shutdown hang fix (ae1737e7339b) + r8169 support are present only at/above $KERNEL_MIN."
+        _err_loud "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
+        _pre_dispatch_exit $EXIT_PREFLIGHT
     end
 end
+function _ir_validate_repo_tier --description "Advisory probe: warn when CPU supports x86-64-v4 but no v4/znver4 repo is active (non-fatal)"
+    set -l _v4_supported false; set -l _v4_active false
+    command /lib/ld-linux-x86-64.so.2 --help 2>/dev/null | string match -q '*x86-64-v4*'; and set _v4_supported true
+    command pacman-conf --repo-list 2>/dev/null | string match -qi '*v4*'; and set _v4_active true
+    if test "$_v4_supported" = true; and test "$_v4_active" = false
+        _warn_loud "Repo tier (advisory): CPU supports x86-64-v4 (AVX-512) but no v4/znver4 repo active — missing optimized binaries"
+        _log "REPO_TIER_V4_INACTIVE: x86-64-v4 supported, no v4 repo in pacman-conf --repo-list"
+    else if test "$_v4_supported" = true; and test "$_v4_active" = true
+        _info "Repo tier: x86-64-v4 supported and v4 repo active"
+    end
+end
+
 
 # ── RUNTIME INIT: ORCHESTRATOR (_init_runtime) ──
 function _init_runtime --description "Cache root UUID + validate config + precompute caches"
@@ -740,6 +771,8 @@ function _init_runtime --description "Cache root UUID + validate config + precom
             end
         end
     end
+    _ir_validate_kernel_floor # hard preflight kernel floor (>= KERNEL_MIN)
+    _ir_validate_repo_tier # advisory x86-64-v4 repo-tier probe (non-fatal)
     _ir_validate_counts
     _ir_validate_keys
     _ir_validate_post_hooks
@@ -820,7 +853,14 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        ct state invalid drop" \
         "        ip6 nexthdr ipv6-icmp icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert, nd-router-solicit, echo-request, packet-too-big, time-exceeded, parameter-problem } accept" \
         "        # IPv4: inbound echo-request (ping) intentionally NOT accepted; IPv6 echo-request is, since ICMPv6 is load-bearing for NDP/PMTUD" \
-        "        icmp type { echo-reply, destination-unreachable, time-exceeded, parameter-problem } accept" \
+        "        icmp type { echo-reply, destination-unreachable, time-exceeded, parameter-problem } accept"
+    if test "$RY_REMOTE_PLAY_PORTS" = true # gated: Sunshine/Moonlight + Steam Remote Play inbound stream ports
+        printf '%s\n' \
+            "        # ry-install: remote-play inbound (RY_REMOTE_PLAY_PORTS=true)" \
+            "        tcp dport { 47984, 47989, 48010, 27036 } accept" \
+            "        udp dport { 47998-48010, 27031-27036 } accept"
+    end
+    printf '%s\n' \
         "    }" \
         "    chain forward { type filter hook forward priority filter; policy drop; }" \
         "    chain output { type filter hook output priority filter; policy accept; }" \
@@ -848,7 +888,7 @@ function _content__etc_udev_rules.d_60-ry-perf.rules --description "Generate con
         "# AMD P-State EPP balance_performance (deliberate mid-bias toward perf, not max EPP=performance)" \
         'ACTION=="add|change", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="balance_performance"' \
         "# GPU performance level (gfx1151 clock-floor; optional)" \
-        'ACTION=="add", KERNEL=="card[0-9]", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="high"'
+        'ACTION=="add", KERNEL=="card[0-9]", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
 end
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (KDE Plasma, Flatpak, D-Bus activated apps)"
@@ -2197,7 +2237,7 @@ function _vss_udev --description "_verify_static_system sub: combined udev perf 
     _chk_file /etc/udev/rules.d/60-ry-perf.rules; or return 0
     _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'queue/scheduler}="none"' "nvme scheduler=none"
     _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'energy_performance_preference}="balance_performance"' "EPP=balance_performance"
-    _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'power_dpm_force_performance_level}="high"' "GPU dpm=high"
+    _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"' "GPU dpm=$GPU_DPM_LEVEL"
     _chk_grep /etc/udev/rules.d/60-ry-perf.rules 'KERNEL=="card[0-9]"' "GPU rule card-scoped"
 end
 function _vss_nft --description "_verify_static_system sub: nftables default-deny-inbound + ICMPv6 NDP/PMTUD accept (IPv6 break-glass)"
@@ -2541,18 +2581,18 @@ function _vrk_gpu_state --description "Runtime kparam check: GPU performance lev
         if test -f "$f"
             set found_gpu true
             set -l level (command cat -- "$f" 2>/dev/null)
-            if test "$level" = high
+            if test "$level" = $GPU_DPM_LEVEL
                 _ok "  $f: $level"
                 set gpu_ok true
             else
-                _fail "  $f: $level (expected: high)"
+                _fail "  $f: $level (expected: $GPU_DPM_LEVEL)"
             end
         end
     end
     if test "$found_gpu" = false
         _warn "  No GPU DPM sysfs entries found"
     else if test "$gpu_ok" = false
-        _warn "  GPU not at 'high' — check dmesg for amdgpu errors"
+        _warn "  GPU not at '$GPU_DPM_LEVEL' — check dmesg for amdgpu errors"
     end
 end
 function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + amd_pstate + boost"

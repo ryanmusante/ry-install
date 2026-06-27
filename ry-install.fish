@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.76.4 (2026-06-27) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.77.0 (2026-06-27) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.76.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.77.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -569,7 +569,7 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_pstate=active btusb.enable_autosuspend=n clearcpuid=514 fsck.mode=force fsck.repair=yes iommu=pt nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n clearcpuid=514 fsck.mode=force fsck.repair=yes nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
@@ -2707,6 +2707,39 @@ function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (h
         end
     end
 end
+function _vrkm_iommu --description "_vrk_module_state sub: IOMMU effect check (amd_iommu=/intel_iommu=/iommu= from KERNEL_PARAMS vs /sys/kernel/iommu_groups + dmesg)"
+    set -l _want "" # off|on (derived from KERNEL_PARAMS; empty = no iommu param → silent)
+    for _kp in $KERNEL_PARAMS
+        switch "$_kp"
+            case 'amd_iommu=off' 'intel_iommu=off' 'iommu=off'
+                set _want off
+            case 'amd_iommu=on' 'intel_iommu=on' 'iommu=pt' 'iommu=force' 'iommu=on'
+                set _want on
+        end
+    end
+    test -z "$_want"; and return 0 # no IOMMU directive in KERNEL_PARAMS
+    test -d /sys/kernel/iommu_groups; or begin; _info "  IOMMU: /sys/kernel/iommu_groups absent — cannot verify (kernel without IOMMU sysfs)"; return 0; end
+    set -l _grp_count (command find /sys/kernel/iommu_groups -mindepth 1 -maxdepth 1 -type d 2>/dev/null | command wc -l | string trim --)
+    string match -qr '^[0-9]+$' -- "$_grp_count"; or set _grp_count 0
+    set -l _dmesg_amdvi ""
+    if test "$_RY_DMESG_LINES" -gt 0; and command -q dmesg; and sudo -n true 2>/dev/null
+        set _dmesg_amdvi (sudo -n dmesg 2>/dev/null | command grep -iE 'AMD-Vi: (Enabled|Found|Interrupt)|DMAR: IOMMU enabled|Adding to iommu group' | command head -n 1)
+    end
+    if test "$_want" = off
+        if test "$_grp_count" -eq 0
+            _ok "  IOMMU: disabled (0 iommu_groups; amd_iommu=off effective)"
+        else
+            _fail "  IOMMU: $_grp_count iommu_groups present but KERNEL_PARAMS requests off — directive not effective (check BIOS IOMMU/firmware override)"
+            test -n "$_dmesg_amdvi"; and _info "  dmesg: "(string trim -- "$_dmesg_amdvi")
+        end
+    else
+        if test "$_grp_count" -gt 0
+            _ok "  IOMMU: enabled ($_grp_count iommu_groups; passthrough/translation active)"
+        else
+            _fail "  IOMMU: 0 iommu_groups but KERNEL_PARAMS requests on — directive not effective (check BIOS IOMMU enablement)"
+        end
+    end
+end
 function _vrkm_blacklist --description "_vrk_module_state sub: module_blacklist= scan from KERNEL_PARAMS"
     set -l _bl_mods
     for _kp in $KERNEL_PARAMS
@@ -2733,6 +2766,9 @@ function _vrk_module_state --description "Runtime kparam check: module parameter
     _echo "── Additional module parameters ──"
     _chk_sysfs_match /sys/module/zswap/parameters/enabled '^[N0]$' zswap.enabled
     _chk_sysfs_eq /proc/sys/kernel/nmi_watchdog 0 nmi_watchdog
+    _echo
+    _echo "── IOMMU (cmdline effect) ──"
+    _vrkm_iommu
     _echo
     _echo "── I/O scheduler (NVMe) ──"
     set -l _nvme_bdevs (command find /sys/block -mindepth 1 -maxdepth 1 -name 'nvme*n*' 2>/dev/null)

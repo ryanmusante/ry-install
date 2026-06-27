@@ -1,11 +1,11 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.76.4-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.77.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo). One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
+> Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 <details>
 <summary><strong>Contents</strong></summary>
@@ -34,7 +34,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.76.4
+cd ry-install && git checkout v7.77.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -53,8 +53,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing deps — `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils (busybox/uutils rejected) — or a sub-6.18 kernel; sudo must be cached.
-NTP sync and `paccache` only warn.
+Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), a sub-6.18 kernel, or uncached sudo. NTP sync and `paccache` only warn.
 
 ## Usage
 
@@ -71,13 +70,11 @@ NTP sync and `paccache` only warn.
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only.
-`--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (non-managed/malformed → exit 2).
-All modes first run the runtime-init gates (hardware match, kernel floor, key/count validation), which hard-fail **exit 3** on a mismatched or sub-floor host before any mode-specific work.
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). All modes first run the runtime-init gates (hardware match, kernel floor, key/count validation), which hard-fail **exit 3** on a mismatched or sub-floor host.
 
 ## Install Flow
 
-A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and skips the Phase 5 rebuild; fix and re-run. mkinitcpio rollback restores the prior `mkinitcpio.conf` byte-for-byte on failure or signal.
+A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and skips the Phase 5 rebuild; fix and re-run.
 
 | # | Phase | Action |
 |---|---|---|
@@ -95,7 +92,7 @@ A results summary prints to stderr; a JSONL log records each phase. `WARN` keeps
 > [!WARNING]
 > Masks `ufw` and ships an nftables **default-deny-inbound** ruleset (established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 NDP/PMTUD accepted, all else dropped; `forward` drop, `output` accept). `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating — EFI-resident loaders like Windows Boot Manager are untouched.
 
-Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `true` (retune the `set -g` global, re-run) to append Sunshine/Moonlight + Steam Remote Play inbound accepts (ports in the script) to the input chain.
+Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play inbound accepts to the input chain.
 
 | Feature | Detail |
 |---|---|
@@ -117,10 +114,9 @@ Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-
 
 ## Configuration
 
-Source of truth is the script; retune the `set -g` globals near the top (perms: system `0644`, user `0600`).
-CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe, see above).
+Source of truth is the script; retune the `set -g` globals near the top (perms: system `0644`, user `0600`). CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe).
 
-**Packages** — `pacman -Rns` is rdep-aware (an external dependant skips + logs the removal). Reversible via [Uninstall](#uninstall).
+**Packages** — `pacman -Rns` is rdep-aware (an external dependant skips + logs). Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
@@ -146,8 +142,6 @@ CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (aft
 | Refused (not corrected) | a symlinked or whitespace-split (malformed) `/etc/fstab` |
 
 ## Managed Files
-
-The 18 managed files and their purpose.
 
 | File | Purpose |
 |---|---|
@@ -178,6 +172,7 @@ The 18 managed files and their purpose.
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 reached RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE` → `1`. |
 | NTSYNC | `/dev/ntsync` asserted in preflight + verify (mainline ≥ 6.14). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
 | MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Symptomatic reserve fix — remove if a kernel bump resolves it. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline — AMD-Vi is fully disabled (this is a single-purpose gaming/LLM desktop with no PCI passthrough). `--verify` confirms the live state (0 entries under `/sys/kernel/iommu_groups/`). **VFIO/GPU-passthrough or SR-IOV users must drop `amd_iommu=off` and use `amd_iommu=on iommu=pt` instead**, then re-run — `--verify` then asserts the groups are populated. |
 
 ## Uninstall
 
@@ -197,7 +192,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 </details>
 
-For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), step 5 regenerates entries from the restored/removed state; revert their contents (or `.ry.bak`) before step 5.
+For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert their contents (or `.ry.bak`) before step 5, which regenerates entries from that state.
 
 ## Known Issues
 
@@ -210,7 +205,7 @@ For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), step 5
 
 ### Known-benign log lines
 
-Expected on this hardware — a deliberate optimization or a hardware-capability gap. `--verify` surfaces the live ones as `INFO` under **known-benign conditions (advisory)** (never affects the verdict).
+Expected on this hardware (deliberate optimization or capability gap). `--verify` surfaces live ones as `INFO` under **known-benign conditions (advisory)** — never affects the verdict.
 
 | Log line | Why it's benign |
 |---|---|
@@ -220,7 +215,7 @@ Expected on this hardware — a deliberate optimization or a hardware-capability
 | `charge thresholds not supported` / `no backlight interface` | mini-PC has no internal battery or panel backlight |
 | `Unlikely small volume range` | UAC descriptor quirk in a USB audio device; capture unaffected |
 
-Shutdown- or handover-only (not live-checkable), documented here instead of by an advisory check:
+Shutdown- or handover-only (not live-checkable):
 
 | Log line | Why it's benign |
 |---|---|
@@ -247,7 +242,7 @@ Shutdown- or handover-only (not live-checkable), documented here instead of by a
 
 ## Contributing
 
-PRs welcome. For config changes, include before/after `--verify` and `--check` output; lint with `fish --no-execute`; keep comments single-line; update [CHANGELOG.md](CHANGELOG.md).
+PRs welcome. For config changes: include before/after `--verify` and `--check` output, lint with `fish --no-execute`, keep comments single-line, update [CHANGELOG.md](CHANGELOG.md).
 
 ## Security
 

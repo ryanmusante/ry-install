@@ -2,17 +2,10 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
-## 7.76.4 - 2026-06-27
+## 7.77.0 - 2026-06-27
 
-- readme: wrap four long prose lines (Requirements, Usage, exit-codes fold, Configuration) at sentence boundaries for diff-friendly source. Rendered output byte-identical; docs-only.
-
-## 7.76.3 - 2026-06-27
-
-- readme: add missing blank line before Install Flow table (GFM table-spacing consistency). Docs-only.
-
-## 7.76.2 - 2026-06-27
-
-- readme: add collapsible table of contents; add license/platform/shell badges. Docs-only, no script-behavior change.
+- cmdline: `iommu=pt` -> `amd_iommu=off` (AMD-Vi fully disabled; no PCI passthrough on this profile). KERNEL_PARAMS count-neutral (16).
+- verify: add `_vrkm_iommu` runtime effect check — derives expected IOMMU state from KERNEL_PARAMS (`amd_iommu=`/`intel_iommu=`/`iommu=`) and asserts it against live `/sys/kernel/iommu_groups` + dmesg correlation. Count- and exit-code-neutral.
 
 ## 7.76.1 - 2026-06-27
 
@@ -50,22 +43,10 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 - cmdline: add `btusb.enable_autosuspend=n`. KERNEL_PARAMS 12 -> 13.
 
-## 7.73.5 - 2026-06-26
-
-- docs: trim README; fix stale Quick-Start clone tag.
-
 ## 7.73.4 - 2026-06-26
 
 - preflight: add `*/modprobe.d/*` post-hook. count 17 -> 18.
 - install-file: add `_post_modprobe` handler.
-
-## 7.73.3 - 2026-06-26
-
-- docs: render Managed Files as a table.
-
-## 7.73.2 - 2026-06-26
-
-- docs: trim README.
 
 ## 7.73.1 - 2026-06-26
 
@@ -89,10 +70,6 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 - mangohud: restore `gpu_power`, `text_outline`, `toggle_hud=Shift_R+F12`.
 - preflight: guard the x86-64-v4 probe.
-
-## 7.71.2 - 2026-06-26
-
-- style: collapse the nm-dispatcher generator comment.
 
 ## 7.71.1 - 2026-06-26
 
@@ -128,19 +105,13 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 - boot: remove `clearcpuid=rdseed`. KERNEL_PARAMS 14 -> 13.
 - preflight: remove `_ry_check_rdseed_workaround_stale`.
 
-## 7.67.0 - 2026-06-22
-
-- style: normalize the RDSEED-microcode probe to fish `(cmd)` form.
-
 ## 7.66.0 - 2026-06-22
 
 - verify: split iwd-process state check into `_vrsv_wifi_iwd_proc`.
-- style: trim verbose source comments.
 
 ## 7.65.0 - 2026-06-21
 
 - mangohud: order fps/frametime ahead of GPU/CPU block.
-- style: fix post-hook banner count.
 
 ## 7.64.0 - 2026-06-21
 

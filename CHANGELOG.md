@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.76.2 - 2026-06-27
+
+- readme: add collapsible table of contents; add license/platform/shell badges. Docs-only, no script-behavior change.
+
 ## 7.76.1 - 2026-06-27
 
 - ntsync: drop `/etc/modules-load.d/ntsync.conf` autoload; ntsync is assert-only (preflight + verify). Count-neutral.

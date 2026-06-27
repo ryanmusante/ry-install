@@ -1,8 +1,31 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.76.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.76.2-1793d1?style=flat-square)](CHANGELOG.md)
+[![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
+[![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
+[![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
 > Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo). One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
+
+<details>
+<summary><strong>Contents</strong></summary>
+
+- [Quick Start](#quick-start)
+- [Requirements](#requirements)
+- [Usage](#usage)
+- [Install Flow](#install-flow)
+- [Safety & Reliability](#safety--reliability)
+- [Configuration](#configuration)
+- [Managed Files](#managed-files)
+- [Tuning Notes](#tuning-notes)
+- [Uninstall](#uninstall)
+- [Known Issues](#known-issues)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Security](#security)
+- [License](#license)
+
+</details>
 
 ## Quick Start
 
@@ -11,7 +34,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.76.1
+cd ry-install && git checkout v7.76.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```

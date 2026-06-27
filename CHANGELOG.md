@@ -2,6 +2,12 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.76.0 - 2026-06-27
+
+- ntsync: collapse _RY_NTSYNC_MODLOAD_CONFS from 3 candidate autoload paths to 1 (/etc/modules-load.d/ntsync.conf). Module is tristate (not builtin) on CachyOS so autoload is still required; the 3 paths were redundant. _ir_validate_counts pair updated 3 -> 1.
+- MangoHud: add cpu_temp directive (after cpu_stats). gpu_temp/gpu_power were present but cpu_temp absent on a 140W shared-package APU. Directives are uncounted; verify path unaffected.
+- preflight: add linux-firmware soft-floor advisory in _install_preflight (mirrors the mesa idiom). Hard-warn on ==20251125* (known-bad MES blob: gfx1151 GCVM_L2 GPU hang), soft-warn <20260110 (pre-dates ROCm MES stability fix). Advisory, non-fatal, count-neutral; vercmp-guarded, fish 3.6 floor.
+
 7.75.1 - 2026-06-27
 
 - cpupower: CPUPOWER_GOVERNOR performance -> powersave.

@@ -2,6 +2,10 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.76.1 - 2026-06-27
+
+- MangoHud: comment out cpu_temp directive (now "# cpu_temp", emitted disabled) pending per-host hwmon sensor resolution. On Strix Halo (Ryzen AI Max+ 395 / gfx1151) MangoHud's hwmon auto-detection can latch the wrong chip and render CPU temp as 0; re-enable with cpu_custom_temp_sensor=k10temp,tempN_input once the live hwmon index is confirmed (see DEEP-DIVE notes). Verify path unaffected (asserts fps + >=1 directive; comments tolerated). Count-neutral.
+
 7.76.0 - 2026-06-27
 
 - ntsync: collapse _RY_NTSYNC_MODLOAD_CONFS from 3 candidate autoload paths to 1 (/etc/modules-load.d/ntsync.conf). Module is tristate (not builtin) on CachyOS so autoload is still required; the 3 paths were redundant. _ir_validate_counts pair updated 3 -> 1.

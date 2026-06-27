@@ -2,6 +2,10 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.74.1 - 2026-06-27
+
+- time-sync: persist NTP-corrected time to the hardware clock via new _ry_rtc_writeback (hwclock --systohc --utc) at both sync-confirmed paths in _ry_check_time_sync. Stops a fast/skewed RTC from poisoning systemd timer persistence stamps (future-dated OnCalendar stamps cause shadow.timer / cachyos-rate-mirrors.timer to silently skip). Guarded on hwclock presence and RTCInLocalTZ != yes; non-fatal.
+
 7.74.0 - 2026-06-27
 
 - cmdline: add processor.max_cstate=1 to KERNEL_PARAMS (cap C-state). KERNEL_PARAMS 13 -> 14.

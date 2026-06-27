@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.74.0 (2026-06-27) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.74.1 (2026-06-27) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.74.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.74.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1607,11 +1607,24 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
     end
     return 1
 end
-function _ry_check_time_sync --description "Verify NTP time sync; enable systemd-timesyncd if drifted (non-fatal)"
+function _ry_rtc_writeback --description "Persist NTP-corrected system time to the hardware clock (hwclock --systohc) so a skewed RTC stops poisoning timer persistence stamps; non-fatal"
+    if not command -q hwclock; _info "    RTC: hwclock not found — cannot persist corrected time to hardware clock (timer persistence stamps may stay skewed until next sync)"; _log "RTC_WRITEBACK_SKIP: hwclock absent"; return 1; end
+    set -l _rtc_local (command timedatectl show -p RTCInLocalTZ --value 2>/dev/null | string trim --)
+    if test "$_rtc_local" = yes; _info "    RTC: hardware clock is in local time — leaving --systohc to systemd; not writing directly"; _log "RTC_WRITEBACK_SKIP: RTCInLocalTZ=yes"; return 1; end
+    if _run sudo -n hwclock --systohc --utc
+        _ok "  RTC: hardware clock written back from NTP-corrected system time (--systohc)"
+        _log "RTC_WRITEBACK_OK"
+        return 0
+    end
+    _warn "  RTC: hwclock --systohc failed — hardware clock still skewed; correct manually (sudo hwclock --systohc --utc)"
+    _log "RTC_WRITEBACK_FAIL"
+    return 1
+end
+function _ry_check_time_sync --description "Verify NTP time sync; enable systemd-timesyncd if drifted (non-fatal); persist corrected time to RTC"
     _log "TIME_SYNC_CHECK_START"
     if not command -q timedatectl; _warn "  Time sync: timedatectl not found — cannot verify (pacman GPG checks may fail on a skewed clock)"; _log "TIME_SYNC_SKIP: timedatectl absent"; return 1; end
     set -l _synced (command timedatectl show -p NTPSynchronized --value 2>/dev/null | string trim --)
-    if test "$_synced" = yes; _ok "  Time sync: NTP synchronized"; _log "TIME_SYNC_OK"; return 0; end
+    if test "$_synced" = yes; _ok "  Time sync: NTP synchronized"; _log "TIME_SYNC_OK"; _ry_rtc_writeback; return 0; end
     _warn "  Time sync: clock NOT NTP-synchronized (NTPSynchronized=$_synced) — pacman signature checks can fail"
     _log "TIME_SYNC_UNSYNCED: NTPSynchronized=$_synced"
     if not command -q systemctl; _info "    systemctl absent — start an NTP client manually"; return 1; end
@@ -1627,7 +1640,7 @@ function _ry_check_time_sync --description "Verify NTP time sync; enable systemd
     if _run sudo -n systemctl enable --now systemd-timesyncd.service
         command sleep 2 </dev/null 2>/dev/null
         set -l _resynced (command timedatectl show -p NTPSynchronized --value 2>/dev/null | string trim --)
-        if test "$_resynced" = yes; _ok "  Time sync: synchronized after starting systemd-timesyncd"; _log "TIME_SYNC_RECOVERED"; return 0; end
+        if test "$_resynced" = yes; _ok "  Time sync: synchronized after starting systemd-timesyncd"; _log "TIME_SYNC_RECOVERED"; _ry_rtc_writeback; return 0; end
         _warn "  Time sync: still not synchronized (NTPSynchronized=$_resynced) — verify NTP egress before relying on signatures"
         _info "    Manual: sudo timedatectl set-ntp true; sleep 5; timedatectl"
         _log "TIME_SYNC_STILL_UNSYNCED: NTPSynchronized=$_resynced"

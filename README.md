@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.74.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.74.1-1793d1?style=flat-square)](CHANGELOG.md)
 
 > Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
 
@@ -13,7 +13,7 @@ One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.74.0
+cd ry-install && git checkout v7.74.1
 chmod +x ry-install.fish
 ./ry-install.fish
 ```

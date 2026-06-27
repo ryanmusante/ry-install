@@ -2,6 +2,17 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.73.2 - 2026-06-26
+
+- docs: trim README to vital information — drop the table of contents and 4 of 5 badges, collapse the full per-file value reference to a pointer (source of truth is the script) plus the deliberate CachyOS divergences, condense the fstab and Tuning Notes prose, and shorten the remote-play port enumeration. ~23% smaller; all safety/recovery/eligibility content (package removal, BLS wipe, ufw mask, DO-NOT-REBOOT banner, exit codes, env overrides, Managed Files index, Uninstall) preserved verbatim.
+- docs: fix Contributing lint guidance — shellcheck cannot lint fish; lint with fish --no-execute only.
+
+7.73.1 - 2026-06-26
+
+- preflight: count each fatal preflight condition once. The rationale + override-hint continuation lines of the kernel-floor and hardware-mismatch (and CPU-model-unreadable) blocks now route through new _err_loud_cont, which mirrors _err_loud (JSONL log + forced stderr + --check silence) but skips the VERIFY_FAIL bump. JSONL footer/summary fail no longer inflates a single condition to 3. Exit codes unchanged.
+- docs: clarify that all four modes run the runtime-init gates (hardware match, kernel floor, embedded key/count validation) before mode dispatch; on a profile-mismatched or sub-floor host these hard-fail exit 3 before the --install-file exit-2 non-managed rejection can surface (bypass via RY_INSTALL_SKIP_HARDWARE_CHECK=1 / RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1).
+- style: fish-native command-substitution notation in the content-dispatch section comment.
+
 7.73.0 - 2026-06-26
 
 - udev: rename 60-ry-perf.rules -> 99-ry-perf.rules so NVMe scheduler=none sorts after vendor 60-ioschedulers.rules and wins by explicit prefix. Scheduler unchanged (none); managed-file count unchanged (18).

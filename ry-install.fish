@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.73.0 (2026-06-26) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.73.2 (2026-06-26) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.73.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.73.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -731,8 +731,8 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
             _log "KERNEL_FLOOR_UNREADABLE_OVERRIDE: uname -r='$_kr'"
         else
             _err_loud "Kernel floor: release unreadable from uname -r ('$_kr') — refusing to deploy"
-            _err_loud "  RTL8127 suspend/shutdown hang fix + r8169 support land only >=$KERNEL_MIN; deploying below risks suspend lockup."
-            _err_loud "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
+            _err_loud_cont "  RTL8127 suspend/shutdown hang fix + r8169 support land only >=$KERNEL_MIN; deploying below risks suspend lockup."
+            _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         end
         return 0
@@ -740,8 +740,8 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
     set -l _cur_parts (string split '.' -- "$_kver"); set -l _min_parts (string split '.' -- "$KERNEL_MIN")
     if test "$_cur_parts[1]" -lt "$_min_parts[1]"; or begin; test "$_cur_parts[1]" -eq "$_min_parts[1]"; and test "$_cur_parts[2]" -lt "$_min_parts[2]"; end
         _err_loud "Kernel floor: running $_kver, profile $PROFILE_NAME requires >=$KERNEL_MIN — refusing to deploy"
-        _err_loud "  RTL8127 suspend/shutdown hang fix (ae1737e7339b) + r8169 support are present only at/above $KERNEL_MIN."
-        _err_loud "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
+        _err_loud_cont "  RTL8127 suspend/shutdown hang fix (ae1737e7339b) + r8169 support are present only at/above $KERNEL_MIN."
+        _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
         _pre_dispatch_exit $EXIT_PREFLIGHT
     end
 end
@@ -770,8 +770,8 @@ function _init_runtime --description "Cache root UUID + validate config + precom
                 _log "HARDWARE_MODEL_UNREADABLE_OVERRIDE: /proc/cpuinfo missing 'model name'"
             else
                 _err_loud "Hardware check: CPU model unreadable from /proc/cpuinfo (no 'model name' field) — refusing to deploy"
-                _err_loud "  Deploying gfx1151/Strix Halo defaults without CPU validation risks incorrect kernel cmdline + initramfs MODULES."
-                _err_loud "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish"
+                _err_loud_cont "  Deploying gfx1151/Strix Halo defaults without CPU validation risks incorrect kernel cmdline + initramfs MODULES."
+                _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish"
                 _pre_dispatch_exit $EXIT_PREFLIGHT
             end
         else if not string match -q -i -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"
@@ -780,8 +780,8 @@ function _init_runtime --description "Cache root UUID + validate config + precom
                 _log "HARDWARE_MISMATCH_OVERRIDE: expected=$EXPECTED_CPU_MATCH detected=$_cpu_model"
             else
                 _err_loud "Hardware mismatch: profile $PROFILE_NAME expects $EXPECTED_CPU_MATCH, detected: $_cpu_model"
-                _err_loud "  Deploying gfx1151/Strix Halo defaults on non-matching CPU would set incorrect kernel cmdline + initramfs MODULES."
-                _err_loud "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish"
+                _err_loud_cont "  Deploying gfx1151/Strix Halo defaults on non-matching CPU would set incorrect kernel cmdline + initramfs MODULES."
+                _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish"
                 _pre_dispatch_exit $EXIT_PREFLIGHT
             end
         end
@@ -940,7 +940,7 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
         "background_alpha=0.4"
 end
 
-# ── CONTENT DISPATCH (_ry_get_file_content; fn = _content_$(_tmpfile_key dst)) ──
+# ── CONTENT DISPATCH (_ry_get_file_content; fn name derived via _content_fn_for) ──
 function _content_fn_for --argument-names dst --description "Resolve the _content_ generator function name for a destination"
     echo "_content_"(_tmpfile_key "$dst")
 end
@@ -1195,6 +1195,12 @@ function _err_loud --description "Fatal-preflight err: stderr regardless of QUIE
     set -l msg (string join -- " " $argv)
     _log "ERR: $msg"
     set -q VERIFY_FAIL; and set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
+    test "$MODE" = check; and return 0
+    _msg_print --force ERR $argv
+end
+function _err_loud_cont --description "Continuation line for a prior _err_loud (rationale/override hint): same routing, no VERIFY_FAIL bump (one condition counts once)"
+    set -l msg (string join -- " " $argv)
+    _log "ERR: $msg"
     test "$MODE" = check; and return 0
     _msg_print --force ERR $argv
 end

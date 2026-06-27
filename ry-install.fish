@@ -11,7 +11,6 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-set -g _RY_NTSYNC_MODLOAD_CONFS /etc/modules-load.d/ntsync.conf # ntsync autoload confs
 set -g KERNEL_MIN 6.18 # hard preflight floor: RTL8127 suspend-hang fix (ae1737e7339b) + r8169 support land >=6.18
 
 # ── HELP TEXT ──
@@ -698,7 +697,6 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
-        _RY_NTSYNC_MODLOAD_CONFS:1 \
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:15 \
         USER_DESTINATIONS:3
@@ -2217,15 +2215,6 @@ function _vss_ntsync_modules --description "_verify_static_system sub: ntsync st
             _warn "  ntsync: module loaded but /dev/ntsync missing"
         case missing
             _info "  ntsync: module not loaded"
-    end
-    _echo
-    _echo "── Modules autoload ──"
-    set -l _found
-    for _c in $_RY_NTSYNC_MODLOAD_CONFS; test -f "$_c"; and set -a _found "$_c"; end
-    if test (count $_found) -gt 0
-        _ok "  ntsync autoload: "(string join ', ' -- $_found)" present (cachyos-settings/wine-cachyos)"
-    else
-        _warn "  ntsync autoload: no modules-load.d/*ntsync.conf found — module may not load on boot"
     end
 end
 function _vss_logind --description "_verify_static_system sub: logind.conf.d keys"

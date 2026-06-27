@@ -4,102 +4,91 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.76.1 - 2026-06-27
 
-- MangoHud: comment out cpu_temp directive (now "# cpu_temp", emitted disabled) pending per-host hwmon sensor resolution. On Strix Halo (Ryzen AI Max+ 395 / gfx1151) MangoHud's hwmon auto-detection can latch the wrong chip and render CPU temp as 0; re-enable with cpu_custom_temp_sensor=k10temp,tempN_input once the live hwmon index is confirmed (see DEEP-DIVE notes). Verify path unaffected (asserts fps + >=1 directive; comments tolerated). Count-neutral.
+- mangohud: comment out cpu_temp (emitted disabled) pending per-host hwmon sensor resolution; re-enable with cpu_custom_temp_sensor=k10temp once the hwmon index is confirmed. Count-neutral.
 
 7.76.0 - 2026-06-27
 
-- ntsync: collapse _RY_NTSYNC_MODLOAD_CONFS from 3 candidate autoload paths to 1 (/etc/modules-load.d/ntsync.conf). Module is tristate (not builtin) on CachyOS so autoload is still required; the 3 paths were redundant. _ir_validate_counts pair updated 3 -> 1.
-- MangoHud: add cpu_temp directive (after cpu_stats). gpu_temp/gpu_power were present but cpu_temp absent on a 140W shared-package APU. Directives are uncounted; verify path unaffected.
-- preflight: add linux-firmware soft-floor advisory in _install_preflight (mirrors the mesa idiom). Hard-warn on ==20251125* (known-bad MES blob: gfx1151 GCVM_L2 GPU hang), soft-warn <20260110 (pre-dates ROCm MES stability fix). Advisory, non-fatal, count-neutral; vercmp-guarded, fish 3.6 floor.
+- ntsync: collapse autoload-conf candidates 3 -> 1 (/etc/modules-load.d/ntsync.conf). Count pair updated 3 -> 1.
+- mangohud: add cpu_temp (after cpu_stats). Uncounted.
+- preflight: add linux-firmware soft-floor advisory (hard-warn on 20251125* MES blob, soft-warn < 20260110). Non-fatal, count-neutral.
 
 7.75.1 - 2026-06-27
 
 - cpupower: CPUPOWER_GOVERNOR performance -> powersave.
-- udev: AMD P-State EPP performance -> balance_performance (named hint, not raw 0x0). boost/prefcore unchanged.
+- udev: AMD P-State EPP performance -> balance_performance.
 
 7.75.0 - 2026-06-27
 
-- cmdline: add fsck.mode=force and fsck.repair=yes to KERNEL_PARAMS (force fsck every boot, auto-repair without prompt). KERNEL_PARAMS 14 -> 16.
+- cmdline: add fsck.mode=force, fsck.repair=yes. KERNEL_PARAMS 14 -> 16.
 
 7.74.2 - 2026-06-27
 
-- verify: add _vss_known_benign advisory sub (5 INFO checks: masked ModemManager D-Bus noise, ACP70 missing machine driver, boltd unknown NHI id, no battery/backlight sysfs, USB mic volume curve). Emits only when present; count- and exit-code-neutral.
-- docs: README — add Known-benign log lines tables; trim to vital info.
+- verify: add _vss_known_benign advisory sub (5 INFO checks). Count- and exit-code-neutral.
 
 7.74.1 - 2026-06-27
 
-- time-sync: add _ry_rtc_writeback (hwclock --systohc --utc) at both sync-confirmed paths in _ry_check_time_sync, so a skewed RTC stops poisoning timer persistence stamps. Guarded on hwclock + RTCInLocalTZ != yes; non-fatal.
+- time-sync: add _ry_rtc_writeback (hwclock --systohc --utc) at both sync-confirmed paths. Non-fatal.
 
 7.74.0 - 2026-06-27
 
-- cmdline: add processor.max_cstate=1 to KERNEL_PARAMS (cap C-state). KERNEL_PARAMS 13 -> 14.
-- preflight: remove _ir_validate_repo_tier (advisory x86-64-v4 probe). No count/exit-code impact.
-- docs: README Phase 4 pipeline now lists the iwd-handoff step (runs only when NM_WIFI_BACKEND=iwd) to match _install_configure_services.
-- docs: README systemd-oomd note made RAM-capacity-agnostic (was a specific figure the script does not define).
+- cmdline: add processor.max_cstate=1. KERNEL_PARAMS 13 -> 14.
+- preflight: remove _ir_validate_repo_tier. No count/exit-code impact.
 
 7.73.6 - 2026-06-26
 
-- cmdline: add btusb.enable_autosuspend=n to KERNEL_PARAMS. KERNEL_PARAMS 12 -> 13.
+- cmdline: add btusb.enable_autosuspend=n. KERNEL_PARAMS 12 -> 13.
 
 7.73.5 - 2026-06-26
 
-- docs: trim README prose. Managed Files table + safety admonitions preserved.
-- docs: fix stale Quick-Start clone tag.
+- docs: trim README prose; fix stale Quick-Start clone tag.
 
 7.73.4 - 2026-06-26
 
-- preflight: add `*/modprobe.d/*|modprobe` to _RY_POST_HOOKS. count 17 -> 18.
-- install-file: add _post_modprobe handler (modprobe.d change applies on reboot).
+- preflight: add */modprobe.d/*|modprobe post-hook. count 17 -> 18.
+- install-file: add _post_modprobe handler.
 
 7.73.3 - 2026-06-26
 
-- docs: render Managed Files as a File|Purpose table, ordered to match SYSTEM/USER_DESTINATIONS.
+- docs: render Managed Files as a File|Purpose table.
 
 7.73.2 - 2026-06-26
 
-- docs: trim README to vital info. Safety/recovery content preserved.
-- docs: Contributing — lint with fish --no-execute.
+- docs: trim README to vital info.
 
 7.73.1 - 2026-06-26
 
 - preflight: count each fatal condition once via _err_loud_cont. Exit codes unchanged.
-- docs: note runtime-init gates run before mode dispatch; exit 3 precedes --install-file exit 2.
-- style: fish-native command-substitution in the content-dispatch comment.
 
 7.73.0 - 2026-06-26
 
-- udev: rename 60-ry-perf.rules -> 99-ry-perf.rules (sorts after vendor 60-ioschedulers.rules). Scheduler unchanged.
-- sysctl: drop vm.page-cluster=0 and vm.vfs_cache_pressure=50 (vendor duplicates). SYSCTL_VALUES 11 -> 9.
+- udev: rename 60-ry-perf.rules -> 99-ry-perf.rules (sorts after vendor). Scheduler unchanged.
+- sysctl: drop vm.page-cluster and vm.vfs_cache_pressure (vendor duplicates). SYSCTL_VALUES 11 -> 9.
 
 7.72.0 - 2026-06-26
 
-- network: add 60-ry-mt7925e.conf (disable_aspm=1) for MT7925. Managed configs 17 -> 18, SYSTEM_DESTINATIONS 14 -> 15.
-- verify: add _vss_modprobe assertion for the mt7925e drop-in.
+- network: add 60-ry-mt7925e.conf (disable_aspm=1). Managed configs 17 -> 18, SYSTEM_DESTINATIONS 14 -> 15.
+- verify: add _vss_modprobe assertion.
 
 7.71.4 - 2026-06-26
 
 - preflight: prefix mesa soft-floor probe with command (avoids shadowing pacman function).
-- docs: clarify fstab normalization operates on the options column (field 4) only.
 
 7.71.3 - 2026-06-26
 
 - mangohud: restore gpu_power, text_outline, toggle_hud=Shift_R+F12.
-- preflight: guard the x86-64-v4 probe (resolve ld-linux via command -v, gate pacman-conf behind command -q).
+- preflight: guard the x86-64-v4 probe.
 
 7.71.2 - 2026-06-26
 
 - style: collapse the nm-dispatcher generator comment to one line.
-- docs: reconcile README against script.
 
 7.71.1 - 2026-06-26
 
-- preflight: add _ir_validate_keys — refuse deploy on out-of-domain embedded scalar key.
-- docs: note fstab rewrite normalizes redundant atime/defaults/commit tokens.
+- preflight: add _ir_validate_keys (refuse deploy on out-of-domain scalar key).
 
 7.71.0 - 2026-06-26
 
-- preflight: add _ir_validate_kernel_floor — hard-fail on kernel < KERNEL_MIN (6.18); skip-override available.
-- preflight: add _ir_validate_repo_tier — advisory x86-64-v4 repo probe.
+- preflight: add _ir_validate_kernel_floor (hard-fail on kernel < 6.18; skip-override available).
 - gpu: parameterize udev DPM level as GPU_DPM_LEVEL (default auto).
 - env: add PROTON_FSR4_RDNA3_UPGRADE=1. ENV_VARS 10 -> 11.
 - firewall: add RY_REMOTE_PLAY_PORTS gate (default false).
@@ -110,7 +99,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.70.0 - 2026-06-23
 
-- regdom: remove /etc/conf.d/wireless-regdom. configs 18 -> 17, SYSTEM_DESTINATIONS 15 -> 14, _RY_POST_HOOKS 18 -> 17.
+- regdom: remove /etc/conf.d/wireless-regdom. configs 18 -> 17, SYSTEM_DESTINATIONS 15 -> 14, post-hooks 18 -> 17.
 - bluetooth: ReconnectAttempts 7 -> 3; remove ReconnectIntervals.
 - preflight: raise mesa soft-floor warn 25.3 -> 26.0.
 
@@ -120,16 +109,16 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.69.0 - 2026-06-22
 
-- cmdline: remove amd_iommu=on from KERNEL_PARAMS. KERNEL_PARAMS 13 -> 12.
+- cmdline: remove amd_iommu=on. KERNEL_PARAMS 13 -> 12.
 
 7.68.0 - 2026-06-22
 
-- boot: remove clearcpuid=rdseed from KERNEL_PARAMS. KERNEL_PARAMS 14 -> 13.
+- boot: remove clearcpuid=rdseed. KERNEL_PARAMS 14 -> 13.
 - preflight: remove _ry_check_rdseed_workaround_stale.
 
 7.67.0 - 2026-06-22
 
-- style: normalize the RDSEED-microcode probe command substitution to fish (cmd) form.
+- style: normalize the RDSEED-microcode probe to fish (cmd) form.
 
 7.66.0 - 2026-06-22
 
@@ -145,7 +134,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 - drirc: remove 95-ry-radv-apu.conf (gfx1151 reports uma:1 natively).
 - network: remove dormant iwd/main.conf; NM_WIFI_BACKEND=iwd opt-in retained.
-- guards: SYSTEM_DESTINATIONS 17 -> 15, _RY_POST_HOOKS 20 -> 18, managed-file count 20 -> 18.
+- guards: SYSTEM_DESTINATIONS 17 -> 15, post-hooks 20 -> 18, managed-file count 20 -> 18.
 
 7.63.0 - 2026-06-21
 

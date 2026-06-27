@@ -6,6 +6,8 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 - cmdline: add processor.max_cstate=1 to KERNEL_PARAMS (cap C-state). KERNEL_PARAMS 13 -> 14.
 - preflight: remove _ir_validate_repo_tier (advisory x86-64-v4 probe). No count/exit-code impact.
+- docs: README Phase 4 pipeline now lists the iwd-handoff step (runs only when NM_WIFI_BACKEND=iwd) to match _install_configure_services.
+- docs: README systemd-oomd note made RAM-capacity-agnostic (was a specific figure the script does not define).
 
 7.73.7 - 2026-06-26
 

@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.76.3 - 2026-06-27
+
+- readme: add missing blank line before Install Flow table (GFM table-spacing consistency). Docs-only.
+
 ## 7.76.2 - 2026-06-27
 
 - readme: add collapsible table of contents; add license/platform/shell badges. Docs-only, no script-behavior change.

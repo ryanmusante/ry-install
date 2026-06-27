@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.76.2-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.76.3-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -34,7 +34,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.76.2
+cd ry-install && git checkout v7.76.3
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -75,6 +75,7 @@ Preflight hard-fails (exit 3) on missing deps — `pacman`, `systemctl`, `mkinit
 ## Install Flow
 
 A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and skips the Phase 5 rebuild; fix and re-run. mkinitcpio rollback restores the prior `mkinitcpio.conf` byte-for-byte on failure or signal.
+
 | # | Phase | Action |
 |---|---|---|
 | 1 | Preflight | config checks → lock → hard gates (read-only) |

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.74.1 (2026-06-27) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.74.2 (2026-06-27) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.74.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.74.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -2276,6 +2276,47 @@ end
 function _vss_modprobe --description "_verify_static_system sub: mt7925e modprobe drop-in (ASPM disable)"
     _chk_file /etc/modprobe.d/60-ry-mt7925e.conf; and _chk_grep /etc/modprobe.d/60-ry-mt7925e.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'
 end
+function _kb_modemmanager_masked --description "INFO when modemmanager.service is masked (expected) — KDE kded probes org.freedesktop.ModemManager1 and the activation fails by design"
+    contains -- modemmanager.service $MASK; or return 0 # only relevant when we mask it
+    command -q systemctl; or return 0
+    set -l _state (command systemctl is-enabled -- modemmanager.service 2>/dev/null | string trim --)
+    contains -- "$_state" masked; or return 0 # only annotate if the mask actually took
+    _info "  ModemManager masked: kded/D-Bus 'ModemManager1 ... could not be found' activation failures are expected and harmless"
+    return 0
+end
+function _kb_acp70_no_machine_driver --description "INFO when ACP70 audio co-processor has no matching ASoC machine driver (missing kernel board-ID quirk; mic may be undetected)"
+    command -q dmesg; or return 0
+    command dmesg 2>/dev/null | command grep -qiE 'acp_asoc_acp70.*No matching ASoC machine driver'; or return 0
+    _info "  ACP70 audio: no matching ASoC machine driver — needs a kernel board-ID quirk; internal mic stays undetected until linux-cachyos ships one (report board model upstream)"
+    return 0
+end
+function _kb_thunderbolt_nhi_unknown --description "INFO when boltd cannot resolve the USB4/Thunderbolt NHI PCI id (boltd PCI-ID table gap; TB UID-stability undetermined)"
+    command -q journalctl; or return 0
+    command journalctl -b --no-pager 2>/dev/null | command grep -qiE "unknown NHI PCI id"; or return 0
+    _info "  Thunderbolt: boltd does not recognize this NHI PCI id — UID-stability check is skipped; USB4/TB devices still enumerate (boltd PCI-ID table gap)"
+    return 0
+end
+function _kb_no_battery_backlight --description "INFO when powerdevil charge-threshold / backlight sysfs is absent (mini-PC: no internal battery or panel backlight — capability gap, not a fault)"
+    set -l _have_bl false
+    for _b in /sys/class/backlight/*; test -e "$_b"; and set _have_bl true; and break; end
+    test "$_have_bl" = true; and return 0 # backlight present → nothing to annotate
+    _info "  No panel backlight / battery sysfs: powerdevil 'charge thresholds not supported' and 'no backlight interface' are expected on this mini-PC (no internal battery or panel)"
+    return 0
+end
+function _kb_usb_mic_volume_curve --description "INFO when a USB audio device reports a non-linear/unlikely volume range (UAC descriptor quirk on the device; cosmetic)"
+    command -q dmesg; or return 0
+    command dmesg 2>/dev/null | command grep -qiE 'Unlikely small volume range'; or return 0
+    _info "  USB mic volume curve: a USB audio device reports an unlikely volume range — a UAC descriptor quirk in the device firmware (cosmetic; does not affect capture)"
+    return 0
+end
+function _vss_known_benign --description "_verify_static_system sub: advisory INFO for known-benign conditions this host triggers by design or hardware (never fails; emits only when present)"
+    _echo "── known-benign conditions (advisory) ──"
+    _kb_modemmanager_masked
+    _kb_acp70_no_machine_driver
+    _kb_thunderbolt_nhi_unknown
+    _kb_no_battery_backlight
+    _kb_usb_mic_volume_curve
+end
 function _verify_static_system --description "Verify ntsync, resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, nftables"
     _echo "SYSTEM CONFIGURATION"
     _vss_ntsync_modules
@@ -2299,6 +2340,7 @@ function _verify_static_system --description "Verify ntsync, resolved, logind, N
     _vss_modprobe
     _echo "── nftables ──"
     _vss_nft
+    _vss_known_benign
 end
 function _verify_static_user --description "Verify environment.d ENV_VARS + baloo indexing disabled + MangoHud HUD config"
     _echo "USER CONFIGURATION"

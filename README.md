@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.74.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.74.2-1793d1?style=flat-square)](CHANGELOG.md)
 
 > Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
 
@@ -13,7 +13,7 @@ One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.74.1
+cd ry-install && git checkout v7.74.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -184,6 +184,28 @@ For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), step 5
 | RTL8127 10GbE | throughput drops under load; suspend/shutdown hang | resolved — in-tree `r8169` (`f24f7b2f3af9`) + suspend/shutdown hang fix (`ae1737e7339b`), both ≥ 6.18 and guaranteed by the kernel floor; no DKMS |
 | MT7925 | kernel panics, low TX power, random deauth | open — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
 | Strix Halo ACP | no ASoC machine driver | open — pending upstream (HDMI/USB audio unaffected) |
+
+### Known-benign log lines
+
+These appear in `dmesg`/journal on this hardware but are expected — either a deliberate optimization or a hardware-capability gap. `--verify` surfaces the live ones under **known-benign conditions (advisory)** as `INFO` (never affects the pass/fail verdict).
+
+| Log line | Why it's benign |
+|---|---|
+| `ModemManager1 … could not be found` | `modemmanager.service` is masked by design; KDE's D-Bus probe fails harmlessly |
+| `acp_asoc_acp70 … No matching ASoC machine driver` | missing kernel board-ID quirk; internal mic undetected (HDMI/USB audio fine) |
+| `unknown NHI PCI id` (boltd) | boltd PCI-ID table gap; USB4/TB devices still enumerate |
+| `charge thresholds not supported` / `no backlight interface` | mini-PC has no internal battery or panel backlight |
+| `Unlikely small volume range` | UAC descriptor quirk in a USB audio device; capture unaffected |
+
+These are shutdown- or session-handover-only and cannot be checked live, so they are documented here rather than by an advisory check:
+
+| Log line | Why it's benign |
+|---|---|
+| `atomic commit failed: Permission denied` (kwin) | DRM-master handover between greeter and session; transient |
+| `nm_dispatcher` / `org.bluez` / `org.bluez.obex` `unit is invalid` | D-Bus activation during shutdown teardown |
+| `home1 … could not be found` | systemd-homed not installed (not used) |
+| `PipeWire remote error: -32` | connection drop during shutdown |
+| device-job `is destructive` (sound/rfkill) | systemd ordering during shutdown |
 
 ## Troubleshooting
 

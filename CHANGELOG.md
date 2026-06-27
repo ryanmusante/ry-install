@@ -2,9 +2,14 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.74.2 - 2026-06-27
+
+- verify: add _vss_known_benign advisory sub (5 INFO checks: masked ModemManager D-Bus noise, ACP70 missing machine driver, boltd unknown NHI id, no battery/backlight sysfs, USB mic volume curve). Emits only when present; count- and exit-code-neutral.
+- docs: README — Known-benign log lines table under Known Issues.
+
 7.74.1 - 2026-06-27
 
-- time-sync: persist NTP-corrected time to the hardware clock via new _ry_rtc_writeback (hwclock --systohc --utc) at both sync-confirmed paths in _ry_check_time_sync. Stops a fast/skewed RTC from poisoning systemd timer persistence stamps (future-dated OnCalendar stamps cause shadow.timer / cachyos-rate-mirrors.timer to silently skip). Guarded on hwclock presence and RTCInLocalTZ != yes; non-fatal.
+- time-sync: add _ry_rtc_writeback (hwclock --systohc --utc) at both sync-confirmed paths in _ry_check_time_sync, so a skewed RTC stops poisoning timer persistence stamps. Guarded on hwclock + RTCInLocalTZ != yes; non-fatal.
 
 7.74.0 - 2026-06-27
 

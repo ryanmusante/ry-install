@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.73.7 (2026-06-26) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.74.0 (2026-06-27) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.73.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.74.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -570,7 +570,7 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_pstate=active btusb.enable_autosuspend=n iommu=pt clearcpuid=514 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_pstate=active btusb.enable_autosuspend=n iommu=pt clearcpuid=514 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
@@ -682,7 +682,7 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
     set -l _expect \
-        KERNEL_PARAMS:13 \
+        KERNEL_PARAMS:14 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
@@ -745,19 +745,6 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
         _pre_dispatch_exit $EXIT_PREFLIGHT
     end
 end
-function _ir_validate_repo_tier --description "Advisory probe: warn when CPU supports x86-64-v4 but no v4/znver4 repo is active (non-fatal)"
-    set -l _v4_supported false; set -l _v4_active false
-    set -l _ldso (command -v ld-linux-x86-64.so.2 /lib/ld-linux-x86-64.so.2 /lib64/ld-linux-x86-64.so.2 2>/dev/null)[1] # guard: absent path would leak a fish stack-trace
-    test -n "$_ldso"; and command $_ldso --help 2>/dev/null | string match -q '*x86-64-v4*'; and set _v4_supported true
-    command -q pacman-conf; and command pacman-conf --repo-list 2>/dev/null | string match -qi '*v4*'; and set _v4_active true
-    if test "$_v4_supported" = true; and test "$_v4_active" = false
-        _warn_loud "Repo tier (advisory): CPU supports x86-64-v4 (AVX-512) but no v4/znver4 repo active — missing optimized binaries"
-        _log "REPO_TIER_V4_INACTIVE: x86-64-v4 supported, no v4 repo in pacman-conf --repo-list"
-    else if test "$_v4_supported" = true; and test "$_v4_active" = true
-        _info "Repo tier: x86-64-v4 supported and v4 repo active"
-    end
-end
-
 
 # ── RUNTIME INIT: ORCHESTRATOR (_init_runtime) ──
 function _init_runtime --description "Cache root UUID + validate config + precompute caches"
@@ -787,7 +774,6 @@ function _init_runtime --description "Cache root UUID + validate config + precom
         end
     end
     _ir_validate_kernel_floor # hard preflight kernel floor (>= KERNEL_MIN)
-    _ir_validate_repo_tier # advisory x86-64-v4 repo-tier probe (non-fatal)
     _ir_validate_counts
     _ir_validate_keys
     _ir_validate_post_hooks

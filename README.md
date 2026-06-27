@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.73.7-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.74.0-1793d1?style=flat-square)](CHANGELOG.md)
 
 > Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
 
@@ -13,7 +13,7 @@ One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.73.7
+cd ry-install && git checkout v7.74.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -59,7 +59,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
 | 3 | Configuration | deploy 18 embedded configs atomically |
-| 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → enable → regdomain |
+| 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → iwd handoff (only when `NM_WIFI_BACKEND=iwd`) → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
@@ -102,7 +102,7 @@ Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-
 
 ## Configuration
 
-Source of truth is the script; retune the `set -g` globals near the top (permissions: system `0644`, user `0600`). Deliberate CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl drop-in at priority 95 (after vendor `70-cachyos-settings.conf`), NVMe scheduler `none`, AMD P-State EPP `performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe, see above). Cmdline is `rw root=UUID=<root>` + the 13 `KERNEL_PARAMS`; `mkinitcpio` is `MODULES=(amdgpu)` + systemd hooks, `zstd`.
+Source of truth is the script; retune the `set -g` globals near the top (permissions: system `0644`, user `0600`). Deliberate CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl drop-in at priority 95 (after vendor `70-cachyos-settings.conf`), NVMe scheduler `none`, AMD P-State EPP `performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe, see above). Cmdline is `rw root=UUID=<root>` + the 14 `KERNEL_PARAMS`; `mkinitcpio` is `MODULES=(amdgpu)` + systemd hooks, `zstd`.
 
 **Packages** — the no-args run removes `PKGS_DEL` with `pacman -Rns` (rdep-aware: skipped + logged if an external package depends on it; reversible via [Uninstall](#uninstall)).
 
@@ -118,7 +118,7 @@ Source of truth is the script; retune the `set -g` globals near the top (permiss
 |---|---|
 | Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, `modemmanager`, sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
-| Untouched | `iwd.service` (opt-in: `NM_WIFI_BACKEND=iwd` + re-run); `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path on 128 GB; do not enable) |
+| Untouched | `iwd.service` (opt-in: `NM_WIFI_BACKEND=iwd` + re-run); `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path with this much RAM; do not enable) |
 
 **fstab** — ext4 rows get `noatime,lazytime,commit=10` in column 4 only; redundant `defaults`/`relatime`/`atime`/`strictatime`/existing `commit=` tokens are normalized away, every other column and every non-ext4 row byte-preserved. Gated by line-count parity, a size floor, and mandatory `findmnt --verify`; a symlinked or whitespace-split (malformed) `/etc/fstab` is refused, not corrected.
 
@@ -129,7 +129,7 @@ The 18 managed files and their purpose.
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot loader settings (default entry, timeout, console-mode) |
-| `/etc/kernel/cmdline` | kernel command line: `root=UUID` prefix + the 13 `KERNEL_PARAMS` |
+| `/etc/kernel/cmdline` | kernel command line: `root=UUID` prefix + the 14 `KERNEL_PARAMS` |
 | `/etc/sdboot-manage.conf` | boot-entry generation (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES` / `HOOKS` / `zstd` compression |
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | systemd-resolved: `DNSSEC=allow-downgrade`, no mDNS/LLMNR/DoT |

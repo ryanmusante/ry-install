@@ -2,16 +2,20 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.73.3 - 2026-06-26
+
+- docs: render Managed Files as a File|Purpose table (one row per file), ordered to match SYSTEM/USER_DESTINATIONS.
+
 7.73.2 - 2026-06-26
 
-- docs: trim README to vital information — drop the table of contents and 4 of 5 badges, collapse the full per-file value reference to a pointer (source of truth is the script) plus the deliberate CachyOS divergences, condense the fstab and Tuning Notes prose, and shorten the remote-play port enumeration. ~23% smaller; all safety/recovery/eligibility content (package removal, BLS wipe, ufw mask, DO-NOT-REBOOT banner, exit codes, env overrides, Managed Files index, Uninstall) preserved verbatim.
-- docs: fix Contributing lint guidance — shellcheck cannot lint fish; lint with fish --no-execute only.
+- docs: trim README to vital info (~23% smaller) — drop TOC + 4/5 badges, collapse per-file value table to a script pointer, condense fstab/Tuning prose. Safety/recovery content preserved.
+- docs: Contributing — lint with fish --no-execute (shellcheck cannot lint fish).
 
 7.73.1 - 2026-06-26
 
-- preflight: count each fatal preflight condition once. The rationale + override-hint continuation lines of the kernel-floor and hardware-mismatch (and CPU-model-unreadable) blocks now route through new _err_loud_cont, which mirrors _err_loud (JSONL log + forced stderr + --check silence) but skips the VERIFY_FAIL bump. JSONL footer/summary fail no longer inflates a single condition to 3. Exit codes unchanged.
-- docs: clarify that all four modes run the runtime-init gates (hardware match, kernel floor, embedded key/count validation) before mode dispatch; on a profile-mismatched or sub-floor host these hard-fail exit 3 before the --install-file exit-2 non-managed rejection can surface (bypass via RY_INSTALL_SKIP_HARDWARE_CHECK=1 / RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1).
-- style: fish-native command-substitution notation in the content-dispatch section comment.
+- preflight: count each fatal preflight condition once — rationale/override continuation lines route through new _err_loud_cont (no VERIFY_FAIL bump). Exit codes unchanged.
+- docs: note runtime-init gates (hardware/kernel-floor/key-count) run before mode dispatch for all modes; exit 3 precedes the --install-file exit-2 rejection.
+- style: fish-native command-substitution notation in the content-dispatch comment.
 
 7.73.0 - 2026-06-26
 
@@ -25,8 +29,8 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 7.71.4 - 2026-06-26
 
-- preflight: prefix the mesa soft-floor probe with command (command pacman -Q mesa) — matches the command-pacman convention used by every other read-only pacman query; avoids resolving a shadowing pacman function.
-- docs: clarify fstab normalization operates on the comma-separated options column (field 4) only; a whitespace-split options row is already malformed and is rejected by the mandatory findmnt --verify gate rather than silently corrected.
+- preflight: prefix the mesa soft-floor probe with command (command pacman -Q mesa) — avoids resolving a shadowing pacman function.
+- docs: clarify fstab normalization operates on the options column (field 4) only; whitespace-split rows are rejected by the findmnt --verify gate, not corrected.
 
 7.71.3 - 2026-06-26
 

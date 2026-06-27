@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.73.2-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.73.3-1793d1?style=flat-square)](CHANGELOG.md)
 
 > Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro
 > (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
@@ -14,7 +14,7 @@ One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.73.2
+cd ry-install && git checkout v7.73.3
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -126,15 +126,28 @@ Source of truth is the script; retune the `set -g` globals near the top. Paths a
 
 ## Managed Files
 
-Path/permission index for the 18 files (system `0644`, user `0600`).
+The 18 managed files and their purpose (permissions: system `0644`, user `0600`).
 
-| Group | Files |
+| File | Purpose |
 |---|---|
-| Boot | `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf` |
-| systemd | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf`, `/etc/systemd/logind.conf.d/99-cachyos-logind.conf`, `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` |
-| Network | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf`, `/etc/iw-regdomain`, `/etc/bluetooth/main.conf`, `/etc/nftables.conf`, `/etc/modprobe.d/60-ry-mt7925e.conf` |
-| Tuning | `/etc/default/cpupower-service.conf`, `/etc/sysctl.d/95-ry-overrides.conf`, `/etc/udev/rules.d/99-ry-perf.rules` |
-| User | `~/.config/environment.d/10-environment.conf`, `~/.config/baloofilerc`, `~/.config/MangoHud/MangoHud.conf` |
+| `/boot/loader/loader.conf` | systemd-boot loader settings (default entry, timeout, console-mode) |
+| `/etc/kernel/cmdline` | kernel command line: `root=UUID` prefix + the 12 `KERNEL_PARAMS` |
+| `/etc/sdboot-manage.conf` | boot-entry generation (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
+| `/etc/mkinitcpio.conf` | initramfs `MODULES` / `HOOKS` / `zstd` compression |
+| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | systemd-resolved: `DNSSEC=allow-downgrade`, no mDNS/LLMNR/DoT |
+| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | ignore power/suspend/hibernate/reboot keys |
+| `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | silence info-level `nm-dispatcher` journal noise |
+| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | NM Wi-Fi backend, power-save off, log level |
+| `/etc/iw-regdomain` | wireless regulatory domain (`US`) |
+| `/etc/bluetooth/main.conf` | BlueZ adapter auto-power-on + paired-sink reconnect |
+| `/etc/nftables.conf` | default-deny-inbound firewall ruleset |
+| `/etc/default/cpupower-service.conf` | CPU governor (`powersave`) |
+| `/etc/sysctl.d/95-ry-overrides.conf` | sysctl tunables (BBR + `fq`, VM, netdev) |
+| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, AMD P-State EPP, GPU DPM |
+| `/etc/modprobe.d/60-ry-mt7925e.conf` | disable PCIe ASPM on MT7925 (stability mitigation) |
+| `~/.config/environment.d/10-environment.conf` | gaming env vars (RADV, MangoHud, Proton) |
+| `~/.config/baloofilerc` | disable KDE Baloo file indexing |
+| `~/.config/MangoHud/MangoHud.conf` | readout-only performance HUD |
 
 ## Tuning Notes
 

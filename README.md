@@ -2,9 +2,7 @@
 
 [![version](https://img.shields.io/badge/version-7.74.2-1793d1?style=flat-square)](CHANGELOG.md)
 
-> Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
-
-One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
+> Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo). One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ## Quick Start
 
@@ -53,7 +51,7 @@ Preflight hard-fails (exit 3) on missing deps — `pacman`, `systemctl`, `mkinit
 
 ## Install Flow
 
-A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and skips the Phase 5 rebuild; fix and re-run. mkinitcpio rollback restores the prior `mkinitcpio.conf` byte-for-byte on such failure or on signal.
+A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and skips the Phase 5 rebuild; fix and re-run. mkinitcpio rollback restores the prior `mkinitcpio.conf` byte-for-byte on failure or signal.
 | # | Phase | Action |
 |---|---|---|
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
@@ -68,13 +66,9 @@ A results summary prints to stderr; a JSONL log records each phase. `WARN` keeps
 ## Safety & Reliability
 
 > [!WARNING]
-> Masks `ufw` and ships an nftables **default-deny-inbound** ruleset: established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 (NDP/PMTUD) accepted, all other inbound dropped. `forward` drop, `output` accept.
+> Masks `ufw` and ships an nftables **default-deny-inbound** ruleset (established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 NDP/PMTUD accepted, all else dropped; `forward` drop, `output` accept). `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating — EFI-resident loaders like Windows Boot Manager are untouched.
 
-> [!NOTE]
-> `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating. EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
-
-> [!NOTE]
-> Host-side game streaming is off by default — `RY_REMOTE_PLAY_PORTS=false`. Set it `true` (retune the `set -g` global, re-run) to append the Sunshine/Moonlight + Steam Remote Play inbound accepts (exact ports in the script) to the input chain.
+Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `true` (retune the `set -g` global, re-run) to append Sunshine/Moonlight + Steam Remote Play inbound accepts (ports in the script) to the input chain.
 
 | Feature | Detail |
 |---|---|
@@ -82,26 +76,45 @@ A results summary prints to stderr; a JSONL log records each phase. `WARN` keeps
 | Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` (and `fstab`, during its rewrite) |
 | mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
-| Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably recycled PID via `/proc` start-time (unsignalable/unknown ⇒ fail-closed) |
+| Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably-recycled PID via `/proc` start-time (else fail-closed) |
 
 <details>
 <summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>
 
 **Exit codes** `0` ok · `1` verify-FAIL/install-error · `2` usage (incl. root-refused) · `3` preflight · `4` boot-critical (DO NOT REBOOT) · `5` lock · `10` `--check` drift · `128+N` signal (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT). Sentinels `11`–`13` and `250`/`251`/`255` never reach a process exit (surface as the footer `gen_fail` count).
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run, `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 
 </details>
 
 ## Configuration
 
-Source of truth is the script; retune the `set -g` globals near the top (permissions: system `0644`, user `0600`). Deliberate CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl drop-in at priority 95 (after vendor `70-cachyos-settings.conf`), NVMe scheduler `none`, AMD P-State EPP `performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe, see above).
+Source of truth is the script; retune the `set -g` globals near the top (perms: system `0644`, user `0600`). CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe, see above).
 
-**Packages** — the no-args run installs a gaming/LLM toolset and removes `PKGS_DEL` (plymouth stack, `micro`, `cachy-update`, `kdeconnect`) with `pacman -Rns` (rdep-aware: skipped + logged if an external package depends on it). Full lists in [Uninstall](#uninstall); `vulkan-radeon` + `lib32-vulkan-radeon` are verified present. Reversible via [Uninstall](#uninstall).
+**Packages** — `pacman -Rns` is rdep-aware (an external dependant skips + logs the removal). Reversible via [Uninstall](#uninstall).
 
-**Units** — masks `ufw`, `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `modemmanager`, and the sleep/suspend/hibernate targets (full list in [Uninstall](#uninstall)); enables `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth`. Untouched: `iwd.service` (opt-in via `NM_WIFI_BACKEND=iwd` + re-run) and `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path; do not enable).
+| Action | Packages |
+|---|---|
+| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `rtkit`, `realtime-privileges`, `ddcutil`, `nftables` |
+| Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
+| Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (chwd Vulkan drivers) |
 
-**fstab** — ext4 rows get `noatime,lazytime,commit=10` in column 4 only; redundant `defaults`/`relatime`/`atime`/`strictatime`/existing `commit=` tokens are normalized away, every other column and every non-ext4 row byte-preserved. Gated by line-count parity, a size floor, and mandatory `findmnt --verify`; a symlinked or whitespace-split (malformed) `/etc/fstab` is refused, not corrected.
+**Units**
+
+| Action | Units |
+|---|---|
+| Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, `modemmanager`, sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
+| Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
+| Untouched | `iwd.service` (opt-in: `NM_WIFI_BACKEND=iwd` + re-run); `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path; do not enable) |
+
+**fstab**
+
+| Aspect | Behavior |
+|---|---|
+| Change | ext4 rows get `noatime,lazytime,commit=10` in column 4 only; every other column and every non-ext4 row byte-preserved |
+| Normalized away | redundant `defaults` / `relatime` / `atime` / `strictatime` / existing `commit=` tokens |
+| Gates | line-count parity + size floor + mandatory `findmnt --verify` |
+| Refused (not corrected) | a symlinked or whitespace-split (malformed) `/etc/fstab` |
 
 ## Managed Files
 
@@ -132,10 +145,10 @@ The 18 managed files and their purpose.
 
 | Topic | Detail |
 |---|---|
-| Large-VRAM compute | Auto/GTT caps usable VRAM near 62 GiB on a 96 GB box. For a single allocation above ~62 GiB (ROCm / llama.cpp), raise the **BIOS UMA framebuffer carveout** (up to 96 GB) — not `amdgpu.gttsize`, which is deprecated. Gaming is unaffected. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
+| Large-VRAM compute | GTT caps usable VRAM near 62 GiB. For a single allocation >~62 GiB (ROCm/llama.cpp), raise the **BIOS UMA carveout** (up to 96 GB), not deprecated `amdgpu.gttsize`. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 reached RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE` → `1`. |
-| NTSYNC | `/dev/ntsync` is asserted in preflight and verify (mainline ≥ 6.14). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
-| MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` to mitigate coredump / BT-reconnect / assoc-fail on `mt7925e` (distinct from `wifi.powersave`). Symptomatic reserve fix — remove if a kernel bump resolves it. The `3 dBm` TX-power readout is cosmetic. |
+| NTSYNC | `/dev/ntsync` asserted in preflight + verify (mainline ≥ 6.14). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
+| MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Symptomatic reserve fix — remove if a kernel bump resolves it. |
 
 ## Uninstall
 
@@ -155,7 +168,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 </details>
 
-For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), step 5 regenerates entries from the restored/removed state; revert their contents (or restore `.ry.bak`) before step 5.
+For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), step 5 regenerates entries from the restored/removed state; revert their contents (or `.ry.bak`) before step 5.
 
 ## Known Issues
 
@@ -168,7 +181,7 @@ For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), step 5
 
 ### Known-benign log lines
 
-These appear in `dmesg`/journal on this hardware but are expected — either a deliberate optimization or a hardware-capability gap. `--verify` surfaces the live ones under **known-benign conditions (advisory)** as `INFO` (never affects the pass/fail verdict).
+Expected on this hardware — a deliberate optimization or a hardware-capability gap. `--verify` surfaces the live ones as `INFO` under **known-benign conditions (advisory)** (never affects the verdict).
 
 | Log line | Why it's benign |
 |---|---|
@@ -178,7 +191,7 @@ These appear in `dmesg`/journal on this hardware but are expected — either a d
 | `charge thresholds not supported` / `no backlight interface` | mini-PC has no internal battery or panel backlight |
 | `Unlikely small volume range` | UAC descriptor quirk in a USB audio device; capture unaffected |
 
-These are shutdown- or session-handover-only and cannot be checked live, so they are documented here rather than by an advisory check:
+Shutdown- or handover-only (not live-checkable), documented here instead of by an advisory check:
 
 | Log line | Why it's benign |
 |---|---|
@@ -201,7 +214,7 @@ These are shutdown- or session-handover-only and cannot be checked live, so they
 | BT speaker won't auto-reconnect | `bluetoothctl trust <MAC>`, then power the speaker on after login so it re-initiates |
 
 > [!NOTE]
-> The installer prints these `usermod` commands when group membership is missing but does not run them: a group change is inert until re-login and can't be cleanly reverted like the managed configs.
+> The installer prints these `usermod` commands when group membership is missing but does not run them — a group change is inert until re-login and can't be cleanly reverted like the managed configs.
 
 ## Contributing
 

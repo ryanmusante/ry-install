@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.76.4 - 2026-06-27
+
+- readme: wrap four long prose lines (Requirements, Usage, exit-codes fold, Configuration) at sentence boundaries for diff-friendly source. Rendered output byte-identical; docs-only.
+
 ## 7.76.3 - 2026-06-27
 
 - readme: add missing blank line before Install Flow table (GFM table-spacing consistency). Docs-only.

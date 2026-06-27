@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.74.2-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.75.1-1793d1?style=flat-square)](CHANGELOG.md)
 
 > Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo). One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
@@ -11,7 +11,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.74.2
+cd ry-install && git checkout v7.75.1
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -89,7 +89,7 @@ Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-
 
 ## Configuration
 
-Source of truth is the script; retune the `set -g` globals near the top (perms: system `0644`, user `0600`). CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe, see above).
+Source of truth is the script; retune the `set -g` globals near the top (perms: system `0644`, user `0600`). CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe, see above).
 
 **Packages** — `pacman -Rns` is rdep-aware (an external dependant skips + logs the removal). Reversible via [Uninstall](#uninstall).
 
@@ -123,7 +123,7 @@ The 18 managed files and their purpose.
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot loader settings (default entry, timeout, console-mode) |
-| `/etc/kernel/cmdline` | kernel command line: `root=UUID` prefix + the 14 `KERNEL_PARAMS` |
+| `/etc/kernel/cmdline` | kernel command line: `root=UUID` prefix + the 16 `KERNEL_PARAMS` |
 | `/etc/sdboot-manage.conf` | boot-entry generation (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES` / `HOOKS` / `zstd` compression |
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | systemd-resolved: `DNSSEC=allow-downgrade`, no mDNS/LLMNR/DoT |
@@ -133,7 +133,7 @@ The 18 managed files and their purpose.
 | `/etc/iw-regdomain` | wireless regulatory domain (`US`) |
 | `/etc/bluetooth/main.conf` | BlueZ adapter auto-power-on + paired-sink reconnect |
 | `/etc/nftables.conf` | default-deny-inbound firewall ruleset |
-| `/etc/default/cpupower-service.conf` | CPU governor (`performance`) |
+| `/etc/default/cpupower-service.conf` | CPU governor (`powersave`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | sysctl tunables (BBR + `fq`, VM, netdev) |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, AMD P-State EPP, GPU DPM |
 | `/etc/modprobe.d/60-ry-mt7925e.conf` | disable PCIe ASPM on MT7925 (stability mitigation) |

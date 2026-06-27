@@ -2,10 +2,19 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.75.1 - 2026-06-27
+
+- cpupower: CPUPOWER_GOVERNOR performance -> powersave.
+- udev: AMD P-State EPP performance -> balance_performance (named hint, not raw 0x0). boost/prefcore unchanged.
+
+7.75.0 - 2026-06-27
+
+- cmdline: add fsck.mode=force and fsck.repair=yes to KERNEL_PARAMS (force fsck every boot, auto-repair without prompt). KERNEL_PARAMS 14 -> 16.
+
 7.74.2 - 2026-06-27
 
 - verify: add _vss_known_benign advisory sub (5 INFO checks: masked ModemManager D-Bus noise, ACP70 missing machine driver, boltd unknown NHI id, no battery/backlight sysfs, USB mic volume curve). Emits only when present; count- and exit-code-neutral.
-- docs: README — add Known-benign log lines tables; trim prose and table cells to vital info; one admonition per section. No paths, lists, exit codes, or warnings lost.
+- docs: README — add Known-benign log lines tables; trim to vital info.
 
 7.74.1 - 2026-06-27
 
@@ -17,11 +26,6 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 - preflight: remove _ir_validate_repo_tier (advisory x86-64-v4 probe). No count/exit-code impact.
 - docs: README Phase 4 pipeline now lists the iwd-handoff step (runs only when NM_WIFI_BACKEND=iwd) to match _install_configure_services.
 - docs: README systemd-oomd note made RAM-capacity-agnostic (was a specific figure the script does not define).
-
-7.73.7 - 2026-06-26
-
-- cpupower: CPUPOWER_GOVERNOR powersave -> performance.
-- udev: AMD P-State EPP balance_performance -> performance (EPP=0x0). boost/prefcore unchanged.
 
 7.73.6 - 2026-06-26
 

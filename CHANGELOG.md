@@ -6,6 +6,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 - verify: add _vss_known_benign advisory sub (5 INFO checks: masked ModemManager D-Bus noise, ACP70 missing machine driver, boltd unknown NHI id, no battery/backlight sysfs, USB mic volume curve). Emits only when present; count- and exit-code-neutral.
 - docs: README — Known-benign log lines table under Known Issues.
+- docs: README — dedupe package/unit/exit-code lists to their canonical homes (Uninstall, Usage) and tighten prose. No information loss.
 
 7.74.1 - 2026-06-27
 

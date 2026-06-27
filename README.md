@@ -32,7 +32,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Hard deps abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils (busybox/uutils rejected). Sub-6.18 kernel also hard-fails (override above); sudo must be cached. NTP sync and `paccache` only warn.
+Preflight hard-fails (exit 3) on missing deps — `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils (busybox/uutils rejected) — or a sub-6.18 kernel; sudo must be cached. NTP sync and `paccache` only warn.
 
 ## Usage
 
@@ -49,7 +49,7 @@ Hard deps abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitc
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (non-managed/malformed → exit 2). All four modes first run the runtime-init gates (hardware match, kernel floor, embedded key/count validation); on a mismatched or sub-floor host these hard-fail **exit 3 before any mode-specific work**, so the exit-2 rejection only surfaces once the gates pass (or are bypassed via the skip overrides).
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (non-managed/malformed → exit 2). All modes first run the runtime-init gates (hardware match, kernel floor, key/count validation), which hard-fail **exit 3** on a mismatched or sub-floor host before any mode-specific work.
 
 ## Install Flow
 
@@ -87,14 +87,7 @@ A results summary prints to stderr; a JSONL log records each phase. `WARN` keeps
 <details>
 <summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>
 
-| Code | Meaning |
-|---|---|
-| `0` / `1` / `2` | success / verify-FAIL or install-error / usage (incl. root-refused) |
-| `3` / `4` / `5` | preflight / boot-critical (DO NOT REBOOT) / lock |
-| `10` | `--check` drift |
-| `128+N` | signal exit (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT) |
-
-Sentinels `11`–`13` and `250`/`251`/`255` never reach a process exit (surface as the footer `gen_fail` count).
+**Exit codes** `0` ok · `1` verify-FAIL/install-error · `2` usage (incl. root-refused) · `3` preflight · `4` boot-critical (DO NOT REBOOT) · `5` lock · `10` `--check` drift · `128+N` signal (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT). Sentinels `11`–`13` and `250`/`251`/`255` never reach a process exit (surface as the footer `gen_fail` count).
 
 Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run, `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 
@@ -102,23 +95,11 @@ Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-
 
 ## Configuration
 
-Source of truth is the script; retune the `set -g` globals near the top (permissions: system `0644`, user `0600`). Deliberate CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl drop-in at priority 95 (after vendor `70-cachyos-settings.conf`), NVMe scheduler `none`, AMD P-State EPP `performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe, see above). Cmdline is `rw root=UUID=<root>` + the 14 `KERNEL_PARAMS`; `mkinitcpio` is `MODULES=(amdgpu)` + systemd hooks, `zstd`.
+Source of truth is the script; retune the `set -g` globals near the top (permissions: system `0644`, user `0600`). Deliberate CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl drop-in at priority 95 (after vendor `70-cachyos-settings.conf`), NVMe scheduler `none`, AMD P-State EPP `performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe, see above).
 
-**Packages** — the no-args run removes `PKGS_DEL` with `pacman -Rns` (rdep-aware: skipped + logged if an external package depends on it; reversible via [Uninstall](#uninstall)).
+**Packages** — the no-args run installs a gaming/LLM toolset and removes `PKGS_DEL` (plymouth stack, `micro`, `cachy-update`, `kdeconnect`) with `pacman -Rns` (rdep-aware: skipped + logged if an external package depends on it). Full lists in [Uninstall](#uninstall); `vulkan-radeon` + `lib32-vulkan-radeon` are verified present. Reversible via [Uninstall](#uninstall).
 
-| Action | Packages |
-|---|---|
-| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `rtkit`, `realtime-privileges`, `ddcutil`, `nftables` |
-| Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
-| Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (chwd Vulkan drivers) |
-
-**Units**
-
-| Action | Units |
-|---|---|
-| Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, `modemmanager`, sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
-| Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
-| Untouched | `iwd.service` (opt-in: `NM_WIFI_BACKEND=iwd` + re-run); `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path with this much RAM; do not enable) |
+**Units** — masks `ufw`, `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `modemmanager`, and the sleep/suspend/hibernate targets (full list in [Uninstall](#uninstall)); enables `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth`. Untouched: `iwd.service` (opt-in via `NM_WIFI_BACKEND=iwd` + re-run) and `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path; do not enable).
 
 **fstab** — ext4 rows get `noatime,lazytime,commit=10` in column 4 only; redundant `defaults`/`relatime`/`atime`/`strictatime`/existing `commit=` tokens are normalized away, every other column and every non-ext4 row byte-preserved. Gated by line-count parity, a size floor, and mandatory `findmnt --verify`; a symlinked or whitespace-split (malformed) `/etc/fstab` is refused, not corrected.
 

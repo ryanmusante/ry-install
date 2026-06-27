@@ -1,9 +1,8 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.73.3-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.73.5-1793d1?style=flat-square)](CHANGELOG.md)
 
-> Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro
-> (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
+> Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / Radeon 8060S / gfx1151 / Strix Halo).
 
 One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
@@ -14,7 +13,7 @@ One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.73.3
+cd ry-install && git checkout v7.73.5
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -33,7 +32,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Hard deps abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils, findutils, diffutils. busybox/uutils rejected. A kernel below 6.18 also hard-fails (override as above). NTP sync and `paccache` only warn; sudo must be cached.
+Hard deps abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils (busybox/uutils rejected). Sub-6.18 kernel also hard-fails (override above); sudo must be cached. NTP sync and `paccache` only warn.
 
 ## Usage
 
@@ -50,12 +49,11 @@ Hard deps abort read-only in preflight (exit 3): `pacman`, `systemctl`, `mkinitc
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination; non-managed or malformed paths are rejected (exit 2). All four modes first run the runtime-init gates (hardware match, kernel floor, embedded key/count validation); on a profile-mismatched or sub-floor host these hard-fail **exit 3 before any mode-specific work** — so the exit-2 non-managed rejection only surfaces once those gates pass (or are bypassed via `RY_INSTALL_SKIP_HARDWARE_CHECK=1` / `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`).
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (non-managed/malformed → exit 2). All four modes first run the runtime-init gates (hardware match, kernel floor, embedded key/count validation); on a mismatched or sub-floor host these hard-fail **exit 3 before any mode-specific work**, so the exit-2 rejection only surfaces once the gates pass (or are bypassed via the skip overrides).
 
 ## Install Flow
 
 A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and skips the Phase 5 rebuild; fix and re-run. mkinitcpio rollback restores the prior `mkinitcpio.conf` byte-for-byte on such failure or on signal.
-
 | # | Phase | Action |
 |---|---|---|
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
@@ -98,13 +96,13 @@ A results summary prints to stderr; a JSONL log records each phase. `WARN` keeps
 
 Sentinels `11`–`13` and `250`/`251`/`255` never reach a process exit (surface as the footer `gen_fail` count).
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `NO_COLOR`, `TMPDIR`. Logs: one JSONL per run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run, `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 
 </details>
 
 ## Configuration
 
-Source of truth is the script; retune the `set -g` globals near the top. Paths and permissions are in [Managed Files](#managed-files) (system `0644`, user `0600`). Most values are conventional; the deliberate CachyOS divergences are resolved `DNSSEC=allow-downgrade` (not DoH), the sysctl drop-in at priority 95 (after vendor `70-cachyos-settings.conf`), NVMe scheduler `none`, AMD P-State EPP `balance_performance`, and `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe, see above). Kernel cmdline is `rw root=UUID=<root>` plus the 12 `KERNEL_PARAMS`; `mkinitcpio` is `MODULES=(amdgpu)` + systemd hooks with `zstd`.
+Source of truth is the script; retune the `set -g` globals near the top (permissions: system `0644`, user `0600`). Deliberate CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl drop-in at priority 95 (after vendor `70-cachyos-settings.conf`), NVMe scheduler `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe, see above). Cmdline is `rw root=UUID=<root>` + the 12 `KERNEL_PARAMS`; `mkinitcpio` is `MODULES=(amdgpu)` + systemd hooks, `zstd`.
 
 **Packages** — the no-args run removes `PKGS_DEL` with `pacman -Rns` (rdep-aware: skipped + logged if an external package depends on it; reversible via [Uninstall](#uninstall)).
 
@@ -122,11 +120,11 @@ Source of truth is the script; retune the `set -g` globals near the top. Paths a
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
 | Untouched | `iwd.service` (opt-in: `NM_WIFI_BACKEND=iwd` + re-run); `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path on 128 GB; do not enable) |
 
-**fstab** — ext4 rows get `noatime,lazytime,commit=10` applied in place, column 4 only: redundant `defaults`/`relatime`/`atime`/`strictatime`/existing `commit=` tokens are normalized away; every other column and every non-ext4 row is preserved byte-for-byte. Gated by line-count parity, a size floor, and mandatory `findmnt --verify`; a symlinked `/etc/fstab` or a whitespace-split (malformed) options row is refused, not corrected.
+**fstab** — ext4 rows get `noatime,lazytime,commit=10` in column 4 only; redundant `defaults`/`relatime`/`atime`/`strictatime`/existing `commit=` tokens are normalized away, every other column and every non-ext4 row byte-preserved. Gated by line-count parity, a size floor, and mandatory `findmnt --verify`; a symlinked or whitespace-split (malformed) `/etc/fstab` is refused, not corrected.
 
 ## Managed Files
 
-The 18 managed files and their purpose (permissions: system `0644`, user `0600`).
+The 18 managed files and their purpose.
 
 | File | Purpose |
 |---|---|
@@ -150,8 +148,6 @@ The 18 managed files and their purpose (permissions: system `0644`, user `0600`)
 | `~/.config/MangoHud/MangoHud.conf` | readout-only performance HUD |
 
 ## Tuning Notes
-
-Knobs outside the managed files, or defaults worth explaining.
 
 | Topic | Detail |
 |---|---|
@@ -181,8 +177,6 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), step 5 regenerates entries from the restored/removed state; revert their contents (or restore `.ry.bak`) before step 5.
 
 ## Known Issues
-
-Hardware gaps on Strix Halo.
 
 | Component | Issue | Status |
 |---|---|---|

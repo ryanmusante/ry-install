@@ -2,6 +2,16 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.73.5 - 2026-06-26
+
+- docs: trim README prose (~5% smaller) — condense Configuration, fstab, Usage, Install-Flow, hard-deps, and the exit-code/env collapsible; drop redundant Known-Issues/Tuning-Notes intro lines. Managed Files table and all safety admonitions (IMPORTANT/CAUTION/WARNING/NOTE) preserved verbatim.
+- docs: fix stale Quick-Start clone tag (`git checkout v7.73.3` -> current).
+
+7.73.4 - 2026-06-26
+
+- preflight: add `*/modprobe.d/*|modprobe` to _RY_POST_HOOKS so every managed destination matches a hook pattern; `_RY_POST_HOOKS` count 17 -> 18. Closes a gap where `--install-file /etc/modprobe.d/60-ry-mt7925e.conf` deployed the file but ran no post-hook and printed no reboot-required notice (the full install was unaffected — Phase 5 rebuilds regardless).
+- install-file: add `_post_modprobe` handler — notifies that a modprobe.d option change applies on reboot (load-time parameter; an already-loaded module is not live-reconfigurable). No initramfs rebuild forced.
+
 7.73.3 - 2026-06-26
 
 - docs: render Managed Files as a File|Purpose table (one row per file), ordered to match SYSTEM/USER_DESTINATIONS.

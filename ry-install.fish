@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.73.3 (2026-06-26) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.73.5 (2026-06-26) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.73.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.73.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -694,7 +694,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:17 \
+        _RY_POST_HOOKS:18 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
@@ -4585,6 +4585,7 @@ set -g _RY_POST_HOOKS \
     "/etc/default/cpupower-service.conf|cpupower" \
     "*/sysctl.d/*|sysctl" \
     "/etc/udev/rules.d/*|udev" \
+    "*/modprobe.d/*|modprobe" \
     "*/environment.d/*|envd" \
     "*/baloofilerc|baloo" \
     "*/MangoHud/MangoHud.conf|mangohud"
@@ -4837,6 +4838,11 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
         return 0
     end
     _run sudo -n udevadm trigger --subsystem-match=block --action=change; or _warn "udevadm trigger failed — scheduler applies at next boot or device hotplug"
+    return 0
+end
+function _post_modprobe --argument-names target --description "Post-hook: notify reboot needed for modprobe.d option change (load-time; cannot live-apply to an already-loaded module)"
+    _info "modprobe.d $target changed — reboot required to apply (module options are read at load time; an already-loaded module keeps its current parameters until reloaded)"
+    _info "  No initramfs rebuild needed for this file; the option takes effect when the module next loads (reboot, or manual rmmod/modprobe of the affected module)"
     return 0
 end
 

@@ -2,6 +2,15 @@ ry-install changelog
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+7.73.7 - 2026-06-26
+
+- cpupower: CPUPOWER_GOVERNOR powersave -> performance. Under amd_pstate=active the amd-pstate-epp driver pins the max P-state on the performance pseudo-governor.
+- udev: AMD P-State EPP balance_performance -> performance in 99-ry-perf.rules (EPP=0x0, max performance bias). _vss_udev and _vrk_cpu_state validators updated; boost/prefcore unchanged.
+
+7.73.6 - 2026-06-26
+
+- cmdline: add btusb.enable_autosuspend=n to KERNEL_PARAMS (disable BT USB controller autosuspend). KERNEL_PARAMS 12 -> 13.
+
 7.73.5 - 2026-06-26
 
 - docs: trim README prose (~5% smaller) — condense Configuration, fstab, Usage, Install-Flow, hard-deps, and the exit-code/env collapsible; drop redundant Known-Issues/Tuning-Notes intro lines. Managed Files table and all safety admonitions (IMPORTANT/CAUTION/WARNING/NOTE) preserved verbatim.

@@ -1,11 +1,11 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.78.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.78.2-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script: 17 embedded configs, gaming/LLM desktop profile.
+> Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs, gaming/LLM desktop profile.
 
 <details>
 <summary><strong>Contents</strong></summary>
@@ -30,11 +30,11 @@
 ## Quick Start
 
 > [!IMPORTANT]
-> Run as your normal user (root is refused, exit 2); cache sudo first (`sudo -v`). The unattended run **removes packages** (see [Configuration](#configuration)). Reboot afterward, then `--verify`. Re-runs are idempotent.
+> Run as your normal user (root refused, exit 2); cache sudo first (`sudo -v`). The unattended run **removes packages** (see [Configuration](#configuration)). Reboot, then `--verify`. Re-runs are idempotent.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.77.1
+cd ry-install && git checkout v7.78.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -90,7 +90,7 @@ A results summary prints to stderr; a JSONL log records each phase. `WARN` keeps
 ## Safety & Reliability
 
 > [!WARNING]
-> Masks `ufw` and ships an nftables **default-deny-inbound** ruleset (established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 NDP/PMTUD accepted, all else dropped; `forward` drop, `output` accept). `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating — EFI-resident loaders like Windows Boot Manager are untouched.
+> Masks `ufw` and ships an nftables **default-deny-inbound** ruleset (established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 NDP/PMTUD accepted, all else dropped; `forward` drop, `output` accept). `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating; EFI-resident loaders like Windows Boot Manager are untouched.
 
 Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play inbound accepts to the input chain.
 
@@ -130,7 +130,7 @@ Source of truth is the script; retune the `set -g` globals near the top (perms: 
 |---|---|
 | Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, `modemmanager`, sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
-| Untouched | `iwd.service` (opt-in: `NM_WIFI_BACKEND=iwd` + re-run); `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path; do not enable) |
+| Untouched | `iwd.service` (opt-in: `NM_WIFI_BACKEND=iwd` + re-run); `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path) |
 
 **fstab**
 
@@ -171,8 +171,8 @@ Source of truth is the script; retune the `set -g` globals near the top (perms: 
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 reached RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE` → `1`. |
 | NTSYNC | `/dev/ntsync` asserted in preflight + verify (mainline ≥ 6.14). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
 | MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Symptomatic reserve fix — remove if a kernel bump resolves it. |
-| AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline — AMD-Vi is fully disabled (this is a single-purpose gaming/LLM desktop with no PCI passthrough). `--verify` confirms the live state (0 entries under `/sys/kernel/iommu_groups/`). **VFIO/GPU-passthrough or SR-IOV users must drop `amd_iommu=off` and use `amd_iommu=on iommu=pt` instead**, then re-run — `--verify` then asserts the groups are populated. |
-| UMIP (`clearcpuid=514`) | Ships in the cmdline — UMIP is disabled system-wide (`SGDT`/`SIDT`/`SMSW` no longer trapped) and the kernel is tainted. Intentional latency choice. Drop the token to restore UMIP if no `umip_printk` stutter is observed. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline; AMD-Vi is fully disabled (single-purpose gaming/LLM desktop, no PCI passthrough). `--verify` confirms 0 entries under `/sys/kernel/iommu_groups/`. **VFIO/passthrough or SR-IOV users must use `amd_iommu=on iommu=pt` instead**, then re-run. |
+| UMIP (`clearcpuid=514`) | Ships in the cmdline; UMIP disabled system-wide (`SGDT`/`SIDT`/`SMSW` untrapped) and the kernel is tainted. Intentional latency choice — drop the token to restore UMIP if no `umip_printk` stutter is seen. |
 
 ## Uninstall
 
@@ -205,25 +205,9 @@ For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert
 
 ### Known-benign log lines
 
-Expected on this hardware (deliberate optimization or capability gap); none affect operation.
+Expected on this hardware (deliberate optimization or capability gap); none affect operation. Live-checkable: `ModemManager1 … could not be found` (KDE D-Bus probe of the by-design-masked `modemmanager.service`); `acp_asoc_acp70 … No matching ASoC machine driver` (missing board-ID quirk, internal mic undetected — HDMI/USB audio fine); `unknown NHI PCI id` from boltd (PCI-ID table gap, USB4/TB still enumerate); `charge thresholds not supported` / `no backlight interface` (mini-PC has no battery or panel backlight); and `Unlikely small volume range` (USB-audio UAC descriptor quirk, capture unaffected).
 
-| Log line | Why it's benign |
-|---|---|
-| `ModemManager1 … could not be found` | `modemmanager.service` is masked by design; KDE's D-Bus probe fails harmlessly |
-| `acp_asoc_acp70 … No matching ASoC machine driver` | missing kernel board-ID quirk; internal mic undetected (HDMI/USB audio fine) |
-| `unknown NHI PCI id` (boltd) | boltd PCI-ID table gap; USB4/TB devices still enumerate |
-| `charge thresholds not supported` / `no backlight interface` | mini-PC has no internal battery or panel backlight |
-| `Unlikely small volume range` | UAC descriptor quirk in a USB audio device; capture unaffected |
-
-Shutdown- or handover-only (not live-checkable):
-
-| Log line | Why it's benign |
-|---|---|
-| `atomic commit failed: Permission denied` (kwin) | DRM-master handover between greeter and session; transient |
-| `nm_dispatcher` / `org.bluez` / `org.bluez.obex` `unit is invalid` | D-Bus activation during shutdown teardown |
-| `home1 … could not be found` | systemd-homed not installed (not used) |
-| `PipeWire remote error: -32` | connection drop during shutdown |
-| device-job `is destructive` (sound/rfkill) | systemd ordering during shutdown |
+Shutdown- or handover-only (not live-checkable): `atomic commit failed: Permission denied` from kwin (transient DRM-master handover between greeter and session); `nm_dispatcher` / `org.bluez` / `org.bluez.obex` `unit is invalid` (D-Bus activation during teardown); `home1 … could not be found` (systemd-homed not installed); `PipeWire remote error: -32` (connection drop on shutdown); and sound/rfkill device-jobs reported `is destructive` (systemd shutdown ordering).
 
 ## Troubleshooting
 

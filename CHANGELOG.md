@@ -2,6 +2,15 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.78.2 - 2026-06-28
+
+- docs: condense README prose to vital information throughout; convert both "Known-benign log lines" tables to prose paragraphs (all entries retained). All other tables, package/unit/file lists, exit codes, and cross-references preserved verbatim. No script behavior change.
+
+## 7.78.1 - 2026-06-28
+
+- fix: `argparse --name` used the `path basename` builtin (fish ≥ 3.7), which fails on the declared 3.6 floor since the version gate accepts 3.6; switched to the floor-safe `command basename` (already the form used elsewhere). Behavior-neutral on fish ≥ 3.7. Count- and exit-code-neutral.
+- docs: sync Quick Start checkout pin `v7.77.1` -> `v7.78.1` (lagged the release).
+
 ## 7.78.0 - 2026-06-28
 
 - baloo: remove `~/.config/baloofilerc` (KDE indexing) from managed files; drop `_post_baloo` purge hook. Managed configs 18 -> 17, USER_DESTINATIONS 3 -> 2, post-hooks 18 -> 17. Any already-deployed file is left in place.

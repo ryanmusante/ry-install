@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.78.3 (2026-06-28) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.79.0 (2026-06-28) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.78.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.79.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -11,7 +11,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-set -g KERNEL_MIN 6.18 # preflight floor: RTL8127 suspend-hang fix + r8169 support land >=6.18
+set -g KERNEL_MIN 6.19 # preflight floor: gfx1151 MES-0x86 firmware (linux-firmware >=20260410) requires kernel >=6.19 amdgpu; also carries RTL8127 suspend-hang fix + r8169 support
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -727,7 +727,7 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
             _log "KERNEL_FLOOR_UNREADABLE_OVERRIDE: uname -r='$_kr'"
         else
             _err_loud "Kernel floor: release unreadable from uname -r ('$_kr') — refusing to deploy"
-            _err_loud_cont "  RTL8127 suspend/shutdown hang fix + r8169 support land only >=$KERNEL_MIN; deploying below risks suspend lockup."
+            _err_loud_cont "  gfx1151 MES-0x86 firmware needs >=$KERNEL_MIN amdgpu; RTL8127 suspend/shutdown hang fix + r8169 support also land only >=$KERNEL_MIN. Deploying below risks GPU hang + suspend lockup."
             _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         end
@@ -736,7 +736,7 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
     set -l _cur_parts (string split '.' -- "$_kver"); set -l _min_parts (string split '.' -- "$KERNEL_MIN")
     if test "$_cur_parts[1]" -lt "$_min_parts[1]"; or begin; test "$_cur_parts[1]" -eq "$_min_parts[1]"; and test "$_cur_parts[2]" -lt "$_min_parts[2]"; end
         _err_loud "Kernel floor: running $_kver, profile $PROFILE_NAME requires >=$KERNEL_MIN — refusing to deploy"
-        _err_loud_cont "  RTL8127 suspend/shutdown hang fix (ae1737e7339b) + r8169 support are present only at/above $KERNEL_MIN."
+        _err_loud_cont "  gfx1151 MES-0x86 firmware (linux-firmware >=20260410) requires >=$KERNEL_MIN amdgpu; RTL8127 hang fix (ae1737e7339b) + r8169 support are present only at/above $KERNEL_MIN."
         _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
         _pre_dispatch_exit $EXIT_PREFLIGHT
     end
@@ -854,7 +854,7 @@ function _content__etc_nftables.conf --description "Generate content for nftable
     if test "$RY_REMOTE_PLAY_PORTS" = true # gated: Sunshine/Moonlight + Steam Remote Play inbound stream ports
         printf '%s\n' \
             "        # ry-install: remote-play inbound (RY_REMOTE_PLAY_PORTS=true)" \
-            "        tcp dport { 47984, 47989, 48010, 27036 } accept" \
+            "        tcp dport { 47984, 47989, 48010, 27036, 27037 } accept" \
             "        udp dport { 47998-48010, 27031-27036 } accept"
     end
     printf '%s\n' \
@@ -911,7 +911,7 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
         "gpu_temp" \
         "gpu_power" \
         "cpu_stats" \
-        "# cpu_temp" \
+        "cpu_temp" \
         "cpu_mhz" \
         "vram" \
         "ram" \
@@ -2617,6 +2617,7 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
     _echo "── amd_pstate / CPU boost ──"
     _chk_sysfs_eq /sys/devices/system/cpu/amd_pstate/status active "amd_pstate status"
     _chk_sysfs_eq /sys/devices/system/cpu/amd_pstate/prefcore enabled "amd_pstate prefcore"
+    _chk_sysfs_eq /sys/devices/system/cpu/amd_pstate/dynamic_epp disabled "amd_pstate dynamic_epp" # must be disabled or kernel overrides the EPP pin (writes to energy_performance_preference return -EBUSY); node absent pre-6.16
     _chk_sysfs_eq /sys/devices/system/cpu/cpufreq/boost 1 "CPU boost"
     _echo
 end

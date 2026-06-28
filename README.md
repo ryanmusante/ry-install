@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.78.3-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.79.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -34,7 +34,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.78.3
+cd ry-install && git checkout v7.79.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -48,12 +48,12 @@ chmod +x ry-install.fish
 | Requirement | Minimum |
 |---|---|
 | Platform | CachyOS · systemd-boot · ext4 root |
-| Kernel | ≥ 6.18 (override `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`) |
+| Kernel | ≥ 6.19 (override `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`) |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), a sub-6.18 kernel, or uncached sudo. NTP sync and `paccache` only warn.
+Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo. NTP sync and `paccache` only warn.
 
 ## Usage
 
@@ -206,8 +206,6 @@ For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert
 ### Known-benign log lines
 
 Expected on this hardware (deliberate optimization or capability gap); none affect operation. Live-checkable: `ModemManager1 … could not be found` (KDE D-Bus probe of the by-design-masked `modemmanager.service`); `acp_asoc_acp70 … No matching ASoC machine driver` (missing board-ID quirk, internal mic undetected — HDMI/USB audio fine); `unknown NHI PCI id` from boltd (PCI-ID table gap, USB4/TB still enumerate); `charge thresholds not supported` / `no backlight interface` (mini-PC has no battery or panel backlight); and `Unlikely small volume range` (USB-audio UAC descriptor quirk, capture unaffected).
-
-Shutdown- or handover-only (not live-checkable): `atomic commit failed: Permission denied` from kwin (transient DRM-master handover between greeter and session); `nm_dispatcher` / `org.bluez` / `org.bluez.obex` `unit is invalid` (D-Bus activation during teardown); `home1 … could not be found` (systemd-homed not installed); `PipeWire remote error: -32` (connection drop on shutdown); and sound/rfkill device-jobs reported `is destructive` (systemd shutdown ordering).
 
 ## Troubleshooting
 

@@ -2,6 +2,13 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.79.0 - 2026-06-28
+
+- preflight: raise `KERNEL_MIN` 6.18 -> 6.19. gfx1151 MES-0x86 firmware (linux-firmware >= 20260410) requires the >= 6.19 amdgpu MES handshake; re-anchored the floor comment + both hard-fail rationale lines to lead with the firmware requirement (RTL8127/r8169 still noted). README floor table + preflight prose synced.
+- firewall: add TCP `27037` to the gated remote-play inbound set (`RY_REMOTE_PLAY_PORTS=true`); Steam Remote Play uses 27036-27037/tcp. Set now `{ 47984, 47989, 48010, 27036, 27037 }`. Default-off gate unchanged.
+- verify: `_vrk_cpu_state` now asserts `amd_pstate/dynamic_epp` == `disabled`. When dynamic EPP is enabled the kernel overrides the udev EPP pin (writes to `energy_performance_preference` return -EBUSY); silent-on-missing so pre-6.16 hosts without the node are unaffected. Exit-code-neutral (advisory `_chk`).
+- mangohud: re-enable `cpu_temp` (was commented pending hwmon resolution). If the wrong sensor is shown on this host, pin it in the generated conf with MangoHud's `cpu_custom_temp_sensor=<chip>,<input>` directive (e.g. `k10temp`); the directive name is `cpu_custom_temp_sensor`, not `cpu_temp_sensor`. Count-neutral.
+
 ## 7.78.3 - 2026-06-28
 
 - style: collapse 12 single- and two-statement functions to one-line form (house style). Script 5012 -> 4983 lines. Behavior-, count-, and exit-code-neutral.

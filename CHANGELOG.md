@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.77.1 - 2026-06-28
+
+- docs: add two section banners — `VERIFY-STATIC: KNOWN-BENIGN ADVISORIES` (delimits the `_kb_*` INFO-only group from the `_vss_*` assertions) and `VERIFY-RUNTIME: MODULE-STATE SUBS` (delimits the `_vrkm_*` subs from the direct `_vrk_*` checks). Comment-only; no code, count, or behavior change.
+
 ## 7.77.0 - 2026-06-27
 
 - cmdline: `iommu=pt` -> `amd_iommu=off` (AMD-Vi fully disabled; no PCI passthrough on this profile). KERNEL_PARAMS count-neutral (16).

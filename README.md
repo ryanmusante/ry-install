@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.79.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.79.2-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -34,7 +34,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.79.1
+cd ry-install && git checkout v7.79.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -114,9 +114,13 @@ Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-
 
 ## Configuration
 
+### Globals
+
 Source of truth is the script; retune the `set -g` globals near the top (perms: system `0644`, user `0600`). CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe).
 
-**Packages** — `pacman -Rns` is rdep-aware (an external dependant skips + logs). Reversible via [Uninstall](#uninstall).
+### Packages
+
+`pacman -Rns` is rdep-aware (an external dependant skips + logs). Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
@@ -124,7 +128,7 @@ Source of truth is the script; retune the `set -g` globals near the top (perms: 
 | Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (chwd Vulkan drivers) |
 
-**Units**
+### Units
 
 | Action | Units |
 |---|---|
@@ -132,7 +136,7 @@ Source of truth is the script; retune the `set -g` globals near the top (perms: 
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
 | Untouched | `iwd.service` (opt-in: `NM_WIFI_BACKEND=iwd` + re-run); `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path) |
 
-**fstab**
+### fstab
 
 | Aspect | Behavior |
 |---|---|
@@ -143,23 +147,50 @@ Source of truth is the script; retune the `set -g` globals near the top (perms: 
 
 ## Managed Files
 
+### Boot
+
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot loader settings (default entry, timeout, console-mode) |
 | `/etc/kernel/cmdline` | kernel command line: `root=UUID` prefix + the 16 `KERNEL_PARAMS` |
 | `/etc/sdboot-manage.conf` | boot-entry generation (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES` / `HOOKS` / `zstd` compression |
+
+### systemd drop-ins
+
+| File | Purpose |
+|---|---|
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | systemd-resolved: `DNSSEC=allow-downgrade`, no mDNS/LLMNR/DoT |
 | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | ignore power/suspend/hibernate/reboot keys |
 | `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | silence info-level `nm-dispatcher` journal noise |
+
+### Network
+
+| File | Purpose |
+|---|---|
 | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | NM Wi-Fi backend, power-save off, log level |
 | `/etc/iw-regdomain` | wireless regulatory domain (`US`) |
+
+### Bluetooth & firewall
+
+| File | Purpose |
+|---|---|
 | `/etc/bluetooth/main.conf` | BlueZ adapter auto-power-on + paired-sink reconnect |
 | `/etc/nftables.conf` | default-deny-inbound firewall ruleset |
+
+### Power, performance & modules
+
+| File | Purpose |
+|---|---|
 | `/etc/default/cpupower-service.conf` | CPU governor (`powersave`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | sysctl tunables (BBR + `fq`, VM, netdev) |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, AMD P-State EPP, GPU DPM |
 | `/etc/modprobe.d/60-ry-mt7925e.conf` | disable PCIe ASPM on MT7925 (stability mitigation) |
+
+### User session
+
+| File | Purpose |
+|---|---|
 | `~/.config/environment.d/10-environment.conf` | gaming env vars (RADV, MangoHud, Proton) |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only performance HUD |
 

@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.79.2 - 2026-06-28
+
+- docs: add subsection headers to README Configuration (Globals/Packages/Units/fstab) and split Managed Files into grouped tables (Boot, systemd drop-ins, Network, Bluetooth & firewall, Power/performance/modules, User session). All 17 file rows retained; no script change.
+
 ## 7.79.1 - 2026-06-28
 
 - preflight: raise the linux-firmware soft-floor advisory (and known-bad-blob upgrade target) 20260110 -> 20260410, matching the gfx1151 MES-0x86 blob the >= 6.19 amdgpu handshake requires. Non-fatal; the warning now covers the full pre-MES range.

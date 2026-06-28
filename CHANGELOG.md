@@ -2,9 +2,18 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.78.0 - 2026-06-28
+
+- baloo: remove `~/.config/baloofilerc` (KDE indexing) from managed files; drop `_post_baloo` purge hook. Managed configs 18 -> 17, USER_DESTINATIONS 3 -> 2, post-hooks 18 -> 17. Any already-deployed file is left in place.
+
+## 7.77.2 - 2026-06-28
+
+- verify: remove `_kb_*` known-benign advisory subsystem and `_ry_check_umip_disabled` (INFO-only; already documented in README). −7 functions. Count- and exit-code-neutral.
+- docs: add Tuning Notes row for the `clearcpuid=514`/UMIP taint tradeoff.
+
 ## 7.77.1 - 2026-06-28
 
-- docs: add two section banners — `VERIFY-STATIC: KNOWN-BENIGN ADVISORIES` (delimits the `_kb_*` INFO-only group from the `_vss_*` assertions) and `VERIFY-RUNTIME: MODULE-STATE SUBS` (delimits the `_vrkm_*` subs from the direct `_vrk_*` checks). Comment-only; no code, count, or behavior change.
+- docs: add two verify-section banners. Comment-only; no behavior change.
 
 ## 7.77.0 - 2026-06-27
 

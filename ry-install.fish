@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.77.1 (2026-06-28) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.78.0 (2026-06-28) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.77.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.78.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
+set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g KERNEL_MIN 6.18 # preflight floor: RTL8127 suspend-hang fix + r8169 support land >=6.18
 
@@ -561,7 +561,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/sysctl.d/95-ry-overrides.conf" \
     "/etc/udev/rules.d/99-ry-perf.rules" \
     "/etc/modprobe.d/60-ry-mt7925e.conf"
-set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/baloofilerc" "$HOME/.config/MangoHud/MangoHud.conf"
+set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set --erase _ry_dst_count
@@ -693,13 +693,13 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:18 \
+        _RY_POST_HOOKS:17 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:15 \
-        USER_DESTINATIONS:3
+        USER_DESTINATIONS:2
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -897,9 +897,6 @@ end
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (KDE Plasma, Flatpak, D-Bus activated apps)"
     for var in $ENV_VARS; printf '%s\n' "$var"; end
-end
-function _content_HOME_.config_baloofilerc --description "Generate content for ~/.config/baloofilerc (KDE Baloo file indexing disabled)"
-    printf '%s\n' "# ry-install: KDE Baloo file indexing disabled (managed file, do not edit by hand)" "[Basic Settings]" "Indexing-Enabled=false"
 end
 function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)"
     printf '%s\n' \
@@ -2267,48 +2264,6 @@ function _vss_modprobe --description "_verify_static_system sub: mt7925e modprob
     _chk_file /etc/modprobe.d/60-ry-mt7925e.conf; and _chk_grep /etc/modprobe.d/60-ry-mt7925e.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'
 end
 
-# ── VERIFY-STATIC: KNOWN-BENIGN ADVISORIES (INFO-only; never fails verdict) ──
-function _kb_modemmanager_masked --description "INFO when modemmanager.service is masked (expected) — KDE kded probes org.freedesktop.ModemManager1 and the activation fails by design"
-    contains -- modemmanager.service $MASK; or return 0 # only relevant when we mask it
-    command -q systemctl; or return 0
-    set -l _state (command systemctl is-enabled -- modemmanager.service 2>/dev/null | string trim --)
-    contains -- "$_state" masked; or return 0 # only annotate if the mask actually took
-    _info "  ModemManager masked: kded/D-Bus 'ModemManager1 ... could not be found' activation failures are expected and harmless"
-    return 0
-end
-function _kb_acp70_no_machine_driver --description "INFO when ACP70 audio co-processor has no matching ASoC machine driver (missing kernel board-ID quirk; mic may be undetected)"
-    command -q dmesg; or return 0
-    command dmesg 2>/dev/null | command grep -qiE 'acp_asoc_acp70.*No matching ASoC machine driver'; or return 0
-    _info "  ACP70 audio: no matching ASoC machine driver — needs a kernel board-ID quirk; internal mic stays undetected until linux-cachyos ships one (report board model upstream)"
-    return 0
-end
-function _kb_thunderbolt_nhi_unknown --description "INFO when boltd cannot resolve the USB4/Thunderbolt NHI PCI id (boltd PCI-ID table gap; TB UID-stability undetermined)"
-    command -q journalctl; or return 0
-    command journalctl -b --no-pager 2>/dev/null | command grep -qiE "unknown NHI PCI id"; or return 0
-    _info "  Thunderbolt: boltd does not recognize this NHI PCI id — UID-stability check is skipped; USB4/TB devices still enumerate (boltd PCI-ID table gap)"
-    return 0
-end
-function _kb_no_battery_backlight --description "INFO when powerdevil charge-threshold / backlight sysfs is absent (mini-PC: no internal battery or panel backlight — capability gap, not a fault)"
-    set -l _have_bl false
-    for _b in /sys/class/backlight/*; test -e "$_b"; and set _have_bl true; and break; end
-    test "$_have_bl" = true; and return 0 # backlight present → nothing to annotate
-    _info "  No panel backlight / battery sysfs: powerdevil 'charge thresholds not supported' and 'no backlight interface' are expected on this mini-PC (no internal battery or panel)"
-    return 0
-end
-function _kb_usb_mic_volume_curve --description "INFO when a USB audio device reports a non-linear/unlikely volume range (UAC descriptor quirk on the device; cosmetic)"
-    command -q dmesg; or return 0
-    command dmesg 2>/dev/null | command grep -qiE 'Unlikely small volume range'; or return 0
-    _info "  USB mic volume curve: a USB audio device reports an unlikely volume range — a UAC descriptor quirk in the device firmware (cosmetic; does not affect capture)"
-    return 0
-end
-function _vss_known_benign --description "_verify_static_system sub: advisory INFO for known-benign conditions this host triggers by design or hardware (never fails; emits only when present)"
-    _echo "── known-benign conditions (advisory) ──"
-    _kb_modemmanager_masked
-    _kb_acp70_no_machine_driver
-    _kb_thunderbolt_nhi_unknown
-    _kb_no_battery_backlight
-    _kb_usb_mic_volume_curve
-end
 function _verify_static_system --description "Verify ntsync, resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, nftables"
     _echo "SYSTEM CONFIGURATION"
     _vss_ntsync_modules
@@ -2332,16 +2287,11 @@ function _verify_static_system --description "Verify ntsync, resolved, logind, N
     _vss_modprobe
     _echo "── nftables ──"
     _vss_nft
-    _vss_known_benign
 end
-function _verify_static_user --description "Verify environment.d ENV_VARS + baloo indexing disabled + MangoHud HUD config"
+function _verify_static_user --description "Verify environment.d ENV_VARS + MangoHud HUD config"
     _echo "USER CONFIGURATION"
     if _chk_file "$HOME/.config/environment.d/10-environment.conf"
         for exp in $ENV_VARS; _chk_grep "$HOME/.config/environment.d/10-environment.conf" "$exp" "$exp"; end
-    end
-    _echo "── baloo (KDE file indexing) ──"
-    if _chk_file "$HOME/.config/baloofilerc"
-        _chk_grep "$HOME/.config/baloofilerc" "Indexing-Enabled=false" "baloo indexing disabled"
     end
     _echo "── MangoHud (readout-only HUD) ──"
     if _chk_file "$HOME/.config/MangoHud/MangoHud.conf"
@@ -3434,12 +3384,6 @@ end
 
 # ── INSTALL PHASE 1: PREFLIGHT ──
 function _ip_bail_prep --description "_install_preflight bail prep: clear LOUD_ERR, mark progress skip"; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; end
-function _ry_check_umip_disabled --description "INFO when clearcpuid=514 (UMIP off) is active — flags the deliberate taint + loss of SGDT/SIDT/SMSW protection (advisory; non-fatal)"
-    contains -- clearcpuid=514 $KERNEL_PARAMS; or return 0 # only relevant while UMIP is masked
-    _info "  clearcpuid=514 active: UMIP disabled system-wide (SGDT/SIDT/SMSW no longer trapped) and kernel is tainted — intentional latency choice; drop the token to restore UMIP if no umip_printk stutter is observed"
-    _log "UMIP_DISABLED: clearcpuid=514 present in KERNEL_PARAMS"
-    return 0
-end
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
     _ry_sudo_cache_banner
@@ -3488,7 +3432,6 @@ function _install_preflight --description "Run all preflight checks before insta
     _echo
     if not _ry_validate_configs; _phase_record "Preflight: config validation" FAIL "see JSONL log"; _err "Configuration validation failed - aborting"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
     _phase_record "Preflight: config validation" PASS "$_RY_MANAGED_FILE_COUNT/$_RY_MANAGED_FILE_COUNT destinations"
-    _ry_check_umip_disabled
     set --erase _RY_LOUD_ERR
     return 0
 end
@@ -4669,7 +4612,6 @@ set -g _RY_POST_HOOKS \
     "/etc/udev/rules.d/*|udev" \
     "*/modprobe.d/*|modprobe" \
     "*/environment.d/*|envd" \
-    "*/baloofilerc|baloo" \
     "*/MangoHud/MangoHud.conf|mangohud"
 function _ir_validate_post_hooks --description "Refuse deploy when any _RY_POST_HOOKS tag lacks a _post_<tag> handler" # mirrors _ir_validate_keys
     set -l _seen_tags
@@ -4841,23 +4783,6 @@ function _post_envd --argument-names target --description "Post-hook: notify ses
     _info "environment.d $target changed — log out and back in (or restart user session) to apply"
     _info "  OR for live apply: systemctl --user import-environment + restart active user units"
     _info "  Active systemd --user services retain old environment until restarted"
-    return 0
-end
-function _post_baloo --argument-names target --description "Post-hook: disable + purge KDE Baloo index after baloofilerc change"
-    _echo
-    set -l _balooctl
-    for _b in balooctl6 balooctl
-        command -q $_b; and set _balooctl $_b; and break
-    end
-    if test -z "$_balooctl"
-        _info "baloofilerc deployed; balooctl not found — indexing stays disabled via config at next login (no live purge)"
-        return 0
-    end
-    if _run $_balooctl disable # user-scope; no sudo (runs against the caller's session)
-        _ok "Baloo indexing disabled and index purged ($_balooctl disable)"
-    else
-        _warn "$_balooctl disable failed — config still disables indexing at next login (non-fatal; file deployed)"
-    end
     return 0
 end
 function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change"

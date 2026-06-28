@@ -1,11 +1,11 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.77.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.78.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script: 18 embedded configs, gaming/LLM desktop profile.
+> Idempotent, reversible CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script: 17 embedded configs, gaming/LLM desktop profile.
 
 <details>
 <summary><strong>Contents</strong></summary>
@@ -41,7 +41,7 @@ chmod +x ry-install.fish
 
 | In scope | Out of scope |
 |---|---|
-| Kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, gaming env vars, MangoHud, KDE Baloo, pacman add/remove, sdboot-manage BLS entries | Dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI |
+| Kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, gaming env vars, MangoHud, pacman add/remove, sdboot-manage BLS entries | Dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI |
 
 ## Requirements
 
@@ -80,7 +80,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 |---|---|---|
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
-| 3 | Configuration | deploy 18 embedded configs atomically |
+| 3 | Configuration | deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → iwd handoff (only when `NM_WIFI_BACKEND=iwd`) → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
@@ -161,7 +161,6 @@ Source of truth is the script; retune the `set -g` globals near the top (perms: 
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, AMD P-State EPP, GPU DPM |
 | `/etc/modprobe.d/60-ry-mt7925e.conf` | disable PCIe ASPM on MT7925 (stability mitigation) |
 | `~/.config/environment.d/10-environment.conf` | gaming env vars (RADV, MangoHud, Proton) |
-| `~/.config/baloofilerc` | disable KDE Baloo file indexing |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only performance HUD |
 
 ## Tuning Notes
@@ -173,6 +172,7 @@ Source of truth is the script; retune the `set -g` globals near the top (perms: 
 | NTSYNC | `/dev/ntsync` asserted in preflight + verify (mainline ≥ 6.14). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
 | MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Symptomatic reserve fix — remove if a kernel bump resolves it. |
 | AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline — AMD-Vi is fully disabled (this is a single-purpose gaming/LLM desktop with no PCI passthrough). `--verify` confirms the live state (0 entries under `/sys/kernel/iommu_groups/`). **VFIO/GPU-passthrough or SR-IOV users must drop `amd_iommu=off` and use `amd_iommu=on iommu=pt` instead**, then re-run — `--verify` then asserts the groups are populated. |
+| UMIP (`clearcpuid=514`) | Ships in the cmdline — UMIP is disabled system-wide (`SGDT`/`SIDT`/`SMSW` no longer trapped) and the kernel is tainted. Intentional latency choice. Drop the token to restore UMIP if no `umip_printk` stutter is observed. |
 
 ## Uninstall
 
@@ -184,7 +184,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | # | Step | Command |
 |---|---|---|
 | 1 | Unmask | `sudo systemctl unmask ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target` |
-| 2 | Remove system paths, then user env.d | `sudo rm /etc/sdboot-manage.conf /etc/sysctl.d/95-ry-overrides.conf /etc/udev/rules.d/99-ry-perf.rules /etc/modprobe.d/60-ry-mt7925e.conf /etc/iw-regdomain /etc/bluetooth/main.conf /etc/nftables.conf /etc/default/cpupower-service.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/systemd/logind.conf.d/99-cachyos-logind.conf /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` then `rm ~/.config/environment.d/10-environment.conf ~/.config/baloofilerc ~/.config/MangoHud/MangoHud.conf` |
+| 2 | Remove system paths, then user env.d | `sudo rm /etc/sdboot-manage.conf /etc/sysctl.d/95-ry-overrides.conf /etc/udev/rules.d/99-ry-perf.rules /etc/modprobe.d/60-ry-mt7925e.conf /etc/iw-regdomain /etc/bluetooth/main.conf /etc/nftables.conf /etc/default/cpupower-service.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/systemd/logind.conf.d/99-cachyos-logind.conf /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` then `rm ~/.config/environment.d/10-environment.conf ~/.config/MangoHud/MangoHud.conf` |
 | 3 | Restore fstab, delete `.ry.bak` | `sudo mv /etc/fstab.ry.bak /etc/fstab` then `sudo rm -f /boot/loader/loader.conf.ry.bak /etc/mkinitcpio.conf.ry.bak` |
 | 4 | Reverse package changes (optional) | `sudo pacman -S --needed plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect` then `sudo pacman -Rns nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs bottom htop git-delta lm_sensors rtkit realtime-privileges ddcutil nftables` |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
@@ -205,7 +205,7 @@ For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert
 
 ### Known-benign log lines
 
-Expected on this hardware (deliberate optimization or capability gap). `--verify` surfaces live ones as `INFO` under **known-benign conditions (advisory)** — never affects the verdict.
+Expected on this hardware (deliberate optimization or capability gap); none affect operation.
 
 | Log line | Why it's benign |
 |---|---|

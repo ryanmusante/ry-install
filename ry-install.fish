@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.78.2 (2026-06-28) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.78.3 (2026-06-28) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.78.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.78.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -210,9 +210,7 @@ function _resolve_systemd_ver --description "Cache systemd major version into _R
     set -g _RY_SYSTEMD_VER_TRIED true
     return 0
 end
-function _unit_state --argument-names unit --description "Return LoadState/ActiveState/UnitFileState as 3-line list (fewer on systemctl error)"
-    command systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null
-end
+function _unit_state --argument-names unit --description "Return LoadState/ActiveState/UnitFileState as 3-line list (fewer on systemctl error)"; command systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null; end
 function _unit_state_padded --argument-names unit --description "Return _unit_state values" # ERR_NO_DATA triple keeps $rec[1..3] in-bounds
     set -l _v (_unit_state "$unit")
     if test (count $_v) -lt 3
@@ -923,9 +921,7 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
 end
 
 # ── CONTENT DISPATCH (_ry_get_file_content; fn name derived via _content_fn_for) ──
-function _content_fn_for --argument-names dst --description "Resolve the _content_ generator function name for a destination"
-    echo "_content_"(_tmpfile_key "$dst")
-end
+function _content_fn_for --argument-names dst --description "Resolve the _content_ generator function name for a destination"; echo "_content_"(_tmpfile_key "$dst"); end
 function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"
     set -l fn (_content_fn_for "$dst")
     functions -q $fn; or return $EXIT_GEN_NOFN
@@ -1049,9 +1045,7 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
         test -L "$path"
     end
 end
-function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"
-    string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"
-end
+function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"; string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"; end
 function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse)" # tri-state rc 0/1/2: drift vs sudo-lapse
     set -l _bytes
     if _is_system_dst "$dst"
@@ -1193,10 +1187,7 @@ function _warn_loud --description "Override-path warn: stderr regardless of QUIE
     test "$MODE" = check; and return 0
     _msg_print --force WARN $argv
 end
-function _echo --description "Print a plain message without level prefix"
-    _log "ECHO: $argv"
-    if test "$QUIET" = false; and not set -q _RY_OUTPUT_BROKEN; printf '%s\n' (string join ' ' -- $argv) >&2; end
-end
+function _echo --description "Print a plain message without level prefix"; _log "ECHO: $argv"; if test "$QUIET" = false; and not set -q _RY_OUTPUT_BROKEN; printf '%s\n' (string join ' ' -- $argv) >&2; end; end
 
 # ── VERIFY SUMMARY ──
 function _verify_summary --description "Print verification pass/fail/warn summary"
@@ -1990,9 +1981,7 @@ function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --descript
     if not _run $_sp mv -T -- "$tmpfile" "$dst"; _fail "→ $dst (atomic move failed)"; return 1; end
     return 0
 end
-function _awf_is_backup_target --argument-names dst --description "True if dst is in _RY_BACKUP_TARGETS (automatic .ry.bak set)"
-    contains -- "$dst" $_RY_BACKUP_TARGETS
-end
+function _awf_is_backup_target --argument-names dst --description "True if dst is in _RY_BACKUP_TARGETS (automatic .ry.bak set)"; contains -- "$dst" $_RY_BACKUP_TARGETS; end
 function _awf_make_backup --argument-names dst use_sudo --description "Create <dst>.ry.bak before overwrite (loader.conf/mkinitcpio.conf/fstab)"
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"
     set -l _sp; test "$use_sudo" = true; and set _sp sudo -n
@@ -2220,10 +2209,7 @@ function _vss_logind --description "_verify_static_system sub: logind.conf.d key
         _chk_grep /etc/systemd/logind.conf.d/99-cachyos-logind.conf "$key=ignore" "$key"
     end
 end
-function _vss_nmdispatch --description "_verify_static_system sub: NetworkManager-dispatcher logging drop-in"
-    _chk_file /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf; or return 0
-    _chk_grep /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX" "dispatcher LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
-end
+function _vss_nmdispatch --description "_verify_static_system sub: NetworkManager-dispatcher logging drop-in"; _chk_file /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf; or return 0; _chk_grep /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX" "dispatcher LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"; end
 function _vss_nm --description "_verify_static_system sub: NetworkManager config"
     _chk_file /etc/NetworkManager/conf.d/99-cachyos-nm.conf; or return 0
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.backend=$NM_WIFI_BACKEND" "wifi backend $NM_WIFI_BACKEND"
@@ -2236,10 +2222,7 @@ function _vss_sysctl --description "_verify_static_system sub: sysctl drop-in ke
         for entry in $SYSCTL_VALUES; set -l parts (string split -m1 '=' -- "$entry"); set -l key $parts[1]; set -l val $parts[2]; _chk_grep /etc/sysctl.d/95-ry-overrides.conf "$key = $val" "$key=$val"; end
     end
 end
-function _vss_regdom --description "_verify_static_system sub: wireless regdom (/etc/iw-regdomain)"
-    _echo "── wireless regdom (iw-regdomain) ──"
-    _chk_file /etc/iw-regdomain; and _chk_grep /etc/iw-regdomain "COUNTRY=$COUNTRY" "iw-regdomain COUNTRY=$COUNTRY"
-end
+function _vss_regdom --description "_verify_static_system sub: wireless regdom (/etc/iw-regdomain)"; _echo "── wireless regdom (iw-regdomain) ──"; _chk_file /etc/iw-regdomain; and _chk_grep /etc/iw-regdomain "COUNTRY=$COUNTRY" "iw-regdomain COUNTRY=$COUNTRY"; end
 function _vss_bluetooth --description "_verify_static_system sub: BlueZ main.conf (adapter auto-power-on)"
     _echo "── bluetooth (main.conf) ──"
     _chk_file /etc/bluetooth/main.conf; or return 0
@@ -2260,9 +2243,7 @@ function _vss_nft --description "_verify_static_system sub: nftables default-den
     _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
     _chk_grep /etc/nftables.conf "nd-neighbor-solicit" "nftables ICMPv6 NDP/PMTUD accept" # regression guard: dropping breaks IPv6 post-NDP-expiry
 end
-function _vss_modprobe --description "_verify_static_system sub: mt7925e modprobe drop-in (ASPM disable)"
-    _chk_file /etc/modprobe.d/60-ry-mt7925e.conf; and _chk_grep /etc/modprobe.d/60-ry-mt7925e.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'
-end
+function _vss_modprobe --description "_verify_static_system sub: mt7925e modprobe drop-in (ASPM disable)"; _chk_file /etc/modprobe.d/60-ry-mt7925e.conf; and _chk_grep /etc/modprobe.d/60-ry-mt7925e.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'; end
 
 function _verify_static_system --description "Verify ntsync, resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, nftables"
     _echo "SYSTEM CONFIGURATION"
@@ -4644,10 +4625,7 @@ function _idf_use_sudo_for_dst --argument-names target --description "Resolve ma
     end
     return 1
 end
-function _idf_dispatch_hook --argument-names target tag --description "Dispatch a post-hook tag to its _post_<tag> handler"
-    if test -z "$tag"; or not functions -q "_post_$tag"; _err "Internal: unknown post-hook tag '$tag' (target=$target)"; return 1; end
-    _post_$tag "$target"
-end
+function _idf_dispatch_hook --argument-names target tag --description "Dispatch a post-hook tag to its _post_<tag> handler"; if test -z "$tag"; or not functions -q "_post_$tag"; _err "Internal: unknown post-hook tag '$tag' (target=$target)"; return 1; end; _post_$tag "$target"; end
 function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"
     _log_section "INSTALL-FILE START"
     if test -z "$target"
@@ -4713,12 +4691,8 @@ function _post_boot_apply --argument-names target skip_mki --description "Shared
     if not _preflight_boot_sanity; _err "CRITICAL: boot sanity check failed after single-file install — DO NOT REBOOT"; return $EXIT_BOOT_CRIT; end
     return 0
 end
-function _post_boot --argument-names target --description "Post-hook: rebuild boot entries (mkinitcpio + sdboot-manage)"
-    _post_boot_apply "$target" false
-end
-function _post_cmdline --argument-names target --description "Post-hook: regenerate sdboot entries only (cmdline is not an initramfs input)"
-    _post_boot_apply "$target" true
-end
+function _post_boot --argument-names target --description "Post-hook: rebuild boot entries (mkinitcpio + sdboot-manage)"; _post_boot_apply "$target" false; end
+function _post_cmdline --argument-names target --description "Post-hook: regenerate sdboot entries only (cmdline is not an initramfs input)"; _post_boot_apply "$target" true; end
 
 # ── POST-HOOKS: NON-BOOT LIVE-APPLY (SERVICE/CONFIG; FAILURES NON-FATAL, EXIT 0) ──
 function _post_resolved --argument-names target --description "Post-hook: restart systemd-resolved"
@@ -4729,10 +4703,7 @@ function _post_resolved --argument-names target --description "Post-hook: restar
     end
     return 0
 end
-function _post_logind --argument-names target --description "Post-hook: notify reboot needed for logind"
-    _info "Logind config $target changed — reboot required (restarting logind kills all sessions)"
-    return 0
-end
+function _post_logind --argument-names target --description "Post-hook: notify reboot needed for logind"; _info "Logind config $target changed — reboot required (restarting logind kills all sessions)"; return 0; end
 function _post_nmdispatch --argument-names target --description "Post-hook: daemon-reload after NetworkManager-dispatcher logging drop-in change"
     _echo
     if not _run sudo -n systemctl daemon-reload

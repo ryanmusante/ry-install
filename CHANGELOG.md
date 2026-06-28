@@ -2,22 +2,26 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.78.3 - 2026-06-28
+
+- style: collapse 12 single- and two-statement functions to one-line form (house style). Script 5012 -> 4983 lines. Behavior-, count-, and exit-code-neutral.
+
 ## 7.78.2 - 2026-06-28
 
-- docs: condense README prose to vital information throughout; convert both "Known-benign log lines" tables to prose paragraphs (all entries retained). All other tables, package/unit/file lists, exit codes, and cross-references preserved verbatim. No script behavior change.
+- docs: condense README prose throughout; convert both known-benign log-line tables to prose (all entries retained). No script behavior change.
 
 ## 7.78.1 - 2026-06-28
 
-- fix: `argparse --name` used the `path basename` builtin (fish ≥ 3.7), which fails on the declared 3.6 floor since the version gate accepts 3.6; switched to the floor-safe `command basename` (already the form used elsewhere). Behavior-neutral on fish ≥ 3.7. Count- and exit-code-neutral.
-- docs: sync Quick Start checkout pin `v7.77.1` -> `v7.78.1` (lagged the release).
+- fix: `argparse --name` used the `path basename` builtin (fish >= 3.7); switched to floor-safe `command basename` for the declared 3.6 floor. Behavior-neutral.
+- docs: sync Quick Start checkout pin to v7.78.1.
 
 ## 7.78.0 - 2026-06-28
 
-- baloo: remove `~/.config/baloofilerc` (KDE indexing) from managed files; drop `_post_baloo` purge hook. Managed configs 18 -> 17, USER_DESTINATIONS 3 -> 2, post-hooks 18 -> 17. Any already-deployed file is left in place.
+- baloo: remove `~/.config/baloofilerc` (KDE indexing) from managed files; drop `_post_baloo` hook. Managed configs 18 -> 17, USER_DESTINATIONS 3 -> 2, post-hooks 18 -> 17.
 
 ## 7.77.2 - 2026-06-28
 
-- verify: remove `_kb_*` known-benign advisory subsystem and `_ry_check_umip_disabled` (INFO-only; already documented in README). −7 functions. Count- and exit-code-neutral.
+- verify: remove `_kb_*` known-benign advisory subsystem and `_ry_check_umip_disabled` (INFO-only). -7 functions. Count- and exit-code-neutral.
 - docs: add Tuning Notes row for the `clearcpuid=514`/UMIP taint tradeoff.
 
 ## 7.77.1 - 2026-06-28
@@ -27,7 +31,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 ## 7.77.0 - 2026-06-27
 
 - cmdline: `iommu=pt` -> `amd_iommu=off` (AMD-Vi fully disabled; no PCI passthrough on this profile). KERNEL_PARAMS count-neutral (16).
-- verify: add `_vrkm_iommu` runtime effect check — derives expected IOMMU state from KERNEL_PARAMS (`amd_iommu=`/`intel_iommu=`/`iommu=`) and asserts it against live `/sys/kernel/iommu_groups` + dmesg correlation. Count- and exit-code-neutral.
+- verify: add `_vrkm_iommu` runtime check — derives expected IOMMU state from KERNEL_PARAMS, asserts against live `/sys/kernel/iommu_groups` + dmesg. Count- and exit-code-neutral.
 
 ## 7.76.1 - 2026-06-27
 

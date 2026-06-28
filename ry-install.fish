@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.79.0 (2026-06-28) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.79.1 (2026-06-28) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.79.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.79.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -3404,10 +3404,10 @@ function _install_preflight --description "Run all preflight checks before insta
     set -l _fwver (string split '-' -- "$_fw")[1]
     if test -n "$_fwver"
         if string match -q '20251125*' -- "$_fwver"
-            _warn_loud "linux-firmware $_fwver: known-bad MES blob (gfx1151 GCVM_L2 GPU hang) — upgrade to >= 20260110"
+            _warn_loud "linux-firmware $_fwver: known-bad MES blob (gfx1151 GCVM_L2 GPU hang) — upgrade to >= 20260410"
             _log "FW_BAD_MES_BLOB: $_fwver"
-        else if command -q vercmp; and test (command vercmp $_fwver 20260110) -lt 0
-            _warn_loud "linux-firmware $_fwver < 20260110 — pre-dates gfx1151 ROCm MES stability fix (soft floor)"
+        else if command -q vercmp; and test (command vercmp $_fwver 20260410) -lt 0
+            _warn_loud "linux-firmware $_fwver < 20260410 — pre-dates the gfx1151 MES-0x86 blob the >= $KERNEL_MIN amdgpu handshake needs (soft floor)"
             _log "FW_BELOW_SOFT_FLOOR: $_fwver"
         end
     end

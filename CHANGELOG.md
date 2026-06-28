@@ -2,53 +2,57 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.79.1 - 2026-06-28
+
+- preflight: raise the linux-firmware soft-floor advisory (and known-bad-blob upgrade target) 20260110 -> 20260410, matching the gfx1151 MES-0x86 blob the >= 6.19 amdgpu handshake requires. Non-fatal; the warning now covers the full pre-MES range.
+
 ## 7.79.0 - 2026-06-28
 
-- preflight: raise `KERNEL_MIN` 6.18 -> 6.19. gfx1151 MES-0x86 firmware (linux-firmware >= 20260410) requires the >= 6.19 amdgpu MES handshake; re-anchored the floor comment + both hard-fail rationale lines to lead with the firmware requirement (RTL8127/r8169 still noted). README floor table + preflight prose synced.
-- firewall: add TCP `27037` to the gated remote-play inbound set (`RY_REMOTE_PLAY_PORTS=true`); Steam Remote Play uses 27036-27037/tcp. Set now `{ 47984, 47989, 48010, 27036, 27037 }`. Default-off gate unchanged.
-- verify: `_vrk_cpu_state` now asserts `amd_pstate/dynamic_epp` == `disabled`. When dynamic EPP is enabled the kernel overrides the udev EPP pin (writes to `energy_performance_preference` return -EBUSY); silent-on-missing so pre-6.16 hosts without the node are unaffected. Exit-code-neutral (advisory `_chk`).
-- mangohud: re-enable `cpu_temp` (was commented pending hwmon resolution). If the wrong sensor is shown on this host, pin it in the generated conf with MangoHud's `cpu_custom_temp_sensor=<chip>,<input>` directive (e.g. `k10temp`); the directive name is `cpu_custom_temp_sensor`, not `cpu_temp_sensor`. Count-neutral.
+- preflight: raise `KERNEL_MIN` 6.18 -> 6.19 (gfx1151 MES-0x86 firmware needs the >= 6.19 amdgpu handshake; RTL8127 suspend-hang fix + r8169 also land here). README + floor comments synced.
+- firewall: add TCP `27037` to the gated remote-play inbound set (Steam Remote Play 27036-27037/tcp); now `{ 47984, 47989, 48010, 27036, 27037 }`. Default-off gate unchanged.
+- verify: `_vrk_cpu_state` asserts `amd_pstate/dynamic_epp` == `disabled` (enabled dynamic EPP overrides the udev EPP pin with -EBUSY). Silent-on-missing for pre-6.16 hosts.
+- mangohud: re-enable `cpu_temp`. Override with `cpu_custom_temp_sensor=<chip>,<input>` (e.g. `k10temp`) if the wrong sensor shows.
 
 ## 7.78.3 - 2026-06-28
 
-- style: collapse 12 single- and two-statement functions to one-line form (house style). Script 5012 -> 4983 lines. Behavior-, count-, and exit-code-neutral.
+- style: collapse 12 short functions to one-line form. 5012 -> 4983 lines. Behavior-neutral.
 
 ## 7.78.2 - 2026-06-28
 
-- docs: condense README prose throughout; convert both known-benign log-line tables to prose (all entries retained). No script behavior change.
+- docs: condense README prose; convert both known-benign log tables to prose (all entries kept).
 
 ## 7.78.1 - 2026-06-28
 
-- fix: `argparse --name` used the `path basename` builtin (fish >= 3.7); switched to floor-safe `command basename` for the declared 3.6 floor. Behavior-neutral.
-- docs: sync Quick Start checkout pin to v7.78.1.
+- fix: `argparse --name` used the fish >= 3.7 `path basename` builtin; switch to floor-safe `command basename`.
+- docs: sync Quick Start pin to v7.78.1.
 
 ## 7.78.0 - 2026-06-28
 
-- baloo: remove `~/.config/baloofilerc` (KDE indexing) from managed files; drop `_post_baloo` hook. Managed configs 18 -> 17, USER_DESTINATIONS 3 -> 2, post-hooks 18 -> 17.
+- baloo: drop `~/.config/baloofilerc` + `_post_baloo`. Managed configs 18 -> 17, USER_DESTINATIONS 3 -> 2, post-hooks 18 -> 17.
 
 ## 7.77.2 - 2026-06-28
 
-- verify: remove `_kb_*` known-benign advisory subsystem and `_ry_check_umip_disabled` (INFO-only). -7 functions. Count- and exit-code-neutral.
+- verify: remove `_kb_*` known-benign subsystem and `_ry_check_umip_disabled` (INFO-only). -7 functions.
 - docs: add Tuning Notes row for the `clearcpuid=514`/UMIP taint tradeoff.
 
 ## 7.77.1 - 2026-06-28
 
-- docs: add two verify-section banners. Comment-only; no behavior change.
+- docs: add two verify-section banners. Comment-only.
 
 ## 7.77.0 - 2026-06-27
 
-- cmdline: `iommu=pt` -> `amd_iommu=off` (AMD-Vi fully disabled; no PCI passthrough on this profile). KERNEL_PARAMS count-neutral (16).
-- verify: add `_vrkm_iommu` runtime check — derives expected IOMMU state from KERNEL_PARAMS, asserts against live `/sys/kernel/iommu_groups` + dmesg. Count- and exit-code-neutral.
+- cmdline: `iommu=pt` -> `amd_iommu=off` (AMD-Vi disabled; no passthrough on this profile). KERNEL_PARAMS count-neutral (16).
+- verify: add `_vrkm_iommu` — derives expected IOMMU state from KERNEL_PARAMS, asserts against live `/sys/kernel/iommu_groups` + dmesg.
 
 ## 7.76.1 - 2026-06-27
 
-- ntsync: drop `/etc/modules-load.d/ntsync.conf` autoload; ntsync is assert-only (preflight + verify). Count-neutral.
-- mangohud: comment out `cpu_temp` pending per-host hwmon resolution (re-enable with `cpu_custom_temp_sensor=k10temp`). Count-neutral.
+- ntsync: drop `/etc/modules-load.d/ntsync.conf`; ntsync is assert-only (preflight + verify).
+- mangohud: comment out `cpu_temp` pending per-host hwmon resolution.
 
 ## 7.76.0 - 2026-06-27
 
 - mangohud: add `cpu_temp` after `cpu_stats`.
-- preflight: add linux-firmware soft-floor advisory (hard-warn on `20251125*` MES blob, soft-warn < `20260110`). Non-fatal.
+- preflight: add linux-firmware soft-floor advisory (hard-warn on `20251125*` blob). Non-fatal.
 
 ## 7.75.1 - 2026-06-27
 
@@ -61,7 +65,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.74.2 - 2026-06-27
 
-- verify: add `_vss_known_benign` advisory sub. Count- and exit-code-neutral.
+- verify: add `_vss_known_benign` advisory sub.
 
 ## 7.74.1 - 2026-06-27
 
@@ -78,8 +82,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.73.4 - 2026-06-26
 
-- preflight: add `*/modprobe.d/*` post-hook. count 17 -> 18.
-- install-file: add `_post_modprobe` handler.
+- preflight: add `*/modprobe.d/*` post-hook + `_post_modprobe` handler. count 17 -> 18.
 
 ## 7.73.1 - 2026-06-26
 
@@ -110,7 +113,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.71.0 - 2026-06-26
 
-- preflight: add `_ir_validate_kernel_floor` (hard-fail on kernel < 6.18; skip-override available).
+- preflight: add `_ir_validate_kernel_floor` (hard-fail on kernel < floor; skip-override available).
 - gpu: parameterize udev DPM level as `GPU_DPM_LEVEL` (default auto).
 - env: add `PROTON_FSR4_RDNA3_UPGRADE=1`. ENV_VARS 10 -> 11.
 - firewall: add `RY_REMOTE_PLAY_PORTS` gate (default false).

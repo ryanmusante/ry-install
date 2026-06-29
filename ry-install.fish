@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.79.2 (2026-06-28) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.79.3 (2026-06-28) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.79.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.79.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -735,10 +735,15 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
     end
     set -l _cur_parts (string split '.' -- "$_kver"); set -l _min_parts (string split '.' -- "$KERNEL_MIN")
     if test "$_cur_parts[1]" -lt "$_min_parts[1]"; or begin; test "$_cur_parts[1]" -eq "$_min_parts[1]"; and test "$_cur_parts[2]" -lt "$_min_parts[2]"; end
-        _err_loud "Kernel floor: running $_kver, profile $PROFILE_NAME requires >=$KERNEL_MIN — refusing to deploy"
-        _err_loud_cont "  gfx1151 MES-0x86 firmware (linux-firmware >=20260410) requires >=$KERNEL_MIN amdgpu; RTL8127 hang fix (ae1737e7339b) + r8169 support are present only at/above $KERNEL_MIN."
-        _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
-        _pre_dispatch_exit $EXIT_PREFLIGHT
+        if test "$RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK" = 1 # mirror hardware gate: override bypasses below-floor hard-fail
+            _warn_loud "Kernel floor (override): running $_kver < $KERNEL_MIN — proceeding"
+            _log "KERNEL_FLOOR_BELOW_OVERRIDE: running=$_kver min=$KERNEL_MIN"
+        else
+            _err_loud "Kernel floor: running $_kver, profile $PROFILE_NAME requires >=$KERNEL_MIN — refusing to deploy"
+            _err_loud_cont "  gfx1151 MES-0x86 firmware (linux-firmware >=20260410) requires >=$KERNEL_MIN amdgpu; RTL8127 hang fix (ae1737e7339b) + r8169 support are present only at/above $KERNEL_MIN."
+            _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
+            _pre_dispatch_exit $EXIT_PREFLIGHT
+        end
     end
 end
 

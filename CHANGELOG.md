@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.79.3 - 2026-06-28
+
+- fix: `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` was honored only on the unreadable-`uname -r` path; the parsed-but-below-floor branch hard-failed (exit 3) with no override gate, so a sub-floor kernel could never be bypassed despite the function description, both error hints, `--help`, and README all advertising the override. Gate the below-floor branch to mirror the `RY_INSTALL_SKIP_HARDWARE_CHECK` sibling (`_warn_loud` + proceed on override, else refuse). Affected all modes, since `_init_runtime` runs before dispatch.
+
 ## 7.79.2 - 2026-06-28
 
 - docs: add subsection headers to README Configuration (Globals/Packages/Units/fstab) and split Managed Files into grouped tables (Boot, systemd drop-ins, Network, Bluetooth & firewall, Power/performance/modules, User session). All 17 file rows retained; no script change.

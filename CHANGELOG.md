@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.79.5 - 2026-06-29
+
+- fix: give `SYSTEM_UPGRADED` a top-level default (`set -g SYSTEM_UPGRADED false`) in the global-state block, and guard its read in `_install_rebuild_boot` with `set -q` (mirroring the existing `_if_trim_pacman_cache` guard). It was the only cross-phase global without a top-level initializer; current call order set it before any read, so no behavior changes, but a future phase reorder or package-phase short-circuit would otherwise surface an unknown-variable read. Hardening only.
+
 ## 7.79.4 - 2026-06-28
 
 - docs: condense changelog entries to one-line form; sync version across script header, `VERSION`, and README badge/pin. Behavior unchanged (version-string bump only).

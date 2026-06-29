@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.79.4 (2026-06-28) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.79.5 (2026-06-29) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.79.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.79.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -170,6 +170,7 @@ set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/mkinitcpio.conf"; set
 set -g _RY_TMPDIR_GLOBS 'ry-sudo-err.*' 'ry-tee-err.*' 'ry-run.*' 'ry-argparse-err.*' 'ry-fstab-tee-err.*' 'ry-fstab-awk-err.*' # TMPDIR sweep globs
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_PROFILE_USES_WIFI_BACKEND false
+set -g SYSTEM_UPGRADED false # top-level default: set authoritatively in _install_packages; read in _install_rebuild_boot + _if_trim_pacman_cache (cross-phase global, must exist in all modes)
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 set -g NM_RESTART_DELAY 3; set -g _PROG_BAR_WIDTH 40
@@ -4273,7 +4274,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     _irb_taint_gate
     set -l _tg_rc $status
     test "$_tg_rc" -ne 0; and return $_tg_rc
-    test "$SYSTEM_UPGRADED" = true; and _ok "System upgraded during package installation"
+    set -q SYSTEM_UPGRADED; and test "$SYSTEM_UPGRADED" = true; and _ok "System upgraded during package installation"
     if not _run sudo -n mkinitcpio -P
         _err "mkinitcpio failed"
         _err "CRITICAL: Boot rebuild failed — aborting remaining steps"

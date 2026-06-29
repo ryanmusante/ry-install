@@ -4,7 +4,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.79.5 - 2026-06-29
 
-- fix: give `SYSTEM_UPGRADED` a top-level default (`set -g SYSTEM_UPGRADED false`) in the global-state block, and guard its read in `_install_rebuild_boot` with `set -q` (mirroring the existing `_if_trim_pacman_cache` guard). It was the only cross-phase global without a top-level initializer; current call order set it before any read, so no behavior changes, but a future phase reorder or package-phase short-circuit would otherwise surface an unknown-variable read. Hardening only.
+- fix: add top-level `set -g SYSTEM_UPGRADED false` default + `set -q` guard in `_install_rebuild_boot` (mirrors `_if_trim_pacman_cache`). Hardening only; no behavior change.
 
 ## 7.79.4 - 2026-06-28
 
@@ -12,7 +12,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.79.3 - 2026-06-28
 
-- fix: gate the below-floor kernel branch on `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, mirroring the `RY_INSTALL_SKIP_HARDWARE_CHECK` sibling (`_warn_loud` + proceed, else refuse). Previously only the unreadable-`uname -r` path honored the override, so a parsed sub-floor kernel was un-bypassable. Affects all modes (`_init_runtime` precedes dispatch).
+- fix: gate the below-floor kernel branch on `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` (mirrors the hardware-skip sibling). Previously a parsed sub-floor kernel was un-bypassable.
 
 ## 7.79.2 - 2026-06-28
 

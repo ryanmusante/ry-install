@@ -7,6 +7,8 @@
 
 > Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs, gaming/LLM desktop profile.
 
+**In 30 seconds:** one unattended run turns a fresh CachyOS install into a tuned single-seat gaming/LLM desktop — kernel cmdline and initramfs for gfx1151, a default-deny nftables firewall (ufw masked), `powersave`/EPP `balance_performance` CPU tuning, BBR networking, Proton/FSR4/RADV session env, and a curated package add/remove. Every change is atomic, byte-verifiable (`--verify`), and reversible by hand ([Uninstall](#uninstall)).
+
 <details>
 <summary><strong>Contents</strong></summary>
 
@@ -62,8 +64,8 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 
 | Flag | Action |
 |---|---|
-| *(no args)* | Full unattended install |
-| `-V, --verbose` | Show install output (ignored under `--check`) |
+| *(no args)* | Full unattended install (silent by default — a phase matrix prints at the end) |
+| `-V, --verbose` | Stream per-command install output (ignored under `--check`) |
 | `--verify` | Config files byte-for-byte, then live system state |
 | `--check` | Silent idempotency probe (`0` clean · `3` preflight · `10` drift) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
@@ -71,6 +73,21 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
 `--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). All modes first run the runtime-init gates (hardware match, kernel floor, key/count validation), which hard-fail **exit 3** on a mismatched or sub-floor host.
+
+### What a clean install looks like
+
+After a successful run, a fully-converged host probes silent and verifies clean:
+
+```fish
+$ ./ry-install.fish --check; echo $status
+0                                    # 0 = no drift (3 = preflight, 10 = drift)
+
+$ ./ry-install.fish --verify
+...
+[OK] Combined (static + runtime): 142 OK
+```
+
+`--check` writes nothing to the terminal — it is a scriptable exit-code probe. `--verify` prints a per-line `[OK]`/`[WARN]`/`[FAIL]` report ending in the combined tally; a run with no `FAIL` lines exits `0` (warnings alone do not fail).
 
 ## Install Flow
 
@@ -86,6 +103,8 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
 A results summary prints to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; `DEFER` applies on next boot (e.g. regdomain).
+
+The intended recovery path for any failure is to read the failing phase, fix the underlying cause, and **re-run** — the script is idempotent, so an already-applied phase no-ops and only the unfinished work is redone. A boot-critical failure (exit 4) is the one case requiring care: resolve it before rebooting (see [Usage](#usage)).
 
 ## Safety & Reliability
 
@@ -113,6 +132,8 @@ Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-
 </details>
 
 ## Configuration
+
+All tunables live as `set -g` globals near the top of the script — there is no external config file. The subsections below map those globals to what they control: **Globals** covers the scalar knobs and CachyOS-specific divergences, **Packages** the add/remove sets, **Units** the systemd mask/enable lists, and **fstab** the ext4 mount-option rewrite. Edit a global, then re-run (or `--install-file` the single affected file) to apply.
 
 ### Globals
 
@@ -230,7 +251,7 @@ For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert
 | Component | Issue | Status |
 |---|---|---|
 | Strix Halo GPU | MES page faults | resolved (MES 0x86; current `linux-firmware` + shipped `mkinitcpio-firmware`) |
-| RTL8127 10GbE | throughput drops under load; suspend/shutdown hang | resolved — in-tree `r8169` (`f24f7b2f3af9`) + suspend/shutdown hang fix (`ae1737e7339b`), both ≥ 6.18 and guaranteed by the kernel floor; no DKMS |
+| RTL8127 10GbE | throughput drops under load; suspend/shutdown hang | resolved — in-tree `r8169` (`f24f7b2f3af9`) + suspend/shutdown hang fix (`ae1737e7339b`) both land in 6.18, so the ≥ 6.19 kernel floor guarantees them; no DKMS |
 | MT7925 | kernel panics, low TX power, random deauth | open — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
 | Strix Halo ACP | no ASoC machine driver | open — pending upstream (HDMI/USB audio unaffected) |
 

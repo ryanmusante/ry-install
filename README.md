@@ -7,7 +7,7 @@
 
 > Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs, gaming/LLM desktop profile.
 
-**In 30 seconds:** one unattended run turns a fresh CachyOS install into a tuned single-seat gaming/LLM desktop — kernel cmdline and initramfs for gfx1151, a default-deny nftables firewall (ufw masked), `powersave`/EPP `balance_performance` CPU tuning, BBR networking, Proton/FSR4/RADV session env, and a curated package add/remove. Every change is atomic, byte-verifiable (`--verify`), and reversible by hand ([Uninstall](#uninstall)).
+**In 30 seconds:** one unattended run turns a fresh CachyOS install into a tuned single-seat gaming/LLM desktop for gfx1151 — see [Configuration](#configuration) for the full set of changes. Every change is atomic, byte-verifiable (`--verify`), and reversible by hand ([Uninstall](#uninstall)).
 
 <details>
 <summary><strong>Contents</strong></summary>
@@ -76,7 +76,7 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 
 ### What a clean install looks like
 
-After a successful run, a fully-converged host probes silent and verifies clean:
+A fully-converged host probes silent and verifies clean:
 
 ```fish
 $ ./ry-install.fish --check; echo $status
@@ -87,7 +87,7 @@ $ ./ry-install.fish --verify
 [OK] Combined (static + runtime): 142 OK
 ```
 
-`--check` writes nothing to the terminal — it is a scriptable exit-code probe. `--verify` prints a per-line `[OK]`/`[WARN]`/`[FAIL]` report ending in the combined tally; a run with no `FAIL` lines exits `0` (warnings alone do not fail).
+`--check` is a silent, scriptable exit-code probe. `--verify` prints a per-line `[OK]`/`[WARN]`/`[FAIL]` report ending in the combined tally; warnings alone do not fail.
 
 ## Install Flow
 
@@ -104,7 +104,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 
 A results summary prints to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; `DEFER` applies on next boot (e.g. regdomain).
 
-The intended recovery path for any failure is to read the failing phase, fix the underlying cause, and **re-run** — the script is idempotent, so an already-applied phase no-ops and only the unfinished work is redone. A boot-critical failure (exit 4) is the one case requiring care: resolve it before rebooting (see [Usage](#usage)).
+Recovery for any failure: read the failing phase, fix the cause, re-run (already-applied phases no-op). A boot-critical failure (exit 4) must be resolved before rebooting — see [Usage](#usage).
 
 ## Safety & Reliability
 
@@ -257,7 +257,7 @@ For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert
 
 ### Known-benign log lines
 
-Expected on this hardware (deliberate optimization or capability gap); none affect operation. Live-checkable: `ModemManager1 … could not be found` (KDE D-Bus probe of the by-design-masked `modemmanager.service`); `acp_asoc_acp70 … No matching ASoC machine driver` (missing board-ID quirk, internal mic undetected — HDMI/USB audio fine); `unknown NHI PCI id` from boltd (PCI-ID table gap, USB4/TB still enumerate); `charge thresholds not supported` / `no backlight interface` (mini-PC has no battery or panel backlight); and `Unlikely small volume range` (USB-audio UAC descriptor quirk, capture unaffected).
+Expected on this hardware; none affect operation. Live-checkable: `ModemManager1 … could not be found` (probe of the masked `modemmanager.service`); `acp_asoc_acp70 … No matching ASoC machine driver` (missing board-ID quirk — HDMI/USB audio fine); `unknown NHI PCI id` from boltd (PCI-ID table gap; USB4/TB still enumerate); `charge thresholds not supported` / `no backlight interface` (no battery or panel backlight); `Unlikely small volume range` (USB-audio descriptor quirk).
 
 ## Troubleshooting
 

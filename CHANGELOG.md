@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.82.0 - 2026-06-30
+
+- fix: validate `GPU_DPM_LEVEL` against the dpm-level enum (was non-empty only); blocks udev `ATTR{}` corruption.
+- fix: reject ISO-3166-1 reserved `COUNTRY` codes (AA, QM-QZ, XA-XZ, ZZ) that silently apply the world regdomain.
+- fix: `environment.d` generator skips malformed entries + asserts count, mirroring sysctl. Adds exit code 14.
+
 ## 7.81.0 - 2026-06-29
 
 - refactor: remove linux-firmware soft-floor advisory + dangling version prose.
@@ -13,7 +19,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.79.6 - 2026-06-29
 
-- fix: GPU udev rule `KERNEL=="card[0-9]*"` + `DEVTYPE=="drm_minor"` (was `card[0-9]`) — covers `card10`+, excludes render nodes and connector hotplug. Count-neutral.
+- fix: GPU udev rule `KERNEL=="card[0-9]*"` + `DEVTYPE=="drm_minor"` (was `card[0-9]`) — `card[0-9]*` now covers `card10`+ and the glob excludes `renderD*`/`controlD*` nodes; `drm_minor` scopes to DRM minor devices. Count-neutral.
 
 ## 7.79.5 - 2026-06-29
 

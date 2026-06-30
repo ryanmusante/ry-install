@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.81.0 (2026-06-29) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.82.0 (2026-06-30) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.81.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
-set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
+set -g VERSION "7.82.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600
@@ -30,7 +30,7 @@ function _ry_show_help --description "Display usage information and available su
         "  -h, --help             Show this help (honored before all checks)" \
         "  -v, --version          Show version (honored before all checks)" \
         "EXIT CODES: 0 ok · 1 verify-FAIL/install-error · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
-        "  (gen/run sentinels 11-13/250/251/255 are internal, never a process exit; signal codes 128+N appear in the JSONL footer; see README.md)" \
+        "  (gen/run sentinels 11-14/250/251/255 are internal, never a process exit; signal codes 128+N appear in the JSONL footer; see README.md)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
@@ -436,7 +436,7 @@ function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
-    set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_FSTAB_EVIDENCE _RY_FSTAB_RESULT
+    set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_ENVD_BAD_ENTRIES _RY_FSTAB_EVIDENCE _RY_FSTAB_RESULT
     set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE _RY_SDBOOT_REFUSE_FS _RY_NET_FAIL_EVIDENCE
 end
 function _dc_release_lock --description "_do_cleanup sub: Release the instance lock (ownership-gated)"
@@ -714,8 +714,10 @@ function _ir_validate_keys --description "Refuse to deploy when an embedded scal
     for _k in LOADER_TIMEOUT NM_WIFI_POWERSAVE BT_RECONNECT_ATTEMPTS
         if not string match -qr '^\d+$' -- "$$_k"; _err_loud "$_k must be a non-negative integer (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
-    if not string match -qr '^[A-Z]{2}$' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166 alpha-2 code (got: '$COUNTRY') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR GPU_DPM_LEVEL NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION
+    if not string match -qr '^[A-Z][A-Z]$' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166-1 alpha-2 code (got: '$COUNTRY') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain. Refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # world-domain footgun: iw/cfg80211 accepts these but applies world limits
+    if not contains -- "$GPU_DPM_LEVEL" auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism; _err_loud "GPU_DPM_LEVEL must be one of auto|low|high|manual|profile_standard|profile_min_sclk|profile_min_mclk|profile_peak|perf_determinism (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # power_dpm_force_performance_level accepted set (amdgpu sysfs); value is interpolated unquoted into udev ATTR
+    for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION
         if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
@@ -900,7 +902,13 @@ function _content__etc_modprobe.d_60-ry-mt7925e.conf --description "Generate con
 end
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (KDE Plasma, Flatpak, D-Bus activated apps)"
-    for var in $ENV_VARS; printf '%s\n' "$var"; end
+    set -l _printed 0; set -g _RY_ENVD_BAD_ENTRIES
+    for var in $ENV_VARS
+        if not string match -qr '^[A-Za-z_][A-Za-z0-9_]*=' -- "$var"; set -ga _RY_ENVD_BAD_ENTRIES "$var"; functions -q _log; and _log "ENVD_SKIP_MALFORMED: '$var' (require KEY=value, KEY charset [A-Za-z_][A-Za-z0-9_]*)"; continue; end
+        printf '%s\n' "$var"
+        set _printed (math $_printed + 1)
+    end
+    if test "$_printed" -ne (count $ENV_VARS); functions -q _log; and _log "ENVD_COUNT_MISMATCH: printed=$_printed expected="(count $ENV_VARS); return $EXIT_GEN_ENVD; end
 end
 function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate content for ~/.config/MangoHud/MangoHud.conf (readout-only HUD; Radeon 8060S / gfx1151)"
     printf '%s\n' \
@@ -1948,6 +1956,12 @@ function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description 
             case $EXIT_GEN_SYSCTL
                 if set -q _RY_SYSCTL_BAD_ENTRIES; and test (count $_RY_SYSCTL_BAD_ENTRIES) -gt 0
                     _err "Content generator assertion failed (output count mismatch): $dst — malformed entries: "(string join ', ' -- $_RY_SYSCTL_BAD_ENTRIES)
+                else
+                    _err "Content generator assertion failed (output count mismatch): $dst"
+                end
+            case $EXIT_GEN_ENVD
+                if set -q _RY_ENVD_BAD_ENTRIES; and test (count $_RY_ENVD_BAD_ENTRIES) -gt 0
+                    _err "Content generator assertion failed (output count mismatch): $dst — malformed entries: "(string join ', ' -- $_RY_ENVD_BAD_ENTRIES)
                 else
                     _err "Content generator assertion failed (output count mismatch): $dst"
                 end

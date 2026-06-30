@@ -80,10 +80,8 @@ A fully-converged host probes silent and verifies clean:
 
 ```fish
 $ ./ry-install.fish --check; echo $status
-0                                    # 0 = no drift (3 = preflight, 10 = drift)
-
+0 # 0 = no drift (3 = preflight, 10 = drift)
 $ ./ry-install.fish --verify
-...
 [OK] Combined (static + runtime): 142 OK
 ```
 

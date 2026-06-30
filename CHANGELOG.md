@@ -2,9 +2,17 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.80.0 - 2026-06-29
+
+- docs: trim verbose in-script comments to vital rationale; sync version (header, `VERSION`, README). No behavior change.
+
+## 7.79.6 - 2026-06-29
+
+- fix: GPU udev rule `KERNEL=="card[0-9]*"` + `DEVTYPE=="drm_minor"` (was `card[0-9]`) — covers `card10`+, excludes render nodes and connector hotplug. Count-neutral.
+
 ## 7.79.5 - 2026-06-29
 
-- fix: add top-level `set -g SYSTEM_UPGRADED false` default + `set -q` guard in `_install_rebuild_boot` (mirrors `_if_trim_pacman_cache`). Hardening only; no behavior change.
+- fix: add top-level `set -g SYSTEM_UPGRADED false` default + `set -q` guard in `_install_rebuild_boot`. Hardening only; no behavior change.
 
 ## 7.79.4 - 2026-06-28
 
@@ -12,7 +20,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.79.3 - 2026-06-28
 
-- fix: gate the below-floor kernel branch on `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` (mirrors the hardware-skip sibling). Previously a parsed sub-floor kernel was un-bypassable.
+- fix: gate the below-floor kernel branch on `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` (mirrors hardware-skip). Sub-floor kernels were previously un-bypassable.
 
 ## 7.79.2 - 2026-06-28
 

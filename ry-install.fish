@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.79.5 (2026-06-29) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.80.0 (2026-06-29) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.79.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.80.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -11,7 +11,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-set -g KERNEL_MIN 6.19 # preflight floor: gfx1151 MES-0x86 firmware (linux-firmware >=20260410) requires kernel >=6.19 amdgpu; also carries RTL8127 suspend-hang fix + r8169 support
+set -g KERNEL_MIN 6.19 # floor: gfx1151 MES-0x86 firmware needs >=6.19 amdgpu; also carries RTL8127 suspend-hang fix + r8169
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -170,7 +170,7 @@ set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/mkinitcpio.conf"; set
 set -g _RY_TMPDIR_GLOBS 'ry-sudo-err.*' 'ry-tee-err.*' 'ry-run.*' 'ry-argparse-err.*' 'ry-fstab-tee-err.*' 'ry-fstab-awk-err.*' # TMPDIR sweep globs
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_PROFILE_USES_WIFI_BACKEND false
-set -g SYSTEM_UPGRADED false # top-level default: set authoritatively in _install_packages; read in _install_rebuild_boot + _if_trim_pacman_cache (cross-phase global, must exist in all modes)
+set -g SYSTEM_UPGRADED false # cross-phase global; must exist in all modes (set in _install_packages)
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 set -g NM_RESTART_DELAY 3; set -g _PROG_BAR_WIDTH 40
@@ -891,7 +891,7 @@ function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate con
         "# AMD P-State EPP balance_performance (perf-leaning hint to CPPC firmware; named profile, not raw 0x0)" \
         'ACTION=="add|change", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="balance_performance"' \
         "# GPU performance level (gfx1151 clock-floor; optional)" \
-        'ACTION=="add", KERNEL=="card[0-9]", SUBSYSTEM=="drm", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
+        'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", DEVTYPE=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
 end
 function _content__etc_modprobe.d_60-ry-mt7925e.conf --description "Generate content for /etc/modprobe.d/60-ry-mt7925e.conf (disable PCIe ASPM on MT7925; symptomatic reserve fix)"
     printf '%s\n' \
@@ -2242,7 +2242,7 @@ function _vss_udev --description "_verify_static_system sub: combined udev perf 
     _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'queue/scheduler}="none"' "nvme scheduler=none"
     _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'energy_performance_preference}="balance_performance"' "EPP=balance_performance"
     _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"' "GPU dpm=$GPU_DPM_LEVEL"
-    _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'KERNEL=="card[0-9]"' "GPU rule card-scoped"
+    _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'KERNEL=="card[0-9]*"' "GPU rule card-scoped"
 end
 function _vss_nft --description "_verify_static_system sub: nftables default-deny-inbound + ICMPv6 NDP/PMTUD accept (IPv6 break-glass)"
     _chk_file /etc/nftables.conf; or return 0
@@ -2623,7 +2623,7 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
     _echo "── amd_pstate / CPU boost ──"
     _chk_sysfs_eq /sys/devices/system/cpu/amd_pstate/status active "amd_pstate status"
     _chk_sysfs_eq /sys/devices/system/cpu/amd_pstate/prefcore enabled "amd_pstate prefcore"
-    _chk_sysfs_eq /sys/devices/system/cpu/amd_pstate/dynamic_epp disabled "amd_pstate dynamic_epp" # must be disabled or kernel overrides the EPP pin (writes to energy_performance_preference return -EBUSY); node absent pre-6.16
+    _chk_sysfs_eq /sys/devices/system/cpu/amd_pstate/dynamic_epp disabled "amd_pstate dynamic_epp" # else EPP pin returns -EBUSY; node absent pre-6.16
     _chk_sysfs_eq /sys/devices/system/cpu/cpufreq/boost 1 "CPU boost"
     _echo
 end

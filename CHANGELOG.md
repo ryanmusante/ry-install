@@ -4,49 +4,49 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.82.0 - 2026-06-30
 
-- fix: validate `GPU_DPM_LEVEL` against the dpm-level enum (was non-empty only); blocks udev `ATTR{}` corruption.
-- fix: reject ISO-3166-1 reserved `COUNTRY` codes (AA, QM-QZ, XA-XZ, ZZ) that silently apply the world regdomain.
-- fix: `environment.d` generator skips malformed entries + asserts count, mirroring sysctl. Adds exit code 14.
+- fix: validate `GPU_DPM_LEVEL` against the dpm-level enum; blocks udev `ATTR{}` corruption.
+- fix: reject ISO-3166-1 reserved `COUNTRY` codes (AA, QM-QZ, XA-XZ, ZZ).
+- fix: `environment.d` generator skips malformed entries + asserts count. Adds exit code 14.
 
 ## 7.81.0 - 2026-06-29
 
 - refactor: remove linux-firmware soft-floor advisory + dangling version prose.
-- docs: add intro prose to Managed Files and Tuning Notes sections.
+- docs: add intro to Managed Files and Tuning Notes sections.
 
 ## 7.80.0 - 2026-06-29
 
-- docs: trim verbose in-script comments to vital rationale; sync version (header, `VERSION`, README). No behavior change.
+- docs: trim in-script comments to vital rationale; sync version. No behavior change.
 
 ## 7.79.6 - 2026-06-29
 
-- fix: GPU udev rule `KERNEL=="card[0-9]*"` + `DEVTYPE=="drm_minor"` (was `card[0-9]`) — `card[0-9]*` now covers `card10`+ and the glob excludes `renderD*`/`controlD*` nodes; `drm_minor` scopes to DRM minor devices. Count-neutral.
+- fix: GPU udev rule `KERNEL=="card[0-9]*"` + `DEVTYPE=="drm_minor"`. Count-neutral.
 
 ## 7.79.5 - 2026-06-29
 
-- fix: add top-level `set -g SYSTEM_UPGRADED false` default + `set -q` guard in `_install_rebuild_boot`. Hardening only; no behavior change.
+- fix: `set -g SYSTEM_UPGRADED false` default + `set -q` guard. Hardening only.
 
 ## 7.79.4 - 2026-06-28
 
-- docs: condense changelog entries to one-line form; sync version across script header, `VERSION`, and README badge/pin. Behavior unchanged (version-string bump only).
+- docs: condense changelog to one-line form; sync version. Behavior unchanged.
 
 ## 7.79.3 - 2026-06-28
 
-- fix: gate the below-floor kernel branch on `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` (mirrors hardware-skip). Sub-floor kernels were previously un-bypassable.
+- fix: gate below-floor kernel branch on `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`.
 
 ## 7.79.2 - 2026-06-28
 
-- docs: add README Configuration subsections + grouped Managed Files tables. All 17 rows retained; no script change.
+- docs: add README Configuration subsections + grouped Managed Files tables.
 
 ## 7.79.1 - 2026-06-28
 
-- preflight: raise linux-firmware soft-floor advisory 20260110 -> 20260410 (gfx1151 MES-0x86 blob for the >= 6.19 amdgpu handshake). Non-fatal.
+- preflight: raise linux-firmware soft-floor advisory 20260110 -> 20260410. Non-fatal.
 
 ## 7.79.0 - 2026-06-28
 
-- preflight: raise `KERNEL_MIN` 6.18 -> 6.19 (gfx1151 MES-0x86 firmware + RTL8127 suspend-hang fix + r8169).
-- firewall: add TCP `27037` to gated remote-play set `{ 47984, 47989, 48010, 27036, 27037 }`. Default-off unchanged.
-- verify: `_vrk_cpu_state` asserts `amd_pstate/dynamic_epp` == `disabled` (else EPP pin returns -EBUSY). Silent on pre-6.16.
-- mangohud: re-enable `cpu_temp` (override `cpu_custom_temp_sensor=<chip>,<input>`).
+- preflight: raise `KERNEL_MIN` 6.18 -> 6.19.
+- firewall: add TCP `27037` to gated remote-play set. Default-off unchanged.
+- verify: `_vrk_cpu_state` asserts `amd_pstate/dynamic_epp` == `disabled`. Silent on pre-6.16.
+- mangohud: re-enable `cpu_temp`.
 
 ## 7.78.3 - 2026-06-28
 
@@ -63,7 +63,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.78.0 - 2026-06-28
 
-- baloo: drop `~/.config/baloofilerc` + `_post_baloo`. configs 18 -> 17, USER_DESTINATIONS 3 -> 2, post-hooks 18 -> 17.
+- baloo: drop `~/.config/baloofilerc` + `_post_baloo`. configs 18 -> 17.
 
 ## 7.77.2 - 2026-06-28
 
@@ -87,7 +87,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 ## 7.76.0 - 2026-06-27
 
 - mangohud: add `cpu_temp`.
-- preflight: add linux-firmware soft-floor advisory (`20251125*` blob). Non-fatal.
+- preflight: add linux-firmware soft-floor advisory. Non-fatal.
 
 ## 7.75.1 - 2026-06-27
 
@@ -104,7 +104,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.74.1 - 2026-06-27
 
-- time-sync: add `_ry_rtc_writeback` (`hwclock --systohc --utc`) at both sync paths. Non-fatal.
+- time-sync: add `_ry_rtc_writeback` at both sync paths. Non-fatal.
 
 ## 7.74.0 - 2026-06-27
 
@@ -130,7 +130,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.72.0 - 2026-06-26
 
-- network: add `60-ry-mt7925e.conf` (`disable_aspm=1`). configs 17 -> 18, SYSTEM_DESTINATIONS 14 -> 15.
+- network: add `60-ry-mt7925e.conf` (`disable_aspm=1`). configs 17 -> 18.
 - verify: add `_vss_modprobe`.
 
 ## 7.71.4 - 2026-06-26
@@ -159,7 +159,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.70.0 - 2026-06-23
 
-- regdom: remove `/etc/conf.d/wireless-regdom`. configs 18 -> 17, SYSTEM_DESTINATIONS 15 -> 14, post-hooks 18 -> 17.
+- regdom: remove `/etc/conf.d/wireless-regdom`. configs 18 -> 17.
 - bluetooth: ReconnectAttempts 7 -> 3; remove ReconnectIntervals.
 - preflight: raise mesa soft-floor warn 25.3 -> 26.0.
 

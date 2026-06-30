@@ -7,7 +7,7 @@
 
 > Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs, gaming/LLM desktop profile.
 
-**In 30 seconds:** one unattended run turns a fresh CachyOS install into a tuned single-seat gaming/LLM desktop for gfx1151 — see [Configuration](#configuration) for the full set of changes. Every change is atomic, byte-verifiable (`--verify`), and reversible by hand ([Uninstall](#uninstall)).
+One unattended run converts a fresh CachyOS install into a tuned single-seat gaming/LLM desktop for gfx1151. Every change is atomic, byte-verifiable (`--verify`), and reversible by hand ([Uninstall](#uninstall)).
 
 <details>
 <summary><strong>Contents</strong></summary>
@@ -74,10 +74,6 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 
 `--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). All modes first run the runtime-init gates (hardware match, kernel floor, key/count validation), which hard-fail **exit 3** on a mismatched or sub-floor host.
 
-### What a clean install looks like
-
-A fully-converged host probes silent and verifies clean:
-
 ```fish
 $ ./ry-install.fish --check; echo $status
 0 # 0 = no drift (3 = preflight, 10 = drift)
@@ -100,16 +96,14 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
-A results summary prints to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; `DEFER` applies on next boot (e.g. regdomain).
-
-Recovery for any failure: read the failing phase, fix the cause, re-run (already-applied phases no-op). A boot-critical failure (exit 4) must be resolved before rebooting — see [Usage](#usage).
+Results print to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; `DEFER` applies on next boot. A boot-critical failure (exit 4) must be resolved before rebooting — see [Usage](#usage).
 
 ## Safety & Reliability
 
 > [!WARNING]
 > Masks `ufw` and ships an nftables **default-deny-inbound** ruleset (established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 NDP/PMTUD accepted, all else dropped; `forward` drop, `output` accept). `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating; EFI-resident loaders like Windows Boot Manager are untouched.
 
-Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play inbound accepts to the input chain.
+Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play inbound accepts.
 
 | Feature | Detail |
 |---|---|
@@ -131,11 +125,11 @@ Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-
 
 ## Configuration
 
-All tunables live as `set -g` globals near the top of the script — there is no external config file. The subsections below map those globals to what they control: **Globals** covers the scalar knobs and CachyOS-specific divergences, **Packages** the add/remove sets, **Units** the systemd mask/enable lists, and **fstab** the ext4 mount-option rewrite. Edit a global, then re-run (or `--install-file` the single affected file) to apply.
+All tunables are `set -g` globals near the top of the script — no external config file. Edit a global, then re-run (or `--install-file` the single affected file) to apply.
 
 ### Globals
 
-Source of truth is the script; retune the `set -g` globals near the top (perms: system `0644`, user `0600`). CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe).
+Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe).
 
 ### Packages
 
@@ -166,7 +160,7 @@ Source of truth is the script; retune the `set -g` globals near the top (perms: 
 
 ## Managed Files
 
-ry-install deploys and verifies 17 embedded config files, grouped below by function. Each is rendered from the script's own data (no bundled templates); `--verify` checks every one against live system state, and `--install-file <path>` re-deploys a single file.
+17 embedded config files, grouped below. Each is rendered from the script's own data; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
 
 ### Boot
 
@@ -217,16 +211,16 @@ ry-install deploys and verifies 17 embedded config files, grouped below by funct
 
 ## Tuning Notes
 
-Rationale for the non-obvious choices below — each is deliberate, and several note the exact override to reverse if your hardware or workload differs.
+Rationale for the non-obvious choices; several note the override to reverse them.
 
 | Topic | Detail |
 |---|---|
 | Large-VRAM compute | GTT caps usable VRAM near 62 GiB. For a single allocation >~62 GiB (ROCm/llama.cpp), raise the **BIOS UMA carveout** (up to 96 GB), not deprecated `amdgpu.gttsize`. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 reached RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE` → `1`. |
 | NTSYNC | `/dev/ntsync` asserted in preflight + verify (mainline ≥ 6.14). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
-| MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Symptomatic reserve fix — remove if a kernel bump resolves it. |
-| AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline; AMD-Vi is fully disabled (single-purpose gaming/LLM desktop, no PCI passthrough). `--verify` confirms 0 entries under `/sys/kernel/iommu_groups/`. **VFIO/passthrough or SR-IOV users must use `amd_iommu=on iommu=pt` instead**, then re-run. |
-| UMIP (`clearcpuid=514`) | Ships in the cmdline; UMIP disabled system-wide (`SGDT`/`SIDT`/`SMSW` untrapped) and the kernel is tainted. Intentional latency choice — drop the token to restore UMIP if no `umip_printk` stutter is seen. |
+| MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Remove if a kernel bump resolves it. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline; AMD-Vi fully disabled (no PCI passthrough). `--verify` confirms 0 entries under `/sys/kernel/iommu_groups/`. **VFIO/passthrough or SR-IOV users must use `amd_iommu=on iommu=pt` instead**, then re-run. |
+| UMIP (`clearcpuid=514`) | Ships in the cmdline; UMIP disabled system-wide (`SGDT`/`SIDT`/`SMSW` untrapped) and the kernel is tainted. Drop the token to restore UMIP if no `umip_printk` stutter is seen. |
 
 ## Uninstall
 
@@ -253,7 +247,7 @@ For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert
 | Component | Issue | Status |
 |---|---|---|
 | Strix Halo GPU | MES page faults | resolved (MES 0x86; current `linux-firmware` + shipped `mkinitcpio-firmware`) |
-| RTL8127 10GbE | throughput drops under load; suspend/shutdown hang | resolved — in-tree `r8169` (`f24f7b2f3af9`) + suspend/shutdown hang fix (`ae1737e7339b`) both land in 6.18, so the ≥ 6.19 kernel floor guarantees them; no DKMS |
+| RTL8127 10GbE | throughput drops under load; suspend/shutdown hang | resolved — in-tree `r8169` (`f24f7b2f3af9`) + suspend/shutdown hang fix (`ae1737e7339b`) land in 6.18, so the ≥ 6.19 floor guarantees them; no DKMS |
 | MT7925 | kernel panics, low TX power, random deauth | open — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
 | Strix Halo ACP | no ASoC machine driver | open — pending upstream (HDMI/USB audio unaffected) |
 

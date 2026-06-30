@@ -2,6 +2,11 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.81.0 - 2026-06-29
+
+- refactor: remove linux-firmware soft-floor advisory + dangling version prose.
+- docs: add intro prose to Managed Files and Tuning Notes sections.
+
 ## 7.80.0 - 2026-06-29
 
 - docs: trim verbose in-script comments to vital rationale; sync version (header, `VERSION`, README). No behavior change.

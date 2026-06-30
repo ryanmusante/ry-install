@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.80.0 (2026-06-29) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.81.0 (2026-06-29) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.80.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.81.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -741,7 +741,7 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
             _log "KERNEL_FLOOR_BELOW_OVERRIDE: running=$_kver min=$KERNEL_MIN"
         else
             _err_loud "Kernel floor: running $_kver, profile $PROFILE_NAME requires >=$KERNEL_MIN — refusing to deploy"
-            _err_loud_cont "  gfx1151 MES-0x86 firmware (linux-firmware >=20260410) requires >=$KERNEL_MIN amdgpu; RTL8127 hang fix (ae1737e7339b) + r8169 support are present only at/above $KERNEL_MIN."
+            _err_loud_cont "  gfx1151 MES-0x86 amdgpu support requires >=$KERNEL_MIN; RTL8127 hang fix (ae1737e7339b) + r8169 support are present only at/above $KERNEL_MIN."
             _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         end
@@ -3404,17 +3404,6 @@ function _install_preflight --description "Run all preflight checks before insta
         else if test (command vercmp $_mesa 26.0) -lt 0
             _warn_loud "mesa $_mesa < 26.0 — gfx1151 RADV may be unstable (soft floor)"
             _log "MESA_BELOW_SOFT_FLOOR: $_mesa"
-        end
-    end
-    set -l _fw (command pacman -Q linux-firmware 2>/dev/null | string split ' ')[2]
-    set -l _fwver (string split '-' -- "$_fw")[1]
-    if test -n "$_fwver"
-        if string match -q '20251125*' -- "$_fwver"
-            _warn_loud "linux-firmware $_fwver: known-bad MES blob (gfx1151 GCVM_L2 GPU hang) — upgrade to >= 20260410"
-            _log "FW_BAD_MES_BLOB: $_fwver"
-        else if command -q vercmp; and test (command vercmp $_fwver 20260410) -lt 0
-            _warn_loud "linux-firmware $_fwver < 20260410 — pre-dates the gfx1151 MES-0x86 blob the >= $KERNEL_MIN amdgpu handshake needs (soft floor)"
-            _log "FW_BELOW_SOFT_FLOOR: $_fwver"
         end
     end
     _echo

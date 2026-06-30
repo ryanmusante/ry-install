@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.80.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.81.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -36,7 +36,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.80.0
+cd ry-install && git checkout v7.81.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -166,6 +166,8 @@ Source of truth is the script; retune the `set -g` globals near the top (perms: 
 
 ## Managed Files
 
+ry-install deploys and verifies 17 embedded config files, grouped below by function. Each is rendered from the script's own data (no bundled templates); `--verify` checks every one against live system state, and `--install-file <path>` re-deploys a single file.
+
 ### Boot
 
 | File | Purpose |
@@ -214,6 +216,8 @@ Source of truth is the script; retune the `set -g` globals near the top (perms: 
 | `~/.config/MangoHud/MangoHud.conf` | readout-only performance HUD |
 
 ## Tuning Notes
+
+Rationale for the non-obvious choices below — each is deliberate, and several note the exact override to reverse if your hardware or workload differs.
 
 | Topic | Detail |
 |---|---|

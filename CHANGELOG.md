@@ -2,11 +2,19 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.83.2 - 2026-06-30
+
+- docs: document non-obvious sysctl values (netdev budget, `max_map_count`, `swappiness`). Comment-only.
+
+## 7.83.1 - 2026-06-30
+
+- fix: `_run` output-capture tail cap derives from head cap; elided count stays non-negative if retuned. No change at shipped cap.
+
 ## 7.83.0 - 2026-07-01
 
-- fix: `environment.d` + `sysctl.d` generators reject entries with control characters (newline/CR/etc), blocking directive injection. Routes to existing count-mismatch assertion (exit 14/13).
-- refactor: hoist `GPU_DPM_LEVEL` accepted set to `_RY_DPM_LEVELS`; guard + error message share one source. No behavior change.
-- docs: trim README exit-code list to the codes users actually see (`0`–`5`, `10`); drop internal gen/run sentinels, signal-code breakdown, and the now-dangling README pointer from `--help`.
+- fix: `environment.d` + `sysctl.d` generators reject control chars, blocking directive injection.
+- refactor: hoist `GPU_DPM_LEVEL` accepted set to `_RY_DPM_LEVELS`; guard + message share one source.
+- docs: trim exit-code list to user-visible codes (`0`–`5`, `10`).
 
 ## 7.82.0 - 2026-06-30
 

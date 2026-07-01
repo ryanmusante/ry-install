@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.83.0 (2026-06-30) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.83.2 (2026-06-30) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.83.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.83.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -589,6 +589,9 @@ set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to 
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_FSR4_RDNA3_UPGRADE=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
+# netdev_budget/_usecs raised from 300/8000: drain more RX packets per NAPI poll (2.5GbE headroom)
+# max_map_count = INT_MAX-5: esync/Proton mmap ceiling for large Wine prefixes
+# swappiness=150: bias reclaim toward zram-backed swap (valid 0-200 since kernel 5.8; floor is 6.19)
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
@@ -1350,7 +1353,7 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     test -s "$tmpfile"; or return 0
     set -l _total (command wc -l <"$tmpfile" 2>/dev/null | string trim --); set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
     test -n "$_last_byte"; and string match -qr '^\d+$' -- "$_total"; and set _total (math $_total + 1)
-    set -l _captured; set -l _head_cap (math "max(1, $cap - 100)"); set -l _tail_cap 100; set -l _need_tail false
+    set -l _captured; set -l _tail_cap (math "min(100, floor($cap / 2))"); set -l _head_cap (math "max(1, $cap - $_tail_cap)"); set -l _need_tail false # tail derived from cap: head+tail<=cap, elided>=0 for any cap>=1
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and set _need_tail true
     set -l _head_n $cap; test "$_need_tail" = true; and set _head_n $_head_cap
     for _l in (command head -n $_head_n -- "$tmpfile"); test (string length -- "$_l") -gt 2000; and set _l (string sub -l 2000 -- "$_l"); set -a _captured "$_l"; end # 2000-char/line cap for JSONL

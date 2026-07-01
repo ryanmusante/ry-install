@@ -76,8 +76,9 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 
 ```fish
 $ ./ry-install.fish --check; echo $status
-0 # 0 = no drift (3 = preflight, 10 = drift)
+0
 $ ./ry-install.fish --verify
+...
 [OK] Combined (static + runtime): 142 OK
 ```
 

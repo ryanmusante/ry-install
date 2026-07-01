@@ -6,7 +6,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 - fix: `environment.d` + `sysctl.d` generators reject entries with control characters (newline/CR/etc), blocking directive injection. Routes to existing count-mismatch assertion (exit 14/13).
 - refactor: hoist `GPU_DPM_LEVEL` accepted set to `_RY_DPM_LEVELS`; guard + error message share one source. No behavior change.
-- docs: correct exit-code note — gen sentinels span `11`–`14` (was `11`–`13`; 14 landed in 7.82.0).
+- docs: trim README exit-code list to the codes users actually see (`0`–`5`, `10`); drop internal gen/run sentinels, signal-code breakdown, and the now-dangling README pointer from `--help`.
 
 ## 7.82.0 - 2026-06-30
 

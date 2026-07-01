@@ -30,7 +30,7 @@ function _ry_show_help --description "Display usage information and available su
         "  -h, --help             Show this help (honored before all checks)" \
         "  -v, --version          Show version (honored before all checks)" \
         "EXIT CODES: 0 ok · 1 verify-FAIL/install-error · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
-        "  (gen/run sentinels 11-14/250/251/255 are internal, never a process exit; signal codes 128+N appear in the JSONL footer; see README.md)" \
+        "  (gen/run sentinels 11-14/250/251/255 are internal, never a process exit; signal codes 128+N appear in the JSONL footer)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \

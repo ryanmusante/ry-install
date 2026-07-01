@@ -116,8 +116,7 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 <details>
 <summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>
 
-**Exit codes** `0` ok · `1` verify-FAIL/install-error · `2` usage (incl. root-refused) · `3` preflight · `4` boot-critical (DO NOT REBOOT) · `5` lock · `10` `--check` drift · `128+N` signal (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT).
-Sentinels `11`–`14` and `250`/`251`/`255` never reach a process exit (surface as the footer `gen_fail` count).
+**Exit codes** `0` ok · `1` verify-FAIL/install-error · `2` usage · `3` preflight · `4` boot-critical (DO NOT REBOOT) · `5` lock · `10` `--check` drift.
 
 Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 

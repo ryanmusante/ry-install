@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.84 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.85.0 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.84"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.85.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -32,7 +32,8 @@ function _ry_show_help --description "Display usage information and available su
         "EXIT CODES: 0 ok · 1 verify-FAIL/install-error · 2 usage · 3 preflight · 4 boot-critical · 5 lock · 10 --check drift" \
         "  (gen/run sentinels 11-14/250/251/255 are internal, never a process exit; signal codes 128+N appear in the JSONL footer)" \
         "ENVIRONMENT (see README.md for detail):" \
-        "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable." \
+        "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable; >9 digits clamp to 2147483647." \
+        "  RY_NO_NTP_REMEDIATION=1  Skip timesyncd auto-enable + RTC writeback (warn-only time sync)." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
         "  RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1  Bypass KERNEL_MIN hard-fail." \
         "  NO_COLOR  Suppress ANSI color (non-empty value, per no-color.org)." \
@@ -62,7 +63,8 @@ for _early_arg in $argv
             end
     end
 end
-set --erase _early_arg _skip_if_val
+set -q _early_arg; and set --erase _early_arg
+set --erase _skip_if_val
 
 # ── PATH HARDENING (before first external command: id -u) ──
 set -l _ry_path_new
@@ -284,6 +286,13 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
         return 1
     end
     command chmod -- 600 "$LOCK_FILE" 2>/dev/null
+    set -l _own_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --) # ownership re-verify: mv -Tf clobber belt
+    if test "$_own_pid" != "$fish_pid"
+        set --erase _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
+        _log "LOCK_OWNERSHIP_LOST: expected=$fish_pid found='$_own_pid' — backing off"
+        echo "[ERR] Lock ownership lost after pidfile install (found: '$_own_pid') — another instance interfered: $LOCK_DIR" >&2
+        return 1
+    end
     set -g _RY_HOLDS_LOCK true
     _log "LOCK_ACQUIRED: pid=$fish_pid dir=$LOCK_DIR"
     return 0
@@ -342,8 +351,10 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
             else
                 _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR attempt=$_reclaim_attempt (PID not running, reclaiming)"
             end
-        else # corrupt path logs CORRUPT only
-            _log "LOCK_PIDFILE_CORRUPT: '$_stale_pid' not a PID after settle — reclaiming (attempt=$_reclaim_attempt)"
+        else # fail-closed: empty/garbage pidfile is not reclaimable (a live peer may be mid-install)
+            _log "LOCK_PIDFILE_UNREADABLE: '$_stale_pid' not a PID after settle — refusing reclaim (fail-closed)"
+            echo "[ERR] Lock pidfile unreadable — refusing reclaim: $LOCK_DIR (no live instance? rm -rf $LOCK_DIR)" >&2
+            return 1
         end
         if test -L "$LOCK_DIR"; _log "LOCK_RECLAIM_REFUSED: $LOCK_DIR is a symlink"; echo "[ERR] Lock dir is a symlink — refusing reclaim: $LOCK_DIR" >&2; return 1; end
         set -l _recheck_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --) # re-read right before rm
@@ -430,8 +441,8 @@ function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_BOOT_COUNT _RY_BOOT_ENUM_OK _CPU_PATH
     set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
     set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK
-    set --erase _RY_MKI_REVERT_FAILED _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED
-    set --erase _RY_RUN_TIMEOUT_WARNED _PROG_CLOCK _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
+    set --erase _RY_MKI_REVERT_FAILED _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED _RY_TIMESYNCD_ENABLED
+    set --erase _RY_RUN_TIMEOUT_WARNED _RY_RUN_TIMEOUT_CLAMPED _PROG_CLOCK _PROG_NOW_LAST _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
     set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT _RY_DMESG_TSC
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
@@ -706,7 +717,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _ir_validate_keys --description "Refuse to deploy when an embedded scalar key holds an out-of-domain value (empty/malformed would corrupt rendered configs)"
+function _ir_validate_keys --description "Refuse deploy on out-of-domain embedded scalar keys"
     for _k in BT_AUTO_ENABLE BT_FAST_CONNECTABLE RY_REMOTE_PLAY_PORTS
         if not contains -- "$$_k" true false; _err_loud "$_k must be true|false (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
@@ -855,8 +866,8 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "table inet filter {" \
         "    chain input {" \
         "        type filter hook input priority filter; policy drop;" \
-        "        ct state established,related accept" \
         "        iif \"lo\" accept" \
+        "        ct state established,related accept" \
         "        ct state invalid drop" \
         "        ip6 nexthdr ipv6-icmp icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert, nd-router-solicit, echo-request, packet-too-big, time-exceeded, parameter-problem } accept" \
         "        # IPv4: inbound echo-request (ping) intentionally NOT accepted; IPv6 echo-request is, since ICMPv6 is load-bearing for NDP/PMTUD" \
@@ -1193,7 +1204,7 @@ function _err_loud --description "Fatal-preflight err: stderr regardless of QUIE
     test "$MODE" = check; and return 0
     _msg_print --force ERR $argv
 end
-function _err_loud_cont --description "Continuation line for a prior _err_loud (rationale/override hint): same routing, no VERIFY_FAIL bump (one condition counts once)"
+function _err_loud_cont --description "Continuation for _err_loud: same routing, no VERIFY_FAIL bump"
     set -l msg (string join -- " " $argv)
     _log "ERR: $msg"
     test "$MODE" = check; and return 0
@@ -1236,7 +1247,8 @@ end
 function _progress_now --description "Monotonic seconds (cached uptime or epoch)"
     if set -q _PROG_CLOCK; and test "$_PROG_CLOCK" = uptime
         set -l _u (command cat -- /proc/uptime 2>/dev/null | string split ' ')[1]
-        if string match -qr '^\d+(\.\d+)?$' -- "$_u"; math "floor($_u)"; return 0; end
+        if string match -qr '^\d+(\.\d+)?$' -- "$_u"; set -g _PROG_NOW_LAST (math "floor($_u)"); printf '%s\n' $_PROG_NOW_LAST; return 0; end
+        set -q _PROG_NOW_LAST; and printf '%s\n' $_PROG_NOW_LAST; and return 0 # freeze on read failure — never mix clock bases
         command date +%s
         return 0
     else if set -q _PROG_CLOCK
@@ -1244,7 +1256,7 @@ function _progress_now --description "Monotonic seconds (cached uptime or epoch)
         return 0
     end
     set -l _u (command cat -- /proc/uptime 2>/dev/null | string split ' ')[1]
-    if string match -qr '^\d+(\.\d+)?$' -- "$_u"; set -g _PROG_CLOCK uptime; math "floor($_u)"; return 0; end
+    if string match -qr '^\d+(\.\d+)?$' -- "$_u"; set -g _PROG_CLOCK uptime; set -g _PROG_NOW_LAST (math "floor($_u)"); printf '%s\n' $_PROG_NOW_LAST; return 0; end
     set -g _PROG_CLOCK epoch
     command date +%s
 end
@@ -1336,6 +1348,15 @@ function _run_resolve_timeout --description "Resolve RY_RUN_TIMEOUT to a usable 
     if not set -q RY_RUN_TIMEOUT; echo $_RY_RUN_TIMEOUT_DEFAULT; return 0; end
     if test -z "$RY_RUN_TIMEOUT"; echo $_RY_RUN_TIMEOUT_DEFAULT; return 0; end
     if string match -qr '^[0-9]+$' -- "$RY_RUN_TIMEOUT"
+        if test (string length -- "$RY_RUN_TIMEOUT") -gt 9 # fish math overflows past 2^53; >9 digits ≈ 31 y — clamp
+            if not set -q _RY_RUN_TIMEOUT_CLAMPED
+                set -g _RY_RUN_TIMEOUT_CLAMPED true
+                _msg_nocount WARN "RY_RUN_TIMEOUT='$RY_RUN_TIMEOUT' exceeds 9 digits — clamping to 2147483647"
+                _log "RY_RUN_TIMEOUT_CLAMPED: value=$RY_RUN_TIMEOUT — using 2147483647"
+            end
+            echo 2147483647
+            return 0
+        end
         set -l _t (math "$RY_RUN_TIMEOUT")
         if test "$_t" -eq 0; echo 0; return 0; end
         echo $_t
@@ -1613,7 +1634,8 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
     end
     return 1
 end
-function _ry_rtc_writeback --description "Persist NTP-corrected system time to the hardware clock (hwclock --systohc) so a skewed RTC stops poisoning timer persistence stamps; non-fatal"
+function _ry_rtc_writeback --description "Persist NTP-corrected time to the RTC (hwclock --systohc); non-fatal"
+    if test "$RY_NO_NTP_REMEDIATION" = 1; _log "RTC_WRITEBACK_SKIP: RY_NO_NTP_REMEDIATION=1"; return 1; end
     if not command -q hwclock; _info "    RTC: hwclock not found — cannot persist corrected time to hardware clock (timer persistence stamps may stay skewed until next sync)"; _log "RTC_WRITEBACK_SKIP: hwclock absent"; return 1; end
     set -l _rtc_local (command timedatectl show -p RTCInLocalTZ --value 2>/dev/null | string trim --)
     if test "$_rtc_local" = yes; _info "    RTC: hardware clock is in local time — leaving --systohc to systemd; not writing directly"; _log "RTC_WRITEBACK_SKIP: RTCInLocalTZ=yes"; return 1; end
@@ -1626,7 +1648,7 @@ function _ry_rtc_writeback --description "Persist NTP-corrected system time to t
     _log "RTC_WRITEBACK_FAIL"
     return 1
 end
-function _ry_check_time_sync --description "Verify NTP time sync; enable systemd-timesyncd if drifted (non-fatal); persist corrected time to RTC"
+function _ry_check_time_sync --description "Verify NTP sync; remediate via timesyncd + RTC writeback (non-fatal)"
     _log "TIME_SYNC_CHECK_START"
     if not command -q timedatectl; _warn "  Time sync: timedatectl not found — cannot verify (pacman GPG checks may fail on a skewed clock)"; _log "TIME_SYNC_SKIP: timedatectl absent"; return 1; end
     set -l _synced (command timedatectl show -p NTPSynchronized --value 2>/dev/null | string trim --)
@@ -1643,7 +1665,13 @@ function _ry_check_time_sync --description "Verify NTP time sync; enable systemd
             return 1
         end
     end
+    if test "$RY_NO_NTP_REMEDIATION" = 1
+        _warn "  Time sync: unsynced and RY_NO_NTP_REMEDIATION=1 — not enabling systemd-timesyncd; configure NTP manually"
+        _log "TIME_SYNC_REMEDIATION_DISABLED: RY_NO_NTP_REMEDIATION=1"
+        return 1
+    end
     if _run sudo -n systemctl enable --now systemd-timesyncd.service
+        set -g _RY_TIMESYNCD_ENABLED true # persistent unit enable — surfaced in the phase matrix
         command sleep 2 </dev/null 2>/dev/null
         set -l _resynced (command timedatectl show -p NTPSynchronized --value 2>/dev/null | string trim --)
         if test "$_resynced" = yes; _ok "  Time sync: synchronized after starting systemd-timesyncd"; _log "TIME_SYNC_RECOVERED"; _ry_rtc_writeback; return 0; end
@@ -1940,8 +1968,8 @@ function _ry_mkinitcpio_array --argument-names key file --description "First non
     else
         set _all_lines (sudo -n grep -E -- "^[[:space:]]*$_key_re=" "$file" 2>/dev/null)
     end
-    test (count $_all_lines) -gt 1; and _warn "  $file: multiple $key= lines found ("(count $_all_lines)") — using first"
-    test (count $_all_lines) -gt 0; and printf '%s\n' "$_all_lines[1]"
+    test (count $_all_lines) -gt 1; and _warn "  $file: multiple $key= lines found ("(count $_all_lines)") — using last (conf is shell-sourced)"
+    test (count $_all_lines) -gt 0; and printf '%s\n' "$_all_lines[-1]"
 end
 function _ry_content_bytes --argument-names dst --description "Raw bytes of embedded content" # pipestatus[1]=gen rc
     set -l _content (_ry_get_file_content "$dst" 2>/dev/null | string collect --no-trim-newlines --allow-empty); set -l _ps $pipestatus
@@ -2016,6 +2044,11 @@ function _awf_make_backup --argument-names dst use_sudo --description "Create <d
         sudo -n test -f "$dst" 2>/dev/null; or return 0
     else
         test -f "$dst"; or return 0
+    end
+    _is_symlink "$_bak" $use_sudo
+    if test "$status" -eq 0 # never cp through a pre-existing symlink at the backup path
+        _as $use_sudo rm -f -- "$_bak" 2>/dev/null
+        _log "BACKUP_SYMLINK_REMOVED: $_bak"
     end
     if _run $_sp cp -p -- "$dst" "$_bak"
         _log "BACKUP_CREATED: $dst -> $_bak"
@@ -2821,7 +2854,7 @@ function _vrsv_nft_assert_ndp --description "_vrsv_chk_nftables sub: assert live
         _warn "  nftables: live input chain has no ICMPv6 NDP accept — IPv6 may break after NDP cache expiry"
     end
 end
-function _vrsv_chk_nftables --argument-names label rec_str --description "Check nftables.service: oneshot without RemainAfterExit reads inactive after a clean load — judge by live ruleset"
+function _vrsv_chk_nftables --argument-names label rec_str --description "nftables.service: oneshot reads inactive after clean load — judge by live ruleset"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found; _warn "  $label: not installed"; return 0; end
     set -l _nft_probe_ok false
@@ -3400,7 +3433,9 @@ function _install_preflight --description "Run all preflight checks before insta
     end
     _phase_record "Preflight: network reachability" PASS "ok"
     if _ry_check_time_sync
-        _phase_record "Preflight: time sync" PASS "NTP synchronized"
+        set -l _ts_ev "NTP synchronized"
+        set -q _RY_TIMESYNCD_ENABLED; and set _ts_ev "NTP synchronized (timesyncd enabled — persistent)"
+        _phase_record "Preflight: time sync" PASS "$_ts_ev"
     else
         _phase_record "Preflight: time sync" WARN "clock not NTP-synced or unverifiable"
     end
@@ -4287,8 +4322,11 @@ function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk
     set -l _reason "upgrade"
     test "$_upgraded" = false; and set _reason "removals=$_removed_n"
     if command -q paccache
-        if _run sudo -n paccache -rk2 -ruk0
-            _phase_record "Finalize: pacman cache trim" PASS "paccache -rk2 ($_reason)"
+        set -l _pc_ok true # -k is last-wins and -u blacklists installed: policies need separate invocations
+        _run sudo -n paccache -rk2; or set _pc_ok false
+        _run sudo -n paccache -ruk0; or set _pc_ok false
+        if test "$_pc_ok" = true
+            _phase_record "Finalize: pacman cache trim" PASS "paccache -rk2 + -ruk0 ($_reason)"
         else
             _warn "paccache cache trim failed"
             _phase_record "Finalize: pacman cache trim" WARN "paccache failed"

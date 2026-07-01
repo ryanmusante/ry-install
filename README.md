@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.84-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.85.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -36,7 +36,7 @@ One unattended run converts a fresh CachyOS install into a tuned single-seat gam
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.84
+cd ry-install && git checkout v7.85.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -55,7 +55,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo. NTP sync and `paccache` only warn.
+Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo. NTP sync and `paccache` only warn. An unsynced clock with no NTP client gets `systemd-timesyncd` enabled (persistent) + an RTC writeback — skip with `RY_NO_NTP_REMEDIATION=1`.
 
 ## Usage
 
@@ -79,7 +79,7 @@ $ ./ry-install.fish --check; echo $status
 0
 $ ./ry-install.fish --verify
 ...
-[OK] Combined (static + runtime): 142 OK
+[OK] Combined (static + runtime): <N> OK
 ```
 
 `--check` is a silent, scriptable exit-code probe. `--verify` prints a per-line `[OK]`/`[WARN]`/`[FAIL]` report ending in the combined tally; warnings alone do not fail.
@@ -108,7 +108,7 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | same-FS tmp → render → symlink-probe → backup → chmod → `mv -T` → re-read + restore on mismatch |
+| Atomic writes | same-FS tmp → render → symlink-probe → backup → chmod → `mv -T` → re-read + restore on mismatch (backup targets) |
 | Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` (and `fstab`, during its rewrite) |
 | mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
@@ -119,7 +119,7 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 
 **Exit codes** `0` ok · `1` verify-FAIL/install-error · `2` usage · `3` preflight · `4` boot-critical (DO NOT REBOOT) · `5` lock · `10` `--check` drift.
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables, >9-digit values clamp to `2147483647`; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1` (skip timesyncd auto-enable + RTC writeback), `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 
 </details>
 
@@ -133,7 +133,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ### Packages
 
-`pacman -Rns` is rdep-aware (an external dependant skips + logs). Reversible via [Uninstall](#uninstall).
+`pacman -Rns` is rdep-aware via `pactree` (pacman-contrib; if absent, pacman's own refusal is the only gate — an external dependant skips + logs). Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
@@ -233,10 +233,12 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 |---|---|---|
 | 1 | Unmask | `sudo systemctl unmask ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target` |
 | 2 | Remove system paths, then user env.d | `sudo rm /etc/sdboot-manage.conf /etc/sysctl.d/95-ry-overrides.conf /etc/udev/rules.d/99-ry-perf.rules /etc/modprobe.d/60-ry-mt7925e.conf /etc/iw-regdomain /etc/bluetooth/main.conf /etc/nftables.conf /etc/default/cpupower-service.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/systemd/logind.conf.d/99-cachyos-logind.conf /etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` then `rm ~/.config/environment.d/10-environment.conf ~/.config/MangoHud/MangoHud.conf` |
-| 3 | Restore fstab, delete `.ry.bak` | `sudo mv /etc/fstab.ry.bak /etc/fstab` then `sudo rm -f /boot/loader/loader.conf.ry.bak /etc/mkinitcpio.conf.ry.bak` |
+| 3 | Restore fstab (if backed up), delete `.ry.bak` | `sudo test -f /etc/fstab.ry.bak; and sudo mv /etc/fstab.ry.bak /etc/fstab` then `sudo rm -f /boot/loader/loader.conf.ry.bak /etc/mkinitcpio.conf.ry.bak` |
 | 4 | Reverse package changes (optional) | `sudo pacman -S --needed plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect` then `sudo pacman -Rns nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs bottom htop git-delta lm_sensors rtkit realtime-privileges ddcutil nftables` |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
+
+The fstab backup exists only if fstab was rewritten (skip if stale). If ry-install enabled `systemd-timesyncd` (unsynced clock at install), optionally `sudo systemctl disable --now systemd-timesyncd`.
 
 </details>
 

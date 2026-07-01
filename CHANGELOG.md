@@ -3,6 +3,27 @@ ry-install release notes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.85.0 (2026-07-01)
+-------------------
+  - paccache: split -rk2 and -ruk0 into separate runs (-k is last-wins;
+    -u blacklists installed packages for the whole invocation).
+  - Clamp RY_RUN_TIMEOUT above 9 digits to 2147483647 (math overflow
+    disabled the cap and leaked errors to stderr).
+  - Lock: refuse reclaim on an empty or garbage pidfile (fail-closed);
+    re-verify pidfile ownership after install.
+  - Add RY_NO_NTP_REMEDIATION=1; record the persistent timesyncd enable
+    in the phase matrix.
+  - _ry_mkinitcpio_array: duplicate KEY= lines resolve to the last
+    (the conf is shell-sourced).
+  - Remove a pre-existing symlink at <dst>.ry.bak before the backup cp.
+  - nftables input: move the loopback accept first.
+  - _progress_now: freeze on uptime read failure instead of switching
+    clock base.
+  - Guard early-arg erase; trim comments and descriptions.
+  - README: guard the fstab restore in uninstall; scope post-write
+    restore to backup targets; note the pactree dependency; document
+    NTP remediation.
+
 7.84 (2026-07-01)
 -----------------
   - Add four section banners (85 total); no logic change.

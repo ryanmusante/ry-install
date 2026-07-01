@@ -3,6 +3,25 @@ ry-install release notes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.85.1 (2026-07-01)
+-------------------
+  - udev: the EPP rule paired SUBSYSTEM=="cpu" with DEVPATH=="*/cpufreq"
+    (unsatisfiable - cpufreq policy kobjects emit no uevents), so it
+    never fired; match KERNEL=="cpu[0-9]*" and write the attribute via
+    the cpu device instead.
+  - fstab: a row holding noatime,lazytime,commit=10 alongside
+    relatime/atime/strictatime (or defaults) skipped the rewrite yet
+    failed --verify forever; needs-change and the awk early-exit now
+    treat those tokens as rewrite triggers.
+  - --install-file (user branch): mkdir honoured the ambient umask, so
+    umask 0002 yielded 0775 dirs that own --verify rejects; both
+    branches now share a 0022-capped mkdir helper (_ry_mkdir_0755).
+  - Log: blank separator _echo calls no longer emit "ECHO: " JSONL
+    noise (27 lines per verify run).
+  - Quote nft-ruleset string-match subjects, the two string-equality
+    command substitutions in test, and the regdom phase record (an
+    empty value no longer shifts arguments).
+
 7.85.0 (2026-07-01)
 -------------------
   - paccache: split -rk2 and -ruk0 into separate runs (-k is last-wins;

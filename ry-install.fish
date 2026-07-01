@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.85.0 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
-if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
+# ry-install v7.85.1 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+if test "$(status filename)" = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.85.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.85.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -905,7 +905,7 @@ function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate con
         "# NVMe I/O scheduler none (peak IOPS/lowest tail latency on NVMe; deliberate divergence from CachyOS kyber default)" \
         'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
         "# AMD P-State EPP balance_performance (perf-leaning hint to CPPC firmware; named profile, not raw 0x0)" \
-        'ACTION=="add|change", SUBSYSTEM=="cpu", DEVPATH=="*/cpufreq", ATTR{cpufreq/energy_performance_preference}="balance_performance"' \
+        'ACTION=="add|change", SUBSYSTEM=="cpu", KERNEL=="cpu[0-9]*", ATTR{cpufreq/energy_performance_preference}="balance_performance"' \
         "# GPU performance level (gfx1151 clock-floor; optional)" \
         'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", DEVTYPE=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
 end
@@ -1004,7 +1004,7 @@ function _tmpfile_key --argument-names path --description "Generate filename key
     set -l _hlen (string length -- "$HOME") # literal HOME-prefix match
     if test "$p" = "$HOME"
         set p HOME
-    else if test (string sub -l (math $_hlen + 1) -- "$p") = "$HOME/"
+    else if test "$(string sub -l (math $_hlen + 1) -- "$p")" = "$HOME/"
         set p "HOME"(string sub -s (math $_hlen + 1) -- "$p")
     end
     string replace -a / _ -- "$p"
@@ -1217,7 +1217,7 @@ function _warn_loud --description "Override-path warn: stderr regardless of QUIE
     test "$MODE" = check; and return 0
     _msg_print --force WARN $argv
 end
-function _echo --description "Print a plain message without level prefix"; _log "ECHO: $argv"; if test "$QUIET" = false; and not set -q _RY_OUTPUT_BROKEN; printf '%s\n' (string join ' ' -- $argv) >&2; end; end
+function _echo --description "Print a plain message without level prefix"; set -q argv[1]; and _log "ECHO: $argv"; if test "$QUIET" = false; and not set -q _RY_OUTPUT_BROKEN; printf '%s\n' (string join ' ' -- $argv) >&2; end; end
 
 # ── VERIFY SUMMARY ──
 function _verify_summary --description "Print verification pass/fail/warn summary"
@@ -2100,17 +2100,20 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     _ok "→ $dst"
     return 0
 end
+function _ry_mkdir_0755 --argument-names use_sudo dir --description "mkdir -p with umask capped at 0022 (own --verify rejects group-writable dirs)"
+    set -l _pmk (umask); umask 0022
+    if test "$use_sudo" = true
+        _run sudo -n mkdir -p -m 0755 -- "$dir"
+    else
+        _run mkdir -p -m 0755 -- "$dir"
+    end
+    set -l _rc $status
+    umask $_pmk
+    return $_rc
+end
 function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination"
     set -l dir (command dirname -- "$dst")
-    if test "$use_sudo" = true
-        set -l _pmk (umask); umask 0022 # 0022 caps umask so dirs stay 0755
-        _run sudo -n mkdir -p -m 0755 -- "$dir"
-        set -l _mk_rc $status
-        umask $_pmk
-        if test "$_mk_rc" -ne 0; _fail "Cannot create directory: $dir"; return 1; end
-    else
-        if not _run mkdir -p -- "$dir"; _fail "Cannot create directory: $dir"; return 1; end # ambient umask; file 0600 via atomic-write
-    end
+    if not _ry_mkdir_0755 "$use_sudo" "$dir"; _fail "Cannot create directory: $dir"; return 1; end
     set -l perms 0644
     test "$use_sudo" = false; and set perms 0600
     set -l _new_bytes (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _gen_rc $pipestatus[1]
@@ -2533,7 +2536,7 @@ function _svc_chk_expected --description "Check EXPECTED_SERVICES units"
                     _log "CHECK_NFT_UNPROBEABLE: nft(8) absent — live ruleset unverifiable, treating as drift (fail-closed)"
                     set -g _RY_CHECK_DRIFT 1
                 else
-                    string match -q -- '*policy drop*' (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null); or set -g _RY_CHECK_DRIFT 1
+                    string match -q -- '*policy drop*' "$(_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)"; or set -g _RY_CHECK_DRIFT 1
                 end
             else
                 test "$active" = active; or set -g _RY_CHECK_DRIFT 1 # RemainAfterExit oneshots read active
@@ -2848,7 +2851,7 @@ function _vrsv_chk_active_enabled --argument-names label rec_str --description "
 end
 function _vrsv_nft_assert_ndp --description "_vrsv_chk_nftables sub: assert live input chain accepts ICMPv6 NDP (warn-only; missing breaks IPv6 after NDP cache expiry)"
     set -l _chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)
-    if string match -q -- '*nd-neighbor-solicit*' $_chain
+    if string match -q -- '*nd-neighbor-solicit*' "$_chain"
         _ok "  nftables: live ICMPv6 NDP/PMTUD accept present"
     else
         _warn "  nftables: live input chain has no ICMPv6 NDP accept — IPv6 may break after NDP cache expiry"
@@ -2873,7 +2876,7 @@ function _vrsv_chk_nftables --argument-names label rec_str --description "nftabl
         return 0
     end
     set -l _input (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)
-    if not string match -q -- '*policy drop*' $_input
+    if not string match -q -- '*policy drop*' "$_input"
         _fail "  $label: $rec[2] and no live inet/filter/input chain with policy drop"
         return 0
     end
@@ -3651,7 +3654,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
             end
             continue
         end
-        if not string match -qr '(^|,)noatime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)lazytime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"
+        if not string match -qr '(^|,)noatime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)lazytime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"; or string match -qr '(^|,)(defaults|relatime|atime|strictatime)(,|$)' -- "$opts_field" # trailing alternation: tokens _vre_fstab rejects must trigger a rewrite
             set -g _RY_FSTAB_NEEDS_CHANGE true
             set -l _existing_commit (string match -rg -- '(?:^|,)commit=([0-9]+)(?:,|$)' "$opts_field")
             test -n "$_existing_commit"; and test "$_existing_commit" != 10; and set -ga _RY_FSTAB_COMMIT_OVERRIDES "$_existing_commit"
@@ -3663,7 +3666,7 @@ function _far_build_awk_script --description "_far_awk_rewrite sub: Emit awk scr
         '/^[ \t]*#/ || NF < 4 { print; next }' \
         '$3 != "ext4" { print; next }' \
         '$4 ~ /^[0-9]+$/ { print; next }' \
-        '$4 ~ /(^|,)noatime(,|$)/ && $4 ~ /(^|,)lazytime(,|$)/ && $4 ~ /(^|,)commit=10(,|$)/ { print; next }' \
+        '$4 ~ /(^|,)noatime(,|$)/ && $4 ~ /(^|,)lazytime(,|$)/ && $4 ~ /(^|,)commit=10(,|$)/ && $4 !~ /(^|,)(defaults|relatime|atime|strictatime)(,|$)/ { print; next }' \
         '{' \
         '    n = split($4, opts, ",")' \
         '    has_noat = 0; has_lazy = 0; out = ""' \
@@ -3909,7 +3912,7 @@ end
 function _csm_nft_live --description "rc 0 iff live inet/filter/input chain has policy drop (oneshot reads inactive after clean load)"
     command -q nft; or return 1
     sudo -n true 2>/dev/null; or return 1
-    string match -q -- '*policy drop*' (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)
+    string match -q -- '*policy drop*' "$(_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)"
 end
 function _csm_enable_nftables_first --description "Activate nftables before the ufw flush; rc 0 iff default-deny ruleset confirmed live"
     contains -- ufw.service $MASK; or return 0
@@ -4066,7 +4069,7 @@ function _install_configure_services --description "Enable, start, and configure
     _configure_services_mask; or set _ret 1
     _configure_services_enable; or set _ret 1
     _apply_wireless_regdom
-    _phase_record "Services: regdom" $_RY_REGDOM_RESULT "$_RY_REGDOM_EVIDENCE"
+    _phase_record "Services: regdom" "$_RY_REGDOM_RESULT" "$_RY_REGDOM_EVIDENCE"
     return $_ret
 end
 

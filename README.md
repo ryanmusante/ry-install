@@ -1,33 +1,11 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.85.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.85.1-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs, gaming/LLM desktop profile.
-
-One unattended run converts a fresh CachyOS install into a tuned single-seat gaming/LLM desktop for gfx1151. Every change is atomic, byte-verifiable (`--verify`), and reversible by hand ([Uninstall](#uninstall)).
-
-<details>
-<summary><strong>Contents</strong></summary>
-
-- [Quick Start](#quick-start)
-- [Requirements](#requirements)
-- [Usage](#usage)
-- [Install Flow](#install-flow)
-- [Safety & Reliability](#safety--reliability)
-- [Configuration](#configuration)
-- [Managed Files](#managed-files)
-- [Tuning Notes](#tuning-notes)
-- [Uninstall](#uninstall)
-- [Known Issues](#known-issues)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [Security](#security)
-- [License](#license)
-
-</details>
+> Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs, gaming/LLM desktop profile. Every change is atomic, byte-verifiable (`--verify`), and reversible by hand ([Uninstall](#uninstall)).
 
 ## Quick Start
 
@@ -36,7 +14,7 @@ One unattended run converts a fresh CachyOS install into a tuned single-seat gam
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.85.0
+cd ry-install && git checkout v7.85.1
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -55,7 +33,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo. NTP sync and `paccache` only warn. An unsynced clock with no NTP client gets `systemd-timesyncd` enabled (persistent) + an RTC writeback — skip with `RY_NO_NTP_REMEDIATION=1`.
+Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP sync and `paccache` only warn. Unsynced clock with no NTP client → `systemd-timesyncd` enabled + RTC writeback (skip with `RY_NO_NTP_REMEDIATION=1`).
 
 ## Usage
 
@@ -72,17 +50,7 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). All modes first run the runtime-init gates (hardware match, kernel floor, key/count validation), which hard-fail **exit 3** on a mismatched or sub-floor host.
-
-```fish
-$ ./ry-install.fish --check; echo $status
-0
-$ ./ry-install.fish --verify
-...
-[OK] Combined (static + runtime): <N> OK
-```
-
-`--check` is a silent, scriptable exit-code probe. `--verify` prints a per-line `[OK]`/`[WARN]`/`[FAIL]` report ending in the combined tally; warnings alone do not fail.
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). All modes first run the runtime-init gates (hardware, kernel floor, key/count validation) — exit 3 on a mismatched or sub-floor host. `--check` is a silent, scriptable exit-code probe; `--verify` prints `[OK]`/`[WARN]`/`[FAIL]` lines ending in a combined tally — warnings alone do not fail.
 
 ## Install Flow
 
@@ -97,7 +65,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
-Results print to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; `DEFER` applies on next boot. A boot-critical failure (exit 4) must be resolved before rebooting — see [Usage](#usage).
+Results print to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; `DEFER` applies on next boot; a boot-critical failure (exit 4) must be resolved before rebooting.
 
 ## Safety & Reliability
 
@@ -114,18 +82,13 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably-recycled PID via `/proc` start-time (else fail-closed) |
 
-<details>
-<summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>
-
 **Exit codes** `0` ok · `1` verify-FAIL/install-error · `2` usage · `3` preflight · `4` boot-critical (DO NOT REBOOT) · `5` lock · `10` `--check` drift.
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables, >9-digit values clamp to `2147483647`; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1` (skip timesyncd auto-enable + RTC writeback), `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
-
-</details>
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables, >9-digit values clamp to `2147483647`; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 
 ## Configuration
 
-All tunables are `set -g` globals near the top of the script — no external config file. Edit a global, then re-run (or `--install-file` the single affected file) to apply.
+All tunables are `set -g` globals near the top of the script — no external config file. Edit a global, then re-run (or `--install-file` the affected file).
 
 ### Globals
 
@@ -160,7 +123,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ## Managed Files
 
-17 embedded config files, grouped below. Each is rendered from the script's own data; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
+17 embedded config files; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
 
 ### Boot
 
@@ -224,10 +187,7 @@ Rationale for the non-obvious choices; several note the override to reverse them
 
 ## Uninstall
 
-No automated uninstaller; use [Managed Files](#managed-files) as the rollback reference.
-
-<details>
-<summary><strong>Manual uninstall</strong> — 6 steps, in order</summary>
+No automated uninstaller; use [Managed Files](#managed-files) as the rollback reference. Manual uninstall — 6 steps, in order:
 
 | # | Step | Command |
 |---|---|---|
@@ -238,11 +198,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-The fstab backup exists only if fstab was rewritten (skip if stale). If ry-install enabled `systemd-timesyncd` (unsynced clock at install), optionally `sudo systemctl disable --now systemd-timesyncd`.
-
-</details>
-
-For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert their contents (or `.ry.bak`) before step 5, which regenerates entries from that state.
+The fstab backup exists only if fstab was rewritten (skip if stale). If ry-install enabled `systemd-timesyncd`, optionally `sudo systemctl disable --now systemd-timesyncd`. For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert their contents (or `.ry.bak`) before step 5, which regenerates entries from that state.
 
 ## Known Issues
 
@@ -255,7 +211,7 @@ For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert
 
 ### Known-benign log lines
 
-Expected on this hardware; none affect operation. Live-checkable: `ModemManager1 … could not be found` (probe of the masked `modemmanager.service`); `acp_asoc_acp70 … No matching ASoC machine driver` (missing board-ID quirk — HDMI/USB audio fine); `unknown NHI PCI id` from boltd (PCI-ID table gap; USB4/TB still enumerate); `charge thresholds not supported` / `no backlight interface` (no battery or panel backlight); `Unlikely small volume range` (USB-audio descriptor quirk).
+Expected on this hardware; none affect operation: `ModemManager1 … could not be found` (probe of masked `modemmanager.service`) · `acp_asoc_acp70 … No matching ASoC machine driver` (HDMI/USB audio fine) · boltd `unknown NHI PCI id` (USB4/TB still enumerate) · `charge thresholds not supported` / `no backlight interface` (no battery/panel) · `Unlikely small volume range` (USB-audio descriptor quirk).
 
 ## Troubleshooting
 
@@ -270,7 +226,7 @@ Expected on this hardware; none affect operation. Live-checkable: `ModemManager1
 | BT speaker won't auto-reconnect | `bluetoothctl trust <MAC>`, then power the speaker on after login so it re-initiates |
 
 > [!NOTE]
-> The installer prints these `usermod` commands when group membership is missing but does not run them — a group change is inert until re-login and can't be cleanly reverted like the managed configs.
+> The installer prints missing-group `usermod` commands but never runs them — a group change is inert until re-login and can't be cleanly reverted like the managed configs.
 
 ## Contributing
 

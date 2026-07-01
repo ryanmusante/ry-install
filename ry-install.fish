@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.83.2 (2026-06-30) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.83.4 (2026-06-30) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.83.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.83.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -11,7 +11,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-set -g KERNEL_MIN 6.19 # floor: gfx1151 MES-0x86 firmware needs >=6.19 amdgpu; also carries RTL8127 suspend-hang fix + r8169
+set -g KERNEL_MIN 6.19 # floor: gfx1151 MES-0x86 amdgpu; RTL8127 suspend-hang fix + r8169
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -584,14 +584,12 @@ set -g CPUPOWER_GOVERNOR powersave
 # Bluetooth: power adapter on at service start/resume; reconnect retry for paired sinks
 set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 3
 set -g GPU_DPM_LEVEL auto # gfx1151 dpm floor; auto avoids pinning SCLK on CPU-bound titles
-set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set (amdgpu sysfs); guard + msg reference this
+set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set (amdgpu sysfs)
 set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to nftables input
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_FSR4_RDNA3_UPGRADE=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
-# netdev_budget/_usecs raised from 300/8000: drain more RX packets per NAPI poll (2.5GbE headroom)
-# max_map_count = INT_MAX-5: esync/Proton mmap ceiling for large Wine prefixes
-# swappiness=150: bias reclaim toward zram-backed swap (valid 0-200 since kernel 5.8; floor is 6.19)
+# tuned sysctl: netdev_budget/_usecs 300/8000→600/5000 (2.5GbE drain); max_map_count=INT_MAX-5 (esync/Proton); swappiness=150 (zram bias, 0-200 since 5.8)
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
@@ -719,7 +717,7 @@ function _ir_validate_keys --description "Refuse to deploy when an embedded scal
         if not string match -qr '^\d+$' -- "$$_k"; _err_loud "$_k must be a non-negative integer (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     if not string match -qr '^[A-Z][A-Z]$' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166-1 alpha-2 code (got: '$COUNTRY') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain. Refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # world-domain footgun: iw/cfg80211 accepts these but applies world limits
+    if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain. Refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
     for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION
         if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -1768,7 +1766,7 @@ function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODU
     test "$_errors" -eq 0
 end
 
-# ── CONFIG-FORMAT VALIDATORS (KV, KPARAM, SYSCTL, INI, TMPFILES) ──
+# ── CONFIG-FORMAT VALIDATORS (KV, KPARAM, SYSCTL, INI, MODPROBE, UDEV, NFT, REGDOM) ──
 function _grep_kv --argument-names dst --description "Validate kv pairs (loader.conf space-sep; sdboot-manage.conf eq-sep)"
     test (count $argv) -lt 2; and _log "BUG: _grep_kv called without content (dst=$dst)"; and return 2
     set -l content $argv[2..-1]; set -l keys; set -l sep
@@ -2796,7 +2794,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT _RY_DMESG_TSC
 end
 
-# ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, wifi, masks) ──
+# ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, nftables, wifi, masks) ──
 function _vrsv_chk_active_enabled --argument-names label rec_str --description "Helper: ok if active+enabled, warn if active only, fail otherwise"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found

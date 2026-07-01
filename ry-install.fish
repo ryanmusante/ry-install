@@ -2905,26 +2905,12 @@ function _vrsv_wifi_nm_backend --description "_vrsv_wifi sub: verify NM effectiv
         _fail "  NM effective wifi.backend: $_eff (expected: $NM_WIFI_BACKEND)"
     end
 end
-function _vrsv_wifi_iwd_proc --description "_vrsv_wifi sub: report iwd process state vs NM_WIFI_BACKEND"
-    command -q pgrep; or return 0
-    if command pgrep -x iwd >/dev/null
-        if test "$NM_WIFI_BACKEND" = iwd
-            _info "  iwd process: running (NM-activated)"
-        else
-            _warn "  iwd process: running (unexpected — NM backend is $NM_WIFI_BACKEND; iwd should be inactive)"
-        end
-    else if test "$NM_WIFI_BACKEND" = iwd
-        _info "  iwd process: not currently active (NM activates it on demand)"
-    else
-        _info "  iwd process: inactive (expected — NM backend is $NM_WIFI_BACKEND)"
-    end
-end
-function _vrsv_wifi --description "Runtime services check: WiFi + iwd backend + NM state"
+function _vrsv_wifi --description "Runtime services check: WiFi + NM backend + NM state"
     _echo
     _echo "WIFI STATE"
     _echo
     if test "$_RY_PROFILE_USES_WIFI_BACKEND" = false
-        _info "  iwd/NetworkManager not managed — skipping WiFi state checks"
+        _info "  NetworkManager not managed — skipping WiFi state checks"
         return 0
     end
     set -l wlan_iface ""
@@ -2936,7 +2922,6 @@ function _vrsv_wifi --description "Runtime services check: WiFi + iwd backend + 
     else
         _warn "  WiFi interface: NOT DETECTED"
     end
-    _vrsv_wifi_iwd_proc
     _vrsv_wifi_nm_backend
     if command -q nmcli
         set -l nm_wifi_enabled (command nmcli -t -f WIFI general 2>/dev/null | string trim --)
@@ -3758,7 +3743,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     return 0
 end
 
-# ── INSTALL PHASE 4 (Services slot): RESOLVED + PKG REMOVE + MASK + IWD + ENABLE + REGDOM ──
+# ── INSTALL PHASE 4 (Services slot): RESOLVED + PKG REMOVE + MASK + ENABLE + REGDOM ──
 function _configure_services_resolved_restart --description "Restart systemd-resolved when its conf.d drop-in is in place"
     test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
     if _run sudo -n systemctl restart systemd-resolved
@@ -3952,33 +3937,6 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     end
     return $_rc
 end
-
-# ── INSTALL PHASE 4 SUB: IWD HANDOFF (disable standalone iwd.service; NM sole Wi-Fi manager) ──
-function _configure_services_iwd_handoff --description "Disable standalone iwd.service so NetworkManager is the sole Wi-Fi manager"
-    test "$NM_WIFI_BACKEND" = iwd; or return 0 # only relevant for the iwd backend
-    if not command -q systemctl; _phase_record "Services: iwd handoff" "--" "systemctl absent"; return 0; end
-    set -l _state (command systemctl is-enabled iwd.service 2>/dev/null | string trim --)
-    if test -z "$_state"; _phase_record "Services: iwd handoff" "--" "iwd.service not present"; return 0; end
-    if test "$_state" = masked
-        # masked blocks NM D-Bus activation: unmask then disable
-        _run sudo -n systemctl unmask iwd.service
-    end
-    # disable not mask: stops boot race, keeps D-Bus activation
-    if _run sudo -n systemctl disable --now iwd.service
-        _ok "iwd.service disabled (NetworkManager activates iwd on demand)"
-        _phase_record "Services: iwd handoff" PASS "iwd.service disabled; NM is sole manager"
-    else
-        set -l _now (command systemctl is-enabled iwd.service 2>/dev/null | string trim --)
-        if test "$_now" = disabled; or test "$_now" = static
-            _phase_record "Services: iwd handoff" PASS "iwd.service $_now (NM is sole manager)"
-        else
-            _warn "Could not disable iwd.service (is-enabled=$_now) — if Wi-Fi misbehaves, run: sudo systemctl disable --now iwd.service"
-            _phase_record "Services: iwd handoff" WARN "iwd.service still $_now"
-        end
-    end
-    return 0
-end
-
 # ── INSTALL PHASE 4 SUB: ENABLE UNITS + REGDOM ──
 function _cse_collect_units --description "Collect system units to enable"
     set -l _enable
@@ -4050,7 +4008,7 @@ function _apply_wireless_regdom --description "Apply the wireless regulatory dom
     set -g _RY_REGDOM_RESULT WARN; set -g _RY_REGDOM_EVIDENCE "iw reg set failed — applies via /etc/iw-regdomain"
     return 0
 end
-function _install_configure_services --description "Enable, start, and configure systemd services (fstab opts + resolved + PKGS_DEL + mask + iwd handoff + enable + regdom)"
+function _install_configure_services --description "Enable, start, and configure systemd services (fstab opts + resolved + PKGS_DEL + mask + enable + regdom)"
     _progress Services
     _info "Post-installation tasks..."
     set -l _ret 0
@@ -4063,7 +4021,6 @@ function _install_configure_services --description "Enable, start, and configure
     _configure_services_resolved_restart
     _configure_services_pkg_remove
     _configure_services_mask; or set _ret 1
-    _configure_services_iwd_handoff
     _configure_services_enable; or set _ret 1
     _apply_wireless_regdom
     _phase_record "Services: regdom" $_RY_REGDOM_RESULT "$_RY_REGDOM_EVIDENCE"
@@ -4343,11 +4300,6 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
     if not command -q NetworkManager
         _warn "NetworkManager configs deployed but NetworkManager not installed — restart skipped; drop-in applies once installed or at next boot"
         _phase_record "Finalize: NetworkManager restart" WARN "NetworkManager not installed"
-        return 0
-    end
-    if test "$NM_WIFI_BACKEND" = iwd; and begin; not command -q pacman; or not command pacman -Qq iwd >/dev/null 2>&1; end
-        _warn "NetworkManager configs deployed but iwd is not installed (advisory; install iwd to activate the iwd backend)"
-        _phase_record "Finalize: NetworkManager restart" WARN "iwd not installed"
         return 0
     end
     if _is_wifi_active_route

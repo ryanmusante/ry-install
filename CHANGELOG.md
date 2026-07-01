@@ -178,7 +178,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
 ## 7.66.0 - 2026-06-22
 
-- verify: split iwd-process check into `_vrsv_wifi_iwd_proc`.
+- verify: split WiFi runtime state into a dedicated sub-check.
 
 ## 7.65.0 - 2026-06-21
 
@@ -187,7 +187,6 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 ## 7.64.0 - 2026-06-21
 
 - drirc: remove `95-ry-radv-apu.conf` (gfx1151 reports `uma:1`).
-- network: remove dormant `iwd/main.conf`.
 - guards: SYSTEM_DESTINATIONS 17 -> 15, post-hooks 20 -> 18, file count 20 -> 18.
 
 ## 7.63.0 - 2026-06-21
@@ -199,7 +198,7 @@ All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 ## 7.62.0 - 2026-06-21
 
 - cmdline: `amd_iommu=off` -> `amd_iommu=on iommu=pt`. KERNEL_PARAMS 13 -> 14.
-- network: NM backend iwd -> wpa_supplicant; `wifi.powersave=2`.
+- network: set NM `wifi.backend=wpa_supplicant`; `wifi.powersave=2`.
 - services: mask `modemmanager.service`. MASK 9 -> 10.
 
 ## 7.61.0 - 2026-06-21

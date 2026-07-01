@@ -76,9 +76,8 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 
 ```fish
 $ ./ry-install.fish --check; echo $status
-0
+0 # 0 = no drift (3 = preflight, 10 = drift)
 $ ./ry-install.fish --verify
-...
 [OK] Combined (static + runtime): 142 OK
 ```
 
@@ -93,7 +92,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 1 | Preflight | config checks → lock → hard gates (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
 | 3 | Configuration | deploy 17 embedded configs atomically |
-| 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → iwd handoff (only when `NM_WIFI_BACKEND=iwd`) → enable → regdomain |
+| 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
@@ -148,7 +147,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 |---|---|
 | Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, `modemmanager`, sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
-| Untouched | `iwd.service` (opt-in: `NM_WIFI_BACKEND=iwd` + re-run); `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path) |
+| Untouched | `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path) |
 
 ### fstab
 

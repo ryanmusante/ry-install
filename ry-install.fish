@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.82.0 (2026-06-30) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.83.0 (2026-06-30) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.82.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.83.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -584,6 +584,7 @@ set -g CPUPOWER_GOVERNOR powersave
 # Bluetooth: power adapter on at service start/resume; reconnect retry for paired sinks
 set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 3
 set -g GPU_DPM_LEVEL auto # gfx1151 dpm floor; auto avoids pinning SCLK on CPU-bound titles
+set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set (amdgpu sysfs); guard + msg reference this
 set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to nftables input
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
@@ -716,7 +717,7 @@ function _ir_validate_keys --description "Refuse to deploy when an embedded scal
     end
     if not string match -qr '^[A-Z][A-Z]$' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166-1 alpha-2 code (got: '$COUNTRY') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain. Refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # world-domain footgun: iw/cfg80211 accepts these but applies world limits
-    if not contains -- "$GPU_DPM_LEVEL" auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism; _err_loud "GPU_DPM_LEVEL must be one of auto|low|high|manual|profile_standard|profile_min_sclk|profile_min_mclk|profile_peak|perf_determinism (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # power_dpm_force_performance_level accepted set (amdgpu sysfs); value is interpolated unquoted into udev ATTR
+    if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
     for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION
         if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
@@ -879,6 +880,7 @@ function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate con
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
     for entry in $SYSCTL_VALUES
         if not string match -qr '^\s*[A-Za-z0-9._-]+\s*=\s*\S' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; functions -q _log; and _log "SYSCTL_SKIP_MALFORMED: '$entry' (require key=value, key charset [A-Za-z0-9._-])"; continue; end
+        if string match -qr '[\x00-\x1f\x7f]' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; functions -q _log; and _log "SYSCTL_SKIP_CTRLCHAR: entry contains control character (newline/CR/etc) — refuse to emit"; continue; end
         set -l parts (string split -m1 '=' -- "$entry"); set -l key (string trim -- "$parts[1]"); set -l val (string trim -- "$parts[2]")
         printf '%s = %s\n' "$key" "$val"
         set _printed (math $_printed + 1)
@@ -905,6 +907,7 @@ function _content_HOME_.config_environment.d_10-environment.conf --description "
     set -l _printed 0; set -g _RY_ENVD_BAD_ENTRIES
     for var in $ENV_VARS
         if not string match -qr '^[A-Za-z_][A-Za-z0-9_]*=' -- "$var"; set -ga _RY_ENVD_BAD_ENTRIES "$var"; functions -q _log; and _log "ENVD_SKIP_MALFORMED: '$var' (require KEY=value, KEY charset [A-Za-z_][A-Za-z0-9_]*)"; continue; end
+        if string match -qr '[\x00-\x1f\x7f]' -- "$var"; set -ga _RY_ENVD_BAD_ENTRIES "$var"; functions -q _log; and _log "ENVD_SKIP_CTRLCHAR: entry contains control character (newline/CR/etc) — refuse to emit"; continue; end
         printf '%s\n' "$var"
         set _printed (math $_printed + 1)
     end

@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Versions follow MAJOR.MINOR.PATCH.
 
+## 7.83.0 - 2026-07-01
+
+- fix: `environment.d` + `sysctl.d` generators reject entries with control characters (newline/CR/etc), blocking directive injection. Routes to existing count-mismatch assertion (exit 14/13).
+- refactor: hoist `GPU_DPM_LEVEL` accepted set to `_RY_DPM_LEVELS`; guard + error message share one source. No behavior change.
+- docs: correct exit-code note — gen sentinels span `11`–`14` (was `11`–`13`; 14 landed in 7.82.0).
+
 ## 7.82.0 - 2026-06-30
 
 - fix: validate `GPU_DPM_LEVEL` against the dpm-level enum; blocks udev `ATTR{}` corruption.

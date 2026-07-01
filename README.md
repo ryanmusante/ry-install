@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.82.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.83.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -36,7 +36,7 @@ One unattended run converts a fresh CachyOS install into a tuned single-seat gam
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.82.0
+cd ry-install && git checkout v7.83.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -117,7 +117,7 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 <summary><strong>Exit codes, sentinels, and environment overrides</strong></summary>
 
 **Exit codes** `0` ok · `1` verify-FAIL/install-error · `2` usage (incl. root-refused) · `3` preflight · `4` boot-critical (DO NOT REBOOT) · `5` lock · `10` `--check` drift · `128+N` signal (130 INT, 143 TERM, 129 HUP, 131 QUIT, 134 ABRT).
-Sentinels `11`–`13` and `250`/`251`/`255` never reach a process exit (surface as the footer `gen_fail` count).
+Sentinels `11`–`14` and `250`/`251`/`255` never reach a process exit (surface as the footer `gen_fail` count).
 
 Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 

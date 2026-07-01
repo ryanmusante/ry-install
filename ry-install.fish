@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.83.4 (2026-06-30) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.84 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test (status filename) = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.83.4"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.84"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -903,6 +903,7 @@ function _content__etc_modprobe.d_60-ry-mt7925e.conf --description "Generate con
         "# 60-ry-mt7925e.conf - disable PCIe ASPM on MT7925 (coredump/BT-reconnect/assoc-fail mitigation; symptomatic, drop if upstream resolves)" \
         "options mt7925e disable_aspm=1"
 end
+# ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (KDE Plasma, Flatpak, D-Bus activated apps)"
     set -l _printed 0; set -g _RY_ENVD_BAD_ENTRIES
@@ -1883,6 +1884,7 @@ function _grep_mangohud_entry --argument-names dst --description 'Validate ≥1 
     end
     return 0
 end
+# ── CONFIG-FORMAT VALIDATORS: DISPATCH + ORCHESTRATOR (_rvc_dispatch → _ry_validate_configs) ──
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family"
     set -l _content $argv[2..-1]
     switch "$dst"
@@ -2005,6 +2007,7 @@ function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --descript
     if not _run $_sp mv -T -- "$tmpfile" "$dst"; _fail "→ $dst (atomic move failed)"; return 1; end
     return 0
 end
+# ── ATOMIC FILE INSTALL: BACKUP + POST-WRITE VERIFY/RESTORE + PUBLIC ENTRY ──
 function _awf_is_backup_target --argument-names dst --description "True if dst is in _RY_BACKUP_TARGETS (automatic .ry.bak set)"; contains -- "$dst" $_RY_BACKUP_TARGETS; end
 function _awf_make_backup --argument-names dst use_sudo --description "Create <dst>.ry.bak before overwrite (loader.conf/mkinitcpio.conf/fstab)"
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"
@@ -2871,6 +2874,7 @@ function _vrsv_chk_cpupower_governor --argument-names rec_str --description "Che
     end
     _fail "  cpupower.service: $rec[2] (expected: active)"
 end
+# ── VERIFY-RUNTIME: SERVICE COLLECTORS (sys-units, wifi/NM backend, masked-inactive) ──
 function _vrsv_sys_units --description "Runtime services check: conf.d-implied + EXPECTED_SERVICES (per-unit dispatch)"
     set -l sys_units (_implicit_confd_units)
     for _e in $EXPECTED_SERVICES; contains -- $_e $sys_units; or set -a sys_units $_e; end

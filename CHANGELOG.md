@@ -3,6 +3,13 @@ ry-install release notes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.84 (2026-07-01)
+-----------------
+  - Add four section banners subdividing oversized blocks: user content
+    generators, config-format validator dispatch, atomic-write
+    backup/verify/restore, and runtime service collectors. Navigation
+    only; no logic change (85 banners total).
+
 7.83.0 - 7.83.4 (2026-06-30)
 ----------------------------
   - Trim in-script comments to essentials; collapse multi-line sysctl

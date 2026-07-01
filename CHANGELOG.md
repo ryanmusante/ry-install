@@ -5,15 +5,11 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 7.84 (2026-07-01)
 -----------------
-  - Add four section banners subdividing oversized blocks: user content
-    generators, config-format validator dispatch, atomic-write
-    backup/verify/restore, and runtime service collectors. Navigation
-    only; no logic change (85 banners total).
+  - Add four section banners (85 total); no logic change.
 
 7.83.0 - 7.83.4 (2026-06-30)
 ----------------------------
-  - Trim in-script comments to essentials; collapse multi-line sysctl
-    rationale; document non-obvious sysctl values.
+  - Trim in-script comments; collapse sysctl rationale to one line.
   - Correct two section banners (drop stale TMPFILES; add nftables).
   - _run output-capture tail cap derives from head cap.
   - environment.d and sysctl.d generators reject control chars.
@@ -43,8 +39,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 -------------------------------------
   - Collapse 12 functions to one-line form; condense README prose.
   - Replace fish >= 3.7 path basename with floor-safe command basename.
-  - Drop baloofilerc and _post_baloo; remove _kb_* known-benign subsystem
-    and _ry_check_umip_disabled.
+  - Drop baloofilerc, _post_baloo, _kb_* known-benign, _ry_check_umip_disabled.
   - Add UMIP / clearcpuid=514 Tuning Note; add two verify-section banners.
   - cmdline: iommu=pt -> amd_iommu=off. Add _vrkm_iommu.
 

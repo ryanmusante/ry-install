@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.87.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.87.2-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.87.0
+cd ry-install && git checkout v7.87.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -28,9 +28,9 @@ chmod +x ry-install.fish
 | Requirement | Minimum |
 |---|---|
 | Platform | CachyOS · systemd-boot · ext4 root |
-| Kernel | ≥ 6.19 (override `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`) |
+| Kernel | ≥ 6.19 (override `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`; `--verify` warns only) |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
-| Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`) |
+| Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
 Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP sync and `paccache` only warn. Unsynced clock with no NTP client → `systemd-timesyncd` enabled + RTC writeback (skip with `RY_NO_NTP_REMEDIATION=1`).
@@ -50,7 +50,7 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard; glued short flags (`-vh`) resolve first-of `h`/`v` in the given order |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). All modes first run the runtime-init gates (hardware, kernel floor, key/count validation) — exit 3 on a mismatched or sub-floor host. `--check` is a silent, scriptable exit-code probe; `--verify` prints `[OK]`/`[WARN]`/`[FAIL]` lines ending in a combined tally — warnings alone do not fail.
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count validation) — exit 3 on a mismatched or sub-floor host; `--verify` downgrades the hardware and kernel-floor gates to warnings and continues. `--check` is a silent, scriptable exit-code probe; `--verify` prints `[OK]`/`[WARN]`/`[FAIL]` lines ending in a combined tally — warnings alone do not fail.
 
 ## Install Flow
 
@@ -58,7 +58,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 
 | # | Phase | Action |
 |---|---|---|
-| 1 | Preflight | config checks → lock → hard gates (read-only) |
+| 1 | Preflight | hard gates → lock → config checks (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
 | 3 | Configuration | deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → enable → regdomain |

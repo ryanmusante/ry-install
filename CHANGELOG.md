@@ -4,62 +4,63 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: subsystem: imperative summary (one line, 72 cols).
 
+7.87.2 (2026-07-02)
+-------------------
+  udev: retrigger cpu beside block so the EPP rule live-applies
+  verify: split amdgpu param pairs once; values may contain ':'
+  lock: create the state dir under umask 0077 (0700 contract)
+  args: root --check with unknown flags or positionals exits 2
+  README: correct preflight order (hard gates -> lock -> checks)
+
+7.87.1 (2026-07-02)
+-------------------
+  compat: replace "$()" so the 3.6 version gate can report
+  verify: hardware/kernel-floor gates warn; deploy/check exit 3
+  nftables: drop redundant echo-reply accept (ct covers replies)
+  validate: require ipv6.disable=1 while nftables is IPv4-only
+  backup: correct _awf_make_backup description (fstab is direct)
+  comments: trim embedded-config and code notes to essentials
+
 7.87.0 (2026-07-01)
 -------------------
   cmdline: add ipv6.disable=1 (IPv6 off system-wide)
   nftables: drop ICMPv6/NDP accepts; ruleset is IPv4-only
   nftables: accept inbound IPv4 ping (echo-request)
   verify: assert the ping accept in file and live ruleset
-  guard: refuse stdin execution (fish 3.7 reports
-         'Standard input', never '-')
-  args: root --check beside --verify/--install-file exits 2
-        (usage parity with non-root) instead of silent 3
-  fstab: --verify flags 'defaults' on ext4 rows as a pending
-         rewrite, matching the installer trigger set
-  run: skip separated long-form sudo value flags when
-       resolving the timeout-bypass command
-  log: retain run-overflow spill files under LOG_DIR so the
-       logged spill path stays valid after the run
+  guard: refuse stdin execution ('Standard input' filename)
+  args: root --check beside other modes exits 2, not silent 3
+  fstab: --verify flags 'defaults' as a pending rewrite
+  run: skip separated sudo value flags in timeout bypass
+  log: retain run-overflow spill files under LOG_DIR
   README: sync IPv4-only firewall notes; trim safety warning
 
 7.86.0 (2026-07-01)
 -------------------
   install-file: resolve $BOOT before the sdboot vfat gate
-          (single-file boot cascade matches full-install order)
   nftables: require hop-limit 255 on inbound ICMPv6 ND types
   args: glued short flags resolve first-of -h/-v in order
-  help: note --check reads live /proc/cmdline (drift 10
-        until reboot after a fresh install)
-  README: sync version pins; document glued-flag order and
-          --check drift semantics
+  help: note --check reads live /proc/cmdline
+  README: sync version pins, glued-flag and drift notes
 
 7.85.3 (2026-07-01)
 -------------------
-  check: honor the silent-probe contract when invoked as root
-         (exit 3, no output; other modes keep exit 2)
-  README: normalize tables to 100 columns; move package lists
-          and uninstall commands into code blocks
+  check: root --check is silent exit 3; other modes keep exit 2
+  README: 100-column tables; package lists into code blocks
 
 7.85.2 (2026-07-01)
 -------------------
-  signal: propagate 128+N to the parent on INT/TERM/HUP/ABRT
-          (fish swallows handler exit; re-raise via exec sh)
+  signal: propagate 128+N on INT/TERM/HUP/ABRT (exec re-raise)
   log: preserve embedded newlines in the JSONL data field
-  backup: skip .ry.bak when the symlink probe is inconclusive
-          (sudo lapse) rather than copy through a symlink
+  backup: skip .ry.bak on inconclusive symlink probe (sudo lapse)
   comments: trim lock, backup, and sysctl rationale notes
 
 7.85.1 (2026-07-01)
 -------------------
-  udev: EPP rule never fired (SUBSYSTEM=="cpu" + DEVPATH cpufreq is
-        unsatisfiable); match KERNEL=="cpu[0-9]*", write via cpu dev
-  fstab: treat relatime/atime/strictatime/defaults beside conformant
-         opts as rewrite triggers (row previously failed --verify)
-  install-file: cap mkdir umask at 0022 via _ry_mkdir_0755 (ambient
-                umask 0002 yielded 0775 dirs that --verify rejects)
+  udev: EPP rule never fired; match KERNEL=="cpu[0-9]*"
+  fstab: atime-variant opts beside conformant rows trigger rewrite
+  install-file: cap mkdir umask at 0022 via _ry_mkdir_0755
   log: drop blank "ECHO: " JSONL noise from separator _echo calls
-  quoting: quote nft string-match subjects, test-equality cmdsubs,
-           and the regdom phase record (empty value shifted args)
+  quoting: quote nft subjects, test cmdsubs, regdom record
 
 7.85.0 (2026-07-01)
 -------------------
@@ -72,8 +73,7 @@ Format: subsystem: imperative summary (one line, 72 cols).
   nftables: move the loopback accept first
   progress: freeze on uptime read failure; never switch clock base
   cleanup: guard early-arg erase; trim comments and descriptions
-  README: guard fstab restore; scope post-write restore; document
-          pactree dependency and NTP remediation
+  README: fstab restore scope; pactree and NTP remediation notes
 
 7.84 (2026-07-01)
 -----------------
@@ -118,12 +118,10 @@ Format: subsystem: imperative summary (one line, 72 cols).
   mangohud: toggle cpu_temp; restore gpu_power, text_outline, toggle
   cpupower: governor performance -> powersave
   udev: AMD P-State EPP performance -> balance_performance
-  cmdline: add fsck.mode=force, fsck.repair=yes,
-           processor.max_cstate=1, btusb.enable_autosuspend=n
+  cmdline: fsck force/repair, max_cstate=1, btusb autosuspend=n
   verify: add _vss_known_benign; add RTC writeback at sync paths
   cleanup: remove _ir_validate_repo_tier; count fatals once
-  udev: rename 60-ry-perf.rules -> 99-ry-perf.rules; drop
-        vm.page-cluster, vm.vfs_cache_pressure
+  udev: 60- -> 99-ry-perf.rules; drop page-cluster, vfs_cache_pressure
   modprobe: add 60-ry-mt7925e.conf (disable_aspm=1), _vss_modprobe
   hooks: add */modprobe.d/* post-hook and _post_modprobe
   probes: prefix mesa soft-floor with command; guard x86-64-v4
@@ -149,8 +147,7 @@ Format: subsystem: imperative summary (one line, 72 cols).
   mangohud: reorder fps/frametime; adjust HUD fields
   gpu: remove drirc 95-ry-radv-apu.conf (gfx1151 reports uma:1)
   bluetooth: add main.conf; enable service; add _vss_bluetooth
-  network: wifi.backend=wpa_supplicant, powersave=2; mask
-           modemmanager; add NM-dispatcher logging.conf
+  network: wpa_supplicant, powersave=2; mask modemmanager; NM logging
   probes: guard vercmp behind command -q
   guards: destinations 17 -> 15; hooks and file count 20 -> 18
 

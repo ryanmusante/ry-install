@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.87.0 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
-if contains -- "$(status filename)" - 'Standard input'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (fish 3.7 reports 'Standard input' for stdin, older docs say '-')
+# ry-install v7.87.2 (2026-07-02) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+if contains -- (status filename) - 'Standard input'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.87.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.87.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -58,7 +58,7 @@ for _early_arg in $argv
             echo "v$VERSION"
             exit $EXIT_OK
         case '-*'
-            if string match -qr -- '^-[hvV]+$' "$_early_arg" # glued h/v/V only; first of h/v in given order wins (getopt semantics)
+            if string match -qr -- '^-[hvV]+$' "$_early_arg" # glued h/v/V only; first h/v wins (getopt order)
                 for _early_ch in (string split '' -- (string sub -s 2 -- "$_early_arg"))
                     test "$_early_ch" = h; and begin; _ry_show_help; exit $EXIT_OK; end
                     test "$_early_ch" = v; and begin; echo "v$VERSION"; exit $EXIT_OK; end
@@ -104,26 +104,32 @@ end
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
 set -g QUIET true; set -g MODE bootstrap # pinned pre-argparse for signal footers
 if not string match -qr '^\d+$' -- "$_MY_UID"; echo "[ERR] id -u returned non-numeric value: '$_MY_UID' — cannot determine user identity" >&2; _ry_exit $EXIT_PREFLIGHT; end
-set -l _ry_root_silent_check false; set -l _rsc_skip false; set -l _rsc_other_mode false # --check silent-probe contract holds even on the root-refusal path
+set -l _ry_root_silent_check false; set -l _rsc_skip false; set -l _rsc_other_mode false; set -l _rsc_after_dd false # --check silent-probe contract holds even on the root-refusal path
 for _rsc_a in $argv
     if test "$_rsc_skip" = true; set _rsc_skip false; continue; end # --install-file value: a literal --check path is not the flag
+    if test "$_rsc_after_dd" = true; set _rsc_other_mode true; break; end # positional after --: non-root exits 2, keep parity
     switch "$_rsc_a"
         case --
-            break
+            set _rsc_after_dd true
         case --install-file
             set _rsc_skip true; set _rsc_other_mode true
         case '--install-file=*' --verify
             set _rsc_other_mode true
         case --check
             set _ry_root_silent_check true
+        case -V --verbose
+            continue # --check-compatible (verbose is dropped under --check)
+        case '*'
+            string match -qr -- '^-V+$' "$_rsc_a"; and continue # glued repeats (-VV): still --check-compatible
+            set _rsc_other_mode true # unknown flag or positional: non-root exits 2 (argparse/positional guard), keep parity
     end
 end
 set -q _rsc_a; and set --erase _rsc_a
-set --erase _rsc_skip
+set --erase _rsc_skip _rsc_after_dd
 if test "$_MY_UID" -eq 0
-    # --check alongside --verify/--install-file is an argparse --exclusive usage error: keep rc-2 parity with non-root instead of the silent probe's 3
+    # --check beside --verify/--install-file: rc-2 usage parity with non-root
     if test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; _ry_exit $EXIT_PREFLIGHT; end # no output; 3 = cannot probe
-    # root refusal precedes argparse by design: unknown-flag/positional diagnostics are superseded (same rc 2 either way)
+    # root refusal precedes argparse: same rc 2 either way
     echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2
     _ry_exit $EXIT_USAGE
 end
@@ -348,7 +354,7 @@ function _lock_pid_started_after --argument-names pid mtime --description "rc 0 
 end
 function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale-lock reclaim)"
     set -g LOCK_DIR "$_RY_HOME_DIR/.lock"; set -g LOCK_FILE "$LOCK_DIR/pid"
-    command mkdir -p -- (command dirname -- "$LOCK_DIR") 2>/dev/null
+    set -l _lk_um (umask); umask 0077; command mkdir -p -- (command dirname -- "$LOCK_DIR") 2>/dev/null; umask $_lk_um # state dir is 0700 by contract
     _acquire_lock_fresh
     set -l _fresh_rc $status
     test "$_fresh_rc" -eq 0; and return 0
@@ -760,17 +766,23 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
     if not string match -qr '^[A-Z][A-Z]$' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166-1 alpha-2 code (got: '$COUNTRY') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain. Refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
+    if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # IPv4-only ruleset: no v6 accepts, ICMPv6/ND would hit policy drop
+        _err_loud "IPv4-only nftables ruleset requires ipv6.disable=1 in KERNEL_PARAMS — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
+    end
     for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION
         if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy when running kernel < KERNEL_MIN (override: RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1)"
+function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy when running kernel < KERNEL_MIN (verify warns; override: RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1)"
     set -l _kr (command uname -r 2>/dev/null)
     set -l _kver (string match -rg -- '^([0-9]+\.[0-9]+)' "$_kr") # strip -arch1-1/-cachyos suffix to MAJOR.MINOR
     if test -z "$_kver"
         if test "$RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK" = 1 # fail-closed: unreadable release requires override
             _warn_loud "Kernel floor (override): release unreadable from uname -r ('$_kr') — proceeding"
             _log "KERNEL_FLOOR_UNREADABLE_OVERRIDE: uname -r='$_kr'"
+        else if test "$MODE" = verify # read-only: warn and continue
+            _warn "Kernel floor: release unreadable from uname -r ('$_kr') — verify continues; deploy would refuse"
+            _log "KERNEL_FLOOR_UNREADABLE_VERIFY: uname -r='$_kr'"
         else
             _err_loud "Kernel floor: release unreadable from uname -r ('$_kr') — refusing to deploy"
             _err_loud_cont "  gfx1151 MES-0x86 firmware needs >=$KERNEL_MIN amdgpu; RTL8127 suspend/shutdown hang fix + r8169 support also land only >=$KERNEL_MIN. Deploying below risks GPU hang + suspend lockup."
@@ -784,6 +796,9 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
         if test "$RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK" = 1 # mirror hardware gate: override bypasses below-floor hard-fail
             _warn_loud "Kernel floor (override): running $_kver < $KERNEL_MIN — proceeding"
             _log "KERNEL_FLOOR_BELOW_OVERRIDE: running=$_kver min=$KERNEL_MIN"
+        else if test "$MODE" = verify # read-only: warn and continue
+            _warn "Kernel floor: running $_kver < $KERNEL_MIN — verify continues; deploy would refuse"
+            _log "KERNEL_FLOOR_BELOW_VERIFY: running=$_kver min=$KERNEL_MIN"
         else
             _err_loud "Kernel floor: running $_kver, profile $PROFILE_NAME requires >=$KERNEL_MIN — refusing to deploy"
             _err_loud_cont "  gfx1151 MES-0x86 amdgpu support requires >=$KERNEL_MIN; RTL8127 hang fix (ae1737e7339b) + r8169 support are present only at/above $KERNEL_MIN."
@@ -802,6 +817,9 @@ function _init_runtime --description "Cache root UUID + validate config + precom
             if test "$RY_INSTALL_SKIP_HARDWARE_CHECK" = 1 # fail-closed: empty model requires override
                 _warn_loud "Hardware check (override): CPU model unreadable from /proc/cpuinfo — proceeding"
                 _log "HARDWARE_MODEL_UNREADABLE_OVERRIDE: /proc/cpuinfo missing 'model name'"
+            else if test "$MODE" = verify # read-only: warn and continue
+                _warn "Hardware check: CPU model unreadable from /proc/cpuinfo — verify continues; deploy would refuse"
+                _log "HARDWARE_MODEL_UNREADABLE_VERIFY: /proc/cpuinfo missing 'model name'"
             else
                 _err_loud "Hardware check: CPU model unreadable from /proc/cpuinfo (no 'model name' field) — refusing to deploy"
                 _err_loud_cont "  Deploying gfx1151/Strix Halo defaults without CPU validation risks incorrect kernel cmdline + initramfs MODULES."
@@ -812,6 +830,9 @@ function _init_runtime --description "Cache root UUID + validate config + precom
             if test "$RY_INSTALL_SKIP_HARDWARE_CHECK" = 1
                 _warn_loud "Hardware mismatch (override): expected $EXPECTED_CPU_MATCH, detected: $_cpu_model"
                 _log "HARDWARE_MISMATCH_OVERRIDE: expected=$EXPECTED_CPU_MATCH detected=$_cpu_model"
+            else if test "$MODE" = verify # read-only: warn and continue
+                _warn "Hardware mismatch: expected $EXPECTED_CPU_MATCH, detected: $_cpu_model — verify continues; deploy would refuse"
+                _log "HARDWARE_MISMATCH_VERIFY: expected=$EXPECTED_CPU_MATCH detected=$_cpu_model"
             else
                 _err_loud "Hardware mismatch: profile $PROFILE_NAME expects $EXPECTED_CPU_MATCH, detected: $_cpu_model"
                 _err_loud_cont "  Deploying gfx1151/Strix Halo defaults on non-matching CPU would set incorrect kernel cmdline + initramfs MODULES."
@@ -867,7 +888,7 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"; printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"; end
 end
 function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
-    printf '%s\n' "# systemd-resolved configuration (plaintext DNS, mDNS/LLMNR off — deliberate divergence from CachyOS DoH default)" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
+    printf '%s\n' "# systemd-resolved: plaintext DNS, mDNS/LLMNR off (diverges from CachyOS DoH default)" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
 end
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
@@ -877,7 +898,7 @@ function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --descriptio
     end
 end
 function _content__etc_systemd_system_NetworkManager-dispatcher.service.d_logging.conf --description "Generate content for NetworkManager-dispatcher logging drop-in (journal noise suppression)"
-    printf '%s\n' "# nm-dispatcher logs via journald (not stdout), so StandardError=null is ineffective; LogLevelMax drops routine info-level lines, keeps notice+" "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
+    printf '%s\n' "# LogLevelMax drops info-level dispatcher lines (journald-logged; StandardError=null ineffective)" "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
 end
 function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (wifi.backend from NM_WIFI_BACKEND)"
     printf '%s\n' "# NetworkManager configuration - $NM_WIFI_BACKEND backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"
@@ -891,7 +912,7 @@ end
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset"
     printf '%s\n' \
         "#!/usr/bin/nft -f" \
-        "# ry-install: minimal default-deny-inbound, IPv4-only (ufw masked; IPv6 disabled via ipv6.disable=1). No inbound ports open by default — add them below." \
+        "# ry-install: default-deny-inbound, IPv4-only (ufw masked; ipv6.disable=1). Add inbound ports below." \
         "flush ruleset" \
         "table inet filter {" \
         "    chain input {" \
@@ -899,8 +920,8 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        iif \"lo\" accept" \
         "        ct state established,related accept" \
         "        ct state invalid drop" \
-        "        # IPv4 ICMP: inbound ping (echo-request) enabled + error/PMTUD types" \
-        "        icmp type { echo-request, echo-reply, destination-unreachable, time-exceeded, parameter-problem } accept"
+        "        # IPv4 ICMP: inbound ping (echo-request) + error/PMTUD types (replies match ct established)" \
+        "        icmp type { echo-request, destination-unreachable, time-exceeded, parameter-problem } accept"
     if test "$RY_REMOTE_PLAY_PORTS" = true # gated: Sunshine/Moonlight + Steam Remote Play inbound stream ports
         printf '%s\n' \
             "        # ry-install: remote-play inbound (RY_REMOTE_PLAY_PORTS=true)" \
@@ -931,21 +952,21 @@ end
 function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP balance_performance + gfx1151 GPU clock-floor)"
     printf '%s\n' \
         "# ry-install: udev performance rules (managed file, do not edit by hand)" \
-        "# NVMe I/O scheduler none (peak IOPS/lowest tail latency on NVMe; deliberate divergence from CachyOS kyber default)" \
+        "# NVMe scheduler none (lowest tail latency; diverges from CachyOS kyber default)" \
         'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
-        "# AMD P-State EPP balance_performance (perf-leaning hint to CPPC firmware; named profile, not raw 0x0)" \
+        "# AMD P-State EPP balance_performance (perf-leaning CPPC hint)" \
         'ACTION=="add|change", SUBSYSTEM=="cpu", KERNEL=="cpu[0-9]*", ATTR{cpufreq/energy_performance_preference}="balance_performance"' \
         "# GPU performance level (gfx1151 clock-floor; optional)" \
         'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", DEVTYPE=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
 end
 function _content__etc_modprobe.d_60-ry-mt7925e.conf --description "Generate content for /etc/modprobe.d/60-ry-mt7925e.conf (disable PCIe ASPM on MT7925; symptomatic reserve fix)"
     printf '%s\n' \
-        "# 60-ry-mt7925e.conf - disable PCIe ASPM on MT7925 (coredump/BT-reconnect/assoc-fail mitigation; symptomatic, drop if upstream resolves)" \
+        "# disable PCIe ASPM on MT7925 (coredump/BT-reconnect/assoc mitigation; drop when upstream fixes)" \
         "options mt7925e disable_aspm=1"
 end
 # ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
-    printf '%s\n' "# Environment variables for systemd user services and graphical sessions — loaded by systemd --user (KDE Plasma, Flatpak, D-Bus activated apps)"
+    printf '%s\n' "# Environment for systemd --user services and graphical sessions (Plasma, Flatpak, D-Bus apps)"
     set -l _printed 0; set -g _RY_ENVD_BAD_ENTRIES
     for var in $ENV_VARS
         if not string match -qr '^[A-Za-z_][A-Za-z0-9_]*=' -- "$var"; set -ga _RY_ENVD_BAD_ENTRIES "$var"; functions -q _log; and _log "ENVD_SKIP_MALFORMED: '$var' (require KEY=value, KEY charset [A-Za-z_][A-Za-z0-9_]*)"; continue; end
@@ -1031,9 +1052,10 @@ end
 function _tmpfile_key --argument-names path --description "Generate filename key from destination path"
     set -l p $path
     set -l _hlen (string length -- "$HOME") # literal HOME-prefix match
+    set -l _pfx (string sub -l (math $_hlen + 1) -- "$p" | string collect)
     if test "$p" = "$HOME"
         set p HOME
-    else if test "$(string sub -l (math $_hlen + 1) -- "$p")" = "$HOME/"
+    else if test "$_pfx" = "$HOME/"
         set p "HOME"(string sub -s (math $_hlen + 1) -- "$p")
     end
     string replace -a / _ -- "$p"
@@ -1402,7 +1424,7 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     test -s "$tmpfile"; or return 0
     set -l _total (command wc -l <"$tmpfile" 2>/dev/null | string trim --); set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
     test -n "$_last_byte"; and string match -qr '^\d+$' -- "$_total"; and set _total (math $_total + 1)
-    set -l _captured; set -l _tail_cap (math "min(100, floor($cap / 2))"); set -l _head_cap (math "max(1, $cap - $_tail_cap)"); set -l _need_tail false # tail derived from cap: head+tail<=cap, elided>=0 for any cap>=1
+    set -l _captured; set -l _tail_cap (math "min(100, floor($cap / 2))"); set -l _head_cap (math "max(1, $cap - $_tail_cap)"); set -l _need_tail false # head+tail<=cap, elided>=0 for cap>=1
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and set _need_tail true
     set -l _head_n $cap; test "$_need_tail" = true; and set _head_n $_head_cap
     for _l in (command head -n $_head_n -- "$tmpfile"); test (string length -- "$_l") -gt 2000; and set _l (string sub -l 2000 -- "$_l"); set -a _captured "$_l"; end # 2000-char/line cap for JSONL
@@ -1414,7 +1436,7 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and _log "$label_tag""_TRUNCATED: total_lines=$_total head_cap=$_head_cap tail_cap=$_tail_cap"
     if test "$_need_tail" = true
         set -l _ovf "$LOG_DIR/run-overflow"
-        if not test -d "$_ovf"; command mkdir -p -m 700 -- "$_ovf" 2>/dev/null; end # retained under LOG_DIR (0700) so the logged path stays valid post-run
+        if not test -d "$_ovf"; command mkdir -p -m 700 -- "$_ovf" 2>/dev/null; end # retained under LOG_DIR so logged path stays valid
         set -l _dest (command mktemp --suffix=.log -p "$_ovf" "$label_tag-$TIMESTAMP-XXXXXX" 2>/dev/null)
         if test -n "$_dest"; and command cp -- "$tmpfile" "$_dest" 2>/dev/null
             set -l _sha (command sha256sum -- "$_dest" 2>/dev/null | string match -rg -- '^(\S+)')
@@ -1447,7 +1469,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
         set -l _skip_next false
         for _ec_arg in $argv[2..-1]
             if test "$_skip_next" = true; set _skip_next false; continue; end
-            if contains -- "$_ec_arg" -u -g -p -C -D -R -T -U --user --group --prompt --close-from --chdir --chroot --command-timeout --other-user --host; set _skip_next true; continue; end # value-taking sudo flags (short + separated long forms): skip flag + value
+            if contains -- "$_ec_arg" -u -g -p -C -D -R -T -U --user --group --prompt --close-from --chdir --chroot --command-timeout --other-user --host; set _skip_next true; continue; end # value-taking sudo flags: skip flag + value
             string match -q -- '-*' "$_ec_arg"; and continue
             test "$_ec_arg" = env; and continue
             string match -qr -- '^[A-Za-z_][A-Za-z0-9_]*=' "$_ec_arg"; and continue
@@ -2066,7 +2088,7 @@ function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --descript
 end
 # ── ATOMIC FILE INSTALL: BACKUP + POST-WRITE VERIFY/RESTORE + PUBLIC ENTRY ──
 function _awf_is_backup_target --argument-names dst --description "True if dst is in _RY_BACKUP_TARGETS (automatic .ry.bak set)"; contains -- "$dst" $_RY_BACKUP_TARGETS; end
-function _awf_make_backup --argument-names dst use_sudo --description "Create <dst>.ry.bak before overwrite (loader.conf/mkinitcpio.conf/fstab)"
+function _awf_make_backup --argument-names dst use_sudo --description "Create <dst>.ry.bak before overwrite (auto for _RY_BACKUP_TARGETS; fstab via direct call)"
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"
     set -l _sp; test "$use_sudo" = true; and set _sp sudo -n
     if test "$use_sudo" = true
@@ -2571,7 +2593,8 @@ function _svc_chk_expected --description "Check EXPECTED_SERVICES units"
                     _log "CHECK_NFT_UNPROBEABLE: nft(8) absent — live ruleset unverifiable, treating as drift (fail-closed)"
                     set -g _RY_CHECK_DRIFT 1
                 else
-                    string match -q -- '*policy drop*' "$(_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)"; or set -g _RY_CHECK_DRIFT 1
+                    set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect)
+                    string match -q -- '*policy drop*' "$_in_chain"; or set -g _RY_CHECK_DRIFT 1
                 end
             else
                 test "$active" = active; or set -g _RY_CHECK_DRIFT 1 # RemainAfterExit oneshots read active
@@ -2729,7 +2752,7 @@ function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (h
     end
     test (count $_pairs) -eq 0; and return 0 # no amdgpu.* module params in KERNEL_PARAMS
     for pair in $_pairs
-        set -l _p (string split ':' -- "$pair"); set -l pname $_p[1]; set -l expected $_p[2]; set -l ppath /sys/module/amdgpu/parameters/$pname
+        set -l _p (string split -m1 ':' -- "$pair"); set -l pname $_p[1]; set -l expected $_p[2]; set -l ppath /sys/module/amdgpu/parameters/$pname
         test -f "$ppath"; or continue
         set -l sysfs_val (string trim -- (command cat -- "$ppath" 2>/dev/null)); set -l sysfs_val_dec "$sysfs_val"; set -l expected_dec "$expected"
         string match -qr '^0x[0-9a-fA-F]+$' -- "$sysfs_val"; and set sysfs_val_dec (printf '%d' "$sysfs_val" 2>/dev/null; or echo "$sysfs_val") # normalize to decimal (amdgpu sysfs hex or decimal)
@@ -3689,7 +3712,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
             end
             continue
         end
-        if not string match -qr '(^|,)noatime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)lazytime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"; or string match -qr '(^|,)(defaults|relatime|atime|strictatime)(,|$)' -- "$opts_field" # trailing alternation: tokens _vre_fstab rejects must trigger a rewrite
+        if not string match -qr '(^|,)noatime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)lazytime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"; or string match -qr '(^|,)(defaults|relatime|atime|strictatime)(,|$)' -- "$opts_field" # tokens _vre_fstab rejects must trigger a rewrite
             set -g _RY_FSTAB_NEEDS_CHANGE true
             set -l _existing_commit (string match -rg -- '(?:^|,)commit=([0-9]+)(?:,|$)' "$opts_field")
             test -n "$_existing_commit"; and test "$_existing_commit" != 10; and set -ga _RY_FSTAB_COMMIT_OVERRIDES "$_existing_commit"
@@ -3947,7 +3970,8 @@ end
 function _csm_nft_live --description "rc 0 iff live inet/filter/input chain has policy drop (oneshot reads inactive after clean load)"
     command -q nft; or return 1
     sudo -n true 2>/dev/null; or return 1
-    string match -q -- '*policy drop*' "$(_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)"
+    set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect)
+    string match -q -- '*policy drop*' "$_in_chain"
 end
 function _csm_enable_nftables_first --description "Activate nftables before the ufw flush; rc 0 iff default-deny ruleset confirmed live"
     contains -- ufw.service $MASK; or return 0
@@ -4838,7 +4862,7 @@ function _post_bluetooth --argument-names target --description "Post-hook: resta
     end
     return 0
 end
-function _post_udev --argument-names target --description "Post-hook: reload udev rules + retrigger block devices after /etc/udev/rules.d/* change"
+function _post_udev --argument-names target --description "Post-hook: reload udev rules + retrigger block/cpu devices after /etc/udev/rules.d/* change"
     _echo
     if not command -q udevadm
         _warn "udevadm(8) not found — I/O scheduler rule applies at next boot"
@@ -4856,10 +4880,10 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
     end
     if not _run sudo -n udevadm control --reload-rules
         _warn "udevadm control --reload-rules failed — rule applies at next boot (non-fatal; file deployed)"
-        _info "  Retry: sudo udevadm control --reload-rules; and sudo udevadm trigger --subsystem-match=block --action=change"
+        _info "  Retry: sudo udevadm control --reload-rules; and sudo udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change"
         return 0
     end
-    _run sudo -n udevadm trigger --subsystem-match=block --action=change; or _warn "udevadm trigger failed — scheduler applies at next boot or device hotplug"
+    _run sudo -n udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change; or _warn "udevadm trigger failed — scheduler/EPP apply at next boot or device event" # drm rule is ACTION==add: applies at boot by design
     return 0
 end
 function _post_modprobe --argument-names target --description "Post-hook: notify reboot needed for modprobe.d option change (load-time; cannot live-apply to an already-loaded module)"

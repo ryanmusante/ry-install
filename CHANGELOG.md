@@ -4,39 +4,49 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: subsystem: imperative summary (one line, 72 cols).
 
+7.87.0 (2026-07-01)
+-------------------
+  cmdline: add ipv6.disable=1 (IPv6 off system-wide)
+  nftables: drop ICMPv6/NDP accepts; ruleset is IPv4-only
+  nftables: accept inbound IPv4 ping (echo-request)
+  verify: assert the ping accept in file and live ruleset
+  guard: refuse stdin execution (fish 3.7 reports
+         'Standard input', never '-')
+  args: root --check beside --verify/--install-file exits 2
+        (usage parity with non-root) instead of silent 3
+  fstab: --verify flags 'defaults' on ext4 rows as a pending
+         rewrite, matching the installer trigger set
+  run: skip separated long-form sudo value flags when
+       resolving the timeout-bypass command
+  log: retain run-overflow spill files under LOG_DIR so the
+       logged spill path stays valid after the run
+  README: sync IPv4-only firewall notes; trim safety warning
+
 7.86.0 (2026-07-01)
 -------------------
-  install-file: resolve $BOOT before the sdboot vfat gate so the
-          non-vfat /boot refusal holds on the single-file boot
-          cascade (matches the full-install phase order; the gate
-          read an unset fallback flag as "not a fallback")
+  install-file: resolve $BOOT before the sdboot vfat gate
+          (single-file boot cascade matches full-install order)
   nftables: require hop-limit 255 on inbound ICMPv6 ND types
-          (RFC 4861 — link-local ND is never forwarded); PMTUD
-          and echo-request types stay unrestricted
-  args: resolve glued short flags first-of -h/-v in the given
-          order (-vh now prints the version; help no longer
-          always wins)
-  help: note that --check compares the live /proc/cmdline, so a
-          fresh install reads drift (10) until reboot
-  README: sync pinned version references; document the glued
-          short-flag order and the --check drift-until-reboot
-          semantics
+  args: glued short flags resolve first-of -h/-v in order
+  help: note --check reads live /proc/cmdline (drift 10
+        until reboot after a fresh install)
+  README: sync version pins; document glued-flag order and
+          --check drift semantics
 
 7.85.3 (2026-07-01)
 -------------------
   check: honor the silent-probe contract when invoked as root
-         (exit 3 with no output; other modes keep the loud
-         root-refusal usage error, exit 2)
-  README: normalize every table to one 100-column width; move
-          package lists and uninstall commands into code blocks
+         (exit 3, no output; other modes keep exit 2)
+  README: normalize tables to 100 columns; move package lists
+          and uninstall commands into code blocks
 
 7.85.2 (2026-07-01)
 -------------------
   signal: propagate 128+N to the parent on INT/TERM/HUP/ABRT
-          (fish 3.x swallows handler `exit`; re-raise via exec sh)
+          (fish swallows handler exit; re-raise via exec sh)
   log: preserve embedded newlines in the JSONL data field
   backup: skip .ry.bak when the symlink probe is inconclusive
-          (sudo lapse) instead of copying through a possible symlink
+          (sudo lapse) rather than copy through a symlink
   comments: trim lock, backup, and sysctl rationale notes
 
 7.85.1 (2026-07-01)

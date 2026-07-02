@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.86.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.87.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.86.0
+cd ry-install && git checkout v7.87.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -70,7 +70,7 @@ Results print to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; 
 ## Safety & Reliability
 
 > [!WARNING]
-> Masks `ufw` and ships an nftables **default-deny-inbound** ruleset (established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 accepted — ND types only at hop-limit 255 per RFC 4861, PMTUD/echo unrestricted — all else dropped; `forward` drop, `output` accept). `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating; EFI-resident loaders like Windows Boot Manager are untouched.
+> Masks `ufw` and ships an IPv4-only nftables **default-deny-inbound** ruleset (loopback, established/related, and inbound ping accepted; all else dropped; `forward` drop, `output` accept). IPv6 is disabled system-wide via `ipv6.disable=1` on the kernel cmdline. `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries before regenerating; EFI-resident loaders such as Windows Boot Manager are untouched.
 
 Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play inbound accepts.
 
@@ -130,7 +130,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot loader settings (default entry, timeout, console-mode) |
-| `/etc/kernel/cmdline` | kernel command line: `root=UUID` prefix + the 16 `KERNEL_PARAMS` |
+| `/etc/kernel/cmdline` | kernel command line: `root=UUID` prefix + the 17 `KERNEL_PARAMS` |
 | `/etc/sdboot-manage.conf` | boot-entry generation (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES` / `HOOKS` / `zstd` compression |
 
@@ -154,7 +154,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 | File | Purpose |
 |---|---|
 | `/etc/bluetooth/main.conf` | BlueZ adapter auto-power-on + paired-sink reconnect |
-| `/etc/nftables.conf` | default-deny-inbound firewall ruleset |
+| `/etc/nftables.conf` | IPv4-only default-deny-inbound firewall ruleset (inbound ping allowed) |
 
 ### Power, performance & modules
 
@@ -182,6 +182,7 @@ Rationale for the non-obvious choices; several note the override to reverse them
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 reached RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE` → `1`. |
 | NTSYNC | `/dev/ntsync` asserted in preflight + verify (mainline ≥ 6.14). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
 | MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Remove if a kernel bump resolves it. |
+| IPv6 | Disabled system-wide (`ipv6.disable=1` in the cmdline); the nftables ruleset is IPv4-only. Drop the token, restore IPv6 firewall rules, and re-run to return to dual-stack. |
 | AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline; AMD-Vi fully disabled (no PCI passthrough). `--verify` confirms 0 entries under `/sys/kernel/iommu_groups/`. **VFIO/passthrough or SR-IOV users must use `amd_iommu=on iommu=pt` instead**, then re-run. |
 | UMIP (`clearcpuid=514`) | Ships in the cmdline; UMIP disabled system-wide (`SGDT`/`SIDT`/`SMSW` untrapped) and the kernel is tainted. Drop the token to restore UMIP if no `umip_printk` stutter is seen. |
 

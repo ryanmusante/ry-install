@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.86.0 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
-if test "$(status filename)" = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
+# ry-install v7.87.0 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+if contains -- "$(status filename)" - 'Standard input'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (fish 3.7 reports 'Standard input' for stdin, older docs say '-')
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.86.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.87.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -104,14 +104,16 @@ end
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
 set -g QUIET true; set -g MODE bootstrap # pinned pre-argparse for signal footers
 if not string match -qr '^\d+$' -- "$_MY_UID"; echo "[ERR] id -u returned non-numeric value: '$_MY_UID' — cannot determine user identity" >&2; _ry_exit $EXIT_PREFLIGHT; end
-set -l _ry_root_silent_check false; set -l _rsc_skip false # --check silent-probe contract holds even on the root-refusal path
+set -l _ry_root_silent_check false; set -l _rsc_skip false; set -l _rsc_other_mode false # --check silent-probe contract holds even on the root-refusal path
 for _rsc_a in $argv
     if test "$_rsc_skip" = true; set _rsc_skip false; continue; end # --install-file value: a literal --check path is not the flag
     switch "$_rsc_a"
         case --
             break
         case --install-file
-            set _rsc_skip true
+            set _rsc_skip true; set _rsc_other_mode true
+        case '--install-file=*' --verify
+            set _rsc_other_mode true
         case --check
             set _ry_root_silent_check true
     end
@@ -119,11 +121,13 @@ end
 set -q _rsc_a; and set --erase _rsc_a
 set --erase _rsc_skip
 if test "$_MY_UID" -eq 0
-    if test "$_ry_root_silent_check" = true; _ry_exit $EXIT_PREFLIGHT; end # no output; 3 = cannot probe
+    # --check alongside --verify/--install-file is an argparse --exclusive usage error: keep rc-2 parity with non-root instead of the silent probe's 3
+    if test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; _ry_exit $EXIT_PREFLIGHT; end # no output; 3 = cannot probe
+    # root refusal precedes argparse by design: unknown-flag/positional diagnostics are superseded (same rc 2 either way)
     echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2
     _ry_exit $EXIT_USAGE
 end
-set --erase _ry_root_silent_check
+set --erase _ry_root_silent_check _rsc_other_mode
 set -g _RY_NO_COLOR false
 set -q NO_COLOR; and test -n "$NO_COLOR"; and set -g _RY_NO_COLOR true # present and non-empty
 test "$TERM" = dumb; and set -g _RY_NO_COLOR true
@@ -605,7 +609,7 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n clearcpuid=514 fsck.mode=force fsck.repair=yes nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n clearcpuid=514 fsck.mode=force fsck.repair=yes ipv6.disable=1 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
@@ -719,7 +723,7 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
     set -l _expect \
-        KERNEL_PARAMS:16 \
+        KERNEL_PARAMS:17 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
@@ -887,7 +891,7 @@ end
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset"
     printf '%s\n' \
         "#!/usr/bin/nft -f" \
-        "# ry-install: minimal default-deny-inbound (ufw masked). No inbound ports open by default — add them below." \
+        "# ry-install: minimal default-deny-inbound, IPv4-only (ufw masked; IPv6 disabled via ipv6.disable=1). No inbound ports open by default — add them below." \
         "flush ruleset" \
         "table inet filter {" \
         "    chain input {" \
@@ -895,11 +899,8 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        iif \"lo\" accept" \
         "        ct state established,related accept" \
         "        ct state invalid drop" \
-        "        # NDP restricted to hop-limit 255 (RFC 4861: link-local ND is never forwarded; anything else is spoofed)" \
-        "        ip6 nexthdr ipv6-icmp icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert, nd-router-solicit } ip6 hoplimit 255 accept" \
-        "        ip6 nexthdr ipv6-icmp icmpv6 type { echo-request, packet-too-big, time-exceeded, parameter-problem } accept" \
-        "        # IPv4: inbound echo-request (ping) intentionally NOT accepted; IPv6 echo-request is, since ICMPv6 is load-bearing for NDP/PMTUD" \
-        "        icmp type { echo-reply, destination-unreachable, time-exceeded, parameter-problem } accept"
+        "        # IPv4 ICMP: inbound ping (echo-request) enabled + error/PMTUD types" \
+        "        icmp type { echo-request, echo-reply, destination-unreachable, time-exceeded, parameter-problem } accept"
     if test "$RY_REMOTE_PLAY_PORTS" = true # gated: Sunshine/Moonlight + Steam Remote Play inbound stream ports
         printf '%s\n' \
             "        # ry-install: remote-play inbound (RY_REMOTE_PLAY_PORTS=true)" \
@@ -1413,11 +1414,11 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and _log "$label_tag""_TRUNCATED: total_lines=$_total head_cap=$_head_cap tail_cap=$_tail_cap"
     if test "$_need_tail" = true
         set -l _ovf "$LOG_DIR/run-overflow"
-        if not test -d "$_ovf"; command mkdir -p -m 700 -- "$_ovf" 2>/dev/null; and _track_tmpfile "$_ovf"; end # ephemeral: tracked, swept at teardown
+        if not test -d "$_ovf"; command mkdir -p -m 700 -- "$_ovf" 2>/dev/null; end # retained under LOG_DIR (0700) so the logged path stays valid post-run
         set -l _dest (command mktemp --suffix=.log -p "$_ovf" "$label_tag-$TIMESTAMP-XXXXXX" 2>/dev/null)
         if test -n "$_dest"; and command cp -- "$tmpfile" "$_dest" 2>/dev/null
             set -l _sha (command sha256sum -- "$_dest" 2>/dev/null | string match -rg -- '^(\S+)')
-            _log "$label_tag""_FULL_SPILL: path=$_dest sha256=$_sha lines=$_total ephemeral=true (swept at teardown)"
+            _log "$label_tag""_FULL_SPILL: path=$_dest sha256=$_sha lines=$_total retained=true"
         else
             _log "$label_tag""_FULL_SPILL_FAIL: could not write spill file under $_ovf"
         end
@@ -1446,7 +1447,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
         set -l _skip_next false
         for _ec_arg in $argv[2..-1]
             if test "$_skip_next" = true; set _skip_next false; continue; end
-            if contains -- "$_ec_arg" -u -g -p -C -D -R -T -U; set _skip_next true; continue; end # value-taking sudo flags: skip flag + value
+            if contains -- "$_ec_arg" -u -g -p -C -D -R -T -U --user --group --prompt --close-from --chdir --chroot --command-timeout --other-user --host; set _skip_next true; continue; end # value-taking sudo flags (short + separated long forms): skip flag + value
             string match -q -- '-*' "$_ec_arg"; and continue
             test "$_ec_arg" = env; and continue
             string match -qr -- '^[A-Za-z_][A-Za-z0-9_]*=' "$_ec_arg"; and continue
@@ -2335,10 +2336,10 @@ function _vss_udev --description "_verify_static_system sub: combined udev perf 
     _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"' "GPU dpm=$GPU_DPM_LEVEL"
     _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'KERNEL=="card[0-9]*"' "GPU rule card-scoped"
 end
-function _vss_nft --description "_verify_static_system sub: nftables default-deny-inbound + ICMPv6 NDP/PMTUD accept (IPv6 break-glass)"
+function _vss_nft --description "_verify_static_system sub: nftables default-deny-inbound + IPv4 ping accept (IPv4-only ruleset)"
     _chk_file /etc/nftables.conf; or return 0
     _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
-    _chk_grep /etc/nftables.conf "nd-neighbor-solicit" "nftables ICMPv6 NDP/PMTUD accept" # regression guard: dropping breaks IPv6 post-NDP-expiry
+    _chk_grep /etc/nftables.conf "echo-request" "nftables IPv4 ping accept" # regression guard: inbound ping must stay enabled
 end
 function _vss_modprobe --description "_verify_static_system sub: mt7925e modprobe drop-in (ASPM disable)"; _chk_file /etc/modprobe.d/60-ry-mt7925e.conf; and _chk_grep /etc/modprobe.d/60-ry-mt7925e.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'; end
 
@@ -2883,12 +2884,12 @@ function _vrsv_chk_active_enabled --argument-names label rec_str --description "
         _fail "  $label: $rec[2] (expected: active)"
     end
 end
-function _vrsv_nft_assert_ndp --description "_vrsv_chk_nftables sub: assert live input chain accepts ICMPv6 NDP (warn-only; missing breaks IPv6 after NDP cache expiry)"
+function _vrsv_nft_assert_ping --description "_vrsv_chk_nftables sub: assert live input chain accepts inbound IPv4 ping (warn-only)"
     set -l _chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)
-    if string match -q -- '*nd-neighbor-solicit*' "$_chain"
-        _ok "  nftables: live ICMPv6 NDP/PMTUD accept present"
+    if string match -q -- '*echo-request*' "$_chain"
+        _ok "  nftables: live IPv4 ping (echo-request) accept present"
     else
-        _warn "  nftables: live input chain has no ICMPv6 NDP accept — IPv6 may break after NDP cache expiry"
+        _warn "  nftables: live input chain has no echo-request accept — inbound ping blocked until reload"
     end
 end
 function _vrsv_chk_nftables --argument-names label rec_str --description "nftables.service: oneshot reads inactive after clean load — judge by live ruleset"
@@ -2898,7 +2899,7 @@ function _vrsv_chk_nftables --argument-names label rec_str --description "nftabl
     command -q nft; and sudo -n true 2>/dev/null; and set _nft_probe_ok true
     if test "$rec[2]" = active
         _vrsv_chk_active_enabled $label "$rec_str"
-        test "$_nft_probe_ok" = true; and _vrsv_nft_assert_ndp # NDP assert independent of unit-state path
+        test "$_nft_probe_ok" = true; and _vrsv_nft_assert_ping # ping assert independent of unit-state path
         return 0
     end
     if not command -q nft
@@ -2919,7 +2920,7 @@ function _vrsv_chk_nftables --argument-names label rec_str --description "nftabl
     else
         _warn "  $label: ruleset live but unit $rec[3] (will not persist across boots)"
     end
-    _vrsv_nft_assert_ndp
+    _vrsv_nft_assert_ping
     return 0
 end
 function _vrsv_chk_resolved --argument-names rec_str --description "Check systemd-resolved active state, only when conf.d drop-in is deployed"
@@ -3157,9 +3158,9 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
             set -l _re (string escape --style=regex -- "$_tok")
             if not string match -qr '(^|,)'$_re'(,|$)' -- "$_opts"; _fail "  ext4 entry missing $_tok: $_fl"; set _fstab_ok false; end
         end
-        for _conflict in relatime atime strictatime # contradict noatime (kernel honours last)
+        for _conflict in defaults relatime atime strictatime # tokens the installer strips — presence means a rewrite is pending
             set -l _cre (string escape --style=regex -- "$_conflict")
-            if string match -qr '(^|,)'$_cre'(,|$)' -- "$_opts"; _fail "  ext4 entry has $_conflict alongside noatime (contradictory): $_fl"; set _fstab_ok false; end
+            if string match -qr '(^|,)'$_cre'(,|$)' -- "$_opts"; _fail "  ext4 entry has $_conflict (installer removes it — rewrite pending): $_fl"; set _fstab_ok false; end
         end
     end
     test "$_fstab_ok" = true; and _ok "  ext4 entries: noatime,lazytime,commit=10 present"

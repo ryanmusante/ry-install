@@ -4,6 +4,11 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.87.5 (2026-07-02)
+-------------------
+  - README: Uninstall command lists -> brief actions, table refs
+  - docs: sync version pins to 7.87.5
+
 7.87.4 (2026-07-02)
 -------------------
   - README: trim Usage, preflight, env-override, Contributing prose

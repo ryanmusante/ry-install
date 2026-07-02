@@ -4,6 +4,14 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: subsystem: imperative summary (one line, 72 cols).
 
+7.85.3 (2026-07-01)
+-------------------
+  check: honor the silent-probe contract when invoked as root
+         (exit 3 with no output; other modes keep the loud
+         root-refusal usage error, exit 2)
+  README: normalize every table to one 100-column width; move
+          package lists and uninstall commands into code blocks
+
 7.85.2 (2026-07-01)
 -------------------
   signal: propagate 128+N to the parent on INT/TERM/HUP/ABRT

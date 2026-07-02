@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.85.2 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.85.3 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test "$(status filename)" = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.85.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.85.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -100,7 +100,26 @@ end
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
 set -g QUIET true; set -g MODE bootstrap # pinned pre-argparse for signal footers
 if not string match -qr '^\d+$' -- "$_MY_UID"; echo "[ERR] id -u returned non-numeric value: '$_MY_UID' — cannot determine user identity" >&2; _ry_exit $EXIT_PREFLIGHT; end
-if test "$_MY_UID" -eq 0; echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2; _ry_exit $EXIT_USAGE; end
+set -l _ry_root_silent_check false; set -l _rsc_skip false # --check silent-probe contract holds even on the root-refusal path
+for _rsc_a in $argv
+    if test "$_rsc_skip" = true; set _rsc_skip false; continue; end # --install-file value: a literal --check path is not the flag
+    switch "$_rsc_a"
+        case --
+            break
+        case --install-file
+            set _rsc_skip true
+        case --check
+            set _ry_root_silent_check true
+    end
+end
+set -q _rsc_a; and set --erase _rsc_a
+set --erase _rsc_skip
+if test "$_MY_UID" -eq 0
+    if test "$_ry_root_silent_check" = true; _ry_exit $EXIT_PREFLIGHT; end # no output; 3 = cannot probe
+    echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2
+    _ry_exit $EXIT_USAGE
+end
+set --erase _ry_root_silent_check
 set -g _RY_NO_COLOR false
 set -q NO_COLOR; and test -n "$NO_COLOR"; and set -g _RY_NO_COLOR true # present and non-empty
 test "$TERM" = dumb; and set -g _RY_NO_COLOR true

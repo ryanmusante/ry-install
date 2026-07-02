@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.85.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.86.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.85.1
+cd ry-install && git checkout v7.86.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -45,10 +45,10 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 | *(no args)* | Full unattended install (silent by default — a phase matrix prints at the end) |
 | `-V, --verbose` | Stream per-command install output (ignored under `--check`) |
 | `--verify` | Config files byte-for-byte, then live system state |
-| `--check` | Silent idempotency probe (`0` clean · `3` preflight · `10` drift) |
+| `--check` | Silent idempotency probe (`0` clean · `3` preflight · `10` drift). Compares the live `/proc/cmdline`, so a fresh install reads `10` until reboot |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--` | End of options (no positional args) |
-| `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
+| `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard; glued short flags (`-vh`) resolve first-of `h`/`v` in the given order |
 
 `--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). All modes first run the runtime-init gates (hardware, kernel floor, key/count validation) — exit 3 on a mismatched or sub-floor host. `--check` is a silent, scriptable exit-code probe; `--verify` prints `[OK]`/`[WARN]`/`[FAIL]` lines ending in a combined tally — warnings alone do not fail.
 
@@ -70,7 +70,7 @@ Results print to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; 
 ## Safety & Reliability
 
 > [!WARNING]
-> Masks `ufw` and ships an nftables **default-deny-inbound** ruleset (established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 NDP/PMTUD accepted, all else dropped; `forward` drop, `output` accept). `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating; EFI-resident loaders like Windows Boot Manager are untouched.
+> Masks `ufw` and ships an nftables **default-deny-inbound** ruleset (established/related + loopback accepted, inbound IPv4 ping dropped, essential ICMPv6 accepted — ND types only at hop-limit 255 per RFC 4861, PMTUD/echo unrestricted — all else dropped; `forward` drop, `output` accept). `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries (including other-OS BLS) before regenerating; EFI-resident loaders like Windows Boot Manager are untouched.
 
 Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play inbound accepts.
 

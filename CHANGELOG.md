@@ -4,6 +4,24 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: subsystem: imperative summary (one line, 72 cols).
 
+7.86.0 (2026-07-01)
+-------------------
+  install-file: resolve $BOOT before the sdboot vfat gate so the
+          non-vfat /boot refusal holds on the single-file boot
+          cascade (matches the full-install phase order; the gate
+          read an unset fallback flag as "not a fallback")
+  nftables: require hop-limit 255 on inbound ICMPv6 ND types
+          (RFC 4861 — link-local ND is never forwarded); PMTUD
+          and echo-request types stay unrestricted
+  args: resolve glued short flags first-of -h/-v in the given
+          order (-vh now prints the version; help no longer
+          always wins)
+  help: note that --check compares the live /proc/cmdline, so a
+          fresh install reads drift (10) until reboot
+  README: sync pinned version references; document the glued
+          short-flag order and the --check drift-until-reboot
+          semantics
+
 7.85.3 (2026-07-01)
 -------------------
   check: honor the silent-probe contract when invoked as root

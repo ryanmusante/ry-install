@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.85.3 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.86.0 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test "$(status filename)" = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.85.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.86.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -25,6 +25,7 @@ function _ry_show_help --description "Display usage information and available su
         "  -V, --verbose          Show install output (check is always silent)" \
         "  --verify               Check config files + live system state" \
         "  --check                Silent idempotency probe (0=clean 3=preflight 10=drift)" \
+        "                         (compares the live /proc/cmdline — a fresh install reads 10 until reboot)" \
         "  --install-file <path>  Re-deploy a single managed file" \
         "  --                     End of options (no positional arguments accepted)" \
         "  -h, --help             Show this help (honored before all checks)" \
@@ -57,13 +58,16 @@ for _early_arg in $argv
             echo "v$VERSION"
             exit $EXIT_OK
         case '-*'
-            if string match -qr -- '^-[hvV]+$' "$_early_arg" # glued h/v/V only
-                string match -q -- '*h*' "$_early_arg"; and begin; _ry_show_help; exit $EXIT_OK; end
-                string match -q -- '*v*' "$_early_arg"; and begin; echo "v$VERSION"; exit $EXIT_OK; end
+            if string match -qr -- '^-[hvV]+$' "$_early_arg" # glued h/v/V only; first of h/v in given order wins (getopt semantics)
+                for _early_ch in (string split '' -- (string sub -s 2 -- "$_early_arg"))
+                    test "$_early_ch" = h; and begin; _ry_show_help; exit $EXIT_OK; end
+                    test "$_early_ch" = v; and begin; echo "v$VERSION"; exit $EXIT_OK; end
+                end
             end
     end
 end
 set -q _early_arg; and set --erase _early_arg
+set -q _early_ch; and set --erase _early_ch
 set --erase _skip_if_val
 
 # ── PATH HARDENING (before first external command: id -u) ──
@@ -891,7 +895,9 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        iif \"lo\" accept" \
         "        ct state established,related accept" \
         "        ct state invalid drop" \
-        "        ip6 nexthdr ipv6-icmp icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert, nd-router-solicit, echo-request, packet-too-big, time-exceeded, parameter-problem } accept" \
+        "        # NDP restricted to hop-limit 255 (RFC 4861: link-local ND is never forwarded; anything else is spoofed)" \
+        "        ip6 nexthdr ipv6-icmp icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert, nd-router-solicit } ip6 hoplimit 255 accept" \
+        "        ip6 nexthdr ipv6-icmp icmpv6 type { echo-request, packet-too-big, time-exceeded, parameter-problem } accept" \
         "        # IPv4: inbound echo-request (ping) intentionally NOT accepted; IPv6 echo-request is, since ICMPv6 is load-bearing for NDP/PMTUD" \
         "        icmp type { echo-reply, destination-unreachable, time-exceeded, parameter-problem } accept"
     if test "$RY_REMOTE_PLAY_PORTS" = true # gated: Sunshine/Moonlight + Steam Remote Play inbound stream ports
@@ -4700,15 +4706,13 @@ function _pb_rebuild_cascade --argument-names target skip_mki --description "_po
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     end
+    set -l _boot (_resolve_boot_path) # populate ESP-fallback state BEFORE the vfat gate (mirrors _install_rebuild_boot order)
     if not _sdboot_fallback_vfat_ok; _log "POST_BOOT_SDBOOT_REFUSED: target=$target"; return $EXIT_BOOT_CRIT; end
-    if test "$SDBOOT_REMOVE_EXISTING" = yes
-        set -l _boot (_resolve_boot_path)
-        if test -z "$_boot"
-            _err "Cannot resolve \$BOOT path — refusing boot-wipe gate"
-            _err "CRITICAL: bootctl/findmnt failed AND /boot missing — aborting"
-            _log "POST_BOOT_BOOT_RESOLVE_FAIL: target=$target"
-            return $EXIT_BOOT_CRIT
-        end
+    if test "$SDBOOT_REMOVE_EXISTING" = yes; and test -z "$_boot"
+        _err "Cannot resolve \$BOOT path — refusing boot-wipe gate"
+        _err "CRITICAL: bootctl/findmnt failed AND /boot missing — aborting"
+        _log "POST_BOOT_BOOT_RESOLVE_FAIL: target=$target"
+        return $EXIT_BOOT_CRIT
     end
     if not _run sudo -n sdboot-manage gen; _err "sdboot-manage gen failed"; _log "BOOT_REBUILD_FAILED: step='sdboot-manage gen' target=$target"; return $EXIT_BOOT_CRIT; end
     if not _run sudo -n sdboot-manage update; _err "sdboot-manage update failed"; _log "BOOT_REBUILD_FAILED: step='sdboot-manage update' target=$target"; return $EXIT_BOOT_CRIT; end

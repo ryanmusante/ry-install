@@ -4,6 +4,11 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: subsystem: imperative summary (one line, 72 cols).
 
+7.87.3 (2026-07-02)
+-------------------
+  comments: trim four over-length section and rationale lines
+  docs: sync version pins to 7.87.3
+
 7.87.2 (2026-07-02)
 -------------------
   udev: retrigger cpu beside block so the EPP rule live-applies
@@ -67,7 +72,7 @@ Format: subsystem: imperative summary (one line, 72 cols).
   paccache: split -rk2 and -ruk0 into separate runs
   timeout: clamp RY_RUN_TIMEOUT above 9 digits to 2147483647
   lock: refuse reclaim on empty/garbage pidfile; re-verify ownership
-  ntp: add RY_NO_NTP_REMEDIATION=1; record timesyncd enable in matrix
+  ntp: add RY_NO_NTP_REMEDIATION=1; log timesyncd enable
   mkinitcpio: duplicate KEY= lines resolve to last (shell-sourced)
   backup: remove pre-existing symlink at <dst>.ry.bak before cp
   nftables: move the loopback accept first
@@ -121,7 +126,7 @@ Format: subsystem: imperative summary (one line, 72 cols).
   cmdline: fsck force/repair, max_cstate=1, btusb autosuspend=n
   verify: add _vss_known_benign; add RTC writeback at sync paths
   cleanup: remove _ir_validate_repo_tier; count fatals once
-  udev: 60- -> 99-ry-perf.rules; drop page-cluster, vfs_cache_pressure
+  udev: 60->99-ry-perf.rules; drop page-cluster, vfs_cache_pressure
   modprobe: add 60-ry-mt7925e.conf (disable_aspm=1), _vss_modprobe
   hooks: add */modprobe.d/* post-hook and _post_modprobe
   probes: prefix mesa soft-floor with command; guard x86-64-v4
@@ -147,7 +152,7 @@ Format: subsystem: imperative summary (one line, 72 cols).
   mangohud: reorder fps/frametime; adjust HUD fields
   gpu: remove drirc 95-ry-radv-apu.conf (gfx1151 reports uma:1)
   bluetooth: add main.conf; enable service; add _vss_bluetooth
-  network: wpa_supplicant, powersave=2; mask modemmanager; NM logging
+  net: wpa_supplicant, powersave=2, NM log; mask modemmanager
   probes: guard vercmp behind command -q
   guards: destinations 17 -> 15; hooks and file count 20 -> 18
 

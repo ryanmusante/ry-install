@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.87.2 (2026-07-02) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.87.3 (2026-07-02) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.87.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.87.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -590,7 +590,7 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
     _teardown exit $_exit_status
 end
 
-# ── EMBEDDED CONFIG: DESTINATIONS (source of truth; _content_ fns + _RY_POST_HOOKS mirror order) ──
+# ── EMBEDDED CONFIG: DESTINATIONS (_content_ fns + _RY_POST_HOOKS mirror order) ──
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" \
     "/etc/kernel/cmdline" \
@@ -636,7 +636,7 @@ set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to 
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_FSR4_RDNA3_UPGRADE=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
-# sysctl: netdev_budget/_usecs 600/5000 (2.5GbE drain); max_map_count=INT_MAX-5 (esync); swappiness=150 (zram bias)
+# sysctl rationale: netdev 600/5000 (2.5GbE), max_map_count (esync), swappiness=150 (zram)
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
@@ -1963,7 +1963,7 @@ function _grep_mangohud_entry --argument-names dst --description 'Validate ≥1 
     end
     return 0
 end
-# ── CONFIG-FORMAT VALIDATORS: DISPATCH + ORCHESTRATOR (_rvc_dispatch → _ry_validate_configs) ──
+# ── CONFIG-FORMAT VALIDATORS: DISPATCH + ORCHESTRATOR ──
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family"
     set -l _content $argv[2..-1]
     switch "$dst"
@@ -3699,7 +3699,7 @@ function _install_system_files --description "Deploy all embedded config files"
     return 0
 end
 
-# ── INSTALL PHASE 4 (Services slot, fstab sub-step): EXT4 OPTS REWRITE (noatime,lazytime,commit=10) ──
+# ── INSTALL PHASE 4 SUB: FSTAB EXT4 OPTS REWRITE (noatime,lazytime,commit=10) ──
 function _fstab_needs_change --description "Scan ext4 entries for missing noatime/lazytime/commit=10"
     set -g _RY_FSTAB_NEEDS_CHANGE false; set -g _RY_FSTAB_COMMIT_OVERRIDES; set -l _malformed_warned false
     for line in $argv

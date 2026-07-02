@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.87.3-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.87.4-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.87.3
+cd ry-install && git checkout v7.87.4
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -33,7 +33,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP sync and `paccache` only warn. Unsynced clock with no NTP client → `systemd-timesyncd` enabled + RTC writeback (skip with `RY_NO_NTP_REMEDIATION=1`).
+Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP sync and `paccache` only warn. Unsynced clock, no NTP client → `systemd-timesyncd` enabled + RTC writeback (skip: `RY_NO_NTP_REMEDIATION=1`).
 
 ## Usage
 
@@ -48,9 +48,9 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 | `--check` | Silent idempotency probe (`0` clean · `3` preflight · `10` drift). Compares the live `/proc/cmdline`, so a fresh install reads `10` until reboot |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--` | End of options (no positional args) |
-| `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard; glued short flags (`-vh`) resolve first-of `h`/`v` in the given order |
+| `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count validation) — exit 3 on a mismatched or sub-floor host; `--verify` downgrades the hardware and kernel-floor gates to warnings and continues. `--check` is a silent, scriptable exit-code probe; `--verify` prints `[OK]`/`[WARN]`/`[FAIL]` lines ending in a combined tally — warnings alone do not fail.
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count validation) — exit 3 on a mismatched or sub-floor host; `--verify` downgrades the hardware and kernel-floor gates to warnings and prints `[OK]`/`[WARN]`/`[FAIL]` lines with a combined tally — warnings alone do not fail.
 
 ## Install Flow
 
@@ -84,7 +84,7 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 
 **Exit codes** `0` ok · `1` verify-FAIL/install-error · `2` usage · `3` preflight · `4` boot-critical (DO NOT REBOOT) · `5` lock · `10` `--check` drift.
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables, >9-digit values clamp to `2147483647`; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` exempt), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 
 ## Configuration
 
@@ -206,13 +206,13 @@ The fstab backup exists only if fstab was rewritten (skip if stale). If ry-insta
 | Component | Issue | Status |
 |---|---|---|
 | Strix Halo GPU | MES page faults | resolved (MES 0x86; current `linux-firmware` + shipped `mkinitcpio-firmware`) |
-| RTL8127 10GbE | throughput drops under load; suspend/shutdown hang | resolved — in-tree `r8169` (`f24f7b2f3af9`) + suspend/shutdown hang fix (`ae1737e7339b`) land in 6.18, so the ≥ 6.19 floor guarantees them; no DKMS |
+| RTL8127 10GbE | throughput drops under load; suspend/shutdown hang | resolved — in-tree `r8169` + suspend/shutdown hang fixes land in 6.18, so the ≥ 6.19 floor guarantees them; no DKMS |
 | MT7925 | kernel panics, low TX power, random deauth | open — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
 | Strix Halo ACP | no ASoC machine driver | open — pending upstream (HDMI/USB audio unaffected) |
 
 ### Known-benign log lines
 
-Expected on this hardware; none affect operation: `ModemManager1 … could not be found` (probe of masked `modemmanager.service`) · `acp_asoc_acp70 … No matching ASoC machine driver` (HDMI/USB audio fine) · boltd `unknown NHI PCI id` (USB4/TB still enumerate) · `charge thresholds not supported` / `no backlight interface` (no battery/panel) · `Unlikely small volume range` (USB-audio descriptor quirk).
+Expected and harmless on this hardware: `ModemManager1 … could not be found` (probe of masked `modemmanager.service`) · `acp_asoc_acp70 … No matching ASoC machine driver` (HDMI/USB audio fine) · boltd `unknown NHI PCI id` (USB4/TB still enumerate) · `charge thresholds not supported` / `no backlight interface` (no battery/panel) · `Unlikely small volume range` (USB-audio descriptor quirk).
 
 ## Troubleshooting
 
@@ -231,7 +231,7 @@ Expected on this hardware; none affect operation: `ModemManager1 … could not b
 
 ## Contributing
 
-PRs welcome. For config changes: include before/after `--verify` and `--check` output, lint with `fish --no-execute`, keep comments single-line, update [CHANGELOG.md](CHANGELOG.md).
+PRs welcome; for config changes include before/after `--verify`/`--check` output, lint with `fish --no-execute`, keep comments single-line, update [CHANGELOG.md](CHANGELOG.md).
 
 ## Security
 

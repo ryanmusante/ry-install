@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.85.1 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.85.2 (2026-07-01) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if test "$(status filename)" = '-'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed, not sourced (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing (filename='-' or by-path)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.85.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.85.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -351,7 +351,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
             else
                 _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR attempt=$_reclaim_attempt (PID not running, reclaiming)"
             end
-        else # fail-closed: empty/garbage pidfile is not reclaimable (a live peer may be mid-install)
+        else # fail-closed: unreadable pidfile may be a live peer mid-install
             _log "LOCK_PIDFILE_UNREADABLE: '$_stale_pid' not a PID after settle — refusing reclaim (fail-closed)"
             echo "[ERR] Lock pidfile unreadable — refusing reclaim: $LOCK_DIR (no live instance? rm -rf $LOCK_DIR)" >&2
             return 1
@@ -535,7 +535,10 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
             set _sig_exit 130
     end
     _teardown signal $_sig_exit
-    exit $_sig_exit
+    _ry_erase_handlers # fish 3.x swallows handler `exit` status; exec a shell to deliver 128+N to the parent
+    set -l _sig_name (string replace -r '^SIG' '' -- "$_sig_label")
+    string match -qr '^[A-Z]+$' -- "$_sig_name"; and exec /bin/sh -c "kill -$_sig_name \$\$ 2>/dev/null; exit $_sig_exit"
+    exit $_sig_exit # fallback: non-signal label or exec failure
 end
 function _cleanup_pipe --on-signal PIPE --description "Signal handler: mark stderr/stdout broken"
     set -q _RY_OUTPUT_BROKEN; and return 0
@@ -600,7 +603,7 @@ set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to 
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_FSR4_RDNA3_UPGRADE=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
-# tuned sysctl: netdev_budget/_usecs 300/8000→600/5000 (2.5GbE drain); max_map_count=INT_MAX-5 (esync/Proton); swappiness=150 (zram bias, 0-200 since 5.8)
+# sysctl: netdev_budget/_usecs 600/5000 (2.5GbE drain); max_map_count=INT_MAX-5 (esync); swappiness=150 (zram bias)
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
@@ -1124,7 +1127,7 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
         umask $_prev_umask
         if test "$_create_rc" -ne 0; not set -q _RY_LOG_WRITE_FAIL; and set -g _RY_LOG_WRITE_FAIL true; return 0; end
     end
-    set -l _ts (command date '+%Y-%m-%dT%H:%M:%S%z'); set -l raw (string join -- " " $argv); set -l data (_json_str "$raw")
+    set -l _ts (command date '+%Y-%m-%dT%H:%M:%S%z'); set -l raw (string join -- " " $argv | string collect); set -l data (_json_str "$raw") # collect keeps embedded \n for _json_str
     printf '{"ts":"%s","event":"log","data":"%s"}\n' "$_ts" "$data" >>"$LOG_FILE" 2>/dev/null
     set -l _write_rc $status
     test "$_write_rc" -eq 0; and not set -q _RY_LOG_WRITTEN; and set -g _RY_LOG_WRITTEN true
@@ -2046,7 +2049,13 @@ function _awf_make_backup --argument-names dst use_sudo --description "Create <d
         test -f "$dst"; or return 0
     end
     _is_symlink "$_bak" $use_sudo
-    if test "$status" -eq 0 # never cp through a pre-existing symlink at the backup path
+    set -l _bak_sym_rc $status
+    if test "$_bak_sym_rc" -eq 2 # sudo lapse: skip best-effort backup vs cp through possible symlink
+        _warn "  $dst: backup skipped — symlink probe on $_bak inconclusive (sudo cache lapsed)"
+        _log "BACKUP_SKIP_SUDO_LAPSE: $_bak"
+        return 0
+    end
+    if test "$_bak_sym_rc" -eq 0 # never cp through a pre-existing symlink at the backup path
         _as $use_sudo rm -f -- "$_bak" 2>/dev/null
         _log "BACKUP_SYMLINK_REMOVED: $_bak"
     end

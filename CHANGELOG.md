@@ -4,27 +4,24 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
-7.88.1 (2026-07-03)
+7.88.2 (2026-07-03)
 -------------------
+  - comments: compress trailing notes to essentials; fix a stale note
+  - docs: merge 7.87.x and 7.88.0-7.88.1 blocks; sync pins to 7.88.2
+
+7.88.0 - 7.88.1 (2026-07-03)
+----------------------------
+  - guard: refuse /dev/stdin and fd-0 aliases like piped stdin
+  - probes: silence vercmp stderr on the mesa soft-floor compare
   - cleanup: guard _cleanup_tmpfiles _log for pre-init signals
   - verify: normalize the modprobe section banner glyphs
   - comments: trim over-length trailing notes
-  - docs: merge 7.85.x and 7.83-7.84 blocks; sync pins to 7.88.1
+  - docs: merge 7.85.x and 7.83-7.84 blocks; sync pins
 
-7.88 (2026-07-03)
------------------
-  - guard: refuse /dev/stdin and fd-0 aliases like piped stdin
-  - probes: silence vercmp stderr on the mesa soft-floor compare
-  - docs: sync version pins to 7.88
-
-7.87.8 (2026-07-03)
--------------------
+7.87.0 - 7.87.8 (2026-07-01 .. 07-03)
+-------------------------------------
   - install-file: loader.conf regenerates sdboot entries only
   - probes: note the pipestatus[1]-only read contract on byte reads
-  - docs: merge the 7.87.0..7.87.7 notes into one block; sync pins
-
-7.87.0 - 7.87.7 (2026-07-01 .. 07-02)
--------------------------------------
   - services: skip resolved/NM restarts when drop-in bytes unchanged
   - tmpfiles: PID-scope TMPDIR names + sweep globs (peer-run safe)
   - progress: uptime-base fallback freezes; never mixes epoch clock

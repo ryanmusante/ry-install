@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.88.1 (2026-07-03) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.88.2 (2026-07-03) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.88.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.88.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -45,7 +45,7 @@ end
 # ── EARLY ARG INTERCEPT: -h/-v BEFORE ROOT GUARD ──
 set -l _skip_if_val false
 for _early_arg in $argv
-    if test "$_skip_if_val" = true; set _skip_if_val false; continue; end # --install-file value: defer -h/-v to argparse
+    if test "$_skip_if_val" = true; set _skip_if_val false; continue; end # --install-file value: defer to argparse
     switch "$_early_arg"
         case --
             break
@@ -104,10 +104,10 @@ end
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
 set -g QUIET true; set -g MODE bootstrap # pinned pre-argparse for signal footers
 if not string match -qr '^\d+$' -- "$_MY_UID"; echo "[ERR] id -u returned non-numeric value: '$_MY_UID' — cannot determine user identity" >&2; _ry_exit $EXIT_PREFLIGHT; end
-set -l _ry_root_silent_check false; set -l _rsc_skip false; set -l _rsc_other_mode false; set -l _rsc_after_dd false # --check silent-probe contract holds even on the root-refusal path
+set -l _ry_root_silent_check false; set -l _rsc_skip false; set -l _rsc_other_mode false; set -l _rsc_after_dd false # --check silent contract holds on root-refusal path
 for _rsc_a in $argv
-    if test "$_rsc_skip" = true; set _rsc_skip false; continue; end # --install-file value: a literal --check path is not the flag
-    if test "$_rsc_after_dd" = true; set _rsc_other_mode true; break; end # positional after --: non-root exits 2, keep parity
+    if test "$_rsc_skip" = true; set _rsc_skip false; continue; end # a literal --check path is not the flag
+    if test "$_rsc_after_dd" = true; set _rsc_other_mode true; break; end # positional after --: exit-2 parity
     switch "$_rsc_a"
         case --
             set _rsc_after_dd true
@@ -202,7 +202,7 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 set -g _RY_BOOT_TAINTED false
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/mkinitcpio.conf"; set -g _RY_BACKUP_SUFFIX .ry.bak
-set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # TMPDIR sweep globs (PID-scoped: never touch a concurrent lock-free run's files)
+set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped sweep globs: never touch a peer run's files
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS; set -g _RY_PROFILE_USES_WIFI_BACKEND false
 set -g SYSTEM_UPGRADED false # cross-phase global; must exist in all modes (set in _install_packages)
@@ -247,7 +247,7 @@ function _resolve_systemd_ver --description "Cache systemd major version into _R
     return 0
 end
 function _unit_state --argument-names unit --description "Return LoadState/ActiveState/UnitFileState as 3-line list (fewer on systemctl error)"; command systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null; end
-function _unit_state_padded --argument-names unit --description "Return _unit_state values" # ERR_NO_DATA triple keeps $rec[1..3] in-bounds
+function _unit_state_padded --argument-names unit --description "Return _unit_state values" # keeps $rec[1..3] in-bounds
     set -l _v (_unit_state "$unit")
     if test (count $_v) -lt 3
         printf '%s\n' ERR_NO_DATA ERR_NO_DATA ERR_NO_DATA
@@ -270,7 +270,7 @@ function _write_footer --argument-names exit_code extra_key --description "Appen
     test "$status" -ne 0; and not set -q _RY_LOG_WRITE_FAIL; and set -g _RY_LOG_WRITE_FAIL true
 end
 function _cleanup_tmpfiles --description "Remove temporary files created during this run"
-    not set -q _FOOTER_WRITTEN; and functions -q _log; and _log "CLEANUP_TMPFILES: sweep starting" # guard: signals may precede _log definition
+    not set -q _FOOTER_WRITTEN; and functions -q _log; and _log "CLEANUP_TMPFILES: sweep starting" # signals may precede _log
     set -l _has_sudo false
     command -q sudo; and sudo -n true 2>/dev/null; and set _has_sudo true
     for dir in $_SYS_TMP_DIRS
@@ -319,7 +319,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
         return 1
     end
     command chmod -- 600 "$LOCK_FILE" 2>/dev/null
-    set -l _own_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --) # ownership re-verify: mv -Tf clobber belt
+    set -l _own_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --) # mv -Tf clobber belt
     if test "$_own_pid" != "$fish_pid"
         set --erase _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
         _log "LOCK_OWNERSHIP_LOST: expected=$fish_pid found='$_own_pid' — backing off"
@@ -510,7 +510,7 @@ function _dc_kill_children --description "_do_cleanup sub: Reap child PIDs (TERM
         test (count (command pgrep -P "$fish_pid" 2>/dev/null)) -eq 0; and break
         command sleep 0.1 </dev/null 2>/dev/null
     end
-    command -q pgrep; and test (count (command pgrep -P "$fish_pid" 2>/dev/null)) -eq 0; and return 0 # zero children confirmed: skip KILL
+    command -q pgrep; and test (count (command pgrep -P "$fish_pid" 2>/dev/null)) -eq 0; and return 0 # no children: skip KILL
     command pkill -KILL -P "$fish_pid" 2>/dev/null
 end
 
@@ -631,7 +631,7 @@ set -g CPUPOWER_GOVERNOR powersave
 # Bluetooth: power adapter on at service start/resume; reconnect retry for paired sinks
 set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 3
 set -g GPU_DPM_LEVEL auto # gfx1151 dpm floor; auto avoids pinning SCLK on CPU-bound titles
-set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set (amdgpu sysfs)
+set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set
 set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to nftables input
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
@@ -675,7 +675,7 @@ set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan driv
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
-set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # thresholds: disk, CPU
+set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ──
@@ -766,7 +766,7 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
     if not string match -qr '^[A-Z][A-Z]$' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166-1 alpha-2 code (got: '$COUNTRY') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain. Refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
-    if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # IPv4-only ruleset: no v6 accepts, ICMPv6/ND would hit policy drop
+    if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # IPv4-only ruleset: ICMPv6/ND would hit policy drop
         _err_loud "IPv4-only nftables ruleset requires ipv6.disable=1 in KERNEL_PARAMS — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
     end
     for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION
@@ -793,7 +793,7 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
     end
     set -l _cur_parts (string split '.' -- "$_kver"); set -l _min_parts (string split '.' -- "$KERNEL_MIN")
     if test "$_cur_parts[1]" -lt "$_min_parts[1]"; or begin; test "$_cur_parts[1]" -eq "$_min_parts[1]"; and test "$_cur_parts[2]" -lt "$_min_parts[2]"; end
-        if test "$RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK" = 1 # mirror hardware gate: override bypasses below-floor hard-fail
+        if test "$RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK" = 1 # mirrors hardware-gate override
             _warn_loud "Kernel floor (override): running $_kver < $KERNEL_MIN — proceeding"
             _log "KERNEL_FLOOR_BELOW_OVERRIDE: running=$_kver min=$KERNEL_MIN"
         else if test "$MODE" = verify # read-only: warn and continue
@@ -1127,7 +1127,7 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
     end
 end
 function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"; string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"; end
-function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse)" # rc 0/1/2 = ok/fail/sudo-lapse; callers read $pipestatus[1] only (collect rc=1 on empty)
+function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse)" # callers read $pipestatus[1] only (collect rc=1 on empty)
     set -l _bytes
     if _is_system_dst "$dst"
         sudo -n true 2>/dev/null; or return 2
@@ -1387,9 +1387,9 @@ function _progress_on_winch --on-signal WINCH --description "Re-anchor progress 
     test "$_PROG_PINNED" = true; or return 0
     set -l _new_rows (command tput lines 2>/dev/null)
     string match -qr '^\d+$' -- "$_new_rows"; or return 0
-    if test "$_new_rows" -lt 10; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <10 rows: tear down (mirrors init refusal).
+    if test "$_new_rows" -lt 10; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <10 rows: tear down (mirrors init)
     set -l _new_cols (command tput cols 2>/dev/null)
-    if string match -qr '^\d+$' -- "$_new_cols"; and test "$_new_cols" -lt 64; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <64 cols: tear down (mirrors init refusal)
+    if string match -qr '^\d+$' -- "$_new_cols"; and test "$_new_cols" -lt 64; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <64 cols: tear down (mirrors init)
     set -g _PROG_ROWS $_new_rows
     printf '\e[s\e[1;%dr\e[u' (math $_PROG_ROWS - 1) >&2
     _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
@@ -1438,7 +1438,7 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     if test "$_need_tail" = true # overflow: inline analysis into JSONL; nothing retained (tmpfile swept by _run)
         set -l _bytes (command stat -c '%s' -- "$tmpfile" 2>/dev/null); string match -qr '^\d+$' -- "$_bytes"; or set _bytes 0
         set -l _sha (command sha256sum -- "$tmpfile" 2>/dev/null | string match -rg -- '^(\S+)'); test -n "$_sha"; or set _sha ERR
-        set -l _mid_s (math $_head_cap + 1); set -l _mid_e (math $_total - $_tail_cap) # scan only the elided region; head/tail lines are already in JSONL
+        set -l _mid_s (math $_head_cap + 1); set -l _mid_e (math $_total - $_tail_cap) # scan elided region only (head/tail already in JSONL)
         set -l _hits (command awk -v s=$_mid_s -v e=$_mid_e 'NR>e{exit} NR>=s && tolower($0) ~ /error|fatal|fail|warning|cannot|denied|conflict|corrupt|missing|unable/ {print NR": "$0; c++; if (c==10) exit}' "$tmpfile" 2>/dev/null)
         set -l _hits_capped
         for _h in $_hits; test (string length -- "$_h") -gt 2000; and set _h (string sub -l 2000 -- "$_h"); set -a _hits_capped "$_h"; end
@@ -2749,7 +2749,7 @@ function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (h
         set -l _p (string split -m1 ':' -- "$pair"); set -l pname $_p[1]; set -l expected $_p[2]; set -l ppath /sys/module/amdgpu/parameters/$pname
         test -f "$ppath"; or continue
         set -l sysfs_val (string trim -- (command cat -- "$ppath" 2>/dev/null)); set -l sysfs_val_dec "$sysfs_val"; set -l expected_dec "$expected"
-        string match -qr '^0x[0-9a-fA-F]+$' -- "$sysfs_val"; and set sysfs_val_dec (printf '%d' "$sysfs_val" 2>/dev/null; or echo "$sysfs_val") # normalize to decimal (amdgpu sysfs hex or decimal)
+        string match -qr '^0x[0-9a-fA-F]+$' -- "$sysfs_val"; and set sysfs_val_dec (printf '%d' "$sysfs_val" 2>/dev/null; or echo "$sysfs_val") # normalize hex to decimal (amdgpu emits either)
         string match -qr '^0x[0-9a-fA-F]+$' -- "$expected"; and set expected_dec (printf '%d' "$expected" 2>/dev/null; or echo "$expected")
         if test "$sysfs_val_dec" = "$expected_dec"
             _ok "  amdgpu.$pname: $sysfs_val"
@@ -3175,7 +3175,7 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
             set -l _re (string escape --style=regex -- "$_tok")
             if not string match -qr '(^|,)'$_re'(,|$)' -- "$_opts"; _fail "  ext4 entry missing $_tok: $_fl"; set _fstab_ok false; end
         end
-        for _conflict in defaults relatime atime strictatime # tokens the installer strips — presence means a rewrite is pending
+        for _conflict in defaults relatime atime strictatime # installer strips these; presence = rewrite pending
             set -l _cre (string escape --style=regex -- "$_conflict")
             if string match -qr '(^|,)'$_cre'(,|$)' -- "$_opts"; _fail "  ext4 entry has $_conflict (installer removes it — rewrite pending): $_fl"; set _fstab_ok false; end
         end
@@ -3479,7 +3479,7 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
     if not _ry_check_network
-        set -l _net_ev "archlinux.org, cloudflare.com, 1.1.1.1, 8.8.8.8 unreachable" # normally overridden by _RY_NET_FAIL_EVIDENCE
+        set -l _net_ev "archlinux.org, cloudflare.com, 1.1.1.1, 8.8.8.8 unreachable" # fallback; _RY_NET_FAIL_EVIDENCE overrides
         set -q _RY_NET_FAIL_EVIDENCE; and test -n "$_RY_NET_FAIL_EVIDENCE"; and set _net_ev "$_RY_NET_FAIL_EVIDENCE"
         _phase_record "Preflight: network reachability" FAIL "$_net_ev"
         _err "Network required for package installation — aborting"
@@ -3593,7 +3593,7 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
         return 1
     end
     _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
-    set -l _q_pre (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)') # name+version fingerprint (fail-open: empty pre/post keeps SYSTEM_UPGRADED=true)
+    set -l _q_pre (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)') # name+version fingerprint; empty pre/post = fail-open true
     if not _run sudo -n pacman $_pacman_first -- $argv
         _warn "Package installation failed — retrying with forced db re-sync (handles transient mirror staleness; will not resolve pkg conflicts — see JSONL log for first-pass stderr)..."
         if not _run sudo -n pacman $_pacman_retry -- $argv
@@ -3756,7 +3756,7 @@ function _far_awk_rewrite --argument-names tmpfstab --description "awk-rewrite f
     set -l _awk_script (_far_build_awk_script | string collect); set -l _tee_err (_mktemp_or_null -p (_tmp_dir) "ry-fstab-tee-err.$fish_pid.XXXXXX"); set -l _awk_err (_mktemp_or_null -p (_tmp_dir) "ry-fstab-awk-err.$fish_pid.XXXXXX")
     _track_tmpfile "$_tee_err"
     _track_tmpfile "$_awk_err"
-    sudo -n awk "$_awk_script" /etc/fstab 2>"$_awk_err" | sudo -n tee -- "$tmpfstab" >/dev/null 2>"$_tee_err" # Single sudo-awk path: awk runs as root
+    sudo -n awk "$_awk_script" /etc/fstab 2>"$_awk_err" | sudo -n tee -- "$tmpfstab" >/dev/null 2>"$_tee_err" # awk runs as root
     set -l _ps $pipestatus
     if test "$_ps[1]" -ne 0; or test "$_ps[2]" -ne 0
         set -l _ps_str (string join , -- $_ps)
@@ -4437,7 +4437,7 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
     else
         _phase_record "Finalize: NetworkManager restart" PASS "restarted"
     end
-    set -l _nm_delay $NM_RESTART_DELAY; string match -qr '^\d+$' -- "$_nm_delay"; or set _nm_delay 3 # guard against non-integer retune
+    set -l _nm_delay $NM_RESTART_DELAY; string match -qr '^\d+$' -- "$_nm_delay"; or set _nm_delay 3 # guard non-integer override
     command sleep $_nm_delay </dev/null 2>/dev/null; or _warn "Sleep interrupted during NM restart settle window"
     return 0
 end
@@ -4721,7 +4721,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     if test -z "$_use_sudo"; _err "Not a managed file: $target"; _info "Run without path to see managed files"; return $EXIT_USAGE; end
     set -l _mdst "$_RY_RESOLVED_MANAGED_DST" # literal dst; canonical key may diverge
     _echo "── ry-install v$VERSION - Install Single File ──"
-    set -l _if_content (_ry_get_file_content "$_mdst" 2>/dev/null) # format-validate before write (parity with full-install preflight)
+    set -l _if_content (_ry_get_file_content "$_mdst" 2>/dev/null) # format-validate before write (preflight parity)
     if test "$status" -ne 0; _err "Content generator failed for $_mdst — refusing to deploy"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     if not _rvc_dispatch "$_mdst" $_if_content; _err "Embedded content failed format validation for $_mdst — refusing to deploy"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     if test "$_use_sudo" = true; _ensure_sudo_cached; or return $EXIT_PREFLIGHT; end

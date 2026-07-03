@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.87.7 (2026-07-02) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
-if contains -- (status filename) - 'Standard input'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
+# ry-install v7.88.1 (2026-07-03) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.87.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.88.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -121,7 +121,7 @@ for _rsc_a in $argv
             continue # --check-compatible (verbose is dropped under --check)
         case '*'
             string match -qr -- '^-V+$' "$_rsc_a"; and continue # glued repeats (-VV): still --check-compatible
-            set _rsc_other_mode true # unknown flag or positional: non-root exits 2 (argparse/positional guard), keep parity
+            set _rsc_other_mode true # unknown flag/positional: non-root exits 2 — keep parity
     end
 end
 set -q _rsc_a; and set --erase _rsc_a
@@ -270,7 +270,7 @@ function _write_footer --argument-names exit_code extra_key --description "Appen
     test "$status" -ne 0; and not set -q _RY_LOG_WRITE_FAIL; and set -g _RY_LOG_WRITE_FAIL true
 end
 function _cleanup_tmpfiles --description "Remove temporary files created during this run"
-    not set -q _FOOTER_WRITTEN; and _log "CLEANUP_TMPFILES: sweep starting"
+    not set -q _FOOTER_WRITTEN; and functions -q _log; and _log "CLEANUP_TMPFILES: sweep starting" # guard: signals may precede _log definition
     set -l _has_sudo false
     command -q sudo; and sudo -n true 2>/dev/null; and set _has_sudo true
     for dir in $_SYS_TMP_DIRS
@@ -568,7 +568,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
             set _sig_exit 130
     end
     _teardown signal $_sig_exit
-    _ry_erase_handlers # fish 3.x swallows handler `exit` status; exec a shell to deliver 128+N to the parent
+    _ry_erase_handlers # fish 3.x swallows handler exit status; exec sh re-raises to deliver 128+N
     set -l _sig_name (string replace -r '^SIG' '' -- "$_sig_label")
     string match -qr '^[A-Z]+$' -- "$_sig_name"; and exec /bin/sh -c "kill -$_sig_name \$\$ 2>/dev/null; exit $_sig_exit"
     exit $_sig_exit # fallback: non-signal label or exec failure
@@ -1127,7 +1127,7 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
     end
 end
 function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"; string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"; end
-function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse)" # tri-state rc 0/1/2: drift vs sudo-lapse
+function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse)" # rc 0/1/2 = ok/fail/sudo-lapse; callers read $pipestatus[1] only (collect rc=1 on empty)
     set -l _bytes
     if _is_system_dst "$dst"
         sudo -n true 2>/dev/null; or return 2
@@ -2378,7 +2378,7 @@ function _verify_static_system --description "Verify ntsync, resolved, logind, N
     _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "GOVERNOR='$CPUPOWER_GOVERNOR'" "GOVERNOR=$CPUPOWER_GOVERNOR"
     _vss_sysctl
     _vss_udev
-    _echo "-- modprobe (mt7925e ASPM) --"
+    _echo "── modprobe (mt7925e ASPM) ──"
     _vss_modprobe
     _echo "── nftables ──"
     _vss_nft
@@ -3498,7 +3498,7 @@ function _install_preflight --description "Run all preflight checks before insta
     if test -n "$_mesa"
         if not command -q vercmp
             _log "MESA_SOFT_FLOOR_SKIP: vercmp absent (pacman-provided) — gfx1151 mesa version not compared"
-        else if test (command vercmp $_mesa 26.0) -lt 0
+        else if test (command vercmp $_mesa 26.0 2>/dev/null) -lt 0
             _warn_loud "mesa $_mesa < 26.0 — gfx1151 RADV may be unstable (soft floor)"
             _log "MESA_BELOW_SOFT_FLOOR: $_mesa"
         end
@@ -4659,7 +4659,7 @@ end
 
 # ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR ──
 set -g _RY_POST_HOOKS \
-    "/boot/*|boot" \
+    "/boot/*|loader" \
     "/etc/kernel/cmdline|cmdline" \
     "/etc/sdboot-manage.conf|boot" \
     "/etc/mkinitcpio.conf|boot" \
@@ -4746,7 +4746,7 @@ function _pb_rebuild_cascade --argument-names target skip_mki --description "_po
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     end
-    set -l _boot (_resolve_boot_path) # populate ESP-fallback state BEFORE the vfat gate (mirrors _install_rebuild_boot order)
+    set -l _boot (_resolve_boot_path) # resolve ESP-fallback state before the vfat gate (mirrors _install_rebuild_boot)
     if not _sdboot_fallback_vfat_ok; _log "POST_BOOT_SDBOOT_REFUSED: target=$target"; return $EXIT_BOOT_CRIT; end
     if test "$SDBOOT_REMOVE_EXISTING" = yes; and test -z "$_boot"
         _err "Cannot resolve \$BOOT path — refusing boot-wipe gate"
@@ -4776,6 +4776,7 @@ function _post_boot_apply --argument-names target skip_mki --description "Shared
 end
 function _post_boot --argument-names target --description "Post-hook: rebuild boot entries (mkinitcpio + sdboot-manage)"; _post_boot_apply "$target" false; end
 function _post_cmdline --argument-names target --description "Post-hook: regenerate sdboot entries only (cmdline is not an initramfs input)"; _post_boot_apply "$target" true; end
+function _post_loader --argument-names target --description "Post-hook: regenerate sdboot entries only (loader.conf is read by systemd-boot directly, not an initramfs input)"; _post_boot_apply "$target" true; end
 
 # ── POST-HOOKS: NON-BOOT LIVE-APPLY (SERVICE/CONFIG; FAILURES NON-FATAL, EXIT 0) ──
 function _post_resolved --argument-names target --description "Post-hook: restart systemd-resolved"

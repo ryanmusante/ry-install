@@ -4,61 +4,45 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
-7.87.7 (2026-07-02)
+7.88.1 (2026-07-03)
 -------------------
+  - cleanup: guard _cleanup_tmpfiles _log for pre-init signals
+  - verify: normalize the modprobe section banner glyphs
+  - comments: trim over-length trailing notes
+  - docs: merge 7.85.x and 7.83-7.84 blocks; sync pins to 7.88.1
+
+7.88 (2026-07-03)
+-----------------
+  - guard: refuse /dev/stdin and fd-0 aliases like piped stdin
+  - probes: silence vercmp stderr on the mesa soft-floor compare
+  - docs: sync version pins to 7.88
+
+7.87.8 (2026-07-03)
+-------------------
+  - install-file: loader.conf regenerates sdboot entries only
+  - probes: note the pipestatus[1]-only read contract on byte reads
+  - docs: merge the 7.87.0..7.87.7 notes into one block; sync pins
+
+7.87.0 - 7.87.7 (2026-07-01 .. 07-02)
+-------------------------------------
   - services: skip resolved/NM restarts when drop-in bytes unchanged
   - tmpfiles: PID-scope TMPDIR names + sweep globs (peer-run safe)
   - progress: uptime-base fallback freezes; never mixes epoch clock
   - packages: SYSTEM_UPGRADED from pacman -Q fingerprint, not rc
   - validate: kv/kparam validators report every missing key/token
-  - install-file: format-validate content before write (preflight
-    parity)
-  - docs: sync version pins to 7.87.7
-
-7.87.6 (2026-07-02)
--------------------
+  - install-file: format-validate content before write
   - run: replace run-overflow spill with inline overflow analysis
   - run: log elided-region diag sample (<=10 lines) + sha256/bytes
   - logs: no run-overflow dir created; nothing retained on disk
-  - docs: sync version pins to 7.87.6
-
-7.87.5 (2026-07-02)
--------------------
-  - README: Uninstall command lists -> brief actions, table refs
-  - docs: sync version pins to 7.87.5
-
-7.87.4 (2026-07-02)
--------------------
-  - README: trim Usage, preflight, env-override, Contributing prose
-  - README: drop flags-table glued-short-flag note
-  - README: drop RTL8127 fix hashes f24f7b2f3af9, ae1737e7339b
-  - CHANGELOG: bullet entry lines
-  - docs: sync version pins to 7.87.4
-
-7.87.3 (2026-07-02)
--------------------
-  - comments: trim four over-length section and rationale lines
-  - docs: sync version pins to 7.87.3
-
-7.87.2 (2026-07-02)
--------------------
   - udev: retrigger cpu beside block so the EPP rule live-applies
   - verify: split amdgpu param pairs once; values may contain ':'
   - lock: create the state dir under umask 0077 (0700 contract)
   - args: root --check with unknown flags or positionals exits 2
-  - README: correct preflight order (hard gates -> lock -> checks)
-
-7.87.1 (2026-07-02)
--------------------
   - compat: replace "$()" so the 3.6 version gate can report
   - verify: hardware/kernel-floor gates warn; deploy/check exit 3
   - nftables: drop redundant echo-reply accept (ct covers replies)
   - validate: require ipv6.disable=1 while nftables is IPv4-only
   - backup: correct _awf_make_backup description (fstab is direct)
-  - comments: trim embedded-config and code notes to essentials
-
-7.87.0 (2026-07-01)
--------------------
   - cmdline: add ipv6.disable=1 (IPv6 off system-wide)
   - nftables: drop ICMPv6/NDP accepts; ruleset is IPv4-only
   - nftables: accept inbound IPv4 ping (echo-request)
@@ -67,8 +51,8 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
   - args: root --check beside other modes exits 2, not silent 3
   - fstab: --verify flags 'defaults' as a pending rewrite
   - run: skip separated sudo value flags in timeout bypass
-  - log: retain run-overflow spill files under LOG_DIR
-  - README: sync IPv4-only firewall notes; trim safety warning
+  - README: sync preflight order, IPv4-only notes, uninstall steps
+  - comments: trim over-length section, rationale, and code notes
 
 7.86.0 (2026-07-01)
 -------------------
@@ -78,51 +62,33 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
   - help: note --check reads live /proc/cmdline
   - README: sync version pins, glued-flag and drift notes
 
-7.85.3 (2026-07-01)
--------------------
+7.85.0 - 7.85.3 (2026-07-01)
+----------------------------
   - check: root --check is silent exit 3; other modes keep exit 2
-  - README: 100-column tables; package lists into code blocks
-
-7.85.2 (2026-07-01)
--------------------
   - signal: propagate 128+N on INT/TERM/HUP/ABRT (exec re-raise)
-  - log: preserve embedded newlines in the JSONL data field
-  - backup: skip .ry.bak on inconclusive symlink probe (sudo lapse)
-  - comments: trim lock, backup, and sysctl rationale notes
-
-7.85.1 (2026-07-01)
--------------------
   - udev: EPP rule never fired; match KERNEL=="cpu[0-9]*"
   - fstab: atime-variant opts beside conformant rows trigger rewrite
   - install-file: cap mkdir umask at 0022 via _ry_mkdir_0755
-  - log: drop blank "ECHO: " JSONL noise from separator _echo calls
-  - quoting: quote nft subjects, test cmdsubs, regdom record
-
-7.85.0 (2026-07-01)
--------------------
+  - lock: refuse reclaim on empty/garbage pidfile; re-verify owner
+  - backup: skip .ry.bak on inconclusive probe; drop symlink first
   - paccache: split -rk2 and -ruk0 into separate runs
   - timeout: clamp RY_RUN_TIMEOUT above 9 digits to 2147483647
-  - lock: refuse reclaim on empty/garbage pidfile; re-verify ownership
   - ntp: add RY_NO_NTP_REMEDIATION=1; log timesyncd enable
   - mkinitcpio: duplicate KEY= lines resolve to last (shell-sourced)
-  - backup: remove pre-existing symlink at <dst>.ry.bak before cp
   - nftables: move the loopback accept first
   - progress: freeze on uptime read failure; never switch clock base
+  - log: preserve embedded newlines in JSONL; drop blank ECHO noise
+  - quoting: quote nft subjects, test cmdsubs, regdom record
   - cleanup: guard early-arg erase; trim comments and descriptions
-  - README: fstab restore scope; pactree and NTP remediation notes
+  - README: 100-col tables; fstab restore scope; pactree/NTP notes
 
-7.84 (2026-07-01)
------------------
-  - docs: add four section banners (85 total); no logic change
-
-7.83.0 - 7.83.4 (2026-06-30)
-----------------------------
-  - comments: trim; collapse sysctl rationale to one line
-  - docs: correct two section banners
+7.83.0 - 7.84 (2026-06-30 .. 07-01)
+-----------------------------------
   - run: derive output-capture tail cap from head cap
   - generators: reject control chars in environment.d and sysctl.d
   - refactor: hoist GPU_DPM_LEVEL accepted set to _RY_DPM_LEVELS
-  - docs: trim exit-code list to user-visible codes (0-5, 10)
+  - comments: trim; collapse sysctl rationale to one line
+  - docs: correct two banners; add four (85 total); trim exit codes
 
 7.81.0 - 7.82.0 (2026-06-29 .. 06-30)
 -------------------------------------

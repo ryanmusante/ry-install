@@ -4,6 +4,24 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.87.7 (2026-07-02)
+-------------------
+  - services: skip resolved/NM restarts when drop-in bytes unchanged
+  - tmpfiles: PID-scope TMPDIR names + sweep globs (peer-run safe)
+  - progress: uptime-base fallback freezes; never mixes epoch clock
+  - packages: SYSTEM_UPGRADED from pacman -Q fingerprint, not rc
+  - validate: kv/kparam validators report every missing key/token
+  - install-file: format-validate content before write (preflight
+    parity)
+  - docs: sync version pins to 7.87.7
+
+7.87.6 (2026-07-02)
+-------------------
+  - run: replace run-overflow spill with inline overflow analysis
+  - run: log elided-region diag sample (<=10 lines) + sha256/bytes
+  - logs: no run-overflow dir created; nothing retained on disk
+  - docs: sync version pins to 7.87.6
+
 7.87.5 (2026-07-02)
 -------------------
   - README: Uninstall command lists -> brief actions, table refs

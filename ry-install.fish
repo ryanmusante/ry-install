@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.87.5 (2026-07-02) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.87.7 (2026-07-02) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.87.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.87.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -202,9 +202,9 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 set -g _RY_BOOT_TAINTED false
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/mkinitcpio.conf"; set -g _RY_BACKUP_SUFFIX .ry.bak
-set -g _RY_TMPDIR_GLOBS 'ry-sudo-err.*' 'ry-tee-err.*' 'ry-run.*' 'ry-argparse-err.*' 'ry-fstab-tee-err.*' 'ry-fstab-awk-err.*' # TMPDIR sweep globs
+set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # TMPDIR sweep globs (PID-scoped: never touch a concurrent lock-free run's files)
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
-set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_PROFILE_USES_WIFI_BACKEND false
+set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS; set -g _RY_PROFILE_USES_WIFI_BACKEND false
 set -g SYSTEM_UPGRADED false # cross-phase global; must exist in all modes (set in _install_packages)
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
@@ -462,10 +462,10 @@ function _dc_sweep_filesystem --description "_do_cleanup sub: Sweep TMPDIR for l
     set -l _find_name_args
     for _g in $_tmp_globs; test -n "$_find_name_args"; and set -a _find_name_args -o; set -a _find_name_args -name "$_g"; end
     command find "$_tmpdir" -xdev -maxdepth 1 \( $_find_name_args \) -type f -uid "$_MY_UID" -delete 2>/dev/null
-    for _rd in "$_tmpdir"/ry-run.* # per-dir descent keeps glob metachars literal
+    for _rd in "$_tmpdir"/ry-run.$fish_pid.* # per-dir descent keeps glob metachars literal
         test -d "$_rd"; and command find "$_rd" -xdev -maxdepth 1 -type f -uid "$_MY_UID" -delete 2>/dev/null
     end
-    command find "$_tmpdir" -xdev -maxdepth 1 -name 'ry-run.*' -type d -empty -uid "$_MY_UID" -delete 2>/dev/null
+    command find "$_tmpdir" -xdev -maxdepth 1 -name "ry-run.$fish_pid.*" -type d -empty -uid "$_MY_UID" -delete 2>/dev/null
 end
 function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _KCONFIG_DATA _KCONFIG_LOADED _RY_ESP_PATH _RY_BOOT_PATH
@@ -478,7 +478,7 @@ function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_RUN_TIMEOUT_WARNED _RY_RUN_TIMEOUT_CLAMPED _PROG_CLOCK _PROG_NOW_LAST _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
     set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT _RY_DMESG_TSC
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
-    set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_BOOT_CRIT_HIT
+    set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_DEPLOY_CHANGED_DSTS _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
     set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_ENVD_BAD_ENTRIES _RY_FSTAB_EVIDENCE _RY_FSTAB_RESULT
     set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE _RY_SDBOOT_REFUSE_FS _RY_NET_FAIL_EVIDENCE
@@ -1011,7 +1011,7 @@ end
 # ── SUDO CREDENTIAL CACHE + COMMAND ESCALATION ──
 function _ensure_sudo_cached --description "Cache sudo credential once before repeated sudo -n calls"
     if not command -q sudo; _err "sudo credential cache failed: sudo not found"; return 1; end
-    set -l _sudo_err (_mktemp_or_null -p (_tmp_dir) ry-sudo-err.XXXXXX)
+    set -l _sudo_err (_mktemp_or_null -p (_tmp_dir) "ry-sudo-err.$fish_pid.XXXXXX")
     _track_tmpfile "$_sudo_err"
     sudo -n -v 2>"$_sudo_err"
     set -l _rc $status
@@ -1300,7 +1300,8 @@ function _progress_now --description "Monotonic seconds (cached uptime or epoch)
         set -l _u (command cat -- /proc/uptime 2>/dev/null | string split ' ')[1]
         if string match -qr '^\d+(\.\d+)?$' -- "$_u"; set -g _PROG_NOW_LAST (math "floor($_u)"); printf '%s\n' $_PROG_NOW_LAST; return 0; end
         set -q _PROG_NOW_LAST; and printf '%s\n' $_PROG_NOW_LAST; and return 0 # freeze on read failure — never mix clock bases
-        command date +%s
+        set -q _PROG_START; and printf '%s\n' $_PROG_START; and return 0 # cache erased mid-teardown: freeze to run start (same base)
+        printf '0\n'
         return 0
     else if set -q _PROG_CLOCK
         command date +%s
@@ -1434,16 +1435,15 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     end
     _log "$label_tag: "(string join -- " | " $_captured)
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and _log "$label_tag""_TRUNCATED: total_lines=$_total head_cap=$_head_cap tail_cap=$_tail_cap"
-    if test "$_need_tail" = true
-        set -l _ovf "$LOG_DIR/run-overflow"
-        if not test -d "$_ovf"; command mkdir -p -m 700 -- "$_ovf" 2>/dev/null; end # retained under LOG_DIR so logged path stays valid
-        set -l _dest (command mktemp --suffix=.log -p "$_ovf" "$label_tag-$TIMESTAMP-XXXXXX" 2>/dev/null)
-        if test -n "$_dest"; and command cp -- "$tmpfile" "$_dest" 2>/dev/null
-            set -l _sha (command sha256sum -- "$_dest" 2>/dev/null | string match -rg -- '^(\S+)')
-            _log "$label_tag""_FULL_SPILL: path=$_dest sha256=$_sha lines=$_total retained=true"
-        else
-            _log "$label_tag""_FULL_SPILL_FAIL: could not write spill file under $_ovf"
-        end
+    if test "$_need_tail" = true # overflow: inline analysis into JSONL; nothing retained (tmpfile swept by _run)
+        set -l _bytes (command stat -c '%s' -- "$tmpfile" 2>/dev/null); string match -qr '^\d+$' -- "$_bytes"; or set _bytes 0
+        set -l _sha (command sha256sum -- "$tmpfile" 2>/dev/null | string match -rg -- '^(\S+)'); test -n "$_sha"; or set _sha ERR
+        set -l _mid_s (math $_head_cap + 1); set -l _mid_e (math $_total - $_tail_cap) # scan only the elided region; head/tail lines are already in JSONL
+        set -l _hits (command awk -v s=$_mid_s -v e=$_mid_e 'NR>e{exit} NR>=s && tolower($0) ~ /error|fatal|fail|warning|cannot|denied|conflict|corrupt|missing|unable/ {print NR": "$0; c++; if (c==10) exit}' "$tmpfile" 2>/dev/null)
+        set -l _hits_capped
+        for _h in $_hits; test (string length -- "$_h") -gt 2000; and set _h (string sub -l 2000 -- "$_h"); set -a _hits_capped "$_h"; end
+        _log "$label_tag""_OVERFLOW_ANALYSIS: lines=$_total bytes=$_bytes sha256=$_sha elided="(math $_total - $_head_cap - $_tail_cap)" mid_diag_hits="(count $_hits_capped)
+        test (count $_hits_capped) -gt 0; and _log "$label_tag""_OVERFLOW_DIAG: "(string join -- ' | ' $_hits_capped)
     end
     if not set -q _RY_OUTPUT_BROKEN
         if test "$QUIET" = false
@@ -1490,7 +1490,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     if string match -q -- '-*' "$argv[1]"; _log "BUG: _run called with dash-prefixed argv[1]='$argv[1]' — refusing"; return $EXIT_RUN_MISUSE; end
     set -l log_cmd (_run_redact_cmd $argv)
     _log "RUN: $log_cmd"
-    set -l _run_dir (command mktemp -d -p (_tmp_dir) ry-run.XXXXXX 2>/dev/null)
+    set -l _run_dir (command mktemp -d -p (_tmp_dir) "ry-run.$fish_pid.XXXXXX" 2>/dev/null)
     _track_tmpfile "$_run_dir"
     if test -z "$_run_dir"; or not test -d "$_run_dir"
         _log "RUN_ABORT: mktemp -d failed for cmd=$log_cmd — refusing to execute without stderr capture"
@@ -1861,31 +1861,25 @@ function _grep_kv --argument-names dst --description "Validate kv pairs (loader.
             _log "BUG: _grep_kv called for unsupported dst=$dst"
             return 2
     end
-    set -l _sep_re (string escape --style=regex -- "$sep")
+    set -l _sep_re (string escape --style=regex -- "$sep"); set -l _missing_keys
     for key in $keys
         set -l _key_re (string escape --style=regex -- "$key")
-        string match -qr -- "^$_key_re$_sep_re" $content; or begin
-            _fail "  $dst: missing key '$key'"
-            return 1
-        end
+        string match -qr -- "^$_key_re$_sep_re" $content; or set -a _missing_keys "$key"
     end
-    return 0
+    for key in $_missing_keys; _fail "  $dst: missing key '$key'"; end
+    test (count $_missing_keys) -eq 0
 end
 function _grep_kparam --argument-names dst --description "Validate cmdline has root=UUID, rw, all KERNEL_PARAMS"
     test (count $argv) -lt 2; and _log "BUG: _grep_kparam called without content (dst=$dst)"; and return 2
-    string match -qr -- '(^|\s)root=UUID=' $argv[2..-1]; or begin
-        _fail "  $dst: missing required token 'root=UUID='"
-        return 1
-    end
-    string match -qr -- '(^|\s)rw(\s|$)' $argv[2..-1]; or begin
-        _fail "  $dst: missing required token 'rw'"
-        return 1
-    end
+    set -l _missing_toks
+    string match -qr -- '(^|\s)root=UUID=' $argv[2..-1]; or set -a _missing_toks "root=UUID="
+    string match -qr -- '(^|\s)rw(\s|$)' $argv[2..-1]; or set -a _missing_toks rw
     for _kp in $KERNEL_PARAMS
         set -l _kp_re (string escape --style=regex -- "$_kp")
-        if not string match -qr -- "(^|\s)$_kp_re(\s|\$)" $argv[2..-1]; _fail "  $dst: missing declared KERNEL_PARAMS token '$_kp'"; return 1; end
+        string match -qr -- "(^|\s)$_kp_re(\s|\$)" $argv[2..-1]; or set -a _missing_toks "$_kp"
     end
-    return 0
+    for _tok in $_missing_toks; _fail "  $dst: missing required token '$_tok'"; end
+    test (count $_missing_toks) -eq 0
 end
 function _grep_sysctl_kv --argument-names dst --description "Validate sysctl.d has ≥1 'key = value' line"
     test (count $argv) -lt 2; and _log "BUG: _grep_sysctl_kv called without content (dst=$dst)"; and return 2
@@ -2028,7 +2022,7 @@ function _ry_content_bytes --argument-names dst --description "Raw bytes of embe
     printf '%s' "$_content"
 end
 function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description "Pipe content generator into tee"
-    set -l _tee_err (_mktemp_or_null -p (_tmp_dir) ry-tee-err.XXXXXX)
+    set -l _tee_err (_mktemp_or_null -p (_tmp_dir) "ry-tee-err.$fish_pid.XXXXXX")
     _track_tmpfile "$_tee_err"
     _ry_get_file_content "$dst" | _as $use_sudo tee -- "$tmpfile" >/dev/null 2>"$_tee_err"
     set -l _ps $pipestatus
@@ -2181,7 +2175,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     end
     _atomic_write_file "$dst" "$perms" "$use_sudo"
     set -l _aw_rc $status
-    test "$_aw_rc" -eq 0; and set -g _RY_DEPLOY_CHANGED_COUNT (math $_RY_DEPLOY_CHANGED_COUNT + 1)
+    test "$_aw_rc" -eq 0; and set -g _RY_DEPLOY_CHANGED_COUNT (math $_RY_DEPLOY_CHANGED_COUNT + 1); and set -ga _RY_DEPLOY_CHANGED_DSTS "$dst"
     return $_aw_rc
 end
 
@@ -3599,6 +3593,7 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
         return 1
     end
     _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
+    set -l _q_pre (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)') # name+version fingerprint (fail-open: empty pre/post keeps SYSTEM_UPGRADED=true)
     if not _run sudo -n pacman $_pacman_first -- $argv
         _warn "Package installation failed — retrying with forced db re-sync (handles transient mirror staleness; will not resolve pkg conflicts — see JSONL log for first-pass stderr)..."
         if not _run sudo -n pacman $_pacman_retry -- $argv
@@ -3614,6 +3609,11 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
         end
     end
     set -g SYSTEM_UPGRADED true
+    set -l _q_post (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
+    if test -n "$_q_pre"; and test -n "$_q_post"; and test "$_q_pre" = "$_q_post"
+        set -g SYSTEM_UPGRADED false
+        _log "PKG_STATE_UNCHANGED: pacman -Q fingerprint identical pre/post -Syu (no-op upgrade)"
+    end
     return 0
 end
 function _ip_run_and_verify --description "_install_packages sub: run pacman -Syu + verify + revalidate hooks"
@@ -3673,7 +3673,9 @@ function _install_packages --description "Install managed packages via pacman -S
     set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
     sudo -n rmdir /run/ry-install 2>/dev/null # reclaim empty snapshot dir
     if test "$_fn_err" = true; _phase_record "Packages: pacman -Syu" FAIL "see JSONL log"; return 1; end
-    _phase_record "Packages: pacman -Syu" PASS "system upgraded (full -Syu)"
+    set -l _syu_ev "system upgraded (full -Syu)"
+    test "$SYSTEM_UPGRADED" = true; or set _syu_ev "no package changes (-Syu no-op)"
+    _phase_record "Packages: pacman -Syu" PASS "$_syu_ev"
     return 0
 end
 
@@ -3751,7 +3753,7 @@ function _far_build_awk_script --description "_far_awk_rewrite sub: Emit awk scr
         '}'
 end
 function _far_awk_rewrite --argument-names tmpfstab --description "awk-rewrite fstab into tmpfstab via tee"
-    set -l _awk_script (_far_build_awk_script | string collect); set -l _tee_err (_mktemp_or_null -p (_tmp_dir) ry-fstab-tee-err.XXXXXX); set -l _awk_err (_mktemp_or_null -p (_tmp_dir) ry-fstab-awk-err.XXXXXX)
+    set -l _awk_script (_far_build_awk_script | string collect); set -l _tee_err (_mktemp_or_null -p (_tmp_dir) "ry-fstab-tee-err.$fish_pid.XXXXXX"); set -l _awk_err (_mktemp_or_null -p (_tmp_dir) "ry-fstab-awk-err.$fish_pid.XXXXXX")
     _track_tmpfile "$_tee_err"
     _track_tmpfile "$_awk_err"
     sudo -n awk "$_awk_script" /etc/fstab 2>"$_awk_err" | sudo -n tee -- "$tmpfstab" >/dev/null 2>"$_tee_err" # Single sudo-awk path: awk runs as root
@@ -3848,8 +3850,13 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
 end
 
 # ── INSTALL PHASE 4 (Services slot): RESOLVED + PKG REMOVE + MASK + ENABLE + REGDOM ──
-function _configure_services_resolved_restart --description "Restart systemd-resolved when its conf.d drop-in is in place"
+function _configure_services_resolved_restart --description "Restart systemd-resolved when its conf.d drop-in changed this run"
     test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
+    if not contains -- /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf $_RY_DEPLOY_CHANGED_DSTS # unchanged bytes: no DNS blip on idempotent re-runs
+        _log "RESOLVED_RESTART_SKIP_UNCHANGED: drop-in bytes identical this run"
+        _phase_record "Services: resolved restart" SKIP "drop-in unchanged (no restart needed)"
+        return 0
+    end
     if _run sudo -n systemctl restart systemd-resolved
         _phase_record "Services: resolved restart" PASS "systemd-resolved restarted"
     else
@@ -4405,6 +4412,11 @@ function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk
 end
 function _if_nm_restart --description "Restart NetworkManager so the deployed wifi.backend/powersave drop-in applies"
     if test "$_RY_PROFILE_USES_WIFI_BACKEND" = false; _info "NetworkManager not managed — skipping NM restart"; _phase_record "Finalize: NetworkManager restart" SKIP "NM backend not active"; return 0; end
+    if not contains -- /etc/NetworkManager/conf.d/99-cachyos-nm.conf $_RY_DEPLOY_CHANGED_DSTS # unchanged bytes: no reconnect blip on idempotent re-runs
+        _log "NM_RESTART_SKIP_UNCHANGED: drop-in bytes identical this run"
+        _phase_record "Finalize: NetworkManager restart" SKIP "drop-in unchanged (no restart needed)"
+        return 0
+    end
     if not command -q NetworkManager
         _warn "NetworkManager configs deployed but NetworkManager not installed — restart skipped; drop-in applies once installed or at next boot"
         _phase_record "Finalize: NetworkManager restart" WARN "NetworkManager not installed"
@@ -4476,7 +4488,7 @@ function _rdi_run_phases --description "Run pkgs/sys/services phases"
     end
     _rrp_optional_indexer updatedb updatedb
     _rrp_optional_indexer pkgfile "pkgfile --update" --update
-    set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0 # phase-3 scope
+    set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS # phase-3 scope
     if _install_system_files
         _phase_record "Configs: system file deployment" PASS "$_RY_DEPLOY_CHANGED_COUNT deployed, $_RY_DEPLOY_IDEMPOTENT_COUNT idempotent"
     else
@@ -4709,6 +4721,9 @@ function _ry_do_install_file --argument-names target --description "Install a si
     if test -z "$_use_sudo"; _err "Not a managed file: $target"; _info "Run without path to see managed files"; return $EXIT_USAGE; end
     set -l _mdst "$_RY_RESOLVED_MANAGED_DST" # literal dst; canonical key may diverge
     _echo "── ry-install v$VERSION - Install Single File ──"
+    set -l _if_content (_ry_get_file_content "$_mdst" 2>/dev/null) # format-validate before write (parity with full-install preflight)
+    if test "$status" -ne 0; _err "Content generator failed for $_mdst — refusing to deploy"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
+    if not _rvc_dispatch "$_mdst" $_if_content; _err "Embedded content failed format validation for $_mdst — refusing to deploy"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     if test "$_use_sudo" = true; _ensure_sudo_cached; or return $EXIT_PREFLIGHT; end
     set -l _changed_before $_RY_DEPLOY_CHANGED_COUNT
     if not _ry_install_file "$_mdst" $_use_sudo; _err "Failed to install: $_mdst"; _log_section "INSTALL-FILE END"; return 1; end
@@ -4913,7 +4928,7 @@ end
 
 # ── MAIN: ARGPARSE + MODE DISPATCH + LOG HEADER + EXIT ──
 set -g MODE install; set -g INSTALL_FILE_TARGET ""
-set -l _ORIG_ARGV $argv; set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) ry-argparse-err.XXXXXX)
+set -l _ORIG_ARGV $argv; set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) "ry-argparse-err.$fish_pid.XXXXXX")
 _track_tmpfile "$_ap_errfile"
 argparse --name=(command basename -- (status filename)) \
     --exclusive=verify,check,install-file \

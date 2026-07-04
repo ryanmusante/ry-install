@@ -4,6 +4,10 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.88.3 (2026-07-03)
+-------------------
+  - logging: hoist the JSONL ISO-8601 timestamp to _RY_TS_FMT
+
 7.88.2 (2026-07-03)
 -------------------
   - comments: compress trailing notes to essentials; fix a stale note

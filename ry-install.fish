@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.88.3 (2026-07-03) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.89.0 (2026-07-04) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.88.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.89.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -100,6 +100,7 @@ function _ry_exit --argument-names code --description "Set bail sentinel and exi
     _ry_erase_handlers
     exit $code
 end
+function _ry_root_usage --description "Root-guard usage error: print msg + help to stderr, exit EXIT_USAGE (parity with non-root argparse path)"; echo "[ERR] $argv" >&2; echo >&2; _ry_show_help >&2; _ry_exit $EXIT_USAGE; end
 
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
 set -g QUIET true; set -g MODE bootstrap # pinned pre-argparse for signal footers
@@ -127,9 +128,21 @@ end
 set -q _rsc_a; and set --erase _rsc_a
 set --erase _rsc_skip _rsc_after_dd
 if test "$_MY_UID" -eq 0
-    # --check beside --verify/--install-file: rc-2 usage parity with non-root
-    if test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; _ry_exit $EXIT_PREFLIGHT; end # no output; 3 = cannot probe
-    # root refusal precedes argparse: same rc 2 either way
+    if test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; _ry_exit $EXIT_PREFLIGHT; end # --check + valid mode: silent, 3 = cannot probe
+    set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity: argparse in subshell (argv rewrite local; parent argv intact for main dispatch)
+    set -l _rg_prc 0; set -l _rg_msg ""
+    for _rg_l in $_rg_msgout
+        if string match -q '@@RC@@*' -- "$_rg_l"; set _rg_prc (string replace '@@RC@@' '' -- "$_rg_l"); else if test -z "$_rg_msg"; set _rg_msg (string replace -ra '\e\[[0-9;]*[a-zA-Z]' '' -- "$_rg_l" | string trim --); end
+    end
+    set -l _rg_state (begin; argparse --name=ry-install --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= -- $argv 2>/dev/null; echo "@@LEFT@@$argv"; set -q _flag_install_file; and echo "@@IF@@$_flag_install_file"; end) # leftover positionals (-- stripped) + install-file value, mirroring main dispatch
+    set -l _rg_left; set -l _rg_if_present false; set -l _rg_if_val ""
+    for _rg_l in $_rg_state
+        if string match -q '@@LEFT@@*' -- "$_rg_l"; set -l _rg_lv (string replace '@@LEFT@@' '' -- "$_rg_l"); test -n "$_rg_lv"; and set _rg_left (string split ' ' -- "$_rg_lv"); else if string match -q '@@IF@@*' -- "$_rg_l"; set _rg_if_present true; set _rg_if_val (string replace '@@IF@@' '' -- "$_rg_l"); end
+    end
+    if test "$_rg_prc" -ne 0; test -n "$_rg_msg"; or set _rg_msg "Invalid arguments: $argv"; _ry_root_usage "$_rg_msg"; end
+    if test "$_rg_if_present" = true; and test -z "$_rg_if_val"; _ry_root_usage "--install-file requires a non-empty absolute path"; end
+    if test (count $_rg_left) -gt 0; _ry_root_usage "Unexpected positional argument(s): $_rg_left"; end
+    set -q _rg_l; and set --erase _rg_l
     echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2
     _ry_exit $EXIT_USAGE
 end

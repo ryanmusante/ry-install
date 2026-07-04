@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.88.3-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.89.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.88.3
+cd ry-install && git checkout v7.89.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -50,7 +50,7 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count validation) — exit 3 on a mismatched or sub-floor host; `--verify` downgrades the hardware and kernel-floor gates to warnings and prints `[OK]`/`[WARN]`/`[FAIL]` lines with a combined tally — warnings alone do not fail.
+`--verify`/`--check` are lock-free and read-only. Invalid arguments report the same usage error and exit `2` whether or not the run is rooted — the root guard defers to argument validation so the message is always precise. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count validation) — exit 3 on a mismatched or sub-floor host; `--verify` downgrades the hardware and kernel-floor gates to warnings and prints `[OK]`/`[WARN]`/`[FAIL]` lines with a combined tally — warnings alone do not fail.
 
 ## Install Flow
 

@@ -183,7 +183,7 @@ Rationale for the non-obvious choices; several note the override to reverse them
 | NTSYNC | `/dev/ntsync` asserted in preflight + verify (mainline ≥ 6.14). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
 | MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Remove if a kernel bump resolves it. |
 | IPv6 | Disabled system-wide (`ipv6.disable=1` in the cmdline); the nftables ruleset is IPv4-only. Drop the token, restore IPv6 firewall rules, and re-run to return to dual-stack. |
-| AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline; AMD-Vi fully disabled (no PCI passthrough). `--verify` confirms the `amd_iommu=off` directive at the config and live-cmdline layers. **VFIO/passthrough or SR-IOV users must use `amd_iommu=on iommu=pt` instead**, then re-run. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline; AMD-Vi fully disabled (no PCI passthrough). **VFIO/passthrough or SR-IOV users must use `amd_iommu=on iommu=pt` instead**, then re-run. |
 | UMIP (`clearcpuid=514`) | Ships in the cmdline; UMIP disabled system-wide (`SGDT`/`SIDT`/`SMSW` untrapped) and the kernel is tainted. Drop the token to restore UMIP if no `umip_printk` stutter is seen. |
 
 ## Uninstall

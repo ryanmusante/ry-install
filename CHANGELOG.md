@@ -4,6 +4,16 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.90.0 (2026-07-04)
+-------------------
+  - verify: fold Vulkan-package check into _vsp_required (ports the
+    pacman-db-lock guard); drop _vre_tcp, _vre_zram,
+    _vss_ntsync_modules, _vrkm_iommu, _vrk_clocksource, and the
+    _RY_DMESG_TSC cache
+  - verify: amd_iommu/tsc effect-correlations retired; directive still
+    asserted at config + live-cmdline layers (README AMD-Vi note synced)
+  - size: script 5080 -> 4951 lines (294 -> 288 functions)
+
 7.89.0 (2026-07-04)
 -------------------
   - args: root guard defers to argparse; invalid args exit 2 with

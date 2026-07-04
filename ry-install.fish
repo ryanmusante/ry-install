@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.89.0 (2026-07-04) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.90.0 (2026-07-04) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.89.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.90.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -489,7 +489,7 @@ function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK
     set --erase _RY_MKI_REVERT_FAILED _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED _RY_TIMESYNCD_ENABLED
     set --erase _RY_RUN_TIMEOUT_WARNED _RY_RUN_TIMEOUT_CLAMPED _PROG_CLOCK _PROG_NOW_LAST _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
-    set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT _RY_DMESG_TSC
+    set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_DEPLOY_CHANGED_DSTS _RY_BOOT_CRIT_HIT
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
@@ -2316,20 +2316,6 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
 end
 
 # ── VERIFY-STATIC: SYSTEM + USER (drop-ins, env.d) ──
-function _vss_ntsync_modules --description "_verify_static_system sub: ntsync state"
-    _echo "── ntsync state ──"
-    set -l _ns (_ntsync_state)
-    switch "$_ns" # case order mirrors _vre_ntsync
-        case loaded
-            _ok "  ntsync: loaded, /dev/ntsync present"
-        case builtin
-            _info "  ntsync: built-in (CONFIG_NTSYNC=y)"
-        case loaded_nodev
-            _warn "  ntsync: module loaded but /dev/ntsync missing"
-        case missing
-            _info "  ntsync: module not loaded"
-    end
-end
 function _vss_logind --description "_verify_static_system sub: logind.conf.d keys"
     _chk_file /etc/systemd/logind.conf.d/99-cachyos-logind.conf; or return 0
     for key in $LOGIND_IGNORE_KEYS
@@ -2374,7 +2360,6 @@ function _vss_modprobe --description "_verify_static_system sub: mt7925e modprob
 
 function _verify_static_system --description "Verify ntsync, resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, nftables"
     _echo "SYSTEM CONFIGURATION"
-    _vss_ntsync_modules
     _echo "── resolved ──"
     if _chk_file /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
         for kv in "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"; _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "$kv"; end
@@ -2415,6 +2400,29 @@ function _vsp_required --description "Check PKGS_ADD against installed; emits OK
             _ok "  $pkg: installed"
         else
             _fail "  $pkg: NOT INSTALLED"
+        end
+    end
+    if set -q EXPECTED_VULKAN_PKGS; and test (count $EXPECTED_VULKAN_PKGS) -gt 0
+        _echo "── Vulkan driver packages ──"
+        if not command -q pacman
+            _warn "  Vulkan packages: pacman not found — skipping"
+        else
+            set -l _vk_installed (command pacman -Qq 2>/dev/null)
+            if test "$status" -ne 0
+                _warn "  Vulkan packages: pacman -Qq failed (db locked or read error) — skipping"
+                _log "VULKAN_QQ_FAIL: pacman -Qq returned non-zero"
+            else
+                set -l _vk_missing
+                for pkg in $EXPECTED_VULKAN_PKGS
+                    if contains -- "$pkg" $_vk_installed
+                        _ok "  $pkg: installed"
+                    else
+                        _fail "  $pkg: NOT installed (DXVK/VKD3D-Proton requires this)"
+                        set -a _vk_missing "$pkg"
+                    end
+                end
+                test (count $_vk_missing) -gt 0; and _info "  Install missing: sudo pacman -S --needed $_vk_missing"
+            end
         end
     end
 end
@@ -2771,39 +2779,6 @@ function _vrkm_amdgpu --description "_vrk_module_state sub: amdgpu parameters (h
         end
     end
 end
-function _vrkm_iommu --description "_vrk_module_state sub: IOMMU effect check (amd_iommu=/intel_iommu=/iommu= from KERNEL_PARAMS vs /sys/kernel/iommu_groups + dmesg)"
-    set -l _want "" # off|on (derived from KERNEL_PARAMS; empty = no iommu param → silent)
-    for _kp in $KERNEL_PARAMS
-        switch "$_kp"
-            case 'amd_iommu=off' 'intel_iommu=off' 'iommu=off'
-                set _want off
-            case 'amd_iommu=on' 'intel_iommu=on' 'iommu=pt' 'iommu=force' 'iommu=on'
-                set _want on
-        end
-    end
-    test -z "$_want"; and return 0 # no IOMMU directive in KERNEL_PARAMS
-    test -d /sys/kernel/iommu_groups; or begin; _info "  IOMMU: /sys/kernel/iommu_groups absent — cannot verify (kernel without IOMMU sysfs)"; return 0; end
-    set -l _grp_count (command find /sys/kernel/iommu_groups -mindepth 1 -maxdepth 1 -type d 2>/dev/null | command wc -l | string trim --)
-    string match -qr '^[0-9]+$' -- "$_grp_count"; or set _grp_count 0
-    set -l _dmesg_amdvi ""
-    if test "$_RY_DMESG_LINES" -gt 0; and command -q dmesg; and sudo -n true 2>/dev/null
-        set _dmesg_amdvi (sudo -n dmesg 2>/dev/null | command grep -iE 'AMD-Vi: (Enabled|Found|Interrupt)|DMAR: IOMMU enabled|Adding to iommu group' | command head -n 1)
-    end
-    if test "$_want" = off
-        if test "$_grp_count" -eq 0
-            _ok "  IOMMU: disabled (0 iommu_groups; amd_iommu=off effective)"
-        else
-            _fail "  IOMMU: $_grp_count iommu_groups present but KERNEL_PARAMS requests off — directive not effective (check BIOS IOMMU/firmware override)"
-            test -n "$_dmesg_amdvi"; and _info "  dmesg: "(string trim -- "$_dmesg_amdvi")
-        end
-    else
-        if test "$_grp_count" -gt 0
-            _ok "  IOMMU: enabled ($_grp_count iommu_groups; passthrough/translation active)"
-        else
-            _fail "  IOMMU: 0 iommu_groups but KERNEL_PARAMS requests on — directive not effective (check BIOS IOMMU enablement)"
-        end
-    end
-end
 function _vrkm_blacklist --description "_vrk_module_state sub: module_blacklist= scan from KERNEL_PARAMS"
     set -l _bl_mods
     for _kp in $KERNEL_PARAMS
@@ -2831,9 +2806,6 @@ function _vrk_module_state --description "Runtime kparam check: module parameter
     _chk_sysfs_match /sys/module/zswap/parameters/enabled '^[N0]$' zswap.enabled
     _chk_sysfs_eq /proc/sys/kernel/nmi_watchdog 0 nmi_watchdog
     _echo
-    _echo "── IOMMU (cmdline effect) ──"
-    _vrkm_iommu
-    _echo
     _echo "── I/O scheduler (NVMe) ──"
     set -l _nvme_bdevs (command find /sys/block -mindepth 1 -maxdepth 1 -name 'nvme*n*' 2>/dev/null)
     if test (count $_nvme_bdevs) -eq 0; _info "  No NVMe block device present"; end
@@ -2845,37 +2817,14 @@ function _vrk_module_state --description "Runtime kparam check: module parameter
     _vrkm_blacklist
     _echo
 end
-function _vrk_clocksource --description "Runtime kparam check: clocksource (with TSC demotion correlation)"
-    _echo "── Clocksource ──"
-    if test -f /sys/devices/system/clocksource/clocksource0/current_clocksource
-        set -l _cs (command cat -- /sys/devices/system/clocksource/clocksource0/current_clocksource 2>/dev/null | string trim --)
-        if test "$_cs" = tsc
-            _ok "  clocksource: $_cs"
-        else if test "$_cs" = hpet
-            _fail "  clocksource: $_cs (expected: tsc — HPET has 10–100× higher read latency)"
-            set -l _tsc_demote $_RY_DMESG_TSC
-            if test -n "$_tsc_demote"
-                for _l in $_tsc_demote; _info "  dmesg: $_l"; end
-            else if test "$_RY_DMESG_LINES" -eq 0
-                _info "  dmesg: cannot scan (sudo lapsed or dmesg unavailable — TSC demotion check skipped)"
-            else
-                _info "  dmesg: no TSC demotion markers found — check BIOS/firmware"
-            end
-        else
-            _warn "  clocksource: $_cs (expected: tsc)"
-        end
-    end
-    _echo
-end
 
 # ── VERIFY-RUNTIME: KPARAMS ORCHESTRATOR (_verify_runtime_kparams) ──
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource"
-    set -g _RY_DMESG_LINES 0; set -g _RY_DMESG_PREEMPT; set -g _RY_DMESG_TSC
+    set -g _RY_DMESG_LINES 0; set -g _RY_DMESG_PREEMPT
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null); set -l _full_count (count $_full)
         if test "$_full_count" -gt 0
             set -g _RY_DMESG_PREEMPT (printf '%s\n' $_full | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
-            set -g _RY_DMESG_TSC (printf '%s\n' $_full | command grep -iE 'Marking TSC unstable|TSC: Marking|clocksource.*tsc.*unstable' | command head -n 3)
         end
         set -g _RY_DMESG_LINES $_full_count
     end
@@ -2894,8 +2843,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     _vrk_gpu_state
     _vrk_cpu_state
     _vrk_module_state
-    _vrk_clocksource
-    set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT _RY_DMESG_TSC
+    set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT
 end
 
 # ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, nftables, wifi, masks) ──
@@ -3116,56 +3064,6 @@ function _vre_sysctl_runtime --description "Runtime env check: sysctl values via
     end
     _echo
 end
-function _vre_tcp --description "Runtime env check: tcp_bbr module version (active bbr value verified in sysctl block)"
-    _echo "── TCP congestion control ──"
-    if command -q modinfo
-        set -l _bbr_ver (command modinfo tcp_bbr 2>/dev/null | command grep -i '^version:' | string replace -r -- '^version:\s*' '')
-        if test -n "$_bbr_ver"
-            _info "  tcp_bbr module version: $_bbr_ver (advisory — active selection asserted in sysctl block)" # module presence != load+select
-        else
-            _info "  tcp_bbr: version field not available"
-        end
-    end
-    _echo
-end
-function _vre_zram --description "Runtime env check: zram service + active swap device"
-    if not command -q swapon
-        _warn "  ZRAM/swap check skipped: swapon(1) unavailable"
-        return 0
-    end
-    set -l _zram_swap (command swapon --show=NAME,TYPE 2>/dev/null | command grep zram); set -l _zram_dev (printf '%s\n' $_zram_swap | string match -rg -- '(zram\d+)' | command head -n 1)
-    test -z "$_zram_dev"; and set _zram_dev zram0
-    set -l _zram_state (command systemctl is-enabled "systemd-zram-setup@$_zram_dev.service" 2>/dev/null | string trim --)
-    switch "$_zram_state"
-        case masked
-            _warn "  ZRAM service: masked (out-of-scope advisory; not managed by this profile)"
-        case enabled
-            _ok "  ZRAM service: enabled"
-        case static
-            if test -n "$_zram_swap"
-                _ok "  ZRAM service: static (template instantiated by zram-generator)"
-            else
-                _warn "  ZRAM service: static but no zram swap device active"
-            end
-        case ''
-            _warn "  ZRAM service: not found"
-        case '*'
-            _warn "  ZRAM service: $_zram_state (expected: enabled or static+active)"
-    end
-    _echo "── ZRAM ──"
-    if test -n "$_zram_swap"
-        set -l _zram_info ""
-        command -q zramctl; and set _zram_info (command zramctl --output NAME,ALGORITHM,DISKSIZE,TOTAL,COMP-RATIO --noheadings 2>/dev/null | command head -n 1 | string trim --)
-        _ok "  ZRAM swap active: $_zram_info"
-    else
-        set -l _any_swap (command swapon --show=NAME,SIZE 2>/dev/null | command tail -n +2)
-        if test -z "$_any_swap"
-            _warn "  No swap available (out-of-scope advisory; ZRAM/swap not managed by this profile)"
-        else
-            _warn "  ZRAM not active but other swap found: $_any_swap"
-        end
-    end
-end
 function _vre_fstab --description "Runtime env check: fstab ext4 entries have noatime,lazytime,commit=10"
     _echo "── fstab mount options ──"
     set -l _fstab_ext4; set -l _fstab_malformed
@@ -3237,8 +3135,6 @@ end
 function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, ZRAM, fstab, ntsync, regdom runtime"
     _vre_envvars
     _vre_sysctl_runtime
-    _vre_tcp
-    _vre_zram
     _vre_fstab
     _vre_ntsync
     _vre_regdom
@@ -3350,30 +3246,6 @@ function _vrs_parent_dirs --description "Runtime session check: parent dirs of m
     test "$dir_checked" -eq 0; and _warn "  No parent directories found to check"
     test "$dir_vfat_skipped" -gt 0; and _info "  $dir_vfat_skipped dir(s) skipped on boot partition (vfat or undetermined fstype — unix perms not verifiable)"
 end
-function _vrs_vulkan --description "Runtime session check: Vulkan driver packages (DXVK/VKD3D-Proton dependency)"
-    _echo
-    _echo "PACKAGE MANAGEMENT"
-    _echo
-    _echo "── Vulkan driver packages ──"
-    if not set -q EXPECTED_VULKAN_PKGS; or test (count $EXPECTED_VULKAN_PKGS) -eq 0; _info "  EXPECTED_VULKAN_PKGS not defined — skipping"; return 0; end
-    if not command -q pacman; _warn "  Vulkan packages: pacman not found — skipping"; return 0; end
-    set -l _vk_installed (command pacman -Qq 2>/dev/null)
-    if test "$status" -ne 0 # db lock/read error: empty list misreports
-        _warn "  Vulkan packages: pacman -Qq failed (db locked or read error) — skipping"
-        _log "VULKAN_QQ_FAIL: pacman -Qq returned non-zero"
-        return 0
-    end
-    set -l _vk_missing_list
-    for _vk_pkg in $EXPECTED_VULKAN_PKGS
-        if contains -- "$_vk_pkg" $_vk_installed
-            _ok "  $_vk_pkg: installed"
-        else
-            _fail "  $_vk_pkg: NOT installed (DXVK/VKD3D-Proton requires this)"
-            set -a _vk_missing_list "$_vk_pkg"
-        end
-    end
-    test (count $_vk_missing_list) -gt 0; and _info "  Install missing: sudo pacman -S --needed $_vk_missing_list"
-end
 
 # ── VERIFY-RUNTIME: SESSION ORCHESTRATOR (_verify_runtime_session) ──
 function _verify_runtime_session --description "Verify NM connection perms, installed-file perms, parent dirs, Vulkan packages"
@@ -3382,7 +3254,6 @@ function _verify_runtime_session --description "Verify NM connection perms, inst
     _vrs_nm_perms
     _vrs_installed_file_perms
     _vrs_parent_dirs
-    _vrs_vulkan
 end
 
 # ── VERIFY: TOP-LEVEL ORCHESTRATORS (_ry_verify_runtime + _ry_verify_all) ──

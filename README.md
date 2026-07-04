@@ -5,7 +5,7 @@
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs, gaming/LLM desktop profile. Every change is atomic, byte-verifiable (`--verify`), and reversible by hand ([Uninstall](#uninstall)).
+> Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs, gaming/LLM desktop profile. Every change is atomic, byte-verifiable (`--verify`), and reversible ([Uninstall](#uninstall)).
 
 ## Quick Start
 
@@ -33,16 +33,16 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP sync and `paccache` only warn. Unsynced clock, no NTP client → `systemd-timesyncd` enabled + RTC writeback (skip: `RY_NO_NTP_REMEDIATION=1`).
+Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), sub-6.19 kernel, or uncached sudo; NTP + `paccache` only warn. Unsynced clock with no NTP client → `systemd-timesyncd` + RTC writeback (skip: `RY_NO_NTP_REMEDIATION=1`).
 
 ## Usage
 
 > [!CAUTION]
-> `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits 4 and prints the DO-NOT-REBOOT banner — **do not reboot** until it succeeds. A non-vfat `/boot` ESP also refuses sdboot (exit 4).
+> `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits 4 with the DO-NOT-REBOOT banner — **do not reboot** until it succeeds. A non-vfat `/boot` ESP also refuses sdboot (exit 4).
 
 | Flag | Action |
 |---|---|
-| *(no args)* | Full unattended install (silent by default — a phase matrix prints at the end) |
+| *(no args)* | Full unattended install (silent; phase matrix prints at the end) |
 | `-V, --verbose` | Stream per-command install output (ignored under `--check`) |
 | `--verify` | Config files byte-for-byte, then live system state |
 | `--check` | Silent idempotency probe (`0` clean · `3` preflight · `10` drift). Compares the live `/proc/cmdline`, so a fresh install reads `10` until reboot |
@@ -50,7 +50,7 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. Invalid arguments report the same usage error and exit `2` whether or not the run is rooted — the root guard defers to argument validation so the message is always precise. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count validation) — exit 3 on a mismatched or sub-floor host; `--verify` downgrades the hardware and kernel-floor gates to warnings and prints `[OK]`/`[WARN]`/`[FAIL]` lines with a combined tally — warnings alone do not fail.
+`--verify`/`--check` are lock-free and read-only. Invalid args exit `2` (same message, rooted or not — the root guard defers to arg validation). `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count) — exit 3 on a sub-floor/mismatched host; `--verify` downgrades hardware + kernel-floor gates to warnings and prints `[OK]`/`[WARN]`/`[FAIL]` with a combined tally (warnings alone don't fail).
 
 ## Install Flow
 
@@ -70,7 +70,7 @@ Results print to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; 
 ## Safety & Reliability
 
 > [!WARNING]
-> Masks `ufw` and ships an IPv4-only nftables **default-deny-inbound** ruleset (loopback, established/related, and inbound ping accepted; all else dropped; `forward` drop, `output` accept). IPv6 is disabled system-wide via `ipv6.disable=1` on the kernel cmdline. `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` entries before regenerating; EFI-resident loaders such as Windows Boot Manager are untouched.
+> Masks `ufw` and ships an IPv4-only nftables **default-deny-inbound** ruleset (loopback, established/related, and inbound ping accepted; all else dropped; `forward` drop, `output` accept). IPv6 is disabled system-wide via `ipv6.disable=1` on the cmdline. `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` before regenerating; EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
 
 Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play inbound accepts.
 
@@ -116,7 +116,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 | Aspect | Behavior |
 |---|---|
-| Change | ext4 rows get `noatime,lazytime,commit=10` in column 4 only; every other column and every non-ext4 row byte-preserved |
+| Change | ext4 rows get `noatime,lazytime,commit=10` in column 4 only; all other columns and non-ext4 rows byte-preserved |
 | Normalized away | redundant `defaults` / `relatime` / `atime` / `strictatime` / existing `commit=` tokens |
 | Gates | line-count parity + size floor + mandatory `findmnt --verify` |
 | Refused (not corrected) | a symlinked or whitespace-split (malformed) `/etc/fstab` |
@@ -130,7 +130,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot loader settings (default entry, timeout, console-mode) |
-| `/etc/kernel/cmdline` | kernel command line: `root=UUID` prefix + the 17 `KERNEL_PARAMS` |
+| `/etc/kernel/cmdline` | kernel command line: `rw root=UUID` prefix + the 17 `KERNEL_PARAMS` |
 | `/etc/sdboot-manage.conf` | boot-entry generation (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES` / `HOOKS` / `zstd` compression |
 
@@ -199,7 +199,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-The fstab backup exists only if fstab was rewritten (skip if stale). If ry-install enabled `systemd-timesyncd`, optionally `sudo systemctl disable --now systemd-timesyncd`. For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert their contents (or `.ry.bak`) before step 5, which regenerates entries from that state.
+The fstab backup exists only if fstab was rewritten (skip if stale). If ry-install enabled `systemd-timesyncd`, optionally `sudo systemctl disable --now systemd-timesyncd`. For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert contents (or `.ry.bak`) before step 5, which regenerates entries from that state.
 
 ## Known Issues
 

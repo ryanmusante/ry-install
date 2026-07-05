@@ -681,7 +681,7 @@ set -g PKGS_ADD \
     ddcutil \
     nftables \
     pacman-contrib \
-    archlinux-contrib # cachy-update hard-deps (pactree/paccache/checkservices); marked explicit post-Syu so -Rns -s can't orphan them
+    archlinux-contrib # cachy-update hard-deps (pactree/paccache/checkservices); kept explicit post-Syu, see _install_packages
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
@@ -3502,7 +3502,7 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
         set -g SYSTEM_UPGRADED false
         _log "PKG_STATE_UNCHANGED: pacman -Q fingerprint identical pre/post -Syu (no-op upgrade)"
     end
-    # mark PKGS_ADD explicit post-Syu: -S --needed leaves a pre-installed dep at reason=dependency; without this, Phase-4 -Rns -s orphans it (-D --asexplicit is idempotent)
+    # mark PKGS_ADD explicit post-Syu so Phase-4 -Rns -s can't orphan a pre-installed reason=dependency member (-D --asexplicit idempotent)
     set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null)
     if test (count $_add_present) -gt 0
         if not _run sudo -n pacman -D --asexplicit -- $_add_present

@@ -6,23 +6,20 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
 
 7.91.2 (2026-07-05)
 -------------------
-  - docs: trim README prose to vital form; all tables preserved
-    verbatim (18 tables / 111 rows unchanged)
-  - script: condense the three verbose comments (PKGS_ADD-explicit,
-    count-tripwire, archlinux-contrib) to single-line vital form
-  - version: sync script header, VERSION global, and README pins
+  - docs: trim README/CHANGELOG prose to vital form; all 18 tables
+    preserved verbatim
+  - script: condense verbose comments to single-line vital form
+  - size: correct stale count; script is 4965 lines / 288 functions
+  - version: sync script header, VERSION global, README pins
     7.91.1 -> 7.91.2
 
 7.91.1 (2026-07-05)
 -------------------
-  - packages: add pacman-contrib and archlinux-contrib to PKGS_ADD;
-    mark every PKGS_ADD member explicit after -Syu via
-    pacman -D --asexplicit, since -S --needed leaves a pre-installed
-    cachy-update dependency at reason=dependency and -Rns -s would
-    otherwise orphan it (pactree, paccache, checkservices); PKGS_ADD
-    17 -> 19
-  - validate: document the _ir_validate_counts literals as independent
-    drift tripwires (never derive a count from the array it guards)
+  - packages: add pacman-contrib, archlinux-contrib; mark every
+    PKGS_ADD member explicit after -Syu (pacman -D --asexplicit) so
+    -Rns -s can't orphan pactree/paccache/checkservices; 17 -> 19
+  - validate: note _ir_validate_counts literals as independent drift
+    tripwires (never derive a count from the array it guards)
   - mangohud: annotate the disabled cpu_temp line as intentional
 
 7.91.0 (2026-07-04)

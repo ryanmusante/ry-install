@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.91.2-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.91.3-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.91.2
+cd ry-install && git checkout v7.91.3
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -180,7 +180,7 @@ Rationale for the non-obvious choices; several note the override to reverse them
 |---|---|
 | Large-VRAM compute | GTT caps usable VRAM near 62 GiB. For a single allocation >~62 GiB (ROCm/llama.cpp), raise the **BIOS UMA carveout** (up to 96 GB), not deprecated `amdgpu.gttsize`. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 reached RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE` → `1`. |
-| NTSYNC | `/dev/ntsync` asserted in preflight + verify (mainline ≥ 6.14). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
+| NTSYNC | `/dev/ntsync` reported (warn-level) by `--verify` (mainline ≥ 6.14; the ≥ 6.19 floor guarantees it). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
 | MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Remove if a kernel bump resolves it. |
 | IPv6 | Disabled system-wide (`ipv6.disable=1` in the cmdline); the nftables ruleset is IPv4-only. Drop the token, restore IPv6 firewall rules, and re-run to return to dual-stack. |
 | AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline; AMD-Vi fully disabled (no PCI passthrough). **VFIO/passthrough or SR-IOV users must use `amd_iommu=on iommu=pt` instead**, then re-run. |
@@ -199,7 +199,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-The fstab backup exists only if fstab was rewritten (skip if stale). If ry-install enabled `systemd-timesyncd`, optionally `sudo systemctl disable --now systemd-timesyncd`. For boot files (`loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`), revert contents (or `.ry.bak`) before step 5, which regenerates entries from that state.
+The fstab backup exists only if fstab was rewritten (skip if stale). If ry-install enabled `systemd-timesyncd`, optionally `sudo systemctl disable --now systemd-timesyncd`. For boot files, revert contents before step 5, which regenerates entries from that state: `loader.conf` and `mkinitcpio.conf` have a `.ry.bak` to restore from, whereas `/etc/kernel/cmdline` is not backed up and must be reverted by hand.
 
 ## Known Issues
 

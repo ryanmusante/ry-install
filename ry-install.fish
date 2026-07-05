@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.91.2 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.91.3 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.91.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.91.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -2362,7 +2362,7 @@ function _vss_nft --description "_verify_static_system sub: nftables default-den
 end
 function _vss_modprobe --description "_verify_static_system sub: mt7925e modprobe drop-in (ASPM disable)"; _chk_file /etc/modprobe.d/60-ry-mt7925e.conf; and _chk_grep /etc/modprobe.d/60-ry-mt7925e.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'; end
 
-function _verify_static_system --description "Verify ntsync, resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, nftables"
+function _verify_static_system --description "Verify resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, modprobe, nftables"
     _echo "SYSTEM CONFIGURATION"
     _echo "── resolved ──"
     if _chk_file /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
@@ -2823,7 +2823,7 @@ function _vrk_module_state --description "Runtime kparam check: module parameter
 end
 
 # ── VERIFY-RUNTIME: KPARAMS ORCHESTRATOR (_verify_runtime_kparams) ──
-function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist, clocksource"
+function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist"
     set -g _RY_DMESG_LINES 0; set -g _RY_DMESG_PREEMPT
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null); set -l _full_count (count $_full)
@@ -3136,7 +3136,7 @@ function _vre_regdom --description "Runtime env check: wireless regulatory domai
 end
 
 # ── VERIFY-RUNTIME: ENV ORCHESTRATOR (_verify_runtime_env) ──
-function _verify_runtime_env --description "Verify ENV_VARS, sysctl, TCP, ZRAM, fstab, ntsync, regdom runtime"
+function _verify_runtime_env --description "Verify ENV_VARS, sysctl, fstab, ntsync, regdom runtime"
     _vre_envvars
     _vre_sysctl_runtime
     _vre_fstab

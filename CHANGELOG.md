@@ -4,6 +4,17 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.91.3 (2026-07-05)
+-------------------
+  - docs: correct ntsync note — /dev/ntsync is reported (warn) by
+    --verify only, not in preflight
+  - docs: clarify uninstall — loader.conf and mkinitcpio.conf carry
+    .ry.bak; /etc/kernel/cmdline is reverted by hand
+  - verify: refresh stale fn descriptions (drop ntsync/clocksource/
+    TCP/ZRAM; add modprobe) from the 7.90.0 sub-check removals
+  - version: sync script header, VERSION global, README pins
+    7.91.2 -> 7.91.3
+
 7.91.2 (2026-07-05)
 -------------------
   - docs: trim README/CHANGELOG prose to vital form; all 18 tables

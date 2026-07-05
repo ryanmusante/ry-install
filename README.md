@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.91.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.91.1-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.91.0
+cd ry-install && git checkout v7.91.1
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -96,11 +96,11 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (pacman-contrib; if absent, pacman's own refusal is the only gate — an external dependant skips + logs). Reversible via [Uninstall](#uninstall).
+`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`). `pacman-contrib` and `archlinux-contrib` are hard-deps of the removed `cachy-update`; Phase 2 marks every `PKGS_ADD` member explicit (`pacman -D --asexplicit`) **after** the `-Syu`, because `-S --needed` skips an already-installed target and leaves its reason as `dependency` — without the explicit-marking, `-Rns -s` would orphan `pactree`/`paccache`/`checkservices` along with `cachy-update`. If `pactree` is somehow absent, pacman's own refusal is the only gate — an external dependant skips + logs. Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
-| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `rtkit`, `realtime-privileges`, `ddcutil`, `nftables` |
+| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `rtkit`, `realtime-privileges`, `ddcutil`, `nftables`, `pacman-contrib`, `archlinux-contrib` |
 | Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (chwd Vulkan drivers) |
 

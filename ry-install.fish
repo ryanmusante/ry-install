@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.91.0 (2026-07-04) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.91.1 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.91.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.91.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -679,7 +679,9 @@ set -g PKGS_ADD \
     rtkit \
     realtime-privileges \
     ddcutil \
-    nftables
+    nftables \
+    pacman-contrib \
+    archlinux-contrib # pacman-contrib (pactree/paccache) + archlinux-contrib (checkservices/paccat) are cachy-update hard-deps; marked explicit post-Syu (see _ip_pacman_invoke) so -Rns -s can't orphan them
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
@@ -741,6 +743,7 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
     if test "$_usr_in" -ne "$_usr_out"; _err_loud "BUG: _RY_CANON_USER_DSTS count drift: in=$_usr_in out=$_usr_out"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
+    # counts are independent drift tripwires — several mirror README tables/help/_RY_MANAGED_FILE_COUNT; on abort, sync the array AND its doc/global mirror (never derive the count from the array — a count==count check voids the guard)
     set -l _expect \
         KERNEL_PARAMS:17 \
         MKINITCPIO_HOOKS:11 \
@@ -748,7 +751,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:11 \
         SYSCTL_VALUES:9 \
-        PKGS_ADD:17 \
+        PKGS_ADD:19 \
         PKGS_DEL:9 \
         MASK:10 \
         EXPECTED_VULKAN_PKGS:2 \
@@ -1004,7 +1007,7 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
         "gpu_core_clock" \
         "gpu_power" \
         "cpu_stats" \
-        "# cpu_temp" \
+        "# cpu_temp intentionally disabled — enable if you want CPU temperature in the HUD" \
         "cpu_mhz" \
         "cpu_power" \
         "vram" \
@@ -3498,6 +3501,16 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
     if test -n "$_q_pre"; and test -n "$_q_post"; and test "$_q_pre" = "$_q_post"
         set -g SYSTEM_UPGRADED false
         _log "PKG_STATE_UNCHANGED: pacman -Q fingerprint identical pre/post -Syu (no-op upgrade)"
+    end
+    # mark PKGS_ADD explicit: -S --needed skips an already-present target and leaves its reason unchanged, so a cachy-update dep (pacman-contrib/archlinux-contrib) would stay reason=dependency and be orphaned by the Phase-4 -Rns -s; -D --asexplicit is idempotent for already-explicit members
+    set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null)
+    if test (count $_add_present) -gt 0
+        if not _run sudo -n pacman -D --asexplicit -- $_add_present
+            _warn "  Could not mark PKGS_ADD packages explicit — orphan-removal exemption not guaranteed for any pre-installed as a dependency"
+            _log "PKG_ASEXPLICIT_FAIL: pacman -D --asexplicit returned non-zero for: $_add_present"
+        else
+            _log "PKG_ASEXPLICIT_OK: marked explicit ("(count $_add_present)"): $_add_present"
+        end
     end
     return 0
 end

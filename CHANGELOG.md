@@ -4,33 +4,37 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.92.0 (2026-07-05)
+-------------------
+  - run: hard-cap long-running pkg/boot/db ops at 7200s instead of
+    disabling their timeout; a short cap never SIGKILLs a live
+    transaction, but a true hang still terminates (RY_RUN_TIMEOUT=0
+    still disables; a user value above the cap is honored)
+  - run: resolve the effective command via PATH before the long-op
+    match so a same-named wrapper cannot inherit the cap
+  - docs: sync help + README to the hard-cap behavior
+  - version: sync script header, VERSION global, README pins
+    7.91.3 -> 7.92.0
+
 7.91.3 (2026-07-05)
 -------------------
-  - docs: correct ntsync note — /dev/ntsync is reported (warn) by
-    --verify only, not in preflight
-  - docs: clarify uninstall — loader.conf and mkinitcpio.conf carry
-    .ry.bak; /etc/kernel/cmdline is reverted by hand
-  - verify: refresh stale fn descriptions (drop ntsync/clocksource/
-    TCP/ZRAM; add modprobe) from the 7.90.0 sub-check removals
-  - version: sync script header, VERSION global, README pins
-    7.91.2 -> 7.91.3
+  - docs: correct ntsync note — reported (warn) by --verify, not
+    preflight; clarify uninstall backup coverage
+  - verify: refresh stale fn descriptions from 7.90.0 removals
+  - version: sync pins 7.91.2 -> 7.91.3
 
 7.91.2 (2026-07-05)
 -------------------
-  - docs: trim README/CHANGELOG prose to vital form; all 18 tables
-    preserved verbatim
-  - script: condense verbose comments to single-line vital form
-  - size: correct stale count; script is 4965 lines / 288 functions
-  - version: sync script header, VERSION global, README pins
-    7.91.1 -> 7.91.2
+  - docs: trim README/CHANGELOG prose; all 18 tables kept verbatim
+  - script: condense verbose comments to single-line form
+  - size: correct stale count (4965 lines / 288 functions)
+  - version: sync pins 7.91.1 -> 7.91.2
 
 7.91.1 (2026-07-05)
 -------------------
-  - packages: add pacman-contrib, archlinux-contrib; mark every
-    PKGS_ADD member explicit after -Syu (pacman -D --asexplicit) so
-    -Rns -s can't orphan pactree/paccache/checkservices; 17 -> 19
-  - validate: note _ir_validate_counts literals as independent drift
-    tripwires (never derive a count from the array it guards)
+  - packages: add pacman-contrib, archlinux-contrib; mark PKGS_ADD
+    explicit after -Syu (pacman -D --asexplicit); 17 -> 19
+  - validate: note _ir_validate_counts literals as drift tripwires
   - mangohud: annotate the disabled cpu_temp line as intentional
 
 7.91.0 (2026-07-04)
@@ -40,13 +44,12 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
 
 7.90.0 (2026-07-04)
 -------------------
-  - verify: fold Vulkan-package check into _vsp_required (ports the
-    pacman-db-lock guard); drop _vre_tcp, _vre_zram,
-    _vss_ntsync_modules, _vrkm_iommu, _vrk_clocksource, and the
-    _RY_DMESG_TSC cache
-  - verify: amd_iommu/tsc effect-correlations retired; directive still
-    asserted at config + live-cmdline layers (README AMD-Vi note synced)
-  - size: script 5080 -> 4951 lines (294 -> 288 functions)
+  - verify: fold Vulkan check into _vsp_required; drop _vre_tcp,
+    _vre_zram, _vss_ntsync_modules, _vrkm_iommu, _vrk_clocksource,
+    _RY_DMESG_TSC
+  - verify: retire amd_iommu/tsc correlations; still asserted at
+    config + live-cmdline layers
+  - size: 5080 -> 4951 lines (294 -> 288 functions)
 
 7.89.0 (2026-07-04)
 -------------------

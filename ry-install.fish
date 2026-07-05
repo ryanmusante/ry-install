@@ -1,13 +1,13 @@
 #!/usr/bin/env fish
-# ry-install v7.91.3 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.92.0 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.91.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.92.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
-set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S%z'
+set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S%z'
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
@@ -34,6 +34,7 @@ function _ry_show_help --description "Display usage information and available su
         "  (gen/run sentinels 11-14/250/251/255 are internal, never a process exit; signal codes 128+N appear in the JSONL footer)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-_run wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT. 0=disable; >9 digits clamp to 2147483647." \
+        "                        pacman/mkinitcpio/sdboot-manage/paccache/updatedb/pkgfile use a floor of $_RY_LONGOP_HARD_CAP""s (never the shorter default; 0 still disables)." \
         "  RY_NO_NTP_REMEDIATION=1  Skip timesyncd auto-enable + RTC writeback (warn-only time sync)." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
         "  RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1  Bypass KERNEL_MIN hard-fail." \
@@ -1480,7 +1481,7 @@ function _run_redact_cmd --description "_run sub: build logged cmd string with t
     end
     string replace -ar -- '/tmp/ry-[A-Za-z0-9_.-]+' '/tmp/ry-[REDACTED]' "$log_cmd"
 end
-function _run_effective_timeout --description "_run sub: resolve timeout; bypass for long-running pkg/boot/db ops (0 = disabled)" # SIGKILL mid-txn corrupts db.lck
+function _run_effective_timeout --description "_run sub: resolve timeout; long-running pkg/boot/db ops get a hard cap, not the short default (SIGKILL mid-txn corrupts db.lck)" # 0 = user disabled
     set -l _t (_run_resolve_timeout); set -l _effective_cmd $argv[1]
     if test "$_effective_cmd" = sudo
         set -l _skip_next false
@@ -1493,10 +1494,15 @@ function _run_effective_timeout --description "_run sub: resolve timeout; bypass
             set _effective_cmd $_ec_arg; break
         end
     end
-    set _effective_cmd (command basename -- "$_effective_cmd")
+    set -l _resolved (builtin command -v -- "$_effective_cmd" 2>/dev/null) # resolve via PATH; basename match alone could hit a same-named wrapper
+    test -n "$_resolved"; or set _resolved "$_effective_cmd"
+    set _effective_cmd (command basename -- "$_resolved")
     if contains -- "$_effective_cmd" pacman mkinitcpio sdboot-manage paccache updatedb pkgfile
-        test "$_t" -gt 0 2>/dev/null; and _log "TIMEOUT_BYPASS: cmd=$_effective_cmd (long-running pkg/boot/db op; SIGKILL would bypass rollback)"
-        set _t 0
+        if test "$_t" -eq 0 2>/dev/null; return 0; end # user opted out entirely (RY_RUN_TIMEOUT=0): honor it
+        if test "$_t" -lt "$_RY_LONGOP_HARD_CAP" 2>/dev/null # raise short default to the hard cap; never below, never unbounded
+            _log "TIMEOUT_LONGOP_CAP: cmd=$_effective_cmd raising $_t""s → $_RY_LONGOP_HARD_CAP""s (long-running pkg/boot/db op; short SIGKILL would bypass rollback)"
+            set _t $_RY_LONGOP_HARD_CAP
+        end
     end
     echo "$_t"
 end

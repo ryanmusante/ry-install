@@ -4,6 +4,19 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.92.1 (2026-07-05)
+-------------------
+  - validate: gate boot-critical scalars (MKINITCPIO_COMPRESSION,
+    SDBOOT_DEFAULT_ENTRY, LOADER_DEFAULT/CONSOLE_MODE/EDITOR) against
+    the KERNEL_PARAMS metachar class; previously non-empty check only
+  - validate: gate MKINITCPIO_COMPRESSION_OPTIONS tokens to the
+    mkinitcpio flag charset (spliced into a shell array literal)
+  - mkinitcpio: emit COMPRESSION_OPTIONS via string join like
+    MODULES/HOOKS; byte-identical output, no --verify regression
+  - validate: mkinitcpio.conf gains a MODULES/HOOKS/COMPRESSION
+    skeleton check (was a no-op)
+  - version: sync pins 7.92.0 -> 7.92.1
+
 7.92.0 (2026-07-05)
 -------------------
   - run: hard-cap long-running pkg/boot/db ops at 7200s instead of

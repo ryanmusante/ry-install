@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.92.0 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.92.1 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.92.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.92.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -789,6 +789,13 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
     for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION
         if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
+    set -l _scalar_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!#]' # same class as KERNEL_PARAMS gate; scalars land in shell-sourced/parser-read boot configs
+    for _k in MKINITCPIO_COMPRESSION SDBOOT_DEFAULT_ENTRY LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR
+        if string match -qr -- "$_scalar_metachar_re" "$$_k"; _err_loud "$_k contains whitespace, quote, or shell metachar: '$$_k' — refuse to deploy (would corrupt a shell-sourced or parser-read boot config)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+    for _co in $MKINITCPIO_COMPRESSION_OPTIONS # each token spliced into a shell array literal; restrict to mkinitcpio flag charset
+        if not string match -qr -- '^-?[A-Za-z0-9]+$' "$_co"; _err_loud "MKINITCPIO_COMPRESSION_OPTIONS token invalid: '$_co' — refuse to deploy (spliced into a shell-sourced array literal)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
 end
 function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy when running kernel < KERNEL_MIN (verify warns; override: RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1)"
     set -l _kr (command uname -r 2>/dev/null)
@@ -902,7 +909,7 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
         "FILES=()" \
         "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")" \
         "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
-    if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"; printf '%s\n' "COMPRESSION_OPTIONS=($MKINITCPIO_COMPRESSION_OPTIONS)"; end
+    if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test (count $MKINITCPIO_COMPRESSION_OPTIONS) -gt 0; printf '%s\n' "COMPRESSION_OPTIONS=("(string join -- " " $MKINITCPIO_COMPRESSION_OPTIONS)")"; end
 end
 function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
     printf '%s\n' "# systemd-resolved: plaintext DNS, mDNS/LLMNR off (diverges from CachyOS DoH default)" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
@@ -2005,6 +2012,9 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
         case '*/MangoHud/MangoHud.conf'
             _grep_mangohud_entry "$dst" $_content
         case '*/mkinitcpio.conf'
+            string match -qr '^MODULES=\(' -- $_content; or begin; _fail "  $dst: no MODULES=() line"; return 1; end
+            string match -qr '^HOOKS=\(' -- $_content; or begin; _fail "  $dst: no HOOKS=() line"; return 1; end
+            string match -qr '^COMPRESSION="' -- $_content; or begin; _fail "  $dst: no COMPRESSION= line"; return 1; end
             return 0
         case '*'
             _grep_ini_header "$dst" $_content

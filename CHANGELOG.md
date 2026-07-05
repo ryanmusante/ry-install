@@ -4,6 +4,11 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.91.0 (2026-07-04)
+-------------------
+  - mangohud: reorder gpu_temp before gpu_core_clock; comment out
+    cpu_temp; add cpu_power readout (~/.config/MangoHud/MangoHud.conf)
+
 7.90.0 (2026-07-04)
 -------------------
   - verify: fold Vulkan-package check into _vsp_required (ports the

@@ -4,6 +4,13 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.92.2 (2026-07-05)
+-------------------
+  - validate: add MKINITCPIO_COMPRESSION_OPTIONS:2 drift tripwire
+  - resolve_esp: note /boot/EFI subdir skip on ext4 /boot
+  - cleanup: db.lck grace reaps only -P $fish_pid descendants
+  - version: sync pins 7.92.1 -> 7.92.2
+
 7.92.1 (2026-07-05)
 -------------------
   - validate: gate boot-critical scalars (MKINITCPIO_COMPRESSION,

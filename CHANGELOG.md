@@ -4,6 +4,15 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.91.2 (2026-07-05)
+-------------------
+  - docs: trim README prose to vital form; all tables preserved
+    verbatim (18 tables / 111 rows unchanged)
+  - script: condense the three verbose comments (PKGS_ADD-explicit,
+    count-tripwire, archlinux-contrib) to single-line vital form
+  - version: sync script header, VERSION global, and README pins
+    7.91.1 -> 7.91.2
+
 7.91.1 (2026-07-05)
 -------------------
   - packages: add pacman-contrib and archlinux-contrib to PKGS_ADD;

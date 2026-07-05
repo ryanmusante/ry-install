@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.91.1 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.91.2 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.91.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.91.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -681,7 +681,7 @@ set -g PKGS_ADD \
     ddcutil \
     nftables \
     pacman-contrib \
-    archlinux-contrib # pacman-contrib (pactree/paccache) + archlinux-contrib (checkservices/paccat) are cachy-update hard-deps; marked explicit post-Syu (see _ip_pacman_invoke) so -Rns -s can't orphan them
+    archlinux-contrib # cachy-update hard-deps (pactree/paccache/checkservices); marked explicit post-Syu so -Rns -s can't orphan them
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
@@ -743,7 +743,7 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
     if test "$_usr_in" -ne "$_usr_out"; _err_loud "BUG: _RY_CANON_USER_DSTS count drift: in=$_usr_in out=$_usr_out"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
-    # counts are independent drift tripwires — several mirror README tables/help/_RY_MANAGED_FILE_COUNT; on abort, sync the array AND its doc/global mirror (never derive the count from the array — a count==count check voids the guard)
+    # independent drift tripwires: never derive a count from the array it guards; on change, sync array + doc/global mirror
     set -l _expect \
         KERNEL_PARAMS:17 \
         MKINITCPIO_HOOKS:11 \
@@ -3502,7 +3502,7 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
         set -g SYSTEM_UPGRADED false
         _log "PKG_STATE_UNCHANGED: pacman -Q fingerprint identical pre/post -Syu (no-op upgrade)"
     end
-    # mark PKGS_ADD explicit: -S --needed skips an already-present target and leaves its reason unchanged, so a cachy-update dep (pacman-contrib/archlinux-contrib) would stay reason=dependency and be orphaned by the Phase-4 -Rns -s; -D --asexplicit is idempotent for already-explicit members
+    # mark PKGS_ADD explicit post-Syu: -S --needed leaves a pre-installed dep at reason=dependency; without this, Phase-4 -Rns -s orphans it (-D --asexplicit is idempotent)
     set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null)
     if test (count $_add_present) -gt 0
         if not _run sudo -n pacman -D --asexplicit -- $_add_present

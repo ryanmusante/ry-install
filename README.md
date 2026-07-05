@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.91.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.91.2-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.91.1
+cd ry-install && git checkout v7.91.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -33,7 +33,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), sub-6.19 kernel, or uncached sudo; NTP + `paccache` only warn. Unsynced clock with no NTP client → `systemd-timesyncd` + RTC writeback (skip: `RY_NO_NTP_REMEDIATION=1`).
+Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), sub-6.19 kernel, or uncached sudo; NTP and `paccache` only warn. An unsynced clock with no NTP client triggers `systemd-timesyncd` + RTC writeback (skip: `RY_NO_NTP_REMEDIATION=1`).
 
 ## Usage
 
@@ -50,7 +50,7 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. Invalid args exit `2` (same message, rooted or not — the root guard defers to arg validation). `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count) — exit 3 on a sub-floor/mismatched host; `--verify` downgrades hardware + kernel-floor gates to warnings and prints `[OK]`/`[WARN]`/`[FAIL]` with a combined tally (warnings alone don't fail).
+`--verify` and `--check` are lock-free and read-only. Invalid args exit `2` (same message rooted or not — the root guard defers to arg validation). `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count) — exit 3 on a sub-floor/mismatched host; `--verify` downgrades hardware + kernel-floor gates to warnings and prints `[OK]`/`[WARN]`/`[FAIL]` with a combined tally (warnings alone don't fail).
 
 ## Install Flow
 
@@ -96,7 +96,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`). `pacman-contrib` and `archlinux-contrib` are hard-deps of the removed `cachy-update`; Phase 2 marks every `PKGS_ADD` member explicit (`pacman -D --asexplicit`) **after** the `-Syu`, because `-S --needed` skips an already-installed target and leaves its reason as `dependency` — without the explicit-marking, `-Rns -s` would orphan `pactree`/`paccache`/`checkservices` along with `cachy-update`. If `pactree` is somehow absent, pacman's own refusal is the only gate — an external dependant skips + logs. Reversible via [Uninstall](#uninstall).
+`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`). `pacman-contrib` and `archlinux-contrib` are hard-deps of the removed `cachy-update`, so Phase 2 marks every `PKGS_ADD` member explicit (`pacman -D --asexplicit`) **after** the `-Syu`: `-S --needed` skips an already-installed target and leaves its reason as `dependency`, which would let `-Rns -s` orphan `pactree`/`paccache`/`checkservices` alongside `cachy-update`. If `pactree` is absent, pacman's own refusal is the only gate — an external dependant skips + logs. Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|

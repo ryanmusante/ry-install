@@ -4,6 +4,11 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.92.4 (2026-07-05)
+-------------------
+  - docs: sync README badge/pin and CHANGELOG; trim verbose bullets
+  - version: sync pins 7.92.3 -> 7.92.4
+
 7.92.3 (2026-07-05)
 -------------------
   - metachar: use PCRE \x27 for quote, dropping fragile fish requote
@@ -20,28 +25,19 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
 
 7.92.1 (2026-07-05)
 -------------------
-  - validate: gate boot-critical scalars (MKINITCPIO_COMPRESSION,
-    SDBOOT_DEFAULT_ENTRY, LOADER_DEFAULT/CONSOLE_MODE/EDITOR) against
-    the KERNEL_PARAMS metachar class; previously non-empty check only
-  - validate: gate MKINITCPIO_COMPRESSION_OPTIONS tokens to the
-    mkinitcpio flag charset (spliced into a shell array literal)
-  - mkinitcpio: emit COMPRESSION_OPTIONS via string join like
-    MODULES/HOOKS; byte-identical output, no --verify regression
-  - validate: mkinitcpio.conf gains a MODULES/HOOKS/COMPRESSION
-    skeleton check (was a no-op)
+  - validate: gate boot-critical scalars against metachar class
+  - validate: gate MKINITCPIO_COMPRESSION_OPTIONS to flag charset
+  - mkinitcpio: emit COMPRESSION_OPTIONS via string join (identical)
+  - validate: add mkinitcpio.conf MODULES/HOOKS skeleton check
   - version: sync pins 7.92.0 -> 7.92.1
 
 7.92.0 (2026-07-05)
 -------------------
-  - run: hard-cap long-running pkg/boot/db ops at 7200s instead of
-    disabling their timeout; a short cap never SIGKILLs a live
-    transaction, but a true hang still terminates (RY_RUN_TIMEOUT=0
+  - run: hard-cap long pkg/boot/db ops at 7200s (RY_RUN_TIMEOUT=0
     still disables; a user value above the cap is honored)
-  - run: resolve the effective command via PATH before the long-op
-    match so a same-named wrapper cannot inherit the cap
+  - run: resolve effective command via PATH before the long-op match
   - docs: sync help + README to the hard-cap behavior
-  - version: sync script header, VERSION global, README pins
-    7.91.3 -> 7.92.0
+  - version: sync pins 7.91.3 -> 7.92.0
 
 7.91.3 (2026-07-05)
 -------------------

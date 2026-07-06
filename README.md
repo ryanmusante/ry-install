@@ -181,11 +181,11 @@ Rationale for non-obvious choices; several list an override to reverse.
 |---|---|
 | Large-VRAM compute | GTT caps usable VRAM near 62 GiB. For a single allocation >~62 GiB (ROCm/llama.cpp), raise the **BIOS UMA carveout** (up to 96 GB), not deprecated `amdgpu.gttsize`. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 reached RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE` → `1`. |
-| NTSYNC | `/dev/ntsync` reported (warn-level) by `--verify` (mainline ≥ 6.14; the ≥ 6.19 floor guarantees it). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
+| NTSYNC | `/dev/ntsync` reported (warn-level) by `--verify` (mainline ≥ 6.14, guaranteed by the ≥ 6.19 floor). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
 | MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Remove if a kernel bump resolves it. |
-| IPv6 | Disabled system-wide (`ipv6.disable=1` in the cmdline); the nftables ruleset is IPv4-only. Drop the token, restore IPv6 firewall rules, and re-run to return to dual-stack. |
-| AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline; AMD-Vi fully disabled (no PCI passthrough). This also refuses the XDNA NPU (`amdxdna`), which the profile blacklists to silence the probe error. **NPU, VFIO/passthrough, or SR-IOV users must use `amd_iommu=on iommu=pt` and drop `60-ry-blacklist-amdxdna.conf`**, then re-run. |
-| UMIP (`clearcpuid=514`) | Ships in the cmdline; UMIP disabled system-wide (`SGDT`/`SIDT`/`SMSW` untrapped) and the kernel is tainted. Drop the token to restore UMIP if no `umip_printk` stutter is seen. |
+| IPv6 | Disabled via `ipv6.disable=1`; the nftables ruleset is IPv4-only. Drop the token, restore IPv6 firewall rules, and re-run for dual-stack. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi (no PCI passthrough) and refuses the XDNA NPU (`amdxdna`), which the profile blacklists to silence the probe error. **NPU, VFIO/passthrough, or SR-IOV users: set `amd_iommu=on iommu=pt`, drop `60-ry-blacklist-amdxdna.conf`, re-run.** |
+| UMIP (`clearcpuid=514`) | `clearcpuid=514` disables UMIP (`SGDT`/`SIDT`/`SMSW` untrapped) and taints the kernel. Drop the token to restore UMIP if no `umip_printk` stutter appears. |
 
 ## Uninstall
 

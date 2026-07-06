@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.92.2 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.92.3 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.92.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.92.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -216,7 +216,7 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 set -g _RY_BOOT_TAINTED false
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/mkinitcpio.conf"; set -g _RY_BACKUP_SUFFIX .ry.bak
-set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped sweep globs: never touch a peer run's files
+set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped sweep globs: never touch files of a peer run
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS; set -g _RY_PROFILE_USES_WIFI_BACKEND false
 set -g SYSTEM_UPGRADED false # cross-phase global; must exist in all modes (set in _install_packages)
@@ -349,7 +349,7 @@ function _lock_pid_started_after --argument-names pid mtime --description "rc 0 
     string match -qr '^\d+$' -- "$mtime"; or return 1
     set -l _stat (command cat -- /proc/$pid/stat 2>/dev/null | string collect)
     test -n "$_stat"; or return 1
-    set -l _post (string replace -r '^.*\) ' '' -- "$_stat") # cut after last ') '; comm may embed parens
+    set -l _post (string replace -r '^.*\) ' '' -- "$_stat") # cut after the last close-paren-space, since comm may contain parens
     set -l _ticks (string split ' ' -- "$_post")[20] # stat field 22 starttime = post-comm index 20
     string match -qr '^\d+$' -- "$_ticks"; or return 1
     set -l _btime (command awk '/^btime /{print $2; exit}' /proc/stat 2>/dev/null)
@@ -679,7 +679,7 @@ set -g PKGS_ADD \
     ddcutil \
     nftables \
     pacman-contrib \
-    archlinux-contrib # pactree (PKGS_DEL rdep safety) + paccache (cache trim) used by ry-install; marked explicit so cachy-update removal (-Rns -s) can't orphan them
+    archlinux-contrib # pactree (PKGS_DEL rdep safety) + paccache (cache trim) used by ry-install; marked explicit so cachy-update removal (-Rns -s) cannot orphan them
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
@@ -786,7 +786,7 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
     for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION
         if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
-    set -l _scalar_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!#]' # same class as KERNEL_PARAMS gate; scalars land in shell-sourced/parser-read boot configs
+    set -l _scalar_metachar_re '[\s"`$;\\\\&|<>(){}*?\x27~!#]' # shell metachar class for scalars written to boot configs
     for _k in MKINITCPIO_COMPRESSION SDBOOT_DEFAULT_ENTRY LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR
         if string match -qr -- "$_scalar_metachar_re" "$$_k"; _err_loud "$_k contains whitespace, quote, or shell metachar: '$$_k' — refuse to deploy (would corrupt a shell-sourced or parser-read boot config)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
@@ -868,7 +868,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     _ir_validate_post_hooks
     for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
     _ir_precompute_caches
-    set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\'~!#]' # literal ' splits/rejoins the class; edit with care
+    set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\x27~!#]' # shell metachar class for kernel params
     for _kp in $KERNEL_PARAMS
         if string match -qr -- "$_kp_metachar_re" "$_kp"
             _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"
@@ -1250,7 +1250,7 @@ function _msg_nocount --argument-names level --description "Like _msg but skips 
     _log "$level: $msg"
     _msg_print $argv
 end
-function _ok --description "Emit OK-level message and increment VERIFY_OK"; _msg OK $argv; return 0; end # always return 0 (callers chain via 'and')
+function _ok --description "Emit OK-level message and increment VERIFY_OK"; _msg OK $argv; return 0; end # always return 0 (callers chain via and)
 function _fail --description "Emit FAIL-level message and increment VERIFY_FAIL"; _msg FAIL $argv; return 0; end
 function _fail_no_count --description "Emit FAIL-level message without incrementing VERIFY_FAIL"; _msg_nocount FAIL $argv; return 0; end
 function _info --description "Emit INFO-level message (no counter)"; _msg INFO $argv; return 0; end
@@ -3515,7 +3515,7 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
         set -g SYSTEM_UPGRADED false
         _log "PKG_STATE_UNCHANGED: pacman -Q fingerprint identical pre/post -Syu (no-op upgrade)"
     end
-    set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null) # mark PKGS_ADD explicit post-Syu so Phase-4 -Rns -s can't orphan a pre-installed reason=dependency member (-D --asexplicit idempotent)
+    set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null) # mark PKGS_ADD explicit post-Syu so Phase-4 -Rns -s cannot orphan a pre-installed reason=dependency member (-D --asexplicit idempotent)
     if test (count $_add_present) -gt 0
         if not _run sudo -n pacman -D --asexplicit -- $_add_present
             _warn "  Could not mark PKGS_ADD packages explicit — orphan-removal exemption not guaranteed for any pre-installed as a dependency"
@@ -3966,7 +3966,7 @@ function _cse_collect_units --description "Collect system units to enable"
         if not contains -- "$_exp" $_RY_PKG_MANAGED_SERVICES
             set -a _enable "$_exp"; continue
         end
-        set -l _st (command systemctl is-enabled "$_exp" 2>/dev/null | string trim --) # enable only if preset didn't
+        set -l _st (command systemctl is-enabled "$_exp" 2>/dev/null | string trim --) # enable only if preset did not
         if test "$_st" = enabled
             _ok "$_exp: already enabled (package preset)"
         else if test -z "$_st"

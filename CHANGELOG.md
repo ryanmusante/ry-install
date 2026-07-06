@@ -4,6 +4,13 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.92.3 (2026-07-05)
+-------------------
+  - metachar: use PCRE \x27 for quote, dropping fragile fish requote
+  - comments: move standalone rationale inline; strip apostrophes
+  - packages: correct contrib-tool rationale (pactree/paccache use)
+  - version: sync pins 7.92.2 -> 7.92.3
+
 7.92.2 (2026-07-05)
 -------------------
   - validate: add MKINITCPIO_COMPRESSION_OPTIONS:2 drift tripwire

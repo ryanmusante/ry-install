@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.94.0 (2026-07-06) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.94.1 (2026-07-06) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.94.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.94.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -3189,11 +3189,13 @@ function _vrs_vfat_skip --argument-names path boot_fstype --description "rc 0 = 
     if test -z "$_fst"; _info "  $path: skipped (boot fstype undetermined — vfat-safe default)"; return 0; end
     return 1
 end
+function _resolve_boot_fstype --description "Emit \$BOOT partition fstype (resolve \$BOOT, default /boot, findmnt FSTYPE); empty when undetermined"
+    set -l _boot_resolved (_resolve_boot_path); test -z "$_boot_resolved"; and set _boot_resolved /boot
+    command findmnt -n -o FSTYPE "$_boot_resolved" 2>/dev/null | string trim --
+end
 function _vrs_installed_file_perms --description "Runtime session check: installed system/service/user file perms"
     _echo "── Installed files ──"
-    set -l perm_bad 0; set -l perm_checked 0; set -l perm_vfat_skipped 0; set -l _boot_resolved (_resolve_boot_path)
-    test -z "$_boot_resolved"; and set _boot_resolved /boot
-    set -l _boot_fstype (command findmnt -n -o FSTYPE "$_boot_resolved" 2>/dev/null | string trim --)
+    set -l perm_bad 0; set -l perm_checked 0; set -l perm_vfat_skipped 0; set -l _boot_fstype (_resolve_boot_fstype)
     for dst in $SYSTEM_DESTINATIONS
         if sudo -n test -f "$dst" 2>/dev/null
             if string match -q '/boot/*' -- "$dst"
@@ -3241,9 +3243,7 @@ end
 function _vrs_parent_dirs --description "Runtime session check: parent dirs of managed files (system root-owned; user dir user-owned)"
     _echo "── Parent directories ──"
     set -l dir_bad 0; set -l dir_checked 0; set -l dir_vfat_skipped 0; set -l checked_dirs
-    set -l _boot_resolved (_resolve_boot_path)
-    test -z "$_boot_resolved"; and set _boot_resolved /boot
-    set -l _boot_fstype (command findmnt -n -o FSTYPE "$_boot_resolved" 2>/dev/null | string trim --)
+    set -l _boot_fstype (_resolve_boot_fstype)
     for dst in $SYSTEM_DESTINATIONS
         set -l dir (command dirname -- "$dst")
         contains -- "$dir" $checked_dirs; and continue

@@ -4,6 +4,12 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.94.1 (2026-07-06)
+-------------------
+  - verify: extract _resolve_boot_fstype; both perm-check subs share
+    one $BOOT-fstype resolver (behavior unchanged)
+  - docs: drop duplicate REMOVE_EXISTING gloss; link Globals to Safety
+
 7.94.0 (2026-07-06)
 -------------------
   - udev: fix GPU rule key DEVTYPE -> ENV{DEVTYPE} (was rejected as an

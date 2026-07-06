@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.94.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.94.1-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.94.0
+cd ry-install && git checkout v7.94.1
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -92,7 +92,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 ### Globals
 
-Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` (BLS wipe).
+Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` (see [Safety & Reliability](#safety--reliability)).
 
 ### Packages
 
@@ -204,13 +204,10 @@ The fstab backup exists only if fstab was rewritten (skip if stale). If ry-insta
 
 ## Known Issues
 
-| Component | Issue | Status |
-|---|---|---|
-| Strix Halo GPU | MES page faults | resolved (MES 0x86; current `linux-firmware` + shipped `mkinitcpio-firmware`) |
-| RTL8127 10GbE | throughput drops under load; suspend/shutdown hang | resolved — in-tree `r8169` + suspend/shutdown hang fixes land in 6.18, so the ≥ 6.19 floor guarantees them; no DKMS |
-| MT7925 | kernel panics, low TX power, random deauth | open — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
-| Strix Halo ACP | no ASoC machine driver | open — pending upstream (HDMI/USB audio unaffected) |
-| XDNA NPU | `amdxdna` probe fails (`-EINVAL`) — driver needs the IOMMU | resolved — profile ships `amd_iommu=off` (NPU unused) and blacklists `amdxdna`; enable via `amd_iommu=on iommu=pt` |
+| Component | Issue |
+|---|---|
+| MT7925 | kernel panics, low TX power, random deauth — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
+| Strix Halo ACP | no ASoC machine driver — pending upstream (HDMI/USB audio unaffected) |
 
 ### Known-benign log lines
 

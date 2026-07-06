@@ -4,6 +4,11 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.93.0 (2026-07-05)
+-------------------
+  - profile: rename internal token gtr_pro -> gtr9_pro
+  - version: sync pins 7.92.4 -> 7.93.0
+
 7.92.4 (2026-07-05)
 -------------------
   - docs: sync README badge/pin and CHANGELOG; trim verbose bullets

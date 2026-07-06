@@ -33,7 +33,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpio`, `sdboot-manage`, `findmnt`, `sha256sum`, `curl`, GNU coreutils/findutils/diffutils — busybox/uutils rejected), sub-6.19 kernel, or uncached sudo; NTP and `paccache` only warn. An unsynced clock with no NTP client triggers `systemd-timesyncd` + RTC writeback (skip `RY_NO_NTP_REMEDIATION=1`).
+Preflight hard-fails (exit 3) on missing deps (core tools must be GNU; busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP and `paccache` only warn. An unsynced clock with no NTP client triggers `systemd-timesyncd` + RTC writeback (skip `RY_NO_NTP_REMEDIATION=1`).
 
 ## Usage
 
@@ -50,7 +50,7 @@ Preflight hard-fails (exit 3) on missing deps (`pacman`, `systemctl`, `mkinitcpi
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify` and `--check` are lock-free and read-only. Invalid args exit `2` (same message rooted or not). `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count) — exit 3 on a sub-floor/mismatched host; `--verify` downgrades hardware + kernel-floor gates to warnings and prints `[OK]`/`[WARN]`/`[FAIL]` with a combined tally (warnings alone don't fail).
+`--verify` and `--check` are lock-free and read-only; invalid args exit 2. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count), exit 3 on a sub-floor/mismatched host; `--verify` downgrades hardware + kernel-floor gates to warnings (warnings alone don't fail).
 
 ## Install Flow
 
@@ -65,7 +65,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
-Results print to stderr; a JSONL log records each phase. `WARN` keeps exit `0`; `DEFER` applies on next boot; a boot-critical failure (exit 4) must be resolved before rebooting.
+Results print to stderr; a JSONL log records each phase. `WARN` keeps exit 0; `DEFER` applies on next boot; a boot-critical failure (exit 4) must be resolved before rebooting.
 
 ## Safety & Reliability
 
@@ -84,7 +84,7 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 
 **Exit codes** `0` ok · `1` verify-FAIL/install-error · `2` usage · `3` preflight · `4` boot-critical (DO NOT REBOOT) · `5` lock · `10` `--check` drift.
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; `pacman`/`mkinitcpio`/`sdboot-manage`/`paccache`/`updatedb`/`pkgfile` use a `7200` s floor so a short cap never SIGKILLs a live transaction, while a true hang still terminates), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; long package/boot ops use a `7200` s floor so a short cap can't SIGKILL a live transaction), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 
 ## Configuration
 
@@ -96,7 +96,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`). `pacman-contrib`/`archlinux-contrib` are hard-deps of the removed `cachy-update`, so Phase 2 marks every `PKGS_ADD` member explicit (`pacman -D --asexplicit`) **after** the `-Syu` — otherwise `-S --needed` leaves a pre-installed member at reason `dependency` and `-Rns -s` would orphan `pactree`/`paccache`/`checkservices`. An external dependant skips + logs. Reversible via [Uninstall](#uninstall).
+`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`). Because `pacman-contrib`/`archlinux-contrib` are hard-deps of the removed `cachy-update`, Phase 2 marks every `PKGS_ADD` member explicit (`pacman -D --asexplicit`) **after** the `-Syu`, so `-Rns -s` can't orphan `pactree`/`paccache`/`checkservices`. An external dependant skips + logs. Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
@@ -175,7 +175,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ## Tuning Notes
 
-Rationale for the non-obvious choices; several note the override to reverse them.
+Rationale for non-obvious choices; several list an override to reverse.
 
 | Topic | Detail |
 |---|---|
@@ -184,7 +184,7 @@ Rationale for the non-obvious choices; several note the override to reverse them
 | NTSYNC | `/dev/ntsync` reported (warn-level) by `--verify` (mainline ≥ 6.14; the ≥ 6.19 floor guarantees it). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
 | MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Remove if a kernel bump resolves it. |
 | IPv6 | Disabled system-wide (`ipv6.disable=1` in the cmdline); the nftables ruleset is IPv4-only. Drop the token, restore IPv6 firewall rules, and re-run to return to dual-stack. |
-| AMD-Vi (IOMMU) | `amd_iommu=off` ships in cmdline (no passthrough). (`amdxdna`) blacklisted to silence probe error. **NPU, VFIO/passthrough, or SR-IOV users must use `amd_iommu=on iommu=pt` and drop `60-ry-blacklist-amdxdna.conf`**, then re-run. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline; AMD-Vi fully disabled (no PCI passthrough). This also refuses the XDNA NPU (`amdxdna`), which the profile blacklists to silence the probe error. **NPU, VFIO/passthrough, or SR-IOV users must use `amd_iommu=on iommu=pt` and drop `60-ry-blacklist-amdxdna.conf`**, then re-run. |
 | UMIP (`clearcpuid=514`) | Ships in the cmdline; UMIP disabled system-wide (`SGDT`/`SIDT`/`SMSW` untrapped) and the kernel is tainted. Drop the token to restore UMIP if no `umip_printk` stutter is seen. |
 
 ## Uninstall
@@ -200,7 +200,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-The fstab backup exists only if fstab was rewritten (skip if stale). If ry-install enabled `systemd-timesyncd`, optionally `sudo systemctl disable --now systemd-timesyncd`. For boot files, revert contents before step 5, which regenerates entries from that state: `loader.conf` and `mkinitcpio.conf` have a `.ry.bak` to restore from, whereas `/etc/kernel/cmdline` is not backed up and must be reverted by hand.
+The fstab backup exists only if fstab was rewritten (skip if stale). If ry-install enabled `systemd-timesyncd`, optionally `sudo systemctl disable --now systemd-timesyncd`. Revert boot-file contents before step 5 (it regenerates entries from that state): restore `loader.conf` / `mkinitcpio.conf` from `.ry.bak`; `/etc/kernel/cmdline` has no backup and is reverted by hand.
 
 ## Known Issues
 

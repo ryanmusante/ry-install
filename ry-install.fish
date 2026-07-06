@@ -639,18 +639,15 @@ set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -
 set -g NM_DISPATCHER_LOGLEVELMAX notice # drop info-level dispatcher spam, keep notice+
 set -g COUNTRY US
 set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKey HandleSuspendKeyLongPress HandleHibernateKey HandleHibernateKeyLongPress HandleRebootKey HandleRebootKeyLongPress
-# Wi-Fi PS off: MT7925/mt76 PS in software causes latency spikes
-set -g NM_WIFI_BACKEND wpa_supplicant; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN
+set -g NM_WIFI_BACKEND wpa_supplicant; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN # Wi-Fi PS off: MT7925/mt76 PS in software causes latency spikes
 set -g CPUPOWER_GOVERNOR powersave
-# Bluetooth: power adapter on at service start/resume; reconnect retry for paired sinks
-set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 3
+set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 3 # Bluetooth: power adapter on at service start/resume; reconnect retry for paired sinks
 set -g GPU_DPM_LEVEL auto # gfx1151 dpm floor; auto avoids pinning SCLK on CPU-bound titles
 set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set
 set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to nftables input
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_FSR4_RDNA3_UPGRADE=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
-# sysctl rationale: netdev 600/5000 (2.5GbE), max_map_count (esync), swappiness=150 (zram)
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" \
     "net.core.netdev_budget=600" \
@@ -660,7 +657,7 @@ set -g SYSCTL_VALUES \
     "net.ipv4.tcp_slow_start_after_idle=0" \
     "vm.compaction_proactiveness=0" \
     "vm.max_map_count=2147483642" \
-    "vm.swappiness=150"
+    "vm.swappiness=150" # sysctl rationale: netdev 600/5000 (2.5GbE), max_map_count (esync), swappiness=150 (zram)
 
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) ──
 set -g PKGS_ADD \
@@ -682,7 +679,7 @@ set -g PKGS_ADD \
     ddcutil \
     nftables \
     pacman-contrib \
-    archlinux-contrib # cachy-update hard-deps (pactree/paccache/checkservices); kept explicit post-Syu, see _install_packages
+    archlinux-contrib # pactree (PKGS_DEL rdep safety) + paccache (cache trim) used by ry-install; marked explicit so cachy-update removal (-Rns -s) can't orphan them
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
@@ -744,7 +741,6 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
     if test "$_usr_in" -ne "$_usr_out"; _err_loud "BUG: _RY_CANON_USER_DSTS count drift: in=$_usr_in out=$_usr_out"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
-    # independent drift tripwires: never derive a count from the array it guards; on change, sync array + doc/global mirror
     set -l _expect \
         KERNEL_PARAMS:17 \
         MKINITCPIO_HOOKS:11 \
@@ -765,7 +761,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:15 \
         USER_DESTINATIONS:2 \
-        MKINITCPIO_COMPRESSION_OPTIONS:2
+        MKINITCPIO_COMPRESSION_OPTIONS:2 # independent drift tripwires: never derive a count from the array it guards; on change, sync array + doc/global mirror
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -3519,8 +3515,7 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
         set -g SYSTEM_UPGRADED false
         _log "PKG_STATE_UNCHANGED: pacman -Q fingerprint identical pre/post -Syu (no-op upgrade)"
     end
-    # mark PKGS_ADD explicit post-Syu so Phase-4 -Rns -s can't orphan a pre-installed reason=dependency member (-D --asexplicit idempotent)
-    set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null)
+    set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null) # mark PKGS_ADD explicit post-Syu so Phase-4 -Rns -s can't orphan a pre-installed reason=dependency member (-D --asexplicit idempotent)
     if test (count $_add_present) -gt 0
         if not _run sudo -n pacman -D --asexplicit -- $_add_present
             _warn "  Could not mark PKGS_ADD packages explicit — orphan-removal exemption not guaranteed for any pre-installed as a dependency"
@@ -4069,8 +4064,7 @@ function _resolve_esp --description "Resolve EFI system partition path (cached; 
     if set -q _RY_ESP_TRIED; printf '%s' "$_RY_ESP_PATH"; return 0; end
     set -l _p (_bootctl_dir -p ESP_BOOTCTL_PIPE_FAIL "falling through to findmnt")
     if test -z "$_p"; or begin; not test -d "$_p"; and not sudo -n test -d "$_p" 2>/dev/null; end
-        # candidates match only when independently mounted vfat; a plain /boot/EFI dir on ext4 /boot returns empty from findmnt and is skipped
-        for _candidate in /efi /boot/efi /boot/EFI /boot
+        for _candidate in /efi /boot/efi /boot/EFI /boot # candidates match only when independently mounted vfat; a plain /boot/EFI dir on ext4 /boot returns empty from findmnt and is skipped
             set -l _fs (command findmnt -no FSTYPE -- "$_candidate" 2>/dev/null)
             if test "$_fs" = vfat; set _p "$_candidate"; break; end
         end

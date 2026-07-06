@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.93.0 (2026-07-05) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.94.0 (2026-07-06) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.93.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.94.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S%z'
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g KERNEL_MIN 6.19 # floor: gfx1151 MES-0x86 amdgpu; RTL8127 suspend-hang fix + r8169
 
@@ -620,7 +620,8 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" \
     "/etc/udev/rules.d/99-ry-perf.rules" \
-    "/etc/modprobe.d/60-ry-mt7925e.conf"
+    "/etc/modprobe.d/60-ry-mt7925e.conf" \
+    "/etc/modprobe.d/60-ry-blacklist-amdxdna.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -759,7 +760,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
         _RY_TMPDIR_GLOBS:6 \
-        SYSTEM_DESTINATIONS:15 \
+        SYSTEM_DESTINATIONS:16 \
         USER_DESTINATIONS:2 \
         MKINITCPIO_COMPRESSION_OPTIONS:2 # independent drift tripwires: never derive a count from the array it guards; on change, sync array + doc/global mirror
     for _kv in $_expect
@@ -978,12 +979,17 @@ function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate con
         "# AMD P-State EPP balance_performance (perf-leaning CPPC hint)" \
         'ACTION=="add|change", SUBSYSTEM=="cpu", KERNEL=="cpu[0-9]*", ATTR{cpufreq/energy_performance_preference}="balance_performance"' \
         "# GPU performance level (gfx1151 clock-floor; optional)" \
-        'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", DEVTYPE=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
+        'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
 end
 function _content__etc_modprobe.d_60-ry-mt7925e.conf --description "Generate content for /etc/modprobe.d/60-ry-mt7925e.conf (disable PCIe ASPM on MT7925; symptomatic reserve fix)"
     printf '%s\n' \
         "# disable PCIe ASPM on MT7925 (coredump/BT-reconnect/assoc mitigation; drop when upstream fixes)" \
         "options mt7925e disable_aspm=1"
+end
+function _content__etc_modprobe.d_60-ry-blacklist-amdxdna.conf --description "Generate content for /etc/modprobe.d/60-ry-blacklist-amdxdna.conf (blacklist XDNA NPU; needs IOMMU, refused under amd_iommu=off)"
+    printf '%s\n' \
+        "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -EINVAL under amd_iommu=off (NPU unused; drop + set amd_iommu=on iommu=pt to enable)" \
+        "blacklist amdxdna"
 end
 # ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
@@ -2373,7 +2379,10 @@ function _vss_nft --description "_verify_static_system sub: nftables default-den
     _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
     _chk_grep /etc/nftables.conf "echo-request" "nftables IPv4 ping accept" # regression guard: inbound ping must stay enabled
 end
-function _vss_modprobe --description "_verify_static_system sub: mt7925e modprobe drop-in (ASPM disable)"; _chk_file /etc/modprobe.d/60-ry-mt7925e.conf; and _chk_grep /etc/modprobe.d/60-ry-mt7925e.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'; end
+function _vss_modprobe --description "_verify_static_system sub: modprobe drop-ins (mt7925e ASPM disable + amdxdna blacklist)"
+    _chk_file /etc/modprobe.d/60-ry-mt7925e.conf; and _chk_grep /etc/modprobe.d/60-ry-mt7925e.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'
+    _chk_file /etc/modprobe.d/60-ry-blacklist-amdxdna.conf; and _chk_grep /etc/modprobe.d/60-ry-blacklist-amdxdna.conf 'blacklist amdxdna' 'amdxdna blacklisted'
+end
 
 function _verify_static_system --description "Verify resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, modprobe, nftables"
     _echo "SYSTEM CONFIGURATION"
@@ -2393,7 +2402,7 @@ function _verify_static_system --description "Verify resolved, logind, NM, regdo
     _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "GOVERNOR='$CPUPOWER_GOVERNOR'" "GOVERNOR=$CPUPOWER_GOVERNOR"
     _vss_sysctl
     _vss_udev
-    _echo "── modprobe (mt7925e ASPM) ──"
+    _echo "── modprobe (mt7925e ASPM + amdxdna blacklist) ──"
     _vss_modprobe
     _echo "── nftables ──"
     _vss_nft

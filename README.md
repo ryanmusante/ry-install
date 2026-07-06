@@ -1,11 +1,11 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.93.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.94.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs, gaming/LLM desktop profile. Every change is atomic, byte-verifiable (`--verify`), and reversible ([Uninstall](#uninstall)).
+> Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 18 embedded configs, gaming/LLM desktop profile. Every change is atomic, byte-verifiable (`--verify`), and reversible ([Uninstall](#uninstall)).
 
 ## Quick Start
 
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.93.0
+cd ry-install && git checkout v7.94.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -60,7 +60,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 |---|---|---|
 | 1 | Preflight | hard gates → lock → config checks (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
-| 3 | Configuration | deploy 17 embedded configs atomically |
+| 3 | Configuration | deploy 18 embedded configs atomically |
 | 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
@@ -123,7 +123,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ## Managed Files
 
-17 embedded config files; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
+18 embedded config files; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
 
 ### Boot
 
@@ -164,6 +164,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 | `/etc/sysctl.d/95-ry-overrides.conf` | sysctl tunables (BBR + `fq`, VM, netdev) |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, AMD P-State EPP, GPU DPM |
 | `/etc/modprobe.d/60-ry-mt7925e.conf` | disable PCIe ASPM on MT7925 (stability mitigation) |
+| `/etc/modprobe.d/60-ry-blacklist-amdxdna.conf` | blacklist the XDNA NPU driver (needs IOMMU; unused under `amd_iommu=off`) |
 
 ### User session
 
@@ -183,7 +184,7 @@ Rationale for the non-obvious choices; several note the override to reverse them
 | NTSYNC | `/dev/ntsync` reported (warn-level) by `--verify` (mainline ≥ 6.14; the ≥ 6.19 floor guarantees it). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
 | MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Remove if a kernel bump resolves it. |
 | IPv6 | Disabled system-wide (`ipv6.disable=1` in the cmdline); the nftables ruleset is IPv4-only. Drop the token, restore IPv6 firewall rules, and re-run to return to dual-stack. |
-| AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline; AMD-Vi fully disabled (no PCI passthrough). **VFIO/passthrough or SR-IOV users must use `amd_iommu=on iommu=pt` instead**, then re-run. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` ships in the cmdline; AMD-Vi fully disabled (no PCI passthrough). This also refuses the XDNA NPU (`amdxdna`), which the profile blacklists to silence the probe error. **NPU, VFIO/passthrough, or SR-IOV users must use `amd_iommu=on iommu=pt` and drop `60-ry-blacklist-amdxdna.conf`**, then re-run. |
 | UMIP (`clearcpuid=514`) | Ships in the cmdline; UMIP disabled system-wide (`SGDT`/`SIDT`/`SMSW` untrapped) and the kernel is tainted. Drop the token to restore UMIP if no `umip_printk` stutter is seen. |
 
 ## Uninstall
@@ -209,6 +210,7 @@ The fstab backup exists only if fstab was rewritten (skip if stale). If ry-insta
 | RTL8127 10GbE | throughput drops under load; suspend/shutdown hang | resolved — in-tree `r8169` + suspend/shutdown hang fixes land in 6.18, so the ≥ 6.19 floor guarantees them; no DKMS |
 | MT7925 | kernel panics, low TX power, random deauth | open — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
 | Strix Halo ACP | no ASoC machine driver | open — pending upstream (HDMI/USB audio unaffected) |
+| XDNA NPU | `amdxdna` probe fails (`-EINVAL`) — driver needs the IOMMU | resolved — profile ships `amd_iommu=off` (NPU unused) and blacklists `amdxdna`; enable via `amd_iommu=on iommu=pt` |
 
 ### Known-benign log lines
 

@@ -4,112 +4,61 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.94.0 (2026-07-06)
+-------------------
+  - udev: fix GPU rule key DEVTYPE -> ENV{DEVTYPE} (was rejected as an
+    invalid key; GPU clock-floor rule never applied)
+  - modprobe: blacklist amdxdna; XDNA NPU needs the IOMMU and probes
+    with -EINVAL under amd_iommu=off (NPU unused); 17 -> 18 files
+
 7.93.0 (2026-07-05)
 -------------------
   - profile: rename internal token gtr_pro -> gtr9_pro
-  - version: sync pins 7.92.4 -> 7.93.0
 
-7.92.4 (2026-07-05)
--------------------
-  - docs: sync README badge/pin and CHANGELOG; trim verbose bullets
-  - version: sync pins 7.92.3 -> 7.92.4
-
-7.92.3 (2026-07-05)
--------------------
+7.90.0 - 7.92.4 (2026-07-04 .. 07-05)
+-------------------------------------
+  - run: hard-cap long pkg/boot/db ops at 7200s (RY_RUN_TIMEOUT=0 still
+    disables; a value above cap honored); resolve cmd via PATH first
+  - validate: gate boot-crit scalars + COMPRESSION_OPTIONS against the
+    metachar/flag class; add mkinitcpio.conf skeleton + :2 tripwire
+  - mkinitcpio: emit COMPRESSION_OPTIONS via string join (identical)
   - metachar: use PCRE \x27 for quote, dropping fragile fish requote
-  - comments: move standalone rationale inline; strip apostrophes
-  - packages: correct contrib-tool rationale (pactree/paccache use)
-  - version: sync pins 7.92.2 -> 7.92.3
-
-7.92.2 (2026-07-05)
--------------------
-  - validate: add MKINITCPIO_COMPRESSION_OPTIONS:2 drift tripwire
+  - packages: add pacman-contrib, archlinux-contrib (17 -> 19); mark
+    PKGS_ADD explicit post-Syu; correct rationale (pactree/paccache use)
+  - mangohud: reorder gpu_temp before gpu_core_clock; comment out
+    cpu_temp; add cpu_power readout
   - resolve_esp: note /boot/EFI subdir skip on ext4 /boot
   - cleanup: db.lck grace reaps only -P $fish_pid descendants
-  - version: sync pins 7.92.1 -> 7.92.2
-
-7.92.1 (2026-07-05)
--------------------
-  - validate: gate boot-critical scalars against metachar class
-  - validate: gate MKINITCPIO_COMPRESSION_OPTIONS to flag charset
-  - mkinitcpio: emit COMPRESSION_OPTIONS via string join (identical)
-  - validate: add mkinitcpio.conf MODULES/HOOKS skeleton check
-  - version: sync pins 7.92.0 -> 7.92.1
-
-7.92.0 (2026-07-05)
--------------------
-  - run: hard-cap long pkg/boot/db ops at 7200s (RY_RUN_TIMEOUT=0
-    still disables; a user value above the cap is honored)
-  - run: resolve effective command via PATH before the long-op match
-  - docs: sync help + README to the hard-cap behavior
-  - version: sync pins 7.91.3 -> 7.92.0
-
-7.91.3 (2026-07-05)
--------------------
-  - docs: correct ntsync note — reported (warn) by --verify, not
-    preflight; clarify uninstall backup coverage
-  - verify: refresh stale fn descriptions from 7.90.0 removals
-  - version: sync pins 7.91.2 -> 7.91.3
-
-7.91.2 (2026-07-05)
--------------------
-  - docs: trim README/CHANGELOG prose; all 18 tables kept verbatim
-  - script: condense verbose comments to single-line form
-  - size: correct stale count (4965 lines / 288 functions)
-  - version: sync pins 7.91.1 -> 7.91.2
-
-7.91.1 (2026-07-05)
--------------------
-  - packages: add pacman-contrib, archlinux-contrib; mark PKGS_ADD
-    explicit after -Syu (pacman -D --asexplicit); 17 -> 19
-  - validate: note _ir_validate_counts literals as drift tripwires
-  - mangohud: annotate the disabled cpu_temp line as intentional
-
-7.91.0 (2026-07-04)
--------------------
-  - mangohud: reorder gpu_temp before gpu_core_clock; comment out
-    cpu_temp; add cpu_power readout (~/.config/MangoHud/MangoHud.conf)
-
-7.90.0 (2026-07-04)
--------------------
-  - verify: fold Vulkan check into _vsp_required; drop _vre_tcp,
-    _vre_zram, _vss_ntsync_modules, _vrkm_iommu, _vrk_clocksource,
-    _RY_DMESG_TSC
-  - verify: retire amd_iommu/tsc correlations; still asserted at
-    config + live-cmdline layers
-  - size: 5080 -> 4951 lines (294 -> 288 functions)
+  - comments: move standalone rationale inline; strip apostrophes
+  - verify: fold Vulkan check into _vsp_required; retire amd_iommu/tsc
+    correlations (still at config + live-cmdline); drop 6 stale fns
+  - docs: sync README/help/pins; correct ntsync note (warn via --verify,
+    not preflight); trim prose, all 18 tables verbatim
 
 7.89.0 (2026-07-04)
 -------------------
-  - args: root guard defers to argparse; invalid args exit 2 with
-    the same usage message whether or not the run is rooted
-  - docs: sync version pins; note argument-message parity
+  - args: root guard defers to argparse; invalid args exit 2 with the
+    same usage message whether or not the run is rooted
 
-7.88.0 - 7.88.3 (2026-07-03)
-----------------------------
-  - guard: refuse /dev/stdin and fd-0 aliases like piped stdin
-  - logging: hoist the JSONL ISO-8601 timestamp to _RY_TS_FMT
-  - cleanup: guard _cleanup_tmpfiles _log for pre-init signals
-  - probes: silence vercmp stderr on the mesa soft-floor compare
-  - verify: normalize the modprobe section banner glyphs
-
-7.87.0 - 7.87.8 (2026-07-01 .. 07-03)
+7.87.0 - 7.88.3 (2026-07-01 .. 07-03)
 -------------------------------------
+  - guard: refuse stdin/pipe exec (/dev/stdin, fd-0, 'Standard input')
   - install-file: format-validate content before write; loader.conf
     regenerates sdboot entries only
-  - run: replace overflow spill with inline analysis; log elided
-    sample (<=10 lines) + sha256/bytes; nothing retained on disk
+  - run: replace overflow spill with inline analysis; log elided sample
+    (<=10 lines) + sha256/bytes; nothing retained on disk
+  - cmdline: add ipv6.disable=1; nftables ruleset IPv4-only, accept
+    inbound IPv4 ping, drop ICMPv6/NDP accepts
   - packages: SYSTEM_UPGRADED from pacman -Q fingerprint, not rc
   - services: skip resolved/NM restarts when drop-in bytes unchanged
   - tmpfiles: PID-scope TMPDIR names + sweep globs (peer-run safe)
   - validate: kv/kparam validators report every missing key/token
   - verify: hardware/kernel-floor gates warn; deploy/check exit 3
-  - cmdline: add ipv6.disable=1; nftables ruleset is IPv4-only
-  - nftables: accept inbound IPv4 ping; drop ICMPv6/NDP accepts
   - args: root --check with unknown flags or positionals exits 2
-  - guard: refuse stdin execution ('Standard input' filename)
   - lock: create the state dir under umask 0077 (0700 contract)
   - udev: retrigger cpu beside block so the EPP rule live-applies
+  - logging: hoist the JSONL ISO-8601 timestamp to _RY_TS_FMT
+  - probes: silence vercmp stderr on the mesa soft-floor compare
 
 7.85.0 - 7.86.0 (2026-07-01)
 ----------------------------

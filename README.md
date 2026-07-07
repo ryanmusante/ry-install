@@ -94,19 +94,19 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 | `5` | lock | Another instance holds the lock (fail-closed on ambiguous pidfile) |
 | `10` | `--check` drift | `--check` confirmed config drift from the managed baseline |
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; package/boot ops floor at `7200` s so a short cap can't SIGKILL a live transaction), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; package/boot ops floor at `7200` s), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1`, `NO_COLOR`, `TMPDIR`. One JSONL log/run under `~/ry-install/logs/` (`0600`).
 
 ## Configuration
 
-All tunables are `set -g` globals near the top of the script — no external config file. Edit a global, then re-run (or `--install-file` the affected file).
+All tunables are `set -g` globals near the top of the script — no external config file. Edit one, then re-run (or `--install-file` the affected file).
 
 ### Globals
 
-Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority 95 (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` (see [Safety & Reliability](#safety--reliability)).
+Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority `95` (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)).
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (`pacman-contrib`). Since `pacman-contrib`/`archlinux-contrib` are hard-deps of the removed `cachy-update`, Phase 2 marks every `PKGS_ADD` member explicit (`pacman -D --asexplicit`) **after** the `-Syu` so `-Rns -s` can't orphan `pactree`/`paccache`/`checkservices`. An external dependant skips + logs. Reversible via [Uninstall](#uninstall).
+`pacman -Rns` is rdep-aware via `pactree` (`pacman-contrib`). Since `pacman-contrib`/`archlinux-contrib` are hard-deps of the removed `cachy-update`, Phase 2 re-marks every `PKGS_ADD` member explicit **after** the `-Syu` so `-Rns -s` can't orphan them. Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
@@ -135,12 +135,19 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 18 embedded config files, in deploy order; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
 
+### Boot & initramfs
+
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot loader settings (default entry, timeout, console-mode) |
 | `/etc/kernel/cmdline` | kernel command line: `rw root=UUID` prefix + the 17 `KERNEL_PARAMS` |
 | `/etc/sdboot-manage.conf` | boot-entry generation (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES` / `HOOKS` / `zstd` compression |
+
+### System services & network
+
+| File | Purpose |
+|---|---|
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | systemd-resolved: `DNSSEC=allow-downgrade`, no mDNS/LLMNR/DoT |
 | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | ignore power/suspend/hibernate/reboot keys |
 | `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | silence info-level `nm-dispatcher` journal noise |
@@ -148,6 +155,11 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 | `/etc/iw-regdomain` | wireless regulatory domain (`US`) |
 | `/etc/bluetooth/main.conf` | BlueZ adapter auto-power-on + paired-sink reconnect |
 | `/etc/nftables.conf` | IPv4-only default-deny-inbound firewall ruleset (inbound ping allowed) |
+
+### Power, modules & user session
+
+| File | Purpose |
+|---|---|
 | `/etc/default/cpupower-service.conf` | CPU governor (`powersave`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | sysctl tunables (BBR + `fq`, VM, netdev) |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, AMD P-State EPP, GPU DPM |

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.94.2 (2026-07-07) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.94.3 (2026-07-07) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.94.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.94.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -130,7 +130,7 @@ set -q _rsc_a; and set --erase _rsc_a
 set --erase _rsc_skip _rsc_after_dd
 if test "$_MY_UID" -eq 0
     if test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; _ry_exit $EXIT_PREFLIGHT; end # --check + valid mode: silent, 3 = cannot probe
-    set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity: argparse in subshell (argv rewrite local; parent argv intact for main dispatch)
+    set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity: argparse in command-substitution (argv rewrite is call-local; parent argv intact for main dispatch)
     set -l _rg_prc 0; set -l _rg_msg ""
     for _rg_l in $_rg_msgout
         if string match -q '@@RC@@*' -- "$_rg_l"; set _rg_prc (string replace '@@RC@@' '' -- "$_rg_l"); else if test -z "$_rg_msg"; set _rg_msg (string replace -ra '\e\[[0-9;]*[a-zA-Z]' '' -- "$_rg_l" | string trim --); end
@@ -177,7 +177,8 @@ end
 set --erase _ry_tmpprobe_dir
 if not command -q timeout; echo "[ERR] GNU coreutils timeout(1) required (used by _run for hang-protection)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command timeout --foreground --kill-after=1 1 true 2>/dev/null; echo "[ERR] timeout(1) lacks --foreground/--kill-after (need GNU coreutils ≥ 8.x; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
-if command -q find; and not command find /dev/null -maxdepth 0 -printf '' 2>/dev/null; echo "[ERR] find(1) lacks -maxdepth/-printf (need GNU findutils; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
+if not command -q find; echo "[ERR] GNU findutils find(1) required (tmpfile sweeps + boot-entry enumeration)" >&2; _ry_exit $EXIT_PREFLIGHT; end
+if not command find /dev/null -maxdepth 0 -printf '' 2>/dev/null; echo "[ERR] find(1) lacks -maxdepth/-printf (need GNU findutils; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -l _ry_mv_a (command mktemp 2>/dev/null); set -l _ry_mv_b (command mktemp 2>/dev/null)
 if test -z "$_ry_mv_a"; or test -z "$_ry_mv_b"; or not command mv -T -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; command rm -f -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; echo "[ERR] mv(1) lacks -T no-target-directory (need GNU coreutils ≥ 8.x; busybox not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 command rm -f -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; set --erase _ry_mv_a _ry_mv_b
@@ -355,14 +356,9 @@ function _lock_pid_started_after --argument-names pid mtime --description "rc 0 
     set -l _btime (command awk '/^btime /{print $2; exit}' /proc/stat 2>/dev/null)
     string match -qr '^\d+$' -- "$_btime"; or return 1
     set -l _hz (command getconf CLK_TCK 2>/dev/null)
-    if not string match -qr '^[1-9]\d*$' -- "$_hz" # getconf absent: recover USER_HZ from CONFIG_HZ
-        set -l _cfg_hz (_kconfig_cache | string match -rg -- '^CONFIG_HZ=([1-9][0-9]*)$' | command head -n 1)
-        if string match -qr '^[1-9]\d*$' -- "$_cfg_hz"
-            set _hz $_cfg_hz; functions -q _log; and _log "LOCK_CLK_TCK_FROM_CONFIG: getconf CLK_TCK unavailable — using CONFIG_HZ=$_hz from /proc/config.gz"
-        else
-            functions -q _log; and _log "LOCK_CLK_TCK_UNKNOWN: getconf CLK_TCK and CONFIG_HZ both unavailable — cannot compute PID start time; treating as live (fail-closed, refusing reclaim)"
-            return 1 # USER_HZ unknown: fail closed
-        end
+    if not string match -qr '^[1-9]\d*$' -- "$_hz" # getconf absent: /proc/pid/stat starttime is USER_HZ (Linux ABI, fixed 100), not the kernel tick rate
+        set _hz 100
+        functions -q _log; and _log "LOCK_CLK_TCK_FALLBACK: getconf CLK_TCK unavailable — using USER_HZ=100 (starttime unit is USER_HZ, fixed at 100 on Linux)"
     end
     test (math "floor($_btime + $_ticks / $_hz)") -gt (math "$mtime + 2")
 end
@@ -788,7 +784,7 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
         if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     set -l _scalar_metachar_re '[\s"`$;\\\\&|<>(){}*?\x27~!#]' # shell metachar class for scalars written to boot configs
-    for _k in MKINITCPIO_COMPRESSION SDBOOT_DEFAULT_ENTRY LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR
+    for _k in MKINITCPIO_COMPRESSION SDBOOT_DEFAULT_ENTRY LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR CPUPOWER_GOVERNOR
         if string match -qr -- "$_scalar_metachar_re" "$$_k"; _err_loud "$_k contains whitespace, quote, or shell metachar: '$$_k' — refuse to deploy (would corrupt a shell-sourced or parser-read boot config)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _co in $MKINITCPIO_COMPRESSION_OPTIONS # each token spliced into a shell array literal; restrict to mkinitcpio flag charset

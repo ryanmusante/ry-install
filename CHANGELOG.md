@@ -4,6 +4,16 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.94.3 (2026-07-07)
+-------------------
+  - lock: use USER_HZ=100 not CONFIG_HZ for PID starttime when
+    getconf is absent; starttime unit is USER_HZ, not kernel tick
+  - preflight: hard-require find(1) in all modes, not only install
+  - preflight: add CPUPOWER_GOVERNOR to the sourced-scalar metachar
+    refuse gate (parity with the other shell-sourced boot scalars)
+  - rootguard: reword argparse capture comment; fish cmd-sub is
+    same-process, begin-block scope keeps argv local (comment only)
+
 7.94.2 (2026-07-07)
 -------------------
   - cmdline: clearcpuid=514 -> clearcpuid=umip; string form is stable

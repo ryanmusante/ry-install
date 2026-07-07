@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.94.1 (2026-07-06) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.94.2 (2026-07-07) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.94.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.94.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -11,7 +11,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-set -g KERNEL_MIN 6.19 # floor: gfx1151 MES-0x86 amdgpu; RTL8127 suspend-hang fix + r8169
+set -g KERNEL_MIN 6.19 # floor: gfx1151 MES-0x86 amdgpu native support (RTL8127 r8169 base 6.16, suspend-hang fix 6.18 — both satisfied a fortiori)
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -630,7 +630,7 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n clearcpuid=514 fsck.mode=force fsck.repair=yes ipv6.disable=1 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS 8250.nr_uarts=0 amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n clearcpuid=umip fsck.mode=force fsck.repair=yes ipv6.disable=1 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off tsc=reliable usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
@@ -807,7 +807,7 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
             _log "KERNEL_FLOOR_UNREADABLE_VERIFY: uname -r='$_kr'"
         else
             _err_loud "Kernel floor: release unreadable from uname -r ('$_kr') — refusing to deploy"
-            _err_loud_cont "  gfx1151 MES-0x86 firmware needs >=$KERNEL_MIN amdgpu; RTL8127 suspend/shutdown hang fix + r8169 support also land only >=$KERNEL_MIN. Deploying below risks GPU hang + suspend lockup."
+            _err_loud_cont "  gfx1151 MES-0x86 firmware needs >=$KERNEL_MIN amdgpu for native support. Deploying below risks GPU hang."
             _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         end
@@ -823,7 +823,7 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
             _log "KERNEL_FLOOR_BELOW_VERIFY: running=$_kver min=$KERNEL_MIN"
         else
             _err_loud "Kernel floor: running $_kver, profile $PROFILE_NAME requires >=$KERNEL_MIN — refusing to deploy"
-            _err_loud_cont "  gfx1151 MES-0x86 amdgpu support requires >=$KERNEL_MIN; RTL8127 hang fix (ae1737e7339b) + r8169 support are present only at/above $KERNEL_MIN."
+            _err_loud_cont "  gfx1151 MES-0x86 amdgpu native support requires >=$KERNEL_MIN (RTL8127 r8169 support and suspend-hang fix ae1737e7339b already present below this floor)."
             _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         end
@@ -988,7 +988,7 @@ function _content__etc_modprobe.d_60-ry-mt7925e.conf --description "Generate con
 end
 function _content__etc_modprobe.d_60-ry-blacklist-amdxdna.conf --description "Generate content for /etc/modprobe.d/60-ry-blacklist-amdxdna.conf (blacklist XDNA NPU; needs IOMMU, refused under amd_iommu=off)"
     printf '%s\n' \
-        "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -EINVAL under amd_iommu=off (NPU unused; drop + set amd_iommu=on iommu=pt to enable)" \
+        "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -ENODEV (ret -19) under amd_iommu=off (NPU unused; drop + set amd_iommu=on iommu=pt to enable)" \
         "blacklist amdxdna"
 end
 # ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──

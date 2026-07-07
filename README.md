@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.94.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.94.2-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.94.1
+cd ry-install && git checkout v7.94.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -82,7 +82,17 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably-recycled PID via `/proc` start-time (else fail-closed) |
 
-**Exit codes** `0` ok · `1` verify-FAIL/install-error · `2` usage · `3` preflight · `4` boot-critical (DO NOT REBOOT) · `5` lock · `10` `--check` drift.
+**Exit codes**
+
+| Code | Meaning | Emitted when |
+| ---- | ------- | ------------ |
+| `0` | OK | Success; also `WARN`-only runs and `--check` clean |
+| `1` | verify-FAIL / install-error | `--verify` found a mismatch, or an install step errored |
+| `2` | usage | Bad args, non-absolute/unmanaged `--install-file` path, root-guard misuse |
+| `3` | preflight | Missing/non-GNU dep, sub-`KERNEL_MIN` kernel, uncached sudo, hardware/key/count gate |
+| `4` | boot-critical (DO NOT REBOOT) | Boot cascade or post-rebuild sanity failed — resolve before rebooting |
+| `5` | lock | Another instance holds the lock (fail-closed on ambiguous pidfile) |
+| `10` | `--check` drift | `--check` confirmed config drift from the managed baseline |
 
 Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; long package/boot ops use a `7200` s floor so a short cap can't SIGKILL a live transaction), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 
@@ -185,7 +195,7 @@ Rationale for non-obvious choices; several list an override to reverse.
 | MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Remove if a kernel bump resolves it. |
 | IPv6 | Disabled via `ipv6.disable=1`; the nftables ruleset is IPv4-only. Drop the token, restore IPv6 firewall rules, and re-run for dual-stack. |
 | AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi (no PCI passthrough) and refuses the XDNA NPU (`amdxdna`), which the profile blacklists to silence the probe error. **NPU, VFIO/passthrough, or SR-IOV users: set `amd_iommu=on iommu=pt`, drop `60-ry-blacklist-amdxdna.conf`, re-run.** |
-| UMIP (`clearcpuid=514`) | `clearcpuid=514` disables UMIP (`SGDT`/`SIDT`/`SMSW` untrapped) and taints the kernel. Drop the token to restore UMIP if no `umip_printk` stutter appears. |
+| UMIP (`clearcpuid=umip`) | `clearcpuid=umip` disables UMIP (`SGDT`/`SIDT`/`SMSW` untrapped) and taints the kernel. The string form is stable across kernel versions (the numeric `514` is not). Drop the token to restore UMIP if no `umip_printk` stutter appears. |
 
 ## Uninstall
 

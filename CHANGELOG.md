@@ -4,6 +4,15 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.94.2 (2026-07-07)
+-------------------
+  - cmdline: clearcpuid=514 -> clearcpuid=umip; string form is stable
+    across kernels (numeric bit is not) -- same UMIP disable
+  - kernel: re-scope KERNEL_MIN 6.19 rationale to gfx1151 MES-0x86
+    amdgpu; RTL8127 r8169 base lands 6.16, hang fix 6.18 (below floor)
+  - modprobe: correct amdxdna probe errno -EINVAL -> -ENODEV (ret -19)
+    in the blacklist comment (behavior unchanged)
+
 7.94.1 (2026-07-06)
 -------------------
   - verify: extract _resolve_boot_fstype; both perm-check subs share

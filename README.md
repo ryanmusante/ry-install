@@ -33,7 +33,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing deps (core tools must be GNU; busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP and `paccache` only warn. An unsynced clock with no NTP client triggers `systemd-timesyncd` + RTC writeback (skip `RY_NO_NTP_REMEDIATION=1`).
+Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP and `paccache` only warn. An unsynced clock with no NTP client triggers `systemd-timesyncd` + RTC writeback (skip `RY_NO_NTP_REMEDIATION=1`).
 
 ## Usage
 
@@ -50,7 +50,7 @@ Preflight hard-fails (exit 3) on missing deps (core tools must be GNU; busybox/u
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify` and `--check` are lock-free and read-only; invalid args exit 2. `--install-file` needs an absolute path resolving via `realpath -m` to a managed destination (else exit 2). Deploy modes and `--check` run hard runtime-init gates (hardware, kernel floor, key/count), exit 3 on a sub-floor/mismatched host; `--verify` downgrades hardware + kernel-floor gates to warnings (warnings alone don't fail).
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` run hard runtime gates (hardware, kernel floor, key/count) → exit 3 on mismatch; `--verify` downgrades hardware + kernel-floor to warnings.
 
 ## Install Flow
 
@@ -94,7 +94,7 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 | `5` | lock | Another instance holds the lock (fail-closed on ambiguous pidfile) |
 | `10` | `--check` drift | `--check` confirmed config drift from the managed baseline |
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; long package/boot ops use a `7200` s floor so a short cap can't SIGKILL a live transaction), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
+Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; package/boot ops floor at `7200` s so a short cap can't SIGKILL a live transaction), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1`, `NO_COLOR`, `TMPDIR`. Log: one JSONL/run at `~/ry-install/logs/YYYY-MM-DD/MODE-...-PID.jsonl` (`0600`).
 
 ## Configuration
 
@@ -106,7 +106,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`). Because `pacman-contrib`/`archlinux-contrib` are hard-deps of the removed `cachy-update`, Phase 2 marks every `PKGS_ADD` member explicit (`pacman -D --asexplicit`) **after** the `-Syu`, so `-Rns -s` can't orphan `pactree`/`paccache`/`checkservices`. An external dependant skips + logs. Reversible via [Uninstall](#uninstall).
+`pacman -Rns` is rdep-aware via `pactree` (`pacman-contrib`). Since `pacman-contrib`/`archlinux-contrib` are hard-deps of the removed `cachy-update`, Phase 2 marks every `PKGS_ADD` member explicit (`pacman -D --asexplicit`) **after** the `-Syu` so `-Rns -s` can't orphan `pactree`/`paccache`/`checkservices`. An external dependant skips + logs. Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|
@@ -133,9 +133,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ## Managed Files
 
-18 embedded config files; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
-
-### Boot
+18 embedded config files, in deploy order; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
 
 | File | Purpose |
 |---|---|
@@ -143,43 +141,18 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 | `/etc/kernel/cmdline` | kernel command line: `rw root=UUID` prefix + the 17 `KERNEL_PARAMS` |
 | `/etc/sdboot-manage.conf` | boot-entry generation (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES` / `HOOKS` / `zstd` compression |
-
-### systemd drop-ins
-
-| File | Purpose |
-|---|---|
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | systemd-resolved: `DNSSEC=allow-downgrade`, no mDNS/LLMNR/DoT |
 | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | ignore power/suspend/hibernate/reboot keys |
 | `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | silence info-level `nm-dispatcher` journal noise |
-
-### Network
-
-| File | Purpose |
-|---|---|
 | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | NM Wi-Fi backend, power-save off, log level |
 | `/etc/iw-regdomain` | wireless regulatory domain (`US`) |
-
-### Bluetooth & firewall
-
-| File | Purpose |
-|---|---|
 | `/etc/bluetooth/main.conf` | BlueZ adapter auto-power-on + paired-sink reconnect |
 | `/etc/nftables.conf` | IPv4-only default-deny-inbound firewall ruleset (inbound ping allowed) |
-
-### Power, performance & modules
-
-| File | Purpose |
-|---|---|
 | `/etc/default/cpupower-service.conf` | CPU governor (`powersave`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | sysctl tunables (BBR + `fq`, VM, netdev) |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, AMD P-State EPP, GPU DPM |
 | `/etc/modprobe.d/60-ry-mt7925e.conf` | disable PCIe ASPM on MT7925 (stability mitigation) |
 | `/etc/modprobe.d/60-ry-blacklist-amdxdna.conf` | blacklist the XDNA NPU driver (needs IOMMU; unused under `amd_iommu=off`) |
-
-### User session
-
-| File | Purpose |
-|---|---|
 | `~/.config/environment.d/10-environment.conf` | gaming env vars (RADV, MangoHud, Proton) |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only performance HUD |
 
@@ -210,7 +183,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-The fstab backup exists only if fstab was rewritten (skip if stale). If ry-install enabled `systemd-timesyncd`, optionally `sudo systemctl disable --now systemd-timesyncd`. Revert boot-file contents before step 5 (it regenerates entries from that state): restore `loader.conf` / `mkinitcpio.conf` from `.ry.bak`; `/etc/kernel/cmdline` has no backup and is reverted by hand.
+The fstab backup exists only if fstab was rewritten. Revert boot-file contents **before** step 5 (it regenerates entries from that state): restore `loader.conf` / `mkinitcpio.conf` from `.ry.bak`; `/etc/kernel/cmdline` has no backup and is reverted by hand. If ry-install enabled `systemd-timesyncd`, optionally `sudo systemctl disable --now systemd-timesyncd`.
 
 ## Known Issues
 

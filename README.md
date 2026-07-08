@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.94.3-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.94.5-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.94.3
+cd ry-install && git checkout v7.94.5
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -106,7 +106,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (`pacman-contrib`). Since `pacman-contrib`/`archlinux-contrib` are hard-deps of the removed `cachy-update`, Phase 2 re-marks every `PKGS_ADD` member explicit **after** the `-Syu` so `-Rns -s` can't orphan them. Reversible via [Uninstall](#uninstall).
+`pacman -Rns` is rdep-aware via `pactree` (`pacman-contrib`). Since `pacman-contrib`/`archlinux-contrib` are hard-deps of the removed `cachy-update`, Phase 2 re-marks every `PKGS_ADD` member explicit **after** the `-Syu` so `-Rns` can't orphan them. Reversible via [Uninstall](#uninstall).
 
 | Action | Packages |
 |---|---|

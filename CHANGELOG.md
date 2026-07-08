@@ -4,6 +4,25 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.94.5 (2026-07-07)
+-------------------
+  - comments: correct "-Rns -s" to "-Rns" in the pactree and
+    asexplicit rationale comments (flag typo; behavior unchanged)
+  - comments: trim verbose inline comments to the essential
+    rationale (nine sites; no code changes)
+  - docs: mirror the -Rns wording fix in the README Packages note
+
+7.94.4 (2026-07-07)
+-------------------
+  - preflight: report mktemp allocation failure distinctly from a
+    missing mv -T capability in the coreutils probe (message only)
+  - run: long-op timeout resolver emits 0 when RY_RUN_TIMEOUT=0
+    instead of empty output; consumers unchanged (single channel)
+  - rootguard: emit leftover positionals one @@LEFT@@ line each and
+    append raw marker lines, so arguments containing spaces survive
+    intact in the usage error; prefix stripped at display (root
+    refusal path only — non-root dispatch was already correct)
+
 7.94.3 (2026-07-07)
 -------------------
   - lock: use USER_HZ=100 not CONFIG_HZ for PID starttime when

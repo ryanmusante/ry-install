@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.94.3 (2026-07-07) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.94.5 (2026-07-07) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.94.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.94.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -11,7 +11,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-set -g KERNEL_MIN 6.19 # floor: gfx1151 MES-0x86 amdgpu native support (RTL8127 r8169 base 6.16, suspend-hang fix 6.18 — both satisfied a fortiori)
+set -g KERNEL_MIN 6.19 # floor: gfx1151 MES-0x86 amdgpu native support (RTL8127 6.16 + suspend fix 6.18 sit below it)
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -130,20 +130,21 @@ set -q _rsc_a; and set --erase _rsc_a
 set --erase _rsc_skip _rsc_after_dd
 if test "$_MY_UID" -eq 0
     if test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; _ry_exit $EXIT_PREFLIGHT; end # --check + valid mode: silent, 3 = cannot probe
-    set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity: argparse in command-substitution (argv rewrite is call-local; parent argv intact for main dispatch)
+    set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity: argparse in cmd-sub; argv rewrite is call-local, parent argv intact
     set -l _rg_prc 0; set -l _rg_msg ""
     for _rg_l in $_rg_msgout
         if string match -q '@@RC@@*' -- "$_rg_l"; set _rg_prc (string replace '@@RC@@' '' -- "$_rg_l"); else if test -z "$_rg_msg"; set _rg_msg (string replace -ra '\e\[[0-9;]*[a-zA-Z]' '' -- "$_rg_l" | string trim --); end
     end
-    set -l _rg_state (begin; argparse --name=ry-install --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= -- $argv 2>/dev/null; echo "@@LEFT@@$argv"; set -q _flag_install_file; and echo "@@IF@@$_flag_install_file"; end) # leftover positionals (-- stripped) + install-file value, mirroring main dispatch
+    set -l _rg_state (begin; argparse --name=ry-install --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= -- $argv 2>/dev/null; for _rg_p in $argv; echo "@@LEFT@@$_rg_p"; end; set -q _flag_install_file; and echo "@@IF@@$_flag_install_file"; end) # one @@LEFT@@ line per leftover positional + the install-file value (refusal-path display only)
     set -l _rg_left; set -l _rg_if_present false; set -l _rg_if_val ""
     for _rg_l in $_rg_state
-        if string match -q '@@LEFT@@*' -- "$_rg_l"; set -l _rg_lv (string replace '@@LEFT@@' '' -- "$_rg_l"); test -n "$_rg_lv"; and set _rg_left (string split ' ' -- "$_rg_lv"); else if string match -q '@@IF@@*' -- "$_rg_l"; set _rg_if_present true; set _rg_if_val (string replace '@@IF@@' '' -- "$_rg_l"); end
+        if string match -q '@@LEFT@@*' -- "$_rg_l"; set -a _rg_left "$_rg_l"; else if string match -q '@@IF@@*' -- "$_rg_l"; set _rg_if_present true; set _rg_if_val (string replace '@@IF@@' '' -- "$_rg_l"); end # LEFT branch first: a positional starting @@IF@@ still lands here; prefix stripped at display
     end
     if test "$_rg_prc" -ne 0; test -n "$_rg_msg"; or set _rg_msg "Invalid arguments: $argv"; _ry_root_usage "$_rg_msg"; end
     if test "$_rg_if_present" = true; and test -z "$_rg_if_val"; _ry_root_usage "--install-file requires a non-empty absolute path"; end
-    if test (count $_rg_left) -gt 0; _ry_root_usage "Unexpected positional argument(s): $_rg_left"; end
+    if test (count $_rg_left) -gt 0; set -l _rg_disp (string replace -r -- '^@@LEFT@@' '' $_rg_left); _ry_root_usage "Unexpected positional argument(s): $_rg_disp"; end
     set -q _rg_l; and set --erase _rg_l
+    set -q _rg_p; and set --erase _rg_p
     echo "[ERR] ry-install must not run as root. Run as your normal user; sudo is invoked internally." >&2
     _ry_exit $EXIT_USAGE
 end
@@ -180,7 +181,8 @@ if not command timeout --foreground --kill-after=1 1 true 2>/dev/null; echo "[ER
 if not command -q find; echo "[ERR] GNU findutils find(1) required (tmpfile sweeps + boot-entry enumeration)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command find /dev/null -maxdepth 0 -printf '' 2>/dev/null; echo "[ERR] find(1) lacks -maxdepth/-printf (need GNU findutils; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -l _ry_mv_a (command mktemp 2>/dev/null); set -l _ry_mv_b (command mktemp 2>/dev/null)
-if test -z "$_ry_mv_a"; or test -z "$_ry_mv_b"; or not command mv -T -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; command rm -f -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; echo "[ERR] mv(1) lacks -T no-target-directory (need GNU coreutils ≥ 8.x; busybox not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
+if test -z "$_ry_mv_a"; or test -z "$_ry_mv_b"; command rm -f -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; echo "[ERR] mktemp(1) failed — cannot allocate probe files for the mv -T capability check (tmp dir probed writable above; check inode/space limits)" >&2; _ry_exit $EXIT_PREFLIGHT; end
+if not command mv -T -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; command rm -f -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; echo "[ERR] mv(1) lacks -T no-target-directory (need GNU coreutils ≥ 8.x; busybox not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 command rm -f -- "$_ry_mv_a" "$_ry_mv_b" 2>/dev/null; set --erase _ry_mv_a _ry_mv_b
 if not command -q stat; echo "[ERR] GNU coreutils stat(1) required (used for mode/owner verification)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command -q date; echo "[ERR] GNU coreutils date(1) required (used for timestamps in DATE_LABEL, TIMESTAMP, JSONL ts fields)" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -514,7 +516,7 @@ function _dc_kill_children --description "_do_cleanup sub: Reap child PIDs (TERM
     test "$_have_kids" = no; and return 0
     command pkill -TERM -P "$fish_pid" 2>/dev/null
     set -l _grace 5 # 0.1s polls
-    test -f /var/lib/pacman/db.lck; and set _grace 100 # pkg txn in flight: up to 10s grace (only -P $fish_pid descendants reaped; detached pacman out of scope)
+    test -f /var/lib/pacman/db.lck; and set _grace 100 # pkg txn in flight: up to 10s grace; only -P $fish_pid descendants reaped
     for _gi in (seq $_grace)
         command -q pgrep; or begin; command sleep 0.5 </dev/null 2>/dev/null; break; end
         test (count (command pgrep -P "$fish_pid" 2>/dev/null)) -eq 0; and break
@@ -676,7 +678,7 @@ set -g PKGS_ADD \
     ddcutil \
     nftables \
     pacman-contrib \
-    archlinux-contrib # pactree (PKGS_DEL rdep safety) + paccache (cache trim) used by ry-install; marked explicit so cachy-update removal (-Rns -s) cannot orphan them
+    archlinux-contrib # pactree/paccache used by ry-install; explicit so cachy-update -Rns removal cannot orphan them
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
@@ -758,7 +760,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:16 \
         USER_DESTINATIONS:2 \
-        MKINITCPIO_COMPRESSION_OPTIONS:2 # independent drift tripwires: never derive a count from the array it guards; on change, sync array + doc/global mirror
+        MKINITCPIO_COMPRESSION_OPTIONS:2 # independent drift tripwires; on change, sync array + doc/global mirror
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -1504,7 +1506,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; long-r
     test -n "$_resolved"; or set _resolved "$_effective_cmd"
     set _effective_cmd (command basename -- "$_resolved")
     if contains -- "$_effective_cmd" pacman mkinitcpio sdboot-manage paccache updatedb pkgfile
-        if test "$_t" -eq 0 2>/dev/null; return 0; end # user opted out entirely (RY_RUN_TIMEOUT=0): honor it
+        if test "$_t" -eq 0 2>/dev/null; echo 0; return 0; end # user opted out entirely (RY_RUN_TIMEOUT=0): honor it — emit 0, same channel as the non-long-op path
         if test "$_t" -lt "$_RY_LONGOP_HARD_CAP" 2>/dev/null # raise short default to the hard cap; never below, never unbounded
             _log "TIMEOUT_LONGOP_CAP: cmd=$_effective_cmd raising $_t""s → $_RY_LONGOP_HARD_CAP""s (long-running pkg/boot/db op; short SIGKILL would bypass rollback)"
             set _t $_RY_LONGOP_HARD_CAP
@@ -3520,7 +3522,7 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
         set -g SYSTEM_UPGRADED false
         _log "PKG_STATE_UNCHANGED: pacman -Q fingerprint identical pre/post -Syu (no-op upgrade)"
     end
-    set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null) # mark PKGS_ADD explicit post-Syu so Phase-4 -Rns -s cannot orphan a pre-installed reason=dependency member (-D --asexplicit idempotent)
+    set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null) # re-mark PKGS_ADD explicit post-Syu so Phase-4 -Rns cannot orphan preinstalled deps (-D idempotent)
     if test (count $_add_present) -gt 0
         if not _run sudo -n pacman -D --asexplicit -- $_add_present
             _warn "  Could not mark PKGS_ADD packages explicit — orphan-removal exemption not guaranteed for any pre-installed as a dependency"
@@ -4069,7 +4071,7 @@ function _resolve_esp --description "Resolve EFI system partition path (cached; 
     if set -q _RY_ESP_TRIED; printf '%s' "$_RY_ESP_PATH"; return 0; end
     set -l _p (_bootctl_dir -p ESP_BOOTCTL_PIPE_FAIL "falling through to findmnt")
     if test -z "$_p"; or begin; not test -d "$_p"; and not sudo -n test -d "$_p" 2>/dev/null; end
-        for _candidate in /efi /boot/efi /boot/EFI /boot # candidates match only when independently mounted vfat; a plain /boot/EFI dir on ext4 /boot returns empty from findmnt and is skipped
+        for _candidate in /efi /boot/efi /boot/EFI /boot # candidates count only when independently mounted vfat; a plain dir returns empty from findmnt
             set -l _fs (command findmnt -no FSTYPE -- "$_candidate" 2>/dev/null)
             if test "$_fs" = vfat; set _p "$_candidate"; break; end
         end

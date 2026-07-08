@@ -4,160 +4,97 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
-7.96.5 (2026-07-08)
+7.96.6 (2026-07-08)
 -------------------
-  - docs: correct the README preflight note — pactree, not
-    paccache, is the warn-only tool, and it warns at package-
-    removal time; uninstall step 2 now says four boot files,
-    matching the .ry.bak set
-  - docs: move the entry-wipe/EFI sentence from the firewall
-    warning into a Safety-table row; trim the --check cell's
-    duplicated exit-code legend; relocate Environment Overrides
-    under Usage
-  - docs: tableize the Globals divergences; group the Install
-    package row to mirror the Remove row; unify GiB; split the
-    merged known-benign row; heading + punctuation polish
+  - cleanup: inline the single-caller _unit_state, _fail_no_count,
+    and _awf_is_backup_target wrappers; drop the _kconfig_cache
+    output path (its sole caller discarded it)
+  - cleanup: fold the eight mkinitcpio-abort SKIP rows and the
+    signal exit-code switch into table-driven loops
+  - cleanup: add _taint for the paired error/boot-taint flags (six
+    sites); drop the redundant _RY_PKG_REMOVE_SKIPS pre-init and
+    four _chk_grep label args that repeated the pattern (the label
+    already defaults to it)
 
-7.96.4 (2026-07-08)
--------------------
-  - probes: replace three builtin→pipe captures (ntsync kconfig,
-    dmesg preempt scan, findmnt error excerpt) with list
-    membership, string match, and slicing; an early-exiting pipe
-    reader could SIGPIPE the shell and mute all later console
-    output for the rest of the run (the JSONL log was unaffected)
-  - lock: set the mkdir-success flag beside the rc capture; closes
-    the signal window that could strand an unreleasable lock dir
+7.96.0 - 7.96.5 (2026-07-07 .. 07-08)
+-------------------------------------
+  - services: mask avahi-daemon.service + .socket (MASK 10 -> 12);
+    a second mDNS responder beside resolved advertised a colliding
+    hostname-2.local (profile runs MulticastDNS=no)
+  - validate: gate every KERNEL_PARAMS token against the
+    [A-Za-z0-9._,=-] charset; tokens splice into the shell-sourced
+    LINUX_OPTIONS="..." value and /etc/kernel/cmdline
   - validate: drop the dead KERNEL_PARAMS metachar re-sweep — the
     charset gate already excludes every shell metachar
-  - run: add -h (host form) to the sudo value-flag skip list used
-    for long-op timeout classification
-
-7.96.3 (2026-07-08)
--------------------
+  - backup: add /etc/kernel/cmdline and /etc/sdboot-manage.conf to
+    _RY_BACKUP_TARGETS (2 -> 4); all four boot-critical files now
+    get .ry.bak plus post-write byte-verify/restore
   - files: pre-validate rendered /etc/nftables.conf with nft -c -f
-    against the staged tmpfile before commit; an invalid ruleset now
-    refuses deploy with the live ruleset and installed file unchanged
-  - services: deduplicate the live input-policy-drop probe — rename
-    _csm_nft_live to _nft_input_drop_live and call it from the
-    --check and verify-runtime paths (3 verbatim copies -> 1)
+    against the staged tmpfile before commit; an invalid ruleset
+    refuses deploy with live ruleset and installed file unchanged
+  - services: deduplicate the live input-policy-drop probe into
+    _nft_input_drop_live (--check + verify paths; 3 copies -> 1)
+  - probes: replace three builtin->pipe captures (ntsync kconfig,
+    dmesg preempt scan, findmnt error excerpt) with list
+    membership, string match, and slicing; an early-exiting pipe
+    reader could SIGPIPE the shell and mute later console output
+  - lock: set the mkdir-success flag beside the rc capture; closes
+    the signal window that could strand an unreleasable lock dir
   - cli: repeated --install-file flags resolve last-wins instead of
     space-joining the argparse list into a bogus path
   - log: rename via mv -T (cp -pT recovery) so a directory squatting
     on the target name cannot swallow the JSONL log
-  - docs: record known issue — the mkinitcpio shutdown-ramfs
-    generator unit can fail at shutdown on CachyOS installs
-    (upstream unit interaction; not remediated in-tree); verify:
-    systemctl status mkinitcpio-generate-shutdown-ramfs.service
-
-7.96.2 (2026-07-07)
--------------------
-  - validate: gate every KERNEL_PARAMS token against the
-    [A-Za-z0-9._,=-] charset; tokens splice into the shell-sourced
-    LINUX_OPTIONS="..." value and /etc/kernel/cmdline (parity with
-    the boot-crit scalar and COMPRESSION_OPTIONS metachar gates)
-  - backup: add /etc/kernel/cmdline and /etc/sdboot-manage.conf to
-    _RY_BACKUP_TARGETS (2 -> 4); all four boot-critical files now
-    get .ry.bak plus post-write byte-verify/restore
+  - run: add -h (host form) to the sudo value-flag skip list used
+    for long-op timeout classification
   - preflight: sudo-cache banner suggests a scoped NOPASSWD drop-in
     (pacman/mkinitcpio/sdboot-manage/systemctl) instead of ALL
-  - docs: README backup row lists the four .ry.bak targets;
-    uninstall step 3 restores cmdline and sdboot-manage.conf from
-    .ry.bak (hand rewrite dropped)
+  - docs: record known issue — the mkinitcpio shutdown-ramfs
+    generator unit can fail at shutdown on CachyOS installs
+    (upstream unit interaction; not remediated in-tree)
+  - docs: README structure pass — Safety/Usage/Globals tables, the
+    four-file .ry.bak uninstall wording, unified GiB units
 
-7.96.1 (2026-07-07)
--------------------
-  - docs: tighten the 7.95.2 and 7.96.0 release-note wording
-    (content unchanged)
-
-7.96.0 (2026-07-07)
--------------------
-  - services: mask avahi-daemon.service + .socket (MASK 10 → 12);
-    a second mDNS responder beside resolved advertised a
-    colliding hostname-2.local (profile runs MulticastDNS=no)
-  - docs: Avahi rationale in Tuning Notes; mask row + unmask
-    count now 12
-
-7.95.2 (2026-07-07)
--------------------
+7.95.0 - 7.95.2 (2026-07-07)
+----------------------------
   - dispatch: hoist the argparse option spec into one
     _RY_ARGPARSE_SPEC global (root-guard + main parsers) with a
     count tripwire; three verbatim copies removed
   - install-file: log POST_HOOK_NONE when a changed destination
     matches no _RY_POST_HOOKS pattern (skip was silent)
-  - docs: fstab table — only a symlinked fstab aborts the
-    rewrite; malformed rows are preserved and warned
-  - docs: align the package-retention rationale with the code,
-    state the three ntsync verify levels, document the
-    RY_RUN_TIMEOUT >9-digit clamp
-  - docs: normalize table separators and headings, trim the
-    longest tuning/uninstall cells, table-ize known-benign
-    lines, expand Security and Contributing
-
-7.95.1 (2026-07-07)
--------------------
-  - docs: trim README prose and table cells to essentials; all
-    tables, rows, commands, paths, overrides, and exit codes are
-    retained; headings and anchors unchanged
-
-7.95.0 (2026-07-07)
--------------------
   - preflight: validate vercmp output before the mesa soft-floor
     compare; empty or non-numeric output logs and skips instead of
-    leaking a test(1) usage error to stderr (a valid below-floor
-    result still warns, unchanged)
-  - docs: convert the README environment-overrides paragraph to a
-    per-variable table and the in/out-of-scope table to prose
+    leaking a test(1) usage error to stderr
+  - docs: trim README to essentials; per-variable environment
+    table; fstab symlink-abort, ntsync levels, and RY_RUN_TIMEOUT
+    clamp notes aligned with the code
 
-7.94.5 (2026-07-07)
--------------------
-  - comments: correct "-Rns -s" to "-Rns" in the pactree and
-    asexplicit rationale comments (flag typo; behavior unchanged)
-  - comments: trim verbose inline comments to the essential
-    rationale (nine sites; no code changes)
-  - docs: mirror the -Rns wording fix in the README Packages note
-
-7.94.4 (2026-07-07)
--------------------
-  - preflight: report mktemp allocation failure distinctly from a
-    missing mv -T capability in the coreutils probe (message only)
-  - run: long-op timeout resolver emits 0 when RY_RUN_TIMEOUT=0
-    instead of empty output; consumers unchanged (single channel)
-  - rootguard: emit leftover positionals one @@LEFT@@ line each and
-    append raw marker lines, so arguments containing spaces survive
-    intact in the usage error; prefix stripped at display (root
-    refusal path only — non-root dispatch was already correct)
-
-7.94.3 (2026-07-07)
--------------------
+7.94.0 - 7.94.5 (2026-07-06 .. 07-07)
+-------------------------------------
+  - udev: fix GPU rule key DEVTYPE -> ENV{DEVTYPE} (was rejected as
+    an invalid key; GPU clock-floor rule never applied)
+  - modprobe: blacklist amdxdna; XDNA NPU needs the IOMMU and
+    probes -ENODEV (ret -19) under amd_iommu=off; 17 -> 18 files
+  - cmdline: clearcpuid=514 -> clearcpuid=umip; string form is
+    stable across kernels (numeric bit is not)
+  - kernel: re-scope KERNEL_MIN 6.19 rationale to gfx1151 MES-0x86
+    amdgpu; RTL8127 base lands 6.16, hang fix 6.18 (below floor)
   - lock: use USER_HZ=100 not CONFIG_HZ for PID starttime when
     getconf is absent; starttime unit is USER_HZ, not kernel tick
-  - preflight: hard-require find(1) in all modes, not only install
-  - preflight: add CPUPOWER_GOVERNOR to the sourced-scalar metachar
-    refuse gate (parity with the other shell-sourced boot scalars)
-  - rootguard: reword argparse capture comment; fish cmd-sub is
-    same-process, begin-block scope keeps argv local (comment only)
-
-7.94.2 (2026-07-07)
--------------------
-  - cmdline: clearcpuid=514 -> clearcpuid=umip; string form is stable
-    across kernels (numeric bit is not) -- same UMIP disable
-  - kernel: re-scope KERNEL_MIN 6.19 rationale to gfx1151 MES-0x86
-    amdgpu; RTL8127 r8169 base lands 6.16, hang fix 6.18 (below floor)
-  - modprobe: correct amdxdna probe errno -EINVAL -> -ENODEV (ret -19)
-    in the blacklist comment (behavior unchanged)
-
-7.94.1 (2026-07-06)
--------------------
-  - verify: extract _resolve_boot_fstype; both perm-check subs share
-    one $BOOT-fstype resolver (behavior unchanged)
-  - docs: drop duplicate REMOVE_EXISTING gloss; link Globals to Safety
-
-7.94.0 (2026-07-06)
--------------------
-  - udev: fix GPU rule key DEVTYPE -> ENV{DEVTYPE} (was rejected as an
-    invalid key; GPU clock-floor rule never applied)
-  - modprobe: blacklist amdxdna; XDNA NPU needs the IOMMU and probes
-    with -EINVAL under amd_iommu=off (NPU unused); 17 -> 18 files
+  - preflight: hard-require find(1) in all modes; add
+    CPUPOWER_GOVERNOR to the sourced-scalar metachar refuse gate
+  - preflight: report mktemp allocation failure distinctly from a
+    missing mv -T capability in the coreutils probe
+  - run: long-op timeout resolver emits 0 when RY_RUN_TIMEOUT=0
+    instead of empty output; consumers unchanged
+  - rootguard: emit leftover positionals one @@LEFT@@ line each and
+    append raw marker lines, so arguments containing spaces survive
+    intact in the usage error (root refusal path only)
+  - verify: extract _resolve_boot_fstype; both perm-check subs
+    share one $BOOT-fstype resolver
+  - comments: correct "-Rns -s" to "-Rns" in the pactree and
+    asexplicit rationales; trim nine verbose inline comments
+  - docs: mirror the -Rns wording; drop duplicate REMOVE_EXISTING
+    gloss; link Globals to Safety
 
 7.93.0 (2026-07-05)
 -------------------

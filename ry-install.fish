@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.96.5 (2026-07-08) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.96.6 (2026-07-08) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.96.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.96.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -224,12 +224,13 @@ set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-r
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS; set -g _RY_PROFILE_USES_WIFI_BACKEND false
 set -g SYSTEM_UPGRADED false # cross-phase global; must exist in all modes (set in _install_packages)
+function _taint --description "Flag install error + boot-critical taint"; set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; end
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 set -g NM_RESTART_DELAY 3; set -g _PROG_BAR_WIDTH 40
 
 # ── KERNEL / SYSTEMD STATE PROBES ──
-function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy-loaded; empty on missing config)"
+function _kconfig_cache --description "Load /proc/config.gz into _KCONFIG_DATA (lazy; empty when unavailable)"
     if not set -q _KCONFIG_LOADED
         if test -f /proc/config.gz; and command -q zcat
             set -g _KCONFIG_DATA (command zcat /proc/config.gz 2>/dev/null)
@@ -238,11 +239,10 @@ function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy
         end
         set -g _KCONFIG_LOADED true
     end
-    test (count $_KCONFIG_DATA) -eq 0; and return 0
-    printf '%s\n' $_KCONFIG_DATA
+    return 0
 end
 function _ntsync_state --description "Return: builtin|loaded|loaded_nodev|missing"
-    _kconfig_cache >/dev/null # prime cache; list membership below avoids a builtin→grep pipe (an early-exit reader would SIGPIPE fish and mute later console output)
+    _kconfig_cache # load cache; list membership below avoids a builtin→grep pipe (an early-exit reader would SIGPIPE fish and mute later console output)
     if contains -- CONFIG_NTSYNC=y $_KCONFIG_DATA
         printf '%s\n' builtin
     else if test -c /dev/ntsync
@@ -265,9 +265,8 @@ function _resolve_systemd_ver --description "Cache systemd major version into _R
     set -g _RY_SYSTEMD_VER_TRIED true
     return 0
 end
-function _unit_state --argument-names unit --description "Return LoadState/ActiveState/UnitFileState as 3-line list (fewer on systemctl error)"; command systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null; end
-function _unit_state_padded --argument-names unit --description "Return _unit_state values" # keeps $rec[1..3] in-bounds
-    set -l _v (_unit_state "$unit")
+function _unit_state_padded --argument-names unit --description "Return LoadState/ActiveState/UnitFileState as exactly 3 lines" # pads on systemctl error; keeps $rec[1..3] in-bounds
+    set -l _v (command systemctl show --value --property=LoadState,ActiveState,UnitFileState -- "$unit" 2>/dev/null)
     if test (count $_v) -lt 3
         printf '%s\n' ERR_NO_DATA ERR_NO_DATA ERR_NO_DATA
     else
@@ -565,25 +564,17 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
         echo "" >&2
         echo "[WARN] Caught $_sig_label - cleaning up..." >&2
     end
-    set -l _sig_exit 130
-    switch "$argv[1]"
-        case HUP SIGHUP
-            set _sig_exit 129
-        case INT SIGINT
-            set _sig_exit 130
-        case QUIT SIGQUIT
-            set _sig_exit 131
-        case TERM SIGTERM
-            set _sig_exit 143
-        case ABRT SIGABRT
-            set _sig_exit 134
-        case '*'
-            functions -q _log; and _log "CLEANUP_UNKNOWN_SIGNAL: argv[1]='$argv[1]' fallback_exit=130"
-            set _sig_exit 130
+    set -l _sig_name (string replace -r '^SIG' '' -- "$_sig_label")
+    set -l _sig_exit ""
+    for _sm in HUP:129 INT:130 QUIT:131 TERM:143 ABRT:134 # 128+N map
+        string match -q "$_sig_name:*" -- $_sm; and set _sig_exit (string split ':' -- $_sm)[2]; and break
+    end
+    if test -z "$_sig_exit"
+        functions -q _log; and _log "CLEANUP_UNKNOWN_SIGNAL: argv[1]='$argv[1]' fallback_exit=130"
+        set _sig_exit 130
     end
     _teardown signal $_sig_exit
     _ry_erase_handlers # fish 3.x swallows handler exit status; exec sh re-raises to deliver 128+N
-    set -l _sig_name (string replace -r '^SIG' '' -- "$_sig_label")
     string match -qr '^[A-Z]+$' -- "$_sig_name"; and exec /bin/sh -c "kill -$_sig_name \$\$ 2>/dev/null; exit $_sig_exit"
     exit $_sig_exit # fallback: non-signal label or exec failure
 end
@@ -682,7 +673,6 @@ set -g PKGS_ADD \
     pacman-contrib \
     archlinux-contrib # pactree/paccache used by ry-install; explicit so cachy-update -Rns removal cannot orphan them
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
-set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
@@ -1255,7 +1245,6 @@ function _msg_nocount --argument-names level --description "Like _msg but skips 
 end
 function _ok --description "Emit OK-level message and increment VERIFY_OK"; _msg OK $argv; return 0; end # always return 0 (callers chain via and)
 function _fail --description "Emit FAIL-level message and increment VERIFY_FAIL"; _msg FAIL $argv; return 0; end
-function _fail_no_count --description "Emit FAIL-level message without incrementing VERIFY_FAIL"; _msg_nocount FAIL $argv; return 0; end
 function _info --description "Emit INFO-level message (no counter)"; _msg INFO $argv; return 0; end
 function _warn --description "Emit WARN-level message and increment VERIFY_WARN"; _msg WARN $argv; return 0; end
 function _phase_record --argument-names check result evidence --description "Append a row to the install summary matrix and JSONL"
@@ -2114,7 +2103,6 @@ function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --descript
     return 0
 end
 # ── ATOMIC FILE INSTALL: BACKUP + POST-WRITE VERIFY/RESTORE + PUBLIC ENTRY ──
-function _awf_is_backup_target --argument-names dst --description "True if dst is in _RY_BACKUP_TARGETS (automatic .ry.bak set)"; contains -- "$dst" $_RY_BACKUP_TARGETS; end
 function _awf_make_backup --argument-names dst use_sudo --description "Create <dst>.ry.bak before overwrite (auto for _RY_BACKUP_TARGETS; fstab via direct call)"
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"
     set -l _sp; test "$use_sudo" = true; and set _sp sudo -n
@@ -2187,7 +2175,7 @@ function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --descri
 end
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write. rc=0 ok; rc=1 any failure"
     set -l dst_dir (command dirname -- "$dst"); set -l _is_bt false
-    _awf_is_backup_target "$dst"; and set _is_bt true
+    contains -- "$dst" $_RY_BACKUP_TARGETS; and set _is_bt true
     set -l tmpfile (_as $use_sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
     if test -z "$tmpfile"; _fail "→ $dst (mktemp failed)"; return 1; end
     _track_tmpfile "$tmpfile"
@@ -2378,9 +2366,9 @@ function _vss_regdom --description "_verify_static_system sub: wireless regdom (
 function _vss_bluetooth --description "_verify_static_system sub: BlueZ main.conf (adapter auto-power-on)"
     _echo "── bluetooth (main.conf) ──"
     _chk_file /etc/bluetooth/main.conf; or return 0
-    _chk_grep /etc/bluetooth/main.conf "AutoEnable=$BT_AUTO_ENABLE" "AutoEnable=$BT_AUTO_ENABLE"
-    _chk_grep /etc/bluetooth/main.conf "FastConnectable=$BT_FAST_CONNECTABLE" "FastConnectable=$BT_FAST_CONNECTABLE"
-    _chk_grep /etc/bluetooth/main.conf "ReconnectAttempts=$BT_RECONNECT_ATTEMPTS" "ReconnectAttempts=$BT_RECONNECT_ATTEMPTS"
+    _chk_grep /etc/bluetooth/main.conf "AutoEnable=$BT_AUTO_ENABLE"
+    _chk_grep /etc/bluetooth/main.conf "FastConnectable=$BT_FAST_CONNECTABLE"
+    _chk_grep /etc/bluetooth/main.conf "ReconnectAttempts=$BT_RECONNECT_ATTEMPTS"
 end
 function _vss_udev --description "_verify_static_system sub: combined udev perf rules (NVMe scheduler + EPP + GPU clock-floor)"
     _echo "── udev (perf: I/O scheduler + EPP + GPU clock-floor) ──"
@@ -2426,7 +2414,7 @@ end
 function _verify_static_user --description "Verify environment.d ENV_VARS + MangoHud HUD config"
     _echo "USER CONFIGURATION"
     if _chk_file "$HOME/.config/environment.d/10-environment.conf"
-        for exp in $ENV_VARS; _chk_grep "$HOME/.config/environment.d/10-environment.conf" "$exp" "$exp"; end
+        for exp in $ENV_VARS; _chk_grep "$HOME/.config/environment.d/10-environment.conf" "$exp"; end
     end
     _echo "── MangoHud (readout-only HUD) ──"
     if _chk_file "$HOME/.config/MangoHud/MangoHud.conf"
@@ -2552,7 +2540,7 @@ function _vsc_check_one --argument-names dst --description "_verify_static_check
     set -l _gen_rc $pipestatus[1]
     if test "$_gen_rc" -ne 0
         if test "$_gen_rc" -eq "$EXIT_GEN_NOUUID"; and test -z "$_ROOT_UUID"; _warn "  $dst: checksum skipped — root UUID unresolved (presence verified separately)"; _log "VERIFY_STATIC_GEN_SKIP_NOUUID: dst=$dst"; return 0; end
-        _fail_no_count "  $dst: generator failed (rc=$_gen_rc)"; set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc"; return 0
+        _msg_nocount FAIL "  $dst: generator failed (rc=$_gen_rc)"; set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc"; return 0
     end
     set -l actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _ib_rc $pipestatus[1]
@@ -3557,18 +3545,18 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
 end
 function _ip_run_and_verify --description "_install_packages sub: run pacman -Syu + verify + revalidate hooks"
     set -l pkgs_to_install $argv; set -l _err false
-    if not _ip_pacman_invoke $pkgs_to_install; set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; set _err true; end
+    if not _ip_pacman_invoke $pkgs_to_install; _taint; set _err true; end
     _info "Verifying package installation..."
-    if not command -q pacman; _err "pacman binary unavailable after install — cannot verify package state"; set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; set _err true; return 1; end # vanished pacman must not read as all-present
+    if not command -q pacman; _err "pacman binary unavailable after install — cannot verify package state"; _taint; set _err true; return 1; end # vanished pacman must not read as all-present
     set -l missing_pkgs (command pacman -T -- $pkgs_to_install 2>/dev/null); set -l _pt_rc $status
     if test "$_pt_rc" -ne 0; and test "$_pt_rc" -ne 127 # pacman -T rc: 0=present 127=targets-missing
         _err "pacman -T failed (rc=$_pt_rc) — cannot verify install state"
-        set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
+        _taint
         set _err true
     else if test (count $missing_pkgs) -gt 0
         _err "Missing packages: $missing_pkgs"
         _warn "  Install manually: sudo pacman -S --needed $missing_pkgs"
-        set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
+        _taint
         set _err true
     else
         _ok "All packages verified installed"
@@ -3577,7 +3565,7 @@ function _ip_run_and_verify --description "_install_packages sub: run pacman -Sy
         _err "Post-pacman: declared MKINITCPIO_HOOKS not all present on disk"
         _err "  pacman -Syu may have removed or renamed a hook this profile references"
         _err "  Inspect: ls /usr/lib/initcpio/{install,hooks}/ /etc/initcpio/{install,hooks}/"
-        set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
+        _taint
         set _err true
     end
     test "$_err" = false
@@ -3595,7 +3583,7 @@ function _install_packages --description "Install managed packages via pacman -S
         set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
         set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
         sudo -n rmdir /run/ry-install 2>/dev/null
-        set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true
+        _taint
         _phase_record "Packages: pacman -Syu" FAIL "mkinitcpio.conf pre-deploy failed"
         return 1
     end
@@ -4414,14 +4402,9 @@ end
 function _rdi_run_phases --description "Run pkgs/sys/services phases"
     not _install_packages; and set -g INSTALL_HAD_ERRORS true
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
-        _phase_record "Packages: updatedb" SKIP "aborted"
-        _phase_record "Packages: pkgfile --update" SKIP "aborted"
-        _phase_record "Configs: system file deployment" SKIP "aborted"
-        _phase_record "Services: fstab opts" SKIP "aborted"
-        _phase_record "Services: PKGS_DEL removal" SKIP "aborted"
-        _phase_record "Services: mask units" SKIP "aborted"
-        _phase_record "Services: enable units" SKIP "aborted"
-        _phase_record "Services: regdom" SKIP "aborted"
+        for _sk in "Packages: updatedb" "Packages: pkgfile --update" "Configs: system file deployment" "Services: fstab opts" "Services: PKGS_DEL removal" "Services: mask units" "Services: enable units" "Services: regdom"
+            _phase_record "$_sk" SKIP "aborted"
+        end
         _err "Aborting remaining phases: mkinitcpio.conf revert failed (boot state inconsistent)"
         return 0
     end

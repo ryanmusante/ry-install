@@ -4,6 +4,51 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.96.5 (2026-07-08)
+-------------------
+  - docs: correct the README preflight note — pactree, not
+    paccache, is the warn-only tool, and it warns at package-
+    removal time; uninstall step 2 now says four boot files,
+    matching the .ry.bak set
+  - docs: move the entry-wipe/EFI sentence from the firewall
+    warning into a Safety-table row; trim the --check cell's
+    duplicated exit-code legend; relocate Environment Overrides
+    under Usage
+  - docs: tableize the Globals divergences; group the Install
+    package row to mirror the Remove row; unify GiB; split the
+    merged known-benign row; heading + punctuation polish
+
+7.96.4 (2026-07-08)
+-------------------
+  - probes: replace three builtin→pipe captures (ntsync kconfig,
+    dmesg preempt scan, findmnt error excerpt) with list
+    membership, string match, and slicing; an early-exiting pipe
+    reader could SIGPIPE the shell and mute all later console
+    output for the rest of the run (the JSONL log was unaffected)
+  - lock: set the mkdir-success flag beside the rc capture; closes
+    the signal window that could strand an unreleasable lock dir
+  - validate: drop the dead KERNEL_PARAMS metachar re-sweep — the
+    charset gate already excludes every shell metachar
+  - run: add -h (host form) to the sudo value-flag skip list used
+    for long-op timeout classification
+
+7.96.3 (2026-07-08)
+-------------------
+  - files: pre-validate rendered /etc/nftables.conf with nft -c -f
+    against the staged tmpfile before commit; an invalid ruleset now
+    refuses deploy with the live ruleset and installed file unchanged
+  - services: deduplicate the live input-policy-drop probe — rename
+    _csm_nft_live to _nft_input_drop_live and call it from the
+    --check and verify-runtime paths (3 verbatim copies -> 1)
+  - cli: repeated --install-file flags resolve last-wins instead of
+    space-joining the argparse list into a bogus path
+  - log: rename via mv -T (cp -pT recovery) so a directory squatting
+    on the target name cannot swallow the JSONL log
+  - docs: record known issue — the mkinitcpio shutdown-ramfs
+    generator unit can fail at shutdown on CachyOS installs
+    (upstream unit interaction; not remediated in-tree); verify:
+    systemctl status mkinitcpio-generate-shutdown-ramfs.service
+
 7.96.2 (2026-07-07)
 -------------------
   - validate: gate every KERNEL_PARAMS token against the

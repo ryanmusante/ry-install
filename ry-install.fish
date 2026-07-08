@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.96.2 (2026-07-07) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.96.5 (2026-07-08) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.96.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.96.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -242,7 +242,8 @@ function _kconfig_cache --description "Return cached /proc/config.gz lines (lazy
     printf '%s\n' $_KCONFIG_DATA
 end
 function _ntsync_state --description "Return: builtin|loaded|loaded_nodev|missing"
-    if _kconfig_cache | command grep -q -- '^CONFIG_NTSYNC=y' 2>/dev/null
+    _kconfig_cache >/dev/null # prime cache; list membership below avoids a builtin→grep pipe (an early-exit reader would SIGPIPE fish and mute later console output)
+    if contains -- CONFIG_NTSYNC=y $_KCONFIG_DATA
         printf '%s\n' builtin
     else if test -c /dev/ntsync
         printf '%s\n' loaded
@@ -309,6 +310,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     set -g _RY_LOCK_DIR_OWNED true
     command mkdir -- "$LOCK_DIR" 2>/dev/null
     set -l _mk_rc $status
+    test "$_mk_rc" -eq 0; and set -g _RY_LOCK_MKDIR_OK true # beside rc capture: no signal window can strand an unreleasable lock dir
     umask $_prev_umask
     if test "$_mk_rc" -ne 0
         set --erase _RY_LOCK_DIR_OWNED
@@ -317,7 +319,6 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
         echo "[ERR] Cannot create lock dir: $LOCK_DIR (mkdir rc=$_mk_rc)" >&2
         return 1
     end
-    set -g _RY_LOCK_MKDIR_OK true
     command chmod -- 700 "$LOCK_DIR" 2>/dev/null
     set -l _pid_tmp (command mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
     if test -z "$_pid_tmp"; or not printf '%s\n' "$fish_pid" >"$_pid_tmp" 2>/dev/null
@@ -794,7 +795,7 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
     for _co in $MKINITCPIO_COMPRESSION_OPTIONS # each token spliced into a shell array literal; restrict to mkinitcpio flag charset
         if not string match -qr -- '^-?[A-Za-z0-9]+$' "$_co"; _err_loud "MKINITCPIO_COMPRESSION_OPTIONS token invalid: '$_co' — refuse to deploy (spliced into a shell-sourced array literal)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
-    for _kp in $KERNEL_PARAMS # each token spliced into the shell-sourced LINUX_OPTIONS="..." value and /etc/kernel/cmdline; restrict to the kparam charset
+    for _kp in $KERNEL_PARAMS # each token spliced into the shell-sourced LINUX_OPTIONS="..." value and /etc/kernel/cmdline; restrict to the kparam charset (excludes every shell metachar)
         if not string match -qr -- '^[A-Za-z0-9._,=-]+$' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refuse to deploy (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
@@ -872,13 +873,6 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     _ir_validate_post_hooks
     for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
     _ir_precompute_caches
-    set -l _kp_metachar_re '[\s"`$;\\\\&|<>(){}*?\x27~!#]' # shell metachar class for kernel params
-    for _kp in $KERNEL_PARAMS
-        if string match -qr -- "$_kp_metachar_re" "$_kp"
-            _err_loud "KERNEL_PARAMS member contains whitespace, quote, or shell metachar: '$_kp' — refuse to deploy (would corrupt cmdline / LINUX_OPTIONS)"
-            _pre_dispatch_exit $EXIT_PREFLIGHT
-        end
-    end
     for _pn in $PKGS_ADD $PKGS_DEL
         if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman would parse as flag, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
@@ -1500,7 +1494,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; long-r
         set -l _skip_next false
         for _ec_arg in $argv[2..-1]
             if test "$_skip_next" = true; set _skip_next false; continue; end
-            if contains -- "$_ec_arg" -u -g -p -C -D -R -T -U --user --group --prompt --close-from --chdir --chroot --command-timeout --other-user --host; set _skip_next true; continue; end # value-taking sudo flags: skip flag + value
+            if contains -- "$_ec_arg" -h -u -g -p -C -D -R -T -U --user --group --prompt --close-from --chdir --chroot --command-timeout --other-user --host; set _skip_next true; continue; end # value-taking sudo flags (-h = host form): skip flag + value
             string match -q -- '-*' "$_ec_arg"; and continue
             test "$_ec_arg" = env; and continue
             string match -qr -- '^[A-Za-z_][A-Za-z0-9_]*=' "$_ec_arg"; and continue
@@ -2173,6 +2167,24 @@ function _awf_postwrite_verify_restore --argument-names dst use_sudo --descripti
     end
     return 1
 end
+function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --description "Dst-specific rendered-bytes validation before commit; rc 1 = refuse deploy (installed file and live state unchanged)"
+    switch "$dst"
+        case /etc/nftables.conf
+            if not command -q nft # --install-file before Phase 2 can hit this; full install deploys files after nftables is installed
+                _warn "  $dst: nft(8) absent — pre-deploy ruleset validation skipped"
+                _log "NFT_PREVALIDATE_SKIPPED: nft absent"
+                return 0
+            end
+            set -l _sp; test "$use_sudo" = true; and set _sp sudo -n
+            if not _run $_sp nft -c -f "$tmpfile"
+                _fail "  $dst: rendered ruleset failed nft -c — refusing deploy (live ruleset and installed file unchanged)"
+                _log "NFT_PREVALIDATE_FAIL: $dst"
+                return 1
+            end
+            _log "NFT_PREVALIDATE_OK: $dst"
+    end
+    return 0
+end
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write. rc=0 ok; rc=1 any failure"
     set -l dst_dir (command dirname -- "$dst"); set -l _is_bt false
     _awf_is_backup_target "$dst"; and set _is_bt true
@@ -2181,6 +2193,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     _track_tmpfile "$tmpfile"
     if not _awf_render_to_tmp "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
     if not _awf_symlink_check "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
+    if not _awf_content_prevalidate "$dst" "$tmpfile" $use_sudo; _rm_tmp "$tmpfile" $use_sudo; return 1; end
     test "$_is_bt" = true; and _awf_make_backup "$dst" $use_sudo # back up after render+symlink-probe
     _awf_finalize_mv "$dst" "$tmpfile" $use_sudo "$perms"
     set -l _fin_rc $status
@@ -2637,8 +2650,7 @@ function _svc_chk_expected --description "Check EXPECTED_SERVICES units"
                     _log "CHECK_NFT_UNPROBEABLE: nft(8) absent — live ruleset unverifiable, treating as drift (fail-closed)"
                     set -g _RY_CHECK_DRIFT 1
                 else
-                    set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect)
-                    string match -q -- '*policy drop*' "$_in_chain"; or set -g _RY_CHECK_DRIFT 1
+                    _nft_input_drop_live; or set -g _RY_CHECK_DRIFT 1
                 end
             else
                 test "$active" = active; or set -g _RY_CHECK_DRIFT 1 # RemainAfterExit oneshots read active
@@ -2853,7 +2865,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
     if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
         set -l _full (sudo -n dmesg 2>/dev/null); set -l _full_count (count $_full)
         if test "$_full_count" -gt 0
-            set -g _RY_DMESG_PREEMPT (printf '%s\n' $_full | command grep -o 'Dynamic Preempt: [a-z]*' | command head -n 1)
+            set -g _RY_DMESG_PREEMPT (string match -rg -- '(Dynamic Preempt: [a-z]+)' $_full)[1] # first match; no builtin→pipe (early-exit reader would SIGPIPE fish)
         end
         set -g _RY_DMESG_LINES $_full_count
     end
@@ -2917,8 +2929,7 @@ function _vrsv_chk_nftables --argument-names label rec_str --description "nftabl
         _warn "  $label: $rec[2] — sudo cache lapsed, live ruleset unverifiable"
         return 0
     end
-    set -l _input (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)
-    if not string match -q -- '*policy drop*' "$_input"
+    if not _nft_input_drop_live
         _fail "  $label: $rec[2] and no live inet/filter/input chain with policy drop"
         return 0
     end
@@ -3733,7 +3744,7 @@ function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp 
         if test "$status" -ne 0
             _rm_tmp "$tmpfstab" true
             _fail "  /etc/fstab: findmnt --verify failed:"
-            for _vl in (printf '%s\n' $_verify_out | command head -n 3); _fail "    $_vl"; end
+            for _vl in $_verify_out[1..3]; _fail "    $_vl"; end # slice clamps; no builtin→head pipe
             return 1
         end
     else
@@ -3902,7 +3913,7 @@ function _csm_retry_individual --description "_configure_services_mask sub: Per-
     end
     return $_ret
 end
-function _csm_nft_live --description "rc 0 iff live inet/filter/input chain has policy drop (oneshot reads inactive after clean load)"
+function _nft_input_drop_live --description "rc 0 iff live inet/filter/input chain has policy drop (oneshot reads inactive after clean load)"
     command -q nft; or return 1
     sudo -n true 2>/dev/null; or return 1
     set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect)
@@ -3911,9 +3922,9 @@ end
 function _csm_enable_nftables_first --description "Activate nftables before the ufw flush; rc 0 iff default-deny ruleset confirmed live"
     contains -- ufw.service $MASK; or return 0
     contains -- nftables.service $EXPECTED_SERVICES; or return 0
-    if _csm_nft_live; _log "NFT_PRE_ENABLE_SKIP: ruleset already live"; return 0; end
+    if _nft_input_drop_live; _log "NFT_PRE_ENABLE_SKIP: ruleset already live"; return 0; end
     _run sudo -n systemctl enable --now -- nftables.service
-    if _csm_nft_live
+    if _nft_input_drop_live
         _ok "nftables.service enabled — default-deny ruleset confirmed live before the ufw flush (oneshot: unit state reads inactive)"
         _log "NFT_PRE_ENABLE_OK"
         return 0
@@ -4885,7 +4896,7 @@ if set -q _flag_version; echo "v$VERSION"; _pre_dispatch_exit $EXIT_OK; end
 set -q _flag_verify; and set -g MODE verify
 set -q _flag_check; and set -g MODE check
 if set -q _flag_install_file
-    set -g MODE install-file; set -l _if_val "$_flag_install_file"
+    set -g MODE install-file; set -l _if_val "$_flag_install_file[-1]" # argparse collects repeats into a list; last one wins
     test -z "$_if_val"; and _early_usage_exit "--install-file requires a non-empty absolute path"
     if not string match -q -- '/*' "$_if_val"
         if string match -qr -- '^--(verify|check|verbose|help|version)$' "$_if_val"
@@ -4923,8 +4934,8 @@ end
 set -l mode_label $MODE
 set -l new_log "$LOG_DIR/$mode_label-$TIMESTAMP.jsonl"; set -l old_log "$LOG_FILE"; set -l _log_rename_ok true
 if test -f "$old_log"; and test "$old_log" != "$new_log"
-    if not command mv -- "$old_log" "$new_log" 2>/dev/null
-        if command cp -p -- "$old_log" "$new_log" 2>/dev/null
+    if not command mv -T -- "$old_log" "$new_log" 2>/dev/null
+        if command cp -pT -- "$old_log" "$new_log" 2>/dev/null
             command rm -f -- "$old_log" 2>/dev/null
             test "$MODE" != check; and echo "[WARN] Log rename via mv failed; recovered via cp+rm: $old_log -> $new_log" >&2
         else

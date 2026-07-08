@@ -1,11 +1,11 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.96.2-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.96.5-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 18 embedded configs, gaming/LLM desktop profile — atomic, byte-verifiable (`--verify`), reversible ([Uninstall](#uninstall)).
+> Idempotent CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 18 embedded configs, gaming/LLM desktop profile — atomic, byte-verifiable (`--verify`), reversible ([Uninstall](#uninstall)).
 
 ## Quick Start
 
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.96.2
+cd ry-install && git checkout v7.96.5
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -31,7 +31,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP and `paccache` warn only. An unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback (skip: `RY_NO_NTP_REMEDIATION=1`).
+Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP sync warns only, and a missing `pactree` warns at package-removal time. An unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback (skip: `RY_NO_NTP_REMEDIATION=1`).
 
 ## Usage
 
@@ -43,12 +43,25 @@ Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected),
 | *(no args)* | Unattended install (silent; phase matrix at end) |
 | `-V, --verbose` | Stream per-command install output (ignored under `--check`) |
 | `--verify` | Config files byte-for-byte, then live system state |
-| `--check` | Silent idempotency probe (`0` clean · `3` preflight · `10` drift); live `/proc/cmdline` — a fresh install reads `10` until reboot |
+| `--check` | Silent idempotency probe vs live `/proc/cmdline` — a fresh install reads drift until reboot ([Exit Codes](#exit-codes)) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
 `--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` hard-gate hardware/kernel-floor/key-count (exit 3); `--verify` downgrades hardware and kernel floor to warnings.
+
+### Environment Overrides
+
+Safe fallback when unset or invalid. One JSONL log per run: `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` (`0600`).
+
+| Variable | Effect |
+|---|---|
+| `RY_RUN_TIMEOUT` | Per-command cap. Default `3600` s; `0` disables; `>9` digits clamp to `2147483647`; package/boot ops floor at `7200` s; invalid → default |
+| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `Ryzen AI Max` CPU-match hard-fail (`--verify` already warns) |
+| `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` | Bypass the `KERNEL_MIN` (≥ 6.19) hard-fail (`--verify` already warns) |
+| `RY_NO_NTP_REMEDIATION=1` | Skip `systemd-timesyncd` auto-enable + RTC writeback (warn only) |
+| `NO_COLOR` | Suppress ANSI color when set non-empty (no-color.org) |
+| `TMPDIR` | Alternate tmp dir; non-absolute, missing, or unwritable → `/tmp` |
 
 ## Install Flow
 
@@ -68,7 +81,7 @@ Results print to stderr; a JSONL log records each phase. `WARN` keeps exit 0; `D
 ## Safety & Reliability
 
 > [!WARNING]
-> Masks `ufw` and ships an IPv4-only nftables default-deny-inbound ruleset (loopback, established/related, inbound ping accepted; `forward` drop, `output` accept). IPv6 disabled system-wide (`ipv6.disable=1`). `REMOVE_EXISTING=yes` deletes all `loader/entries/` before regeneration; EFI-resident loaders (e.g. Windows Boot Manager) untouched.
+> Masks `ufw` and ships an IPv4-only nftables default-deny-inbound ruleset (loopback, established/related, inbound ping accepted; `forward` drop, `output` accept). IPv6 disabled system-wide (`ipv6.disable=1`).
 
 Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play accepts.
 
@@ -78,6 +91,7 @@ Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-
 | Auto backups | `<path>.ry.bak` for `loader.conf` / `/etc/kernel/cmdline` / `/etc/sdboot-manage.conf` / `mkinitcpio.conf` (and `fstab`, during its rewrite) |
 | mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
+| Entry regeneration | `REMOVE_EXISTING=yes` deletes all `loader/entries/` before regeneration; EFI-resident loaders (e.g. Windows Boot Manager) untouched |
 | Instance lock | atomic `mkdir 0700`; stale reclaim only for a provably-recycled PID (`/proc` start-time); else fail-closed |
 
 ### Exit Codes
@@ -92,26 +106,21 @@ Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-
 | `5` | lock | Another instance holds the lock (fail-closed on ambiguous pidfile) |
 | `10` | `--check` drift | Config drift from the managed baseline |
 
-### Environment Overrides
-
-Safe fallback when unset or invalid. One JSONL log per run: `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` (`0600`).
-
-| Variable | Effect |
-|---|---|
-| `RY_RUN_TIMEOUT` | Per-command cap. Default `3600` s; `0` disables; `>9` digits clamp to `2147483647`; package/boot ops floor at `7200` s; invalid → default |
-| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `Ryzen AI Max` CPU-match hard-fail (`--verify` already warns) |
-| `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` | Bypass the `KERNEL_MIN` (≥ 6.19) hard-fail (`--verify` already warns) |
-| `RY_NO_NTP_REMEDIATION=1` | Skip `systemd-timesyncd` auto-enable + RTC writeback (warn only) |
-| `NO_COLOR` | Suppress ANSI color when set non-empty (no-color.org) |
-| `TMPDIR` | Alternate tmp dir; non-absolute, missing, or unwritable → `/tmp` |
-
 ## Configuration
 
 All tunables are `set -g` globals near the top of the script — no external config file. Edit one, then re-run (or `--install-file` the affected file).
 
 ### Globals
 
-Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade` (not DoH), sysctl priority `95` (after vendor `70-cachyos-settings.conf`), NVMe sched `none`, AMD P-State EPP `balance_performance`, `sdboot-manage REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)).
+Perms: system `0644`, user `0600`. CachyOS divergences:
+
+| Divergence | Value |
+|---|---|
+| `DNSSEC` | `allow-downgrade` (vendor default is DoH) |
+| sysctl priority | `95` — loads after vendor `70-cachyos-settings.conf` |
+| NVMe scheduler | `none` (vendor default is `kyber`) |
+| AMD P-State EPP | `balance_performance` |
+| `sdboot-manage` | `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)) |
 
 ### Packages
 
@@ -119,7 +128,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 | Action | Packages |
 |---|---|
-| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `rtkit`, `realtime-privileges`, `ddcutil`, `nftables`, `pacman-contrib`, `archlinux-contrib` |
+| Install | gaming (`cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`) · CLI (`fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`) · hardware (`nvme-cli`, `lm_sensors`, `ddcutil`) · RT audio (`rtkit`, `realtime-privileges`) · firewall (`nftables`) · contrib (`pacman-contrib`, `archlinux-contrib`) |
 | Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (chwd Vulkan drivers) |
 
@@ -131,7 +140,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
 | Untouched | `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path) |
 
-### fstab
+### `fstab`
 
 | Aspect | Behavior |
 |---|---|
@@ -184,7 +193,7 @@ Rationale for non-obvious choices; several list an override to reverse.
 
 | Topic | Detail |
 |---|---|
-| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; for larger single allocations (ROCm/llama.cpp) raise the BIOS UMA carveout (up to 96 GB) — `amdgpu.gttsize` is deprecated. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
+| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; for larger single allocations (ROCm/llama.cpp) raise the BIOS UMA carveout (up to 96 GiB) — `amdgpu.gttsize` is deprecated. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 on RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE`. |
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-without-node warn · absent info); guaranteed by the ≥ 6.19 floor. Opt a title out: `PROTON_NO_NTSYNC=1`. |
 | MT7925 ASPM | `disable_aspm=1` via `60-ry-mt7925e.conf` (coredump / BT-reconnect / assoc mitigation; distinct from `wifi.powersave`). Drop once a kernel fix lands. |
@@ -200,7 +209,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | # | Step | Action |
 |---|---|---|
 | 1 | Unmask units | `sudo systemctl unmask` all 12 masked units — exact set in [Units](#units) |
-| 2 | Remove configs | `sudo rm` managed system files + `rm` the 2 user files — skip the three boot files (step 3 reverts them) |
+| 2 | Remove configs | `sudo rm` managed system files + `rm` the 2 user files — skip the four boot files (step 3 reverts them) |
 | 3 | Revert boot files + fstab | `.ry.bak` → `loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `mkinitcpio.conf`, `/etc/fstab` (if present); then delete the `.ry.bak` files |
 | 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** row, `pacman -Rns` the **Install** row — exact lists in [Packages](#packages) |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
@@ -212,8 +221,9 @@ Boot files must be reverted before step 5 — it regenerates entries from that s
 
 | Component | Issue |
 |---|---|
-| MT7925 | panics, low TX power, random deauth (out-of-tree DKMS; fixes landing upstream). The `3 dBm` TX readout is cosmetic — correct power applied |
+| MT7925 | panics, low TX power, random deauth (out-of-tree DKMS; fixes landing upstream). The `3 dBm` TX readout is cosmetic — correct power applied. |
 | Strix Halo ACP | no ASoC machine driver — pending upstream (HDMI/USB audio unaffected) |
+| mkinitcpio | `mkinitcpio-generate-shutdown-ramfs.service` can fail at shutdown (upstream unit interaction; not remediated in-tree). Verify: `systemctl status mkinitcpio-generate-shutdown-ramfs.service`. |
 
 ### Known-Benign Log Lines
 
@@ -224,7 +234,8 @@ Expected and harmless on this hardware:
 | `ModemManager1 … could not be found` | probe of masked `modemmanager.service` |
 | `acp_asoc_acp70 … No matching ASoC machine driver` | pending upstream; HDMI/USB audio unaffected |
 | boltd `unknown NHI PCI id` | USB4/TB devices still enumerate |
-| `charge thresholds not supported` / `no backlight interface` | desktop — no battery or panel |
+| `charge thresholds not supported` | desktop — no battery |
+| `no backlight interface` | desktop — no panel |
 | `Unlikely small volume range` | USB-audio descriptor quirk |
 
 ## Troubleshooting

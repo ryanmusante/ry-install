@@ -4,6 +4,12 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.95.1 (2026-07-07)
+-------------------
+  - docs: trim README prose and table cells to essentials; all
+    tables, rows, commands, paths, overrides, and exit codes are
+    retained; headings and anchors unchanged
+
 7.95.0 (2026-07-07)
 -------------------
   - preflight: validate vercmp output before the mesa soft-floor

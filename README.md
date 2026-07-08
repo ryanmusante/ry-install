@@ -1,20 +1,20 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.95.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.95.1-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 18 embedded configs, gaming/LLM desktop profile. Every change is atomic, byte-verifiable (`--verify`), and reversible ([Uninstall](#uninstall)).
+> Idempotent, reversible CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 18 embedded configs, gaming/LLM desktop profile — atomic, byte-verifiable (`--verify`), reversible ([Uninstall](#uninstall)).
 
 ## Quick Start
 
 > [!IMPORTANT]
-> Run as your normal user (root refused, exit 2); cache sudo first (`sudo -v`). The unattended run **removes packages** (see [Configuration](#configuration)). Reboot, then `--verify`. Re-runs are idempotent.
+> Run as your normal user (root refused, exit 2); cache sudo first (`sudo -v`). The unattended run **removes packages** ([Configuration](#configuration)). Reboot, then `--verify`; re-runs are idempotent.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.95.0
+cd ry-install && git checkout v7.95.1
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -31,24 +31,24 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP and `paccache` only warn. An unsynced clock with no NTP client triggers `systemd-timesyncd` + RTC writeback (skip `RY_NO_NTP_REMEDIATION=1`).
+Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP and `paccache` warn only. An unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback (skip: `RY_NO_NTP_REMEDIATION=1`).
 
 ## Usage
 
 > [!CAUTION]
-> `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits 4 with the DO-NOT-REBOOT banner — **do not reboot** until it succeeds. A non-vfat `/boot` ESP also refuses sdboot (exit 4).
+> `--install-file` of a boot config runs the boot cascade (`loader.conf` / `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits 4 — **do not reboot** until it succeeds. A non-vfat `/boot` ESP fallback also refuses sdboot (exit 4).
 
 | Flag | Action |
 |---|---|
-| *(no args)* | Full unattended install (silent; phase matrix prints at the end) |
+| *(no args)* | Unattended install (silent; phase matrix at end) |
 | `-V, --verbose` | Stream per-command install output (ignored under `--check`) |
 | `--verify` | Config files byte-for-byte, then live system state |
-| `--check` | Silent idempotency probe (`0` clean · `3` preflight · `10` drift). Compares the live `/proc/cmdline`, so a fresh install reads `10` until reboot |
+| `--check` | Silent idempotency probe (`0` clean · `3` preflight · `10` drift); reads live `/proc/cmdline`, so a fresh install shows `10` until reboot |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` run hard runtime gates (hardware, kernel floor, key/count) → exit 3 on mismatch; `--verify` downgrades hardware + kernel-floor to warnings.
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` hard-gate hardware/kernel-floor/key-count (exit 3); `--verify` downgrades hardware and kernel floor to warnings.
 
 ## Install Flow
 
@@ -68,9 +68,9 @@ Results print to stderr; a JSONL log records each phase. `WARN` keeps exit 0; `D
 ## Safety & Reliability
 
 > [!WARNING]
-> Masks `ufw` and ships an IPv4-only nftables **default-deny-inbound** ruleset (loopback, established/related, and inbound ping accepted; all else dropped; `forward` drop, `output` accept). IPv6 is disabled system-wide via `ipv6.disable=1` on the cmdline. `REMOVE_EXISTING=yes` makes `sdboot-manage gen` delete all `loader/entries/` before regenerating; EFI-resident loaders (e.g. Windows Boot Manager) are untouched.
+> Masks `ufw` and ships an IPv4-only nftables **default-deny-inbound** ruleset (loopback, established/related, inbound ping accepted; `forward` drop, `output` accept). IPv6 disabled system-wide (`ipv6.disable=1`). `REMOVE_EXISTING=yes` deletes all `loader/entries/` before regeneration; EFI-resident loaders (e.g. Windows Boot Manager) untouched.
 
-Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play inbound accepts.
+Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play accepts.
 
 | Feature | Detail |
 |---|---|
@@ -78,30 +78,30 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 | Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` (and `fstab`, during its rewrite) |
 | mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
-| Instance lock | atomic `mkdir 0700`; stale-lock reclaim only for a provably-recycled PID via `/proc` start-time (else fail-closed) |
+| Instance lock | atomic `mkdir 0700`; stale reclaim only for a provably-recycled PID (`/proc` start-time); else fail-closed |
 
 **Exit codes**
 
 | Code | Meaning | Emitted when |
 | ---- | ------- | ------------ |
 | `0` | OK | Success; also `WARN`-only runs and `--check` clean |
-| `1` | verify-FAIL / install-error | `--verify` found a mismatch, or an install step errored |
-| `2` | usage | Bad args, non-absolute/unmanaged `--install-file` path, root-guard misuse |
-| `3` | preflight | Missing/non-GNU dep, sub-`KERNEL_MIN` kernel, uncached sudo, hardware/key/count gate |
+| `1` | verify-FAIL / install-error | `--verify` mismatch, or an install step errored |
+| `2` | usage | Bad args, non-absolute/unmanaged `--install-file`, root-guard misuse |
+| `3` | preflight | Missing/non-GNU dep, sub-`KERNEL_MIN` kernel, uncached sudo, gate mismatch |
 | `4` | boot-critical (DO NOT REBOOT) | Boot cascade or post-rebuild sanity failed — resolve before rebooting |
 | `5` | lock | Another instance holds the lock (fail-closed on ambiguous pidfile) |
-| `10` | `--check` drift | `--check` confirmed config drift from the managed baseline |
+| `10` | `--check` drift | Config drift from the managed baseline |
 
 **Environment overrides** (safe fallback when unset/invalid)
 
 | Variable | Effect |
 |---|---|
-| `RY_RUN_TIMEOUT` | Per-command wall-clock cap. Default `3600` s; `0` disables; package/boot ops floor at `7200` s; invalid values fall back to the default |
-| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `Ryzen AI Max` CPU-match hard-fail (deploy modes; `--verify` already only warns) |
-| `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` | Bypass the `KERNEL_MIN` (≥ 6.19) hard-fail (deploy modes; `--verify` already only warns) |
-| `RY_NO_NTP_REMEDIATION=1` | Skip `systemd-timesyncd` auto-enable + RTC writeback (time sync warns only) |
-| `NO_COLOR` | Suppress ANSI color when set non-empty (per no-color.org) |
-| `TMPDIR` | Alternate tmp dir; non-absolute, missing, or unwritable falls back to `/tmp` |
+| `RY_RUN_TIMEOUT` | Per-command cap. Default `3600` s; `0` disables; package/boot ops floor at `7200` s; invalid → default |
+| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `Ryzen AI Max` CPU-match hard-fail (`--verify` already warns) |
+| `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` | Bypass the `KERNEL_MIN` (≥ 6.19) hard-fail (`--verify` already warns) |
+| `RY_NO_NTP_REMEDIATION=1` | Skip `systemd-timesyncd` auto-enable + RTC writeback (warn only) |
+| `NO_COLOR` | Suppress ANSI color when set non-empty (no-color.org) |
+| `TMPDIR` | Alternate tmp dir; non-absolute, missing, or unwritable → `/tmp` |
 
 One JSONL log/run under `~/ry-install/logs/` (`0600`).
 
@@ -115,7 +115,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (`pacman-contrib`). Since `pacman-contrib`/`archlinux-contrib` are hard-deps of the removed `cachy-update`, Phase 2 re-marks every `PKGS_ADD` member explicit **after** the `-Syu` so `-Rns` can't orphan them. Reversible via [Uninstall](#uninstall).
+`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib`/`archlinux-contrib` are hard-deps of the removed `cachy-update`, so Phase 2 re-marks all `PKGS_ADD` explicit **after** `-Syu` — `-Rns` can't orphan them. Reversible ([Uninstall](#uninstall)).
 
 | Action | Packages |
 |---|---|
@@ -135,7 +135,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 | Aspect | Behavior |
 |---|---|
-| Change | ext4 rows get `noatime,lazytime,commit=10` in column 4 only; all other columns and non-ext4 rows byte-preserved |
+| Change | ext4 rows get `noatime,lazytime,commit=10` in column 4; everything else byte-preserved |
 | Normalized away | redundant `defaults` / `relatime` / `atime` / `strictatime` / existing `commit=` tokens |
 | Gates | line-count parity + size floor + mandatory `findmnt --verify` |
 | Refused (not corrected) | a symlinked or whitespace-split (malformed) `/etc/fstab` |
@@ -163,7 +163,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | NM Wi-Fi backend, power-save off, log level |
 | `/etc/iw-regdomain` | wireless regulatory domain (`US`) |
 | `/etc/bluetooth/main.conf` | BlueZ adapter auto-power-on + paired-sink reconnect |
-| `/etc/nftables.conf` | IPv4-only default-deny-inbound firewall ruleset (inbound ping allowed) |
+| `/etc/nftables.conf` | IPv4-only default-deny-inbound firewall (inbound ping allowed) |
 
 ### Power, modules & user session
 
@@ -183,13 +183,13 @@ Rationale for non-obvious choices; several list an override to reverse.
 
 | Topic | Detail |
 |---|---|
-| Large-VRAM compute | GTT caps usable VRAM near 62 GiB. For a single allocation >~62 GiB (ROCm/llama.cpp), raise the **BIOS UMA carveout** (up to 96 GB), not deprecated `amdgpu.gttsize`. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
-| FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 reached RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE` → `1`. |
-| NTSYNC | `/dev/ntsync` reported (warn-level) by `--verify` (mainline ≥ 6.14, guaranteed by the ≥ 6.19 floor). Opt a title out with `PROTON_NO_NTSYNC=1` in its launch options. |
-| MT7925 ASPM | `/etc/modprobe.d/60-ry-mt7925e.conf` sets `disable_aspm=1` (coredump / BT-reconnect / assoc-fail mitigation; distinct from `wifi.powersave`). Remove if a kernel bump resolves it. |
-| IPv6 | Disabled via `ipv6.disable=1`; the nftables ruleset is IPv4-only. Drop the token, restore IPv6 firewall rules, and re-run for dual-stack. |
-| AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi (no PCI passthrough) and refuses the XDNA NPU (`amdxdna`), which the profile blacklists to silence the probe error. **NPU, VFIO/passthrough, or SR-IOV users: set `amd_iommu=on iommu=pt`, drop `60-ry-blacklist-amdxdna.conf`, re-run.** |
-| UMIP (`clearcpuid=umip`) | `clearcpuid=umip` disables UMIP (`SGDT`/`SIDT`/`SMSW` untrapped) and taints the kernel. The string form is stable across kernel versions (the numeric `514` is not). Drop the token to restore UMIP if no `umip_printk` stutter appears. |
+| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; for larger single allocations (ROCm/llama.cpp) raise the **BIOS UMA carveout** (up to 96 GB), not deprecated `amdgpu.gttsize`. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
+| FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 on RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE`. |
+| NTSYNC | `/dev/ntsync` reported (warn-level) by `--verify`; guaranteed by the ≥ 6.19 floor. Opt a title out: `PROTON_NO_NTSYNC=1`. |
+| MT7925 ASPM | `disable_aspm=1` via `60-ry-mt7925e.conf` (coredump / BT-reconnect / assoc mitigation; distinct from `wifi.powersave`). Drop once a kernel fix lands. |
+| IPv6 | Disabled via `ipv6.disable=1`; ruleset is IPv4-only. For dual-stack: drop the token, add IPv6 rules, re-run. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi (no passthrough) and breaks the XDNA NPU (blacklisted to silence the probe error). **NPU/VFIO/SR-IOV: set `amd_iommu=on iommu=pt`, drop `60-ry-blacklist-amdxdna.conf`, re-run.** |
+| UMIP (`clearcpuid=umip`) | Disables UMIP (`SGDT`/`SIDT`/`SMSW` untrapped); taints the kernel. The string form is version-stable (numeric `514` is not). Drop the token if no `umip_printk` stutter appears. |
 
 ## Uninstall
 
@@ -198,19 +198,19 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | # | Step | Action |
 |---|---|---|
 | 1 | Unmask units | `sudo systemctl unmask` all 10 masked units — exact set in [Units](#units) |
-| 2 | Remove configs | `sudo rm` the managed system files, then `rm` the 2 user files — all of [Managed Files](#managed-files) except `loader.conf`, `/etc/kernel/cmdline`, `mkinitcpio.conf`, which are reverted, not deleted (see note below) |
+| 2 | Remove configs | `sudo rm` managed system files + `rm` the 2 user files — all of [Managed Files](#managed-files) except `loader.conf` / `/etc/kernel/cmdline` / `mkinitcpio.conf` (reverted, not deleted; note below) |
 | 3 | Restore fstab, drop backups | Restore `/etc/fstab` from `.ry.bak` if present, then delete the `loader.conf` and `mkinitcpio.conf` `.ry.bak` backups |
 | 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** row, `pacman -Rns` the **Install** row — exact lists in [Packages](#packages) |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-The fstab backup exists only if fstab was rewritten. Revert boot-file contents **before** step 5 (it regenerates entries from that state): restore `loader.conf` / `mkinitcpio.conf` from `.ry.bak`; `/etc/kernel/cmdline` has no backup and is reverted by hand. If ry-install enabled `systemd-timesyncd`, optionally `sudo systemctl disable --now systemd-timesyncd`.
+The fstab backup exists only if fstab was rewritten. Revert boot files **before** step 5 (it regenerates entries from that state): `loader.conf` / `mkinitcpio.conf` from `.ry.bak`; `/etc/kernel/cmdline` by hand (no backup). If ry-install enabled `systemd-timesyncd`: `sudo systemctl disable --now systemd-timesyncd` (optional).
 
 ## Known Issues
 
 | Component | Issue |
 |---|---|
-| MT7925 | kernel panics, low TX power, random deauth — out-of-tree DKMS; some fixes upstream. The `3 dBm` TX-power readout is cosmetic (correct power applied) |
+| MT7925 | panics, low TX power, random deauth (out-of-tree DKMS; fixes landing upstream). The `3 dBm` TX readout is cosmetic — correct power applied |
 | Strix Halo ACP | no ASoC machine driver — pending upstream (HDMI/USB audio unaffected) |
 
 ### Known-benign log lines
@@ -230,7 +230,7 @@ Expected and harmless on this hardware: `ModemManager1 … could not be found` (
 | BT speaker won't auto-reconnect | `bluetoothctl trust <MAC>`, then power the speaker on after login so it re-initiates |
 
 > [!NOTE]
-> The installer prints missing-group `usermod` commands but never runs them — a group change is inert until re-login and can't be cleanly reverted like the managed configs.
+> The installer prints missing-group `usermod` commands but never runs them — group changes are inert until re-login and aren't cleanly reversible like the managed configs.
 
 ## Contributing
 

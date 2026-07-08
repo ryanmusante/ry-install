@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.95.1 (2026-07-07) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.96.1 (2026-07-07) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.95.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.96.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -11,6 +11,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
+set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= # single option-spec source for all three argparse sites (root-guard msg + state, main dispatch)
 set -g KERNEL_MIN 6.19 # floor: gfx1151 MES-0x86 amdgpu native support (RTL8127 6.16 + suspend fix 6.18 sit below it)
 
 # ── HELP TEXT ──
@@ -130,12 +131,12 @@ set -q _rsc_a; and set --erase _rsc_a
 set --erase _rsc_skip _rsc_after_dd
 if test "$_MY_UID" -eq 0
     if test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; _ry_exit $EXIT_PREFLIGHT; end # --check + valid mode: silent, 3 = cannot probe
-    set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity: argparse in cmd-sub; argv rewrite is call-local, parent argv intact
+    set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) $_RY_ARGPARSE_SPEC -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity: argparse in cmd-sub; argv rewrite is call-local, parent argv intact
     set -l _rg_prc 0; set -l _rg_msg ""
     for _rg_l in $_rg_msgout
         if string match -q '@@RC@@*' -- "$_rg_l"; set _rg_prc (string replace '@@RC@@' '' -- "$_rg_l"); else if test -z "$_rg_msg"; set _rg_msg (string replace -ra '\e\[[0-9;]*[a-zA-Z]' '' -- "$_rg_l" | string trim --); end
     end
-    set -l _rg_state (begin; argparse --name=ry-install --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= -- $argv 2>/dev/null; for _rg_p in $argv; echo "@@LEFT@@$_rg_p"; end; set -q _flag_install_file; and echo "@@IF@@$_flag_install_file"; end) # one @@LEFT@@ line per leftover positional + the install-file value (refusal-path display only)
+    set -l _rg_state (begin; argparse --name=ry-install $_RY_ARGPARSE_SPEC -- $argv 2>/dev/null; for _rg_p in $argv; echo "@@LEFT@@$_rg_p"; end; set -q _flag_install_file; and echo "@@IF@@$_flag_install_file"; end) # one @@LEFT@@ line per leftover positional + the install-file value (refusal-path display only)
     set -l _rg_left; set -l _rg_if_present false; set -l _rg_if_val ""
     for _rg_l in $_rg_state
         if string match -q '@@LEFT@@*' -- "$_rg_l"; set -a _rg_left "$_rg_l"; else if string match -q '@@IF@@*' -- "$_rg_l"; set _rg_if_present true; set _rg_if_val (string replace '@@IF@@' '' -- "$_rg_l"); end # LEFT branch first: a positional starting @@IF@@ still lands here; prefix stripped at display
@@ -684,7 +685,7 @@ set -g _RY_PKG_REMOVE_SKIPS
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
-set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service avahi-daemon.service avahi-daemon.socket sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi masked (unit + activation socket): second mDNS responder beside resolved advertised a colliding hostname-N.local; profile runs mDNS off (MulticastDNS=no)
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
@@ -749,11 +750,12 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         SYSCTL_VALUES:9 \
         PKGS_ADD:19 \
         PKGS_DEL:9 \
-        MASK:10 \
+        MASK:12 \
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
         _RY_POST_HOOKS:17 \
+        _RY_ARGPARSE_SPEC:7 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:2 \
@@ -4654,7 +4656,11 @@ function _ry_do_install_file --argument-names target --description "Install a si
     set -l _hook_rc 0 # live-apply post-hook on byte change
     if test "$_RY_DEPLOY_CHANGED_COUNT" -gt "$_changed_before"
         set -l _h (_post_hook_for_target "$_mdst")
-        if test -n "$_h"; _idf_dispatch_hook "$_mdst" "$_h"; set _hook_rc $status; end
+        if test -n "$_h"
+            _idf_dispatch_hook "$_mdst" "$_h"; set _hook_rc $status
+        else
+            _log "POST_HOOK_NONE: target=$_mdst (no _RY_POST_HOOKS pattern matched — live-apply skipped; file deployed)"
+        end
     else
         _log "POST_HOOK_SKIP_UNCHANGED: target=$_mdst (bytes identical; no live-apply)"
     end
@@ -4853,11 +4859,7 @@ end
 set -g MODE install; set -g INSTALL_FILE_TARGET ""
 set -l _ORIG_ARGV $argv; set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) "ry-argparse-err.$fish_pid.XXXXXX")
 _track_tmpfile "$_ap_errfile"
-argparse --name=(command basename -- (status filename)) \
-    --exclusive=verify,check,install-file \
-    h/help v/version V/verbose \
-    verify check install-file= \
-    -- $argv 2>"$_ap_errfile"
+argparse --name=(command basename -- (status filename)) $_RY_ARGPARSE_SPEC -- $argv 2>"$_ap_errfile"
 set -l _argparse_rc $status
 if test "$_argparse_rc" -ne 0
     set -l _ap_msg ""

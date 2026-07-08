@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.95.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.96.1-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.95.1
+cd ry-install && git checkout v7.96.1
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -43,7 +43,7 @@ Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected),
 | *(no args)* | Unattended install (silent; phase matrix at end) |
 | `-V, --verbose` | Stream per-command install output (ignored under `--check`) |
 | `--verify` | Config files byte-for-byte, then live system state |
-| `--check` | Silent idempotency probe (`0` clean · `3` preflight · `10` drift); reads live `/proc/cmdline`, so a fresh install shows `10` until reboot |
+| `--check` | Silent idempotency probe (`0` clean · `3` preflight · `10` drift); live `/proc/cmdline` — a fresh install reads `10` until reboot |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
@@ -68,7 +68,7 @@ Results print to stderr; a JSONL log records each phase. `WARN` keeps exit 0; `D
 ## Safety & Reliability
 
 > [!WARNING]
-> Masks `ufw` and ships an IPv4-only nftables **default-deny-inbound** ruleset (loopback, established/related, inbound ping accepted; `forward` drop, `output` accept). IPv6 disabled system-wide (`ipv6.disable=1`). `REMOVE_EXISTING=yes` deletes all `loader/entries/` before regeneration; EFI-resident loaders (e.g. Windows Boot Manager) untouched.
+> Masks `ufw` and ships an IPv4-only nftables default-deny-inbound ruleset (loopback, established/related, inbound ping accepted; `forward` drop, `output` accept). IPv6 disabled system-wide (`ipv6.disable=1`). `REMOVE_EXISTING=yes` deletes all `loader/entries/` before regeneration; EFI-resident loaders (e.g. Windows Boot Manager) untouched.
 
 Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play accepts.
 
@@ -80,10 +80,10 @@ Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; stale reclaim only for a provably-recycled PID (`/proc` start-time); else fail-closed |
 
-**Exit codes**
+### Exit Codes
 
 | Code | Meaning | Emitted when |
-| ---- | ------- | ------------ |
+|---|---|---|
 | `0` | OK | Success; also `WARN`-only runs and `--check` clean |
 | `1` | verify-FAIL / install-error | `--verify` mismatch, or an install step errored |
 | `2` | usage | Bad args, non-absolute/unmanaged `--install-file`, root-guard misuse |
@@ -92,18 +92,18 @@ Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-
 | `5` | lock | Another instance holds the lock (fail-closed on ambiguous pidfile) |
 | `10` | `--check` drift | Config drift from the managed baseline |
 
-**Environment overrides** (safe fallback when unset/invalid)
+### Environment Overrides
+
+Safe fallback when unset or invalid. One JSONL log per run: `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` (`0600`).
 
 | Variable | Effect |
 |---|---|
-| `RY_RUN_TIMEOUT` | Per-command cap. Default `3600` s; `0` disables; package/boot ops floor at `7200` s; invalid → default |
+| `RY_RUN_TIMEOUT` | Per-command cap. Default `3600` s; `0` disables; `>9` digits clamp to `2147483647`; package/boot ops floor at `7200` s; invalid → default |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `Ryzen AI Max` CPU-match hard-fail (`--verify` already warns) |
 | `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` | Bypass the `KERNEL_MIN` (≥ 6.19) hard-fail (`--verify` already warns) |
 | `RY_NO_NTP_REMEDIATION=1` | Skip `systemd-timesyncd` auto-enable + RTC writeback (warn only) |
 | `NO_COLOR` | Suppress ANSI color when set non-empty (no-color.org) |
 | `TMPDIR` | Alternate tmp dir; non-absolute, missing, or unwritable → `/tmp` |
-
-One JSONL log/run under `~/ry-install/logs/` (`0600`).
 
 ## Configuration
 
@@ -115,7 +115,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib`/`archlinux-contrib` are hard-deps of the removed `cachy-update`, so Phase 2 re-marks all `PKGS_ADD` explicit **after** `-Syu` — `-Rns` can't orphan them. Reversible ([Uninstall](#uninstall)).
+`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib`/`archlinux-contrib` supply `pactree`/`paccache` for ry-install itself; Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)).
 
 | Action | Packages |
 |---|---|
@@ -127,7 +127,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 
 | Action | Units |
 |---|---|
-| Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, `modemmanager`, sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
+| Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, `modemmanager`, `avahi-daemon` (`.service` + `.socket`), sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
 | Untouched | `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path) |
 
@@ -138,7 +138,8 @@ Perms: system `0644`, user `0600`. CachyOS divergences: `DNSSEC=allow-downgrade`
 | Change | ext4 rows get `noatime,lazytime,commit=10` in column 4; everything else byte-preserved |
 | Normalized away | redundant `defaults` / `relatime` / `atime` / `strictatime` / existing `commit=` tokens |
 | Gates | line-count parity + size floor + mandatory `findmnt --verify` |
-| Refused (not corrected) | a symlinked or whitespace-split (malformed) `/etc/fstab` |
+| Refused | a symlinked `/etc/fstab` — the whole rewrite aborts |
+| Preserved + warned | malformed (whitespace-split) rows — left byte-identical; conforming rows still rewritten |
 
 ## Managed Files
 
@@ -183,13 +184,14 @@ Rationale for non-obvious choices; several list an override to reverse.
 
 | Topic | Detail |
 |---|---|
-| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; for larger single allocations (ROCm/llama.cpp) raise the **BIOS UMA carveout** (up to 96 GB), not deprecated `amdgpu.gttsize`. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
+| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; for larger single allocations (ROCm/llama.cpp) raise the BIOS UMA carveout (up to 96 GB) — `amdgpu.gttsize` is deprecated. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 on RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE`. |
-| NTSYNC | `/dev/ntsync` reported (warn-level) by `--verify`; guaranteed by the ≥ 6.19 floor. Opt a title out: `PROTON_NO_NTSYNC=1`. |
+| NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-without-node warn · absent info); guaranteed by the ≥ 6.19 floor. Opt a title out: `PROTON_NO_NTSYNC=1`. |
 | MT7925 ASPM | `disable_aspm=1` via `60-ry-mt7925e.conf` (coredump / BT-reconnect / assoc mitigation; distinct from `wifi.powersave`). Drop once a kernel fix lands. |
 | IPv6 | Disabled via `ipv6.disable=1`; ruleset is IPv4-only. For dual-stack: drop the token, add IPv6 rules, re-run. |
-| AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi (no passthrough) and breaks the XDNA NPU (blacklisted to silence the probe error). **NPU/VFIO/SR-IOV: set `amd_iommu=on iommu=pt`, drop `60-ry-blacklist-amdxdna.conf`, re-run.** |
-| UMIP (`clearcpuid=umip`) | Disables UMIP (`SGDT`/`SIDT`/`SMSW` untrapped); taints the kernel. The string form is version-stable (numeric `514` is not). Drop the token if no `umip_printk` stutter appears. |
+| Avahi | `.service` + `.socket` masked — a second mDNS responder beside systemd-resolved advertises a colliding `hostname-2.local`; the profile runs mDNS off entirely (`MulticastDNS=no`). Unmask both to restore. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi and breaks the XDNA NPU (blacklisted to silence the probe error). NPU/VFIO/SR-IOV: set `amd_iommu=on iommu=pt`, drop `60-ry-blacklist-amdxdna.conf`, re-run. |
+| UMIP (`clearcpuid=umip`) | Disables UMIP trapping (`SGDT`/`SIDT`/`SMSW`); taints the kernel. String form is version-stable (numeric `514` is not). Drop the token if no `umip_printk` stutter appears. |
 
 ## Uninstall
 
@@ -197,14 +199,14 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 | # | Step | Action |
 |---|---|---|
-| 1 | Unmask units | `sudo systemctl unmask` all 10 masked units — exact set in [Units](#units) |
-| 2 | Remove configs | `sudo rm` managed system files + `rm` the 2 user files — all of [Managed Files](#managed-files) except `loader.conf` / `/etc/kernel/cmdline` / `mkinitcpio.conf` (reverted, not deleted; note below) |
-| 3 | Restore fstab, drop backups | Restore `/etc/fstab` from `.ry.bak` if present, then delete the `loader.conf` and `mkinitcpio.conf` `.ry.bak` backups |
+| 1 | Unmask units | `sudo systemctl unmask` all 12 masked units — exact set in [Units](#units) |
+| 2 | Remove configs | `sudo rm` managed system files + `rm` the 2 user files — skip the three boot files (step 3 reverts them) |
+| 3 | Revert boot files + fstab | `.ry.bak` → `loader.conf`, `mkinitcpio.conf`, `/etc/fstab` (if present); rewrite `/etc/kernel/cmdline` by hand; then delete the `.ry.bak` files |
 | 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** row, `pacman -Rns` the **Install** row — exact lists in [Packages](#packages) |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-The fstab backup exists only if fstab was rewritten. Revert boot files **before** step 5 (it regenerates entries from that state): `loader.conf` / `mkinitcpio.conf` from `.ry.bak`; `/etc/kernel/cmdline` by hand (no backup). If ry-install enabled `systemd-timesyncd`: `sudo systemctl disable --now systemd-timesyncd` (optional).
+Boot files must be reverted before step 5 — it regenerates entries from that state; `/etc/kernel/cmdline` has no backup. The fstab backup exists only if fstab was rewritten. If ry-install enabled `systemd-timesyncd`: `sudo systemctl disable --now systemd-timesyncd` (optional).
 
 ## Known Issues
 
@@ -213,9 +215,17 @@ The fstab backup exists only if fstab was rewritten. Revert boot files **before*
 | MT7925 | panics, low TX power, random deauth (out-of-tree DKMS; fixes landing upstream). The `3 dBm` TX readout is cosmetic — correct power applied |
 | Strix Halo ACP | no ASoC machine driver — pending upstream (HDMI/USB audio unaffected) |
 
-### Known-benign log lines
+### Known-Benign Log Lines
 
-Expected and harmless on this hardware: `ModemManager1 … could not be found` (probe of masked `modemmanager.service`) · `acp_asoc_acp70 … No matching ASoC machine driver` (HDMI/USB audio fine) · boltd `unknown NHI PCI id` (USB4/TB still enumerate) · `charge thresholds not supported` / `no backlight interface` (no battery/panel) · `Unlikely small volume range` (USB-audio descriptor quirk).
+Expected and harmless on this hardware:
+
+| Log line | Why benign |
+|---|---|
+| `ModemManager1 … could not be found` | probe of masked `modemmanager.service` |
+| `acp_asoc_acp70 … No matching ASoC machine driver` | pending upstream; HDMI/USB audio unaffected |
+| boltd `unknown NHI PCI id` | USB4/TB devices still enumerate |
+| `charge thresholds not supported` / `no backlight interface` | desktop — no battery or panel |
+| `Unlikely small volume range` | USB-audio descriptor quirk |
 
 ## Troubleshooting
 
@@ -234,11 +244,11 @@ Expected and harmless on this hardware: `ModemManager1 … could not be found` (
 
 ## Contributing
 
-PRs welcome; for config changes include before/after `--verify`/`--check` output, lint with `fish --no-execute`, keep comments single-line, update [CHANGELOG.md](CHANGELOG.md).
+PRs welcome. For config changes, include before/after `--verify`/`--check` output. Lint with `fish --no-execute`, keep comments single-line, and update [CHANGELOG.md](CHANGELOG.md).
 
 ## Security
 
-Invokes `sudo` internally; modifies boot config, firewall, and kernel cmdline. Review before running. Report concerns via GitHub issues or privately to the maintainer.
+Invokes `sudo` internally; modifies boot config, firewall, and kernel cmdline. Review the nftables ruleset, `KERNEL_PARAMS`, and `PKGS_DEL` before running. Report concerns via GitHub issues or privately to the maintainer.
 
 ## License
 

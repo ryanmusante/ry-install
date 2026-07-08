@@ -4,6 +4,35 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.96.1 (2026-07-07)
+-------------------
+  - docs: tighten the 7.95.2 and 7.96.0 release-note wording
+    (content unchanged)
+
+7.96.0 (2026-07-07)
+-------------------
+  - services: mask avahi-daemon.service + .socket (MASK 10 → 12);
+    a second mDNS responder beside resolved advertised a
+    colliding hostname-2.local (profile runs MulticastDNS=no)
+  - docs: Avahi rationale in Tuning Notes; mask row + unmask
+    count now 12
+
+7.95.2 (2026-07-07)
+-------------------
+  - dispatch: hoist the argparse option spec into one
+    _RY_ARGPARSE_SPEC global (root-guard + main parsers) with a
+    count tripwire; three verbatim copies removed
+  - install-file: log POST_HOOK_NONE when a changed destination
+    matches no _RY_POST_HOOKS pattern (skip was silent)
+  - docs: fstab table — only a symlinked fstab aborts the
+    rewrite; malformed rows are preserved and warned
+  - docs: align the package-retention rationale with the code,
+    state the three ntsync verify levels, document the
+    RY_RUN_TIMEOUT >9-digit clamp
+  - docs: normalize table separators and headings, trim the
+    longest tuning/uninstall cells, table-ize known-benign
+    lines, expand Security and Contributing
+
 7.95.1 (2026-07-07)
 -------------------
   - docs: trim README prose and table cells to essentials; all

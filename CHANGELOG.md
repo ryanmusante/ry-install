@@ -4,6 +4,15 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.95.0 (2026-07-07)
+-------------------
+  - preflight: validate vercmp output before the mesa soft-floor
+    compare; empty or non-numeric output logs and skips instead of
+    leaking a test(1) usage error to stderr (a valid below-floor
+    result still warns, unchanged)
+  - docs: convert the README environment-overrides paragraph to a
+    per-variable table and the in/out-of-scope table to prose
+
 7.94.5 (2026-07-07)
 -------------------
   - comments: correct "-Rns -s" to "-Rns" in the pactree and

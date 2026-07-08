@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.94.5 (2026-07-07) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.95.0 (2026-07-07) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin (incl. /dev/stdin + fd-0 aliases)
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.94.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.95.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -3406,9 +3406,14 @@ function _install_preflight --description "Run all preflight checks before insta
     if test -n "$_mesa"
         if not command -q vercmp
             _log "MESA_SOFT_FLOOR_SKIP: vercmp absent (pacman-provided) — gfx1151 mesa version not compared"
-        else if test (command vercmp $_mesa 26.0 2>/dev/null) -lt 0
-            _warn_loud "mesa $_mesa < 26.0 — gfx1151 RADV may be unstable (soft floor)"
-            _log "MESA_BELOW_SOFT_FLOOR: $_mesa"
+        else
+            set -l _vc (command vercmp $_mesa 26.0 2>/dev/null) # empty/garbage output must not reach test(1)
+            if not string match -qr -- '^-?\d+$' "$_vc"
+                _log "MESA_SOFT_FLOOR_SKIP: vercmp output unparseable ('$_vc') — comparison skipped"
+            else if test "$_vc" -lt 0
+                _warn_loud "mesa $_mesa < 26.0 — gfx1151 RADV may be unstable (soft floor)"
+                _log "MESA_BELOW_SOFT_FLOOR: $_mesa"
+            end
         end
     end
     _echo

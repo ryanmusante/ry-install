@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.94.5-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.95.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,14 +14,12 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.94.5
+cd ry-install && git checkout v7.95.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-| In scope | Out of scope |
-|---|---|
-| Kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, gaming env vars, MangoHud, pacman add/remove, sdboot-manage BLS entries | Dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI |
+**In scope:** kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, gaming env vars, MangoHud, pacman add/remove, and sdboot-manage BLS entries. **Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, and UKI.
 
 ## Requirements
 
@@ -94,7 +92,18 @@ Host-side game streaming is off by default (`RY_REMOTE_PLAY_PORTS=false`); set `
 | `5` | lock | Another instance holds the lock (fail-closed on ambiguous pidfile) |
 | `10` | `--check` drift | `--check` confirmed config drift from the managed baseline |
 
-Environment overrides (safe fallback when unset/invalid): `RY_RUN_TIMEOUT` (per-command cap, default `3600` s, `0` disables; package/boot ops floor at `7200` s), `RY_INSTALL_SKIP_HARDWARE_CHECK=1`, `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1`, `RY_NO_NTP_REMEDIATION=1`, `NO_COLOR`, `TMPDIR`. One JSONL log/run under `~/ry-install/logs/` (`0600`).
+**Environment overrides** (safe fallback when unset/invalid)
+
+| Variable | Effect |
+|---|---|
+| `RY_RUN_TIMEOUT` | Per-command wall-clock cap. Default `3600` s; `0` disables; package/boot ops floor at `7200` s; invalid values fall back to the default |
+| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `Ryzen AI Max` CPU-match hard-fail (deploy modes; `--verify` already only warns) |
+| `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` | Bypass the `KERNEL_MIN` (≥ 6.19) hard-fail (deploy modes; `--verify` already only warns) |
+| `RY_NO_NTP_REMEDIATION=1` | Skip `systemd-timesyncd` auto-enable + RTC writeback (time sync warns only) |
+| `NO_COLOR` | Suppress ANSI color when set non-empty (per no-color.org) |
+| `TMPDIR` | Alternate tmp dir; non-absolute, missing, or unwritable falls back to `/tmp` |
+
+One JSONL log/run under `~/ry-install/logs/` (`0600`).
 
 ## Configuration
 

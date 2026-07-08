@@ -4,6 +4,18 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.97.0 (2026-07-08)
+-------------------
+  - env: drop the NO_COLOR, TMPDIR, and RY_NO_NTP_REMEDIATION
+    overrides; tmp root pinned to /tmp, color gates on TERM+tty,
+    NTP remediation always runs when the clock is unsynced
+  - verify: _ry_mkinitcpio_array joins multi-line KEY=( ... )
+    assignments (last wins); the HOOKS syntax check reuses it,
+    dropping a duplicate awk extractor
+  - run: fold tmpdir redaction to the pinned /tmp pattern
+  - docs: trim the environment table to the three remaining vars
+  - comments: single-line pass; verbose inline rationale trimmed
+
 7.96.6 (2026-07-08)
 -------------------
   - cleanup: inline the single-caller _unit_state, _fail_no_count,
@@ -37,7 +49,7 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
   - probes: replace three builtin->pipe captures (ntsync kconfig,
     dmesg preempt scan, findmnt error excerpt) with list
     membership, string match, and slicing; an early-exiting pipe
-    reader could SIGPIPE the shell and mute later console output
+    reader could SIGPIPE the shell
   - lock: set the mkdir-success flag beside the rc capture; closes
     the signal window that could strand an unreleasable lock dir
   - cli: repeated --install-file flags resolve last-wins instead of
@@ -62,8 +74,7 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
   - install-file: log POST_HOOK_NONE when a changed destination
     matches no _RY_POST_HOOKS pattern (skip was silent)
   - preflight: validate vercmp output before the mesa soft-floor
-    compare; empty or non-numeric output logs and skips instead of
-    leaking a test(1) usage error to stderr
+    compare; empty/non-numeric output logs and skips
   - docs: trim README to essentials; per-variable environment
     table; fstab symlink-abort, ntsync levels, and RY_RUN_TIMEOUT
     clamp notes aligned with the code

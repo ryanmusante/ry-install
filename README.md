@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.96.6-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.97.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.96.6
+cd ry-install && git checkout v7.97.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -31,7 +31,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP sync warns only, and a missing `pactree` warns at package-removal time. An unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback (skip: `RY_NO_NTP_REMEDIATION=1`).
+Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP sync warns only, and a missing `pactree` warns at package-removal time. An unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
 
 ## Usage
 
@@ -56,12 +56,9 @@ Safe fallback when unset or invalid. One JSONL log per run: `~/ry-install/logs/Y
 
 | Variable | Effect |
 |---|---|
-| `RY_RUN_TIMEOUT` | Per-command cap. Default `3600` s; `0` disables; `>9` digits clamp to `2147483647`; package/boot ops floor at `7200` s; invalid → default |
-| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `Ryzen AI Max` CPU-match hard-fail (`--verify` already warns) |
-| `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` | Bypass the `KERNEL_MIN` (≥ 6.19) hard-fail (`--verify` already warns) |
-| `RY_NO_NTP_REMEDIATION=1` | Skip `systemd-timesyncd` auto-enable + RTC writeback (warn only) |
-| `NO_COLOR` | Suppress ANSI color when set non-empty (no-color.org) |
-| `TMPDIR` | Alternate tmp dir; non-absolute, missing, or unwritable → `/tmp` |
+| `RY_RUN_TIMEOUT` | Per-command cap. Default `3600` s; `0` disables; package/boot ops floor `7200` s; invalid → default |
+| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `Ryzen AI Max` CPU-match hard-fail (`--verify` warns) |
+| `RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1` | Bypass the `KERNEL_MIN` (≥ 6.19) hard-fail (`--verify` warns) |
 
 ## Install Flow
 

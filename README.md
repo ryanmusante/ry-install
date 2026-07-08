@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.96.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.96.2-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.96.1
+cd ry-install && git checkout v7.96.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -75,7 +75,7 @@ Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-
 | Feature | Detail |
 |---|---|
 | Atomic writes | same-FS tmp → render → symlink-probe → backup → chmod → `mv -T` → re-read + restore on mismatch (backup targets) |
-| Auto backups | `<path>.ry.bak` for `loader.conf` / `mkinitcpio.conf` (and `fstab`, during its rewrite) |
+| Auto backups | `<path>.ry.bak` for `loader.conf` / `/etc/kernel/cmdline` / `/etc/sdboot-manage.conf` / `mkinitcpio.conf` (and `fstab`, during its rewrite) |
 | mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Instance lock | atomic `mkdir 0700`; stale reclaim only for a provably-recycled PID (`/proc` start-time); else fail-closed |
@@ -201,12 +201,12 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 |---|---|---|
 | 1 | Unmask units | `sudo systemctl unmask` all 12 masked units — exact set in [Units](#units) |
 | 2 | Remove configs | `sudo rm` managed system files + `rm` the 2 user files — skip the three boot files (step 3 reverts them) |
-| 3 | Revert boot files + fstab | `.ry.bak` → `loader.conf`, `mkinitcpio.conf`, `/etc/fstab` (if present); rewrite `/etc/kernel/cmdline` by hand; then delete the `.ry.bak` files |
+| 3 | Revert boot files + fstab | `.ry.bak` → `loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `mkinitcpio.conf`, `/etc/fstab` (if present); then delete the `.ry.bak` files |
 | 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** row, `pacman -Rns` the **Install** row — exact lists in [Packages](#packages) |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-Boot files must be reverted before step 5 — it regenerates entries from that state; `/etc/kernel/cmdline` has no backup. The fstab backup exists only if fstab was rewritten. If ry-install enabled `systemd-timesyncd`: `sudo systemctl disable --now systemd-timesyncd` (optional).
+Boot files must be reverted before step 5 — it regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite (fstab: only if rewritten). If ry-install enabled `systemd-timesyncd`: `sudo systemctl disable --now systemd-timesyncd` (optional).
 
 ## Known Issues
 

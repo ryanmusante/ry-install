@@ -4,6 +4,21 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.96.2 (2026-07-07)
+-------------------
+  - validate: gate every KERNEL_PARAMS token against the
+    [A-Za-z0-9._,=-] charset; tokens splice into the shell-sourced
+    LINUX_OPTIONS="..." value and /etc/kernel/cmdline (parity with
+    the boot-crit scalar and COMPRESSION_OPTIONS metachar gates)
+  - backup: add /etc/kernel/cmdline and /etc/sdboot-manage.conf to
+    _RY_BACKUP_TARGETS (2 -> 4); all four boot-critical files now
+    get .ry.bak plus post-write byte-verify/restore
+  - preflight: sudo-cache banner suggests a scoped NOPASSWD drop-in
+    (pacman/mkinitcpio/sdboot-manage/systemctl) instead of ALL
+  - docs: README backup row lists the four .ry.bak targets;
+    uninstall step 3 restores cmdline and sdboot-manage.conf from
+    .ry.bak (hand rewrite dropped)
+
 7.96.1 (2026-07-07)
 -------------------
   - docs: tighten the 7.95.2 and 7.96.0 release-note wording

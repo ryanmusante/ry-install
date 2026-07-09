@@ -4,6 +4,12 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.97.3 (2026-07-08)
+-------------------
+  - verify: pacman.conf inspection gains a sudo read fallback plus
+    grep-error and sudo-lapse gates — a perms-hardened (0600) conf
+    now reports "inspection skipped" instead of a false "not set"
+
 7.97.2 (2026-07-08)
 -------------------
   - docs: trim in-script comments to essential rationale; no

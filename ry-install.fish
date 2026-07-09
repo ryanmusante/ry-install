@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.97.2 (2026-07-08) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.97.3 (2026-07-08) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.97.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.97.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -2433,13 +2433,29 @@ end
 function _vsp_pacman_conf --description "Inspect IgnorePkg / ParallelDownloads in /etc/pacman.conf (section-agnostic grep; pacman only honours [options])"
     _echo "── pacman.conf ──"
     if not test -f /etc/pacman.conf; _warn "  /etc/pacman.conf not found"; return 0; end
-    set -l ignore_lines (command grep -E -- '^[[:space:]]*IgnorePkg' /etc/pacman.conf 2>/dev/null)
+    set -l _pc_sudo false # sudo read avoids a false "not set" on a perms-hardened (0600) conf
+    if not test -r /etc/pacman.conf
+        if command -q sudo; and sudo -n test -r /etc/pacman.conf 2>/dev/null
+            set _pc_sudo true
+        else
+            _warn "  /etc/pacman.conf not readable (perms drift; sudo unavailable or cache lapsed) — IgnorePkg/ParallelDownloads inspection skipped"
+            _log "PACMAN_CONF_UNREADABLE: inspection skipped"
+            return 0
+        end
+    end
+    set -l ignore_lines (_as $_pc_sudo grep -E -- '^[[:space:]]*IgnorePkg' /etc/pacman.conf 2>/dev/null)
+    set -l _ig_rc $status
+    if test "$_ig_rc" -gt 1; _warn "  /etc/pacman.conf: read error (grep rc=$_ig_rc) — inspection skipped"; _log "PACMAN_CONF_READ_FAIL: IgnorePkg grep rc=$_ig_rc"; return 0; end
+    if test "$_ig_rc" -eq 1; and test "$_pc_sudo" = true; and not sudo -n true 2>/dev/null; _warn "  /etc/pacman.conf: sudo cache lapsed during read — inspection skipped"; _log "PACMAN_CONF_SUDO_LAPSE: IgnorePkg read"; return 0; end
     if test -n "$ignore_lines"
         for line in $ignore_lines; _ok "  $line"; end
     else
         _info "  No IgnorePkg set"
     end
-    set -l parallel (command grep -E -- '^[[:space:]]*ParallelDownloads[[:space:]]*=' /etc/pacman.conf 2>/dev/null)
+    set -l parallel (_as $_pc_sudo grep -E -- '^[[:space:]]*ParallelDownloads[[:space:]]*=' /etc/pacman.conf 2>/dev/null)
+    set -l _pl_rc $status
+    if test "$_pl_rc" -gt 1; _warn "  /etc/pacman.conf: read error (grep rc=$_pl_rc) — ParallelDownloads check skipped"; _log "PACMAN_CONF_READ_FAIL: ParallelDownloads grep rc=$_pl_rc"; return 0; end
+    if test "$_pl_rc" -eq 1; and test "$_pc_sudo" = true; and not sudo -n true 2>/dev/null; _warn "  /etc/pacman.conf: sudo cache lapsed during read — ParallelDownloads check skipped"; _log "PACMAN_CONF_SUDO_LAPSE: ParallelDownloads read"; return 0; end
     if test -n "$parallel"
         _ok "  $parallel"
     else

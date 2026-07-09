@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.97.3 (2026-07-08) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.98.0 (2026-07-09) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.97.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.98.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -36,7 +36,6 @@ function _ry_show_help --description "Display usage information and available su
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_RUN_TIMEOUT=<sec>  Per-command wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT""s; 0 disables; pkg/boot ops floor $_RY_LONGOP_HARD_CAP""s." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
-        "  RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1  Bypass KERNEL_MIN hard-fail." \
         "  NO_COLOR              Disable colored output when set (no-color.org)." \
         "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl" \
         ""
@@ -775,36 +774,28 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
         if not string match -qr -- '^[A-Za-z0-9._,=-]+$' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refuse to deploy (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy when running kernel < KERNEL_MIN (verify warns; override: RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1)"
+function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy when running kernel < KERNEL_MIN (verify warns; no override)"
     set -l _kr (command uname -r 2>/dev/null)
     set -l _kver (string match -rg -- '^([0-9]+\.[0-9]+)' "$_kr") # strip -arch1-1/-cachyos suffix to MAJOR.MINOR
     if test -z "$_kver"
-        if test "$RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK" = 1 # fail-closed: unreadable release requires override
-            _warn_loud "Kernel floor (override): release unreadable from uname -r ('$_kr') — proceeding"
-            _log "KERNEL_FLOOR_UNREADABLE_OVERRIDE: uname -r='$_kr'"
-        else if test "$MODE" = verify # read-only: warn and continue
+        if test "$MODE" = verify # read-only: warn and continue
             _warn "Kernel floor: release unreadable from uname -r ('$_kr') — verify continues; deploy would refuse"
             _log "KERNEL_FLOOR_UNREADABLE_VERIFY: uname -r='$_kr'"
-        else
+        else # fail-closed: unreadable release refuses deploy
             _err_loud "Kernel floor: release unreadable from uname -r ('$_kr') — refusing to deploy"
             _err_loud_cont "  gfx1151 MES-0x86 firmware needs >=$KERNEL_MIN amdgpu for native support. Deploying below risks GPU hang."
-            _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         end
         return 0
     end
     set -l _cur_parts (string split '.' -- "$_kver"); set -l _min_parts (string split '.' -- "$KERNEL_MIN")
     if test "$_cur_parts[1]" -lt "$_min_parts[1]"; or begin; test "$_cur_parts[1]" -eq "$_min_parts[1]"; and test "$_cur_parts[2]" -lt "$_min_parts[2]"; end
-        if test "$RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK" = 1 # mirrors hardware-gate override
-            _warn_loud "Kernel floor (override): running $_kver < $KERNEL_MIN — proceeding"
-            _log "KERNEL_FLOOR_BELOW_OVERRIDE: running=$_kver min=$KERNEL_MIN"
-        else if test "$MODE" = verify # read-only: warn and continue
+        if test "$MODE" = verify # read-only: warn and continue
             _warn "Kernel floor: running $_kver < $KERNEL_MIN — verify continues; deploy would refuse"
             _log "KERNEL_FLOOR_BELOW_VERIFY: running=$_kver min=$KERNEL_MIN"
         else
             _err_loud "Kernel floor: running $_kver, profile $PROFILE_NAME requires >=$KERNEL_MIN — refusing to deploy"
             _err_loud_cont "  gfx1151 MES-0x86 amdgpu native support requires >=$KERNEL_MIN (RTL8127 r8169 support and suspend-hang fix ae1737e7339b already present below this floor)."
-            _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1 ./ry-install.fish"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         end
     end

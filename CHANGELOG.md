@@ -4,6 +4,14 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.98.0 (2026-07-09)
+-------------------
+  - env: drop the RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK override; the
+    KERNEL_MIN (>= 6.19) gate is now unconditional for deploy and
+    --check (--verify still warns only)
+  - docs: remove the override from --help, the README kernel row,
+    and the README environment table
+
 7.97.3 (2026-07-08)
 -------------------
   - verify: pacman.conf inspection gains a sudo read fallback plus

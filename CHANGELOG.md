@@ -4,139 +4,100 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
-7.98.0 (2026-07-09)
--------------------
+7.98.0 - 7.98.1 (2026-07-09)
+----------------------------
+  - verify: strip inline comments before the file-content token
+    match; a token inside a trailing comment no longer reads present
+  - preflight: require id(1) in the dependency gate
+  - verify: quote the GPU_DPM_LEVEL sysfs comparison
   - env: drop the RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK override; the
-    KERNEL_MIN (>= 6.19) gate is now unconditional for deploy and
-    --check (--verify still warns only)
-  - docs: remove the override from --help, the README kernel row,
-    and the README environment table
+    KERNEL_MIN (>= 6.19) gate is unconditional for deploy/--check
+    (--verify still warns only)
+  - docs: drop the override from --help and the README; normalize
+    the README known-benign table; merge changelog series entries
+    and trim wrapped bullets
 
-7.97.3 (2026-07-08)
--------------------
+7.97.0 - 7.97.3 (2026-07-08)
+----------------------------
   - verify: pacman.conf inspection gains a sudo read fallback plus
-    grep-error and sudo-lapse gates — a perms-hardened (0600) conf
-    now reports "inspection skipped" instead of a false "not set"
-
-7.97.2 (2026-07-08)
--------------------
-  - docs: trim in-script comments to essential rationale; no
-    functional change
-  - docs: compact the 7.97.1 changelog entry
-
-7.97.1 (2026-07-08)
--------------------
-  - env: honor NO_COLOR again (no-color.org); document in --help
-    and the README environment table
-  - data: derive _RY_BACKUP_TARGETS from _RY_BOOT_CRITICAL_DSTS
-  - verify: Vulkan check reuses the installed list from argv;
-    drop a second pacman -Qq and dead guard branches
-  - cleanup: hoist the systemd-version probe in _post_udev; move
-    _set_exit beside bail primitives; note _installed_bytes
-    text-only contract
-
-7.97.0 (2026-07-08)
--------------------
-  - env: drop the NO_COLOR, TMPDIR, and RY_NO_NTP_REMEDIATION
-    overrides; tmp root pinned to /tmp, color gates on TERM+tty,
-    NTP remediation always runs when the clock is unsynced
+    grep-error/sudo-lapse gates; a 0600 conf reports "inspection
+    skipped" instead of a false "not set"
+  - verify: Vulkan check reuses the installed list from argv; drop
+    a second pacman -Qq and dead guard branches
   - verify: _ry_mkinitcpio_array joins multi-line KEY=( ... )
-    assignments (last wins); the HOOKS syntax check reuses it,
-    dropping a duplicate awk extractor
+    blocks (last wins); HOOKS syntax check reuses it
+  - env: drop the NO_COLOR, TMPDIR, and RY_NO_NTP_REMEDIATION
+    overrides, then restore NO_COLOR support (no-color.org); tmp
+    root pinned to /tmp; NTP remediation always runs when unsynced
+  - data: derive _RY_BACKUP_TARGETS from _RY_BOOT_CRITICAL_DSTS
   - run: fold tmpdir redaction to the pinned /tmp pattern
-  - docs: trim the environment table to the three remaining vars
-  - comments: single-line pass; verbose inline rationale trimmed
+  - cleanup: hoist the _post_udev systemd probe; move _set_exit
+    beside the bail primitives; note _installed_bytes text-only
+  - docs: single-line comment pass; trim the environment table
 
-7.96.6 (2026-07-08)
--------------------
-  - cleanup: inline the single-caller _unit_state, _fail_no_count,
-    and _awf_is_backup_target wrappers; drop the _kconfig_cache
-    output path (its sole caller discarded it)
-  - cleanup: fold the eight mkinitcpio-abort SKIP rows and the
-    signal exit-code switch into table-driven loops
-  - cleanup: add _taint for the paired error/boot-taint flags (six
-    sites); drop the redundant _RY_PKG_REMOVE_SKIPS pre-init and
-    four _chk_grep label args that repeated the pattern (the label
-    already defaults to it)
-
-7.96.0 - 7.96.5 (2026-07-07 .. 07-08)
+7.96.0 - 7.96.6 (2026-07-07 .. 07-08)
 -------------------------------------
-  - services: mask avahi-daemon.service + .socket (MASK 10 -> 12);
-    a second mDNS responder beside resolved advertised a colliding
-    hostname-2.local (profile runs MulticastDNS=no)
-  - validate: gate every KERNEL_PARAMS token against the
-    [A-Za-z0-9._,=-] charset; tokens splice into the shell-sourced
-    LINUX_OPTIONS="..." value and /etc/kernel/cmdline
-  - validate: drop the dead KERNEL_PARAMS metachar re-sweep — the
-    charset gate already excludes every shell metachar
-  - backup: add /etc/kernel/cmdline and /etc/sdboot-manage.conf to
-    _RY_BACKUP_TARGETS (2 -> 4); all four boot-critical files now
-    get .ry.bak plus post-write byte-verify/restore
-  - files: pre-validate rendered /etc/nftables.conf with nft -c -f
-    against the staged tmpfile before commit; an invalid ruleset
-    refuses deploy with live ruleset and installed file unchanged
-  - services: deduplicate the live input-policy-drop probe into
-    _nft_input_drop_live (--check + verify paths; 3 copies -> 1)
-  - probes: replace three builtin->pipe captures (ntsync kconfig,
-    dmesg preempt scan, findmnt error excerpt) with list
-    membership, string match, and slicing; an early-exiting pipe
-    reader could SIGPIPE the shell
+  - services: mask avahi-daemon .service + .socket (MASK 10 -> 12);
+    a second mDNS responder advertised a colliding hostname-2.local
+  - validate: gate KERNEL_PARAMS tokens to [A-Za-z0-9._,=-]; drop
+    the dead metachar re-sweep the charset already covers
+  - backup: .ry.bak + post-write byte-verify/restore for all four
+    boot-critical files (2 -> 4)
+  - files: pre-validate rendered /etc/nftables.conf with nft -c
+    before commit; an invalid ruleset refuses deploy unchanged
+  - services: deduplicate the live input-drop probe into
+    _nft_input_drop_live (3 copies -> 1)
+  - probes: replace three builtin->pipe captures with list/match/
+    slice; an early-exiting pipe reader could SIGPIPE the shell
   - lock: set the mkdir-success flag beside the rc capture; closes
-    the signal window that could strand an unreleasable lock dir
+    a signal window that could strand the lock dir
   - cli: repeated --install-file flags resolve last-wins instead of
-    space-joining the argparse list into a bogus path
-  - log: rename via mv -T (cp -pT recovery) so a directory squatting
-    on the target name cannot swallow the JSONL log
-  - run: add -h (host form) to the sudo value-flag skip list used
-    for long-op timeout classification
-  - preflight: sudo-cache banner suggests a scoped NOPASSWD drop-in
-    (pacman/mkinitcpio/sdboot-manage/systemctl) instead of ALL
-  - docs: record known issue — the mkinitcpio shutdown-ramfs
-    generator unit can fail at shutdown on CachyOS installs
-    (upstream unit interaction; not remediated in-tree)
-  - docs: README structure pass — Safety/Usage/Globals tables, the
-    four-file .ry.bak uninstall wording, unified GiB units
+    space-joining into a bogus path
+  - log: rename via mv -T (cp -pT recovery) so a directory squat
+    cannot swallow the JSONL log
+  - run: add -h (host form) to the sudo value-flag skip list
+  - preflight: sudo banner suggests a scoped NOPASSWD drop-in, not
+    ALL
+  - cleanup: inline single-caller wrappers; table-drive the
+    mkinitcpio SKIP rows and signal switch; add _taint (six sites)
+  - docs: record the shutdown-ramfs known issue; README structure
+    pass (Safety/Usage/Globals tables, GiB units)
 
 7.95.0 - 7.95.2 (2026-07-07)
 ----------------------------
-  - dispatch: hoist the argparse option spec into one
-    _RY_ARGPARSE_SPEC global (root-guard + main parsers) with a
-    count tripwire; three verbatim copies removed
+  - dispatch: hoist the argparse spec into one _RY_ARGPARSE_SPEC
+    global with a count tripwire; three verbatim copies removed
   - install-file: log POST_HOOK_NONE when a changed destination
-    matches no _RY_POST_HOOKS pattern (skip was silent)
+    matches no _RY_POST_HOOKS pattern
   - preflight: validate vercmp output before the mesa soft-floor
-    compare; empty/non-numeric output logs and skips
-  - docs: trim README to essentials; per-variable environment
-    table; fstab symlink-abort, ntsync levels, and RY_RUN_TIMEOUT
-    clamp notes aligned with the code
+    compare; empty/non-numeric logs and skips
+  - docs: trim README to essentials; align fstab symlink-abort,
+    ntsync levels, and RY_RUN_TIMEOUT clamp notes with the code
 
 7.94.0 - 7.94.5 (2026-07-06 .. 07-07)
 -------------------------------------
-  - udev: fix GPU rule key DEVTYPE -> ENV{DEVTYPE} (was rejected as
-    an invalid key; GPU clock-floor rule never applied)
-  - modprobe: blacklist amdxdna; XDNA NPU needs the IOMMU and
-    probes -ENODEV (ret -19) under amd_iommu=off; 17 -> 18 files
-  - cmdline: clearcpuid=514 -> clearcpuid=umip; string form is
-    stable across kernels (numeric bit is not)
-  - kernel: re-scope KERNEL_MIN 6.19 rationale to gfx1151 MES-0x86
-    amdgpu; RTL8127 base lands 6.16, hang fix 6.18 (below floor)
-  - lock: use USER_HZ=100 not CONFIG_HZ for PID starttime when
-    getconf is absent; starttime unit is USER_HZ, not kernel tick
-  - preflight: hard-require find(1) in all modes; add
-    CPUPOWER_GOVERNOR to the sourced-scalar metachar refuse gate
-  - preflight: report mktemp allocation failure distinctly from a
-    missing mv -T capability in the coreutils probe
-  - run: long-op timeout resolver emits 0 when RY_RUN_TIMEOUT=0
-    instead of empty output; consumers unchanged
-  - rootguard: emit leftover positionals one @@LEFT@@ line each and
-    append raw marker lines, so arguments containing spaces survive
-    intact in the usage error (root refusal path only)
+  - udev: fix GPU rule key DEVTYPE -> ENV{DEVTYPE}; the clock-floor
+    rule was rejected and never applied
+  - modprobe: blacklist amdxdna; the XDNA NPU probes -ENODEV under
+    amd_iommu=off (17 -> 18 files)
+  - cmdline: clearcpuid=514 -> clearcpuid=umip; the string form is
+    stable across kernels
+  - kernel: re-scope the KERNEL_MIN 6.19 rationale to gfx1151
+    MES-0x86 amdgpu (RTL8127 and the hang fix land below the floor)
+  - lock: use USER_HZ=100, not CONFIG_HZ, for PID starttime when
+    getconf is absent
+  - preflight: hard-require find(1); gate CPUPOWER_GOVERNOR through
+    the sourced-scalar metachar refusal
+  - preflight: report mktemp failure distinctly from a missing
+    mv -T capability
+  - run: the long-op resolver emits 0 for RY_RUN_TIMEOUT=0 instead
+    of empty output
+  - rootguard: emit leftover positionals one @@LEFT@@ line each so
+    spaced arguments survive the usage error intact
   - verify: extract _resolve_boot_fstype; both perm-check subs
     share one $BOOT-fstype resolver
-  - comments: correct "-Rns -s" to "-Rns" in the pactree and
-    asexplicit rationales; trim nine verbose inline comments
-  - docs: mirror the -Rns wording; drop duplicate REMOVE_EXISTING
-    gloss; link Globals to Safety
+  - docs: correct "-Rns -s" to "-Rns"; trim nine verbose inline
+    comments; link Globals to Safety
 
 7.93.0 (2026-07-05)
 -------------------
@@ -144,39 +105,39 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
 
 7.90.0 - 7.92.4 (2026-07-04 .. 07-05)
 -------------------------------------
-  - run: hard-cap long pkg/boot/db ops at 7200s (RY_RUN_TIMEOUT=0 still
-    disables; a value above cap honored); resolve cmd via PATH first
-  - validate: gate boot-crit scalars + COMPRESSION_OPTIONS against the
-    metachar/flag class; add mkinitcpio.conf skeleton + :2 tripwire
-  - mkinitcpio: emit COMPRESSION_OPTIONS via string join (identical)
-  - metachar: use PCRE \x27 for quote, dropping fragile fish requote
-  - packages: add pacman-contrib, archlinux-contrib (17 -> 19); mark
-    PKGS_ADD explicit post-Syu; correct rationale (pactree/paccache use)
+  - run: hard-cap long pkg/boot/db ops at 7200s (0 still disables;
+    above-cap values honored); resolve cmd via PATH first
+  - validate: gate boot-crit scalars + COMPRESSION_OPTIONS against
+    the metachar/flag class; mkinitcpio skeleton + :2 tripwire
+  - mkinitcpio: emit COMPRESSION_OPTIONS via string join
+  - metachar: use PCRE \x27 for quote; drop the fragile requote
+  - packages: add pacman-contrib, archlinux-contrib (17 -> 19);
+    mark PKGS_ADD explicit post-Syu (pactree/paccache rationale)
   - mangohud: reorder gpu_temp before gpu_core_clock; comment out
-    cpu_temp; add cpu_power readout
-  - resolve_esp: note /boot/EFI subdir skip on ext4 /boot
+    cpu_temp; add cpu_power
+  - resolve_esp: note the /boot/EFI subdir skip on ext4 /boot
   - cleanup: db.lck grace reaps only -P $fish_pid descendants
   - comments: move standalone rationale inline; strip apostrophes
-  - verify: fold Vulkan check into _vsp_required; retire amd_iommu/tsc
-    correlations (still at config + live-cmdline); drop 6 stale fns
-  - docs: sync README/help/pins; correct ntsync note (warn via --verify,
-    not preflight); trim prose, all 18 tables verbatim
+  - verify: fold the Vulkan check into _vsp_required; retire the
+    amd_iommu/tsc correlations; drop 6 stale functions
+  - docs: sync README/help/pins; correct the ntsync note (warn via
+    --verify, not preflight)
 
 7.89.0 (2026-07-04)
 -------------------
-  - args: root guard defers to argparse; invalid args exit 2 with the
-    same usage message whether or not the run is rooted
+  - args: root guard defers to argparse; invalid args exit 2 with
+    the same usage message rooted or not
 
 7.87.0 - 7.88.3 (2026-07-01 .. 07-03)
 -------------------------------------
-  - guard: refuse stdin/pipe exec (/dev/stdin, fd-0, 'Standard input')
+  - guard: refuse stdin/pipe exec (/dev/stdin, fd-0, stdin name)
   - install-file: format-validate content before write; loader.conf
     regenerates sdboot entries only
-  - run: replace overflow spill with inline analysis; log elided sample
-    (<=10 lines) + sha256/bytes; nothing retained on disk
+  - run: replace overflow spill with inline analysis; log elided
+    sample (<=10 lines) + sha256/bytes; nothing retained on disk
   - cmdline: add ipv6.disable=1; nftables ruleset IPv4-only, accept
     inbound IPv4 ping, drop ICMPv6/NDP accepts
-  - packages: SYSTEM_UPGRADED from pacman -Q fingerprint, not rc
+  - packages: SYSTEM_UPGRADED from a pacman -Q fingerprint, not rc
   - services: skip resolved/NM restarts when drop-in bytes unchanged
   - tmpfiles: PID-scope TMPDIR names + sweep globs (peer-run safe)
   - validate: kv/kparam validators report every missing key/token
@@ -197,7 +158,7 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
   - lock: refuse reclaim on empty/garbage pidfile; re-verify owner
   - backup: skip .ry.bak on inconclusive probe; drop symlink first
   - timeout: clamp RY_RUN_TIMEOUT above 9 digits to 2147483647
-  - ntp: add RY_NO_NTP_REMEDIATION=1; log timesyncd enable
+  - ntp: add RY_NO_NTP_REMEDIATION=1; log the timesyncd enable
   - args: glued short flags resolve first-of -h/-v in order
 
 7.79.0 - 7.84.0 (2026-06-28 .. 07-01)
@@ -207,10 +168,10 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
     skip malformed entries and assert count
   - validate: GPU_DPM_LEVEL against the dpm-level enum; reject
     ISO-3166-1 reserved COUNTRY codes
-  - run: derive output-capture tail cap from head cap
+  - run: derive the output-capture tail cap from the head cap
   - verify: assert amd_pstate/dynamic_epp == disabled
   - udev: GPU rule KERNEL=="card[0-9]*" plus DEVTYPE=="drm_minor"
-  - nftables: add TCP 27037 to gated remote-play set
+  - nftables: add TCP 27037 to the gated remote-play set
 
 7.71.0 - 7.78.3 (2026-06-26 .. 06-28)
 -------------------------------------
@@ -233,7 +194,7 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
   - gpu: remove drirc and radv-apu overrides (gfx1151 reports uma:1)
   - verify: split WiFi runtime state into a dedicated sub-check
   - regdom: remove /etc/conf.d/wireless-regdom
-  - mesa: raise soft-floor warn 25.3 -> 26.0
+  - mesa: raise the soft-floor warn 25.3 -> 26.0
   - guards: destinations 17 -> 15; hooks and file count 20 -> 18
 
 7.59.0 and earlier

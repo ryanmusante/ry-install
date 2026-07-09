@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.98.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.98.1-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.98.0
+cd ry-install && git checkout v7.98.1
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -41,7 +41,7 @@ Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected),
 | Flag | Action |
 |---|---|
 | *(no args)* | Unattended install (silent; phase matrix at end) |
-| `-V, --verbose` | Stream per-command install output (ignored under `--check`) |
+| `-V`/`--verbose` | Stream per-command install output (ignored under `--check`) |
 | `--verify` | Config files byte-for-byte, then live system state |
 | `--check` | Silent idempotency probe vs live `/proc/cmdline` — a fresh install reads drift until reboot ([Exit Codes](#exit-codes)) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
@@ -226,11 +226,11 @@ Boot files must be reverted before step 5 — it regenerates entries from that s
 
 Expected and harmless on this hardware:
 
-| Log line | Why benign |
+| Line | Reason |
 |---|---|
 | `ModemManager1 … could not be found` | probe of masked `modemmanager.service` |
 | `acp_asoc_acp70 … No matching ASoC machine driver` | pending upstream; HDMI/USB audio unaffected |
-| boltd `unknown NHI PCI id` | USB4/TB devices still enumerate |
+| `boltd … unknown NHI PCI id` | USB4/TB devices still enumerate |
 | `charge thresholds not supported` | desktop — no battery |
 | `no backlight interface` | desktop — no panel |
 | `Unlikely small volume range` | USB-audio descriptor quirk |

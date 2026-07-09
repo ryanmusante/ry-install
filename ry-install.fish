@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.98.0 (2026-07-09) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.98.1 (2026-07-09) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.98.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.98.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1592,7 +1592,7 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     if test "$use_sudo" = false; and not test -r "$file"; and _is_system_dst "$file"; set use_sudo true; end # sudo read avoids false DENIED on perms drift
     _cg_access_ok "$file" "$label" $use_sudo; or return 1
     set -l _grep_flags -wF
-    _as $use_sudo grep -v '^[[:space:]]*#' -- "$file" 2>/dev/null | command grep $_grep_flags -- "$pattern" >/dev/null 2>/dev/null
+    _as $use_sudo awk '{ sub(/[[:space:]]+#.*$/, "") } /^[[:space:]]*#/ { next } NF { print; f=1 } END { exit f ? 0 : 1 }' "$file" 2>/dev/null | command grep $_grep_flags -- "$pattern" >/dev/null 2>/dev/null # strips inline comments too; rc 1 = no content lines (grep -v parity)
     set -l _stage1_rc $pipestatus[1]; set -l _grep_rc $pipestatus[2]
     switch "$_stage1_rc"
         case 0
@@ -1629,7 +1629,7 @@ end
 function _ry_check_deps --description "Verify required packages are installed"
     _log "DEPS_CHECK_START"
     set -l missing
-    for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum timeout mktemp awk grep curl getent sudo head df mv tee stat find cp chmod chown install cat rm date wc tail basename dirname mkdir rmdir touch env sleep cmp
+    for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum timeout mktemp awk grep curl getent id sudo head df mv tee stat find cp chmod chown install cat rm date wc tail basename dirname mkdir rmdir touch env sleep cmp
         command -q $cmd; or set -a missing $cmd
     end
     if test (count $missing) -gt 0; _err "missing: $missing"; return 1; end
@@ -2709,7 +2709,7 @@ function _vrk_gpu_state --description "Runtime kparam check: GPU performance lev
         if test -f "$f"
             set found_gpu true
             set -l level (command cat -- "$f" 2>/dev/null)
-            if test "$level" = $GPU_DPM_LEVEL
+            if test "$level" = "$GPU_DPM_LEVEL"
                 _ok "  $f: $level"
                 set gpu_ok true
             else

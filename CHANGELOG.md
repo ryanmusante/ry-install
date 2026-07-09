@@ -4,6 +4,23 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.97.2 (2026-07-08)
+-------------------
+  - docs: trim in-script comments to essential rationale; no
+    functional change
+  - docs: compact the 7.97.1 changelog entry
+
+7.97.1 (2026-07-08)
+-------------------
+  - env: honor NO_COLOR again (no-color.org); document in --help
+    and the README environment table
+  - data: derive _RY_BACKUP_TARGETS from _RY_BOOT_CRITICAL_DSTS
+  - verify: Vulkan check reuses the installed list from argv;
+    drop a second pacman -Qq and dead guard branches
+  - cleanup: hoist the systemd-version probe in _post_udev; move
+    _set_exit beside bail primitives; note _installed_bytes
+    text-only contract
+
 7.97.0 (2026-07-08)
 -------------------
   - env: drop the NO_COLOR, TMPDIR, and RY_NO_NTP_REMEDIATION

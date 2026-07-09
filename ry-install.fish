@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.97.0 (2026-07-08) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.97.2 (2026-07-08) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.97.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.97.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -12,7 +12,7 @@ set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= # single option-spec source (root-guard + main argparse)
-set -g KERNEL_MIN 6.19 # floor: gfx1151 MES-0x86 amdgpu native support (RTL8127 6.16 + suspend fix 6.18 sit below it)
+set -g KERNEL_MIN 6.19 # gfx1151 MES-0x86 amdgpu floor (RTL8127 + suspend fixes sit below)
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -37,6 +37,7 @@ function _ry_show_help --description "Display usage information and available su
         "  RY_RUN_TIMEOUT=<sec>  Per-command wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT""s; 0 disables; pkg/boot ops floor $_RY_LONGOP_HARD_CAP""s." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
         "  RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK=1  Bypass KERNEL_MIN hard-fail." \
+        "  NO_COLOR              Disable colored output when set (no-color.org)." \
         "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl" \
         ""
 end
@@ -80,7 +81,7 @@ set --erase _ry_path_new _ry_p
 command -q id; or begin; echo "[ERR] GNU coreutils id(1) required (resolves UID before privilege checks)" >&2; exit $EXIT_PREFLIGHT; end # first external command
 set -g _MY_UID (command id -u)
 
-# ── BAIL PRIMITIVES: _RY_EXIT + HANDLER ERASE ──
+# ── BAIL PRIMITIVES: _RY_EXIT + _SET_EXIT + HANDLER ERASE ──
 function _ry_erase_handlers --description "Erase signal/exit handler functions"; functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null; end
 function _ry_exit --argument-names code --description "Set bail sentinel and exit"
     test -z "$code"; and set code 0
@@ -99,6 +100,7 @@ function _ry_exit --argument-names code --description "Set bail sentinel and exi
     _ry_erase_handlers
     exit $code
 end
+function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE and _INTENDED_EXIT_CODE atomically"; set -g _RY_EXIT_CODE $_code; set -g _INTENDED_EXIT_CODE $_code; end
 function _ry_root_usage --description "Root-guard usage error: print msg + help to stderr, exit EXIT_USAGE (parity with non-root argparse path)"; echo "[ERR] $argv" >&2; echo >&2; _ry_show_help >&2; _ry_exit $EXIT_USAGE; end
 
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
@@ -149,6 +151,7 @@ end
 set --erase _ry_root_silent_check _rsc_other_mode
 set -g _RY_NO_COLOR false
 test "$TERM" = dumb; and set -g _RY_NO_COLOR true
+set -q NO_COLOR; and set -g _RY_NO_COLOR true # no-color.org: presence (even empty) disables color
 set -l fish_ver $FISH_VERSION; set -l parts (string split '.' -- "$fish_ver"); set -l _fish_minor (string replace -r '[^0-9].*' '' -- "$parts[2]"); test -z "$_fish_minor"; and set _fish_minor 0
 if not string match -qr '^\d+$' -- "$parts[1]"; or not string match -qr '^\d+$' -- "$_fish_minor"; echo "[ERR] fish version unparseable: '$fish_ver'" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -l _fish_ok 0
@@ -158,7 +161,7 @@ if test "$_fish_ok" -eq 0; echo "[ERR] fish 3.6+ required (found: $fish_ver)" >&
 set --erase fish_ver parts _fish_minor _fish_ok
 
 # ── TMP ROOT (PINNED /tmp) + COREUTILS PROBES ──
-set -q TMPDIR; and set --erase TMPDIR # tmp pinned to /tmp; children (mktemp) must not honor an inherited TMPDIR
+set -q TMPDIR; and set --erase TMPDIR # pin tmp to /tmp; children must not honor inherited TMPDIR
 if not test -w /tmp; echo "[ERR] tmp dir not writable: /tmp" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command -q timeout; echo "[ERR] GNU coreutils timeout(1) required (used by _run for hang-protection)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command timeout --foreground --kill-after=1 1 true 2>/dev/null; echo "[ERR] timeout(1) lacks --foreground/--kill-after (need GNU coreutils ≥ 8.x; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -202,7 +205,7 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 # ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──
 set -g _RY_BOOT_TAINTED false
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
-set -g _RY_BACKUP_TARGETS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"; set -g _RY_BACKUP_SUFFIX .ry.bak # mirrors _RY_BOOT_CRITICAL_DSTS order
+set -g _RY_BACKUP_TARGETS $_RY_BOOT_CRITICAL_DSTS; set -g _RY_BACKUP_SUFFIX .ry.bak
 set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped sweep globs: never touch files of a peer run
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS; set -g _RY_PROFILE_USES_WIFI_BACKEND false
@@ -292,7 +295,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     set -g _RY_LOCK_DIR_OWNED true
     command mkdir -- "$LOCK_DIR" 2>/dev/null
     set -l _mk_rc $status
-    test "$_mk_rc" -eq 0; and set -g _RY_LOCK_MKDIR_OK true # beside rc capture: no signal window can strand an unreleasable lock dir
+    test "$_mk_rc" -eq 0; and set -g _RY_LOCK_MKDIR_OK true # beside rc capture: no signal window strands the lock dir
     umask $_prev_umask
     if test "$_mk_rc" -ne 0
         set --erase _RY_LOCK_DIR_OWNED
@@ -342,7 +345,7 @@ function _lock_pid_started_after --argument-names pid mtime --description "rc 0 
     set -l _btime (command awk '/^btime /{print $2; exit}' /proc/stat 2>/dev/null)
     string match -qr '^\d+$' -- "$_btime"; or return 1
     set -l _hz (command getconf CLK_TCK 2>/dev/null)
-    if not string match -qr '^[1-9]\d*$' -- "$_hz" # getconf absent: /proc/pid/stat starttime is USER_HZ (Linux ABI, fixed 100), not the kernel tick rate
+    if not string match -qr '^[1-9]\d*$' -- "$_hz" # starttime is USER_HZ (Linux ABI, fixed 100), not the tick rate
         set _hz 100
         functions -q _log; and _log "LOCK_CLK_TCK_FALLBACK: getconf CLK_TCK unavailable — using USER_HZ=100 (starttime unit is USER_HZ, fixed at 100 on Linux)"
     end
@@ -557,7 +560,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
         set _sig_exit 130
     end
     _teardown signal $_sig_exit
-    _ry_erase_handlers # fish 3.x swallows handler exit status; exec sh re-raises to deliver 128+N
+    _ry_erase_handlers # fish swallows handler exit status; exec sh re-raises 128+N
     string match -qr '^[A-Z]+$' -- "$_sig_name"; and exec /bin/sh -c "kill -$_sig_name \$\$ 2>/dev/null; exit $_sig_exit"
     exit $_sig_exit # fallback: non-signal label or exec failure
 end
@@ -632,7 +635,7 @@ set -g SYSCTL_VALUES \
     "net.ipv4.tcp_slow_start_after_idle=0" \
     "vm.compaction_proactiveness=0" \
     "vm.max_map_count=2147483642" \
-    "vm.swappiness=150" # sysctl rationale: netdev 600/5000 (2.5GbE), max_map_count (esync), swappiness=150 (zram)
+    "vm.swappiness=150" # netdev=2.5GbE, max_map_count=esync, swappiness=150=zram
 
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) ──
 set -g PKGS_ADD \
@@ -659,7 +662,7 @@ set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme b
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
-set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service avahi-daemon.service avahi-daemon.socket sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi unit+socket: second mDNS responder collided with resolved (MulticastDNS=no)
+set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service avahi-daemon.service avahi-daemon.socket sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi unit+socket: second mDNS responder collided with resolved
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
@@ -768,7 +771,7 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
     for _co in $MKINITCPIO_COMPRESSION_OPTIONS # spliced into a shell array literal; flag charset only
         if not string match -qr -- '^-?[A-Za-z0-9]+$' "$_co"; _err_loud "MKINITCPIO_COMPRESSION_OPTIONS token invalid: '$_co' — refuse to deploy (spliced into a shell-sourced array literal)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
-    for _kp in $KERNEL_PARAMS # spliced into LINUX_OPTIONS="..." and /etc/kernel/cmdline; kparam charset excludes shell metachars
+    for _kp in $KERNEL_PARAMS # spliced into boot configs; charset excludes shell metachars
         if not string match -qr -- '^[A-Za-z0-9._,=-]+$' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refuse to deploy (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
@@ -1119,7 +1122,7 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
     end
 end
 function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"; string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"; end
-function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse)" # callers read $pipestatus[1] only (collect rc=1 on empty)
+function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse; text-only — fish strings cannot carry NUL)" # callers read $pipestatus[1] only (collect rc=1 on empty)
     set -l _bytes
     if _is_system_dst "$dst"
         sudo -n true 2>/dev/null; or return 2
@@ -1426,7 +1429,7 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     end
     _log "$label_tag: "(string join -- " | " $_captured)
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and _log "$label_tag""_TRUNCATED: total_lines=$_total head_cap=$_head_cap tail_cap=$_tail_cap"
-    if test "$_need_tail" = true # overflow: inline analysis into JSONL; nothing retained (tmpfile swept by _run)
+    if test "$_need_tail" = true # overflow: analysis inlined into JSONL; nothing retained
         set -l _bytes (command stat -c '%s' -- "$tmpfile" 2>/dev/null); string match -qr '^\d+$' -- "$_bytes"; or set _bytes 0
         set -l _sha (command sha256sum -- "$tmpfile" 2>/dev/null | string match -rg -- '^(\S+)'); test -n "$_sha"; or set _sha ERR
         set -l _mid_s (math $_head_cap + 1); set -l _mid_e (math $_total - $_tail_cap) # scan elided region only (head/tail already in JSONL)
@@ -1466,7 +1469,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; long-r
     test -n "$_resolved"; or set _resolved "$_effective_cmd"
     set _effective_cmd (command basename -- "$_resolved")
     if contains -- "$_effective_cmd" pacman mkinitcpio sdboot-manage paccache updatedb pkgfile
-        if test "$_t" -eq 0 2>/dev/null; echo 0; return 0; end # user opted out entirely (RY_RUN_TIMEOUT=0): honor it — emit 0, same channel as the non-long-op path
+        if test "$_t" -eq 0 2>/dev/null; echo 0; return 0; end # RY_RUN_TIMEOUT=0 opt-out: honor it, emit 0
         if test "$_t" -lt "$_RY_LONGOP_HARD_CAP" 2>/dev/null # raise short default to the hard cap; never below, never unbounded
             _log "TIMEOUT_LONGOP_CAP: cmd=$_effective_cmd raising $_t""s → $_RY_LONGOP_HARD_CAP""s (long-running pkg/boot/db op; short SIGKILL would bypass rollback)"
             set _t $_RY_LONGOP_HARD_CAP
@@ -2394,7 +2397,7 @@ function _verify_static_user --description "Verify environment.d ENV_VARS + Mang
 end
 
 # ── VERIFY-STATIC: PACKAGES + SERVICES + SYNTAX ──
-function _vsp_required --description "Check PKGS_ADD against installed; emits OK/FAIL per pkg"
+function _vsp_required --description "Check PKGS_ADD + Vulkan pkgs against installed list in argv; emits OK/FAIL per pkg"
     _echo "── Required packages ──"
     for pkg in $PKGS_ADD
         if contains -- "$pkg" $argv
@@ -2403,28 +2406,18 @@ function _vsp_required --description "Check PKGS_ADD against installed; emits OK
             _fail "  $pkg: NOT INSTALLED"
         end
     end
-    if set -q EXPECTED_VULKAN_PKGS; and test (count $EXPECTED_VULKAN_PKGS) -gt 0
+    if set -q EXPECTED_VULKAN_PKGS; and test (count $EXPECTED_VULKAN_PKGS) -gt 0 # argv = caller-validated installed list
         _echo "── Vulkan driver packages ──"
-        if not command -q pacman
-            _warn "  Vulkan packages: pacman not found — skipping"
-        else
-            set -l _vk_installed (command pacman -Qq 2>/dev/null)
-            if test "$status" -ne 0
-                _warn "  Vulkan packages: pacman -Qq failed (db locked or read error) — skipping"
-                _log "VULKAN_QQ_FAIL: pacman -Qq returned non-zero"
+        set -l _vk_missing
+        for pkg in $EXPECTED_VULKAN_PKGS
+            if contains -- "$pkg" $argv
+                _ok "  $pkg: installed"
             else
-                set -l _vk_missing
-                for pkg in $EXPECTED_VULKAN_PKGS
-                    if contains -- "$pkg" $_vk_installed
-                        _ok "  $pkg: installed"
-                    else
-                        _fail "  $pkg: NOT installed (DXVK/VKD3D-Proton requires this)"
-                        set -a _vk_missing "$pkg"
-                    end
-                end
-                test (count $_vk_missing) -gt 0; and _info "  Install missing: sudo pacman -S --needed $_vk_missing"
+                _fail "  $pkg: NOT installed (DXVK/VKD3D-Proton requires this)"
+                set -a _vk_missing "$pkg"
             end
         end
+        test (count $_vk_missing) -gt 0; and _info "  Install missing: sudo pacman -S --needed $_vk_missing"
     end
 end
 function _vsp_removed --description "Check PKGS_DEL against installed; warn if still present"
@@ -4283,7 +4276,7 @@ function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk
     set -l _reason "upgrade"
     test "$_upgraded" = false; and set _reason "removals=$_removed_n"
     if command -q paccache
-        set -l _pc_ok true # -k is last-wins and -u blacklists installed: policies need separate invocations
+        set -l _pc_ok true # -k last-wins, -u blacklists installed: separate invocations
         _run sudo -n paccache -rk2; or set _pc_ok false
         _run sudo -n paccache -ruk0; or set _pc_ok false
         if test "$_pc_ok" = true
@@ -4637,7 +4630,7 @@ function _pb_rebuild_cascade --argument-names target skip_mki --description "_po
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     end
-    set -l _boot (_resolve_boot_path) # resolve ESP-fallback state before the vfat gate (mirrors _install_rebuild_boot)
+    set -l _boot (_resolve_boot_path) # resolve ESP-fallback before the vfat gate (mirrors phase 5)
     if not _sdboot_fallback_vfat_ok; _log "POST_BOOT_SDBOOT_REFUSED: target=$target"; return $EXIT_BOOT_CRIT; end
     if test "$SDBOOT_REMOVE_EXISTING" = yes; and test -z "$_boot"
         _err "Cannot resolve \$BOOT path — refusing boot-wipe gate"
@@ -4782,8 +4775,9 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
             return 0
         end
     else
-        _warn "udevadm verify unavailable (systemd "(set -q _RY_SYSTEMD_VER; and echo $_RY_SYSTEMD_VER; or echo unknown)" < 254) — reloading $target unvalidated; check the rule by hand if you edited it"
-        _log "UDEV_VERIFY_SKIP: systemd "(set -q _RY_SYSTEMD_VER; and echo $_RY_SYSTEMD_VER; or echo unknown)" < 254 — udevadm verify unavailable; reloading rule unvalidated"
+        set -l _sv (set -q _RY_SYSTEMD_VER; and echo $_RY_SYSTEMD_VER; or echo unknown)
+        _warn "udevadm verify unavailable (systemd $_sv < 254) — reloading $target unvalidated; check the rule by hand if you edited it"
+        _log "UDEV_VERIFY_SKIP: systemd $_sv < 254 — udevadm verify unavailable; reloading rule unvalidated"
     end
     if not _run sudo -n udevadm control --reload-rules
         _warn "udevadm control --reload-rules failed — rule applies at next boot (non-fatal; file deployed)"
@@ -4923,7 +4917,6 @@ end
 
 # ── MAIN: RUNTIME INIT + LOCK + MODE DISPATCH + FOOTER ──
 set -g _RY_EXIT_CODE 0
-function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE and _INTENDED_EXIT_CODE atomically"; set -g _RY_EXIT_CODE $_code; set -g _INTENDED_EXIT_CODE $_code; end
 _init_runtime
 switch "$MODE"
     case install-file install

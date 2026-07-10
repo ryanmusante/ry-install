@@ -4,6 +4,24 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.98.3 (2026-07-09)
+-------------------
+  - docs: drop the Known-Benign Log Lines table from the README
+
+7.98.2 (2026-07-09)
+-------------------
+  - verify: compare the live COMPRESSION= value against
+    MKINITCPIO_COMPRESSION instead of a zstd literal; editing the
+    global no longer trips a false MISSING
+  - data: hoist the EPP hint and the scaling-driver expectation
+    into EPP_PREFERENCE / EXPECTED_SCALING_DRIVER; enum-gate EPP
+    (spliced into a udev ATTR) and charset-gate CPUPOWER_GOVERNOR
+    to the domain the cpupower format validator accepts
+  - docs: credit pactree/paccache to pacman-contrib alone and note
+    archlinux-contrib is script-unused; document the root --check
+    silent exit 3 and the interactive sudo -v prompt; add a BIOS
+    section (85 W flat-PPT SMU profile + reference-repo link)
+
 7.98.0 - 7.98.1 (2026-07-09)
 ----------------------------
   - verify: strip inline comments before the file-content token

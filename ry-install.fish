@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.98.1 (2026-07-09) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.98.3 (2026-07-09) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.98.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.98.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -621,6 +621,8 @@ set -g CPUPOWER_GOVERNOR powersave
 set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 3 # adapter auto-power-on; paired-sink reconnect retries
 set -g GPU_DPM_LEVEL auto # gfx1151 dpm floor; auto avoids pinning SCLK on CPU-bound titles
 set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set
+set -g EPP_PREFERENCE balance_performance; set -g _RY_EPP_LEVELS default performance balance_performance balance_power power # energy_performance_preference accepted set; udev-pinned per CPU
+set -g EXPECTED_SCALING_DRIVER amd-pstate-epp # verify-only: cpufreq scaling_driver expectation under amd_pstate=active
 set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to nftables input
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
@@ -656,7 +658,7 @@ set -g PKGS_ADD \
     ddcutil \
     nftables \
     pacman-contrib \
-    archlinux-contrib # pactree/paccache used by ry-install
+    archlinux-contrib # pacman-contrib supplies pactree/paccache (used by ry-install); archlinux-contrib: community admin scripts (checkservices etc.), not invoked
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
@@ -757,10 +759,12 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
     if not string match -qr '^[A-Z][A-Z]$' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166-1 alpha-2 code (got: '$COUNTRY') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain. Refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
+    if not contains -- "$EPP_PREFERENCE" $_RY_EPP_LEVELS; _err_loud "EPP_PREFERENCE must be one of "(string join '|' -- $_RY_EPP_LEVELS)" (got: '$EPP_PREFERENCE') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
+    if not string match -qr '^[a-z][a-z0-9_-]*$' -- "$CPUPOWER_GOVERNOR"; _err_loud "CPUPOWER_GOVERNOR must match ^[a-z][a-z0-9_-]*\$ (got: '$CPUPOWER_GOVERNOR') — refuse to deploy (the domain _grep_cpupower_entry accepts)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # IPv4-only ruleset: ICMPv6/ND would hit policy drop
         _err_loud "IPv4-only nftables ruleset requires ipv6.disable=1 in KERNEL_PARAMS — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
     end
-    for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION
+    for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION EXPECTED_SCALING_DRIVER
         if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     set -l _scalar_metachar_re '[\s"`$;\\\\&|<>(){}*?\x27~!#]' # shell metachar class for scalars written to boot configs
@@ -941,7 +945,7 @@ function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate con
         "# NVMe scheduler none (lowest tail latency; diverges from CachyOS kyber default)" \
         'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
         "# AMD P-State EPP balance_performance (perf-leaning CPPC hint)" \
-        'ACTION=="add|change", SUBSYSTEM=="cpu", KERNEL=="cpu[0-9]*", ATTR{cpufreq/energy_performance_preference}="balance_performance"' \
+        'ACTION=="add|change", SUBSYSTEM=="cpu", KERNEL=="cpu[0-9]*", ATTR{cpufreq/energy_performance_preference}="'$EPP_PREFERENCE'"' \
         "# GPU performance level (gfx1151 clock-floor; optional)" \
         'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
 end
@@ -1922,7 +1926,7 @@ function _grep_envd_entry --argument-names dst --description 'Validate ≥1 KEY=
 end
 function _grep_cpupower_entry --argument-names dst --description "Validate a GOVERNOR='<name>' line (cpupower-service.conf)"
     test (count $argv) -lt 2; and _log "BUG: _grep_cpupower_entry called without content (dst=$dst)"; and return 2
-    string match -qr -- "^GOVERNOR='[a-z]+'\$" $argv[2..-1]; or begin
+    string match -qr -- "^GOVERNOR='[a-z][a-z0-9_-]*'\$" $argv[2..-1]; or begin
         _fail "  $dst: no GOVERNOR='<name>' line found"
         return 1
     end
@@ -2257,10 +2261,10 @@ function _vsb_mkinitcpio --description "_verify_static_boot sub: /etc/mkinitcpio
     _echo "  Config: $hooks_line"
     for hook in $MKINITCPIO_HOOKS; _chk_token_in "$hooks_line" "$hook" "$hook"; end
     set -l comp_line (_ry_mkinitcpio_array COMPRESSION)
-    if string match -q '*zstd*' -- "$comp_line"
-        _ok "  COMPRESSION=zstd: present"
+    if string match -q "*$MKINITCPIO_COMPRESSION*" -- "$comp_line"
+        _ok "  COMPRESSION=$MKINITCPIO_COMPRESSION: present"
     else
-        _fail "  COMPRESSION=zstd: MISSING"
+        _fail "  COMPRESSION=$MKINITCPIO_COMPRESSION: MISSING"
     end
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test -n "$MKINITCPIO_COMPRESSION_OPTIONS"
         set -l comp_opts_line (_ry_mkinitcpio_array COMPRESSION_OPTIONS); set -l _missing
@@ -2339,7 +2343,7 @@ function _vss_udev --description "_verify_static_system sub: combined udev perf 
     _echo "── udev (perf: I/O scheduler + EPP + GPU clock-floor) ──"
     _chk_file /etc/udev/rules.d/99-ry-perf.rules; or return 0
     _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'queue/scheduler}="none"' "nvme scheduler=none"
-    _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'energy_performance_preference}="balance_performance"' "EPP=balance_performance"
+    _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'energy_performance_preference}="'$EPP_PREFERENCE'"' "EPP=$EPP_PREFERENCE"
     _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"' "GPU dpm=$GPU_DPM_LEVEL"
     _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'KERNEL=="card[0-9]*"' "GPU rule card-scoped"
 end
@@ -2731,14 +2735,14 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
     else
         set -l cpu_name (string replace -r '.*/cpu(\d+)/.*' 'cpu$1' -- "$_CPU_PATH")
         _info "  Checking $cpu_name (representative)"
-        for check in "scaling_driver:amd-pstate-epp:Scaling driver" \
+        for check in "scaling_driver:$EXPECTED_SCALING_DRIVER:Scaling driver" \
             "scaling_governor:$CPUPOWER_GOVERNOR:Governor" # driver + governor profile-managed
             set -l parts (string split ':' -- "$check"); set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
             _chk_eq "$parts[3]" "$sysfs_val" "$parts[2]"
         end
         set -l _epp (command cat -- "$_CPU_PATH/energy_performance_preference" 2>/dev/null) # EPP pinned via 99-ry-perf.rules
         if test -n "$_epp"
-            _chk_eq "EPP" "$_epp" balance_performance
+            _chk_eq "EPP" "$_epp" "$EPP_PREFERENCE"
         else
             _info "  EPP: unreadable"
         end

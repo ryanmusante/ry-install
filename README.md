@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.98.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.98.3-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -10,11 +10,11 @@
 ## Quick Start
 
 > [!IMPORTANT]
-> Run as your normal user (root refused, exit 2); cache sudo first (`sudo -v`). The unattended run **removes packages** ([Configuration](#configuration)). Reboot, then `--verify`; re-runs are idempotent.
+> Run as your normal user (root refused, exit 2; root `--check`: silent exit 3); cache sudo first (`sudo -v`). The unattended run **removes packages** ([Configuration](#configuration)). Reboot, then `--verify`; re-runs are idempotent.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.98.1
+cd ry-install && git checkout v7.98.3
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -31,7 +31,30 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo; NTP sync warns only, and a missing `pactree` warns at package-removal time. An unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
+Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo (non-interactive — a TTY run prompts once via `sudo -v`); NTP sync warns only, and a missing `pactree` warns at package-removal time. An unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
+
+## BIOS
+
+Firmware-side power/thermal profile this repo assumes on the GTR9 Pro. Beelink ships the box tuned for a [140 W peak](https://www.bee-link.com/products/beelink-gtr9-pro-amd-ryzen-ai-max-395), but Strix Halo multi-thread scaling flattens hard past the mid-80s — community [power-mode testing](https://strixhalo.wiki/Guides/Power-Modes-and-Performance) measures roughly +19% going 55 → 85 W and only ~+12% more for the remaining stretch to 120 W — so `SPL = Fast PPT = Slow PPT = 85 W` buys near-peak throughput at a flat, quiet fan curve. [STAPM](https://skatterbencher.com/amd-precision-boost-2/) exists to decay a laptop's package power toward a chassis skin-temperature target; on a desk box that decay is pure lost performance (the same mobile-silicon carry-over AMD had to [patch out of the 8000G desktop APUs](https://www.techpowerup.com/318566/amd-to-fix-ryzen-8000g-desktop-apu-stapm-feature-via-motherboard-bios-updates)), so the boost/override/time-constant values below neutralize it and the equal PPT limits become the only ceiling. `TjMax 90` holds the junction 10 °C under the silicon's [100 °C limit](https://www.amd.com/en/products/processors/laptop/ryzen/ai-300-series/amd-ryzen-ai-max-plus-395.html) for fan headroom and margin. Option-by-option walkthrough, screenshots, and firmware-version notes: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
+
+`Advanced → SMU Common Options` — power limits in mW, time constants in s, TjMax in °C:
+
+| Setting | Value |
+|---|---|
+| ECO Mode | `Disabled` |
+| SPL Control | `Manual` |
+| Sustained Power Limit | `85000` |
+| PPT Control | `Manual` |
+| Fast PPT Limit | `85000` |
+| Slow PPT Limit | `85000` |
+| Slow PPT Time Constant | `0` |
+| STAPM Control | `Manual` |
+| System Temperature Tracking | `Auto` |
+| STAPM Boost Override | `1` |
+| STAPM Boost | `0` |
+| Tskin Time Constant (STAPM) | `0` |
+| Thermal Control | `Manual` |
+| TjMax | `90` |
 
 ## Usage
 
@@ -121,7 +144,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib`/`archlinux-contrib` supply `pactree`/`paccache` for ry-install itself; Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)).
+`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib` supplies `pactree`/`paccache` for ry-install itself (`archlinux-contrib` adds community admin scripts the script never invokes); Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)).
 
 | Action | Packages |
 |---|---|
@@ -158,7 +181,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 | `/boot/loader/loader.conf` | systemd-boot loader settings (default entry, timeout, console-mode) |
 | `/etc/kernel/cmdline` | kernel command line: `rw root=UUID` prefix + the 17 `KERNEL_PARAMS` |
 | `/etc/sdboot-manage.conf` | boot-entry generation (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
-| `/etc/mkinitcpio.conf` | initramfs `MODULES` / `HOOKS` / `zstd` compression |
+| `/etc/mkinitcpio.conf` | initramfs `MODULES` / `HOOKS` / `COMPRESSION` (default `zstd`) |
 
 ### System services & network
 
@@ -221,19 +244,6 @@ Boot files must be reverted before step 5 — it regenerates entries from that s
 | MT7925 | panics, low TX power, random deauth (out-of-tree DKMS; fixes landing upstream). The `3 dBm` TX readout is cosmetic — correct power applied. |
 | Strix Halo ACP | no ASoC machine driver — pending upstream (HDMI/USB audio unaffected) |
 | mkinitcpio | `mkinitcpio-generate-shutdown-ramfs.service` can fail at shutdown (upstream unit interaction; not remediated in-tree). Verify: `systemctl status mkinitcpio-generate-shutdown-ramfs.service`. |
-
-### Known-Benign Log Lines
-
-Expected and harmless on this hardware:
-
-| Line | Reason |
-|---|---|
-| `ModemManager1 … could not be found` | probe of masked `modemmanager.service` |
-| `acp_asoc_acp70 … No matching ASoC machine driver` | pending upstream; HDMI/USB audio unaffected |
-| `boltd … unknown NHI PCI id` | USB4/TB devices still enumerate |
-| `charge thresholds not supported` | desktop — no battery |
-| `no backlight interface` | desktop — no panel |
-| `Unlikely small volume range` | USB-audio descriptor quirk |
 
 ## Troubleshooting
 

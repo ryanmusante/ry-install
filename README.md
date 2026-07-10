@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.98.3-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.98.4-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.98.3
+cd ry-install && git checkout v7.98.4
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -31,11 +31,11 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo (non-interactive — a TTY run prompts once via `sudo -v`); NTP sync warns only, and a missing `pactree` warns at package-removal time. An unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
+Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo (non-TTY; a TTY prompts once); NTP sync warns only, and a missing `pactree` warns at package-removal time. An unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
 
 ## BIOS
 
-Firmware-side power/thermal profile this repo assumes on the GTR9 Pro. Beelink ships the box tuned for a [140 W peak](https://www.bee-link.com/products/beelink-gtr9-pro-amd-ryzen-ai-max-395), but Strix Halo multi-thread scaling flattens hard past the mid-80s — community [power-mode testing](https://strixhalo.wiki/Guides/Power-Modes-and-Performance) measures roughly +19% going 55 → 85 W and only ~+12% more for the remaining stretch to 120 W — so `SPL = Fast PPT = Slow PPT = 85 W` buys near-peak throughput at a flat, quiet fan curve. [STAPM](https://skatterbencher.com/amd-precision-boost-2/) exists to decay a laptop's package power toward a chassis skin-temperature target; on a desk box that decay is pure lost performance (the same mobile-silicon carry-over AMD had to [patch out of the 8000G desktop APUs](https://www.techpowerup.com/318566/amd-to-fix-ryzen-8000g-desktop-apu-stapm-feature-via-motherboard-bios-updates)), so the boost/override/time-constant values below neutralize it and the equal PPT limits become the only ceiling. `TjMax 90` holds the junction 10 °C under the silicon's [100 °C limit](https://www.amd.com/en/products/processors/laptop/ryzen/ai-300-series/amd-ryzen-ai-max-plus-395.html) for fan headroom and margin. Option-by-option walkthrough, screenshots, and firmware-version notes: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
+Strix Halo multi-thread gains [flatten](https://strixhalo.wiki/Guides/Power-Modes-and-Performance) past ~85 W (+19% for 55 → 85 W, only ~+12% more to 120 W), so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve. [STAPM](https://skatterbencher.com/amd-precision-boost-2/) decays package power toward a laptop skin-temperature target — meaningless on a desktop — so the boost/time-constant rows zero it; `TjMax 90` leaves 10 °C of headroom under the silicon's 100 °C limit. Full walkthrough, screenshots, firmware notes: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
 `Advanced → SMU Common Options` — power limits in mW, time constants in s, TjMax in °C:
 
@@ -144,7 +144,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib` supplies `pactree`/`paccache` for ry-install itself (`archlinux-contrib` adds community admin scripts the script never invokes); Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)).
+`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib` supplies `pactree`/`paccache` for ry-install itself (`archlinux-contrib`: extra admin scripts, unused here); Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)).
 
 | Action | Packages |
 |---|---|
@@ -213,14 +213,14 @@ Rationale for non-obvious choices; several list an override to reverse.
 
 | Topic | Detail |
 |---|---|
-| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; for larger single allocations (ROCm/llama.cpp) raise the BIOS UMA carveout (up to 96 GiB) — `amdgpu.gttsize` is deprecated. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
+| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise the BIOS UMA carveout (≤96 GiB) for larger single allocations — `amdgpu.gttsize` is deprecated. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 on RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE`. |
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-without-node warn · absent info); guaranteed by the ≥ 6.19 floor. Opt a title out: `PROTON_NO_NTSYNC=1`. |
 | MT7925 ASPM | `disable_aspm=1` via `60-ry-mt7925e.conf` (coredump / BT-reconnect / assoc mitigation; distinct from `wifi.powersave`). Drop once a kernel fix lands. |
 | IPv6 | Disabled via `ipv6.disable=1`; ruleset is IPv4-only. For dual-stack: drop the token, add IPv6 rules, re-run. |
-| Avahi | `.service` + `.socket` masked — a second mDNS responder beside systemd-resolved advertises a colliding `hostname-2.local`; the profile runs mDNS off entirely (`MulticastDNS=no`). Unmask both to restore. |
-| AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi and breaks the XDNA NPU (blacklisted to silence the probe error). NPU/VFIO/SR-IOV: set `amd_iommu=on iommu=pt`, drop `60-ry-blacklist-amdxdna.conf`, re-run. |
-| UMIP (`clearcpuid=umip`) | Disables UMIP trapping (`SGDT`/`SIDT`/`SMSW`); taints the kernel. String form is version-stable (numeric `514` is not). Drop the token if no `umip_printk` stutter appears. |
+| Avahi | `.service`+`.socket` masked — a second mDNS responder collided (`hostname-2.local`); the profile runs mDNS off (`MulticastDNS=no`). Unmask both to restore. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi and breaks the XDNA NPU (hence the blacklist). NPU/VFIO/SR-IOV: set `amd_iommu=on iommu=pt`, drop `60-ry-blacklist-amdxdna.conf`, re-run. |
+| UMIP (`clearcpuid=umip`) | Disables UMIP trapping; taints the kernel. String form is version-stable. Drop the token if no `umip_printk` stutter appears. |
 
 ## Uninstall
 
@@ -241,9 +241,9 @@ Boot files must be reverted before step 5 — it regenerates entries from that s
 
 | Component | Issue |
 |---|---|
-| MT7925 | panics, low TX power, random deauth (out-of-tree DKMS; fixes landing upstream). The `3 dBm` TX readout is cosmetic — correct power applied. |
+| MT7925 | panics, low TX power, random deauth (fixes landing upstream); the `3 dBm` TX readout is cosmetic. |
 | Strix Halo ACP | no ASoC machine driver — pending upstream (HDMI/USB audio unaffected) |
-| mkinitcpio | `mkinitcpio-generate-shutdown-ramfs.service` can fail at shutdown (upstream unit interaction; not remediated in-tree). Verify: `systemctl status mkinitcpio-generate-shutdown-ramfs.service`. |
+| mkinitcpio | `mkinitcpio-generate-shutdown-ramfs.service` can fail at shutdown (upstream; not remediated in-tree). Verify: `systemctl status mkinitcpio-generate-shutdown-ramfs.service`. |
 
 ## Troubleshooting
 
@@ -258,7 +258,7 @@ Boot files must be reverted before step 5 — it regenerates entries from that s
 | BT speaker won't auto-reconnect | `bluetoothctl trust <MAC>`, then power the speaker on after login so it re-initiates |
 
 > [!NOTE]
-> The installer prints missing-group `usermod` commands but never runs them — group changes are inert until re-login and aren't cleanly reversible like the managed configs.
+> The installer prints `usermod` hints but never runs them; group changes need re-login and aren't auto-reverted.
 
 ## Contributing
 

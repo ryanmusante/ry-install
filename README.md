@@ -1,11 +1,11 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.98.6-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.99.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 18 embedded configs, gaming/LLM desktop profile — atomic, byte-verifiable (`--verify`), reversible ([Uninstall](#uninstall)).
+> Idempotent CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs, gaming/LLM desktop profile — atomic, byte-verifiable (`--verify`), reversible ([Uninstall](#uninstall)).
 
 ## Quick Start
 
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.98.6
+cd ry-install && git checkout v7.99.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -91,7 +91,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 |---|---|---|
 | 1 | Preflight | hard gates → lock → config checks (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
-| 3 | Configuration | deploy 18 embedded configs atomically |
+| 3 | Configuration | deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
@@ -172,7 +172,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 
 ## Managed Files
 
-18 embedded config files, in deploy order; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
+17 embedded config files, in deploy order; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
 
 ### Boot & initramfs
 
@@ -202,8 +202,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 | `/etc/default/cpupower-service.conf` | CPU governor (`powersave`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | sysctl tunables (BBR + `fq`, VM, netdev) |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, AMD P-State EPP, GPU DPM |
-| `/etc/modprobe.d/60-ry-mt7925e.conf` | disable PCIe ASPM on MT7925 (stability mitigation) |
-| `/etc/modprobe.d/60-ry-blacklist-amdxdna.conf` | blacklist the XDNA NPU driver (needs IOMMU; unused under `amd_iommu=off`) |
+| `/etc/modprobe.d/60-ry-modules.conf` | module options: MT7925 ASPM off; `amdxdna` blacklist (toggle `BLACKLIST_AMDXDNA`) |
 | `~/.config/environment.d/10-environment.conf` | gaming env vars (RADV, MangoHud, Proton) |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only performance HUD |
 
@@ -216,10 +215,10 @@ Rationale for non-obvious choices; several list an override to reverse.
 | Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise the BIOS UMA carveout (≤96 GiB) for larger single allocations — `amdgpu.gttsize` is deprecated. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 on RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE`. |
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-without-node warn · absent info); guaranteed by the ≥ 6.19 floor. Opt a title out: `PROTON_NO_NTSYNC=1`. |
-| MT7925 ASPM | `disable_aspm=1` via `60-ry-mt7925e.conf` (coredump / BT-reconnect / assoc mitigation; distinct from `wifi.powersave`). Drop once a kernel fix lands. |
+| MT7925 ASPM | `disable_aspm=1` via `60-ry-modules.conf` (coredump / BT-reconnect / assoc mitigation; distinct from `wifi.powersave`). Drop once a kernel fix lands. |
 | IPv6 | Disabled via `ipv6.disable=1`; ruleset is IPv4-only. For dual-stack: drop the token, add IPv6 rules, re-run. |
 | Avahi | `.service`+`.socket` masked — a second mDNS responder collided (`hostname-2.local`); the profile runs mDNS off (`MulticastDNS=no`). Unmask both to restore. |
-| AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi and breaks the XDNA NPU (hence the blacklist). NPU/VFIO/SR-IOV: set `amd_iommu=on iommu=pt`, drop `60-ry-blacklist-amdxdna.conf`, re-run. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi and breaks the XDNA NPU (hence the blacklist). NPU/VFIO/SR-IOV: set `amd_iommu=on iommu=pt` + `BLACKLIST_AMDXDNA false`, re-run. |
 | UMIP (`clearcpuid=umip`) | Disables UMIP trapping; taints the kernel. String form is version-stable. Drop the token if no `umip_printk` stutter appears. |
 
 ## Uninstall

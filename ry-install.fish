@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.98.6 (2026-07-10) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.99.0 (2026-07-10) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.98.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.99.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S%z'
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= # single option-spec source (root-guard + main argparse)
 set -g KERNEL_MIN 6.19 # gfx1151 MES-0x86 amdgpu floor (RTL8127 + suspend fixes sit below)
@@ -596,9 +596,9 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" \
     "/etc/udev/rules.d/99-ry-perf.rules" \
-    "/etc/modprobe.d/60-ry-mt7925e.conf" \
-    "/etc/modprobe.d/60-ry-blacklist-amdxdna.conf"
+    "/etc/modprobe.d/60-ry-modules.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf"
+set -g _RY_LEGACY_DSTS "/etc/modprobe.d/60-ry-mt7925e.conf" "/etc/modprobe.d/60-ry-blacklist-amdxdna.conf" # superseded by 60-ry-modules.conf (7.99.0); removed on install
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set --erase _ry_dst_count
@@ -624,6 +624,7 @@ set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk pro
 set -g EPP_PREFERENCE balance_performance; set -g _RY_EPP_LEVELS default performance balance_performance balance_power power # energy_performance_preference accepted set; udev-pinned per CPU
 set -g EXPECTED_SCALING_DRIVER amd-pstate-epp # verify-only: cpufreq scaling_driver expectation under amd_pstate=active
 set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to nftables input
+set -g BLACKLIST_AMDXDNA true # false + amd_iommu=on iommu=pt enables the XDNA NPU (validator-paired)
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_FSR4_RDNA3_UPGRADE=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
@@ -738,7 +739,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:4 \
         _RY_TMPDIR_GLOBS:6 \
-        SYSTEM_DESTINATIONS:16 \
+        SYSTEM_DESTINATIONS:15 \
         USER_DESTINATIONS:2 \
         MKINITCPIO_COMPRESSION_OPTIONS:2 # drift tripwires; sync arrays + docs on change
     for _kv in $_expect
@@ -747,7 +748,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
     end
 end
 function _ir_validate_keys --description "Refuse deploy on out-of-domain embedded scalar keys"
-    for _k in BT_AUTO_ENABLE BT_FAST_CONNECTABLE RY_REMOTE_PLAY_PORTS
+    for _k in BT_AUTO_ENABLE BT_FAST_CONNECTABLE RY_REMOTE_PLAY_PORTS BLACKLIST_AMDXDNA
         if not contains -- "$$_k" true false; _err_loud "$_k must be true|false (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _k in SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE RESOLVED_MDNS RESOLVED_LLMNR RESOLVED_DOT
@@ -763,6 +764,9 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
     if not string match -qr '^[a-z][a-z0-9_-]*$' -- "$CPUPOWER_GOVERNOR"; _err_loud "CPUPOWER_GOVERNOR must match ^[a-z][a-z0-9_-]*\$ (got: '$CPUPOWER_GOVERNOR') — refuse to deploy (the domain _grep_cpupower_entry accepts)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # IPv4-only ruleset: ICMPv6/ND would hit policy drop
         _err_loud "IPv4-only nftables ruleset requires ipv6.disable=1 in KERNEL_PARAMS — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
+    end
+    if test "$BLACKLIST_AMDXDNA" = false; and contains -- amd_iommu=off $KERNEL_PARAMS # amdxdna probes -EINVAL without the IOMMU
+        _err_loud "BLACKLIST_AMDXDNA=false requires the IOMMU (drop amd_iommu=off; set amd_iommu=on iommu=pt) — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
     end
     for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION EXPECTED_SCALING_DRIVER
         if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -949,15 +953,16 @@ function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate con
         "# GPU performance level (gfx1151 clock-floor; optional)" \
         'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
 end
-function _content__etc_modprobe.d_60-ry-mt7925e.conf --description "Generate content for /etc/modprobe.d/60-ry-mt7925e.conf (disable PCIe ASPM on MT7925; symptomatic reserve fix)"
+function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate content for /etc/modprobe.d/60-ry-modules.conf (MT7925 ASPM off + optional amdxdna blacklist)"
     printf '%s\n' \
+        "# ry-install: module options + blacklist (managed file, do not edit by hand)" \
         "# disable PCIe ASPM on MT7925 (coredump/BT-reconnect/assoc mitigation; drop when upstream fixes)" \
         "options mt7925e disable_aspm=1"
-end
-function _content__etc_modprobe.d_60-ry-blacklist-amdxdna.conf --description "Generate content for /etc/modprobe.d/60-ry-blacklist-amdxdna.conf (blacklist XDNA NPU; needs IOMMU, refused under amd_iommu=off)"
-    printf '%s\n' \
-        "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -EINVAL (ret -22) under amd_iommu=off (NPU unused; drop + set amd_iommu=on iommu=pt to enable)" \
-        "blacklist amdxdna"
+    if test "$BLACKLIST_AMDXDNA" = true # NPU path: BLACKLIST_AMDXDNA=false + amd_iommu=on iommu=pt (validator-paired)
+        printf '%s\n' \
+            "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -EINVAL (ret -22) under amd_iommu=off" \
+            "blacklist amdxdna"
+    end
 end
 # ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
@@ -2353,9 +2358,10 @@ function _vss_nft --description "_verify_static_system sub: nftables default-den
     _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
     _chk_grep /etc/nftables.conf "echo-request" "nftables IPv4 ping accept" # regression guard: inbound ping must stay enabled
 end
-function _vss_modprobe --description "_verify_static_system sub: modprobe drop-ins (mt7925e ASPM disable + amdxdna blacklist)"
-    _chk_file /etc/modprobe.d/60-ry-mt7925e.conf; and _chk_grep /etc/modprobe.d/60-ry-mt7925e.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'
-    _chk_file /etc/modprobe.d/60-ry-blacklist-amdxdna.conf; and _chk_grep /etc/modprobe.d/60-ry-blacklist-amdxdna.conf 'blacklist amdxdna' 'amdxdna blacklisted'
+function _vss_modprobe --description "_verify_static_system sub: modprobe drop-in (mt7925e ASPM off + optional amdxdna blacklist)"
+    _chk_file /etc/modprobe.d/60-ry-modules.conf; or return 0
+    _chk_grep /etc/modprobe.d/60-ry-modules.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'
+    test "$BLACKLIST_AMDXDNA" = true; and _chk_grep /etc/modprobe.d/60-ry-modules.conf 'blacklist amdxdna' 'amdxdna blacklisted'
 end
 
 function _verify_static_system --description "Verify resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, modprobe, nftables"
@@ -2376,7 +2382,7 @@ function _verify_static_system --description "Verify resolved, logind, NM, regdo
     _chk_file /etc/default/cpupower-service.conf; and _chk_grep /etc/default/cpupower-service.conf "GOVERNOR='$CPUPOWER_GOVERNOR'" "GOVERNOR=$CPUPOWER_GOVERNOR"
     _vss_sysctl
     _vss_udev
-    _echo "── modprobe (mt7925e ASPM + amdxdna blacklist) ──"
+    _echo "── modprobe (60-ry-modules.conf) ──"
     _vss_modprobe
     _echo "── nftables ──"
     _vss_nft
@@ -3610,12 +3616,26 @@ function _isf_deploy_set --argument-names use_sudo phase --description "Deploy a
     if test "$_had_failure" = true; _err "$phase file installation failed"; return 1; end
     return 0
 end
+function _isf_remove_legacy --description "Remove superseded managed files (pre-7.99 modprobe drop-ins)"
+    for _lg in $_RY_LEGACY_DSTS
+        sudo -n test -f "$_lg" 2>/dev/null; or continue
+        if _run sudo -n rm -f -- "$_lg"
+            _ok "removed legacy managed file: $_lg"
+            _log "LEGACY_REMOVED: $_lg"
+        else
+            _warn "could not remove legacy managed file: $_lg (remove manually)"
+            _log "LEGACY_REMOVE_FAIL: $_lg"
+        end
+    end
+    return 0
+end
 function _install_system_files --description "Deploy all embedded config files"
     set -l _fn_err false
     _progress Configuration
     _info "Installing system configuration files..."
     _log "=== INSTALL SYSTEM FILES ==="
     if not _isf_deploy_set true System $SYSTEM_DESTINATIONS; set -g INSTALL_HAD_ERRORS true; set _fn_err true; end
+    _isf_remove_legacy # migrate: superseded drop-ins from pre-7.99 layouts
     _info "Installing user configuration files..."
     _log "=== INSTALL USER FILES ==="
     if not _isf_deploy_set false User $USER_DESTINATIONS; set -g INSTALL_HAD_ERRORS true; set _fn_err true; end

@@ -4,6 +4,15 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.99.0 (2026-07-10)
+-------------------
+  - modprobe: merge the two drop-ins into 60-ry-modules.conf
+  - modprobe: add the BLACKLIST_AMDXDNA true|false toggle
+  - validate: refuse BLACKLIST_AMDXDNA=false under amd_iommu=off
+  - install: remove superseded 60-ry-* drop-ins on deploy
+  - guards: managed destinations 18 -> 17
+  - docs: sync managed-files and tuning tables to the merge
+
 7.98.6 (2026-07-10)
 -------------------
   - verify: lsmod-check managed modprobe.d blacklist entries

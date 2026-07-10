@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.98.5 (2026-07-09) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.98.6 (2026-07-10) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.98.5"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.98.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -476,7 +476,7 @@ function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_RUN_TIMEOUT_WARNED _RY_RUN_TIMEOUT_CLAMPED _PROG_CLOCK _PROG_NOW_LAST _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
     set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
-    set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_DEPLOY_CHANGED_DSTS _RY_BOOT_CRIT_HIT
+    set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_DEPLOY_CHANGED_DSTS _RY_BOOT_CRIT_HIT _RY_DEPLOY_TAG
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
     set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_ENVD_BAD_ENTRIES _RY_FSTAB_EVIDENCE _RY_FSTAB_RESULT
     set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE _RY_SDBOOT_REFUSE_FS _RY_NET_FAIL_EVIDENCE
@@ -956,7 +956,7 @@ function _content__etc_modprobe.d_60-ry-mt7925e.conf --description "Generate con
 end
 function _content__etc_modprobe.d_60-ry-blacklist-amdxdna.conf --description "Generate content for /etc/modprobe.d/60-ry-blacklist-amdxdna.conf (blacklist XDNA NPU; needs IOMMU, refused under amd_iommu=off)"
     printf '%s\n' \
-        "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -ENODEV (ret -19) under amd_iommu=off (NPU unused; drop + set amd_iommu=on iommu=pt to enable)" \
+        "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -EINVAL (ret -22) under amd_iommu=off (NPU unused; drop + set amd_iommu=on iommu=pt to enable)" \
         "blacklist amdxdna"
 end
 # ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──
@@ -2157,7 +2157,8 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     if test "$_fin_rc" -ne 0; _rm_tmp "$tmpfile" $use_sudo; return $_fin_rc; end
     _untrack_tmpfile "$tmpfile"
     if test "$_is_bt" = true; and not _awf_postwrite_verify_restore "$dst" $use_sudo; return 1; end
-    _ok "→ $dst"
+    set -l _tag ""; set -q _RY_DEPLOY_TAG; and test -n "$_RY_DEPLOY_TAG"; and set _tag " [$_RY_DEPLOY_TAG]" # caller-scoped deploy label (e.g. pre-Syu seed)
+    _ok "→ $dst$_tag"
     return 0
 end
 function _ry_mkdir_0755 --argument-names use_sudo dir --description "mkdir -p with umask capped at 0022 (own --verify rejects group-writable dirs)"
@@ -2179,7 +2180,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     set -l _new_bytes (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _gen_rc $pipestatus[1]
     if test "$_gen_rc" -eq 0
         set -l _cur_bytes (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _read_rc $pipestatus[1]
-        if test "$_read_rc" -eq 0; and test "$_new_bytes" = "$_cur_bytes"; set -g _RY_DEPLOY_IDEMPOTENT_COUNT (math $_RY_DEPLOY_IDEMPOTENT_COUNT + 1); _ok "→ $dst (unchanged)"; return 0; end
+        if test "$_read_rc" -eq 0; and test "$_new_bytes" = "$_cur_bytes"; set -l _tag ""; set -q _RY_DEPLOY_TAG; and test -n "$_RY_DEPLOY_TAG"; and set _tag " [$_RY_DEPLOY_TAG]"; set -g _RY_DEPLOY_IDEMPOTENT_COUNT (math $_RY_DEPLOY_IDEMPOTENT_COUNT + 1); _ok "→ $dst (unchanged)$_tag"; return 0; end
         test "$_read_rc" -eq 2; and _log "SKIP_PROBE_SUDO_LAPSED: dst=$dst — re-deploying"
     end
     _atomic_write_file "$dst" "$perms" "$use_sudo"
@@ -2793,6 +2794,27 @@ function _vrkm_blacklist --description "_vrk_module_state sub: module_blacklist=
         end
     end
 end
+function _vrkm_blacklist_modprobe --description "_vrk_module_state sub: lsmod-check 'blacklist' entries from managed modprobe.d content"
+    set -l _mods
+    for _dst in $SYSTEM_DESTINATIONS
+        string match -q '*/modprobe.d/*' -- "$_dst"; or continue
+        set -l _content (_ry_get_file_content "$_dst" 2>/dev/null)
+        test "$status" -eq 0; or continue # generator failure: surfaced by static checksum verify
+        for _bl in (string match -rg -- '^[[:space:]]*blacklist[[:space:]]+(\S+)' $_content)
+            contains -- "$_bl" $_mods; or set -a _mods "$_bl"
+        end
+    end
+    test (count $_mods) -eq 0; and return 0 # no managed modprobe.d blacklist entries
+    if not command -q lsmod; _warn "  modprobe.d blacklist: lsmod absent — cannot verify load state"; return 0; end
+    for mod in $_mods
+        set -l _mod_lsmod (string replace -a -- '-' '_' "$mod")
+        if command env LC_ALL=C lsmod 2>/dev/null | command grep -q -- "^$_mod_lsmod "
+            _fail "  $mod: LOADED (modprobe.d blacklist not in effect — reboot pending, or loaded from initramfs)"
+        else
+            _ok "  $mod: not loaded (modprobe.d)"
+        end
+    end
+end
 function _vrk_module_state --description "Runtime kparam check: module parameters + blacklist"
     _echo "MODULE STATE"
     _echo
@@ -2813,6 +2835,7 @@ function _vrk_module_state --description "Runtime kparam check: module parameter
     _echo
     _echo "── Blacklisted modules ──"
     _vrkm_blacklist
+    _vrkm_blacklist_modprobe
     _echo
 end
 
@@ -3546,7 +3569,9 @@ function _install_packages --description "Install managed packages via pacman -S
     _info "Package installation..."
     set -l pkgs_to_install $PKGS_ADD; set -g SYSTEM_UPGRADED false
     _ip_snapshot_mkinitcpio
+    set -g _RY_DEPLOY_TAG "pre-Syu seed" # label the seed deploy line (else indistinguishable from the phase-3 deploy)
     if not _ry_install_file "/etc/mkinitcpio.conf" true
+        set --erase _RY_DEPLOY_TAG
         _err "Failed to pre-deploy mkinitcpio.conf before package install"
         _err "Aborting package installation — mkinitcpio.conf must be in place before -Syu"
         set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
@@ -3556,6 +3581,7 @@ function _install_packages --description "Install managed packages via pacman -S
         _phase_record "Packages: pacman -Syu" FAIL "mkinitcpio.conf pre-deploy failed"
         return 1
     end
+    set --erase _RY_DEPLOY_TAG
     if test (count $pkgs_to_install) -gt 0; _ip_run_and_verify $pkgs_to_install; or set _fn_err true; end
     if set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"
         if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true # failed revert: keep snapshot (tmpfs, lost on reboot)
@@ -4492,7 +4518,7 @@ function _rdi_summary --description "Print final install summary"
         return 0
     end
     _info "Manual steps required:"
-    _info "  1. Run 'rehash' or start new shell (updates command paths)"
+    _info "  1. Start a new shell to pick up new commands (bash: hash -r; fish rescans PATH automatically)"
     _info "  2. REBOOT to apply kernel cmdline and module changes"
     set -l _hint_n 2 # counter keeps hint numbering gap-free
     set -l _post_uname (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}') # single resolve

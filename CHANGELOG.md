@@ -4,6 +4,14 @@ ry-install release notes
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
+7.98.6 (2026-07-10)
+-------------------
+  - verify: lsmod-check managed modprobe.d blacklist entries
+  - packages: tag the pre-Syu mkinitcpio seed log line
+  - docs: shell-aware post-install hint (drop the csh 'rehash')
+  - modprobe: correct the amdxdna errno note (-EINVAL, ret -22)
+  - changelog: fix historical errno and path-builtin version notes
+
 7.98.5 (2026-07-09)
 -------------------
   - docs: drop the Known Issues table; render the fstab heading plain
@@ -62,7 +70,7 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
 7.94.0 - 7.94.5 (2026-07-06 .. 07-07)
 -------------------------------------
   - udev: GPU rule DEVTYPE -> ENV{DEVTYPE}; rule never applied
-  - modprobe: blacklist amdxdna (-ENODEV under amd_iommu=off)
+  - modprobe: blacklist amdxdna (-EINVAL under amd_iommu=off)
   - cmdline: clearcpuid=514 -> clearcpuid=umip (version-stable)
   - kernel: re-scope the 6.19 floor rationale to gfx1151 MES-0x86
   - lock: USER_HZ=100 fallback for PID starttime
@@ -148,7 +156,7 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
   - udev: EPP performance -> balance_performance; 60 -> 99 rules
   - env: add PROTON_FSR4_RDNA3_UPGRADE=1, RY_REMOTE_PLAY_PORTS
   - validate: add the kernel-floor and key validators
-  - compat: command basename over the fish >=3.7 path builtin
+  - compat: command basename over the fish >=3.5 path builtin
 
 7.60.0 - 7.70.1 (2026-06-21 .. 06-24)
 -------------------------------------

@@ -598,7 +598,6 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/udev/rules.d/99-ry-perf.rules" \
     "/etc/modprobe.d/60-ry-modules.conf"
 set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf"
-set -g _RY_LEGACY_DSTS "/etc/modprobe.d/60-ry-mt7925e.conf" "/etc/modprobe.d/60-ry-blacklist-amdxdna.conf" # superseded by 60-ry-modules.conf (7.99.0); removed on install
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set --erase _ry_dst_count
@@ -3616,26 +3615,12 @@ function _isf_deploy_set --argument-names use_sudo phase --description "Deploy a
     if test "$_had_failure" = true; _err "$phase file installation failed"; return 1; end
     return 0
 end
-function _isf_remove_legacy --description "Remove superseded managed files (pre-7.99 modprobe drop-ins)"
-    for _lg in $_RY_LEGACY_DSTS
-        sudo -n test -f "$_lg" 2>/dev/null; or continue
-        if _run sudo -n rm -f -- "$_lg"
-            _ok "removed legacy managed file: $_lg"
-            _log "LEGACY_REMOVED: $_lg"
-        else
-            _warn "could not remove legacy managed file: $_lg (remove manually)"
-            _log "LEGACY_REMOVE_FAIL: $_lg"
-        end
-    end
-    return 0
-end
 function _install_system_files --description "Deploy all embedded config files"
     set -l _fn_err false
     _progress Configuration
     _info "Installing system configuration files..."
     _log "=== INSTALL SYSTEM FILES ==="
     if not _isf_deploy_set true System $SYSTEM_DESTINATIONS; set -g INSTALL_HAD_ERRORS true; set _fn_err true; end
-    _isf_remove_legacy # migrate: superseded drop-ins from pre-7.99 layouts
     _info "Installing user configuration files..."
     _log "=== INSTALL USER FILES ==="
     if not _isf_deploy_set false User $USER_DESTINATIONS; set -g INSTALL_HAD_ERRORS true; set _fn_err true; end

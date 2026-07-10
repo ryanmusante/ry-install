@@ -9,7 +9,7 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
   - modprobe: merge the two drop-ins into 60-ry-modules.conf
   - modprobe: add the BLACKLIST_AMDXDNA true|false toggle
   - validate: refuse BLACKLIST_AMDXDNA=false under amd_iommu=off
-  - install: remove superseded 60-ry-* drop-ins on deploy
+  - docs: note manual removal of the pre-7.99 drop-ins
   - guards: managed destinations 18 -> 17
   - docs: sync managed-files and tuning tables to the merge
 

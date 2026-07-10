@@ -1,56 +1,46 @@
 ry-install release notes
-=========================
+========================
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 Format: - subsystem: imperative summary (single bullet, 72 cols).
 
-7.98.4 (2026-07-09)
+7.98.5 (2026-07-09)
 -------------------
-  - docs: condense the BIOS section; trim README prose and tables
-  - changelog: trim wrapped bullets across historical entries
+  - docs: drop the Known Issues table; render the fstab heading plain
+  - changelog: merge the 7.98.x series; collapse wrapped bullets
 
-7.98.3 (2026-07-09)
--------------------
-  - docs: drop the Known-Benign Log Lines README table
-
-7.98.2 (2026-07-09)
--------------------
-  - verify: compare live COMPRESSION= to MKINITCPIO_COMPRESSION,
-    not a zstd literal
-  - data: hoist EPP_PREFERENCE + EXPECTED_SCALING_DRIVER; enum-gate
-    EPP; align CPUPOWER_GOVERNOR charset with its validator
-  - docs: pactree/paccache credit to pacman-contrib; note root
-    --check exit 3 and the TTY sudo -v prompt; add BIOS section
-
-7.98.0 - 7.98.1 (2026-07-09)
+7.98.0 - 7.98.4 (2026-07-09)
 ----------------------------
+  - verify: compare live COMPRESSION= to MKINITCPIO_COMPRESSION
   - verify: strip inline comments before the token match
-  - preflight: require id(1) in the dependency gate
   - verify: quote the GPU_DPM_LEVEL sysfs comparison
-  - env: drop RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK; the 6.19 floor
-    is unconditional for deploy/--check (--verify warns)
-  - docs: drop the override from --help/README; merge changelog
-    series entries
+  - preflight: require id(1) in the dependency gate
+  - env: drop RY_INSTALL_SKIP_KERNEL_FLOOR_CHECK (floor unconditional)
+  - data: hoist EPP + scaling-driver expectations; enum-gate EPP
+  - data: align CPUPOWER_GOVERNOR charset with its validator
+  - docs: add a condensed BIOS section; trim README prose and tables
+  - docs: credit pactree/paccache to pacman-contrib
+  - docs: note root --check exit 3 and the TTY sudo -v prompt
+  - docs: drop the Known-Benign Log Lines README table
 
 7.97.0 - 7.97.3 (2026-07-08)
 ----------------------------
   - verify: pacman.conf sudo-read fallback + grep/lapse gates
   - verify: Vulkan check reuses the argv installed list
   - verify: _ry_mkinitcpio_array joins multi-line KEY=( ) blocks
-  - env: drop NO_COLOR/TMPDIR/RY_NO_NTP_REMEDIATION overrides,
-    then restore NO_COLOR; pin tmp to /tmp; NTP always remediates
+  - env: drop NO_COLOR/TMPDIR/RY_NO_NTP_REMEDIATION, restore NO_COLOR
+  - env: pin tmp to /tmp; NTP always remediates
   - data: derive _RY_BACKUP_TARGETS from _RY_BOOT_CRITICAL_DSTS
   - run: fold tmpdir redaction to the pinned /tmp pattern
-  - cleanup: hoist the _post_udev probe; move _set_exit; note
-    _installed_bytes text-only
-  - docs: single-line comment pass; trim the environment table
+  - cleanup: hoist the _post_udev probe; move _set_exit
+  - docs: note _installed_bytes text-only; single-line comment pass
+  - docs: trim the environment table
 
 7.96.0 - 7.96.6 (2026-07-07 .. 07-08)
 -------------------------------------
   - services: mask avahi-daemon .service+.socket (MASK 10 -> 12)
   - validate: KERNEL_PARAMS charset [A-Za-z0-9._,=-]
-  - backup: .ry.bak + post-write verify/restore for all 4 boot
-    files
+  - backup: .ry.bak + post-write verify/restore for the 4 boot files
   - files: nft -c pre-validate /etc/nftables.conf before commit
   - services: dedupe the live input-drop probe
   - probes: drop builtin->pipe captures (SIGPIPE risk)
@@ -93,8 +83,8 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
   - validate: metachar-gate boot scalars + COMPRESSION_OPTIONS
   - mkinitcpio: emit COMPRESSION_OPTIONS via string join
   - metachar: PCRE \x27 for quote; drop the fragile requote
-  - packages: add pacman-contrib + archlinux-contrib (17 -> 19);
-    mark PKGS_ADD explicit post-Syu
+  - packages: add pacman-contrib + archlinux-contrib (17 -> 19)
+  - packages: mark PKGS_ADD explicit post-Syu
   - mangohud: reorder gpu_temp; comment cpu_temp; add cpu_power
   - resolve_esp: note the /boot/EFI subdir skip on ext4 /boot
   - cleanup: db.lck grace reaps only -P $fish_pid descendants
@@ -109,8 +99,8 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
 7.87.0 - 7.88.3 (2026-07-01 .. 07-03)
 -------------------------------------
   - guard: refuse stdin/pipe execution
-  - install-file: format-validate before write; loader.conf
-    regenerates sdboot entries only
+  - install-file: format-validate before write
+  - install-file: loader.conf regenerates sdboot entries only
   - run: inline overflow analysis (sha256 + <=10 sampled lines)
   - cmdline: add ipv6.disable=1; IPv4-only ruleset, inbound ping
   - packages: SYSTEM_UPGRADED from a pacman -Q fingerprint
@@ -132,8 +122,7 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
   - udev: EPP rule KERNEL=="cpu[0-9]*" (never fired before)
   - fstab: atime-variant opts trigger rewrite
   - lock: refuse reclaim on garbage pidfile; re-verify owner
-  - backup: skip .ry.bak on inconclusive probe; drop symlink
-    first
+  - backup: skip .ry.bak on inconclusive probe; drop symlink first
   - timeout: clamp RY_RUN_TIMEOUT >9 digits to 2147483647
   - ntp: add RY_NO_NTP_REMEDIATION=1; log the timesyncd enable
   - args: glued short flags resolve first-of -h/-v
@@ -150,10 +139,10 @@ Format: - subsystem: imperative summary (single bullet, 72 cols).
 
 7.71.0 - 7.78.3 (2026-06-26 .. 06-28)
 -------------------------------------
-  - refactor: one-line fn collapse; extract _content_fn_for; drop
-    baloofilerc/_post_baloo/_kb_*/umip fn
-  - cmdline: iommu=pt -> amd_iommu=off; fsck force/repair,
-    max_cstate=1, btusb autosuspend=n; add _vrkm_iommu
+  - refactor: one-line fn collapse; extract _content_fn_for
+  - refactor: drop baloofilerc/_post_baloo/_kb_*/umip fn
+  - cmdline: iommu=pt -> amd_iommu=off; add _vrkm_iommu
+  - cmdline: fsck force/repair, max_cstate=1, btusb autosuspend=n
   - modprobe: add 60-ry-mt7925e.conf (disable_aspm=1)
   - cpupower: governor performance -> powersave
   - udev: EPP performance -> balance_performance; 60 -> 99 rules

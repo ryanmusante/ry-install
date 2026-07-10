@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.98.4-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.98.5-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.98.4
+cd ry-install && git checkout v7.98.5
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -160,7 +160,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
 | Untouched | `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path) |
 
-### `fstab`
+### fstab
 
 | Aspect | Behavior |
 |---|---|
@@ -236,14 +236,6 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 6 | Reboot | `sudo systemctl reboot` |
 
 Boot files must be reverted before step 5 — it regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite (fstab: only if rewritten). If ry-install enabled `systemd-timesyncd`: `sudo systemctl disable --now systemd-timesyncd` (optional).
-
-## Known Issues
-
-| Component | Issue |
-|---|---|
-| MT7925 | panics, low TX power, random deauth (fixes landing upstream); the `3 dBm` TX readout is cosmetic. |
-| Strix Halo ACP | no ASoC machine driver — pending upstream (HDMI/USB audio unaffected) |
-| mkinitcpio | `mkinitcpio-generate-shutdown-ramfs.service` can fail at shutdown (upstream; not remediated in-tree). Verify: `systemctl status mkinitcpio-generate-shutdown-ramfs.service`. |
 
 ## Troubleshooting
 

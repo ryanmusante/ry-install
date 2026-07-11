@@ -132,9 +132,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 ### Globals
 
-Perms: system `0644`, user `0600`. CachyOS divergences:
-
-([Safety & Reliability](#safety--reliability)) |
+Perms: system `0644`, user `0600`. CachyOS divergences: ([Safety & Reliability](#safety--reliability)) |
 
 ### Packages
 

@@ -174,9 +174,6 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 
 17 embedded config files, in deploy order; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
 
-> [!NOTE]
-> Upgrading from ≤ 7.98.x: `60-ry-modules.conf` supersedes two drop-ins — remove them once: `sudo rm /etc/modprobe.d/60-ry-mt7925e.conf /etc/modprobe.d/60-ry-blacklist-amdxdna.conf`
-
 ### Boot & initramfs
 
 | File | Purpose |

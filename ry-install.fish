@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.99.0 (2026-07-10) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.99.1 (2026-07-10) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.99.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.99.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -127,6 +127,8 @@ for _rsc_a in $argv
 end
 set -q _rsc_a; and set --erase _rsc_a
 set --erase _rsc_skip _rsc_after_dd
+set -g _RY_ARGV_CHECK_ONLY false # pre-argparse hint: --check silence must hold before MODE is set
+test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; and set -g _RY_ARGV_CHECK_ONLY true
 if test "$_MY_UID" -eq 0
     if test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; _ry_exit $EXIT_PREFLIGHT; end # --check + valid mode: silent, 3 = cannot probe
     set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) $_RY_ARGPARSE_SPEC -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity argparse in cmd-sub; parent argv intact
@@ -183,14 +185,14 @@ end
 set -gx HOME (string trim -r -c / -- (string trim -- "$HOME"))
 if test -z "$HOME"; or not test -d "$HOME"; echo "[ERR] HOME resolves to empty/non-dir after normalization: '$HOME'" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -g _RY_HOME_DIR "$HOME/ry-install"; set -g LOG_DIR "$_RY_HOME_DIR/logs/$DATE_LABEL"
-set -l _prev_mkdir_umask (umask)
-umask 0077
+set -l _prev_mkdir_umask 022; set -q umask; and set _prev_mkdir_umask $umask # write the umask variable directly: umask(1) is autoloaded — a signal mid-load leaks 'Unknown command' to stderr
+set -g umask 0077
 command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
-    umask $_prev_mkdir_umask
+    set -g umask $_prev_mkdir_umask
     echo "[ERR] Cannot create log directory: $LOG_DIR" >&2
     _ry_exit $EXIT_PREFLIGHT
 end
-umask $_prev_mkdir_umask
+set -g umask $_prev_mkdir_umask
 for _ld_path in "$_RY_HOME_DIR" "$_RY_HOME_DIR/logs" "$LOG_DIR"
     set -l _pre (command stat -c '%a' -- "$_ld_path" 2>/dev/null)
     command chmod -- 700 "$_ld_path" 2>/dev/null
@@ -289,13 +291,13 @@ set -g _CLEANUP_DONE false
 
 # ── INSTANCE LOCK: ATOMIC MKDIR + STALE-PID RECLAIM ──
 function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
-    set -l _prev_umask (umask)
-    umask 0077
+    set -l _prev_umask 022; set -q umask; and set _prev_umask $umask
+    set -g umask 0077
     set -g _RY_LOCK_DIR_OWNED true
     command mkdir -- "$LOCK_DIR" 2>/dev/null
     set -l _mk_rc $status
     test "$_mk_rc" -eq 0; and set -g _RY_LOCK_MKDIR_OK true # beside rc capture: no signal window strands the lock dir
-    umask $_prev_umask
+    set -g umask $_prev_umask
     if test "$_mk_rc" -ne 0
         set --erase _RY_LOCK_DIR_OWNED
         test -d "$LOCK_DIR"; and return 2
@@ -352,7 +354,7 @@ function _lock_pid_started_after --argument-names pid mtime --description "rc 0 
 end
 function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale-lock reclaim)"
     set -g LOCK_DIR "$_RY_HOME_DIR/.lock"; set -g LOCK_FILE "$LOCK_DIR/pid"
-    set -l _lk_um (umask); umask 0077; command mkdir -p -- (command dirname -- "$LOCK_DIR") 2>/dev/null; umask $_lk_um # state dir is 0700 by contract
+    set -l _lk_um 022; set -q umask; and set _lk_um $umask; set -g umask 0077; command mkdir -p -- (command dirname -- "$LOCK_DIR") 2>/dev/null; set -g umask $_lk_um # state dir is 0700 by contract
     _acquire_lock_fresh
     set -l _fresh_rc $status
     test "$_fresh_rc" -eq 0; and return 0
@@ -545,7 +547,10 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     set -g _CLEANUP_DONE true; set -l _sig_label SIG$argv[1]
     string match -q 'SIG*' -- "$argv[1]"; and set _sig_label "$argv[1]"
     test -z "$argv[1]"; and set _sig_label exit
-    if not set -q _RY_OUTPUT_BROKEN; and test "$MODE" != check # --check stays stderr-silent
+    set -l _sig_silent false # --check stays stderr-silent, incl. the bootstrap window before argparse sets MODE
+    test "$MODE" = check; and set _sig_silent true
+    test "$MODE" = bootstrap; and set -q _RY_ARGV_CHECK_ONLY; and test "$_RY_ARGV_CHECK_ONLY" = true; and set _sig_silent true
+    if not set -q _RY_OUTPUT_BROKEN; and test "$_sig_silent" = false
         echo "" >&2
         echo "[WARN] Caught $_sig_label - cleaning up..." >&2
     end
@@ -658,7 +663,7 @@ set -g PKGS_ADD \
     ddcutil \
     nftables \
     pacman-contrib \
-    archlinux-contrib # pacman-contrib supplies pactree/paccache (used by ry-install); archlinux-contrib: community admin scripts (checkservices etc.), not invoked
+    archlinux-contrib # pacman-contrib: pactree/paccache (used here); archlinux-contrib: extra admin scripts, not invoked
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
@@ -1162,11 +1167,11 @@ function _log --description "Append a timestamped JSONL line to LOG_FILE"
     test -n "$LOG_FILE"; or return 0 # skip when LOG_FILE unset
     set -q _RY_LOG_SUPPRESS_CREATE; and test "$_RY_LOG_SUPPRESS_CREATE" = true; and not test -f "$LOG_FILE"; and return 0 # skip lazy-create post-cleanup
     if not test -f "$LOG_FILE"
-        set -l _prev_umask (umask)
-        umask 0177
+        set -l _prev_umask 022; set -q umask; and set _prev_umask $umask
+        set -g umask 0177
         command install -m 0600 -- /dev/null "$LOG_FILE" 2>/dev/null
         set -l _create_rc $status
-        umask $_prev_umask
+        set -g umask $_prev_umask
         if test "$_create_rc" -ne 0; not set -q _RY_LOG_WRITE_FAIL; and set -g _RY_LOG_WRITE_FAIL true; return 0; end
     end
     set -l _ts (command date $_RY_TS_FMT); set -l raw (string join -- " " $argv | string collect); set -l data (_json_str "$raw") # collect keeps embedded \n for _json_str
@@ -2166,14 +2171,14 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     return 0
 end
 function _ry_mkdir_0755 --argument-names use_sudo dir --description "mkdir -p with umask capped at 0022 (own --verify rejects group-writable dirs)"
-    set -l _pmk (umask); umask 0022
+    set -l _pmk 022; set -q umask; and set _pmk $umask; set -g umask 0022
     if test "$use_sudo" = true
         _run sudo -n mkdir -p -m 0755 -- "$dir"
     else
         _run mkdir -p -m 0755 -- "$dir"
     end
     set -l _rc $status
-    umask $_pmk
+    set -g umask $_pmk
     return $_rc
 end
 function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination"
@@ -3574,7 +3579,7 @@ function _install_packages --description "Install managed packages via pacman -S
     _info "Package installation..."
     set -l pkgs_to_install $PKGS_ADD; set -g SYSTEM_UPGRADED false
     _ip_snapshot_mkinitcpio
-    set -g _RY_DEPLOY_TAG "pre-Syu seed" # label the seed deploy line (else indistinguishable from the phase-3 deploy)
+    set -g _RY_DEPLOY_TAG "pre-Syu seed" # tag seed deploy vs phase-3
     if not _ry_install_file "/etc/mkinitcpio.conf" true
         set --erase _RY_DEPLOY_TAG
         _err "Failed to pre-deploy mkinitcpio.conf before package install"
@@ -4907,9 +4912,10 @@ if set -q _flag_install_file
         set -g INSTALL_FILE_TARGET "$_if_val"
     end
 end
+set --erase _RY_ARGV_CHECK_ONLY # MODE is authoritative past this point
 if test (count $argv) -gt 0; echo "[ERR] Unexpected positional argument(s): $argv" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
 if test "$MODE" = check
-    set -q _flag_verbose; and _log "CHECK_VERBOSE_IGNORED: -V/--verbose dropped under --check (silent-probe contract)" # --check ignores -V (silent-probe contract)
+    set -q _flag_verbose; and _log "CHECK_VERBOSE_IGNORED: -V/--verbose dropped under --check (silent-probe contract)"
 else if set -q _flag_verbose; or test "$MODE" != install
     set -g QUIET false
 end
@@ -4931,13 +4937,13 @@ end
 test "$_log_rename_ok" = true; and set -g LOG_FILE "$new_log"
 if test -L "$LOG_FILE"; command rm -f -- "$LOG_FILE" 2>/dev/null; test "$MODE" != check; and echo "[WARN] Pre-existing LOG_FILE was a symlink — removed; will re-create with 0600" >&2; end
 if not test -f "$LOG_FILE"
-    set -l _prev_umask (umask)
-    umask 0177
+    set -l _prev_umask 022; set -q umask; and set _prev_umask $umask
+    set -g umask 0177
     if not command install -m 0600 -- /dev/null "$LOG_FILE" 2>/dev/null
-        if not command touch -- "$LOG_FILE" 2>/dev/null; umask $_prev_umask; echo "[ERR] Failed to create log file: $LOG_FILE" >&2; _ry_exit $EXIT_PREFLIGHT; end
-        if not command chmod -- 600 "$LOG_FILE" 2>/dev/null; umask $_prev_umask; command rm -f -- "$LOG_FILE" 2>/dev/null; echo "[ERR] Failed to set 0600 on log file: $LOG_FILE" >&2; _ry_exit $EXIT_PREFLIGHT; end
+        if not command touch -- "$LOG_FILE" 2>/dev/null; set -g umask $_prev_umask; echo "[ERR] Failed to create log file: $LOG_FILE" >&2; _ry_exit $EXIT_PREFLIGHT; end
+        if not command chmod -- 600 "$LOG_FILE" 2>/dev/null; set -g umask $_prev_umask; command rm -f -- "$LOG_FILE" 2>/dev/null; echo "[ERR] Failed to set 0600 on log file: $LOG_FILE" >&2; _ry_exit $EXIT_PREFLIGHT; end
     end
-    umask $_prev_umask
+    set -g umask $_prev_umask
 else
     command chmod -- 600 "$LOG_FILE" 2>/dev/null
 end

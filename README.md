@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.99.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.99.1-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.99.0
+cd ry-install && git checkout v7.99.1
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -132,7 +132,15 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 ### Globals
 
-Perms: system `0644`, user `0600`.
+Perms: system `0644`, user `0600`. CachyOS divergences:
+
+| Divergence | Value |
+|---|---|
+| `DNSSEC` | `allow-downgrade` (vendor default is DoH) |
+| sysctl priority | `95` — loads after vendor `70-cachyos-settings.conf` |
+| NVMe scheduler | `none` (vendor default is `kyber`) |
+| AMD P-State EPP | `balance_performance` |
+| `sdboot-manage` | `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)) |
 
 ### Packages
 
@@ -165,6 +173,9 @@ Perms: system `0644`, user `0600`.
 ## Managed Files
 
 17 embedded config files, in deploy order; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
+
+> [!NOTE]
+> Upgrading from ≤ 7.98.x: `60-ry-modules.conf` supersedes two drop-ins — remove them once: `sudo rm /etc/modprobe.d/60-ry-mt7925e.conf /etc/modprobe.d/60-ry-blacklist-amdxdna.conf`
 
 ### Boot & initramfs
 

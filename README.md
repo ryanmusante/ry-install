@@ -134,13 +134,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 Perms: system `0644`, user `0600`. CachyOS divergences:
 
-| Divergence | Value |
-|---|---|
-| `DNSSEC` | `allow-downgrade` (vendor default is DoH) |
-| sysctl priority | `95` — loads after vendor `70-cachyos-settings.conf` |
-| NVMe scheduler | `none` (vendor default is `kyber`) |
-| AMD P-State EPP | `balance_performance` |
-| `sdboot-manage` | `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)) |
+([Safety & Reliability](#safety--reliability)) |
 
 ### Packages
 
@@ -173,9 +167,6 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 ## Managed Files
 
 17 embedded config files, in deploy order; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
-
-> [!NOTE]
-> Upgrading from ≤ 7.98.x: `60-ry-modules.conf` supersedes two drop-ins — remove them once: `sudo rm /etc/modprobe.d/60-ry-mt7925e.conf /etc/modprobe.d/60-ry-blacklist-amdxdna.conf`
 
 ### Boot & initramfs
 

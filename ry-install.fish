@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.99.1 (2026-07-10) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.100.0 (2026-07-11) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.99.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.100.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -12,7 +12,7 @@ set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= # single option-spec source (root-guard + main argparse)
-set -g KERNEL_MIN 6.19 # gfx1151 MES-0x86 amdgpu floor (RTL8127 + suspend fixes sit below)
+set -g KERNEL_MIN 6.19 # gfx1151 post-0x83 MES amdgpu floor — 0x83 reverted upstream 2025-12-01 (RTL8127 + suspend fixes land <=6.18)
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -641,7 +641,7 @@ set -g SYSCTL_VALUES \
     "net.ipv4.tcp_slow_start_after_idle=0" \
     "vm.compaction_proactiveness=0" \
     "vm.max_map_count=2147483642" \
-    "vm.swappiness=150" # netdev=2.5GbE, max_map_count=esync, swappiness=150=zram
+    "vm.swappiness=150" # netdev=10GbE (RTL8127), max_map_count=esync, swappiness=150=zram
 
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) ──
 set -g PKGS_ADD \
@@ -662,8 +662,7 @@ set -g PKGS_ADD \
     realtime-privileges \
     ddcutil \
     nftables \
-    pacman-contrib \
-    archlinux-contrib # pacman-contrib: pactree/paccache (used here); archlinux-contrib: extra admin scripts, not invoked
+    pacman-contrib # pactree/paccache (used here)
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
@@ -731,7 +730,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:11 \
         SYSCTL_VALUES:9 \
-        PKGS_ADD:19 \
+        PKGS_ADD:18 \
         PKGS_DEL:9 \
         MASK:12 \
         EXPECTED_VULKAN_PKGS:2 \
@@ -795,7 +794,7 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
             _log "KERNEL_FLOOR_UNREADABLE_VERIFY: uname -r='$_kr'"
         else # fail-closed: unreadable release refuses deploy
             _err_loud "Kernel floor: release unreadable from uname -r ('$_kr') — refusing to deploy"
-            _err_loud_cont "  gfx1151 MES-0x86 firmware needs >=$KERNEL_MIN amdgpu for native support. Deploying below risks GPU hang."
+            _err_loud_cont "  gfx1151 post-0x83 MES firmware needs >=$KERNEL_MIN amdgpu for native support. Deploying below risks GPU hang."
             _pre_dispatch_exit $EXIT_PREFLIGHT
         end
         return 0
@@ -807,7 +806,7 @@ function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy 
             _log "KERNEL_FLOOR_BELOW_VERIFY: running=$_kver min=$KERNEL_MIN"
         else
             _err_loud "Kernel floor: running $_kver, profile $PROFILE_NAME requires >=$KERNEL_MIN — refusing to deploy"
-            _err_loud_cont "  gfx1151 MES-0x86 amdgpu native support requires >=$KERNEL_MIN (RTL8127 r8169 support and suspend-hang fix ae1737e7339b already present below this floor)."
+            _err_loud_cont "  gfx1151 post-0x83 MES amdgpu native support requires >=$KERNEL_MIN (RTL8127 r8169 support and suspend-hang fix ae1737e7339b already present below this floor)."
             _pre_dispatch_exit $EXIT_PREFLIGHT
         end
     end
@@ -1704,7 +1703,7 @@ function _ry_check_time_sync --description "Verify NTP sync; remediate via times
     _warn "  Time sync: clock NOT NTP-synchronized (NTPSynchronized=$_synced) — pacman signature checks can fail"
     _log "TIME_SYNC_UNSYNCED: NTPSynchronized=$_synced"
     if not command -q systemctl; _info "    systemctl absent — start an NTP client manually"; return 1; end
-    for _ntp_alt in chronyd.service ntpd.service # never stack timesyncd on existing NTP client
+    for _ntp_alt in chronyd.service ntpd.service openntpd.service # never stack timesyncd on existing NTP client
         set -l _alt_en (command systemctl is-enabled -- $_ntp_alt 2>/dev/null | string trim --)
         set -l _alt_act (command systemctl is-active -- $_ntp_alt 2>/dev/null | string trim --)
         if begin; test -n "$_alt_en"; and not contains -- "$_alt_en" disabled masked not-found; end; or contains -- "$_alt_act" active activating
@@ -2367,6 +2366,15 @@ function _vss_modprobe --description "_verify_static_system sub: modprobe drop-i
     _chk_grep /etc/modprobe.d/60-ry-modules.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'
     test "$BLACKLIST_AMDXDNA" = true; and _chk_grep /etc/modprobe.d/60-ry-modules.conf 'blacklist amdxdna' 'amdxdna blacklisted'
 end
+function _vss_modprobe_leftovers --description "_verify_static_system sub: warn on superseded pre-7.99 modprobe drop-ins"
+    for _lf in /etc/modprobe.d/60-ry-mt7925e.conf /etc/modprobe.d/60-ry-blacklist-amdxdna.conf
+        if test -e "$_lf"
+            _warn "  $_lf: superseded pre-7.99 drop-in present — remove once: sudo rm $_lf"
+            _log "MODPROBE_LEFTOVER: $_lf"
+        end
+    end
+    return 0
+end
 
 function _verify_static_system --description "Verify resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, modprobe, nftables"
     _echo "SYSTEM CONFIGURATION"
@@ -2388,6 +2396,7 @@ function _verify_static_system --description "Verify resolved, logind, NM, regdo
     _vss_udev
     _echo "── modprobe (60-ry-modules.conf) ──"
     _vss_modprobe
+    _vss_modprobe_leftovers
     _echo "── nftables ──"
     _vss_nft
 end
@@ -3278,7 +3287,7 @@ function _vrs_parent_dirs --description "Runtime session check: parent dirs of m
 end
 
 # ── VERIFY-RUNTIME: SESSION ORCHESTRATOR (_verify_runtime_session) ──
-function _verify_runtime_session --description "Verify NM connection perms, installed-file perms, parent dirs, Vulkan packages"
+function _verify_runtime_session --description "Verify NM connection perms, installed-file perms, parent dirs"
     _echo "FILE PERMISSIONS"
     _echo "── Sensitive files ──"
     _vrs_nm_perms

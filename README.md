@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.99.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.100.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.99.1
+cd ry-install && git checkout v7.100.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -103,6 +103,8 @@ Results print to stderr; a JSONL log records each phase. `WARN` keeps exit 0; `D
 > [!WARNING]
 > Masks `ufw` and ships an IPv4-only nftables default-deny-inbound ruleset (loopback, established/related, inbound ping accepted; `forward` drop, `output` accept). IPv6 disabled system-wide (`ipv6.disable=1`).
 
+The fallback BLS entry boots with `LINUX_FALLBACK_OPTIONS="quiet"` only: IPv6 and AMD-Vi return to kernel defaults while the IPv4-only ruleset still applies; the `amdxdna` blacklist (`modprobe.d`) remains active.
+
 Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play accepts.
 
 | Feature | Detail |
@@ -144,11 +146,11 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib` supplies `pactree`/`paccache` for ry-install itself (`archlinux-contrib`: extra admin scripts, unused here); Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)).
+`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib` supplies `pactree`/`paccache` for ry-install itself; Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)). Existing installs: `archlinux-contrib` is no longer managed — optional one-time `sudo pacman -Rns archlinux-contrib`.
 
 | Action | Packages |
 |---|---|
-| Install | gaming (`cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`) · CLI (`fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`) · hardware (`nvme-cli`, `lm_sensors`, `ddcutil`) · RT audio (`rtkit`, `realtime-privileges`) · firewall (`nftables`) · contrib (`pacman-contrib`, `archlinux-contrib`) |
+| Install | gaming (`cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`) · CLI (`fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`) · hardware (`nvme-cli`, `lm_sensors`, `ddcutil`) · RT audio (`rtkit`, `realtime-privileges`) · firewall (`nftables`) · contrib (`pacman-contrib`) |
 | Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (chwd Vulkan drivers) |
 
@@ -173,6 +175,9 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 ## Managed Files
 
 17 embedded config files, in deploy order; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
+
+> [!NOTE]
+> Upgrading from ≤ 7.98.x: `60-ry-modules.conf` supersedes two drop-ins — remove them once: `sudo rm /etc/modprobe.d/60-ry-mt7925e.conf /etc/modprobe.d/60-ry-blacklist-amdxdna.conf`
 
 ### Boot & initramfs
 
@@ -215,6 +220,7 @@ Rationale for non-obvious choices; several list an override to reverse.
 | Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise the BIOS UMA carveout (≤96 GiB) for larger single allocations — `amdgpu.gttsize` is deprecated. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 on RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE`. |
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-without-node warn · absent info); guaranteed by the ≥ 6.19 floor. Opt a title out: `PROTON_NO_NTSYNC=1`. |
+| MangoHud `cpu_temp` | Ships disabled: re-enabling `cpu_temp` re-trips [MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794) (`cpu_power` reads 0 when `cpu_temp` is enabled on Zen 5). |
 | MT7925 ASPM | `disable_aspm=1` via `60-ry-modules.conf` (coredump / BT-reconnect / assoc mitigation; distinct from `wifi.powersave`). Drop once a kernel fix lands. |
 | IPv6 | Disabled via `ipv6.disable=1`; ruleset is IPv4-only. For dual-stack: drop the token, add IPv6 rules, re-run. |
 | Avahi | `.service`+`.socket` masked — a second mDNS responder collided (`hostname-2.local`); the profile runs mDNS off (`MulticastDNS=no`). Unmask both to restore. |

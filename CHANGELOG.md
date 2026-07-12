@@ -3,6 +3,17 @@ ry-install release notes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.100.0 (2026-07-11)
+--------------------
+  - kernel: re-anchor MES floor label to post-0x83 evidence (0x83 reverted upstream 2025-12-01)
+  - sysctl: correct netdev comment 2.5GbE -> 10GbE (RTL8127)
+  - verify: trim stale Vulkan mention from runtime-session description
+  - ntp: scan openntpd.service in the NTP-client conflict guard
+  - packages: drop archlinux-contrib (PKGS_ADD 19 -> 18; nothing invokes it)
+  - verify: warn on superseded pre-7.99 modprobe drop-ins
+  - docs: note fallback-entry IPv6/IOMMU exposure; cpu_temp #1794 caveat
+  - docs: bump version pins
+
 7.99.1 (2026-07-10)
 -------------------
   - signal: hold --check stderr-silence through the pre-argparse window

@@ -3,6 +3,15 @@ ry-install release notes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.102.0 (2026-07-12)
+--------------------
+  - boot: switch pcie_aspm.policy=performance to pcie_aspm=off
+  - env.d: add VKD3D_CONFIG=descriptor_heap
+  - sysctl: add vm.watermark_boost_factor=0
+  - modprobe: drop mt7925e disable_aspm=1 (covered by pcie_aspm=off)
+  - validate: accept comment-only modprobe drop-in
+  - docs: sync tables; bump version pins
+
 7.101.0 (2026-07-12)
 --------------------
   - comments: trim verbose inline notes to vital rationale

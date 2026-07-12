@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.101.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.102.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.101.0
+cd ry-install && git checkout v7.102.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -204,8 +204,8 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 | `/etc/default/cpupower-service.conf` | CPU governor (`powersave`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | sysctl tunables (BBR + `fq`, VM, netdev) |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, AMD P-State EPP, GPU DPM |
-| `/etc/modprobe.d/60-ry-modules.conf` | module options: MT7925 ASPM off; `amdxdna` blacklist (toggle `BLACKLIST_AMDXDNA`) |
-| `~/.config/environment.d/10-environment.conf` | gaming env vars (RADV, MangoHud, Proton) |
+| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist (toggle `BLACKLIST_AMDXDNA`) |
+| `~/.config/environment.d/10-environment.conf` | gaming env vars (RADV, MangoHud, Proton, VKD3D) |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only performance HUD |
 
 ## Tuning Notes
@@ -218,7 +218,7 @@ Rationale for non-obvious choices; several list an override to reverse.
 | FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 on RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE`. |
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-without-node warn · absent info); guaranteed by the ≥ 6.19 floor. Opt a title out: `PROTON_NO_NTSYNC=1`. |
 | MangoHud `cpu_temp` | Ships disabled: re-enabling `cpu_temp` re-trips [MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794) (`cpu_power` reads 0 when `cpu_temp` is enabled on Zen 5). |
-| MT7925 ASPM | `disable_aspm=1` via `60-ry-modules.conf` (coredump / BT-reconnect / assoc mitigation; distinct from `wifi.powersave`). Drop once a kernel fix lands. |
+| PCIe ASPM | `pcie_aspm=off` disables ASPM link-power management globally (MT7925 coredump / BT-reconnect / assoc mitigation, plus NVMe latency). For power savings on battery-less desktop this is intentional; drop the token to restore kernel ASPM defaults. |
 | IPv6 | Disabled via `ipv6.disable=1`; ruleset is IPv4-only. For dual-stack: drop the token, add IPv6 rules, re-run. |
 | Avahi | `.service`+`.socket` masked — a second mDNS responder collided (`hostname-2.local`); the profile runs mDNS off (`MulticastDNS=no`). Unmask both to restore. |
 | AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi and breaks the XDNA NPU (hence the blacklist). NPU/VFIO/SR-IOV: set `amd_iommu=on iommu=pt` + `BLACKLIST_AMDXDNA false`, re-run. |

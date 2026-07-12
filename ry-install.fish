@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.102.1 (2026-07-12) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.102.2 (2026-07-12) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.102.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.102.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -2573,8 +2573,6 @@ function _ry_verify_static --description "Verify installed configs: boot, system
     _verify_static_checksum
     _log_section "STATIC VERIFICATION END"
     _verify_summary
-    set -l ret $status
-    return $ret
 end
 
 # ── --CHECK MODE: SILENT IDEMPOTENCY PROBE ──
@@ -3304,8 +3302,6 @@ function _ry_verify_runtime --description "Verify runtime kernel params, service
     _verify_runtime_session
     _log_section "RUNTIME VERIFICATION END"
     _verify_summary
-    set -l ret $status
-    return $ret
 end
 function _ry_verify_all --description "Verify both: static configs + runtime state; FAIL if either fails. Footer = combined counts"
     _ry_verify_static; set -l _rc_s $status

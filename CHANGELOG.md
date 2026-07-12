@@ -3,6 +3,12 @@ ry-install release notes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.102.2 (2026-07-12)
+--------------------
+  - verify: drop redundant return-value temp in static/runtime teardown (no behavior change)
+  - docs: trim Tuning Notes prose to vital points
+  - docs: bump version pins
+
 7.102.1 (2026-07-12)
 --------------------
   - docs: trim BIOS, safety-fallback, and packages prose to vital points

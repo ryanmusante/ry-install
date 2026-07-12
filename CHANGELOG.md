@@ -10,8 +10,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - verify: trim stale Vulkan mention from runtime-session description
   - ntp: scan openntpd.service in the NTP-client conflict guard
   - packages: drop archlinux-contrib (PKGS_ADD 19 -> 18; nothing invokes it)
-  - verify: warn on superseded pre-7.99 modprobe drop-ins
   - docs: note fallback-entry IPv6/IOMMU exposure; cpu_temp #1794 caveat
+  - docs: drop the pre-7.99 modprobe drop-in removal note
   - docs: bump version pins
 
 7.99.1 (2026-07-10)

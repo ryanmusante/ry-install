@@ -2366,15 +2366,6 @@ function _vss_modprobe --description "_verify_static_system sub: modprobe drop-i
     _chk_grep /etc/modprobe.d/60-ry-modules.conf 'options mt7925e disable_aspm=1' 'mt7925e disable_aspm=1'
     test "$BLACKLIST_AMDXDNA" = true; and _chk_grep /etc/modprobe.d/60-ry-modules.conf 'blacklist amdxdna' 'amdxdna blacklisted'
 end
-function _vss_modprobe_leftovers --description "_verify_static_system sub: warn on superseded pre-7.99 modprobe drop-ins"
-    for _lf in /etc/modprobe.d/60-ry-mt7925e.conf /etc/modprobe.d/60-ry-blacklist-amdxdna.conf
-        if test -e "$_lf"
-            _warn "  $_lf: superseded pre-7.99 drop-in present — remove once: sudo rm $_lf"
-            _log "MODPROBE_LEFTOVER: $_lf"
-        end
-    end
-    return 0
-end
 
 function _verify_static_system --description "Verify resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, modprobe, nftables"
     _echo "SYSTEM CONFIGURATION"
@@ -2396,7 +2387,6 @@ function _verify_static_system --description "Verify resolved, logind, NM, regdo
     _vss_udev
     _echo "── modprobe (60-ry-modules.conf) ──"
     _vss_modprobe
-    _vss_modprobe_leftovers
     _echo "── nftables ──"
     _vss_nft
 end

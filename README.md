@@ -19,7 +19,9 @@ chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-**In scope:** kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, gaming env vars, MangoHud, pacman add/remove, and sdboot-manage BLS entries. **Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, and UKI.
+**In scope:** kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, gaming env vars, MangoHud, pacman add/remove, and sdboot-manage BLS entries. 
+
+**Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, and UKI.
 
 ## Requirements
 
@@ -146,7 +148,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib` supplies `pactree`/`paccache` for ry-install itself; Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)). |
+`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib` supplies `pactree`/`paccache` for ry-install itself; Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)).
 
 | Action | Packages |
 |---|---|

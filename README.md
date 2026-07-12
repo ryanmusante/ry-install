@@ -146,7 +146,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib` supplies `pactree`/`paccache` for ry-install itself; Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)). 
+`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib` supplies `pactree`/`paccache` for ry-install itself; Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)). |
 
 | Action | Packages |
 |---|---|

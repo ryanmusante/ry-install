@@ -1,11 +1,11 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.100.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.101.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs, gaming/LLM desktop profile — atomic, byte-verifiable (`--verify`), reversible ([Uninstall](#uninstall)).
+> Idempotent CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable (`--verify`), reversible ([Uninstall](#uninstall)).
 
 ## Quick Start
 
@@ -14,14 +14,12 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.100.0
+cd ry-install && git checkout v7.101.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-**In scope:** kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, gaming env vars, MangoHud, pacman add/remove, and sdboot-manage BLS entries. 
-
-**Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, and UKI.
+**In scope:** kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, gaming env vars, MangoHud, pacman add/remove, and sdboot-manage BLS entries. **Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, and UKI.
 
 ## Requirements
 
@@ -33,11 +31,11 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo (non-TTY; a TTY prompts once); NTP sync warns only, and a missing `pactree` warns at package-removal time. An unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
+Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo (non-TTY; a TTY prompts once). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
 
 ## BIOS
 
-Strix Halo multi-thread gains [flatten](https://strixhalo.wiki/Guides/Power-Modes-and-Performance) past ~85 W (+19% for 55 → 85 W, only ~+12% more to 120 W), so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve. [STAPM](https://skatterbencher.com/amd-precision-boost-2/) decays package power toward a laptop skin-temperature target — meaningless on a desktop — so the boost/time-constant rows zero it; `TjMax 90` leaves 10 °C of headroom under the silicon's 100 °C limit. Full walkthrough, screenshots, firmware notes: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
+Strix Halo multi-thread gains [flatten](https://strixhalo.wiki/Guides/Power-Modes-and-Performance) past ~85 W, so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve. [STAPM](https://skatterbencher.com/amd-precision-boost-2/) targets a laptop skin temperature (meaningless on a desktop), so the boost/time-constant rows zero it; `TjMax 90` leaves 10 °C under the 100 °C silicon limit. Full walkthrough and firmware notes: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
 `Advanced → SMU Common Options` — power limits in mW, time constants in s, TjMax in °C:
 
@@ -148,7 +146,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree`. `pacman-contrib` supplies `pactree`/`paccache` for ry-install itself; Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan any that arrived as a dependency. Reversible ([Uninstall](#uninstall)).
+`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan one that arrived as a dependency. Reversible ([Uninstall](#uninstall)). Existing installs: `archlinux-contrib` is no longer managed — optional one-time `sudo pacman -Rns archlinux-contrib`.
 
 | Action | Packages |
 |---|---|

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.100.0 (2026-07-11) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.101.0 (2026-07-12) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.100.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.101.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -185,7 +185,7 @@ end
 set -gx HOME (string trim -r -c / -- (string trim -- "$HOME"))
 if test -z "$HOME"; or not test -d "$HOME"; echo "[ERR] HOME resolves to empty/non-dir after normalization: '$HOME'" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -g _RY_HOME_DIR "$HOME/ry-install"; set -g LOG_DIR "$_RY_HOME_DIR/logs/$DATE_LABEL"
-set -l _prev_mkdir_umask 022; set -q umask; and set _prev_mkdir_umask $umask # write the umask variable directly: umask(1) is autoloaded — a signal mid-load leaks 'Unknown command' to stderr
+set -l _prev_mkdir_umask 022; set -q umask; and set _prev_mkdir_umask $umask # set umask var directly; umask(1) is autoloaded and a mid-load signal leaks to stderr
 set -g umask 0077
 command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
     set -g umask $_prev_mkdir_umask
@@ -547,7 +547,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     set -g _CLEANUP_DONE true; set -l _sig_label SIG$argv[1]
     string match -q 'SIG*' -- "$argv[1]"; and set _sig_label "$argv[1]"
     test -z "$argv[1]"; and set _sig_label exit
-    set -l _sig_silent false # --check stays stderr-silent, incl. the bootstrap window before argparse sets MODE
+    set -l _sig_silent false # --check stays stderr-silent even before argparse sets MODE
     test "$MODE" = check; and set _sig_silent true
     test "$MODE" = bootstrap; and set -q _RY_ARGV_CHECK_ONLY; and test "$_RY_ARGV_CHECK_ONLY" = true; and set _sig_silent true
     if not set -q _RY_OUTPUT_BROKEN; and test "$_sig_silent" = false
@@ -961,7 +961,7 @@ function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate con
         "# ry-install: module options + blacklist (managed file, do not edit by hand)" \
         "# disable PCIe ASPM on MT7925 (coredump/BT-reconnect/assoc mitigation; drop when upstream fixes)" \
         "options mt7925e disable_aspm=1"
-    if test "$BLACKLIST_AMDXDNA" = true # NPU path: BLACKLIST_AMDXDNA=false + amd_iommu=on iommu=pt (validator-paired)
+    if test "$BLACKLIST_AMDXDNA" = true # false = NPU path (see BLACKLIST_AMDXDNA global)
         printf '%s\n' \
             "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -EINVAL (ret -22) under amd_iommu=off" \
             "blacklist amdxdna"

@@ -3,6 +3,13 @@ ry-install release notes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.102.1 (2026-07-12)
+--------------------
+  - docs: trim BIOS, safety-fallback, and packages prose to vital points
+  - docs: name the deploy gate key/count (keys + counts, two validators)
+  - docs: normalize countable numerals to digits
+  - docs: bump version pins
+
 7.102.0 (2026-07-12)
 --------------------
   - boot: switch pcie_aspm.policy=performance to pcie_aspm=off

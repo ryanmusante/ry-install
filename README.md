@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.102.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.102.1-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.102.0
+cd ry-install && git checkout v7.102.1
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -35,7 +35,7 @@ Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected),
 
 ## BIOS
 
-Strix Halo multi-thread gains [flatten](https://strixhalo.wiki/Guides/Power-Modes-and-Performance) past ~85 W, so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve. [STAPM](https://skatterbencher.com/amd-precision-boost-2/) targets a laptop skin temperature (meaningless on a desktop), so the boost/time-constant rows zero it; `TjMax 90` leaves 10 °C under the 100 °C silicon limit. Full walkthrough and firmware notes: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
+Strix Halo multi-thread gains [flatten](https://strixhalo.wiki/Guides/Power-Modes-and-Performance) past ~85 W, so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve. [STAPM](https://skatterbencher.com/amd-precision-boost-2/) tracks a laptop skin temperature (irrelevant on a desktop), so the boost/time-constant rows zero it; `TjMax 90` holds 10 °C under the silicon limit. Full walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
 `Advanced → SMU Common Options` — power limits in mW, time constants in s, TjMax in °C:
 
@@ -71,7 +71,7 @@ Strix Halo multi-thread gains [flatten](https://strixhalo.wiki/Guides/Power-Mode
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` hard-gate hardware/kernel-floor/key-count (exit 3); `--verify` downgrades hardware and kernel floor to warnings.
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` hard-gate hardware, kernel floor, and key/count invariants (exit 3); `--verify` downgrades hardware and kernel floor to warnings.
 
 ### Environment Overrides
 
@@ -103,7 +103,7 @@ Results print to stderr; a JSONL log records each phase. `WARN` keeps exit 0; `D
 > [!WARNING]
 > Masks `ufw` and ships an IPv4-only nftables default-deny-inbound ruleset (loopback, established/related, inbound ping accepted; `forward` drop, `output` accept). IPv6 disabled system-wide (`ipv6.disable=1`).
 
-The fallback BLS entry boots with `LINUX_FALLBACK_OPTIONS="quiet"` only: IPv6 and AMD-Vi return to kernel defaults while the IPv4-only ruleset still applies; the `amdxdna` blacklist (`modprobe.d`) remains active.
+The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and AMD-Vi revert to kernel defaults, though the IPv4-only ruleset and the `amdxdna` blacklist still apply.
 
 Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play accepts.
 
@@ -146,7 +146,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan one that arrived as a dependency. Reversible ([Uninstall](#uninstall)). Existing installs: `archlinux-contrib` is no longer managed — optional one-time `sudo pacman -Rns archlinux-contrib`.
+`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan a dependency-installed one. Reversible ([Uninstall](#uninstall)). Existing installs: `archlinux-contrib` is no longer managed — optional `sudo pacman -Rns archlinux-contrib`.
 
 | Action | Packages |
 |---|---|
@@ -231,7 +231,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | # | Step | Action |
 |---|---|---|
 | 1 | Unmask units | `sudo systemctl unmask` all 12 masked units — exact set in [Units](#units) |
-| 2 | Remove configs | `sudo rm` managed system files + `rm` the 2 user files — skip the four boot files (step 3 reverts them) |
+| 2 | Remove configs | `sudo rm` managed system files + `rm` the 2 user files — skip the 4 boot files (step 3 reverts them) |
 | 3 | Revert boot files + fstab | `.ry.bak` → `loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `mkinitcpio.conf`, `/etc/fstab` (if present); then delete the `.ry.bak` files |
 | 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** row, `pacman -Rns` the **Install** row — exact lists in [Packages](#packages) |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |

@@ -39,7 +39,7 @@ Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected) 
 The walkthrough below is collapsible — click/tap the summary to expand.
 
 <details>
-<summary>85 W power ceiling — 13 SMU settings</summary>
+<summary>85 W power ceiling — 14 SMU settings</summary>
 
 Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve; per-setting rationale is in the Note column. Full rationale + walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
@@ -154,6 +154,8 @@ All tunables are `set -g` globals near the top of the script — no external con
 | RT audio | `rtkit`, `realtime-privileges` |
 | Firewall | `nftables` |
 | Contrib | `pacman-contrib` |
+
+**Remove & verify:**
 
 | Action | Packages |
 |---|---|

@@ -3,8 +3,9 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.105.5 - 7.105.8 (2026-07-14)
+7.105.5 - 7.105.9 (2026-07-14)
 ------------------------------
+  - readme: Globals table -> prose (values unchanged); Managed Files split into Boot/System/User tables (17 rows, deploy order kept)
   - exit codes: annotate EXIT_GEN_11-14 + EXIT_RUN_TMPFAIL 251 as internal-only sentinels (parity with the 250/255 note); no behavior change
   - lock: document mkdir+pidfile rationale above _acquire_lock (flock intentionally not used)
   - packaging: release archive now store-mode (zip -0) per archive convention

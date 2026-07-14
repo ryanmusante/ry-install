@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.105.8-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.105.9-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.105.8
+cd ry-install && git checkout v7.105.9
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -132,15 +132,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 ### Globals
 
-CachyOS divergences:
-
-| Divergence | Value |
-|---|---|
-| `DNSSEC` | `allow-downgrade` (vendor default is DoH) |
-| sysctl priority | `95` — loads after vendor `70-cachyos-settings.conf` |
-| NVMe scheduler | `none` (vendor default is `kyber`) |
-| AMD P-State EPP | `balance_performance` |
-| `sdboot-manage` | `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)) |
+CachyOS divergences: `DNSSEC=allow-downgrade` (vendor default is DoH); sysctl priority `95`, loading after vendor `70-cachyos-settings.conf`; NVMe scheduler `none` (vendor default is `kyber`); AMD P-State EPP `balance_performance`; `sdboot-manage` `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)).
 
 ### Packages
 
@@ -166,7 +158,9 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 
 ## Managed Files
 
-17 embedded configs, in deploy order ([`--verify`](#usage) checks all, `--install-file` re-deploys one):
+17 embedded configs, in deploy order ([`--verify`](#usage) checks all, `--install-file` re-deploys one): 4 boot-critical (`.ry.bak`-backed), 11 system, 2 user.
+
+### Boot files
 
 | File | Purpose |
 |---|---|
@@ -174,6 +168,11 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 | `/etc/kernel/cmdline` | `rw root=UUID` + the 17 `KERNEL_PARAMS` |
 | `/etc/sdboot-manage.conf` | entry gen (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES`/`HOOKS`/`COMPRESSION` (`zstd`) |
+
+### System files
+
+| File | Purpose |
+|---|---|
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | `DNSSEC=allow-downgrade`, no mDNS/LLMNR/DoT |
 | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | ignore power/suspend/hibernate/reboot keys |
 | `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | silence info-level `nm-dispatcher` noise |
@@ -185,6 +184,11 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 | `/etc/sysctl.d/95-ry-overrides.conf` | BBR + `fq`, VM, netdev tunables |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe sched `none`, P-State EPP, GPU DPM |
 | `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist (`BLACKLIST_AMDXDNA`) |
+
+### User files
+
+| File | Purpose |
+|---|---|
 | `~/.config/environment.d/10-environment.conf` | gaming env (RADV, MangoHud, Proton, VKD3D) |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only HUD |
 

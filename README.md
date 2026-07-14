@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.105.9-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.105.10-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.105.9
+cd ry-install && git checkout v7.105.10
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -65,7 +65,7 @@ Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT =
 |---|---|
 | *(no args)* | Unattended install (silent; phase matrix at end) |
 | `-V`/`--verbose` | Stream per-command install output (ignored under `--check`) |
-| `--verify` | Config files byte-for-byte, then live system state |
+| `--verify` | Config files byte-for-byte, then live system state; flags stale `/etc/modprobe.d/60-ry-*` drop-ins outside the managed set |
 | `--check` | Silent idempotency probe vs live `/proc/cmdline` — a fresh install reads drift until reboot ([Exit Codes](#exit-codes)) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--` | End of options (no positional args) |
@@ -199,10 +199,10 @@ Non-obvious choices; several list an override to reverse.
 | Topic | Detail |
 |---|---|
 | Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise BIOS UMA carveout (≤96 GiB) for more (`amdgpu.gttsize` deprecated). Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
-| FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE`. |
+| FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled (RDNA3/3.5 via Proton-CachyOS ≥ 11.0-20260702, which removed the old `PROTON_FSR4_RDNA3_UPGRADE` form). Verify: `printenv FSR4_UPGRADE`. |
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-no-node warn · absent info). Opt out: `PROTON_NO_NTSYNC=1`. |
 | MangoHud `cpu_temp` | Disabled — re-enabling re-trips [MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794) (`cpu_power` reads 0 on Zen 5). |
-| PCIe ASPM | `pcie_aspm=off` (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency); drop to restore ASPM defaults. |
+| PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency); plain `off` only inherits whatever ASPM state the BIOS programmed. Drop to restore ASPM defaults. |
 | IPv6 | `ipv6.disable=1`, IPv4-only ruleset. Dual-stack: drop token, add IPv6 rules, re-run. |
 | Avahi | `.service`+`.socket` masked — collided with resolved as a 2nd mDNS responder; profile runs `MulticastDNS=no`. Unmask both to restore. |
 | AMD-Vi (IOMMU) | `amd_iommu=off` breaks the XDNA NPU (hence blacklist). NPU/VFIO/SR-IOV: `amd_iommu=on iommu=pt` + `BLACKLIST_AMDXDNA false`, re-run. |

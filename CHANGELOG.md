@@ -3,6 +3,14 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.105.10 (2026-07-14)
+---------------------
+  - env: PROTON_FSR4_RDNA3_UPGRADE=1 -> FSR4_UPGRADE=1 (long form removed upstream in Proton-CachyOS 11.0-20260702; alpha slot moved, ENV_VARS count unchanged at 12)
+  - boot: pcie_aspm=off -> pcie_aspm.policy=performance; "off" leaves firmware-programmed ASPM untouched (kernel doc clarification 2e0239d47d75e08), policy=performance actively disables it, guaranteeing the MT7925/NVMe mitigation regardless of BIOS state (KERNEL_PARAMS count unchanged at 17)
+  - verify: add _vss_modprobe_stale - fail on any /etc/modprobe.d/60-ry-* drop-in outside SYSTEM_DESTINATIONS (closes the unguarded pre-7.99 leftover gap); function count 288 -> 289
+  - modprobe: NPU-path comment now names pcie_aspm.policy=performance as the MT7925 ASPM cover
+  - readme: badge/checkout -> 7.105.10; FSR4 + ASPM tuning rows synced; --verify row notes the stale drop-in scan
+
 7.105.5 - 7.105.9 (2026-07-14)
 ------------------------------
   - readme: Globals table -> prose (values unchanged); Managed Files split into Boot/System/User tables (17 rows, deploy order kept)

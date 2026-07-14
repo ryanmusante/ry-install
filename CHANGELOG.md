@@ -3,18 +3,15 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.105.7 (2026-07-14)
---------------------
+7.105.5 - 7.105.8 (2026-07-14)
+------------------------------
+  - exit codes: annotate EXIT_GEN_11-14 + EXIT_RUN_TMPFAIL 251 as internal-only sentinels (parity with the 250/255 note); no behavior change
+  - lock: document mkdir+pidfile rationale above _acquire_lock (flock intentionally not used)
+  - packaging: release archive now store-mode (zip -0) per archive convention
   - kernel: remove enforced floor — drop _ir_validate_kernel_floor fn + call site, retire KERNEL_MIN var; floor kept as advisory comment only (6.18.4: RTL8127 r8169 + suspend-hang fix)
   - validators: 4 -> 3 (counts/keys/post_hooks); function count 289 -> 288
   - readme: kernel row + exit-3 causes + hard-gate list now describe the floor as advisory, not hard-fail
-
-7.105.6 (2026-07-14)
---------------------
   - readme: trim redundant prose (scope/pactree/fstab/tuning lead-ins); no facts or values dropped
-
-7.105.5 (2026-07-14)
---------------------
   - readme: add Note column to BIOS table; move per-setting rationale out of the intro prose
 
 7.104.0 - 7.105.4 (2026-07-14)

@@ -3,6 +3,12 @@ ry-install release notes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.104.0 (2026-07-14)
+--------------------
+  - data: reflow PKGS_ADD/SYSCTL_VALUES/SYSTEM_DESTINATIONS/_RY_POST_HOOKS to packed rows (element order/counts unchanged)
+  - data: drop two trailing array comments; hoist rationale to a leading line
+  - docs: bump version pins
+
 7.103.0 (2026-07-13)
 --------------------
   - kernel: relax KERNEL_MIN 6.19 -> 6.18.4 (6.19 superseded; regression floor only)
@@ -10,27 +16,15 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - kernel: rewrite KERNEL_MIN rationale (gfx1151 fix is firmware, not kernel version)
   - docs: Requirements table kernel floor + preflight prose; bump version pins
 
-7.102.2 (2026-07-12)
---------------------
-  - verify: drop redundant return-value temp in static/runtime teardown (no behavior change)
-  - docs: trim Tuning Notes prose to vital points
-  - docs: bump version pins
-
-7.102.1 (2026-07-12)
---------------------
-  - docs: trim BIOS, safety-fallback, and packages prose to vital points
-  - docs: name the deploy gate key/count (keys + counts, two validators)
-  - docs: normalize countable numerals to digits
-  - docs: bump version pins
-
-7.102.0 (2026-07-12)
---------------------
+7.102.0 - 7.102.2 (2026-07-12)
+------------------------------
   - boot: switch pcie_aspm.policy=performance to pcie_aspm=off
   - env.d: add VKD3D_CONFIG=descriptor_heap
   - sysctl: add vm.watermark_boost_factor=0
   - modprobe: drop mt7925e disable_aspm=1 (covered by pcie_aspm=off)
   - validate: accept comment-only modprobe drop-in
-  - docs: sync tables; bump version pins
+  - verify: drop redundant return-value temp in static/runtime teardown
+  - docs: trim BIOS/safety-fallback/packages/Tuning prose; name the deploy key/count gate; sync tables
 
 7.101.0 (2026-07-12)
 --------------------

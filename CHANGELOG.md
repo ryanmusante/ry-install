@@ -3,6 +3,12 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.105.7 (2026-07-14)
+--------------------
+  - kernel: remove enforced floor — drop _ir_validate_kernel_floor fn + call site, retire KERNEL_MIN var; floor kept as advisory comment only (6.18.4: RTL8127 r8169 + suspend-hang fix)
+  - validators: 4 -> 3 (counts/keys/post_hooks); function count 289 -> 288
+  - readme: kernel row + exit-3 causes + hard-gate list now describe the floor as advisory, not hard-fail
+
 7.105.6 (2026-07-14)
 --------------------
   - readme: trim redundant prose (scope/pactree/fstab/tuning lead-ins); no facts or values dropped

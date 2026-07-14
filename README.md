@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.105.6-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.105.7-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.105.6
+cd ry-install && git checkout v7.105.7
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -26,12 +26,12 @@ chmod +x ry-install.fish
 | Requirement | Minimum |
 |---|---|
 | Platform | CachyOS · systemd-boot · ext4 root |
-| Kernel | ≥ 6.18.4 (hard-fail, no override; `--verify` warns only) — regression floor (RTL8127 + suspend) |
+| Kernel | 6.18.4 advisory floor (not enforced) — regression baseline (RTL8127 + suspend) |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.18.4 kernel, or uncached sudo (non-TTY; a TTY prompts once). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
+Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected) or uncached sudo (non-TTY; a TTY prompts once). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
 
 ## BIOS
 
@@ -71,7 +71,7 @@ Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT =
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` hard-gate hardware, kernel floor, and key/count invariants (exit 3); `--verify` downgrades the first two to warnings.
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` hard-gate hardware and key/count invariants (exit 3); `--verify` downgrades the hardware gate to a warning.
 
 ### Environment Overrides
 
@@ -121,7 +121,7 @@ The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and 
 | `0` | OK | Success; also `WARN`-only runs and `--check` clean |
 | `1` | verify-FAIL / install-error | `--verify` mismatch, or an install step errored |
 | `2` | usage | Bad args, non-absolute/unmanaged `--install-file`, root-guard misuse |
-| `3` | preflight | Missing/non-GNU dep, sub-`KERNEL_MIN` kernel, uncached sudo, gate mismatch |
+| `3` | preflight | Missing/non-GNU dep, uncached sudo, gate mismatch |
 | `4` | boot-critical (DO NOT REBOOT) | Boot cascade or post-rebuild sanity failed — resolve before rebooting |
 | `5` | lock | Another instance holds the lock (fail-closed on ambiguous pidfile) |
 | `10` | `--check` drift | Config drift from the managed baseline |

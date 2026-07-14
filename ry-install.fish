@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.105.6 (2026-07-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.105.7 (2026-07-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.105.6"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.105.7"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -12,7 +12,7 @@ set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= # single option-spec source (root-guard + main argparse)
-set -g KERNEL_MIN 6.18.4 # regression floor (RTL8127 r8169 + suspend-hang fix ae1737e7339b); gfx1151 fix is firmware, not kernel
+# Kernel floor (advisory, not enforced): 6.18.4 — RTL8127 r8169 + suspend-hang fix ae1737e7339b; gfx1151 fix is firmware (linux-firmware MES 0x86), not kernel
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -754,35 +754,6 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
         if not string match -qr -- '^[A-Za-z0-9._,=-]+$' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refuse to deploy (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _ir_validate_kernel_floor --description "Hard preflight: refuse deploy when running kernel < KERNEL_MIN (verify warns; no override)"
-    set -l _kr (command uname -r 2>/dev/null)
-    set -l _kver (string match -rg -- '^([0-9]+\.[0-9]+(?:\.[0-9]+)?)' "$_kr") # strip -arch1-1/-cachyos suffix to MAJOR.MINOR[.PATCH]
-    if test -z "$_kver"
-        if test "$MODE" = verify # read-only: warn and continue
-            _warn "Kernel floor: release unreadable from uname -r ('$_kr') — verify continues; deploy would refuse"
-            _log "KERNEL_FLOOR_UNREADABLE_VERIFY: uname -r='$_kr'"
-        else # fail-closed: unreadable release refuses deploy
-            _err_loud "Kernel floor: release unreadable from uname -r ('$_kr') — refusing to deploy"
-            _err_loud_cont "  Cannot confirm the >=$KERNEL_MIN floor (RTL8127 r8169 + suspend-hang fix ae1737e7339b); refusing rather than risk broken networking/suspend."
-            _pre_dispatch_exit $EXIT_PREFLIGHT
-        end
-        return 0
-    end
-    set -l _cur_parts (string split '.' -- "$_kver"); set -l _min_parts (string split '.' -- "$KERNEL_MIN")
-    set -q _cur_parts[3]; or set _cur_parts[3] 0
-    set -q _min_parts[3]; or set _min_parts[3] 0
-    if test "$_cur_parts[1]" -lt "$_min_parts[1]"; or begin; test "$_cur_parts[1]" -eq "$_min_parts[1]"; and test "$_cur_parts[2]" -lt "$_min_parts[2]"; end; or begin; test "$_cur_parts[1]" -eq "$_min_parts[1]"; and test "$_cur_parts[2]" -eq "$_min_parts[2]"; and test "$_cur_parts[3]" -lt "$_min_parts[3]"; end
-        if test "$MODE" = verify # read-only: warn and continue
-            _warn "Kernel floor: running $_kver < $KERNEL_MIN — verify continues; deploy would refuse"
-            _log "KERNEL_FLOOR_BELOW_VERIFY: running=$_kver min=$KERNEL_MIN"
-        else
-            _err_loud "Kernel floor: running $_kver, profile $PROFILE_NAME requires >=$KERNEL_MIN — refusing to deploy"
-            _err_loud_cont "  >=$KERNEL_MIN carries RTL8127 r8169 support and the suspend-hang fix ae1737e7339b; the gfx1151 GPU-hang fix is in linux-firmware (MES 0x86), not the kernel."
-            _pre_dispatch_exit $EXIT_PREFLIGHT
-        end
-    end
-end
-
 # ── RUNTIME INIT: ORCHESTRATOR (_init_runtime) ──
 function _init_runtime --description "Cache root UUID + validate config + precompute caches"
     _ir_resolve_root_uuid
@@ -816,7 +787,6 @@ function _init_runtime --description "Cache root UUID + validate config + precom
             end
         end
     end
-    _ir_validate_kernel_floor # hard preflight kernel floor (>= KERNEL_MIN)
     _ir_validate_counts
     _ir_validate_keys
     _ir_validate_post_hooks

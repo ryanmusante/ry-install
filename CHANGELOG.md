@@ -3,6 +3,12 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.105.12 (2026-07-14)
+---------------------
+  - readme: normalize H3 heading case (Boot/System/User Files) to match sibling Title Case headings; code-format chwd; no facts or values changed
+  - readme: badge/checkout -> 7.105.12
+  - script: version string only (2 lines)
+
 7.105.11 (2026-07-14)
 ---------------------
   - readme: trim restated BIOS rationale from the intro (per-setting Note cells keep every value); drop duplicate --verify-warns + exit-4 mentions (canonical homes: Requirements/Usage prose, CAUTION + Exit Codes table); tighten FSR4 + ASPM tuning rows; no facts or values dropped

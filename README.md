@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.105.11-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.105.12-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.105.11
+cd ry-install && git checkout v7.105.12
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -143,7 +143,7 @@ CachyOS divergences: `DNSSEC=allow-downgrade` (vendor default is DoH); sysctl pr
 |---|---|
 | Install | gaming (`cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`) · CLI (`fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`) · hardware (`nvme-cli`, `lm_sensors`, `ddcutil`) · RT audio (`rtkit`, `realtime-privileges`) · firewall (`nftables`) · contrib (`pacman-contrib`) |
 | Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
-| Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (chwd Vulkan drivers) |
+| Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (`chwd` Vulkan drivers) |
 
 ### Units
 
@@ -161,7 +161,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 
 17 embedded configs, in deploy order ([`--verify`](#usage) checks all, `--install-file` re-deploys one): 4 boot-critical (`.ry.bak`-backed), 11 system, 2 user.
 
-### Boot files
+### Boot Files
 
 | File | Purpose |
 |---|---|
@@ -170,7 +170,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 | `/etc/sdboot-manage.conf` | entry gen (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES`/`HOOKS`/`COMPRESSION` (`zstd`) |
 
-### System files
+### System Files
 
 | File | Purpose |
 |---|---|
@@ -186,7 +186,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe sched `none`, P-State EPP, GPU DPM |
 | `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist (`BLACKLIST_AMDXDNA`) |
 
-### User files
+### User Files
 
 | File | Purpose |
 |---|---|

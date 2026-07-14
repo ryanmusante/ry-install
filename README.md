@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.102.2-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.103.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.102.2
+cd ry-install && git checkout v7.103.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -26,12 +26,12 @@ chmod +x ry-install.fish
 | Requirement | Minimum |
 |---|---|
 | Platform | CachyOS · systemd-boot · ext4 root |
-| Kernel | ≥ 6.19 (hard-fail, no override; `--verify` warns only) |
+| Kernel | ≥ 6.18.4 (hard-fail, no override; `--verify` warns only) — regression floor (RTL8127 + suspend) |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.19 kernel, or uncached sudo (non-TTY; a TTY prompts once). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
+Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), a sub-6.18.4 kernel, or uncached sudo (non-TTY; a TTY prompts once). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
 
 ## BIOS
 

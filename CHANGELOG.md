@@ -3,6 +3,13 @@ ry-install release notes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.103.0 (2026-07-13)
+--------------------
+  - kernel: relax KERNEL_MIN 6.19 -> 6.18.4 (6.19 superseded; regression floor only)
+  - kernel: extend floor compare to 3-part (MAJOR.MINOR.PATCH)
+  - kernel: rewrite KERNEL_MIN rationale (gfx1151 fix is firmware, not kernel version)
+  - docs: Requirements table kernel floor + preflight prose; bump version pins
+
 7.102.2 (2026-07-12)
 --------------------
   - verify: drop redundant return-value temp in static/runtime teardown (no behavior change)

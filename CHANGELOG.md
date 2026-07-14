@@ -3,38 +3,21 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.105.4 (2026-07-14)
+7.105.6 (2026-07-14)
 --------------------
+  - readme: trim redundant prose (scope/pactree/fstab/tuning lead-ins); no facts or values dropped
+
+7.105.5 (2026-07-14)
+--------------------
+  - readme: add Note column to BIOS table; move per-setting rationale out of the intro prose
+
+7.104.0 - 7.105.4 (2026-07-14)
+------------------------------
   - readme: add Default column to Environment Overrides; move defaults out of Effect prose
-
-7.105.3 (2026-07-14)
---------------------
-  - comments: condense inline notes on long lines to vital rationale; no code change
-
-7.105.2 (2026-07-14)
---------------------
-  - headers: merge the two adjacent Phase 4 headers into one (Services overview + fstab slice)
-
-7.105.1 (2026-07-14)
---------------------
-  - comments: drop redundant "Phase 4: fstab" inline note (call is self-describing)
-
-7.105.0 (2026-07-14)
---------------------
-  - changelog: trim history; condense pre-7.100 ranges to per-range summaries
-
-7.104.2 (2026-07-14)
---------------------
-  - comments: fold floating pactree/paccache note inline; trim KERNEL_MIN rationale to vital
-
-7.104.1 (2026-07-14)
---------------------
-  - headers: consistent "PHASE 4:" prefix; lead Services header carries sub-step order; Phase 3 -> CONFIGURATION
-
-7.104.0 (2026-07-14)
---------------------
+  - comments: condense long-line inline notes to vital rationale; trim KERNEL_MIN + pactree/paccache notes
+  - headers: consistent "PHASE 4:" prefix; merge adjacent Phase 4 headers; Phase 3 -> CONFIGURATION
   - data: reflow PKGS_ADD/SYSCTL_VALUES/SYSTEM_DESTINATIONS/_RY_POST_HOOKS to packed rows (order/counts unchanged)
-  - data: drop two trailing array comments; hoist rationale to a leading line
+  - changelog: trim history; condense pre-7.100 ranges to per-range summaries
 
 7.103.0 (2026-07-13)
 --------------------

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.105.4-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.105.6-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,12 +14,12 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.105.4
+cd ry-install && git checkout v7.105.6
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-**In scope:** kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, gaming env vars, MangoHud, pacman add/remove, and sdboot-manage BLS entries. **Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, and UKI.
+**In scope:** kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, gaming env vars, MangoHud, pacman add/remove, sdboot-manage BLS entries. **Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
 
 ## Requirements
 
@@ -39,22 +39,22 @@ Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT =
 
 `Advanced → SMU Common Options` — power limits in mW, time constants in s, TjMax in °C:
 
-| Setting | Value |
-|---|---|
-| ECO Mode | `Disabled` |
-| SPL Control | `Manual` |
-| Sustained Power Limit | `85000` |
-| PPT Control | `Manual` |
-| Fast PPT Limit | `85000` |
-| Slow PPT Limit | `85000` |
-| Slow PPT Time Constant | `0` |
-| STAPM Control | `Manual` |
-| System Temperature Tracking | `Auto` |
-| STAPM Boost Override | `1` |
-| STAPM Boost | `0` |
-| Tskin Time Constant (STAPM) | `0` |
-| Thermal Control | `Manual` |
-| TjMax | `90` |
+| Setting | Value | Note |
+|---|---|---|
+| ECO Mode | `Disabled` | frees the manual power limits below |
+| SPL Control | `Manual` | unlock Sustained Power Limit |
+| Sustained Power Limit | `85000` | 85 W ceiling — gains flatten past this |
+| PPT Control | `Manual` | unlock Fast/Slow PPT |
+| Fast PPT Limit | `85000` | flat with SPL — no transient boost above 85 W |
+| Slow PPT Limit | `85000` | flat with SPL |
+| Slow PPT Time Constant | `0` | no slow-PPT ramp window |
+| STAPM Control | `Manual` | unlock the skin-temp track |
+| System Temperature Tracking | `Auto` | leave stock; STAPM Boost below does the zeroing |
+| STAPM Boost Override | `1` | enable the override |
+| STAPM Boost | `0` | zero a desktop-irrelevant skin-temp track |
+| Tskin Time Constant (STAPM) | `0` | no Tskin ramp window |
+| Thermal Control | `Manual` | unlock TjMax |
+| TjMax | `90` | 10 °C under the silicon limit |
 
 ## Usage
 
@@ -71,7 +71,7 @@ Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT =
 | `--` | End of options (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` hard-gate hardware, kernel floor, and key/count invariants (exit 3); `--verify` downgrades hardware and kernel floor to warnings.
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` hard-gate hardware, kernel floor, and key/count invariants (exit 3); `--verify` downgrades the first two to warnings.
 
 ### Environment Overrides
 
@@ -144,7 +144,7 @@ CachyOS divergences:
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan a dependency-installed one. Existing installs: `archlinux-contrib` is no longer managed — optional `sudo pacman -Rns archlinux-contrib`.
+`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` can't orphan a dependency-installed one. `archlinux-contrib` is no longer managed — optional `sudo pacman -Rns archlinux-contrib`.
 
 | Action | Packages |
 |---|---|
@@ -162,7 +162,7 @@ CachyOS divergences:
 
 ### fstab
 
-ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`relatime`/`atime`/`strictatime`/existing `commit=` tokens normalized away); everything else byte-preserved. Gated by line-count parity + size floor + mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the whole rewrite; malformed (whitespace-split) rows are left byte-identical and warned.
+ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`relatime`/`atime`/`strictatime`/existing `commit=` tokens normalized away); everything else byte-preserved. Gated by line-count parity + size floor + mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite; malformed (whitespace-split) rows are left byte-identical and warned.
 
 ## Managed Files
 
@@ -190,7 +190,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 
 ## Tuning Notes
 
-Rationale for non-obvious choices; several list an override to reverse.
+Non-obvious choices; several list an override to reverse.
 
 | Topic | Detail |
 |---|---|

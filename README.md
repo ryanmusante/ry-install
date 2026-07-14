@@ -35,7 +35,7 @@ Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected),
 
 ## BIOS
 
-Strix Halo multi-thread gains [flatten](https://strixhalo.wiki/Guides/Power-Modes-and-Performance) past ~85 W, so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve. [STAPM](https://skatterbencher.com/amd-precision-boost-2/) tracks a laptop skin temperature (irrelevant on a desktop), so the boost/time-constant rows zero it; `TjMax 90` holds 10 °C under the silicon limit. Full walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
+Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve; STAPM rows zero a desktop-irrelevant skin-temp track, and `TjMax 90` holds 10 °C under the silicon limit. Full rationale + walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
 `Advanced → SMU Common Options` — power limits in mW, time constants in s, TjMax in °C:
 
@@ -103,17 +103,15 @@ Results print to stderr; a JSONL log records each phase. `WARN` keeps exit 0; `D
 > [!WARNING]
 > Masks `ufw` and ships an IPv4-only nftables default-deny-inbound ruleset (loopback, established/related, inbound ping accepted; `forward` drop, `output` accept). IPv6 disabled system-wide (`ipv6.disable=1`).
 
-The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and AMD-Vi revert to kernel defaults, though the IPv4-only ruleset and the `amdxdna` blacklist still apply.
-
-Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play accepts.
+The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and AMD-Vi revert to kernel defaults, though the IPv4-only ruleset and the `amdxdna` blacklist still apply. Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play accepts.
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | same-FS tmp → render → symlink-probe → backup → chmod → `mv -T` → re-read + restore on mismatch (backup targets) |
-| Auto backups | `<path>.ry.bak` for `loader.conf` / `/etc/kernel/cmdline` / `/etc/sdboot-manage.conf` / `mkinitcpio.conf` (and `fstab`, during its rewrite) |
-| mkinitcpio rollback | byte-exact revert (gated by `cmp`) on `pacman -Syu` failure or signal |
+| Atomic writes | same-FS tmp → render → symlink-probe → backup → chmod → `mv -T` → re-read + restore on mismatch |
+| Auto backups | `<path>.ry.bak` for the 4 boot files (and `fstab`, during its rewrite) |
+| mkinitcpio rollback | byte-exact revert (`cmp`-gated) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
-| Entry regeneration | `REMOVE_EXISTING=yes` deletes all `loader/entries/` before regeneration; EFI-resident loaders (e.g. Windows Boot Manager) untouched |
+| Entry regeneration | `REMOVE_EXISTING=yes` clears `loader/entries/` first; EFI-resident loaders (e.g. Windows Boot Manager) untouched |
 | Instance lock | atomic `mkdir 0700`; stale reclaim only for a provably-recycled PID (`/proc` start-time); else fail-closed |
 
 ### Exit Codes
@@ -130,11 +128,11 @@ Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-
 
 ## Configuration
 
-All tunables are `set -g` globals near the top of the script — no external config file. Edit one, then re-run (or `--install-file` the affected file).
+All tunables are `set -g` globals near the top of the script — no external config file. Edit one, then re-run (or `--install-file` the affected file). Perms: system `0644`, user `0600`.
 
 ### Globals
 
-Perms: system `0644`, user `0600`. CachyOS divergences:
+CachyOS divergences:
 
 | Divergence | Value |
 |---|---|
@@ -146,7 +144,7 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan a dependency-installed one. Reversible ([Uninstall](#uninstall)). Existing installs: `archlinux-contrib` is no longer managed — optional `sudo pacman -Rns archlinux-contrib`.
+`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan a dependency-installed one. Existing installs: `archlinux-contrib` is no longer managed — optional `sudo pacman -Rns archlinux-contrib`.
 
 | Action | Packages |
 |---|---|
@@ -164,49 +162,31 @@ Perms: system `0644`, user `0600`. CachyOS divergences:
 
 ### fstab
 
-| Aspect | Behavior |
-|---|---|
-| Change | ext4 rows get `noatime,lazytime,commit=10` in column 4; everything else byte-preserved |
-| Normalized away | redundant `defaults` / `relatime` / `atime` / `strictatime` / existing `commit=` tokens |
-| Gates | line-count parity + size floor + mandatory `findmnt --verify` |
-| Refused | a symlinked `/etc/fstab` — the whole rewrite aborts |
-| Preserved + warned | malformed (whitespace-split) rows — left byte-identical; conforming rows still rewritten |
+ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`relatime`/`atime`/`strictatime`/existing `commit=` tokens normalized away); everything else byte-preserved. Gated by line-count parity + size floor + mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the whole rewrite; malformed (whitespace-split) rows are left byte-identical and warned.
 
 ## Managed Files
 
-17 embedded config files, in deploy order; `--verify` checks every one against live state, `--install-file <path>` re-deploys one.
-
-### Boot & initramfs
+17 embedded configs, in deploy order ([`--verify`](#usage) checks all, `--install-file` re-deploys one):
 
 | File | Purpose |
 |---|---|
-| `/boot/loader/loader.conf` | systemd-boot loader settings (default entry, timeout, console-mode) |
-| `/etc/kernel/cmdline` | kernel command line: `rw root=UUID` prefix + the 17 `KERNEL_PARAMS` |
-| `/etc/sdboot-manage.conf` | boot-entry generation (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
-| `/etc/mkinitcpio.conf` | initramfs `MODULES` / `HOOKS` / `COMPRESSION` (default `zstd`) |
-
-### System services & network
-
-| File | Purpose |
-|---|---|
-| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | systemd-resolved: `DNSSEC=allow-downgrade`, no mDNS/LLMNR/DoT |
+| `/boot/loader/loader.conf` | loader: default entry, timeout, console-mode |
+| `/etc/kernel/cmdline` | `rw root=UUID` + the 17 `KERNEL_PARAMS` |
+| `/etc/sdboot-manage.conf` | entry gen (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
+| `/etc/mkinitcpio.conf` | initramfs `MODULES`/`HOOKS`/`COMPRESSION` (`zstd`) |
+| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | `DNSSEC=allow-downgrade`, no mDNS/LLMNR/DoT |
 | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | ignore power/suspend/hibernate/reboot keys |
-| `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | silence info-level `nm-dispatcher` journal noise |
-| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | NM Wi-Fi backend, power-save off, log level |
-| `/etc/iw-regdomain` | wireless regulatory domain (`US`) |
-| `/etc/bluetooth/main.conf` | BlueZ adapter auto-power-on + paired-sink reconnect |
-| `/etc/nftables.conf` | IPv4-only default-deny-inbound firewall (inbound ping allowed) |
-
-### Power, modules & user session
-
-| File | Purpose |
-|---|---|
-| `/etc/default/cpupower-service.conf` | CPU governor (`powersave`) |
-| `/etc/sysctl.d/95-ry-overrides.conf` | sysctl tunables (BBR + `fq`, VM, netdev) |
-| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, AMD P-State EPP, GPU DPM |
-| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist (toggle `BLACKLIST_AMDXDNA`) |
-| `~/.config/environment.d/10-environment.conf` | gaming env vars (RADV, MangoHud, Proton, VKD3D) |
-| `~/.config/MangoHud/MangoHud.conf` | readout-only performance HUD |
+| `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | silence info-level `nm-dispatcher` noise |
+| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | Wi-Fi backend, power-save off, log level |
+| `/etc/iw-regdomain` | regulatory domain (`US`) |
+| `/etc/bluetooth/main.conf` | adapter auto-power-on + paired-sink reconnect |
+| `/etc/nftables.conf` | IPv4-only default-deny-inbound (ping allowed) |
+| `/etc/default/cpupower-service.conf` | governor (`powersave`) |
+| `/etc/sysctl.d/95-ry-overrides.conf` | BBR + `fq`, VM, netdev tunables |
+| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe sched `none`, P-State EPP, GPU DPM |
+| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist (`BLACKLIST_AMDXDNA`) |
+| `~/.config/environment.d/10-environment.conf` | gaming env (RADV, MangoHud, Proton, VKD3D) |
+| `~/.config/MangoHud/MangoHud.conf` | readout-only HUD |
 
 ## Tuning Notes
 
@@ -214,15 +194,15 @@ Rationale for non-obvious choices; several list an override to reverse.
 
 | Topic | Detail |
 |---|---|
-| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise the BIOS UMA carveout (≤96 GiB) for larger allocations — `amdgpu.gttsize` is deprecated. Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
-| FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (FSR4 on RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE`. |
-| NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-without-node warn · absent info). Opt a title out: `PROTON_NO_NTSYNC=1`. |
-| MangoHud `cpu_temp` | Ships disabled: re-enabling `cpu_temp` re-trips [MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794) (`cpu_power` reads 0 when `cpu_temp` is enabled on Zen 5). |
-| PCIe ASPM | `pcie_aspm=off` disables ASPM link-power management globally (MT7925 coredump / BT-reconnect / assoc mitigation, plus NVMe latency); drop the token to restore kernel ASPM defaults. |
-| IPv6 | Disabled via `ipv6.disable=1`; ruleset is IPv4-only. For dual-stack: drop the token, add IPv6 rules, re-run. |
-| Avahi | `.service`+`.socket` masked — collided with resolved as a second mDNS responder (`hostname-2.local`); the profile runs mDNS off (`MulticastDNS=no`). Unmask both to restore. |
-| AMD-Vi (IOMMU) | `amd_iommu=off` disables AMD-Vi and breaks the XDNA NPU (hence the blacklist). NPU/VFIO/SR-IOV: set `amd_iommu=on iommu=pt` + `BLACKLIST_AMDXDNA false`, re-run. |
-| UMIP (`clearcpuid=umip`) | Disables UMIP trapping; taints the kernel. String form is version-stable. Drop the token if no `umip_printk` stutter appears. |
+| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise BIOS UMA carveout (≤96 GiB) for more (`amdgpu.gttsize` deprecated). Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
+| FSR4 on RDNA3 | `PROTON_FSR4_RDNA3_UPGRADE=1` ships enabled (RDNA3/3.5 via Proton-CachyOS). Verify: `printenv PROTON_FSR4_RDNA3_UPGRADE`. |
+| NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-no-node warn · absent info). Opt out: `PROTON_NO_NTSYNC=1`. |
+| MangoHud `cpu_temp` | Disabled — re-enabling re-trips [MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794) (`cpu_power` reads 0 on Zen 5). |
+| PCIe ASPM | `pcie_aspm=off` (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency); drop to restore ASPM defaults. |
+| IPv6 | `ipv6.disable=1`, IPv4-only ruleset. Dual-stack: drop token, add IPv6 rules, re-run. |
+| Avahi | `.service`+`.socket` masked — collided with resolved as a 2nd mDNS responder; profile runs `MulticastDNS=no`. Unmask both to restore. |
+| AMD-Vi (IOMMU) | `amd_iommu=off` breaks the XDNA NPU (hence blacklist). NPU/VFIO/SR-IOV: `amd_iommu=on iommu=pt` + `BLACKLIST_AMDXDNA false`, re-run. |
+| UMIP (`clearcpuid=umip`) | Disables UMIP trapping; taints kernel. String form is version-stable. Drop if no `umip_printk` stutter. |
 
 ## Uninstall
 

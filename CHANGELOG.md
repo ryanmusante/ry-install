@@ -1,5 +1,5 @@
-ry-install release notes
-========================
+Summary of changes
+==================
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 

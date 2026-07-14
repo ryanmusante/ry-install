@@ -3,6 +3,13 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.105.11 (2026-07-14)
+---------------------
+  - readme: trim restated BIOS rationale from the intro (per-setting Note cells keep every value); drop duplicate --verify-warns + exit-4 mentions (canonical homes: Requirements/Usage prose, CAUTION + Exit Codes table); tighten FSR4 + ASPM tuning rows; no facts or values dropped
+  - readme: Requirements gains a Mesa >= 26.0 soft-warn row (gate existed in-script, was undocumented)
+  - readme: badge/checkout -> 7.105.11
+  - script: version string only (2 lines)
+
 7.105.10 (2026-07-14)
 ---------------------
   - env: PROTON_FSR4_RDNA3_UPGRADE=1 -> FSR4_UPGRADE=1 (long form removed upstream in Proton-CachyOS 11.0-20260702; alpha slot moved, ENV_VARS count unchanged at 12)

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.105.10-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.105.11-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.105.10
+cd ry-install && git checkout v7.105.11
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -27,6 +27,7 @@ chmod +x ry-install.fish
 |---|---|
 | Platform | CachyOS · systemd-boot · ext4 root |
 | Kernel | 6.18.4 advisory floor (not enforced) — regression baseline (RTL8127 + suspend) |
+| Mesa | ≥ 26.0 (below: soft warn only) |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
 | Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
@@ -35,7 +36,7 @@ Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected) 
 
 ## BIOS
 
-Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve; STAPM rows zero a desktop-irrelevant skin-temp track, and `TjMax 90` holds 10 °C under the silicon limit. Full rationale + walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
+Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve; per-setting rationale is in the Note column. Full rationale + walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
 `Advanced → SMU Common Options` — power limits in mW, time constants in s, TjMax in °C:
 
@@ -80,7 +81,7 @@ Safe fallback when unset or invalid. One JSONL log per run: `~/ry-install/logs/Y
 | Variable | Default | Effect |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` s | Per-command cap; `0` disables; package/boot ops floor `7200` s; invalid → default |
-| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | `0` (check on) | Bypass the `Ryzen AI Max` CPU-match hard-fail (`--verify` warns) |
+| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | `0` (check on) | Bypass the `Ryzen AI Max` CPU-match hard-fail |
 | `NO_COLOR` | unset (color on) | Disable colored output when set — any value, including empty ([no-color.org](https://no-color.org)) |
 
 ## Install Flow
@@ -96,7 +97,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
-Results print to stderr; a JSONL log records each phase. `WARN` keeps exit 0; `DEFER` applies on next boot; a boot-critical failure (exit 4) must be resolved before rebooting.
+Results print to stderr; a JSONL log records each phase. `WARN` keeps exit 0; `DEFER` applies on next boot.
 
 ## Safety & Reliability
 
@@ -199,10 +200,10 @@ Non-obvious choices; several list an override to reverse.
 | Topic | Detail |
 |---|---|
 | Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise BIOS UMA carveout (≤96 GiB) for more (`amdgpu.gttsize` deprecated). Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
-| FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled (RDNA3/3.5 via Proton-CachyOS ≥ 11.0-20260702, which removed the old `PROTON_FSR4_RDNA3_UPGRADE` form). Verify: `printenv FSR4_UPGRADE`. |
+| FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled (RDNA3/3.5; Proton-CachyOS ≥ 11.0-20260702 replaces removed `PROTON_FSR4_RDNA3_UPGRADE`). Verify: `printenv FSR4_UPGRADE`. |
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-no-node warn · absent info). Opt out: `PROTON_NO_NTSYNC=1`. |
 | MangoHud `cpu_temp` | Disabled — re-enabling re-trips [MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794) (`cpu_power` reads 0 on Zen 5). |
-| PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency); plain `off` only inherits whatever ASPM state the BIOS programmed. Drop to restore ASPM defaults. |
+| PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency); plain `off` merely inherits BIOS link state. Drop to restore ASPM defaults. |
 | IPv6 | `ipv6.disable=1`, IPv4-only ruleset. Dual-stack: drop token, add IPv6 rules, re-run. |
 | Avahi | `.service`+`.socket` masked — collided with resolved as a 2nd mDNS responder; profile runs `MulticastDNS=no`. Unmask both to restore. |
 | AMD-Vi (IOMMU) | `amd_iommu=off` breaks the XDNA NPU (hence blacklist). NPU/VFIO/SR-IOV: `amd_iommu=on iommu=pt` + `BLACKLIST_AMDXDNA false`, re-run. |

@@ -3,6 +3,10 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.105.3 (2026-07-14)
+--------------------
+  - comments: condense inline notes on long lines to vital rationale; no code change
+
 7.105.2 (2026-07-14)
 --------------------
   - headers: merge the two adjacent Phase 4 headers into one (Services overview + fstab slice)

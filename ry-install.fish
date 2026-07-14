@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.105.2 (2026-07-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
-if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
+# ry-install v7.105.3 (2026-07-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.105.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.105.3"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -131,15 +131,15 @@ set -g _RY_ARGV_CHECK_ONLY false # pre-argparse hint: --check silence must hold 
 test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; and set -g _RY_ARGV_CHECK_ONLY true
 if test "$_MY_UID" -eq 0
     if test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; _ry_exit $EXIT_PREFLIGHT; end # --check + valid mode: silent, 3 = cannot probe
-    set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) $_RY_ARGPARSE_SPEC -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity argparse in cmd-sub; parent argv intact
+    set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) $_RY_ARGPARSE_SPEC -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity argparse in subshell; parent argv intact
     set -l _rg_prc 0; set -l _rg_msg ""
     for _rg_l in $_rg_msgout
         if string match -q '@@RC@@*' -- "$_rg_l"; set _rg_prc (string replace '@@RC@@' '' -- "$_rg_l"); else if test -z "$_rg_msg"; set _rg_msg (string replace -ra '\e\[[0-9;]*[a-zA-Z]' '' -- "$_rg_l" | string trim --); end
     end
-    set -l _rg_state (begin; argparse --name=ry-install $_RY_ARGPARSE_SPEC -- $argv 2>/dev/null; for _rg_p in $argv; echo "@@LEFT@@$_rg_p"; end; set -q _flag_install_file; and echo "@@IF@@$_flag_install_file"; end) # one @@LEFT@@ line per leftover; refusal-path display only
+    set -l _rg_state (begin; argparse --name=ry-install $_RY_ARGPARSE_SPEC -- $argv 2>/dev/null; for _rg_p in $argv; echo "@@LEFT@@$_rg_p"; end; set -q _flag_install_file; and echo "@@IF@@$_flag_install_file"; end) # one @@LEFT@@ per leftover; display-only
     set -l _rg_left; set -l _rg_if_present false; set -l _rg_if_val ""
     for _rg_l in $_rg_state
-        if string match -q '@@LEFT@@*' -- "$_rg_l"; set -a _rg_left "$_rg_l"; else if string match -q '@@IF@@*' -- "$_rg_l"; set _rg_if_present true; set _rg_if_val (string replace '@@IF@@' '' -- "$_rg_l"); end # LEFT branch first; prefix stripped at display
+        if string match -q '@@LEFT@@*' -- "$_rg_l"; set -a _rg_left "$_rg_l"; else if string match -q '@@IF@@*' -- "$_rg_l"; set _rg_if_present true; set _rg_if_val (string replace '@@IF@@' '' -- "$_rg_l"); end # LEFT before IF; prefix stripped later
     end
     if test "$_rg_prc" -ne 0; test -n "$_rg_msg"; or set _rg_msg "Invalid arguments: $argv"; _ry_root_usage "$_rg_msg"; end
     if test "$_rg_if_present" = true; and test -z "$_rg_if_val"; _ry_root_usage "--install-file requires a non-empty absolute path"; end
@@ -207,7 +207,7 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 set -g _RY_BOOT_TAINTED false
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS $_RY_BOOT_CRITICAL_DSTS; set -g _RY_BACKUP_SUFFIX .ry.bak
-set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped sweep globs: never touch files of a peer run
+set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped: never touch a peer run's files
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS; set -g _RY_PROFILE_USES_WIFI_BACKEND false
 set -g SYSTEM_UPGRADED false # cross-phase global; must exist in all modes (set in _install_packages)
@@ -636,7 +636,7 @@ set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme b
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
-set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service avahi-daemon.service avahi-daemon.socket sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi unit+socket: second mDNS responder collided with resolved
+set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service avahi-daemon.service avahi-daemon.socket sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi: 2nd mDNS responder collided with resolved
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
@@ -1097,7 +1097,7 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
     end
 end
 function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"; string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"; end
-function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse; text-only — fish strings cannot carry NUL)" # callers read $pipestatus[1] only (collect rc=1 on empty)
+function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse; text-only — fish strings cannot carry NUL)" # callers read $pipestatus[1] only
     set -l _bytes
     if _is_system_dst "$dst"
         sudo -n true 2>/dev/null; or return 2
@@ -1126,7 +1126,7 @@ function _json_str --description "Escape a string for safe JSON embedding (RFC 8
     set s (string replace -ar -- '\t' '\\\\t' "$s" | string collect)
     set s (string replace -ar -- '\x08' '\\\\b' "$s" | string collect)
     set s (string replace -ar -- '\f' '\\\\f' "$s" | string collect)
-    for _hex in 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f; set s (string replace -ar -- '\x'$_hex '\\\\u00'$_hex "$s" | string collect); end # NUL omitted: fish strings cannot carry NUL
+    for _hex in 01 02 03 04 05 06 07 0b 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 7f; set s (string replace -ar -- '\x'$_hex '\\\\u00'$_hex "$s" | string collect); end # NUL omitted: fish strings can't hold NUL
     printf '%s' "$s"
     return 0
 end
@@ -1433,7 +1433,7 @@ function _run_effective_timeout --description "_run sub: resolve timeout; long-r
         set -l _skip_next false
         for _ec_arg in $argv[2..-1]
             if test "$_skip_next" = true; set _skip_next false; continue; end
-            if contains -- "$_ec_arg" -h -u -g -p -C -D -R -T -U --user --group --prompt --close-from --chdir --chroot --command-timeout --other-user --host; set _skip_next true; continue; end # value-taking sudo flags (-h = host form): skip flag + value
+            if contains -- "$_ec_arg" -h -u -g -p -C -D -R -T -U --user --group --prompt --close-from --chdir --chroot --command-timeout --other-user --host; set _skip_next true; continue; end # value-taking sudo flags (-h=host): skip flag+value
             string match -q -- '-*' "$_ec_arg"; and continue
             test "$_ec_arg" = env; and continue
             string match -qr -- '^[A-Za-z_][A-Za-z0-9_]*=' "$_ec_arg"; and continue
@@ -1576,7 +1576,7 @@ function _chk_grep --argument-names file pattern label --description "Verify a f
     if test "$use_sudo" = false; and not test -r "$file"; and _is_system_dst "$file"; set use_sudo true; end # sudo read avoids false DENIED on perms drift
     _cg_access_ok "$file" "$label" $use_sudo; or return 1
     set -l _grep_flags -wF
-    _as $use_sudo awk '{ sub(/[[:space:]]+#.*$/, "") } /^[[:space:]]*#/ { next } NF { print; f=1 } END { exit f ? 0 : 1 }' "$file" 2>/dev/null | command grep $_grep_flags -- "$pattern" >/dev/null 2>/dev/null # strips inline comments too; rc 1 = no content lines (grep -v parity)
+    _as $use_sudo awk '{ sub(/[[:space:]]+#.*$/, "") } /^[[:space:]]*#/ { next } NF { print; f=1 } END { exit f ? 0 : 1 }' "$file" 2>/dev/null | command grep $_grep_flags -- "$pattern" >/dev/null 2>/dev/null # strips comments; rc 1 = no content (grep -v parity)
     set -l _stage1_rc $pipestatus[1]; set -l _grep_rc $pipestatus[2]
     switch "$_stage1_rc"
         case 0
@@ -3151,7 +3151,7 @@ function _vrs_nm_perms --description "Runtime session check: NetworkManager syst
         set -l bad_perms 0
         for conn_file in $conn_files; _chk_perms "$conn_file" 600 root:root true; or set bad_perms (math $bad_perms + 1); end
         if test "$bad_perms" -eq 0; set -l conn_count (count $conn_files); _ok "  NetworkManager connections: $conn_count files with correct permissions"; end
-    else if begin; command grep -q -- 'wifi.backend=' /etc/NetworkManager/conf.d/99-cachyos-nm.conf 2>/dev/null; or begin; not test -r /etc/NetworkManager/conf.d/99-cachyos-nm.conf; and sudo -n grep -q -- 'wifi.backend=' /etc/NetworkManager/conf.d/99-cachyos-nm.conf 2>/dev/null; end; end # sudo fallback if drop-in tightened to 0600
+    else if begin; command grep -q -- 'wifi.backend=' /etc/NetworkManager/conf.d/99-cachyos-nm.conf 2>/dev/null; or begin; not test -r /etc/NetworkManager/conf.d/99-cachyos-nm.conf; and sudo -n grep -q -- 'wifi.backend=' /etc/NetworkManager/conf.d/99-cachyos-nm.conf 2>/dev/null; end; end # sudo fallback if drop-in is 0600
         _warn "  NetworkManager connections: no .nmconnection files (WiFi may not auto-connect)"
     else
         _info "  NetworkManager connections: no .nmconnection files found"
@@ -3615,7 +3615,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
             end
             continue
         end
-        if not string match -qr '(^|,)noatime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)lazytime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"; or string match -qr '(^|,)(defaults|relatime|atime|strictatime)(,|$)' -- "$opts_field" # tokens _vre_fstab rejects must trigger a rewrite
+        if not string match -qr '(^|,)noatime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)lazytime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"; or string match -qr '(^|,)(defaults|relatime|atime|strictatime)(,|$)' -- "$opts_field" # tokens _vre_fstab rejects must force rewrite
             set -g _RY_FSTAB_NEEDS_CHANGE true
             set -l _existing_commit (string match -rg -- '(?:^|,)commit=([0-9]+)(?:,|$)' "$opts_field")
             test -n "$_existing_commit"; and test "$_existing_commit" != 10; and set -ga _RY_FSTAB_COMMIT_OVERRIDES "$_existing_commit"
@@ -4788,7 +4788,7 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
         _info "  Retry: sudo udevadm control --reload-rules; and sudo udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change"
         return 0
     end
-    _run sudo -n udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change; or _warn "udevadm trigger failed — scheduler/EPP apply at next boot or device event" # drm rule is ACTION==add: applies at boot by design
+    _run sudo -n udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change; or _warn "udevadm trigger failed — scheduler/EPP apply at next boot or device event" # drm rule is ACTION==add: applies at boot
     return 0
 end
 function _post_modprobe --argument-names target --description "Post-hook: notify reboot needed for modprobe.d option change (load-time; cannot live-apply to an already-loaded module)"
@@ -4909,7 +4909,7 @@ for _r in $_argv_in; set -a _argv_parts '"'(_json_str "$_r")'"'; end
 set --erase _r
 set -l _argv_json '['(string join -- ',' $_argv_parts)']'; set -l _verbose_json false
 test "$QUIET" = false; and set _verbose_json true
-printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' (command date $_RY_TS_FMT) "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null # literal format string
+printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}\n' (command date $_RY_TS_FMT) "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json" >>"$LOG_FILE" 2>/dev/null
 if test "$status" -eq 0
     set -g _RY_HEADER_WRITTEN true
 else

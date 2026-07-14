@@ -3,25 +3,25 @@ ry-install release notes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.105.2 (2026-07-14)
+--------------------
+  - headers: merge the two adjacent Phase 4 headers into one (Services overview + fstab slice)
+
 7.105.1 (2026-07-14)
 --------------------
   - comments: drop redundant "Phase 4: fstab" inline note (call is self-describing)
-  - docs: bump version pins
 
 7.105.0 (2026-07-14)
 --------------------
-  - docs: trim changelog history; condense pre-7.100 ranges to per-range summaries
-  - docs: bump version pins
+  - changelog: trim history; condense pre-7.100 ranges to per-range summaries
 
 7.104.2 (2026-07-14)
 --------------------
   - comments: fold floating pactree/paccache note inline; trim KERNEL_MIN rationale to vital
-  - docs: bump version pins
 
 7.104.1 (2026-07-14)
 --------------------
-  - headers: consistent "PHASE 4:" prefix; lead Services header carries sub-step order; Phase 3 -> CONFIGURATION (comment-only)
-  - docs: bump version pins
+  - headers: consistent "PHASE 4:" prefix; lead Services header carries sub-step order; Phase 3 -> CONFIGURATION
 
 7.104.0 (2026-07-14)
 --------------------
@@ -41,7 +41,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 7.101.0 (2026-07-12)
 --------------------
-  - comments: trim verbose inline notes to vital rationale; condense prose
+  - comments: trim verbose inline notes to vital rationale
 
 7.100.0 (2026-07-11)
 --------------------

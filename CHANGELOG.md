@@ -3,6 +3,11 @@ ry-install release notes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.105.1 (2026-07-14)
+--------------------
+  - comments: drop redundant "Phase 4: fstab" inline note (call is self-describing)
+  - docs: bump version pins
+
 7.105.0 (2026-07-14)
 --------------------
   - docs: trim changelog history; condense pre-7.100 ranges to per-range summaries

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.105.12-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.105.13-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -10,11 +10,11 @@
 ## Quick Start
 
 > [!IMPORTANT]
-> Run as your normal user (root refused, exit 2; root `--check`: silent exit 3); cache sudo first (`sudo -v`). The unattended run **removes packages** ([Configuration](#configuration)). Reboot, then `--verify`; re-runs are idempotent.
+> Run as your normal user; cache sudo first (`sudo -v`). The unattended run **removes packages** ([Configuration](#configuration)). Reboot, then `--verify`; re-runs are idempotent.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.105.12
+cd ry-install && git checkout v7.105.13
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -35,6 +35,9 @@ chmod +x ry-install.fish
 Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected) or uncached sudo (non-TTY; a TTY prompts once). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
 
 ## BIOS
+
+<details>
+<summary>85 W power ceiling — 13 SMU settings (expand)</summary>
 
 Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve; per-setting rationale is in the Note column. Full rationale + walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
@@ -57,6 +60,8 @@ Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT =
 | Thermal Control | `Manual` | unlock TjMax |
 | TjMax | `90` | 10 °C under the silicon limit |
 
+</details>
+
 ## Usage
 
 > [!CAUTION]
@@ -64,13 +69,13 @@ Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT =
 
 | Flag | Action |
 |---|---|
-| *(no args)* | Unattended install (silent; phase matrix at end) |
+| *(no args)* | Run the unattended install (silent; phase matrix at end) |
 | `-V`/`--verbose` | Stream per-command install output (ignored under `--check`) |
-| `--verify` | Config files byte-for-byte, then live system state; flags stale `/etc/modprobe.d/60-ry-*` drop-ins outside the managed set |
-| `--check` | Silent idempotency probe vs live `/proc/cmdline` — a fresh install reads drift until reboot ([Exit Codes](#exit-codes)) |
+| `--verify` | Verify config files byte-for-byte, then live system state; flag stale `/etc/modprobe.d/60-ry-*` drop-ins outside the managed set |
+| `--check` | Probe idempotency silently vs live `/proc/cmdline` — a fresh install reads drift until reboot ([Exit Codes](#exit-codes)) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
-| `--` | End of options (no positional args) |
-| `-h`/`--help` · `-v`/`--version` | Honored before all checks, including the root guard |
+| `--` | End option parsing (no positional args) |
+| `-h`/`--help` · `-v`/`--version` | Print and exit before all checks, including the root guard |
 
 `--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` hard-gate hardware and key/count invariants (exit 3); `--verify` downgrades the hardware gate to a warning.
 
@@ -104,7 +109,7 @@ Results print to stderr; a JSONL log records each phase. `WARN` keeps exit 0; `D
 > [!WARNING]
 > Masks `ufw` and ships an IPv4-only nftables default-deny-inbound ruleset (loopback, established/related, inbound ping accepted; `forward` drop, `output` accept). IPv6 disabled system-wide (`ipv6.disable=1`).
 
-The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and AMD-Vi revert to kernel defaults, though the IPv4-only ruleset and the `amdxdna` blacklist still apply. Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`); set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play accepts.
+The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and AMD-Vi revert to kernel defaults, though the IPv4-only ruleset and the `amdxdna` blacklist still apply. Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`). Set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play accepts.
 
 | Feature | Detail |
 |---|---|
@@ -117,12 +122,12 @@ The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and 
 
 ### Exit Codes
 
-| Code | Meaning | Emitted when |
+| Code | Meaning | Emitted When |
 |---|---|---|
 | `0` | OK | Success; also `WARN`-only runs and `--check` clean |
 | `1` | verify-FAIL / install-error | `--verify` mismatch, or an install step errored |
 | `2` | usage | Bad args, non-absolute/unmanaged `--install-file`, root-guard misuse |
-| `3` | preflight | Missing/non-GNU dep, uncached sudo, gate mismatch |
+| `3` | preflight | Missing/non-GNU dep, uncached sudo, gate mismatch, root + `--check` (silent) |
 | `4` | boot-critical (DO NOT REBOOT) | Boot cascade or post-rebuild sanity failed — resolve before rebooting |
 | `5` | lock | Another instance holds the lock (fail-closed on ambiguous pidfile) |
 | `10` | `--check` drift | Config drift from the managed baseline |
@@ -131,9 +136,9 @@ The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and 
 
 All tunables are `set -g` globals near the top of the script — no external config file. Edit one, then re-run (or `--install-file` the affected file). Perms: system `0644`, user `0600`.
 
-### Globals
+### CachyOS Divergences
 
-CachyOS divergences: `DNSSEC=allow-downgrade` (vendor default is DoH); sysctl priority `95`, loading after vendor `70-cachyos-settings.conf`; NVMe scheduler `none` (vendor default is `kyber`); AMD P-State EPP `balance_performance`; `sdboot-manage` `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)).
+`DNSSEC=allow-downgrade` (vendor default is DoH); sysctl priority `95`, loading after vendor `70-cachyos-settings.conf`; NVMe scheduler `none` (vendor default is `kyber`); AMD P-State EPP `balance_performance`; `sdboot-manage` `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)).
 
 ### Packages
 
@@ -141,7 +146,12 @@ CachyOS divergences: `DNSSEC=allow-downgrade` (vendor default is DoH); sysctl pr
 
 | Action | Packages |
 |---|---|
-| Install | gaming (`cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`) · CLI (`fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`) · hardware (`nvme-cli`, `lm_sensors`, `ddcutil`) · RT audio (`rtkit`, `realtime-privileges`) · firewall (`nftables`) · contrib (`pacman-contrib`) |
+| Install — gaming | `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware` |
+| Install — CLI | `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta` |
+| Install — hardware | `nvme-cli`, `lm_sensors`, `ddcutil` |
+| Install — RT audio | `rtkit`, `realtime-privileges` |
+| Install — firewall | `nftables` |
+| Install — contrib | `pacman-contrib` |
 | Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (`chwd` Vulkan drivers) |
 
@@ -153,9 +163,9 @@ CachyOS divergences: `DNSSEC=allow-downgrade` (vendor default is DoH); sysctl pr
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
 | Untouched | `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path) |
 
-### fstab
+### `fstab`
 
-ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`relatime`/`atime`/`strictatime`/existing `commit=` tokens normalized away); everything else byte-preserved. Gated by line-count parity + size floor + mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite; malformed (whitespace-split) rows are left byte-identical and warned.
+ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`relatime`/`atime`/`strictatime`/existing `commit=` tokens normalized away). Everything else is byte-preserved. Gated by line-count parity + size floor + mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite. Malformed (whitespace-split) rows are left byte-identical and warned.
 
 ## Managed Files
 
@@ -216,7 +226,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | # | Step | Action |
 |---|---|---|
 | 1 | Unmask units | `sudo systemctl unmask` all 12 masked units — exact set in [Units](#units) |
-| 2 | Remove configs | `sudo rm` managed system files + `rm` the 2 user files — skip the 4 boot files (step 3 reverts them) |
+| 2 | Remove configs | `sudo rm` the 11 system files + `rm` the 2 user files — skip the 4 boot files (step 3 reverts them) |
 | 3 | Revert boot files + fstab | `.ry.bak` → `loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `mkinitcpio.conf`, `/etc/fstab` (if present); then delete the `.ry.bak` files |
 | 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** row, `pacman -Rns` the **Install** row — exact lists in [Packages](#packages) |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |

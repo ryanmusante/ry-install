@@ -3,7 +3,7 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.105.10 - 7.105.14 (2026-07-14)
+7.105.10 - 7.105.15 (2026-07-14)
 --------------------------------
   - env: replace PROTON_FSR4_RDNA3_UPGRADE=1 with FSR4_UPGRADE=1 (long form removed upstream in Proton-CachyOS 11.0-20260702; ENV_VARS count unchanged at 12)
   - boot: replace pcie_aspm=off with pcie_aspm.policy=performance — "off" leaves firmware-programmed ASPM untouched (kernel doc 2e0239d47d75e08); policy=performance actively disables it regardless of BIOS state (KERNEL_PARAMS count unchanged at 17)
@@ -11,9 +11,9 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - modprobe: NPU-path comment names pcie_aspm.policy=performance as the MT7925 ASPM cover
   - readme: document the Mesa >= 26.0 soft-warn gate in Requirements; note the stale drop-in scan in the --verify row
   - readme: de-dup BIOS intro vs table Note cells, drop repeated --verify-warns and exit-4 mentions, tighten FSR4 + ASPM rows; no facts or values dropped
-  - readme: split the Packages Install row into an Install-headed category table (Gaming/CLI/Hardware/RT audio/Firewall/Contrib; Remove/Verify keep their own Action table); verb-first Flag actions; move root/exit-code detail from the Quick Start alert into Exit Codes (exit 3 gains the root + --check emitter); collapse the BIOS walkthrough into <details>; sentence-split fstab and Safety prose
+  - readme: split the Packages Install row into an Install-headed category table (Gaming/CLI/Hardware/RT audio/Firewall/Contrib; Remove/Verify keep their own Action table); verb-first Flag actions; move root/exit-code detail from the Quick Start alert into Exit Codes (exit 3 gains the root + --check emitter); collapse the BIOS walkthrough into <details> with a collapsibility note above it; sentence-split fstab and Safety prose
   - readme: normalize H3 case (Boot/System/User Files); rename Globals -> CachyOS Divergences; backtick the fstab heading; code-format chwd; count the 11 system files in Uninstall; Emitted When header case
-  - readme: badge/checkout -> 7.105.14
+  - readme: badge/checkout -> 7.105.15
 
 7.105.5 - 7.105.9 (2026-07-14)
 ------------------------------

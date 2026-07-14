@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.105.14-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.105.15-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.105.14
+cd ry-install && git checkout v7.105.15
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -36,8 +36,10 @@ Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected) 
 
 ## BIOS
 
+The walkthrough below is collapsible — click/tap the summary to expand.
+
 <details>
-<summary>85 W power ceiling — 13 SMU settings (expand)</summary>
+<summary>85 W power ceiling — 13 SMU settings</summary>
 
 Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve; per-setting rationale is in the Note column. Full rationale + walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 

@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.105.13-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.105.14-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.105.13
+cd ry-install && git checkout v7.105.14
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -144,14 +144,17 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 `pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` can't orphan a dependency-installed one. `archlinux-contrib` is no longer managed — optional `sudo pacman -Rns archlinux-contrib`.
 
+| Install | Packages |
+|---|---|
+| Gaming | `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware` |
+| CLI | `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta` |
+| Hardware | `nvme-cli`, `lm_sensors`, `ddcutil` |
+| RT audio | `rtkit`, `realtime-privileges` |
+| Firewall | `nftables` |
+| Contrib | `pacman-contrib` |
+
 | Action | Packages |
 |---|---|
-| Install — gaming | `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware` |
-| Install — CLI | `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta` |
-| Install — hardware | `nvme-cli`, `lm_sensors`, `ddcutil` |
-| Install — RT audio | `rtkit`, `realtime-privileges` |
-| Install — firewall | `nftables` |
-| Install — contrib | `pacman-contrib` |
 | Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (`chwd` Vulkan drivers) |
 

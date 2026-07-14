@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.104.0 (2026-07-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.105.0 (2026-07-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end # refuse sourcing/stdin
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.104.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.105.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14
 set -g EXIT_RUN_TMPFAIL 251
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -12,7 +12,7 @@ set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= # single option-spec source (root-guard + main argparse)
-set -g KERNEL_MIN 6.18.4 # regression floor: RTL8127 r8169 + suspend-hang fix ae1737e7339b land <=6.18; gfx1151 GPU-hang fix is in linux-firmware (MES 0x86), not the kernel — not gated here
+set -g KERNEL_MIN 6.18.4 # regression floor (RTL8127 r8169 + suspend-hang fix ae1737e7339b); gfx1151 fix is firmware, not kernel
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -629,10 +629,9 @@ set -g SYSCTL_VALUES \
     "vm.swappiness=150" "vm.watermark_boost_factor=0"
 
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) ──
-# pactree/paccache (used here)
 set -g PKGS_ADD \
     nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs \
-    bottom htop git-delta lm_sensors rtkit realtime-privileges ddcutil nftables pacman-contrib
+    bottom htop git-delta lm_sensors rtkit realtime-privileges ddcutil nftables pacman-contrib # pacman-contrib: pactree + paccache
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
@@ -3581,7 +3580,7 @@ function _install_packages --description "Install managed packages via pacman -S
     return 0
 end
 
-# ── INSTALL PHASE 3: SYSTEM + USER + SERVICE FILES (ATOMIC WRITES) ──
+# ── INSTALL PHASE 3: CONFIGURATION (SYSTEM + USER CONFIG FILES, ATOMIC WRITES) ──
 function _isf_deploy_set --argument-names use_sudo phase --description "Deploy all destinations from argv[3..]"
     set -l _had_failure false
     for dst in $argv[3..]
@@ -3603,7 +3602,8 @@ function _install_system_files --description "Deploy all embedded config files"
     return 0
 end
 
-# ── INSTALL PHASE 4 SUB: FSTAB EXT4 OPTS REWRITE (noatime,lazytime,commit=10) ──
+# ── INSTALL PHASE 4: SERVICES (FSTAB → RESOLVED → PKG REMOVE → MASK → ENABLE → REGDOM) ──
+# ── INSTALL PHASE 4: FSTAB EXT4 OPTS REWRITE (noatime,lazytime,commit=10) ──
 function _fstab_needs_change --description "Scan ext4 entries for missing noatime/lazytime/commit=10"
     set -g _RY_FSTAB_NEEDS_CHANGE false; set -g _RY_FSTAB_COMMIT_OVERRIDES; set -l _malformed_warned false
     for line in $argv
@@ -3751,7 +3751,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     return 0
 end
 
-# ── INSTALL PHASE 4 (Services slot): RESOLVED + PKG REMOVE + MASK + ENABLE + REGDOM ──
+# ── INSTALL PHASE 4: RESOLVED RESTART (conf.d drop-in changed this run) ──
 function _configure_services_resolved_restart --description "Restart systemd-resolved when its conf.d drop-in changed this run"
     test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
     if not contains -- /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf $_RY_DEPLOY_CHANGED_DSTS # unchanged bytes: no DNS blip on idempotent re-runs
@@ -3768,7 +3768,7 @@ function _configure_services_resolved_restart --description "Restart systemd-res
     return 0
 end
 
-# ── INSTALL PHASE 4 SUB: PKGS_DEL REMOVAL (RDEP-AWARE VIA PACTREE) ──
+# ── INSTALL PHASE 4: PKGS_DEL REMOVAL (RDEP-AWARE VIA PACTREE) ──
 function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when no external installed rdeps; emit nothing (blocked)"
     if not command -q pactree
         if not set -q _RY_PACTREE_MISSING_WARNED
@@ -3854,7 +3854,7 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
     return 0
 end
 
-# ── INSTALL PHASE 4 SUB: MASK + FIREWALL HANDOFF (NFTABLES LIVE BEFORE UFW FLUSH) ──
+# ── INSTALL PHASE 4: MASK + FIREWALL HANDOFF (NFTABLES LIVE BEFORE UFW FLUSH) ──
 function _csm_filter_units --description "_configure_services_mask sub: Pre-filter unit list"
     for _unit in $argv # per-unit avoids batched positional drift
         set -l _state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
@@ -3951,7 +3951,7 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     end
     return $_rc
 end
-# ── INSTALL PHASE 4 SUB: ENABLE UNITS + REGDOM ──
+# ── INSTALL PHASE 4: ENABLE UNITS + REGDOM ──
 function _cse_collect_units --description "Collect system units to enable"
     set -l _enable
     for _exp in $EXPECTED_SERVICES

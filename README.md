@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.105.3-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.105.4-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.105.3
+cd ry-install && git checkout v7.105.4
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -77,11 +77,11 @@ Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT =
 
 Safe fallback when unset or invalid. One JSONL log per run: `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` (`0600`).
 
-| Variable | Effect |
-|---|---|
-| `RY_RUN_TIMEOUT` | Per-command cap. Default `3600` s; `0` disables; package/boot ops floor `7200` s; invalid → default |
-| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `Ryzen AI Max` CPU-match hard-fail (`--verify` warns) |
-| `NO_COLOR` | Disable colored output when set — any value, including empty ([no-color.org](https://no-color.org)) |
+| Variable | Default | Effect |
+|---|---|---|
+| `RY_RUN_TIMEOUT` | `3600` s | Per-command cap; `0` disables; package/boot ops floor `7200` s; invalid → default |
+| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | `0` (check on) | Bypass the `Ryzen AI Max` CPU-match hard-fail (`--verify` warns) |
+| `NO_COLOR` | unset (color on) | Disable colored output when set — any value, including empty ([no-color.org](https://no-color.org)) |
 
 ## Install Flow
 

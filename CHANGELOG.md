@@ -3,6 +3,10 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.105.4 (2026-07-14)
+--------------------
+  - readme: add Default column to Environment Overrides; move defaults out of Effect prose
+
 7.105.3 (2026-07-14)
 --------------------
   - comments: condense inline notes on long lines to vital rationale; no code change

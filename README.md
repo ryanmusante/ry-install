@@ -26,11 +26,11 @@ chmod +x ry-install.fish
 | Requirement | Minimum |
 |---|---|
 | Platform | CachyOS · systemd-boot · ext4 root |
-| Kernel | 6.18.4 advisory floor — regression baseline (RTL8127 + suspend) |
-| Mesa | ≥ 26.0 (below: soft warn only) |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
 | Hardware | CPU matches `Ryzen AI Max` — bypass: `RY_INSTALL_SKIP_HARDWARE_CHECK=1` |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
+| Mesa | ≥ 26.0 (below: soft warn only) |
+| Kernel | 6.18.4 advisory floor — regression baseline (RTL8127 + suspend) |
 
 Preflight hard-fails (exit 3) on uncached sudo (non-TTY; a TTY prompts once), missing/non-GNU deps (busybox/uutils rejected), a free-space floor breach, or an unreachable network. NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
 
@@ -115,12 +115,12 @@ The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and 
 
 | Feature | Detail |
 |---|---|
+| Instance lock | atomic `mkdir` (then `0700`); stale reclaim only for a provably-recycled PID (`/proc` start-time); else fail-closed |
 | Atomic writes | same-FS tmp → render → symlink-probe → content pre-validate (`nft -c` for the ruleset) → backup → chmod → `mv -T` → re-read + restore on mismatch |
 | Auto backups | `<path>.ry.bak` for the 4 boot files (and `fstab`, during its rewrite) |
 | mkinitcpio rollback | byte-exact revert (`cmp`-gated) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Entry regeneration | `REMOVE_EXISTING=yes` clears `loader/entries/` first; EFI-resident loaders (e.g. Windows Boot Manager) untouched |
-| Instance lock | atomic `mkdir 0700`; stale reclaim only for a provably-recycled PID (`/proc` start-time); else fail-closed |
 
 ### Exit Codes
 
@@ -146,14 +146,9 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 `pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` can't orphan a dependency-installed one.
 
-| Install | Packages |
+| Action | Packages |
 |---|---|
-| Gaming | `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware` |
-| CLI | `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta` |
-| Hardware | `nvme-cli`, `lm_sensors`, `ddcutil` |
-| RT audio | `rtkit`, `realtime-privileges` |
-| Firewall | `nftables` |
-| Contrib | `pacman-contrib` |
+| Install (`-Syu --needed`) | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `rtkit`, `realtime-privileges`, `ddcutil`, `nftables`, `pacman-contrib` |
 
 ### Remove & Verify
 
@@ -182,9 +177,9 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 
 | File | Purpose |
 |---|---|
-| `/boot/loader/loader.conf` | loader: default entry, timeout, console-mode |
+| `/boot/loader/loader.conf` | loader: default entry, timeout, console-mode, editor |
 | `/etc/kernel/cmdline` | `rw root=UUID` + the 17 `KERNEL_PARAMS` |
-| `/etc/sdboot-manage.conf` | entry gen (`REMOVE_EXISTING`, `LINUX_OPTIONS`) |
+| `/etc/sdboot-manage.conf` | entry gen: `LINUX_OPTIONS`, `LINUX_FALLBACK_OPTIONS`, `DEFAULT_ENTRY`, `REMOVE_EXISTING`, `OVERWRITE_EXISTING`, `REMOVE_OBSOLETE` |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES`/`HOOKS`/`COMPRESSION` (`zstd`) |
 
 ### System Files
@@ -199,7 +194,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 | `/etc/bluetooth/main.conf` | adapter auto-power-on + paired-sink reconnect |
 | `/etc/nftables.conf` | IPv4-only default-deny-inbound (ping allowed) |
 | `/etc/default/cpupower-service.conf` | governor (`powersave`) |
-| `/etc/sysctl.d/95-ry-overrides.conf` | `fq` + netdev, TCP BBR, VM tunables |
+| `/etc/sysctl.d/95-ry-overrides.conf` | `fq` + netdev, TCP `bbr`, VM tunables |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe sched `none`, P-State EPP, GPU DPM |
 | `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist (`BLACKLIST_AMDXDNA`) |
 
@@ -216,15 +211,15 @@ Non-obvious choices; several list an override to reverse.
 
 | Topic | Detail |
 |---|---|
-| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise BIOS UMA carveout (≤96 GiB) for more (`amdgpu.gttsize` deprecated). Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
-| FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled (RDNA3/3.5). Verify: `printenv FSR4_UPGRADE`. |
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-no-node warn · absent info). Opt out: `PROTON_NO_NTSYNC=1`. |
-| MangoHud `cpu_temp` | Intentionally disabled (commented) in the shipped HUD — uncomment to show CPU temp. `cpu_power` ships active but reads 0 on Zen 5. |
-| PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency); plain `off` merely inherits BIOS link state. Drop to restore ASPM defaults. |
-| IPv6 | `ipv6.disable=1`, IPv4-only ruleset. Dual-stack: drop token, add IPv6 rules, re-run. |
-| Avahi | `.service`+`.socket` masked — collided with resolved as a 2nd mDNS responder; profile runs `MulticastDNS=no`. Unmask both to restore. |
 | AMD-Vi (IOMMU) | `amd_iommu=off` breaks the XDNA NPU (hence blacklist). NPU/VFIO/SR-IOV: `amd_iommu=on iommu=pt` + `BLACKLIST_AMDXDNA false`, re-run. |
 | UMIP (`clearcpuid=umip`) | Disables UMIP trapping; taints kernel. String form is version-stable (CPUID bit numbers shift between kernels). Drop if no `umip_printk` stutter. |
+| IPv6 | `ipv6.disable=1`, IPv4-only ruleset. Dual-stack: drop token, add IPv6 rules, re-run. |
+| PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency); plain `off` merely inherits BIOS link state. Drop to restore ASPM defaults. |
+| FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled (RDNA3/3.5). Verify: `printenv FSR4_UPGRADE`. |
+| Avahi | `.service`+`.socket` masked — collided with resolved as a 2nd mDNS responder; profile runs `MulticastDNS=no`. Unmask both to restore. |
+| MangoHud `cpu_temp` | Intentionally disabled (commented) in the shipped HUD — uncomment to show CPU temp. `cpu_power` ships active but reads 0 on Zen 5. |
+| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise BIOS UMA carveout (≤96 GiB) for more (`amdgpu.gttsize` deprecated). Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 
 ## Uninstall
 

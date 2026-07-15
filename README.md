@@ -19,7 +19,9 @@ chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-**In scope:** pacman add/remove, kernel cmdline, initramfs, NetworkManager, Bluetooth, nftables firewall, sysctl, gaming env vars, MangoHud, fstab mount options, systemd units, sdboot-manage BLS entries. **Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
+**In scope:** pacman add/remove, kernel cmdline, initramfs, NetworkManager, Bluetooth, nftables firewall, sysctl, gaming env vars, MangoHud, fstab mount options, systemd units, sdboot-manage BLS entries. 
+
+**Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
 
 ## Requirements
 
@@ -148,7 +150,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 | Action | Packages |
 |---|---|
-| Install (`-Syu --needed`) | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `rtkit`, `realtime-privileges`, `ddcutil`, `nftables`, `pacman-contrib` |
+| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `rtkit`, `realtime-privileges`, `ddcutil`, `nftables`, `pacman-contrib` |
 
 ### Remove & Verify
 

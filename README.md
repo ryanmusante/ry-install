@@ -32,7 +32,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` — bypass: `RY_INSTALL_SKIP_HARDWARE_CHECK=1` |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), uncached sudo (non-TTY; a TTY prompts once), or an unreachable network. NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
+Preflight hard-fails (exit 3) on uncached sudo (non-TTY; a TTY prompts once), missing/non-GNU deps (busybox/uutils rejected), a free-space floor breach, or an unreachable network. NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
 
 ## BIOS
 
@@ -140,7 +140,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 ### CachyOS Divergences
 
-`DNSSEC=allow-downgrade` (vendor default is DoH); sysctl priority `95`, loading after vendor `70-cachyos-settings.conf`; NVMe scheduler `none` (vendor default is `kyber`); AMD P-State EPP `balance_performance`; `sdboot-manage` `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)).
+`sdboot-manage` `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)); `DNSSEC=allow-downgrade` (vendor default is DoH); sysctl priority `95`, loading after vendor `70-cachyos-settings.conf`; NVMe scheduler `none` (vendor default is `kyber`); AMD P-State EPP `balance_performance`.
 
 ### Packages
 
@@ -199,7 +199,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 | `/etc/bluetooth/main.conf` | adapter auto-power-on + paired-sink reconnect |
 | `/etc/nftables.conf` | IPv4-only default-deny-inbound (ping allowed) |
 | `/etc/default/cpupower-service.conf` | governor (`powersave`) |
-| `/etc/sysctl.d/95-ry-overrides.conf` | BBR + `fq`, VM, netdev tunables |
+| `/etc/sysctl.d/95-ry-overrides.conf` | `fq` + netdev, TCP BBR, VM tunables |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe sched `none`, P-State EPP, GPU DPM |
 | `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist (`BLACKLIST_AMDXDNA`) |
 

@@ -13,6 +13,9 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - readme: de-dup BIOS intro vs table Note cells, drop repeated --verify-warns and exit-4 mentions, tighten FSR4 + ASPM rows; no facts or values dropped
   - readme: split the Packages Install row into an Install-headed category table (Gaming/CLI/Hardware/RT audio/Firewall/Contrib; Remove/Verify keep their own Action table under a bold "Remove & verify" lead-in); verb-first Flag actions; move root/exit-code detail from the Quick Start alert into Exit Codes (exit 3 gains the root + --check emitter); collapse the BIOS walkthrough into a collapsibility note above it; sentence-split fstab and Safety prose
   - readme: normalize H3 case (Boot/System/User Files); rename Globals -> CachyOS Divergences; backtick the fstab heading; code-format chwd; count the 11 system files in Uninstall; Emitted When header case
+  - readme: add Embedded Values — Kernel Parameters (17) / Gaming Environment (12) / Sysctl Overrides (10) tables in declaration order, one-line Effect cells; rationale stays in Tuning Notes
+  - readme: precision — DoH divergence tied to plaintext DNS (DNSOverTLS=no), not DNSSEC; full ICMP accept set + invalid-drop named; GPU DPM value auto; RY_RUN_TIMEOUT >9-digit clamp; wpa_supplicant backend + WARN level named; /boot floor gated on separate mount; full phase-verdict set; Divergences reordered to decl order (EPP before sysctl-95); Platform row footnoted as declarative
+  - readme: detail — remote-play port sets, paccache -rk2/-ruk0, network probe targets + 37-command GNU roster, mkinitcpio amdgpu + zstd -1 -T0, loader/sdboot values, BlueZ FastConnectable + 3 retries, logind long-press variants, LogLevelMax=notice, MangoHud toggle key, exit-code sentinel note, lock path, Wi-Fi NM-restart DEFER, amd-pstate-epp verify expectation, ESP-fallback note; nothing removed
   - readme: badge/checkout -> 7.105.15
 
 7.105.5 - 7.105.9 (2026-07-14)

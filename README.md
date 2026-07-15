@@ -19,7 +19,7 @@ chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-**In scope:** pacman add/remove, kernel cmdline, initramfs, NetworkManager, Bluetooth, nftables firewall, sysctl, gaming env vars, MangoHud, fstab mount options, systemd units, sdboot-manage BLS entries. 
+**In scope:** pacman add/remove, kernel cmdline, initramfs, NetworkManager, Bluetooth, nftables firewall, sysctl, gaming env vars, MangoHud, fstab mount options, systemd units, sdboot-manage BLS entries.
 
 **Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
 
@@ -30,11 +30,11 @@ chmod +x ry-install.fish
 | Platform | CachyOS · systemd-boot · ext4 root |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
 | Hardware | CPU matches `Ryzen AI Max` — bypass: `RY_INSTALL_SKIP_HARDWARE_CHECK=1` |
-| Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
+| Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500; gated only when `/boot` is a separate mount) |
 | Mesa | ≥ 26.0 (below: soft warn only) |
 | Kernel | 6.18.4 advisory floor — regression baseline (RTL8127 + suspend) |
 
-Preflight hard-fails (exit 3) on uncached sudo (non-TTY; a TTY prompts once), missing/non-GNU deps (busybox/uutils rejected), a free-space floor breach, or an unreachable network. NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
+The Platform row is the design target — enforced indirectly (`sdboot-manage` dependency, non-vfat ESP refusal, ext4-only fstab tuning); the rows below it are preflight-enforced. Preflight hard-fails (exit 3) on uncached sudo (non-TTY; a TTY prompts once), missing/non-GNU deps — 37 required commands, with capability probes for `timeout --foreground --kill-after`, `find -maxdepth -printf`, and `mv -T` (busybox/uutils rejected) — a free-space floor breach, or an unreachable network (HTTPS to `archlinux.org` then `cloudflare.com`, ICMP `1.1.1.1`/`8.8.8.8` fallback). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
 
 ## BIOS
 
@@ -69,7 +69,7 @@ Strix Halo multi-thread gains flatten past ~85 W; a flat `SPL = fPPT = sPPT = 85
 ## Usage
 
 > [!CAUTION]
-> `--install-file` of a boot config runs the boot cascade (`loader.conf` / `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits 4 — **do not reboot** until it succeeds. A non-vfat `/boot` ESP fallback also refuses sdboot (exit 4).
+> `--install-file` of a boot config runs the boot cascade (`loader.conf` / `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits 4 — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit 4).
 
 | Flag | Action |
 |---|---|
@@ -89,7 +89,7 @@ Safe fallback when unset or invalid.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `RY_RUN_TIMEOUT` | `3600` s | Per-command cap; `0` disables; package/boot ops floor `7200` s; invalid → default |
+| `RY_RUN_TIMEOUT` | `3600` s | Per-command cap; `0` disables; package/boot ops floor `7200` s; non-numeric → default; > 9 digits clamps to `2147483647` |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | `0` (check on) | Bypass the `Ryzen AI Max` CPU-match hard-fail |
 | `NO_COLOR` | unset (color on) | Disable colored output when set — any value, including empty ([no-color.org](https://no-color.org)) |
 
@@ -104,20 +104,20 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 3 | Configuration | deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
-| 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
+| 6 | Finalize | user `daemon-reload` → `paccache -rk2` + `-ruk0` → NetworkManager restart |
 
-Results print to stderr; one JSONL log per run (`0600`): `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. Phase verdicts: `WARN` keeps exit 0; `DEFER` applies on next boot.
+Results print to stderr; one JSONL log per run (`0600`): `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. Phase verdicts: `PASS` · `WARN` · `FAIL` · `DEFER` · `SKIP` · `N/A` — `WARN` keeps exit 0; `DEFER` applies on next boot (e.g. the NetworkManager restart over Wi-Fi).
 
 ## Safety & Reliability
 
 > [!WARNING]
-> Masks `ufw` and ships an IPv4-only nftables default-deny-inbound ruleset (loopback, established/related, inbound ping accepted; `forward` drop, `output` accept). IPv6 disabled system-wide (`ipv6.disable=1`).
+> Masks `ufw` and ships an IPv4-only nftables default-deny-inbound ruleset: loopback, established/related, and ICMP echo-request + error/PMTUD types (destination-unreachable, time-exceeded, parameter-problem) accepted; `invalid` state dropped; `forward` drop, `output` accept. IPv6 disabled system-wide (`ipv6.disable=1`).
 
-The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and AMD-Vi revert to kernel defaults, though the IPv4-only ruleset and the `amdxdna` blacklist still apply. Game-streaming inbound is off; `RY_REMOTE_PLAY_PORTS=true` + re-run appends Sunshine/Moonlight + Steam Remote Play accepts.
+The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and AMD-Vi revert to kernel defaults, though the IPv4-only ruleset and the `amdxdna` blacklist still apply. Game-streaming inbound is off; `RY_REMOTE_PLAY_PORTS=true` + re-run appends Sunshine/Moonlight + Steam Remote Play accepts (`tcp 47984, 47989, 48010, 27036, 27037` · `udp 47998-48010, 27031-27036`).
 
 | Feature | Detail |
 |---|---|
-| Instance lock | atomic `mkdir` (then `0700`); stale reclaim only for a provably-recycled PID (`/proc` start-time); else fail-closed |
+| Instance lock | `~/ry-install/.lock/pid` — atomic `mkdir` (then `0700`); stale reclaim only for a provably-recycled PID (`/proc` start-time); else fail-closed |
 | Atomic writes | same-FS tmp → render → symlink-probe → content pre-validate (`nft -c` for the ruleset) → backup → chmod → `mv -T` → re-read + restore on mismatch |
 | Auto backups | `<path>.ry.bak` for the 4 boot files (and `fstab`, during its rewrite) |
 | mkinitcpio rollback | byte-exact revert (`cmp`-gated) on `pacman -Syu` failure or signal |
@@ -136,13 +136,15 @@ The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and 
 | `5` | lock | Another instance holds the lock (fail-closed on ambiguous pidfile) |
 | `10` | `--check` drift | Config drift from the managed baseline |
 
+Sentinels `11-14` / `250` / `251` / `255` are internal and never surface as process exits; signals exit `128+N`.
+
 ## Configuration
 
 All tunables are `set -g` globals near the top of the script — no external config file. Edit one, then re-run (or `--install-file` the affected file). Perms: system `0644`, user `0600`.
 
 ### CachyOS Divergences
 
-`sdboot-manage` `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)); `DNSSEC=allow-downgrade` (vendor default is DoH); sysctl priority `95`, loading after vendor `70-cachyos-settings.conf`; NVMe scheduler `none` (vendor default is `kyber`); AMD P-State EPP `balance_performance`.
+`sdboot-manage` `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)); plaintext DNS — `DNSOverTLS=no` (vendor default is DoH) plus `DNSSEC=allow-downgrade`; AMD P-State EPP `balance_performance` (`--verify` expects the `amd-pstate-epp` scaling driver); sysctl priority `95`, loading after vendor `70-cachyos-settings.conf`; NVMe scheduler `none` (vendor default is `kyber`).
 
 ### Packages
 
@@ -179,25 +181,25 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 
 | File | Purpose |
 |---|---|
-| `/boot/loader/loader.conf` | loader: default entry, timeout, console-mode, editor |
+| `/boot/loader/loader.conf` | loader: default `@saved`, timeout `0`, console-mode `keep`, editor `no` |
 | `/etc/kernel/cmdline` | `rw root=UUID` + the 17 `KERNEL_PARAMS` |
-| `/etc/sdboot-manage.conf` | entry gen: `LINUX_OPTIONS`, `LINUX_FALLBACK_OPTIONS`, `DEFAULT_ENTRY`, `REMOVE_EXISTING`, `OVERWRITE_EXISTING`, `REMOVE_OBSOLETE` |
-| `/etc/mkinitcpio.conf` | initramfs `MODULES`/`HOOKS`/`COMPRESSION` (`zstd`) |
+| `/etc/sdboot-manage.conf` | entry gen: `LINUX_OPTIONS`, `LINUX_FALLBACK_OPTIONS="quiet"`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING=yes`, `OVERWRITE_EXISTING=yes`, `REMOVE_OBSOLETE=yes` |
+| `/etc/mkinitcpio.conf` | initramfs `MODULES` (`amdgpu` — early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-1 -T0`) |
 
 ### System Files
 
 | File | Purpose |
 |---|---|
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | `DNSSEC=allow-downgrade`, no mDNS/LLMNR/DoT |
-| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | ignore power/suspend/hibernate/reboot keys |
-| `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | silence info-level `nm-dispatcher` noise |
-| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | Wi-Fi backend, power-save off, log level |
+| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | ignore power/suspend/hibernate/reboot keys (+ long-press variants — 8 keys) |
+| `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | `LogLevelMax=notice` — silence info-level `nm-dispatcher` noise |
+| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, `wifi.powersave=2` (off), log level `WARN` |
 | `/etc/iw-regdomain` | regulatory domain (`US`) |
-| `/etc/bluetooth/main.conf` | adapter auto-power-on + paired-sink reconnect |
+| `/etc/bluetooth/main.conf` | adapter auto-power-on, `FastConnectable`, 3 paired-sink reconnect attempts |
 | `/etc/nftables.conf` | IPv4-only default-deny-inbound (ping allowed) |
 | `/etc/default/cpupower-service.conf` | governor (`powersave`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `fq` + netdev, TCP `bbr`, VM tunables |
-| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe sched `none`, P-State EPP, GPU DPM |
+| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe sched `none`, P-State EPP, GPU DPM level `auto` (no SCLK pin) |
 | `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist (`BLACKLIST_AMDXDNA`) |
 
 ### User Files
@@ -205,7 +207,65 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 | File | Purpose |
 |---|---|
 | `~/.config/environment.d/10-environment.conf` | gaming env (RADV, MangoHud, Proton, VKD3D) |
-| `~/.config/MangoHud/MangoHud.conf` | readout-only HUD |
+| `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
+
+## Embedded Values
+
+The value arrays behind the managed files, in declaration order. Rationale for the non-obvious entries: [Tuning Notes](#tuning-notes).
+
+### Kernel Parameters
+
+| Token | Effect |
+|---|---|
+| `8250.nr_uarts=0` | allocate no legacy 8250 UART ports (none on this board) |
+| `amd_iommu=off` | IOMMU fully off — lowest DMA-mapping overhead |
+| `amd_pstate=active` | CPPC autonomous mode — the `amd-pstate-epp` scaling driver |
+| `btusb.enable_autosuspend=n` | keep the BT controller powered — no wake/reconnect stalls |
+| `clearcpuid=umip` | disable UMIP trapping |
+| `fsck.mode=force` | run fsck on every boot |
+| `fsck.repair=yes` | auto-repair whatever fsck finds |
+| `ipv6.disable=1` | disable the IPv6 stack |
+| `nowatchdog` | no watchdog modules — fewer timer wakeups |
+| `nvme_core.default_ps_max_latency_us=0` | NVMe APST off — no power-state exit latency |
+| `pcie_aspm.policy=performance` | force every PCIe link out of ASPM |
+| `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
+| `quiet` | suppress boot console noise |
+| `split_lock_detect=off` | no split-lock throttling penalty in games |
+| `tsc=reliable` | trust the TSC — skip the clocksource watchdog |
+| `usbcore.autosuspend=-1` | USB autosuspend off globally |
+| `zswap.enabled=0` | zswap off — zram is the swap path |
+
+### Gaming Environment
+
+| Variable | Effect |
+|---|---|
+| `AMD_VULKAN_ICD=RADV` | pin the RADV Vulkan driver |
+| `DXVK_LOG_LEVEL=none` | DXVK logging off |
+| `DXVK_LOG_PATH=none` | no DXVK log files |
+| `FSR4_UPGRADE=1` | enable the FSR4 upgrade path |
+| `MANGOHUD=1` | HUD on for Vulkan titles |
+| `MESA_SHADER_CACHE_MAX_SIZE=16G` | roomy Mesa shader cache |
+| `PROTON_ENABLE_WAYLAND=1` | native-Wayland Proton path |
+| `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
+| `VKD3D_CONFIG=descriptor_heap` | D3D12 descriptor-heap fast path |
+| `VKD3D_DEBUG=none` | vkd3d logging off |
+| `VKD3D_SHADER_DEBUG=none` | vkd3d shader logging off |
+| `WINEDEBUG=-all` | Wine debug channels off |
+
+### Sysctl Overrides
+
+| Key | Effect |
+|---|---|
+| `net.core.default_qdisc=fq` | `fq` qdisc — the BBR pairing |
+| `net.core.netdev_budget=600` | larger NAPI poll budget |
+| `net.core.netdev_budget_usecs=5000` | longer NAPI poll window |
+| `net.ipv4.tcp_congestion_control=bbr` | BBR congestion control |
+| `net.ipv4.tcp_notsent_lowat=16384` | cap unsent buffer — lower send latency |
+| `net.ipv4.tcp_slow_start_after_idle=0` | keep cwnd across idle |
+| `vm.compaction_proactiveness=0` | no proactive-compaction stalls |
+| `vm.max_map_count=2147483642` | game-sized mmap headroom (Steam value) |
+| `vm.swappiness=150` | prefer zram swap aggressively |
+| `vm.watermark_boost_factor=0` | no watermark-boost reclaim spikes |
 
 ## Tuning Notes
 

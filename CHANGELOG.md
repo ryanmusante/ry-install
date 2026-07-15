@@ -11,7 +11,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - modprobe: NPU-path comment names pcie_aspm.policy=performance as the MT7925 ASPM cover
   - readme: document the Mesa >= 26.0 soft-warn gate in Requirements; note the stale drop-in scan in the --verify row
   - readme: de-dup BIOS intro vs table Note cells, drop repeated --verify-warns and exit-4 mentions, tighten FSR4 + ASPM rows; no facts or values dropped
-  - readme: split the Packages Install row into an Install-headed category table (Gaming/CLI/Hardware/RT audio/Firewall/Contrib; Remove/Verify keep their own Action table under a bold "Remove & verify" lead-in); verb-first Flag actions; move root/exit-code detail from the Quick Start alert into Exit Codes (exit 3 gains the root + --check emitter); collapse the BIOS walkthrough into <details> with a collapsibility note above it; sentence-split fstab and Safety prose
+  - readme: split the Packages Install row into an Install-headed category table (Gaming/CLI/Hardware/RT audio/Firewall/Contrib; Remove/Verify keep their own Action table under a bold "Remove & verify" lead-in); verb-first Flag actions; move root/exit-code detail from the Quick Start alert into Exit Codes (exit 3 gains the root + --check emitter); collapse the BIOS walkthrough into a collapsibility note above it; sentence-split fstab and Safety prose
   - readme: normalize H3 case (Boot/System/User Files); rename Globals -> CachyOS Divergences; backtick the fstab heading; code-format chwd; count the 11 system files in Uninstall; Emitted When header case
   - readme: badge/checkout -> 7.105.15
 

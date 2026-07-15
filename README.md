@@ -155,7 +155,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 | Firewall | `nftables` |
 | Contrib | `pacman-contrib` |
 
-**Remove & verify:**
+### Remove and Verify
 
 | Action | Packages |
 |---|---|
@@ -170,7 +170,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 | Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
 | Untouched | `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path) |
 
-### `fstab`
+### Fstab File
 
 ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`relatime`/`atime`/`strictatime`/existing `commit=` tokens normalized away). Everything else is byte-preserved. Gated by line-count parity + size floor + mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite. Malformed (whitespace-split) rows are left byte-identical and warned.
 

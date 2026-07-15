@@ -10,7 +10,7 @@
 ## Quick Start
 
 > [!IMPORTANT]
-> Run as your normal user; cache sudo first (`sudo -v`). The unattended run **removes packages** ([Configuration](#configuration)). Reboot, then `--verify`; re-runs are idempotent.
+> Run as your normal user; cache sudo first (`sudo -v`). The unattended run **removes packages** ([Remove & Verify](#remove--verify)). Reboot, then `--verify`; re-runs are idempotent.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
@@ -19,17 +19,17 @@ chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-**In scope:** kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, gaming env vars, MangoHud, pacman add/remove, sdboot-manage BLS entries. **Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
+**In scope:** kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, nftables firewall, fstab mount options, gaming env vars, MangoHud, pacman add/remove, sdboot-manage BLS entries. **Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
 
 ## Requirements
 
 | Requirement | Minimum |
 |---|---|
 | Platform | CachyOS · systemd-boot · ext4 root |
-| Kernel | 6.18.4 advisory floor (not enforced) — regression baseline (RTL8127 + suspend) |
+| Kernel | 6.18.4 advisory floor — regression baseline (RTL8127 + suspend) |
 | Mesa | ≥ 26.0 (below: soft warn only) |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
-| Hardware | CPU matches `Ryzen AI Max` (override `RY_INSTALL_SKIP_HARDWARE_CHECK=1`; `--verify` warns only) |
+| Hardware | CPU matches `Ryzen AI Max` — bypass: `RY_INSTALL_SKIP_HARDWARE_CHECK=1` |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
 Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected) or uncached sudo (non-TTY; a TTY prompts once). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
@@ -41,7 +41,7 @@ Click/tap the summary to expand.
 <details>
 <summary>85 W power ceiling — 14 SMU settings</summary>
 
-Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve; per-setting rationale is in the Note column. Full rationale + walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
+Strix Halo multi-thread gains flatten past ~85 W; a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve. Per-setting rationale: Note column. Full walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
 `Advanced → SMU Common Options` — power limits in mW, time constants in s, TjMax in °C:
 
@@ -83,7 +83,7 @@ Strix Halo multi-thread gains flatten past ~85 W, so a flat `SPL = fPPT = sPPT =
 
 ### Environment Overrides
 
-Safe fallback when unset or invalid. One JSONL log per run: `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl` (`0600`).
+Safe fallback when unset or invalid.
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -104,14 +104,14 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache` → NetworkManager restart |
 
-Results print to stderr; a JSONL log records each phase. `WARN` keeps exit 0; `DEFER` applies on next boot.
+Results print to stderr; one JSONL log per run (`0600`): `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. Phase verdicts: `WARN` keeps exit 0; `DEFER` applies on next boot.
 
 ## Safety & Reliability
 
 > [!WARNING]
 > Masks `ufw` and ships an IPv4-only nftables default-deny-inbound ruleset (loopback, established/related, inbound ping accepted; `forward` drop, `output` accept). IPv6 disabled system-wide (`ipv6.disable=1`).
 
-The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and AMD-Vi revert to kernel defaults, though the IPv4-only ruleset and the `amdxdna` blacklist still apply. Game-streaming inbound is off (`RY_REMOTE_PLAY_PORTS=false`). Set `true` and re-run to append Sunshine/Moonlight + Steam Remote Play accepts.
+The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and AMD-Vi revert to kernel defaults, though the IPv4-only ruleset and the `amdxdna` blacklist still apply. Game-streaming inbound is off; `RY_REMOTE_PLAY_PORTS=true` + re-run appends Sunshine/Moonlight + Steam Remote Play accepts.
 
 | Feature | Detail |
 |---|---|
@@ -144,7 +144,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` can't orphan a dependency-installed one. `archlinux-contrib` is no longer managed — optional `sudo pacman -Rns archlinux-contrib`.
+`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` can't orphan a dependency-installed one.
 
 | Install | Packages |
 |---|---|
@@ -219,12 +219,12 @@ Non-obvious choices; several list an override to reverse.
 | Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise BIOS UMA carveout (≤96 GiB) for more (`amdgpu.gttsize` deprecated). Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled (RDNA3/3.5). Verify: `printenv FSR4_UPGRADE`. |
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-no-node warn · absent info). Opt out: `PROTON_NO_NTSYNC=1`. |
-| MangoHud `cpu_temp` | (`cpu_power` reads 0 on Zen 5). |
+| MangoHud `cpu_temp` | HUD reads `cpu_temp`, not `cpu_power` — the power counter reports 0 on Zen 5. |
 | PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency); plain `off` merely inherits BIOS link state. Drop to restore ASPM defaults. |
 | IPv6 | `ipv6.disable=1`, IPv4-only ruleset. Dual-stack: drop token, add IPv6 rules, re-run. |
 | Avahi | `.service`+`.socket` masked — collided with resolved as a 2nd mDNS responder; profile runs `MulticastDNS=no`. Unmask both to restore. |
 | AMD-Vi (IOMMU) | `amd_iommu=off` breaks the XDNA NPU (hence blacklist). NPU/VFIO/SR-IOV: `amd_iommu=on iommu=pt` + `BLACKLIST_AMDXDNA false`, re-run. |
-| UMIP (`clearcpuid=umip`) | Disables UMIP trapping; taints kernel. String form is version-stable. Drop if no `umip_printk` stutter. |
+| UMIP (`clearcpuid=umip`) | Disables UMIP trapping; taints kernel. String form is version-stable (CPUID bit numbers shift between kernels). Drop if no `umip_printk` stutter. |
 
 ## Uninstall
 
@@ -235,7 +235,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 1 | Unmask units | `sudo systemctl unmask` all 12 masked units — exact set in [Units](#units) |
 | 2 | Remove configs | `sudo rm` the 11 system files + `rm` the 2 user files — skip the 4 boot files (step 3 reverts them) |
 | 3 | Revert boot files + fstab | `.ry.bak` → `loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `mkinitcpio.conf`, `/etc/fstab` (if present); then delete the `.ry.bak` files |
-| 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** row, `pacman -Rns` the **Install** row — exact lists in [Packages](#packages) |
+| 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** list, `pacman -Rns` the **Install** packages — exact sets in [Packages](#packages) + [Remove & Verify](#remove--verify) |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 

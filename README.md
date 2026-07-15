@@ -19,7 +19,7 @@ chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-**In scope:** kernel cmdline, initramfs, systemd units, NetworkManager, Bluetooth, sysctl, nftables firewall, fstab mount options, gaming env vars, MangoHud, pacman add/remove, sdboot-manage BLS entries. **Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
+**In scope:** pacman add/remove, kernel cmdline, initramfs, NetworkManager, Bluetooth, nftables firewall, sysctl, gaming env vars, MangoHud, fstab mount options, systemd units, sdboot-manage BLS entries. **Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
 
 ## Requirements
 
@@ -32,7 +32,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` — bypass: `RY_INSTALL_SKIP_HARDWARE_CHECK=1` |
 | Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500) |
 
-Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected) or uncached sudo (non-TTY; a TTY prompts once). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
+Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected), uncached sudo (non-TTY; a TTY prompts once), or an unreachable network. NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
 
 ## BIOS
 
@@ -115,7 +115,7 @@ The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and 
 
 | Feature | Detail |
 |---|---|
-| Atomic writes | same-FS tmp → render → symlink-probe → backup → chmod → `mv -T` → re-read + restore on mismatch |
+| Atomic writes | same-FS tmp → render → symlink-probe → content pre-validate (`nft -c` for the ruleset) → backup → chmod → `mv -T` → re-read + restore on mismatch |
 | Auto backups | `<path>.ry.bak` for the 4 boot files (and `fstab`, during its rewrite) |
 | mkinitcpio rollback | byte-exact revert (`cmp`-gated) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
@@ -219,7 +219,7 @@ Non-obvious choices; several list an override to reverse.
 | Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise BIOS UMA carveout (≤96 GiB) for more (`amdgpu.gttsize` deprecated). Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
 | FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled (RDNA3/3.5). Verify: `printenv FSR4_UPGRADE`. |
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-no-node warn · absent info). Opt out: `PROTON_NO_NTSYNC=1`. |
-| MangoHud `cpu_temp` | HUD reads `cpu_temp`, not `cpu_power` — the power counter reports 0 on Zen 5. |
+| MangoHud `cpu_temp` | Intentionally disabled (commented) in the shipped HUD — uncomment to show CPU temp. `cpu_power` ships active but reads 0 on Zen 5. |
 | PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency); plain `off` merely inherits BIOS link state. Drop to restore ASPM defaults. |
 | IPv6 | `ipv6.disable=1`, IPv4-only ruleset. Dual-stack: drop token, add IPv6 rules, re-run. |
 | Avahi | `.service`+`.socket` masked — collided with resolved as a 2nd mDNS responder; profile runs `MulticastDNS=no`. Unmask both to restore. |

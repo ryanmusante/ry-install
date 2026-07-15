@@ -36,7 +36,7 @@ Preflight hard-fails (exit 3) on missing/non-GNU deps (busybox/uutils rejected) 
 
 ## BIOS
 
-The walkthrough below is collapsible — click/tap the summary to expand.
+Click/tap the summary to expand.
 
 <details>
 <summary>85 W power ceiling — 14 SMU settings</summary>
@@ -155,7 +155,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 | Firewall | `nftables` |
 | Contrib | `pacman-contrib` |
 
-### Remove and Verify
+### Remove & Verify
 
 | Action | Packages |
 |---|---|
@@ -217,9 +217,9 @@ Non-obvious choices; several list an override to reverse.
 | Topic | Detail |
 |---|---|
 | Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise BIOS UMA carveout (≤96 GiB) for more (`amdgpu.gttsize` deprecated). Verify: `cat /sys/module/ttm/parameters/pages_limit`. |
-| FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled (RDNA3/3.5; Proton-CachyOS ≥ 11.0-20260702 replaces removed `PROTON_FSR4_RDNA3_UPGRADE`). Verify: `printenv FSR4_UPGRADE`. |
+| FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled (RDNA3/3.5). Verify: `printenv FSR4_UPGRADE`. |
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-no-node warn · absent info). Opt out: `PROTON_NO_NTSYNC=1`. |
-| MangoHud `cpu_temp` | Disabled — re-enabling re-trips [MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794) (`cpu_power` reads 0 on Zen 5). |
+| MangoHud `cpu_temp` | (`cpu_power` reads 0 on Zen 5). |
 | PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency); plain `off` merely inherits BIOS link state. Drop to restore ASPM defaults. |
 | IPv6 | `ipv6.disable=1`, IPv4-only ruleset. Dual-stack: drop token, add IPv6 rules, re-run. |
 | Avahi | `.service`+`.socket` masked — collided with resolved as a 2nd mDNS responder; profile runs `MulticastDNS=no`. Unmask both to restore. |
@@ -252,9 +252,6 @@ Boot files must be reverted before step 5 — it regenerates entries from that s
 | PipeWire permission denied | `sudo usermod -aG realtime $USER`, re-login (needs `realtime-privileges`) |
 | ddcutil permission denied | `sudo usermod -aG i2c $USER`, re-login (needs `ddcutil`) |
 | BT speaker won't auto-reconnect | `bluetoothctl trust <MAC>`, then power the speaker on after login so it re-initiates |
-
-> [!NOTE]
-> The installer prints `usermod` hints but never runs them; group changes need re-login and aren't auto-reverted.
 
 ## Contributing
 

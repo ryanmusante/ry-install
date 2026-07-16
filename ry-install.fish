@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.105.15 (2026-07-14) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.106.0 (2026-07-15) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.105.15"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.106.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn returns, consumed at call sites; surface as EXIT_PREFLIGHT/FAIL rows) — never a process exit
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only) — never a process exit
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -11,7 +11,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version V/verbose verify check install-file= # single option-spec source (root-guard + main argparse)
+set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version verify check install-file= # single option-spec source (root-guard + main argparse)
 # Kernel floor (advisory, not enforced): 6.18.4 — RTL8127 r8169 + suspend-hang fix ae1737e7339b; gfx1151 fix is firmware (linux-firmware MES 0x86), not kernel
 
 # ── HELP TEXT ──
@@ -23,7 +23,6 @@ function _ry_show_help --description "Display usage information and available su
         "Single fish script, $_RY_MANAGED_FILE_COUNT embedded configs, no bundled dependencies." \
         "Usage: "(status filename)" [OPTIONS]" \
         "  (no args)              Unattended install" \
-        "  -V, --verbose          Show install output (check is always silent)" \
         "  --verify               Check config files + live system state" \
         "  --check                Silent idempotency probe (0=clean 3=preflight 10=drift)" \
         "                         (compares the live /proc/cmdline — a fresh install reads 10 until reboot)" \
@@ -118,8 +117,6 @@ for _rsc_a in $argv
             set _rsc_other_mode true
         case --check
             set _ry_root_silent_check true
-        case -V --verbose
-            continue # --check-compatible (verbose is dropped under --check)
         case '*'
             string match -qr -- '^-V+$' "$_rsc_a"; and continue # glued repeats (-VV): still --check-compatible
             set _rsc_other_mode true # unknown flag/positional: non-root exits 2 — keep parity
@@ -475,7 +472,7 @@ function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_BOOT_COUNT _RY_BOOT_ENUM_OK _CPU_PATH
     set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
     set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK
-    set --erase _RY_MKI_REVERT_FAILED _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED _RY_TIMESYNCD_ENABLED
+    set --erase _RY_MKI_REVERT_FAILED _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _RY_RUN_TIMEOUT_CLAMPED _PROG_CLOCK _PROG_NOW_LAST _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
     set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
@@ -637,7 +634,7 @@ set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme b
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
-set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service modemmanager.service avahi-daemon.service avahi-daemon.socket sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi: 2nd mDNS responder collided with resolved
+set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service ufw.service ModemManager.service avahi-daemon.service avahi-daemon.socket sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi: 2nd mDNS responder collided with resolved
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
@@ -707,7 +704,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
         _RY_POST_HOOKS:17 \
-        _RY_ARGPARSE_SPEC:7 \
+        _RY_ARGPARSE_SPEC:6 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:4 \
@@ -827,7 +824,7 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test (count $MKINITCPIO_COMPRESSION_OPTIONS) -gt 0; printf '%s\n' "COMPRESSION_OPTIONS=("(string join -- " " $MKINITCPIO_COMPRESSION_OPTIONS)")"; end
 end
 function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
-    printf '%s\n' "# systemd-resolved: plaintext DNS, mDNS/LLMNR off (diverges from CachyOS DoH default)" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
+    printf '%s\n' "# systemd-resolved: plaintext DNS, mDNS/LLMNR off (diverges from CachyOS DoT default)" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
 end
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
     printf '%s\n' "# systemd-logind configuration - desktop power handling"
@@ -1625,48 +1622,13 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
     end
     return 1
 end
-function _ry_rtc_writeback --description "Persist NTP-corrected time to the RTC (hwclock --systohc); non-fatal"
-    if not command -q hwclock; _info "    RTC: hwclock not found — cannot persist corrected time to hardware clock (timer persistence stamps may stay skewed until next sync)"; _log "RTC_WRITEBACK_SKIP: hwclock absent"; return 1; end
-    set -l _rtc_local (command timedatectl show -p RTCInLocalTZ --value 2>/dev/null | string trim --)
-    if test "$_rtc_local" = yes; _info "    RTC: hardware clock is in local time — leaving --systohc to systemd; not writing directly"; _log "RTC_WRITEBACK_SKIP: RTCInLocalTZ=yes"; return 1; end
-    if _run sudo -n hwclock --systohc --utc
-        _ok "  RTC: hardware clock written back from NTP-corrected system time (--systohc)"
-        _log "RTC_WRITEBACK_OK"
-        return 0
-    end
-    _warn "  RTC: hwclock --systohc failed — hardware clock still skewed; correct manually (sudo hwclock --systohc --utc)"
-    _log "RTC_WRITEBACK_FAIL"
-    return 1
-end
-function _ry_check_time_sync --description "Verify NTP sync; remediate via timesyncd + RTC writeback (non-fatal)"
+function _ry_check_time_sync --description "Verify NTP sync (warn-only; no remediation)"
     _log "TIME_SYNC_CHECK_START"
     if not command -q timedatectl; _warn "  Time sync: timedatectl not found — cannot verify (pacman GPG checks may fail on a skewed clock)"; _log "TIME_SYNC_SKIP: timedatectl absent"; return 1; end
     set -l _synced (command timedatectl show -p NTPSynchronized --value 2>/dev/null | string trim --)
-    if test "$_synced" = yes; _ok "  Time sync: NTP synchronized"; _log "TIME_SYNC_OK"; _ry_rtc_writeback; return 0; end
-    _warn "  Time sync: clock NOT NTP-synchronized (NTPSynchronized=$_synced) — pacman signature checks can fail"
+    if test "$_synced" = yes; _ok "  Time sync: NTP synchronized"; _log "TIME_SYNC_OK"; return 0; end
+    _warn "  Time sync: clock NOT NTP-synchronized (NTPSynchronized=$_synced) — pacman signature checks can fail; enable an NTP client manually (e.g. sudo timedatectl set-ntp true)"
     _log "TIME_SYNC_UNSYNCED: NTPSynchronized=$_synced"
-    if not command -q systemctl; _info "    systemctl absent — start an NTP client manually"; return 1; end
-    for _ntp_alt in chronyd.service ntpd.service openntpd.service # never stack timesyncd on existing NTP client
-        set -l _alt_en (command systemctl is-enabled -- $_ntp_alt 2>/dev/null | string trim --)
-        set -l _alt_act (command systemctl is-active -- $_ntp_alt 2>/dev/null | string trim --)
-        if begin; test -n "$_alt_en"; and not contains -- "$_alt_en" disabled masked not-found; end; or contains -- "$_alt_act" active activating
-            _warn "  Time sync: $_ntp_alt is present ($_alt_en/$_alt_act) but the clock is unsynced — not enabling systemd-timesyncd (two NTP clients would conflict); repair $_ntp_alt manually"
-            _log "TIME_SYNC_CONFLICT: $_ntp_alt is-enabled=$_alt_en is-active=$_alt_act — timesyncd auto-enable skipped"
-            return 1
-        end
-    end
-    if _run sudo -n systemctl enable --now systemd-timesyncd.service
-        set -g _RY_TIMESYNCD_ENABLED true # persistent unit enable — surfaced in the phase matrix
-        command sleep 2 </dev/null 2>/dev/null
-        set -l _resynced (command timedatectl show -p NTPSynchronized --value 2>/dev/null | string trim --)
-        if test "$_resynced" = yes; _ok "  Time sync: synchronized after starting systemd-timesyncd"; _log "TIME_SYNC_RECOVERED"; _ry_rtc_writeback; return 0; end
-        _warn "  Time sync: still not synchronized (NTPSynchronized=$_resynced) — verify NTP egress before relying on signatures"
-        _info "    Manual: sudo timedatectl set-ntp true; sleep 5; timedatectl"
-        _log "TIME_SYNC_STILL_UNSYNCED: NTPSynchronized=$_resynced"
-        return 1
-    end
-    _warn "  Time sync: could not enable systemd-timesyncd — configure an NTP client manually"
-    _log "TIME_SYNC_TIMESYNCD_ENABLE_FAIL"
     return 1
 end
 function _check_avail --argument-names path divisor unit crit warn --description "Compare available bytes at path against crit/warn thresholds (in scaled units)"
@@ -2311,14 +2273,6 @@ function _vss_modprobe --description "_verify_static_system sub: modprobe drop-i
     _chk_file /etc/modprobe.d/60-ry-modules.conf; or return 0
     test "$BLACKLIST_AMDXDNA" = true; and _chk_grep /etc/modprobe.d/60-ry-modules.conf 'blacklist amdxdna' 'amdxdna blacklisted'
 end
-function _vss_modprobe_stale --description "_verify_static_system sub: stale /etc/modprobe.d/60-ry-* drop-ins outside SYSTEM_DESTINATIONS"
-    # pre-7.99 leftover guard: generator-sourced checks never see stale on-disk drop-ins (superseded 60-ry-mt7925e.conf / 60-ry-blacklist-amdxdna.conf)
-    set -l _stale
-    for _f in /etc/modprobe.d/60-ry-*; contains -- "$_f" $SYSTEM_DESTINATIONS; or set -a _stale "$_f"; end
-    test (count $_stale) -eq 0
-    _chk_present $status "no stale 60-ry-* drop-ins" "stale drop-in(s) found: $_stale (pre-7.99 leftover - remove)"
-end
-
 function _verify_static_system --description "Verify resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, modprobe, nftables"
     _echo "SYSTEM CONFIGURATION"
     _echo "── resolved ──"
@@ -2339,7 +2293,6 @@ function _verify_static_system --description "Verify resolved, logind, NM, regdo
     _vss_udev
     _echo "── modprobe (60-ry-modules.conf) ──"
     _vss_modprobe
-    _vss_modprobe_stale
     _echo "── nftables ──"
     _vss_nft
 end
@@ -3351,9 +3304,7 @@ function _install_preflight --description "Run all preflight checks before insta
     end
     _phase_record "Preflight: network reachability" PASS "ok"
     if _ry_check_time_sync
-        set -l _ts_ev "NTP synchronized"
-        set -q _RY_TIMESYNCD_ENABLED; and set _ts_ev "NTP synchronized (timesyncd enabled — persistent)"
-        _phase_record "Preflight: time sync" PASS "$_ts_ev"
+        _phase_record "Preflight: time sync" PASS "NTP synchronized"
     else
         _phase_record "Preflight: time sync" WARN "clock not NTP-synced or unverifiable"
     end
@@ -4824,7 +4775,7 @@ if set -q _flag_install_file
     set -g MODE install-file; set -l _if_val "$_flag_install_file[-1]" # argparse collects repeats into a list; last one wins
     test -z "$_if_val"; and _early_usage_exit "--install-file requires a non-empty absolute path"
     if not string match -q -- '/*' "$_if_val"
-        if string match -qr -- '^--(verify|check|verbose|help|version)$' "$_if_val"
+        if string match -qr -- '^--(verify|check|help|version)$' "$_if_val"
             _early_usage_exit "--install-file requires a value, but the next argument is the flag $_if_val. Use --install-file=<path> or place the path immediately after"
         else if string match -q -- '-*' "$_if_val"
             _early_usage_exit "--install-file requires an absolute path argument (got flag: $_if_val). Use --install-file=<path> for paths starting with '-'"
@@ -4850,11 +4801,7 @@ if set -q _flag_install_file
 end
 set --erase _RY_ARGV_CHECK_ONLY # MODE is authoritative past this point
 if test (count $argv) -gt 0; echo "[ERR] Unexpected positional argument(s): $argv" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
-if test "$MODE" = check
-    set -q _flag_verbose; and _log "CHECK_VERBOSE_IGNORED: -V/--verbose dropped under --check (silent-probe contract)"
-else if set -q _flag_verbose; or test "$MODE" != install
-    set -g QUIET false
-end
+test "$MODE" != install; and test "$MODE" != check; and set -g QUIET false
 
 # ── MAIN: LOG RENAME + 0600 CREATE + JSONL HEADER ──
 set -l mode_label $MODE

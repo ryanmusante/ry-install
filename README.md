@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.105.15-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.106.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.105.15
+cd ry-install && git checkout v7.106.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -34,7 +34,7 @@ chmod +x ry-install.fish
 | Mesa | ≥ 26.0 (below: soft warn only) |
 | Kernel | 6.18.4 advisory floor — regression baseline (RTL8127 + suspend) |
 
-The Platform row is the design target — enforced indirectly (`sdboot-manage` dependency, non-vfat ESP refusal, ext4-only fstab tuning); the rows below it are preflight-checked — hard gates except the Mesa soft warn and the kernel advisory floor. Preflight hard-fails (exit 3) on uncached sudo, missing/non-GNU deps (37 commands, capability-probed), a free-space floor breach, or an unreachable network. NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd`.
+The Platform row is the design target — enforced indirectly (`sdboot-manage` dependency, non-vfat ESP refusal, ext4-only fstab tuning); the rows below it are preflight-checked — hard gates except the Mesa soft warn and the kernel advisory floor. Preflight hard-fails (exit 3) on uncached sudo, missing/non-GNU deps (37 commands, capability-probed), a free-space floor breach, or an unreachable network. NTP sync and a missing `pactree` warn only.
 
 ## BIOS
 
@@ -48,8 +48,7 @@ Multi-thread gains flatten past ~85 W — set a flat `SPL = fPPT = sPPT = 85 W` 
 | Flag | Action |
 |---|---|
 | *(no args)* | Run the unattended install (silent; phase matrix at end) |
-| `-V`/`--verbose` | Stream per-command install output (ignored under `--check`) |
-| `--verify` | Verify config files byte-for-byte, then live system state; flag stale `/etc/modprobe.d/60-ry-*` drop-ins outside the managed set |
+| `--verify` | Verify config files byte-for-byte, then live system state |
 | `--check` | Probe idempotency silently vs live `/proc/cmdline` — a fresh install reports drift until reboot ([Exit Codes](#exit-codes)) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--` | End option parsing (no positional args) |
@@ -139,7 +138,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 | Action | Units |
 |---|---|
-| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `ufw.service`, `modemmanager.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
+| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `ufw.service`, `ModemManager.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
 | Enable | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service` |
 | Untouched | `systemd-oomd.service` (by design — kernel OOM-killer + zram is the intended path) |
 
@@ -270,7 +269,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at start and fails once the ruleset is removed; disable any other [enabled units](#units) you no longer want the same way. Boot files must be reverted before step 5 — it regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite (fstab: only if rewritten). If ry-install enabled `systemd-timesyncd`: `sudo systemctl disable --now systemd-timesyncd` (optional).
+Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at start and fails once the ruleset is removed; disable any other [enabled units](#units) you no longer want the same way. Boot files must be reverted before step 5 — it regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite (fstab: only if rewritten).
 
 ## Troubleshooting
 

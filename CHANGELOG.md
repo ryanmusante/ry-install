@@ -3,6 +3,12 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.106.0 (2026-07-15)
+--------------------
+  - remove: --verbose/-V flag (shared stream emitter retained for error paths); _vss_modprobe_stale transitional scan; NTP auto-enable + RTC writeback — an unsynced clock now warns only; functions 289 -> 287
+  - fix: MASK modemmanager.service -> ModemManager.service (unit lookup is case-sensitive; the lowercase mask never matched); resolved-divergence comment DoH -> DoT
+  - readme: flags/NTP/uninstall wording synced; Mask cell casing; badge/checkout -> 7.106.0
+
 7.105.10 - 7.105.15 (2026-07-14 .. 07-15)
 --------------------------------
   - env: FSR4_UPGRADE=1 replaces PROTON_FSR4_RDNA3_UPGRADE=1 (long form removed in Proton-CachyOS 11.0-20260702)

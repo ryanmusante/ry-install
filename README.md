@@ -19,7 +19,7 @@ chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-**In scope:** pacman add/remove, kernel cmdline, initramfs, NetworkManager, Bluetooth, nftables firewall, sysctl, gaming env vars, MangoHud, fstab mount options, systemd units, sdboot-manage BLS entries, systemd-resolved DNS, logind power keys, udev perf rules, modprobe.d blacklist, cpupower governor, Wi-Fi regdomain.
+**In scope:** the 17 [Managed Files](#managed-files) domains, plus pacman add/remove, systemd units, and the fstab rewrite.
 
 **Out of scope:** dotfiles beyond the 2 managed user files, secrets, backups, multi-user, non-CachyOS, laptops, UKI, Secure Boot.
 
@@ -29,40 +29,16 @@ chmod +x ry-install.fish
 |---|---|
 | Platform | CachyOS · systemd-boot · ext4 root |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
-| Hardware | CPU matches `Ryzen AI Max` — bypass: `RY_INSTALL_SKIP_HARDWARE_CHECK=1` |
+| Hardware | CPU matches `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | Free space | 2 GiB `/` (warn < 5 GiB), 200 MiB `/boot` (warn < 500 MiB; gated only when `/boot` is a separate mount) |
 | Mesa | ≥ 26.0 (below: soft warn only) |
 | Kernel | 6.18.4 advisory floor — regression baseline (RTL8127 + suspend) |
 
-The Platform row is the design target — enforced indirectly (`sdboot-manage` dependency, non-vfat ESP refusal, ext4-only fstab tuning); the rows below it are preflight-checked — hard gates except the Mesa soft warn and the kernel advisory floor. Preflight hard-fails (exit 3) on uncached sudo (non-TTY; a TTY prompts once), missing/non-GNU deps — 37 required commands, with capability probes for `timeout --foreground --kill-after`, `find -maxdepth -printf`, and `mv -T` (busybox/uutils rejected) — a free-space floor breach, or an unreachable network (HTTPS to `archlinux.org` then `cloudflare.com`, ICMP `1.1.1.1`/`8.8.8.8` fallback). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
+The Platform row is the design target — enforced indirectly (`sdboot-manage` dependency, non-vfat ESP refusal, ext4-only fstab tuning); the rows below it are preflight-checked — hard gates except the Mesa soft warn and the kernel advisory floor. Preflight hard-fails (exit 3) on uncached sudo, missing/non-GNU deps (37 commands, capability-probed), a free-space floor breach, or an unreachable network. NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd`.
 
 ## BIOS
 
-<details>
-<summary>85 W power ceiling — 14 SMU settings</summary>
-
-Strix Halo multi-thread gains flatten past ~85 W; a flat `SPL = fPPT = sPPT = 85 W` ceiling trades the stock 140 W boost for near-peak throughput on a quiet, constant fan curve. Per-setting rationale: Note column. Full walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
-
-`Advanced → SMU Common Options` — power limits in mW, time constants in s, TjMax in °C:
-
-| Setting | Value | Note |
-|---|---|---|
-| ECO Mode | `Disabled` | frees the manual power limits below |
-| SPL Control | `Manual` | unlock Sustained Power Limit |
-| Sustained Power Limit | `85000` | 85 W ceiling — gains flatten past this |
-| PPT Control | `Manual` | unlock Fast/Slow PPT |
-| Fast PPT Limit | `85000` | flat with SPL — no transient boost above 85 W |
-| Slow PPT Limit | `85000` | flat with SPL |
-| Slow PPT Time Constant | `0` | no slow-PPT ramp window |
-| STAPM Control | `Manual` | unlock the skin-temp track |
-| System Temperature Tracking | `Auto` | leave stock; STAPM Boost below does the zeroing |
-| STAPM Boost Override | `1` | enable the override |
-| STAPM Boost | `0` | zero a desktop-irrelevant skin-temp track |
-| Tskin Time Constant (STAPM) | `0` | no Tskin ramp window |
-| Thermal Control | `Manual` | unlock TjMax |
-| TjMax | `90` | 10 °C under the silicon limit |
-
-</details>
+Multi-thread gains flatten past ~85 W — set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`. Full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
 ## Usage
 
@@ -79,7 +55,7 @@ Strix Halo multi-thread gains flatten past ~85 W; a flat `SPL = fPPT = sPPT = 85
 | `--` | End option parsing (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Print and exit before all checks, including the root guard |
 
-`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving (`realpath -m`) to a managed destination. Deploy modes and `--check` hard-gate hardware and key/count invariants (exit 3); `--verify` downgrades the hardware gate to a warning.
+`--verify`/`--check` are lock-free and read-only. `--install-file` needs an absolute path resolving to a managed destination. Deploy modes and `--check` hard-gate hardware and key/count invariants (exit 3); `--verify` downgrades the hardware gate to a warning.
 
 ### Environment Overrides
 
@@ -116,7 +92,7 @@ The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and 
 | Feature | Detail |
 |---|---|
 | Instance lock | `~/ry-install/.lock/pid` — atomic `mkdir` (then `0700`); stale reclaim only for a provably-recycled PID (`/proc` start-time); else fail-closed |
-| Atomic writes | same-FS tmp → render → symlink-probe → content pre-validate (`nft -c` for the ruleset) → backup → chmod → `mv -T` → re-read + restore on mismatch |
+| Atomic writes | same-FS tmp + pre-validation (`nft -c` for the ruleset) → backup → atomic `mv -T` → re-read, restore on mismatch |
 | Auto backups | `<path>.ry.bak` for the 4 boot files (and `fstab`, during its rewrite) |
 | mkinitcpio rollback | byte-exact revert (`cmp`-gated) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
@@ -146,7 +122,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 ### Packages
 
-`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`, which also supplies `paccache`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` can't orphan a dependency-installed one.
+`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` can't orphan a dependency-installed one.
 
 | Action | Packages |
 |---|---|
@@ -275,7 +251,7 @@ Non-obvious choices; several list an override to reverse.
 | AMD-Vi (IOMMU) | `amd_iommu=off` breaks the XDNA NPU (hence blacklist). NPU/VFIO/SR-IOV: `amd_iommu=on iommu=pt` + `BLACKLIST_AMDXDNA false`, re-run. |
 | UMIP (`clearcpuid=umip`) | Disables UMIP trapping; taints kernel. String form is version-stable (CPUID bit numbers shift between kernels). Drop if no `umip_printk` stutter. |
 | IPv6 | `ipv6.disable=1`, IPv4-only ruleset. Dual-stack: drop token, add IPv6 rules, re-run. |
-| PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency); plain `off` merely inherits BIOS link state. Drop to restore ASPM defaults. |
+| PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency). Drop to restore ASPM defaults. |
 | FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled (RDNA3/3.5). Verify: `printenv FSR4_UPGRADE`. |
 | Avahi | `.service`+`.socket` masked — collided with resolved as a 2nd mDNS responder; profile runs `MulticastDNS=no`. Unmask both to restore. |
 | MangoHud `cpu_temp` | Intentionally disabled (commented) in the shipped HUD — uncomment to show CPU temp. `cpu_power` ships active but reads 0 on Zen 5. |

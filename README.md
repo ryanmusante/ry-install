@@ -21,7 +21,7 @@ chmod +x ry-install.fish
 
 **In scope:** pacman add/remove, kernel cmdline, initramfs, NetworkManager, Bluetooth, nftables firewall, sysctl, gaming env vars, MangoHud, fstab mount options, systemd units, sdboot-manage BLS entries.
 
-**Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI.
+**Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI, Secure Boot.
 
 ## Requirements
 
@@ -91,7 +91,7 @@ Safe fallback when unset or invalid.
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` s | Per-command cap; `0` disables; package/boot ops floor `7200` s; non-numeric → default; > 9 digits clamps to `2147483647` |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | `0` (check on) | Bypass the `Ryzen AI Max` CPU-match hard-fail |
-| `NO_COLOR` | unset (color on) | Disable colored output when set — any value, including empty ([no-color.org](https://no-color.org)) |
+| `NO_COLOR` | unset (color on) | Disable colored output when set — any value, including empty (stricter than [no-color.org](https://no-color.org), which ignores an empty string) |
 
 ## Install Flow
 
@@ -140,7 +140,7 @@ Sentinels `11-14` / `250` / `251` / `255` are internal and never surface as proc
 
 ## Configuration
 
-All tunables are `set -g` globals near the top of the script — no external config file. Edit one, then re-run (or `--install-file` the affected file). Perms: system `0644`, user `0600`.
+All tunables are `set -g` globals near the top of the script — no external config file. Edit one, then re-run (or `--install-file` the affected file). Porting to other hardware starts at the profile seam — `PROFILE_NAME`, `PROFILE_DESC`, and `EXPECTED_CPU_MATCH` — then the value arrays in [Embedded Values](#embedded-values). Perms: system `0644`, user `0600`.
 
 ### CachyOS Divergences
 
@@ -296,7 +296,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-Boot files must be reverted before step 5 — it regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite (fstab: only if rewritten). If ry-install enabled `systemd-timesyncd`: `sudo systemctl disable --now systemd-timesyncd` (optional).
+Boot files must be reverted before step 5 — it regenerates entries from that state. Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at start and fails once the ruleset is removed; disable any other [enabled units](#units) you no longer want the same way. A `.ry.bak` exists only if the file was present before the overwrite (fstab: only if rewritten). If ry-install enabled `systemd-timesyncd`: `sudo systemctl disable --now systemd-timesyncd` (optional).
 
 ## Troubleshooting
 

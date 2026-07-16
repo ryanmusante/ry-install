@@ -3,6 +3,11 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.107.0 (2026-07-15)
+--------------------
+  - remove: _lock_pid_started_after recycled-PID rescue — live or ambiguous pidfiles now always fail closed (dead-PID stale reclaim retained); Mesa soft-warn + kernel-advisory preflight notes; functions 287 -> 286
+  - readme: Requirements 6 -> 4 rows; gate sentence simplified; lock wording synced; badge/checkout -> 7.107.0
+
 7.106.0 (2026-07-15)
 --------------------
   - remove: --verbose/-V flag (shared stream emitter retained for error paths); _vss_modprobe_stale transitional scan; NTP auto-enable + RTC writeback — an unsynced clock now warns only; functions 289 -> 287

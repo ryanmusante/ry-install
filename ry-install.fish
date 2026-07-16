@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.106.0 (2026-07-15) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.107.0 (2026-07-15) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.106.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.107.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn returns, consumed at call sites; surface as EXIT_PREFLIGHT/FAIL rows) — never a process exit
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only) — never a process exit
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -12,7 +12,6 @@ set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version verify check install-file= # single option-spec source (root-guard + main argparse)
-# Kernel floor (advisory, not enforced): 6.18.4 — RTL8127 r8169 + suspend-hang fix ae1737e7339b; gfx1151 fix is firmware (linux-firmware MES 0x86), not kernel
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -332,25 +331,8 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     _log "LOCK_ACQUIRED: pid=$fish_pid dir=$LOCK_DIR"
     return 0
 end
-function _lock_pid_started_after --argument-names pid mtime --description "rc 0 = PID provably started after mtime+2s (recycled); rc 1 = unknown or older (fail-closed)"
-    string match -qr '^[1-9]\d*$' -- "$pid"; or return 1
-    string match -qr '^\d+$' -- "$mtime"; or return 1
-    set -l _stat (command cat -- /proc/$pid/stat 2>/dev/null | string collect)
-    test -n "$_stat"; or return 1
-    set -l _post (string replace -r '^.*\) ' '' -- "$_stat") # cut after the last close-paren-space, since comm may contain parens
-    set -l _ticks (string split ' ' -- "$_post")[20] # stat field 22 starttime = post-comm index 20
-    string match -qr '^\d+$' -- "$_ticks"; or return 1
-    set -l _btime (command awk '/^btime /{print $2; exit}' /proc/stat 2>/dev/null)
-    string match -qr '^\d+$' -- "$_btime"; or return 1
-    set -l _hz (command getconf CLK_TCK 2>/dev/null)
-    if not string match -qr '^[1-9]\d*$' -- "$_hz" # starttime is USER_HZ (Linux ABI, fixed 100), not the tick rate
-        set _hz 100
-        functions -q _log; and _log "LOCK_CLK_TCK_FALLBACK: getconf CLK_TCK unavailable — using USER_HZ=100 (starttime unit is USER_HZ, fixed at 100 on Linux)"
-    end
-    test (math "floor($_btime + $_ticks / $_hz)") -gt (math "$mtime + 2")
-end
-# mkdir+pidfile lock, not flock: atomic on any fs, no fd inheritance into sudo children, stale-pid reclaim; EXIT_LOCK=5 on live holder
-function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale-lock reclaim)"
+# mkdir+pidfile lock, not flock: atomic on any fs, no fd inheritance into sudo children; dead-PID stale reclaim only (live/ambiguous fail closed); EXIT_LOCK=5 on live holder
+function _acquire_lock --description "Acquire instance lock (atomic mkdir; dead-PID stale reclaim)"
     set -g LOCK_DIR "$_RY_HOME_DIR/.lock"; set -g LOCK_FILE "$LOCK_DIR/pid"
     set -l _lk_um 022; set -q umask; and set _lk_um $umask; set -g umask 0077; command mkdir -p -- (command dirname -- "$LOCK_DIR") 2>/dev/null; set -g umask $_lk_um # state dir is 0700 by contract
     _acquire_lock_fresh
@@ -364,21 +346,14 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; stale
             set _stale_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
         end
         if string match -qr '^[1-9]\d*$' -- "$_stale_pid"
-            set -l _pf_mtime (command stat -c '%Y' -- "$LOCK_FILE" 2>/dev/null)
             if command kill -0 "$_stale_pid" 2>/dev/null # kill absent rc 127 -> /proc branch (fail-closed)
-                if not _lock_pid_started_after "$_stale_pid" "$_pf_mtime" # provably-newer start = recycled PID
-                    _log "LOCK_HELD: pid=$_stale_pid dir=$LOCK_DIR (live instance)"
-                    echo "[ERR] Another instance is running (pid=$_stale_pid) — lock: $LOCK_DIR" >&2
-                    return 1
-                end
-                _log "LOCK_PID_RECYCLED: pid=$_stale_pid started after pidfile mtime=$_pf_mtime — reclaiming (attempt=$_reclaim_attempt)"
+                _log "LOCK_HELD: pid=$_stale_pid dir=$LOCK_DIR (live instance)"
+                echo "[ERR] Another instance is running (pid=$_stale_pid) — lock: $LOCK_DIR" >&2
+                return 1
             else if test -d /proc/"$_stale_pid" # kill -0 EPERM: /proc presence wins
-                if not _lock_pid_started_after "$_stale_pid" "$_pf_mtime"
-                    _log "LOCK_PEER_UNSIGNALABLE: pid=$_stale_pid alive in /proc — not reclaiming"
-                    echo "[ERR] Another instance appears alive (pid=$_stale_pid, unsignalable) — lock: $LOCK_DIR" >&2
-                    return 1
-                end
-                _log "LOCK_PID_RECYCLED: pid=$_stale_pid (unsignalable) started after pidfile mtime=$_pf_mtime — reclaiming (attempt=$_reclaim_attempt)"
+                _log "LOCK_PEER_UNSIGNALABLE: pid=$_stale_pid alive in /proc — not reclaiming"
+                echo "[ERR] Another instance appears alive (pid=$_stale_pid, unsignalable) — lock: $LOCK_DIR" >&2
+                return 1
             else
                 _log "LOCK_STALE_CLAIM: pid=$_stale_pid dir=$LOCK_DIR attempt=$_reclaim_attempt (PID not running, reclaiming)"
             end
@@ -3307,20 +3282,6 @@ function _install_preflight --description "Run all preflight checks before insta
         _phase_record "Preflight: time sync" PASS "NTP synchronized"
     else
         _phase_record "Preflight: time sync" WARN "clock not NTP-synced or unverifiable"
-    end
-    set -l _mesa (command pacman -Q mesa 2>/dev/null | string split ' ')[2]
-    if test -n "$_mesa"
-        if not command -q vercmp
-            _log "MESA_SOFT_FLOOR_SKIP: vercmp absent (pacman-provided) — gfx1151 mesa version not compared"
-        else
-            set -l _vc (command vercmp $_mesa 26.0 2>/dev/null) # empty/garbage output must not reach test(1)
-            if not string match -qr -- '^-?\d+$' "$_vc"
-                _log "MESA_SOFT_FLOOR_SKIP: vercmp output unparseable ('$_vc') — comparison skipped"
-            else if test "$_vc" -lt 0
-                _warn_loud "mesa $_mesa < 26.0 — gfx1151 RADV may be unstable (soft floor)"
-                _log "MESA_BELOW_SOFT_FLOOR: $_mesa"
-            end
-        end
     end
     _echo
     if not _ry_validate_configs; _phase_record "Preflight: config validation" FAIL "see JSONL log"; _err "Configuration validation failed - aborting"; _ip_bail_prep; return $EXIT_PREFLIGHT; end

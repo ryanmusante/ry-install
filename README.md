@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.106.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.107.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.106.0
+cd ry-install && git checkout v7.107.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -31,10 +31,8 @@ chmod +x ry-install.fish
 | fish / systemd | ≥ 3.6 / ≥ 250 |
 | Hardware | CPU matches `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | Free space | 2 GiB `/` (warn < 5 GiB), 200 MiB `/boot` (warn < 500 MiB; gated only when `/boot` is a separate mount) |
-| Mesa | ≥ 26.0 (below: soft warn only) |
-| Kernel | 6.18.4 advisory floor — regression baseline (RTL8127 + suspend) |
 
-The Platform row is the design target — enforced indirectly (`sdboot-manage` dependency, non-vfat ESP refusal, ext4-only fstab tuning); the rows below it are preflight-checked — hard gates except the Mesa soft warn and the kernel advisory floor. Preflight hard-fails (exit 3) on uncached sudo, missing/non-GNU deps (37 commands, capability-probed), a free-space floor breach, or an unreachable network. NTP sync and a missing `pactree` warn only.
+The Platform row is the design target — enforced indirectly (`sdboot-manage` dependency, non-vfat ESP refusal, ext4-only fstab tuning); the rows below it are preflight-checked hard gates. Preflight hard-fails (exit 3) on uncached sudo, missing/non-GNU deps (37 commands, capability-probed), a free-space floor breach, or an unreachable network. NTP sync and a missing `pactree` warn only.
 
 ## BIOS
 
@@ -90,7 +88,7 @@ The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and 
 
 | Feature | Detail |
 |---|---|
-| Instance lock | `~/ry-install/.lock/pid` — atomic `mkdir` (then `0700`); stale reclaim only for a provably-recycled PID (`/proc` start-time); else fail-closed |
+| Instance lock | `~/ry-install/.lock/pid` — atomic `mkdir` (then `0700`); stale reclaim only when the recorded PID is dead; live or ambiguous pidfiles fail closed |
 | Atomic writes | same-FS tmp + pre-validation (`nft -c` for the ruleset) → backup → atomic `mv -T` → re-read, restore on mismatch |
 | Auto backups | `<path>.ry.bak` for the 4 boot files (and `fstab`, during its rewrite) |
 | mkinitcpio rollback | byte-exact revert (`cmp`-gated) on `pacman -Syu` failure or signal |

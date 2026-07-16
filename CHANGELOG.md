@@ -3,6 +3,12 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.107.2 (2026-07-16)
+--------------------
+  - fix: drop the stale -V case from the root pre-scan (flag removed in 7.106.0); root --check -V now exits 2 with usage, matching non-root
+  - readme: Sysctl Overrides table -> brief prose; badge/checkout -> 7.107.2
+  - packaging: release zip ships ry-install.fish with mode 0755 (was 0644)
+
 7.106.0 - 7.107.1 (2026-07-15)
 ------------------------------
   - remove: --verbose/-V flag (stream emitter retained for error paths); _vss_modprobe_stale scan; NTP auto-enable + RTC writeback — an unsynced clock now warns only; _lock_pid_started_after recycled-PID rescue (dead-PID stale reclaim retained); Mesa soft-warn + kernel-advisory notes; functions 289 -> 286

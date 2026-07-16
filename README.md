@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.107.1-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.107.2-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.107.1
+cd ry-install && git checkout v7.107.2
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -225,18 +225,7 @@ The value arrays behind the managed files, in declaration order. Rationale for t
 
 ### Sysctl Overrides
 
-| Key | Effect |
-|---|---|
-| `net.core.default_qdisc=fq` | `fq` qdisc — the BBR pairing |
-| `net.core.netdev_budget=600` | larger NAPI poll budget |
-| `net.core.netdev_budget_usecs=5000` | longer NAPI poll window |
-| `net.ipv4.tcp_congestion_control=bbr` | BBR congestion control |
-| `net.ipv4.tcp_notsent_lowat=16384` | cap unsent buffer — lower send latency |
-| `net.ipv4.tcp_slow_start_after_idle=0` | keep cwnd across idle |
-| `vm.compaction_proactiveness=0` | no proactive-compaction stalls |
-| `vm.max_map_count=2147483642` | game-sized mmap headroom (Steam value) |
-| `vm.swappiness=150` | prefer zram swap aggressively |
-| `vm.watermark_boost_factor=0` | no watermark-boost reclaim spikes |
+Ten keys, split between networking and memory. The network half pairs BBR congestion control with the `fq` qdisc, widens NAPI polling (`netdev_budget=600`, `netdev_budget_usecs=5000`), caps the unsent buffer at 16 KiB (`tcp_notsent_lowat`) for lower send latency, and keeps the congestion window across idle. The VM half disables proactive compaction and watermark boosting (both reclaim-stall sources), raises `vm.max_map_count` to Steam's 2147483642, and sets `vm.swappiness=150` to push swap traffic onto zram.
 
 ## Tuning Notes
 

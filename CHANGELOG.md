@@ -18,6 +18,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - readme: detail — remote-play port sets, paccache -rk2/-ruk0, network probe targets + 37-command GNU roster, mkinitcpio amdgpu + zstd -1 -T0, loader/sdboot values, BlueZ FastConnectable + 3 retries, logind long-press variants, LogLevelMax=notice, MangoHud toggle key, exit-code sentinel note, lock path, Wi-Fi NM-restart DEFER, amd-pstate-epp verify expectation, ESP-fallback note; nothing removed
   - readme: Uninstall gains a disable-before-remove note (nftables unit failure); Out of scope += Secure Boot; Configuration names the profile seam
   - readme: badge/checkout -> 7.105.15
+  - readme: precision — resolved-divergence protocol DoH -> DoT (the overridden key is DNSOverTLS; script comment retains DoH until the next script cut); Requirements gate sentence names the Mesa soft-warn + kernel-advisory exceptions; phase-verdict row token is `--` (N/A is the Totals label); free-space warn thresholds gain GiB/MiB; --check row "reads" -> "reports" drift; SKIP_HARDWARE_CHECK row restyled (bare variable, unset default, exact-match =1 note)
+  - readme: Units cells -> exact unit names (byte-match MASK/EXPECTED_SERVICES; systemctl unmask copy-safe; systemd-oomd suffixed); Uninstall step-3 revert list -> full paths; Uninstall caveats reordered to step order; Boot-failure fix row gains sdboot-manage update (parity with Phase 5 + the exit-4 hint); env.d purpose adds DXVK + Wine; color-gating note (non-TTY stderr / TERM=dumb); In scope += resolved DNS, logind keys, udev rules, modprobe.d, cpupower governor, regdomain; Out-of-scope dotfiles narrowed to beyond the 2 managed user files; drop the BIOS click/tap note
 
 7.105.5 - 7.105.9 (2026-07-14)
 ------------------------------

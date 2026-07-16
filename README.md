@@ -19,9 +19,9 @@ chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-**In scope:** pacman add/remove, kernel cmdline, initramfs, NetworkManager, Bluetooth, nftables firewall, sysctl, gaming env vars, MangoHud, fstab mount options, systemd units, sdboot-manage BLS entries.
+**In scope:** pacman add/remove, kernel cmdline, initramfs, NetworkManager, Bluetooth, nftables firewall, sysctl, gaming env vars, MangoHud, fstab mount options, systemd units, sdboot-manage BLS entries, systemd-resolved DNS, logind power keys, udev perf rules, modprobe.d blacklist, cpupower governor, Wi-Fi regdomain.
 
-**Out of scope:** dotfiles, secrets, backups, multi-user, non-CachyOS, laptops, UKI, Secure Boot.
+**Out of scope:** dotfiles beyond the 2 managed user files, secrets, backups, multi-user, non-CachyOS, laptops, UKI, Secure Boot.
 
 ## Requirements
 
@@ -30,15 +30,13 @@ chmod +x ry-install.fish
 | Platform | CachyOS · systemd-boot · ext4 root |
 | fish / systemd | ≥ 3.6 / ≥ 250 |
 | Hardware | CPU matches `Ryzen AI Max` — bypass: `RY_INSTALL_SKIP_HARDWARE_CHECK=1` |
-| Free space | 2 GiB `/` (warn < 5), 200 MiB `/boot` (warn < 500; gated only when `/boot` is a separate mount) |
+| Free space | 2 GiB `/` (warn < 5 GiB), 200 MiB `/boot` (warn < 500 MiB; gated only when `/boot` is a separate mount) |
 | Mesa | ≥ 26.0 (below: soft warn only) |
 | Kernel | 6.18.4 advisory floor — regression baseline (RTL8127 + suspend) |
 
-The Platform row is the design target — enforced indirectly (`sdboot-manage` dependency, non-vfat ESP refusal, ext4-only fstab tuning); the rows below it are preflight-enforced. Preflight hard-fails (exit 3) on uncached sudo (non-TTY; a TTY prompts once), missing/non-GNU deps — 37 required commands, with capability probes for `timeout --foreground --kill-after`, `find -maxdepth -printf`, and `mv -T` (busybox/uutils rejected) — a free-space floor breach, or an unreachable network (HTTPS to `archlinux.org` then `cloudflare.com`, ICMP `1.1.1.1`/`8.8.8.8` fallback). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
+The Platform row is the design target — enforced indirectly (`sdboot-manage` dependency, non-vfat ESP refusal, ext4-only fstab tuning); the rows below it are preflight-checked — hard gates except the Mesa soft warn and the kernel advisory floor. Preflight hard-fails (exit 3) on uncached sudo (non-TTY; a TTY prompts once), missing/non-GNU deps — 37 required commands, with capability probes for `timeout --foreground --kill-after`, `find -maxdepth -printf`, and `mv -T` (busybox/uutils rejected) — a free-space floor breach, or an unreachable network (HTTPS to `archlinux.org` then `cloudflare.com`, ICMP `1.1.1.1`/`8.8.8.8` fallback). NTP sync and a missing `pactree` warn only; an unsynced clock with no NTP client auto-enables `systemd-timesyncd` + RTC writeback.
 
 ## BIOS
-
-Click/tap the summary to expand.
 
 <details>
 <summary>85 W power ceiling — 14 SMU settings</summary>
@@ -76,7 +74,7 @@ Strix Halo multi-thread gains flatten past ~85 W; a flat `SPL = fPPT = sPPT = 85
 | *(no args)* | Run the unattended install (silent; phase matrix at end) |
 | `-V`/`--verbose` | Stream per-command install output (ignored under `--check`) |
 | `--verify` | Verify config files byte-for-byte, then live system state; flag stale `/etc/modprobe.d/60-ry-*` drop-ins outside the managed set |
-| `--check` | Probe idempotency silently vs live `/proc/cmdline` — a fresh install reads drift until reboot ([Exit Codes](#exit-codes)) |
+| `--check` | Probe idempotency silently vs live `/proc/cmdline` — a fresh install reports drift until reboot ([Exit Codes](#exit-codes)) |
 | `--install-file <abs-path>` | Re-deploy a single managed file |
 | `--` | End option parsing (no positional args) |
 | `-h`/`--help` · `-v`/`--version` | Print and exit before all checks, including the root guard |
@@ -85,12 +83,12 @@ Strix Halo multi-thread gains flatten past ~85 W; a flat `SPL = fPPT = sPPT = 85
 
 ### Environment Overrides
 
-Safe fallback when unset or invalid.
+Safe fallback when unset or invalid. Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`.
 
 | Variable | Default | Effect |
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` s | Per-command cap; `0` disables; package/boot ops floor `7200` s; non-numeric → default; > 9 digits clamps to `2147483647` |
-| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | `0` (check on) | Bypass the `Ryzen AI Max` CPU-match hard-fail |
+| `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset (check on) | Set `1` (exact) to bypass the `Ryzen AI Max` CPU-match hard-fail; any other value keeps the check on |
 | `NO_COLOR` | unset (color on) | Disable colored output when set — any value, including empty (stricter than [no-color.org](https://no-color.org), which ignores an empty string) |
 
 ## Install Flow
@@ -106,7 +104,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2` + `-ruk0` → NetworkManager restart |
 
-Results print to stderr; one JSONL log per run (`0600`): `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. Phase verdicts: `PASS` · `WARN` · `FAIL` · `DEFER` · `SKIP` · `N/A` — `WARN` keeps exit 0; `DEFER` applies on next boot (e.g. the NetworkManager restart over Wi-Fi).
+Results print to stderr; one JSONL log per run (`0600`): `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. Phase verdicts: `PASS` · `WARN` · `FAIL` · `DEFER` · `SKIP` · `--` (rolled up as `N/A` in the Totals row) — `WARN` keeps exit 0; `DEFER` applies on next boot (e.g. the NetworkManager restart over Wi-Fi).
 
 ## Safety & Reliability
 
@@ -144,7 +142,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 ### CachyOS Divergences
 
-`sdboot-manage` `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)); plaintext DNS — `DNSOverTLS=no` (vendor default is DoH) plus `DNSSEC=allow-downgrade`; AMD P-State EPP `balance_performance` (`--verify` expects the `amd-pstate-epp` scaling driver); sysctl priority `95`, loading after vendor `70-cachyos-settings.conf`; NVMe scheduler `none` (vendor default is `kyber`).
+`sdboot-manage` `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)); plaintext DNS — `DNSOverTLS=no` (vendor default is DoT) plus `DNSSEC=allow-downgrade`; AMD P-State EPP `balance_performance` (`--verify` expects the `amd-pstate-epp` scaling driver); sysctl priority `95`, loading after vendor `70-cachyos-settings.conf`; NVMe scheduler `none` (vendor default is `kyber`).
 
 ### Packages
 
@@ -165,9 +163,9 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 | Action | Units |
 |---|---|
-| Mask | `ananicy-cpp`, `power-profiles-daemon`, `NetworkManager-wait-online`, `ufw`, `modemmanager`, `avahi-daemon` (`.service` + `.socket`), sleep/suspend/hibernate/hybrid-sleep/suspend-then-hibernate targets |
-| Enable | `fstrim.timer`, `NetworkManager`, `cpupower`, `nftables`, `bluetooth` |
-| Untouched | `systemd-oomd` (by design — kernel OOM-killer + zram is the intended path) |
+| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `ufw.service`, `modemmanager.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
+| Enable | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service` |
+| Untouched | `systemd-oomd.service` (by design — kernel OOM-killer + zram is the intended path) |
 
 ### Fstab File
 
@@ -206,7 +204,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 
 | File | Purpose |
 |---|---|
-| `~/.config/environment.d/10-environment.conf` | gaming env (RADV, MangoHud, Proton, VKD3D) |
+| `~/.config/environment.d/10-environment.conf` | gaming env (RADV, DXVK, MangoHud, Proton, VKD3D, Wine) |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
 
 ## Embedded Values
@@ -291,18 +289,18 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 |---|---|---|
 | 1 | Unmask units | `sudo systemctl unmask` all 12 masked units — exact set in [Units](#units) |
 | 2 | Remove configs | `sudo rm` the 11 system files + `rm` the 2 user files — skip the 4 boot files (step 3 reverts them) |
-| 3 | Revert boot files + fstab | `.ry.bak` → `loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `mkinitcpio.conf`, `/etc/fstab` (if present); then delete the `.ry.bak` files |
+| 3 | Revert boot files + fstab | `.ry.bak` → `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` (if present); then delete the `.ry.bak` files |
 | 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** list, `pacman -Rns` the **Install** packages — exact sets in [Packages](#packages) + [Remove & Verify](#remove--verify) |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-Boot files must be reverted before step 5 — it regenerates entries from that state. Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at start and fails once the ruleset is removed; disable any other [enabled units](#units) you no longer want the same way. A `.ry.bak` exists only if the file was present before the overwrite (fstab: only if rewritten). If ry-install enabled `systemd-timesyncd`: `sudo systemctl disable --now systemd-timesyncd` (optional).
+Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at start and fails once the ruleset is removed; disable any other [enabled units](#units) you no longer want the same way. Boot files must be reverted before step 5 — it regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite (fstab: only if rewritten). If ry-install enabled `systemd-timesyncd`: `sudo systemctl disable --now systemd-timesyncd` (optional).
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| Boot failure | live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` |
+| Boot failure | live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update` |
 | Rebuild refused | a phase tainted boot state — fix the cause, re-run |
 | `--verify` drift | `./ry-install.fish --install-file /etc/...` |
 | Lock held, no live PID | `rm -rf ~/ry-install/.lock`; re-run |

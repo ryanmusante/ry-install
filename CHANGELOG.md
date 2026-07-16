@@ -3,30 +3,21 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.107.0 (2026-07-15)
---------------------
-  - remove: _lock_pid_started_after recycled-PID rescue — live or ambiguous pidfiles now always fail closed (dead-PID stale reclaim retained); Mesa soft-warn + kernel-advisory preflight notes; functions 287 -> 286
-  - readme: Requirements 6 -> 4 rows; gate sentence simplified; lock wording synced; badge/checkout -> 7.107.0
-
-7.106.0 (2026-07-15)
---------------------
-  - remove: --verbose/-V flag (shared stream emitter retained for error paths); _vss_modprobe_stale transitional scan; NTP auto-enable + RTC writeback — an unsynced clock now warns only; functions 289 -> 287
+7.106.0 - 7.107.1 (2026-07-15)
+------------------------------
+  - remove: --verbose/-V flag (stream emitter retained for error paths); _vss_modprobe_stale scan; NTP auto-enable + RTC writeback — an unsynced clock now warns only; _lock_pid_started_after recycled-PID rescue (dead-PID stale reclaim retained); Mesa soft-warn + kernel-advisory notes; functions 289 -> 286
   - fix: MASK modemmanager.service -> ModemManager.service (unit lookup is case-sensitive; the lowercase mask never matched); resolved-divergence comment DoH -> DoT
-  - readme: flags/NTP/uninstall wording synced; Mask cell casing; badge/checkout -> 7.106.0
+  - source: +5 section banners (fstab atomic replace, post-hooks hardware/firewall, verify-static boot, atomic-write public entry, entry greps)
+  - readme: flags/NTP/lock/uninstall wording synced; Requirements 6 -> 4 rows; Mask cell casing; badge/checkout -> 7.107.1
 
-7.105.10 - 7.105.15 (2026-07-14 .. 07-15)
---------------------------------
+7.105.5 - 7.105.15 (2026-07-14 .. 07-15)
+----------------------------------------
   - env: FSR4_UPGRADE=1 replaces PROTON_FSR4_RDNA3_UPGRADE=1 (long form removed in Proton-CachyOS 11.0-20260702)
   - boot: pcie_aspm.policy=performance replaces pcie_aspm=off — actively disables ASPM regardless of BIOS state
-  - verify: _vss_modprobe_stale fails unmanaged /etc/modprobe.d/60-ry-* drop-ins; functions 288 -> 289
-  - readme: Embedded Values tables (17/12/10, declaration order); consistency + precision fixes (DoT, verdict token, exact Mask/Enable unit names, full revert paths); trim to vital (BIOS table -> linked walkthrough); details in git history
-  - changelog: history condensed to range summaries; badge/checkout -> 7.105.15
-
-7.105.5 - 7.105.9 (2026-07-14)
-------------------------------
-  - kernel: enforced floor removed — 6.18.4 advisory only; validators 4 -> 3; functions 289 -> 288
-  - exit codes: 11-14 + 251 annotated internal-only sentinels; packaging: archive -> store-mode (zip -0)
-  - readme: Managed Files split into Boot/System/User tables
+  - kernel: enforced floor removed — 6.18.4 advisory only; validators 4 -> 3
+  - verify: _vss_modprobe_stale added (unmanaged 60-ry-* scan); exit codes 11-14 + 251 annotated internal-only; packaging: archive -> store-mode (zip -0)
+  - readme: Embedded Values tables (17/12/10); Managed Files split into Boot/System/User; consistency + precision fixes; trim to vital (BIOS table -> linked walkthrough)
+  - changelog: history condensed to range summaries
 
 7.100.0 - 7.105.4 (2026-07-11 .. 07-14)
 ---------------------------------------

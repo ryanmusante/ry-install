@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.107.0 (2026-07-15) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.107.1 (2026-07-15) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.107.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.107.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn returns, consumed at call sites; surface as EXIT_PREFLIGHT/FAIL rows) — never a process exit
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only) — never a process exit
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1768,6 +1768,7 @@ function _grep_ini_header --argument-names dst --description 'Validate ≥1 [Sec
     end
     return 0
 end
+# ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (MODPROBE → MANGOHUD) ──
 function _grep_modprobe_entry --argument-names dst --description 'Validate modprobe.d content: comment-only ok, else every non-comment line is a directive (options/blacklist/install/alias/softdep/remove)'
     test (count $argv) -lt 2; and _log "BUG: _grep_modprobe_entry called without content (dst=$dst)"; and return 2
     for _line in $argv[2..-1]
@@ -2033,6 +2034,7 @@ function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --descri
     end
     return 0
 end
+# ── ATOMIC FILE INSTALL: PUBLIC ENTRY (_atomic_write_file → _ry_install_file) ──
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write. rc=0 ok; rc=1 any failure"
     set -l dst_dir (command dirname -- "$dst"); set -l _is_bt false
     contains -- "$dst" $_RY_BACKUP_TARGETS; and set _is_bt true
@@ -2141,6 +2143,7 @@ function _vsb_cmdline --description "_verify_static_boot sub: cmdline KERNEL_PAR
     string match -qr -- '(^|\s)rw(\s|$)' "$cmdline_content"
     _chk_present $status rw "MISSING from /etc/kernel/cmdline"
 end
+# ── VERIFY-STATIC: BOOT (MKINITCPIO + ENTRIES) ──
 function _vsb_mkinitcpio --description "_verify_static_boot sub: /etc/mkinitcpio.conf MODULES/HOOKS/COMPRESSION checks"
     _echo "── mkinitcpio.conf ──"
     _chk_file /etc/mkinitcpio.conf; or return 0
@@ -3584,6 +3587,7 @@ function _far_awk_rewrite --argument-names tmpfstab --description "awk-rewrite f
     end
     return 0
 end
+# ── INSTALL PHASE 4: FSTAB ATOMIC REPLACE (PARITY + SIZE + FINDMNT GATES) ──
 function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp + awk + verify + mv)"
     set -l tmpfstab (sudo -n mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null) # tmpfile in dst parent: same-FS mv -T atomic
     if test -z "$tmpfstab"; _fail "  /etc/fstab: mktemp failed"; return 1; end
@@ -4619,6 +4623,7 @@ function _post_envd --argument-names target --description "Post-hook: notify ses
     _info "  Active systemd --user services retain old environment until restarted"
     return 0
 end
+# ── POST-HOOKS: HARDWARE + FIREWALL (CPUPOWER, NFT, REGDOM, BT, UDEV, MODPROBE) ──
 function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change"
     _echo
     if not _run sudo -n systemctl restart cpupower.service

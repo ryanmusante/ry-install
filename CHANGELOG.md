@@ -3,6 +3,11 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.107.3 (2026-07-16)
+--------------------
+  - changelog: 7.60.0 - 7.99.1 detail folded into the history-trim line — every entry superseded by current README/source state
+  - source + readme: trim pass found no safely removable content (0 unused globals, 0 duplicate comments, 0 dead lines, 0 redundant rows); version pins only
+
 7.107.2 (2026-07-16)
 --------------------
   - fix: drop the stale -V case from the root pre-scan (flag removed in 7.106.0); root --check -V now exits 2 with usage, matching non-root
@@ -32,13 +37,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - values: +VKD3D_CONFIG=descriptor_heap, +vm.watermark_boost_factor=0; packages: drop archlinux-contrib (PKGS_ADD -> 18)
   - source: comment/header/data-row condensation; readme: Env Overrides Default column; ntp: scan openntpd; accept comment-only modprobe drop-in
 
-7.60.0 - 7.99.1 (2026-06-21 .. 07-11)
--------------------------------------
-  - configs: modprobe drop-ins merged into 60-ry-modules.conf + BLACKLIST_AMDXDNA/IOMMU guard; bluetooth main.conf; NM wpa_supplicant + powersave=2; cmdline: ipv6.disable=1, clearcpuid=umip
-  - power: amd_iommu=off; governor powersave; EPP balance_performance; services: avahi pair + modemmanager masked (MASK -> 12)
-  - safety: .ry.bak + post-write verify/restore for the 4 boot files; nft -c pre-validate; root-guard argparse, silent root --check exit 3; lock-reclaim hardening; 7200s long-op cap
-  - verify: lsmod blacklist / COMPRESSION= / EPP assertions; guards: managed destinations settle at 15 (+2 user)
-
-7.59.0 and earlier
+7.99.1 and earlier
 ------------------
   - History trimmed. See git tags for the full record.

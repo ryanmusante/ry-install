@@ -270,14 +270,6 @@ Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at star
 | ddcutil permission denied | `sudo usermod -aG i2c $USER`, re-login (needs `ddcutil`) |
 | BT speaker won't auto-reconnect | `bluetoothctl trust <MAC>`, then power the speaker on after login so it re-initiates |
 
-## Contributing
-
-PRs welcome. For config changes, include before/after `--verify`/`--check` output. Lint with `fish --no-execute`, keep comments single-line, and update [CHANGELOG.md](CHANGELOG.md).
-
-## Security
-
-Invokes `sudo` internally; modifies boot config, firewall, and kernel cmdline. Review the nftables ruleset, `KERNEL_PARAMS`, and `PKGS_DEL` before running. Report concerns via GitHub issues or privately to the maintainer.
-
 ## License
 
 MIT © 2026 Ryan Musante. SPDX-License-Identifier: MIT

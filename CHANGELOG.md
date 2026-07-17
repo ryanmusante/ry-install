@@ -6,7 +6,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.107.3 (2026-07-16)
 --------------------
   - changelog: 7.60.0 - 7.99.1 detail folded into the history-trim line — every entry superseded by current README/source state
-  - source + readme: trim pass found no safely removable content (0 unused globals, 0 duplicate comments, 0 dead lines, 0 redundant rows); version pins only
+  - source + readme: trim pass
 
 7.107.2 (2026-07-16)
 --------------------

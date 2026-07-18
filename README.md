@@ -1,11 +1,11 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.107.3-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.108.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable (`--verify`), reversible ([Uninstall](#uninstall)).
+> Idempotent CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 18 embedded configs — atomic, byte-verifiable (`--verify`), reversible ([Uninstall](#uninstall)).
 
 ## Quick Start
 
@@ -14,12 +14,12 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.107.3
+cd ry-install && git checkout v7.108.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-**In scope:** the 17 [Managed Files](#managed-files) domains, plus pacman add/remove, systemd units, and the fstab rewrite.
+**In scope:** the 18 [Managed Files](#managed-files) domains, plus pacman add/remove, systemd units, and the fstab rewrite.
 
 **Out of scope:** dotfiles beyond the 2 managed user files, secrets, backups, multi-user, non-CachyOS, laptops, UKI, Secure Boot.
 
@@ -72,7 +72,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 |---|---|---|
 | 1 | Preflight | hard gates → lock → config checks (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
-| 3 | Configuration | deploy 17 embedded configs atomically |
+| 3 | Configuration | deploy 18 embedded configs atomically |
 | 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` → `paccache -rk2` + `-ruk0` → NetworkManager restart |
@@ -115,7 +115,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 ### CachyOS Divergences
 
-`sdboot-manage` `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)); plaintext DNS — `DNSOverTLS=no` (vendor default is DoT) plus `DNSSEC=allow-downgrade`; AMD P-State EPP `balance_performance` (`--verify` expects the `amd-pstate-epp` scaling driver); sysctl priority `95`, loading after vendor `70-cachyos-settings.conf`; NVMe scheduler `none` (vendor default is `kyber`).
+`sdboot-manage` `REMOVE_EXISTING=yes` ([Safety & Reliability](#safety--reliability)); plaintext DNS — `DNSOverTLS=no` (vendor default is DoT) plus `DNSSEC=no`; AMD P-State EPP `balance_performance` (`--verify` expects the `amd-pstate-epp` scaling driver); sysctl priority `95`, loading after vendor `70-cachyos-settings.conf`; NVMe scheduler `none` (vendor default is `kyber`).
 
 ### Packages
 
@@ -123,7 +123,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 | Action | Packages |
 |---|---|
-| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `git-delta`, `lm_sensors`, `rtkit`, `realtime-privileges`, `ddcutil`, `nftables`, `pacman-contrib` |
+| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `nftables`, `pacman-contrib` |
 
 ### Remove & Verify
 
@@ -136,7 +136,7 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 | Action | Units |
 |---|---|
-| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `ufw.service`, `ModemManager.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
+| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `ufw.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
 | Enable | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service` |
 | Untouched | `systemd-oomd.service` (by design — kernel OOM-killer + zram is the intended path) |
 
@@ -146,14 +146,14 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 
 ## Managed Files
 
-17 embedded configs, in deploy order ([`--verify`](#usage) checks all, `--install-file` re-deploys one): 4 boot-critical (`.ry.bak`-backed), 11 system, 2 user.
+18 embedded configs, in deploy order ([`--verify`](#usage) checks all, `--install-file` re-deploys one): 4 boot-critical (`.ry.bak`-backed), 11 system, 3 user.
 
 ### Boot Files
 
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | loader: default `@saved`, timeout `0`, console-mode `keep`, editor `no` |
-| `/etc/kernel/cmdline` | `rw root=UUID` + the 17 `KERNEL_PARAMS` |
+| `/etc/kernel/cmdline` | `rw root=UUID` + the 15 `KERNEL_PARAMS` |
 | `/etc/sdboot-manage.conf` | entry gen: `LINUX_OPTIONS`, `LINUX_FALLBACK_OPTIONS="quiet"`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING=yes`, `OVERWRITE_EXISTING=yes`, `REMOVE_OBSOLETE=yes` |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES` (`amdgpu` — early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-1 -T0`) |
 
@@ -161,7 +161,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 
 | File | Purpose |
 |---|---|
-| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | `DNSSEC=allow-downgrade`, no mDNS/LLMNR/DoT |
+| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | `DNSSEC=no`, no mDNS/LLMNR/DoT |
 | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | ignore power/suspend/hibernate/reboot keys (+ long-press variants — 8 keys) |
 | `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | `LogLevelMax=notice` — silence info-level `nm-dispatcher` noise |
 | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, `wifi.powersave=2` (off), log level `WARN` |
@@ -179,6 +179,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 |---|---|
 | `~/.config/environment.d/10-environment.conf` | gaming env (RADV, DXVK, MangoHud, Proton, VKD3D, Wine) |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
+| `~/.config/systemd/user/plasma-powerdevil.service.d/10-no-ddcutil.conf` | `POWERDEVIL_NO_DDCUTIL=1` — PowerDevil DDC/CI off; silences `org_kde_powerdevil` i2c errors (external-monitor brightness via Plasma intentionally off) |
 
 ## Embedded Values
 
@@ -188,7 +189,6 @@ The value arrays behind the managed files, in declaration order. Rationale for t
 
 | Token | Effect |
 |---|---|
-| `8250.nr_uarts=0` | allocate no legacy 8250 UART ports (none on this board) |
 | `amd_iommu=off` | IOMMU fully off — lowest DMA-mapping overhead |
 | `amd_pstate=active` | CPPC autonomous mode — the `amd-pstate-epp` scaling driver |
 | `btusb.enable_autosuspend=n` | keep the BT controller powered — no wake/reconnect stalls |
@@ -202,7 +202,6 @@ The value arrays behind the managed files, in declaration order. Rationale for t
 | `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
 | `quiet` | suppress boot console noise |
 | `split_lock_detect=off` | no split-lock throttling penalty in games |
-| `tsc=reliable` | trust the TSC — skip the clocksource watchdog |
 | `usbcore.autosuspend=-1` | USB autosuspend off globally |
 | `zswap.enabled=0` | zswap off — zram is the swap path |
 
@@ -249,8 +248,8 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 | # | Step | Action |
 |---|---|---|
-| 1 | Unmask units | `sudo systemctl unmask` all 12 masked units — exact set in [Units](#units) |
-| 2 | Remove configs | `sudo rm` the 11 system files + `rm` the 2 user files — skip the 4 boot files (step 3 reverts them) |
+| 1 | Unmask units | `sudo systemctl unmask` all 10 masked units — exact set in [Units](#units) |
+| 2 | Remove configs | `sudo rm` the 11 system files + `rm` the 3 user files — skip the 4 boot files (step 3 reverts them) |
 | 3 | Revert boot files + fstab | `.ry.bak` → `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` (if present); then delete the `.ry.bak` files |
 | 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** list, `pacman -Rns` the **Install** packages — exact sets in [Packages](#packages) + [Remove & Verify](#remove--verify) |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |

@@ -3,6 +3,13 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.108.0 (2026-07-17)
+--------------------
+  - add: PowerDevil DDC/CI opt-out drop-in as managed file 18 (~/.config/systemd/user/plasma-powerdevil.service.d/10-no-ddcutil.conf, POWERDEVIL_NO_DDCUTIL=1) + user-scope live-apply post-hook (systemctl --user daemon-reload + plasma-powerdevil restart; notify fallback, non-fatal)
+  - remove: kernel params 8250.nr_uarts=0 + tsc=reliable (KERNEL_PARAMS 17 -> 15); packages git-delta + ddcutil (PKGS_ADD 18 -> 16; libddcutil stays via the powerdevil dependency); masks NetworkManager-wait-online.service + ModemManager.service (MASK 12 -> 10)
+  - resolved: DNSSEC allow-downgrade -> no (validation delegated to the upstream resolver; allow-downgrade is downgrade-attack-vulnerable and a known bogus-failure source)
+  - readme: counts + tables synced (managed 17 -> 18, user files 2 -> 3, Embedded Values 15/12/10); badge/checkout -> 7.108.0
+
 7.107.3 (2026-07-16)
 --------------------
   - changelog: 7.60.0 - 7.99.1 detail folded into the history-trim line — every entry superseded by current README/source state

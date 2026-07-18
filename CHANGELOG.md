@@ -3,6 +3,11 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.115.0 (2026-07-18)
+--------------------
+  - readme: libvirt known-interaction note condensed to vital information (mechanism one-liner, snippet, no-duplicate-NAT, verify commands)
+  - readme: full information verify vs script values — loader/sdboot/resolved/NM/BT/cpupower/regdom/EPP/DPM tokens, remote-play port sets, log path, perms, managed-file split all confirmed accurate; ufw reverse-dependency check: no hard reverse dependency on this profile (gufw/ufw-extras not installed; desktop integrations list ufw as optional), removal stays pactree-gated at run time
+
 7.114.0 (2026-07-18)
 --------------------
   - readme: line-by-line trim to vital information (prose + table cells; libvirt note tightened)

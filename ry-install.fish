@@ -2565,7 +2565,7 @@ function _ry_do_check --description "Silent idempotency probe" # ERR_NO_DATA->pr
     return $EXIT_OK
 end
 
-# ── VERIFY-RUNTIME: KERNEL CMDLINE + GPU + CPU + MODULES + CLOCKSOURCE ──
+# ── VERIFY-RUNTIME: KERNEL CMDLINE + GPU + CPU + MODULES ──
 function _vrk_cmdline --description "Runtime kparam check: /proc/cmdline + preemption model"
     _echo "KERNEL CMDLINE"
     _echo
@@ -4630,9 +4630,14 @@ function _post_envd --argument-names target --description "Post-hook: notify ses
 end
 function _post_powerdevil --argument-names target --description "Post-hook: user-scope daemon-reload + PowerDevil restart after DDC/CI opt-out drop-in change"
     _echo
-    if not _run systemctl --user daemon-reload
-        _warn "systemctl --user daemon-reload failed (no user manager reachable?) — drop-in applies at next login (non-fatal; file deployed)"
+    if not _has_user_bus_active
+        _info "Skipping user-scope apply for $target (no active user-bus — log in graphically or enable-linger)"
         _info "  Manual apply: systemctl --user daemon-reload; and systemctl --user restart plasma-powerdevil.service"
+        _log "POST_POWERDEVIL_SKIP: no active user-bus target=$target"
+        return 0
+    end
+    if not _run systemctl --user daemon-reload
+        _warn "systemctl --user daemon-reload failed — drop-in applies at next login (non-fatal; file deployed)"
         return 0
     end
     if not _run systemctl --user restart plasma-powerdevil.service

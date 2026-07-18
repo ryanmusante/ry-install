@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.110.0 (2026-07-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.114.0 (2026-07-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.110.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
-set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn returns, consumed at call sites; surface as EXIT_PREFLIGHT/FAIL rows) — never a process exit
+set -g VERSION "7.114.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn returns) — never a process exit
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only) — never a process exit
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S%z'
@@ -180,7 +180,7 @@ end
 set -gx HOME (string trim -r -c / -- (string trim -- "$HOME"))
 if test -z "$HOME"; or not test -d "$HOME"; echo "[ERR] HOME resolves to empty/non-dir after normalization: '$HOME'" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -g _RY_HOME_DIR "$HOME/ry-install"; set -g LOG_DIR "$_RY_HOME_DIR/logs/$DATE_LABEL"
-set -l _prev_mkdir_umask 022; set -q umask; and set _prev_mkdir_umask $umask # set umask var directly; umask(1) is autoloaded and a mid-load signal leaks to stderr
+set -l _prev_mkdir_umask 022; set -q umask; and set _prev_mkdir_umask $umask # set umask var directly; autoloaded umask(1) leaks to stderr mid-load
 set -g umask 0077
 command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
     set -g umask $_prev_mkdir_umask
@@ -330,7 +330,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     _log "LOCK_ACQUIRED: pid=$fish_pid dir=$LOCK_DIR"
     return 0
 end
-# mkdir+pidfile lock, not flock: atomic on any fs, no fd inheritance into sudo children; dead-PID stale reclaim only (live/ambiguous fail closed); EXIT_LOCK=5 on live holder
+# mkdir+pidfile lock (atomic on any fs, no fd into sudo children); dead-PID reclaim only, live/ambiguous fail closed; EXIT_LOCK=5
 function _acquire_lock --description "Acquire instance lock (atomic mkdir; dead-PID stale reclaim)"
     set -g LOCK_DIR "$_RY_HOME_DIR/.lock"; set -g LOCK_FILE "$LOCK_DIR/pid"
     set -l _lk_um 022; set -q umask; and set _lk_um $umask; set -g umask 0077; command mkdir -p -- (command dirname -- "$LOCK_DIR") 2>/dev/null; set -g umask $_lk_um # state dir is 0700 by contract
@@ -572,7 +572,7 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-set -g KERNEL_PARAMS amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n clearcpuid=umip fsck.mode=force fsck.repair=yes ipv6.disable=1 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n clearcpuid=umip fsck.mode=force fsck.repair=yes ipv6.disable=1 nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
@@ -593,7 +593,7 @@ set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to 
 set -g BLACKLIST_AMDXDNA true # false + amd_iommu=on iommu=pt enables the XDNA NPU (validator-paired)
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
-set -g ENV_VARS "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "FSR4_UPGRADE=1" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_CONFIG=descriptor_heap" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
+set -g ENV_VARS "DXVK_LOG_LEVEL=none" "FSR4_UPGRADE=1" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_CONFIG=descriptor_heap" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
 # netdev=10GbE (RTL8127), max_map_count=esync, swappiness=150=zram, watermark_boost=0 disables reclaim boosting
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" "net.core.netdev_budget=600" "net.core.netdev_budget_usecs=5000" "net.ipv4.tcp_congestion_control=bbr" \
@@ -604,11 +604,11 @@ set -g SYSCTL_VALUES \
 set -g PKGS_ADD \
     nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs \
     bottom htop lm_sensors rtkit realtime-privileges nftables pacman-contrib # pacman-contrib: pactree + paccache
-set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
+set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect ufw
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
-set -g MASK ananicy-cpp.service power-profiles-daemon.service ufw.service avahi-daemon.service avahi-daemon.socket sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi: 2nd mDNS responder collided with resolved
+set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi: 2nd mDNS responder collided with resolved
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
@@ -665,14 +665,14 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
     set -l _expect \
-        KERNEL_PARAMS:15 \
+        KERNEL_PARAMS:14 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
-        ENV_VARS:12 \
+        ENV_VARS:11 \
         SYSCTL_VALUES:10 \
         PKGS_ADD:16 \
-        PKGS_DEL:9 \
+        PKGS_DEL:10 \
         MASK:10 \
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:5 \
@@ -822,7 +822,7 @@ end
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset"
     printf '%s\n' \
         "#!/usr/bin/nft -f" \
-        "# ry-install: default-deny-inbound, IPv4-only (ufw masked; ipv6.disable=1). Add inbound ports below." \
+        "# ry-install: default-deny-inbound, IPv4-only (ufw removed; ipv6.disable=1). Add inbound ports below." \
         "flush ruleset" \
         "table inet filter {" \
         "    chain input {" \
@@ -3747,7 +3747,15 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
         _phase_record "Services: PKGS_DEL removal" WARN "pacman query failed — skipped"
         return 0
     end
-    for pkg in $PKGS_DEL
+    set -l _del_list $PKGS_DEL
+    if contains -- ufw $_del_list # nftables-first: never remove the firewall still holding the rules
+        set -l _nft_live false
+        _csm_enable_nftables_first; and set _nft_live true
+        if not _csm_prepare_ufw_removal $_nft_live
+            set _del_list (string match -v -- ufw $_del_list)
+        end
+    end
+    for pkg in $_del_list
         contains -- "$pkg" $_del_installed; or continue
         for _emit in (_csp_filter_rdeps "$pkg"); test -z "$_emit"; and continue; contains -- "$_emit" $to_del; and continue; set -a to_del "$_emit"; end
     end
@@ -3803,8 +3811,8 @@ function _nft_input_drop_live --description "rc 0 iff live inet/filter/input cha
     set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect)
     string match -q -- '*policy drop*' "$_in_chain"
 end
-function _csm_enable_nftables_first --description "Activate nftables before the ufw flush; rc 0 iff default-deny ruleset confirmed live"
-    contains -- ufw.service $MASK; or return 0
+function _csm_enable_nftables_first --description "Activate nftables before the ufw flush + removal; rc 0 iff default-deny ruleset confirmed live"
+    contains -- ufw $PKGS_DEL; or return 0
     contains -- nftables.service $EXPECTED_SERVICES; or return 0
     if _nft_input_drop_live; _log "NFT_PRE_ENABLE_SKIP: ruleset already live"; return 0; end
     _run sudo -n systemctl enable --now -- nftables.service
@@ -3817,37 +3825,34 @@ function _csm_enable_nftables_first --description "Activate nftables before the 
     _log "NFT_PRE_ENABLE_FAIL: live ruleset unconfirmed"
     return 1
 end
-function _csm_disable_ufw_rules --argument-names nft_live --description "Flush ufw rules before mask, but only when nftables default-deny is confirmed live"
-    contains -- ufw.service $MASK; or return 0
-    command -q ufw; or return 0
-    set -l _state (command systemctl is-active ufw.service 2>/dev/null | string trim --)
-    if test "$_state" != active; _log "UFW_RULE_FLUSH_SKIP: ufw.service is-active=$_state"; return 0; end
+function _csm_prepare_ufw_removal --argument-names nft_live --description "Flush + stop + unmask ufw ahead of its package removal; rc 0 iff removal may proceed"
+    command -q ufw; or return 0 # binary absent: nothing to flush (del loop skips it)
     if test "$nft_live" != true
-        _warn "ufw left active — nftables default-deny not confirmed live; flushing ufw now would leave the host unfirewalled until reboot. Re-run after nftables.service starts."
-        _log "UFW_RULE_FLUSH_DEFERRED: nft_live=$nft_live (ufw retained to avoid unfirewalled window)"
-        return 0
+        _warn "ufw retained this run — nftables default-deny not confirmed live; flushing/removing ufw now would leave the host unfirewalled until reboot. Re-run after nftables.service starts."
+        _log "UFW_REMOVAL_DEFERRED: nft_live=$nft_live (ufw retained to avoid an unfirewalled window)"
+        return 1
     end
-    _warn "SECURITY: ufw disabled+masked by profile — nftables default-deny-inbound is the active host firewall"
-    _log "SECURITY_POSTURE: ufw disabled+masked; nftables default-deny-inbound active (/etc/nftables.conf)"
-    if _run sudo -n ufw --force disable
-        _ok "ufw disabled — netfilter rules flushed (nftables default-deny live)"
-        _log "UFW_RULE_FLUSH_OK"
+    set -l _state (command systemctl is-active ufw.service 2>/dev/null | string trim --)
+    if test "$_state" = active
+        if _run sudo -n ufw --force disable
+            _ok "ufw disabled — netfilter rules flushed (nftables default-deny live)"
+            _log "UFW_RULE_FLUSH_OK"
+        else
+            _warn "ufw --force disable failed — retaining the ufw package this run so stale rules never outlive their flush tool"
+            _log "UFW_RULE_FLUSH_FAIL: removal deferred"
+            return 1
+        end
     else
-        _warn "ufw --force disable failed — netfilter rules may persist until reboot"
-        _log "UFW_RULE_FLUSH_FAIL"
+        _log "UFW_RULE_FLUSH_SKIP: ufw.service is-active=$_state"
     end
+    _run sudo -n systemctl disable --now -- ufw.service; or _log "UFW_UNIT_DISABLE_WARN: disable --now failed (non-fatal)"
+    _run sudo -n systemctl unmask -- ufw.service; or _log "UFW_UNMASK_WARN: unmask failed (non-fatal)" # clears a stale mask symlink left by older releases
+    _warn "SECURITY: ufw flushed + removed by profile — nftables default-deny-inbound is the active host firewall"
+    _log "SECURITY_POSTURE: ufw removed; nftables default-deny-inbound active (/etc/nftables.conf)"
     return 0
 end
 function _configure_services_mask --description "Apply MASK list; batch-mask with per-unit retry"
-    set -l _nft_live false
-    _csm_enable_nftables_first; and set _nft_live true
-    _csm_disable_ufw_rules $_nft_live
     set -l safe_mask $MASK
-    if test "$_nft_live" != true; and contains -- ufw.service $safe_mask # masking ufw with rules retained = no firewall next boot
-        set safe_mask (string match -v -- ufw.service $safe_mask)
-        _warn "ufw.service mask skipped this run — nftables default-deny not confirmed live; masking ufw now would block its ruleset reload on next boot. Re-run after nftables.service is active."
-        _log "MASK_UFW_SKIP: nft_live=false — ufw.service left unmasked to preserve firewall coverage across reboot"
-    end
     if test (count $safe_mask) -eq 0
         _phase_record "Services: mask units" "--" "MASK list empty"
         return 0

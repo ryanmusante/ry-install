@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.110.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.114.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.110.0
+cd ry-install && git checkout v7.114.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -32,7 +32,7 @@ chmod +x ry-install.fish
 | Hardware | CPU matches `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | Free space | 2 GiB `/` (warn < 5 GiB), 200 MiB `/boot` (warn < 500 MiB; gated only when `/boot` is a separate mount) |
 
-The Platform row is the design target — enforced indirectly (`sdboot-manage` dependency, non-vfat ESP refusal, ext4-only fstab tuning); the rows below it are preflight-checked hard gates. Preflight hard-fails (exit 3) on uncached sudo, missing/non-GNU deps (37 commands, capability-probed), a free-space floor breach, or an unreachable network. NTP sync and a missing `pactree` warn only.
+The Platform row is the design target, enforced indirectly (`sdboot-manage` dependency, non-vfat ESP refusal, ext4-only fstab tuning); the rest are preflight hard gates. Preflight hard-fails (exit 3) on uncached sudo, missing/non-GNU deps (37 commands, capability-probed), a free-space floor breach, or an unreachable network; NTP sync and a missing `pactree` warn only.
 
 ## BIOS
 
@@ -62,7 +62,7 @@ Safe fallback when unset or invalid. Color also auto-disables when stderr is not
 |---|---|---|
 | `RY_RUN_TIMEOUT` | `3600` s | Per-command cap; `0` disables; package/boot ops floor `7200` s; non-numeric → default; > 9 digits clamps to `2147483647` |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK` | unset (check on) | Set `1` (exact) to bypass the `Ryzen AI Max` CPU-match hard-fail; any other value keeps the check on |
-| `NO_COLOR` | unset (color on) | Disable colored output when set — any value, including empty (stricter than [no-color.org](https://no-color.org), which ignores an empty string) |
+| `NO_COLOR` | unset (color on) | Disable colored output when set — any value, including empty (stricter than [no-color.org](https://no-color.org)) |
 
 ## Install Flow
 
@@ -73,16 +73,16 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 1 | Preflight | hard gates → lock → config checks (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
 | 3 | Configuration | deploy 17 embedded configs atomically |
-| 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → enable → regdomain |
+| 4 | Services | fstab → resolved → package removal (nftables-first: ufw flushed + removed) → mask → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` (+ PowerDevil re-apply when the env file changed) → `paccache -rk2` + `-ruk0` → NetworkManager restart |
 
-Results print to stderr; one JSONL log per run (`0600`): `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. Phase verdicts: `PASS` · `WARN` · `FAIL` · `DEFER` · `SKIP` · `--` (rolled up as `N/A` in the Totals row) — `WARN` keeps exit 0; `DEFER` applies on next boot (e.g. the NetworkManager restart over Wi-Fi).
+Results print to stderr; one JSONL log per run (`0600`): `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. Phase verdicts: `PASS` · `WARN` · `FAIL` · `DEFER` · `SKIP` · `--` (`N/A` in Totals) — `WARN` keeps exit 0; `DEFER` applies next boot (e.g. the NetworkManager restart over Wi-Fi).
 
 ## Safety & Reliability
 
 > [!WARNING]
-> Masks `ufw` and ships an IPv4-only nftables default-deny-inbound ruleset: loopback, established/related, and ICMP echo-request + error/PMTUD types (destination-unreachable, time-exceeded, parameter-problem) accepted; `invalid` state dropped; `forward` drop, `output` accept. IPv6 disabled system-wide (`ipv6.disable=1`).
+> Removes `ufw` (nftables-first: default-deny confirmed live before the flush and `-Rns`) and ships an IPv4-only nftables default-deny-inbound ruleset: loopback, established/related, and ICMP echo-request + error/PMTUD types (destination-unreachable, time-exceeded, parameter-problem) accepted; `invalid` state dropped; `forward` drop, `output` accept. IPv6 disabled system-wide (`ipv6.disable=1`).
 
 The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and AMD-Vi revert to kernel defaults, though the IPv4-only ruleset and the `amdxdna` blacklist still apply. Game-streaming inbound is off; `RY_REMOTE_PLAY_PORTS=true` + re-run appends Sunshine/Moonlight + Steam Remote Play accepts (`tcp 47984, 47989, 48010, 27036, 27037` · `udp 47998-48010, 27031-27036`).
 
@@ -129,14 +129,14 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 | Action | Packages |
 |---|---|
-| Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
+| Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect`, `ufw` (flushed nftables-first) |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (`chwd` Vulkan drivers) |
 
 ### Units
 
 | Action | Units |
 |---|---|
-| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `ufw.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
+| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
 | Enable | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service` |
 | Untouched | `systemd-oomd.service` (by design — kernel OOM-killer + zram is the intended path) |
 
@@ -153,7 +153,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | loader: default `@saved`, timeout `0`, console-mode `keep`, editor `no` |
-| `/etc/kernel/cmdline` | `rw root=UUID` + the 15 `KERNEL_PARAMS` |
+| `/etc/kernel/cmdline` | `rw root=UUID` + the 14 `KERNEL_PARAMS` |
 | `/etc/sdboot-manage.conf` | entry gen: `LINUX_OPTIONS`, `LINUX_FALLBACK_OPTIONS="quiet"`, `DEFAULT_ENTRY=manual`, `REMOVE_EXISTING=yes`, `OVERWRITE_EXISTING=yes`, `REMOVE_OBSOLETE=yes` |
 | `/etc/mkinitcpio.conf` | initramfs `MODULES` (`amdgpu` — early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-1 -T0`) |
 
@@ -195,7 +195,6 @@ The value arrays behind the managed files, in declaration order. Rationale for t
 | `fsck.mode=force` | run fsck on every boot |
 | `fsck.repair=yes` | auto-repair whatever fsck finds |
 | `ipv6.disable=1` | disable the IPv6 stack |
-| `nowatchdog` | no watchdog modules — fewer timer wakeups |
 | `nvme_core.default_ps_max_latency_us=0` | NVMe APST off — no power-state exit latency |
 | `pcie_aspm.policy=performance` | force every PCIe link out of ASPM |
 | `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
@@ -209,11 +208,10 @@ The value arrays behind the managed files, in declaration order. Rationale for t
 | Variable | Effect |
 |---|---|
 | `DXVK_LOG_LEVEL=none` | DXVK logging off |
-| `DXVK_LOG_PATH=none` | no DXVK log files |
 | `FSR4_UPGRADE=1` | enable the FSR4 upgrade path |
 | `MANGOHUD=1` | HUD on for Vulkan titles |
 | `MESA_SHADER_CACHE_MAX_SIZE=16G` | roomy Mesa shader cache |
-| `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
+| `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors; external-monitor brightness intentionally off |
 | `PROTON_ENABLE_WAYLAND=1` | native-Wayland Proton path |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
 | `VKD3D_CONFIG=descriptor_heap` | D3D12 descriptor-heap fast path |
@@ -233,7 +231,7 @@ Non-obvious choices; several list an override to reverse.
 |---|---|
 | NTSYNC | `--verify` reports `/dev/ntsync` (present ok · module-no-node warn · absent info). Opt out: `PROTON_NO_NTSYNC=1`. |
 | AMD-Vi (IOMMU) | `amd_iommu=off` breaks the XDNA NPU (hence blacklist). NPU/VFIO/SR-IOV: `amd_iommu=on iommu=pt` + `BLACKLIST_AMDXDNA false`, re-run. |
-| UMIP (`clearcpuid=umip`) | Disables UMIP trapping; taints kernel. String form is version-stable. Drop if no `umip_printk` stutter. |
+| UMIP (`clearcpuid=umip`) | Disables UMIP trapping; taints kernel. String form is version-stable (CPUID bit numbers shift between kernels). Drop if no `umip_printk` stutter. |
 | IPv6 | `ipv6.disable=1`, IPv4-only ruleset. Dual-stack: drop token, add IPv6 rules, re-run. |
 | PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link (MT7925 coredump / BT-reconnect / assoc fix + NVMe latency). Drop to restore ASPM defaults. |
 | FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled (RDNA3/3.5). Verify: `printenv FSR4_UPGRADE`. |
@@ -265,8 +263,25 @@ Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at star
 | `--verify` drift | `./ry-install.fish --install-file /etc/...` |
 | Lock held, no live PID | `rm -rf ~/ry-install/.lock`; re-run |
 | PipeWire permission denied | `sudo usermod -aG realtime $USER`, re-login (needs `realtime-privileges`) |
-| ddcutil permission denied | `sudo usermod -aG i2c $USER`, re-login (needs `ddcutil`) |
 | BT speaker won't auto-reconnect | `bluetoothctl trust <MAC>`, then power the speaker on after login so it re-initiates |
+
+#### Known interaction — libvirt/QEMU NAT networking (VMs out of scope)
+
+Arch `libvirt` defaults to the **nftables** firewall backend (since v10.4.0, auto-selected when `nft` is present; `firewall_backend` in `/etc/libvirt/network.conf` may not take effect — the compiled-in default wins, trust `nft list table ip libvirt_network`). It creates table `ip libvirt_network`: input/output/forward base chains (priority 0, `policy accept`), forward traffic via `guest_input`/`guest_output`/`guest_cross`, and `guest_nat` (postrouting, priority 100, `policy accept`) masquerading `192.168.122.0/24`. nftables requires acceptance from **every** base chain at a hook — libvirt's accepts cannot override this profile's `inet filter` `forward { policy drop; }`. Symptom: the guest gets a DHCP lease and reaches `192.168.122.1`, but no WAN. **UFW**-based fixes (`ufw route allow in/out on virbr0`) are inert here — ufw is removed.
+
+If libvirt/QEMU is ever run on this box, add to the input/forward chains in `/etc/nftables.conf` (then `--install-file` it):
+
+```
+# inet filter INPUT chain — guest DHCP/DNS to the host dnsmasq:
+iifname "virbr0" udp dport { 53, 67 } accept
+iifname "virbr0" tcp dport { 53, 67 } accept
+
+# inet filter FORWARD chain — survive the global drop:
+iifname "virbr0" accept
+oifname "virbr0" ct state established,related accept
+```
+
+Do **not** add a `table ip nat` masquerade block — `guest_nat` already masquerades `192.168.122.0/24`. The nftables backend omits the iptables-era DHCP-checksum-fixup rules (matters only for ~15-year-old guests). Verify: the `inet filter forward` drop counter while a guest pings WAN; `sysctl net.ipv4.ip_forward` must be `1` (libvirt sets it). IPv4-only: no ip6 rules needed (`ipv6.disable=1`).
 
 ## License
 

@@ -3,59 +3,25 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.116.0 (2026-07-18)
+7.117.0 (2026-07-18)
 --------------------
-  - readme: libvirt known-interaction note reduced to essentials (problem, accept snippet, no-duplicate-NAT)
+  - changelog: 7.108.0 - 7.116.0 merged into a range entry
+  - readme + source: version sync
 
-7.115.0 (2026-07-18)
---------------------
-  - readme: libvirt known-interaction note condensed to vital information (mechanism one-liner, snippet, no-duplicate-NAT, verify commands)
-  - readme: full information verify vs script values — loader/sdboot/resolved/NM/BT/cpupower/regdom/EPP/DPM tokens, remote-play port sets, log path, perms, managed-file split all confirmed accurate; ufw reverse-dependency check: no hard reverse dependency on this profile (gufw/ufw-extras not installed; desktop integrations list ufw as optional), removal stays pactree-gated at run time
-
-7.114.0 (2026-07-18)
---------------------
-  - readme: line-by-line trim to vital information (prose + table cells; libvirt note tightened)
-  - readme: cmdline row count synced (14 KERNEL_PARAMS); stale ddcutil troubleshooting row dropped
-
-7.113.0 (2026-07-18)
---------------------
-  - changelog: restyled to terse per-area lines
-  - source: comment trim pass (vital information only)
-  - readme: badge/checkout synced
-
-7.112.0 (2026-07-18)
---------------------
-  - cmdline: drop nowatchdog (15 -> 14); NMI watchdog stays off via vendor sysctl + watchdog-module blacklists, soft-lockup detector returns to kernel default
-  - services: mask NetworkManager-wait-online.service (MASK 9 -> 10)
-  - env: drop DXVK_LOG_PATH=none (11 vars; inert under DXVK_LOG_LEVEL=none)
-
-7.111.0 (2026-07-18)
---------------------
-  - services: remove ufw instead of masking (MASK 10 -> 9, PKGS_DEL 9 -> 10); nftables default-deny confirmed live before flush -> disable -> unmask -> -Rns, removal defers while the live ruleset is unconfirmed
-  - readme: document libvirt/QEMU NAT vs the forward drop (nftables backend since libvirt 10.4.0) with the virbr0 accept snippet; managed ruleset unchanged
-  - nftables: header comment synced (ufw masked -> removed)
-
-7.110.0 (2026-07-18)
---------------------
-  - env: drop AMD_VULKAN_ICD=RADV (12 vars; read only by amdvlk's switchable-graphics layer, profile ships RADV only)
-  - nftables: input chain reordered to the Arch default shape (invalid drop, established/related, loopback); live-applies via post-hook
-  - readme: Session Environment table synced
-
-7.109.0 (2026-07-18)
---------------------
-  - env: POWERDEVIL_NO_DDCUTIL=1 moves from the user drop-in to environment.d (managed 18 -> 17, user files 3 -> 2, hooks 18 -> 17); delete the deployed drop-in by hand on migration
+7.108.0 - 7.116.0 (2026-07-17 .. 07-18)
+---------------------------------------
+  - cmdline: drop 8250.nr_uarts=0, tsc=reliable, nowatchdog (17 -> 14)
+  - env: POWERDEVIL_NO_DDCUTIL=1 via environment.d (per-service drop-in retired); drop AMD_VULKAN_ICD=RADV, DXVK_LOG_PATH=none (11 vars)
+  - services: ufw removed instead of masked (PKGS_DEL 9 -> 10) — nftables default-deny confirmed live, then flush -> disable -> unmask -> -Rns; removal defers while the live ruleset is unconfirmed
+  - services: mask net 12 -> 10 (ModemManager.service and ufw.service out, NetworkManager-wait-online.service re-added)
+  - packages: drop git-delta, ddcutil (PKGS_ADD 18 -> 16)
+  - resolved: DNSSEC allow-downgrade -> no
   - deploy: one-time first-adoption preserve <dst>.ry.orig for differing pre-existing non-boot files
   - verify: user-unit health check (plasma-powerdevil must not be failed; any failed --user unit warns)
   - install: environment.d changes live-apply to PowerDevil (user daemon-reload + restart)
-  - readme: counts and tables synced
-
-7.108.0 (2026-07-17)
---------------------
-  - env: PowerDevil DDC/CI opt-out drop-in added as managed file 18 with user-scope live-apply hook
-  - cmdline: drop 8250.nr_uarts=0 and tsc=reliable (17 -> 15)
-  - packages: drop git-delta and ddcutil (18 -> 16); mask: drop NetworkManager-wait-online.service and ModemManager.service (12 -> 10)
-  - resolved: DNSSEC allow-downgrade -> no
-  - readme: counts and tables synced
+  - nftables: input chain reordered to the Arch default shape; header comment synced
+  - readme: libvirt/QEMU NAT known-interaction note (forward drop breaks guest WAN; virbr0 accept snippet); trim passes; counts synced
+  - changelog + source: restyle and comment trim passes
 
 7.107.3 (2026-07-16)
 --------------------

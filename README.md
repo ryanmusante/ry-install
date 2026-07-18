@@ -179,7 +179,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 |---|---|
 | `~/.config/environment.d/10-environment.conf` | gaming env (RADV, DXVK, MangoHud, Proton, VKD3D, Wine) |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
-| `~/.config/systemd/user/plasma-powerdevil.service.d/10-no-ddcutil.conf` | `POWERDEVIL_NO_DDCUTIL=1` — PowerDevil DDC/CI off; silences `org_kde_powerdevil` i2c errors (external-monitor brightness via Plasma intentionally off) |
+| `~/.config/systemd/user/plasma-powerdevil.service.d/10-no-ddcutil.conf` | `POWERDEVIL_NO_DDCUTIL=1` — PowerDevil DDC/CI off; silences `org_kde_powerdevil` i2c errors |
 
 ## Embedded Values
 

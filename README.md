@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.115.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.116.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.115.0
+cd ry-install && git checkout v7.116.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -267,7 +267,7 @@ Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at star
 
 #### Known interaction — libvirt/QEMU NAT networking (VMs out of scope)
 
-libvirt ≥ 10.4.0 ships its own nftables table for NAT guest networking (`ip libvirt_network`, all chains `policy accept`) — and nftables requires acceptance from **every** base chain at a hook, so this profile's `forward { policy drop; }` still drops guest traffic. Symptom: guest gets a DHCP lease, reaches `192.168.122.1`, no WAN. UFW-based fixes are inert here (ufw removed). If VMs are ever run, add to `/etc/nftables.conf`, then `--install-file` it:
+The `forward { policy drop; }` chain silently breaks libvirt/QEMU NAT guest WAN — libvirt's own `ip libvirt_network` table (`policy accept`) cannot override it. If VMs are ever run, add to `/etc/nftables.conf`, then `--install-file` it:
 
 ```
 # input — guest DHCP/DNS to the host dnsmasq:
@@ -279,7 +279,7 @@ iifname "virbr0" accept
 oifname "virbr0" ct state established,related accept
 ```
 
-Do **not** duplicate NAT — libvirt's `guest_nat` already masquerades `192.168.122.0/24`. Verify: `nft list table ip libvirt_network` (what libvirt actually created); the `inet filter forward` drop counter while a guest pings WAN; `sysctl net.ipv4.ip_forward` must be `1`. IPv4-only: no ip6 rules needed (`ipv6.disable=1`).
+Do **not** duplicate NAT — libvirt's `guest_nat` already masquerades `192.168.122.0/24`.
 
 ## License
 

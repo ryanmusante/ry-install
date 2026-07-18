@@ -3,6 +3,10 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.116.0 (2026-07-18)
+--------------------
+  - readme: libvirt known-interaction note reduced to essentials (problem, accept snippet, no-duplicate-NAT)
+
 7.115.0 (2026-07-18)
 --------------------
   - readme: libvirt known-interaction note condensed to vital information (mechanism one-liner, snippet, no-duplicate-NAT, verify commands)

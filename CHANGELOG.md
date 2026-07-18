@@ -3,6 +3,20 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.110.0 (2026-07-18)
+--------------------
+  - remove: AMD_VULKAN_ICD=RADV from ENV_VARS (13 -> 12) — the variable is read only by the switchable-graphics layer shipped with amdvlk (AMDVLK README: with RADV also installed, AMDVLK becomes the default and AMD_VULKAN_ICD switches between them); this profile ships RADV only (EXPECTED_VULKAN_PKGS byte-verified), amdvlk is AUR-only and upstream-discontinued — re-add the pin if amdvlk is ever installed
+  - change: nftables input chain reordered to the canonical Arch "Simple & Safe" shape — ct state invalid drop first ("early drop of invalid connections"), then established,related accept, then loopback accept; ct states are disjoint so packet decisions are unchanged except invalid-state loopback packets now drop (matches the Arch-shipped default); live-applies via the nftables post-hook, no reboot
+  - readme: Session Environment table -> 12 rows; env-file purpose cell synced; badge/checkout -> 7.110.0
+
+7.109.0 (2026-07-18)
+--------------------
+  - change: POWERDEVIL_NO_DDCUTIL=1 moves from the per-service drop-in into the managed environment.d file (ENV_VARS 12 -> 13) — environment.d(5) variables reach services started by the systemd user instance, and PowerDevil reads the variable at daemon start (qEnvironmentVariableIntValue > 0); the drop-in ~/.config/systemd/user/plasma-powerdevil.service.d/10-no-ddcutil.conf is retired as a managed file (managed 18 -> 17, USER_DESTINATIONS 3 -> 2, _RY_POST_HOOKS 18 -> 17, _post_powerdevil removed) — delete the deployed drop-in by hand on migration
+  - add: one-time first-adoption preserve <dst>.ry.orig for every non-boot managed file whose pre-existing content differs at first deploy (boot files keep the .ry.bak path) — closes the silent-overwrite data-loss gap
+  - add: --verify runtime user-unit health check (_vrsv_user_units) — plasma-powerdevil.service must not be in the failed state; any failed systemd --user unit warns
+  - change: _post_envd and the install Finalize phase live-apply environment.d changes to PowerDevil (user daemon-reload re-runs the environment generators, then plasma-powerdevil restart; bus-gated, non-fatal) — 7.108.0's drop-in live-apply hook only ran under --install-file, never in a full install
+  - readme: counts + tables synced (managed 18 -> 17, user files 3 -> 2, Embedded Values 15/13/10); Gaming Environment -> Session Environment; backups + uninstall cover .ry.orig; badge/checkout -> 7.109.0
+
 7.108.0 (2026-07-17)
 --------------------
   - add: PowerDevil DDC/CI opt-out drop-in as managed file 18 (~/.config/systemd/user/plasma-powerdevil.service.d/10-no-ddcutil.conf, POWERDEVIL_NO_DDCUTIL=1) + user-scope live-apply post-hook (systemctl --user daemon-reload + plasma-powerdevil restart, gated on an active user-bus; notify fallback, non-fatal)

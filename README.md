@@ -1,11 +1,11 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.108.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.110.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
 
-> Idempotent CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 18 embedded configs — atomic, byte-verifiable (`--verify`), reversible ([Uninstall](#uninstall)).
+> Idempotent CachyOS config manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable (`--verify`), reversible ([Uninstall](#uninstall)).
 
 ## Quick Start
 
@@ -14,12 +14,12 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.108.0
+cd ry-install && git checkout v7.110.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
 
-**In scope:** the 18 [Managed Files](#managed-files) domains, plus pacman add/remove, systemd units, and the fstab rewrite.
+**In scope:** the 17 [Managed Files](#managed-files) domains, plus pacman add/remove, systemd units, and the fstab rewrite.
 
 **Out of scope:** dotfiles beyond the 2 managed user files, secrets, backups, multi-user, non-CachyOS, laptops, UKI, Secure Boot.
 
@@ -72,10 +72,10 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 |---|---|---|
 | 1 | Preflight | hard gates → lock → config checks (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
-| 3 | Configuration | deploy 18 embedded configs atomically |
+| 3 | Configuration | deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved → package removal → mask (nftables-first, then ufw flush) → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
-| 6 | Finalize | user `daemon-reload` → `paccache -rk2` + `-ruk0` → NetworkManager restart |
+| 6 | Finalize | user `daemon-reload` (+ PowerDevil re-apply when the env file changed) → `paccache -rk2` + `-ruk0` → NetworkManager restart |
 
 Results print to stderr; one JSONL log per run (`0600`): `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. Phase verdicts: `PASS` · `WARN` · `FAIL` · `DEFER` · `SKIP` · `--` (rolled up as `N/A` in the Totals row) — `WARN` keeps exit 0; `DEFER` applies on next boot (e.g. the NetworkManager restart over Wi-Fi).
 
@@ -90,7 +90,7 @@ The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and 
 |---|---|
 | Instance lock | `~/ry-install/.lock/pid` — atomic `mkdir` (then `0700`); stale reclaim only when the recorded PID is dead; live or ambiguous pidfiles fail closed |
 | Atomic writes | same-FS tmp + pre-validation (`nft -c` for the ruleset) → backup → atomic `mv -T` → re-read, restore on mismatch |
-| Auto backups | `<path>.ry.bak` for the 4 boot files (and `fstab`, during its rewrite) |
+| Auto backups | `<path>.ry.bak` for the 4 boot files (and `fstab`, during its rewrite); one-time `<path>.ry.orig` for any other managed file whose pre-existing content differed at first adoption |
 | mkinitcpio rollback | byte-exact revert (`cmp`-gated) on `pacman -Syu` failure or signal |
 | Boot gates | a tainted phase refuses the rebuild; `sdboot-manage gen` refuses when `$BOOT` is unresolvable |
 | Entry regeneration | `REMOVE_EXISTING=yes` clears `loader/entries/` first; EFI-resident loaders (e.g. Windows Boot Manager) untouched |
@@ -146,7 +146,7 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 
 ## Managed Files
 
-18 embedded configs, in deploy order ([`--verify`](#usage) checks all, `--install-file` re-deploys one): 4 boot-critical (`.ry.bak`-backed), 11 system, 3 user.
+17 embedded configs, in deploy order ([`--verify`](#usage) checks all, `--install-file` re-deploys one): 4 boot-critical (`.ry.bak`-backed), 11 system, 2 user.
 
 ### Boot Files
 
@@ -177,9 +177,8 @@ ext4 rows get `noatime,lazytime,commit=10` in column 4 (redundant `defaults`/`re
 
 | File | Purpose |
 |---|---|
-| `~/.config/environment.d/10-environment.conf` | gaming env (RADV, DXVK, MangoHud, Proton, VKD3D, Wine) |
+| `~/.config/environment.d/10-environment.conf` | session env — gaming vars (DXVK, MangoHud, Proton, VKD3D, Wine) + `POWERDEVIL_NO_DDCUTIL=1` |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
-| `~/.config/systemd/user/plasma-powerdevil.service.d/10-no-ddcutil.conf` | `POWERDEVIL_NO_DDCUTIL=1` — PowerDevil DDC/CI off; silences `org_kde_powerdevil` i2c errors |
 
 ## Embedded Values
 
@@ -205,16 +204,16 @@ The value arrays behind the managed files, in declaration order. Rationale for t
 | `usbcore.autosuspend=-1` | USB autosuspend off globally |
 | `zswap.enabled=0` | zswap off — zram is the swap path |
 
-### Gaming Environment
+### Session Environment
 
 | Variable | Effect |
 |---|---|
-| `AMD_VULKAN_ICD=RADV` | pin the RADV Vulkan driver |
 | `DXVK_LOG_LEVEL=none` | DXVK logging off |
 | `DXVK_LOG_PATH=none` | no DXVK log files |
 | `FSR4_UPGRADE=1` | enable the FSR4 upgrade path |
 | `MANGOHUD=1` | HUD on for Vulkan titles |
 | `MESA_SHADER_CACHE_MAX_SIZE=16G` | roomy Mesa shader cache |
+| `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors; external-monitor brightness intentionally off |
 | `PROTON_ENABLE_WAYLAND=1` | native-Wayland Proton path |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
 | `VKD3D_CONFIG=descriptor_heap` | D3D12 descriptor-heap fast path |
@@ -249,13 +248,13 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 | # | Step | Action |
 |---|---|---|
 | 1 | Unmask units | `sudo systemctl unmask` all 10 masked units — exact set in [Units](#units) |
-| 2 | Remove configs | `sudo rm` the 11 system files + `rm` the 3 user files — skip the 4 boot files (step 3 reverts them) |
+| 2 | Remove configs | `sudo rm` the 11 system files + `rm` the 2 user files — skip the 4 boot files (step 3 reverts them) |
 | 3 | Revert boot files + fstab | `.ry.bak` → `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` (if present); then delete the `.ry.bak` files |
 | 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** list, `pacman -Rns` the **Install** packages — exact sets in [Packages](#packages) + [Remove & Verify](#remove--verify) |
 | 5 | Rebuild initramfs + entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
 | 6 | Reboot | `sudo systemctl reboot` |
 
-Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at start and fails once the ruleset is removed; disable any other [enabled units](#units) you no longer want the same way. Boot files must be reverted before step 5 — it regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite (fstab: only if rewritten).
+Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at start and fails once the ruleset is removed; disable any other [enabled units](#units) you no longer want the same way. Boot files must be reverted before step 5 — it regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite (fstab: only if rewritten). A one-time `<path>.ry.orig` (first-adoption preserve) may exist for non-boot managed files — restore it instead of bare removal where wanted, then delete it.
 
 ## Troubleshooting
 

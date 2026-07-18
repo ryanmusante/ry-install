@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.108.0 (2026-07-17) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.110.0 (2026-07-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.108.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.110.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn returns, consumed at call sites; surface as EXIT_PREFLIGHT/FAIL rows) — never a process exit
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only) — never a process exit
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S%z'
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version verify check install-file= # single option-spec source (root-guard + main argparse)
 
@@ -201,7 +201,7 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 # ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──
 set -g _RY_BOOT_TAINTED false
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
-set -g _RY_BACKUP_TARGETS $_RY_BOOT_CRITICAL_DSTS; set -g _RY_BACKUP_SUFFIX .ry.bak
+set -g _RY_BACKUP_TARGETS $_RY_BOOT_CRITICAL_DSTS; set -g _RY_BACKUP_SUFFIX .ry.bak; set -g _RY_ORIG_SUFFIX .ry.orig # .ry.orig: one-time first-adoption preserve for non-boot managed files
 set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped: never touch a peer run's files
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS; set -g _RY_PROFILE_USES_WIFI_BACKEND false
@@ -564,7 +564,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     "/etc/iw-regdomain" "/etc/bluetooth/main.conf" "/etc/nftables.conf" "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" "/etc/udev/rules.d/99-ry-perf.rules" "/etc/modprobe.d/60-ry-modules.conf"
-set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf" "$HOME/.config/systemd/user/plasma-powerdevil.service.d/10-no-ddcutil.conf"
+set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set --erase _ry_dst_count
@@ -593,7 +593,7 @@ set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to 
 set -g BLACKLIST_AMDXDNA true # false + amd_iommu=on iommu=pt enables the XDNA NPU (validator-paired)
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
-set -g ENV_VARS "AMD_VULKAN_ICD=RADV" "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "FSR4_UPGRADE=1" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_CONFIG=descriptor_heap" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
+set -g ENV_VARS "DXVK_LOG_LEVEL=none" "DXVK_LOG_PATH=none" "FSR4_UPGRADE=1" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_CONFIG=descriptor_heap" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
 # netdev=10GbE (RTL8127), max_map_count=esync, swappiness=150=zram, watermark_boost=0 disables reclaim boosting
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" "net.core.netdev_budget=600" "net.core.netdev_budget_usecs=5000" "net.ipv4.tcp_congestion_control=bbr" \
@@ -677,14 +677,14 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:18 \
+        _RY_POST_HOOKS:17 \
         _RY_ARGPARSE_SPEC:6 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:4 \
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:15 \
-        USER_DESTINATIONS:3 \
+        USER_DESTINATIONS:2 \
         MKINITCPIO_COMPRESSION_OPTIONS:2 # drift tripwires; sync arrays + docs on change
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -827,9 +827,9 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "table inet filter {" \
         "    chain input {" \
         "        type filter hook input priority filter; policy drop;" \
-        "        iif \"lo\" accept" \
+        "        ct state invalid drop # early drop of invalid connections" \
         "        ct state established,related accept" \
-        "        ct state invalid drop" \
+        "        iif \"lo\" accept" \
         "        # IPv4 ICMP: inbound ping (echo-request) + error/PMTUD types (replies match ct established)" \
         "        icmp type { echo-request, destination-unreachable, time-exceeded, parameter-problem } accept"
     if test "$RY_REMOTE_PLAY_PORTS" = true # gated: Sunshine/Moonlight + Steam Remote Play inbound stream ports
@@ -881,7 +881,7 @@ function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate con
             "# no directives: BLACKLIST_AMDXDNA=false (NPU path) and MT7925 ASPM now covered by pcie_aspm.policy=performance"
     end
 end
-# ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud + PowerDevil drop-in) ──
+# ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment for systemd --user services and graphical sessions (Plasma, Flatpak, D-Bus apps)"
     set -l _printed 0; set -g _RY_ENVD_BAD_ENTRIES
@@ -916,12 +916,6 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
         "font_size=20" \
         "text_outline" \
         "background_alpha=0.4"
-end
-function _content_HOME_.config_systemd_user_plasma-powerdevil.service.d_10-no-ddcutil.conf --description "Generate content for ~/.config/systemd/user/plasma-powerdevil.service.d/10-no-ddcutil.conf (PowerDevil DDC/CI opt-out)"
-    printf '%s\n' \
-        "# ry-install: PowerDevil ddcutil/DDC-CI opt-out — silences org_kde_powerdevil i2c errors; Plasma external-monitor brightness intentionally off (managed file, do not edit by hand)" \
-        "[Service]" \
-        "Environment=POWERDEVIL_NO_DDCUTIL=1"
 end
 
 # ── CONTENT DISPATCH (_ry_get_file_content; fn name derived via _content_fn_for) ──
@@ -2081,6 +2075,18 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
         if test "$_read_rc" -eq 0; and test "$_new_bytes" = "$_cur_bytes"; set -l _tag ""; set -q _RY_DEPLOY_TAG; and test -n "$_RY_DEPLOY_TAG"; and set _tag " [$_RY_DEPLOY_TAG]"; set -g _RY_DEPLOY_IDEMPOTENT_COUNT (math $_RY_DEPLOY_IDEMPOTENT_COUNT + 1); _ok "→ $dst (unchanged)$_tag"; return 0; end
         test "$_read_rc" -eq 2; and _log "SKIP_PROBE_SUDO_LAPSED: dst=$dst — re-deploying"
     end
+    if set -q _read_rc; and test "$_read_rc" -eq 0; and not contains -- "$dst" $_RY_BACKUP_TARGETS # one-time first-adoption preserve (boot targets use the .ry.bak path)
+        set -l _orig "$dst$_RY_ORIG_SUFFIX"
+        _is_symlink "$_orig" $use_sudo; and _as $use_sudo rm -f -- "$_orig" 2>/dev/null # never cp through a pre-existing symlink at the preserve path
+        if not _as $use_sudo test -e "$_orig"
+            if _as $use_sudo cp -p -- "$dst" "$_orig"
+                _log "PREEXISTING_PRESERVED: $dst -> $_orig sha256="(printf '%s' "$_cur_bytes" | command sha256sum | string split -f1 ' ')
+            else
+                _warn "  $dst: first-adoption preserve to $_orig failed — proceeding (atomic write still protects the original on write failure)"
+                _log "PREEXISTING_PRESERVE_FAIL: $dst"
+            end
+        end
+    end
     _atomic_write_file "$dst" "$perms" "$use_sudo"
     set -l _aw_rc $status
     test "$_aw_rc" -eq 0; and set -g _RY_DEPLOY_CHANGED_COUNT (math $_RY_DEPLOY_CHANGED_COUNT + 1); and set -ga _RY_DEPLOY_CHANGED_DSTS "$dst"
@@ -2935,12 +2941,28 @@ function _vrsv_masked_inactive --description "Runtime services check: MASK units
     end
 end
 
+function _vrsv_user_units --description "Runtime services check: managed user-scope units not failed (PowerDevil reads POWERDEVIL_NO_DDCUTIL from the user-manager environment)"
+    if not _has_user_bus_active; _info "  user units: skipped (no active user-bus — log in graphically or enable-linger to verify)"; return 0; end
+    if test (command systemctl --user list-unit-files --no-legend plasma-powerdevil.service 2>/dev/null | count) -eq 0
+        _info "  plasma-powerdevil.service: unit not present — skipping user-unit health check"
+        return 0
+    end
+    if command systemctl --user is-failed --quiet plasma-powerdevil.service 2>/dev/null
+        _fail "plasma-powerdevil.service: failed — journalctl --user -u plasma-powerdevil -b · coredumpctl list org_kde_powerdevil"
+    else
+        _ok "plasma-powerdevil.service: not failed"
+    end
+    set -l _failed_n (command systemctl --user --failed --plain --no-legend 2>/dev/null | count)
+    test "$_failed_n" -gt 0; and _warn "  systemd --user reports $_failed_n failed unit(s) — systemctl --user --failed"
+    return 0
+end
 # ── VERIFY-RUNTIME: SERVICES ORCHESTRATOR (_verify_runtime_services) ──
 function _verify_runtime_services --description "Verify systemd unit states (sys batch) and WiFi runtime"
     _echo "SERVICE STATE"
     _echo
     _vrsv_sys_units
     _vrsv_masked_inactive
+    _vrsv_user_units
     _vrsv_wifi
     return 0
 end
@@ -4247,6 +4269,14 @@ function _install_finalize --description "Finalize: user daemon-reload + pacman 
     if _has_user_bus_active
         if _run systemctl --user daemon-reload
             _phase_record "Finalize: systemctl --user reload" PASS "user-bus active"
+            if contains -- "$HOME/.config/environment.d/10-environment.conf" $_RY_DEPLOY_CHANGED_DSTS # reload re-ran env generators — re-apply to PowerDevil
+                if _run systemctl --user restart plasma-powerdevil.service
+                    _phase_record "Finalize: PowerDevil env re-apply" PASS "environment.d changed"
+                else
+                    _warn "plasma-powerdevil.service restart failed — POWERDEVIL_NO_DDCUTIL applies at next login (non-fatal)"
+                    _phase_record "Finalize: PowerDevil env re-apply" WARN "restart failed (non-fatal)"
+                end
+            end
         else
             _warn "systemctl --user daemon-reload failed — re-login refreshes the user session (non-fatal)"
             _phase_record "Finalize: systemctl --user reload" WARN "daemon-reload failed (non-fatal)"
@@ -4459,7 +4489,7 @@ set -g _RY_POST_HOOKS \
     "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/NetworkManager-dispatcher.service.d/*|nmdispatch" "*/NetworkManager/conf.d/*|nm" \
     "/etc/iw-regdomain|regdom" "/etc/bluetooth/main.conf|bluetooth" "/etc/nftables.conf|nft" "/etc/default/cpupower-service.conf|cpupower" \
     "*/sysctl.d/*|sysctl" "/etc/udev/rules.d/*|udev" "*/modprobe.d/*|modprobe" "*/environment.d/*|envd" \
-    "*/MangoHud/MangoHud.conf|mangohud" "*/plasma-powerdevil.service.d/*|powerdevil"
+    "*/MangoHud/MangoHud.conf|mangohud"
 function _ir_validate_post_hooks --description "Refuse deploy when any _RY_POST_HOOKS tag lacks a _post_<tag> handler" # mirrors _ir_validate_keys
     set -l _seen_tags
     for _entry in $_RY_POST_HOOKS
@@ -4622,27 +4652,20 @@ function _post_mangohud --argument-names target --description "Post-hook: notify
     _info "  Toggle the HUD in-app with Shift_R+F12 (MangoHud default)"
     return 0
 end
-function _post_envd --argument-names target --description "Post-hook: notify session restart needed for environment.d"
-    _info "environment.d $target changed — log out and back in (or restart user session) to apply"
-    _info "  OR for live apply: systemctl --user import-environment + restart active user units"
-    _info "  Active systemd --user services retain old environment until restarted"
-    return 0
-end
-function _post_powerdevil --argument-names target --description "Post-hook: user-scope daemon-reload + PowerDevil restart after DDC/CI opt-out drop-in change"
-    _echo
+function _post_envd --argument-names target --description "Post-hook: env-generator re-run + PowerDevil re-apply after environment.d change"
+    _info "environment.d $target changed — log out and back in (or restart the user session) to apply session-wide"
+    _info "  Active systemd --user services retain the old environment until restarted"
     if not _has_user_bus_active
-        _info "Skipping user-scope apply for $target (no active user-bus — log in graphically or enable-linger)"
-        _info "  Manual apply: systemctl --user daemon-reload; and systemctl --user restart plasma-powerdevil.service"
-        _log "POST_POWERDEVIL_SKIP: no active user-bus target=$target"
+        _info "  No active user-bus — POWERDEVIL_NO_DDCUTIL applies at next graphical login"
+        _log "POST_ENVD_SKIP: no active user-bus target=$target"
         return 0
     end
-    if not _run systemctl --user daemon-reload
-        _warn "systemctl --user daemon-reload failed — drop-in applies at next login (non-fatal; file deployed)"
+    if not _run systemctl --user daemon-reload # re-runs environment generators — systemd.environment-generator(7)
+        _warn "systemctl --user daemon-reload failed — environment.d applies at next login (non-fatal; file deployed)"
         return 0
     end
     if not _run systemctl --user restart plasma-powerdevil.service
-        _warn "plasma-powerdevil.service restart failed — drop-in applies at next login (non-fatal; file deployed)"
-        _info "  Manual apply: systemctl --user restart plasma-powerdevil.service"
+        _warn "plasma-powerdevil.service restart failed — POWERDEVIL_NO_DDCUTIL applies at next login (non-fatal; file deployed)"
         return 0
     end
     return 0

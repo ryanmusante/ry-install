@@ -4,6 +4,43 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.125.0
+-------
+
+  - dns: the AdGuard upstreams are now pinned by the profile, in the
+    resolver drop-in and in the NetworkManager global-dns section.
+    Without the second one, servers from a DHCP lease reach the
+    resolver as per-link configuration and outrank the pinned list
+  - dns: queries stay in plaintext. The upstream tier does the
+    filtering and behaves the same either way, while strict
+    DNS-over-TLS fails closed, so one unreachable endpoint would stop
+    name resolution outright
+  - dns: two refusals at preflight. An empty upstream list and an
+    upstream that is not an IPv4 literal are both rejected before
+    anything is written; the address family follows ipv6.disable=1
+  - readme: the resolver and NetworkManager entries describe the
+    pinning and record why encryption is absent by choice
+  - affects the resolver drop-in and the NetworkManager drop-in. The
+    other fifteen generated files are unchanged
+
+
+7.123.1
+-------
+
+  - color: NO_COLOR now needs a non-empty value to disable color. The
+    variable was previously honored on presence alone, so an empty
+    assignment suppressed color where the convention it cites asks for
+    it to be ignored; TERM=dumb and the non-TTY path are unchanged
+  - summary: the configuration phase now reports under its own name.
+    Five of the six phases already printed the name they are declared
+    with, while this one printed an abbreviation, so a reader grouping
+    the summary or the log by phase saw seven names for six phases
+  - modprobe: correct the second amdxdna comment to -ENODEV (-19). The
+    generated file was corrected in 7.123.0; the guard that refuses the
+    NPU path without an IOMMU still named the older value
+  - no change to any generated file, embedded value or exit code
+
+
 7.123.0
 -------
 

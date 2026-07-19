@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.123.0** &nbsp;·&nbsp; [Changelog](CHANGELOG.md)
+**Version 7.125.0** &nbsp;·&nbsp; [Changelog](CHANGELOG.md)
 
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
@@ -30,7 +30,7 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.123.0
+cd ry-install && git checkout v7.125.0
 sudo -v
 ./ry-install.fish
 ```
@@ -103,7 +103,7 @@ Sentinels `11`–`14`, `250`, `251`, and `255` are internal function returns and
 |---|---|
 | `RY_RUN_TIMEOUT=<sec>` | Per-command wall-clock cap. Default `3600`; `0` disables; package and boot operations floor at `7200` |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `EXPECTED_CPU_MATCH` hard-fail |
-| `NO_COLOR` | Disable colored output ([no-color.org](https://no-color.org)) |
+| `NO_COLOR` | Disable colored output when set to a non-empty value ([no-color.org](https://no-color.org)) |
 
 Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping the hardware check is the risky one: deploying gfx1151 defaults on a non-matching CPU writes an incorrect kernel cmdline and initramfs `MODULES`.
 
@@ -124,10 +124,10 @@ Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping 
 
 | File | Purpose |
 |---|---|
-| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | plaintext DNS, mDNS and LLMNR off |
+| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | AdGuard upstreams, mDNS and LLMNR off |
 | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | ignore power, suspend, hibernate, and reboot keys — 8 keys including long-press variants |
 | `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | `LogLevelMax=notice` drops info-level dispatcher lines |
-| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, log level `WARN` |
+| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, log level `WARN`, DNS upstreams pinned |
 | `/etc/iw-regdomain` | regulatory domain (`US`) |
 | `/etc/bluetooth/main.conf` | adapter auto-power-on, `FastConnectable`, 3 paired-sink reconnect attempts |
 | `/etc/nftables.conf` | IPv4-only default-deny-inbound, ping allowed |
@@ -170,7 +170,7 @@ The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, norm
 
 Boot-critical failures exit `4` and skip finalization rather than leaving a half-rebuilt ESP. Only one instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes against the embedded generator output by SHA256, and re-runs converge, so `--check` reports drift without writing anything.
 
-`sdboot-manage` runs with `REMOVE_EXISTING=yes`. DNS is plaintext — `DNSOverTLS=no` and `DNSSEC=no`, both diverging from the CachyOS default. The sysctl drop-in uses priority `95` so it loads after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none` where the vendor default is `kyber`.
+`sdboot-manage` runs with `REMOVE_EXISTING=yes`. DNS upstreams are pinned to AdGuard by IP and queried in plaintext — `DNSOverTLS=no`, matching the router, which filters through the same tier without encryption. `DNSSEC=no` matches the systemd default. The sysctl drop-in uses priority `95` so it loads after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none` where the vendor default is `kyber`.
 
 ## Embedded Values
 
@@ -224,7 +224,7 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 
 These are variables defined in `ry-install.fish`, not CachyOS or upstream settings. Nothing reads a variable named `RESOLVED_DOT` or `GPU_DPM_LEVEL` — the script holds the value under that name and writes it out in whatever form the consuming component expects. Two reach their destination as-is: `COUNTRY` becomes the `COUNTRY=` line in `/etc/iw-regdomain`, and `LOGIND_IGNORE_KEYS` expands to eight `Handle*Key=ignore` lines in the logind drop-in. The rest are renamed on the way out — `RESOLVED_DOT` is written as `DNSOverTLS`, `BT_AUTO_ENABLE` as BlueZ's `AutoEnable`, `EPP_PREFERENCE` as a udev `ATTR{cpufreq/energy_performance_preference}` assignment. Edit the value here, not in the file it lands in; the next run rewrites that file from the value in the script.
 
-**DNS resolution.** `RESOLVED_MDNS` and `RESOLVED_LLMNR` are both `no`, which turns off multicast DNS and LLMNR in systemd-resolved. `RESOLVED_DOT` is `no`, leaving DNS in plaintext — a deliberate divergence from the CachyOS DNS-over-TLS default. `RESOLVED_DNSSEC` is `no`, so responses are not validated. All four land in the resolved drop-in.
+**DNS resolution.** `RESOLVED_MDNS` and `RESOLVED_LLMNR` are both `no`, which turns off multicast DNS and LLMNR in systemd-resolved. `RESOLVED_DNS_SERVERS` holds the upstream addresses, written to the resolver drop-in as a plain `DNS=` line. `RESOLVED_DOT` is `no`, so queries are sent in plaintext. That is a deliberate choice, not an oversight: the filtering comes from the upstream tier and is identical either way, while `DNSOverTLS=yes` fails closed, so a blocked or unreachable TLS endpoint stops name resolution outright instead of degrading. On a fixed desktop whose priority is uninterrupted connectivity, the reliability is worth more than hiding query names from the network operator. `RESOLVED_DNSSEC` is `no`, so responses are not validated. The same upstreams are repeated in the NetworkManager drop-in under `[global-dns-domain-*]` — without that, DHCP-supplied servers reach systemd-resolved as per-link DNS and take precedence over the global `DNS=` line, so the pinned upstreams would be silently ignored.
 
 **Networking.** `NM_WIFI_BACKEND` is `wpa_supplicant`. `NM_WIFI_POWERSAVE` is `2`, which disables Wi-Fi powersave — the MT7925 handles powersave in software, and leaving it on produces latency spikes. `NM_LOG_LEVEL` is `WARN`, and `NM_DISPATCHER_LOGLEVELMAX` is `notice`, which drops info-level dispatcher lines from the journal while keeping anything more severe. `COUNTRY` is `US` and sets the wireless regulatory domain.
 

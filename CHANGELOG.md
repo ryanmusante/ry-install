@@ -7,14 +7,12 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.125.0
 -------
 
-  - dns: the AdGuard upstreams are now pinned by the profile, in the
-    resolver drop-in and in the NetworkManager global-dns section.
-    Without the second one, servers from a DHCP lease reach the
-    resolver as per-link configuration and outrank the pinned list
-  - dns: queries stay in plaintext. The upstream tier does the
-    filtering and behaves the same either way, while strict
-    DNS-over-TLS fails closed, so one unreachable endpoint would stop
-    name resolution outright
+  - dns: the AdGuard upstreams are pinned in the resolver drop-in and
+    in the NetworkManager global-dns section. Without the second,
+    DHCP-supplied servers arrive as per-link config and outrank them
+  - dns: queries stay in plaintext. The filtering is identical either
+    way, while strict DNS-over-TLS fails closed, so one unreachable
+    endpoint would stop name resolution outright
   - dns: two refusals at preflight. An empty upstream list and an
     upstream that is not an IPv4 literal are both rejected before
     anything is written; the address family follows ipv6.disable=1
@@ -27,14 +25,12 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.123.1
 -------
 
-  - color: NO_COLOR now needs a non-empty value to disable color. The
-    variable was previously honored on presence alone, so an empty
-    assignment suppressed color where the convention it cites asks for
-    it to be ignored; TERM=dumb and the non-TTY path are unchanged
-  - summary: the configuration phase now reports under its own name.
-    Five of the six phases already printed the name they are declared
-    with, while this one printed an abbreviation, so a reader grouping
-    the summary or the log by phase saw seven names for six phases
+  - color: NO_COLOR now needs a non-empty value to disable color. It
+    was honored on presence alone, so an empty assignment suppressed
+    color; TERM=dumb and the non-TTY path are unchanged
+  - summary: the configuration phase now reports under its declared
+    name. It printed an abbreviation while the other five did not, so
+    grouping the summary or log by phase showed seven names for six
   - modprobe: correct the second amdxdna comment to -ENODEV (-19). The
     generated file was corrected in 7.123.0; the guard that refuses the
     NPU path without an IOMMU still named the older value
@@ -49,8 +45,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     itself; coredumps on the Wi-Fi adapter are still reported without it
   - sysctl: add kernel.nmi_watchdog=0. The runtime check asserted this
     value while nothing in the profile set it, leaving the result to a
-    distribution default that is supplied from a package, not the kernel
-    configuration; the profile now owns the value it verifies
+    package-supplied default; the profile now owns what it verifies
   - env: rename FSR4_UPGRADE to PROTON_FSR4_UPGRADE, the name the Proton
     runtime actually reads. The former was consumed by nothing
   - env: drop VKD3D_CONFIG=descriptor_heap. The path is not enabled by

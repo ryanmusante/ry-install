@@ -101,7 +101,7 @@ Sentinels `11`–`14`, `250`, `251`, and `255` are internal function returns and
 
 | Variable | Effect |
 |---|---|
-| `RY_RUN_TIMEOUT=<sec>` | Per-command wall-clock cap. Default `3600`; `0` disables; package and boot operations floor at `7200` |
+| `RY_RUN_TIMEOUT=<sec>` | Per-command wall-clock cap. Default `3600`; `0` disables; package and boot ops floor at `7200` |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `EXPECTED_CPU_MATCH` hard-fail |
 | `NO_COLOR` | Disable colored output when set to a non-empty value ([no-color.org](https://no-color.org)) |
 
@@ -150,11 +150,11 @@ Permissions: system files `0644`, user files `0600`.
 | Phase | Name | Work |
 |---|---|---|
 | 1 | Preflight | Dependency, network, disk, and systemd gates; hardware match; lock acquisition |
-| 2 | Packages | Seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD`, re-mark them explicit, refresh `updatedb` and `pkgfile` |
+| 2 | Packages | Seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` and re-mark explicit, refresh `updatedb` and `pkgfile` |
 | 3 | Configuration | Deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regulatory domain |
 | 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
-| 6 | Finalize | User `daemon-reload` (plus a PowerDevil re-apply when the env file changed), `paccache -rk2` and `-ruk0`, NetworkManager restart |
+| 6 | Finalize | User `daemon-reload` (PowerDevil re-apply if the env file changed), `paccache -rk2` and `-ruk0`, NetworkManager restart |
 
 Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If the ruleset cannot be confirmed, the mask is withheld for the run. The `ufw` package stays installed.
 
@@ -166,11 +166,11 @@ Every managed file is written atomically: content is rendered to a temp file on 
 
 Backups are `<path>.ry.bak` for the 4 boot files and for `fstab` during its rewrite. Any other managed file whose pre-existing content differed at first adoption gets a one-time `<path>.ry.orig`.
 
-The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime` and existing `commit=` tokens. Everything else is byte-preserved. It is gated by line-count parity, a size floor and a mandatory `findmnt --verify`; a symlinked `/etc/fstab` aborts the rewrite, and malformed rows are left byte-identical and warned.
+The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime` and existing `commit=` tokens; everything else is byte-preserved. It is gated by line-count parity, a size floor and a mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite; malformed rows are left byte-identical and warned.
 
-Boot-critical failures exit `4` and skip finalization rather than leaving a half-rebuilt ESP. Only one instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes against the embedded generator output by SHA256, and re-runs converge, so `--check` reports drift without writing anything.
+Boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes to generator output by SHA256; `--check` reports drift without writing.
 
-`sdboot-manage` runs with `REMOVE_EXISTING=yes`. DNS upstreams are pinned to AdGuard by IP and queried in plaintext — `DNSOverTLS=no`, matching the router, which filters through the same tier without encryption. `DNSSEC=no` matches the systemd default. The sysctl drop-in uses priority `95` so it loads after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none` where the vendor default is `kyber`.
+`sdboot-manage` runs with `REMOVE_EXISTING=yes`. DNS upstreams are pinned to AdGuard by IP and queried in plaintext — `DNSOverTLS=no`, matching the router. `DNSSEC=no` matches the systemd default. The sysctl drop-in uses priority `95`, loading after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none`; the vendor default is `kyber`.
 
 ## Embedded Values
 
@@ -222,17 +222,17 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 
 ### Service Keys
 
-These are variables defined in `ry-install.fish`, not CachyOS or upstream settings. Nothing reads a variable named `RESOLVED_DOT` or `GPU_DPM_LEVEL` — the script holds the value under that name and writes it out in whatever form the consuming component expects. Two reach their destination as-is: `COUNTRY` becomes the `COUNTRY=` line in `/etc/iw-regdomain`, and `LOGIND_IGNORE_KEYS` expands to eight `Handle*Key=ignore` lines in the logind drop-in. The rest are renamed on the way out — `RESOLVED_DOT` is written as `DNSOverTLS`, `BT_AUTO_ENABLE` as BlueZ's `AutoEnable`, `EPP_PREFERENCE` as a udev `ATTR{cpufreq/energy_performance_preference}` assignment. Edit the value here, not in the file it lands in; the next run rewrites that file from the value in the script.
+These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed on the way out — `RESOLVED_DOT` becomes `DNSOverTLS`, `BT_AUTO_ENABLE` BlueZ's `AutoEnable`, `EPP_PREFERENCE` a udev `ATTR{cpufreq/energy_performance_preference}`. Only `COUNTRY` and `LOGIND_IGNORE_KEYS` keep their names. Edit the value here, not the generated file; the next run overwrites it.
 
-**DNS resolution.** `RESOLVED_MDNS` and `RESOLVED_LLMNR` are both `no`, which turns off multicast DNS and LLMNR in systemd-resolved. `RESOLVED_DNS_SERVERS` holds the upstream addresses, written to the resolver drop-in as a plain `DNS=` line. `RESOLVED_DOT` is `no`, so queries are sent in plaintext. That is a deliberate choice, not an oversight: the filtering comes from the upstream tier and is identical either way, while `DNSOverTLS=yes` fails closed, so a blocked or unreachable TLS endpoint stops name resolution outright instead of degrading. On a fixed desktop whose priority is uninterrupted connectivity, the reliability is worth more than hiding query names from the network operator. `RESOLVED_DNSSEC` is `no`, so responses are not validated. The same upstreams are repeated in the NetworkManager drop-in under `[global-dns-domain-*]` — without that, DHCP-supplied servers reach systemd-resolved as per-link DNS and take precedence over the global `DNS=` line, so the pinned upstreams would be silently ignored.
+**DNS resolution.** `RESOLVED_MDNS` and `RESOLVED_LLMNR` are `no`. `RESOLVED_DNS_SERVERS` holds the upstream addresses, written as a plain `DNS=` line. `RESOLVED_DOT` is `no` — the filtering is identical either way, and `DNSOverTLS=yes` fails closed, so an unreachable endpoint would stop resolution outright. `RESOLVED_DNSSEC` is `no`. The same upstreams repeat in the NetworkManager drop-in under `[global-dns-domain-*]`; without that, DHCP-supplied servers arrive as per-link DNS and outrank the global `DNS=` line.
 
-**Networking.** `NM_WIFI_BACKEND` is `wpa_supplicant`. `NM_WIFI_POWERSAVE` is `2`, which disables Wi-Fi powersave — the MT7925 handles powersave in software, and leaving it on produces latency spikes. `NM_LOG_LEVEL` is `WARN`, and `NM_DISPATCHER_LOGLEVELMAX` is `notice`, which drops info-level dispatcher lines from the journal while keeping anything more severe. `COUNTRY` is `US` and sets the wireless regulatory domain.
+**Networking.** `NM_WIFI_BACKEND` is `wpa_supplicant`. `NM_WIFI_POWERSAVE` is `2`, disabling Wi-Fi powersave — the MT7925 handles it in software and produces latency spikes otherwise. `NM_LOG_LEVEL` is `WARN`; `NM_DISPATCHER_LOGLEVELMAX` is `notice`, dropping info-level dispatcher lines. `COUNTRY` is `US`, the wireless regulatory domain.
 
-**Bluetooth.** `BT_AUTO_ENABLE` is `true`, so the adapter powers on at boot. `BT_FAST_CONNECTABLE` is `true` and `BT_RECONNECT_ATTEMPTS` is `3`, which together speed up reconnection to paired sinks. All three are written into the BlueZ daemon config.
+**Bluetooth.** `BT_AUTO_ENABLE` is `true`, powering the adapter on at boot. `BT_FAST_CONNECTABLE` is `true` and `BT_RECONNECT_ATTEMPTS` is `3`, speeding reconnection to paired sinks. All three land in the BlueZ daemon config.
 
-**CPU and GPU.** `CPUPOWER_GOVERNOR` is `powersave`, the correct choice under `amd-pstate-epp` — the EPP hint, not the governor name, is what drives performance in that mode. `EPP_PREFERENCE` is `balance_performance` and is pinned per-CPU through a udev rule. `GPU_DPM_LEVEL` is `auto`, which leaves the gfx1151 clock floor alone rather than pinning SCLK on CPU-bound titles. `EXPECTED_SCALING_DRIVER` is `amd-pstate-epp`; it writes nothing and exists only so `--verify` can confirm the driver actually in use matches what `amd_pstate=active` should produce. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list before deployment, since each is interpolated into a udev attribute unquoted.
+**CPU and GPU.** `CPUPOWER_GOVERNOR` is `powersave`, correct under `amd-pstate-epp` — the EPP hint drives performance there, not the governor name. `EPP_PREFERENCE` is `balance_performance`, pinned per-CPU by a udev rule. `GPU_DPM_LEVEL` is `auto`, leaving the gfx1151 clock floor alone. `EXPECTED_SCALING_DRIVER` is `amd-pstate-epp`, verify-only. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
 
-**Firewall and hardware.** `RY_REMOTE_PLAY_PORTS` is `false`; setting it `true` appends the Sunshine and Steam streaming ports to the nftables input chain. `BLACKLIST_AMDXDNA` is `true`, blacklisting the NPU driver — it pairs with `amd_iommu=off`, since the NPU needs the IOMMU and will not probe without it. Setting it `false` requires switching the kernel command line to `amd_iommu=on iommu=pt`, and the script refuses to deploy an inconsistent pair.
+**Firewall and hardware.** `RY_REMOTE_PLAY_PORTS` is `false`; `true` appends the Sunshine and Steam streaming ports to the nftables input chain. `BLACKLIST_AMDXDNA` is `true`, pairing with `amd_iommu=off` — the NPU needs the IOMMU and will not probe without it. Setting it `false` requires `amd_iommu=on iommu=pt`; the script refuses an inconsistent pair.
 
 ### Session Environment
 
@@ -295,13 +295,13 @@ Non-obvious choices; several list an override to reverse.
 
 **IPv6** — `ipv6.disable=1` pairs with the IPv4-only ruleset. For dual-stack, drop the token, add IPv6 rules, and re-run.
 
-**PCIe ASPM** — `pcie_aspm.policy=performance` actively disables ASPM on every link, which addresses Bluetooth reconnect and association plus NVMe latency. Plain `pcie_aspm=off` only inherits the BIOS state. The global policy governs link state, so `mt7925e.disable_aspm=1` pairs with it to disable ASPM at the endpoint driver as well — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the corresponding default.
+**PCIe ASPM** — `pcie_aspm.policy=performance` actively disables ASPM on every link, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. `mt7925e.disable_aspm=1` pairs with it at the endpoint driver — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
 
-**FSR4 on RDNA3** — `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5. Recent Proton-CachyOS builds copy the FSR4 DLL automatically, so the variable now mainly pins a specific DLL version. Verify with `printenv PROTON_FSR4_UPGRADE`.
+**FSR4 on RDNA3** — `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5. Recent Proton-CachyOS builds copy the DLL automatically, so it now mainly pins a version. Verify with `printenv PROTON_FSR4_UPGRADE`.
 
-**Avahi** — both `.service` and `.socket` are masked. They collided with resolved as a second mDNS responder, and the profile runs `MulticastDNS=no`. Unmask both to restore.
+**Avahi** — both `.service` and `.socket` are masked; they collided with resolved as a second mDNS responder. Unmask both to restore.
 
-**MangoHud `cpu_temp`** — the shipped HUD omits `cpu_temp`; the line in its place is a note, not a disabled token, so add `cpu_temp` on its own line to show CPU temperature. Leaving it off is deliberate: on Zen 5, enabling `cpu_temp` makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream). `cpu_power` ships active and reads correctly as long as `cpu_temp` stays off.
+**MangoHud `cpu_temp`** — the shipped HUD omits `cpu_temp`; add it on its own line to show CPU temperature. Leaving it off is deliberate: on Zen 5, enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
 
 **Large-VRAM compute** — GTT caps usable VRAM near 62 GiB. Raise the BIOS UMA carveout, up to 96 GiB, for more, since `amdgpu.gttsize` is deprecated. Check `/sys/module/ttm/parameters/pages_limit`.
 
@@ -334,16 +334,16 @@ Do **not** duplicate NAT — libvirt's `guest_nat` already masquerades `192.168.
 
 ## Uninstall
 
-There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference and work through these six steps in order.
+There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference and work through these steps in order.
 
-1. **Unmask units** — `sudo systemctl unmask` all 11 masked units; exact set in [Units](#units).
+1. **Unmask units** — `sudo systemctl unmask` all 11; set in [Units](#units).
 2. **Remove configs** — `sudo rm` the 11 system files and `rm` the 2 user files. Skip the 4 boot files; step 3 reverts them.
-3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, and `/etc/fstab` if present, then delete the `.ry.bak` files.
-4. **Reverse packages** (optional) — `pacman -S --needed` the Remove list, `pacman -Rns` the Install list; exact sets in [Packages](#packages).
-5. **Rebuild initramfs and entries** — `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
+3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the `.ry.bak` files.
+4. **Reverse packages** (optional) — `pacman -S --needed` the Remove list, `pacman -Rns` the Install list; sets in [Packages](#packages).
+5. **Rebuild** — `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
 6. **Reboot** — `sudo systemctl reboot`.
 
-Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at start and fails once the ruleset is gone. Disable any other enabled unit you no longer want the same way. Boot files must be reverted before step 5, which regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite; for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot managed files — restore it instead of plain removal where you want the original back, then delete it.
+Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at start and fails once the ruleset is gone. Boot files must be reverted before step 5, which regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite; for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot files — restore that instead of deleting.
 
 ## License
 

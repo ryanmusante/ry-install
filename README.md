@@ -116,7 +116,7 @@ Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping 
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
-| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 14 kernel tokens |
+| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 15 kernel tokens |
 | `/etc/sdboot-manage.conf` | `LINUX_OPTIONS` mirror, `LINUX_FALLBACK_OPTIONS="quiet"`, entry management keys |
 | `/etc/mkinitcpio.conf` | `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-1 -T0`) |
 
@@ -301,7 +301,7 @@ Non-obvious choices; several list an override to reverse.
 
 **Avahi** — both `.service` and `.socket` are masked. They collided with resolved as a second mDNS responder, and the profile runs `MulticastDNS=no`. Unmask both to restore.
 
-**MangoHud `cpu_temp`** — intentionally commented out in the shipped HUD; uncomment to show CPU temperature. `cpu_power` ships active but reads 0 on Zen 5.
+**MangoHud `cpu_temp`** — the shipped HUD omits `cpu_temp`; the line in its place is a note, not a disabled token, so add `cpu_temp` on its own line to show CPU temperature. Leaving it off is deliberate: on Zen 5, enabling `cpu_temp` makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream). `cpu_power` ships active and reads correctly as long as `cpu_temp` stays off.
 
 **Large-VRAM compute** — GTT caps usable VRAM near 62 GiB. Raise the BIOS UMA carveout, up to 96 GiB, for more, since `amdgpu.gttsize` is deprecated. Check `/sys/module/ttm/parameters/pages_limit`.
 

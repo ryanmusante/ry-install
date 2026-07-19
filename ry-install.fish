@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.117.0 (2026-07-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.119.0 (2026-07-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.117.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.119.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn returns) — never a process exit
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only) — never a process exit
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -604,11 +604,11 @@ set -g SYSCTL_VALUES \
 set -g PKGS_ADD \
     nvme-cli cachyos-gaming-meta cachyos-gaming-applications lib32-mesa mkinitcpio-firmware fd sd dust procs \
     bottom htop lm_sensors rtkit realtime-privileges nftables pacman-contrib # pacman-contrib: pactree + paccache
-set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect ufw
+set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
-set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi: 2nd mDNS responder collided with resolved
+set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi: 2nd mDNS responder collided with resolved; ufw: nftables owns the ruleset — masked so its rules never load
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
@@ -672,8 +672,8 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         ENV_VARS:11 \
         SYSCTL_VALUES:10 \
         PKGS_ADD:16 \
-        PKGS_DEL:10 \
-        MASK:10 \
+        PKGS_DEL:9 \
+        MASK:11 \
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
@@ -822,7 +822,7 @@ end
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset"
     printf '%s\n' \
         "#!/usr/bin/nft -f" \
-        "# ry-install: default-deny-inbound, IPv4-only (ufw removed; ipv6.disable=1). Add inbound ports below." \
+        "# ry-install: default-deny-inbound, IPv4-only (ufw masked; ipv6.disable=1). Add inbound ports below." \
         "flush ruleset" \
         "table inet filter {" \
         "    chain input {" \
@@ -3748,13 +3748,6 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
         return 0
     end
     set -l _del_list $PKGS_DEL
-    if contains -- ufw $_del_list # nftables-first: never remove the firewall still holding the rules
-        set -l _nft_live false
-        _csm_enable_nftables_first; and set _nft_live true
-        if not _csm_prepare_ufw_removal $_nft_live
-            set _del_list (string match -v -- ufw $_del_list)
-        end
-    end
     for pkg in $_del_list
         contains -- "$pkg" $_del_installed; or continue
         for _emit in (_csp_filter_rdeps "$pkg"); test -z "$_emit"; and continue; contains -- "$_emit" $to_del; and continue; set -a to_del "$_emit"; end
@@ -3811,8 +3804,8 @@ function _nft_input_drop_live --description "rc 0 iff live inet/filter/input cha
     set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect)
     string match -q -- '*policy drop*' "$_in_chain"
 end
-function _csm_enable_nftables_first --description "Activate nftables before the ufw flush + removal; rc 0 iff default-deny ruleset confirmed live"
-    contains -- ufw $PKGS_DEL; or return 0
+function _csm_enable_nftables_first --description "Activate nftables before the ufw flush + mask; rc 0 iff default-deny ruleset confirmed live"
+    contains -- ufw.service $MASK; or return 0
     contains -- nftables.service $EXPECTED_SERVICES; or return 0
     if _nft_input_drop_live; _log "NFT_PRE_ENABLE_SKIP: ruleset already live"; return 0; end
     _run sudo -n systemctl enable --now -- nftables.service
@@ -3825,11 +3818,11 @@ function _csm_enable_nftables_first --description "Activate nftables before the 
     _log "NFT_PRE_ENABLE_FAIL: live ruleset unconfirmed"
     return 1
 end
-function _csm_prepare_ufw_removal --argument-names nft_live --description "Flush + stop + unmask ufw ahead of its package removal; rc 0 iff removal may proceed"
-    command -q ufw; or return 0 # binary absent: nothing to flush (del loop skips it)
+function _csm_prepare_ufw_masking --argument-names nft_live --description "Flush live ufw rules ahead of its unit mask; rc 0 iff the mask may proceed"
+    command -q ufw; or return 0 # binary absent: nothing to flush (the not-installed unit filter skips an absent ufw.service)
     if test "$nft_live" != true
-        _warn "ufw retained this run — nftables default-deny not confirmed live; flushing/removing ufw now would leave the host unfirewalled until reboot. Re-run after nftables.service starts."
-        _log "UFW_REMOVAL_DEFERRED: nft_live=$nft_live (ufw retained to avoid an unfirewalled window)"
+        _warn "ufw.service mask withheld this run — nftables default-deny not confirmed live; mask --now stops ufw (ufw-init stop flushes) and would leave the host unfirewalled until reboot. Re-run after nftables.service starts."
+        _log "UFW_MASK_DEFERRED: nft_live=$nft_live (ufw.service left unmasked to avoid an unfirewalled window)"
         return 1
     end
     set -l _state (command systemctl is-active ufw.service 2>/dev/null | string trim --)
@@ -3838,21 +3831,26 @@ function _csm_prepare_ufw_removal --argument-names nft_live --description "Flush
             _ok "ufw disabled — netfilter rules flushed (nftables default-deny live)"
             _log "UFW_RULE_FLUSH_OK"
         else
-            _warn "ufw --force disable failed — retaining the ufw package this run so stale rules never outlive their flush tool"
-            _log "UFW_RULE_FLUSH_FAIL: removal deferred"
+            _warn "ufw --force disable failed — withholding the ufw.service mask this run so a stop-triggered flush never fires in an unknown state"
+            _log "UFW_RULE_FLUSH_FAIL: mask deferred"
             return 1
         end
     else
         _log "UFW_RULE_FLUSH_SKIP: ufw.service is-active=$_state"
     end
-    _run sudo -n systemctl disable --now -- ufw.service; or _log "UFW_UNIT_DISABLE_WARN: disable --now failed (non-fatal)"
-    _run sudo -n systemctl unmask -- ufw.service; or _log "UFW_UNMASK_WARN: unmask failed (non-fatal)" # clears a stale mask symlink left by older releases
-    _warn "SECURITY: ufw flushed + removed by profile — nftables default-deny-inbound is the active host firewall"
-    _log "SECURITY_POSTURE: ufw removed; nftables default-deny-inbound active (/etc/nftables.conf)"
+    _warn "SECURITY: ufw rules inert (flushed or already inactive) — ufw.service masked by profile; nftables default-deny-inbound is the active host firewall"
+    _log "SECURITY_POSTURE: ufw masked; nftables default-deny-inbound active (/etc/nftables.conf)"
     return 0
 end
 function _configure_services_mask --description "Apply MASK list; batch-mask with per-unit retry"
     set -l safe_mask $MASK
+    if contains -- ufw.service $safe_mask # nftables-first: mask --now stops ufw (ufw-init stop flushes) — never before default-deny is live
+        set -l _nft_live false
+        _csm_enable_nftables_first; and set _nft_live true
+        if not _csm_prepare_ufw_masking $_nft_live
+            set safe_mask (string match -v -- ufw.service $safe_mask)
+        end
+    end
     if test (count $safe_mask) -eq 0
         _phase_record "Services: mask units" "--" "MASK list empty"
         return 0

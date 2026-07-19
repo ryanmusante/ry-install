@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.117.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.119.0-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish-1793d1?style=flat-square)](https://fishshell.com)
@@ -14,7 +14,7 @@
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.117.0
+cd ry-install && git checkout v7.119.0
 chmod +x ry-install.fish
 ./ry-install.fish
 ```
@@ -73,7 +73,7 @@ A `pacman -Syu`, package-verify, or boot-config failure **taints** the run and s
 | 1 | Preflight | hard gates → lock → config checks (read-only) |
 | 2 | Packages | `pacman -Syu`; `mkinitcpio.conf` pre-deployed so the sync rebuilds initramfs once |
 | 3 | Configuration | deploy 17 embedded configs atomically |
-| 4 | Services | fstab → resolved → package removal (nftables-first: ufw flushed + removed) → mask → enable → regdomain |
+| 4 | Services | fstab → resolved → package removal → mask (nftables-first: ufw flushed, then masked) → enable → regdomain |
 | 5 | Boot | taint-gate → `mkinitcpio -P` → `sdboot-manage gen` + `update` → sanity |
 | 6 | Finalize | user `daemon-reload` (+ PowerDevil re-apply when the env file changed) → `paccache -rk2` + `-ruk0` → NetworkManager restart |
 
@@ -82,7 +82,7 @@ Results print to stderr; one JSONL log per run (`0600`): `~/ry-install/logs/YYYY
 ## Safety & Reliability
 
 > [!WARNING]
-> Removes `ufw` (nftables-first: default-deny confirmed live before the flush and `-Rns`) and ships an IPv4-only nftables default-deny-inbound ruleset: loopback, established/related, and ICMP echo-request + error/PMTUD types (destination-unreachable, time-exceeded, parameter-problem) accepted; `invalid` state dropped; `forward` drop, `output` accept. IPv6 disabled system-wide (`ipv6.disable=1`).
+> Masks `ufw.service` (nftables-first: default-deny confirmed live before the flush; the `ufw` package stays installed) and ships an IPv4-only nftables default-deny-inbound ruleset: loopback, established/related, and ICMP echo-request + error/PMTUD types (destination-unreachable, time-exceeded, parameter-problem) accepted; `invalid` state dropped; `forward` drop, `output` accept. IPv6 disabled system-wide (`ipv6.disable=1`).
 
 The fallback BLS entry boots `LINUX_FALLBACK_OPTIONS="quiet"` only — IPv6 and AMD-Vi revert to kernel defaults, though the IPv4-only ruleset and the `amdxdna` blacklist still apply. Game-streaming inbound is off; `RY_REMOTE_PLAY_PORTS=true` + re-run appends Sunshine/Moonlight + Steam Remote Play accepts (`tcp 47984, 47989, 48010, 27036, 27037` · `udp 47998-48010, 27031-27036`).
 
@@ -129,14 +129,14 @@ All tunables are `set -g` globals near the top of the script — no external con
 
 | Action | Packages |
 |---|---|
-| Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect`, `ufw` (flushed nftables-first) |
+| Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro` + `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 | Verify present | `vulkan-radeon`, `lib32-vulkan-radeon` (`chwd` Vulkan drivers) |
 
 ### Units
 
 | Action | Units |
 |---|---|
-| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
+| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
 | Enable | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service` |
 | Untouched | `systemd-oomd.service` (by design — kernel OOM-killer + zram is the intended path) |
 
@@ -245,7 +245,7 @@ No automated uninstaller; use [Managed Files](#managed-files) as the rollback re
 
 | # | Step | Action |
 |---|---|---|
-| 1 | Unmask units | `sudo systemctl unmask` all 10 masked units — exact set in [Units](#units) |
+| 1 | Unmask units | `sudo systemctl unmask` all 11 masked units — exact set in [Units](#units) |
 | 2 | Remove configs | `sudo rm` the 11 system files + `rm` the 2 user files — skip the 4 boot files (step 3 reverts them) |
 | 3 | Revert boot files + fstab | `.ry.bak` → `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` (if present); then delete the `.ry.bak` files |
 | 4 | Reverse packages (optional) | `pacman -S --needed` the **Remove** list, `pacman -Rns` the **Install** packages — exact sets in [Packages](#packages) + [Remove & Verify](#remove--verify) |

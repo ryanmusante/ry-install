@@ -3,12 +3,21 @@ Summary of changes
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.117.0 (2026-07-18)
+7.119.0 (2026-07-18)
 --------------------
-  - changelog: 7.108.0 - 7.116.0 merged into a range entry
+  - changelog: 7.117.0 folded into the range entry
   - readme + source: version sync
 
-7.108.0 - 7.116.0 (2026-07-17 .. 07-18)
+7.118.0 (2026-07-18)
+--------------------
+  - services: ufw masked, not removed - MASK 10 -> 11 (+ufw.service), PKGS_DEL 10 -> 9 (-ufw)
+  - services: nftables-first gate moved from the removal path to the mask path; on an
+    unconfirmed ruleset the ufw.service mask is withheld for the run (mask --now stops
+    ufw and ufw-init stop flushes - never before default-deny is live)
+  - nftables.conf: embedded header now reads "ufw masked" (one-time drift + redeploy)
+  - readme: flow, warning, packages, units, uninstall synced
+
+7.108.0 - 7.117.0 (2026-07-17 .. 07-18)
 ---------------------------------------
   - cmdline: drop 8250.nr_uarts=0, tsc=reliable, nowatchdog (17 -> 14)
   - env: POWERDEVIL_NO_DDCUTIL=1 via environment.d (per-service drop-in retired); drop AMD_VULKAN_ICD=RADV, DXVK_LOG_PATH=none (11 vars)

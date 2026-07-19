@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.120.1 - CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.121.0 - CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.120.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.121.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -726,6 +726,7 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
         if not string match -qr -- '^[A-Za-z0-9._,=-]+$' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refuse to deploy (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
+
 # ── RUNTIME INIT: ORCHESTRATOR (_init_runtime) ──
 function _init_runtime --description "Cache root UUID + validate config + precompute caches"
     _ir_resolve_root_uuid
@@ -881,6 +882,7 @@ function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate con
             "# no directives: BLACKLIST_AMDXDNA=false (NPU path) and MT7925 ASPM now covered by pcie_aspm.policy=performance"
     end
 end
+
 # ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# Environment for systemd --user services and graphical sessions (Plasma, Flatpak, D-Bus apps)"
@@ -1021,13 +1023,13 @@ function _track_tmpfile --argument-names path --description "Track a tmpfile/dir
     test "$path" = /dev/null; and return 0
     set -ga _TRACKED_TMPFILES "$path"
 end
-function _mktemp_or_null --description "mktemp wrapper; emits path on stdout, /dev/null sentinel on failure"
+function _mktemp_or_null --description "Mktemp wrapper; emits path on stdout, /dev/null sentinel on failure"
     set -l _tf (command mktemp $argv 2>/dev/null)
     if test -z "$_tf"; echo /dev/null; functions -q _log; and _log "MKTEMP_OR_NULL_FAIL: args='$argv' — falling back to /dev/null sentinel"; return 0; end
     echo "$_tf"
     return 0
 end
-function _tmp_dir --description "tmp root (pinned /tmp)"; printf '%s' /tmp; end
+function _tmp_dir --description "Tmp root (pinned /tmp)"; printf '%s' /tmp; end
 
 # ── FILESYSTEM PROBES (symlink, system-dst, byte read) ──
 function _is_symlink --argument-names path use_sudo --description "Sudo-aware test -L (rc 0/1/2 = symlink/not/sudo-lapse)"
@@ -1767,6 +1769,7 @@ function _grep_ini_header --argument-names dst --description 'Validate ≥1 [Sec
     end
     return 0
 end
+
 # ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (MODPROBE → MANGOHUD) ──
 function _grep_modprobe_entry --argument-names dst --description 'Validate modprobe.d content: comment-only ok, else every non-comment line is a directive (options/blacklist/install/alias/softdep/remove)'
     test (count $argv) -lt 2; and _log "BUG: _grep_modprobe_entry called without content (dst=$dst)"; and return 2
@@ -1831,6 +1834,7 @@ function _grep_mangohud_entry --argument-names dst --description 'Validate ≥1 
     end
     return 0
 end
+
 # ── CONFIG-FORMAT VALIDATORS: DISPATCH + ORCHESTRATOR ──
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family"
     set -l _content $argv[2..-1]
@@ -1954,7 +1958,7 @@ function _awf_symlink_check --argument-names dst tmpfile use_sudo --description 
     test "$_sym_rc" -eq 2; and _fail "→ $dst (sudo cache lapsed during post-write symlink check — aborting)"; and return 1
     return 0
 end
-function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --description "chmod + sudo cache check + atomic mv"
+function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --description "Chmod + sudo cache check + atomic mv"
     set -l _sp
     test "$use_sudo" = true; and set _sp sudo -n
     if not _run $_sp chmod -- $perms "$tmpfile"; _fail "→ $dst (chmod failed)"; return 1; end
@@ -1962,6 +1966,7 @@ function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --descript
     if not _run $_sp mv -T -- "$tmpfile" "$dst"; _fail "→ $dst (atomic move failed)"; return 1; end
     return 0
 end
+
 # ── ATOMIC FILE INSTALL: BACKUP + POST-WRITE VERIFY/RESTORE + PUBLIC ENTRY ──
 function _awf_make_backup --argument-names dst use_sudo --description "Create <dst>.ry.bak before overwrite (auto for _RY_BACKUP_TARGETS; fstab via direct call)"
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"
@@ -2033,6 +2038,7 @@ function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --descri
     end
     return 0
 end
+
 # ── ATOMIC FILE INSTALL: PUBLIC ENTRY (_atomic_write_file → _ry_install_file) ──
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write. rc=0 ok; rc=1 any failure"
     set -l dst_dir (command dirname -- "$dst"); set -l _is_bt false
@@ -2053,7 +2059,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     _ok "→ $dst$_tag"
     return 0
 end
-function _ry_mkdir_0755 --argument-names use_sudo dir --description "mkdir -p with umask capped at 0022 (own --verify rejects group-writable dirs)"
+function _ry_mkdir_0755 --argument-names use_sudo dir --description "Mkdir -p with umask capped at 0022 (own --verify rejects group-writable dirs)"
     set -l _pmk 022; set -q umask; and set _pmk $umask; set -g umask 0022
     if test "$use_sudo" = true
         _run sudo -n mkdir -p -m 0755 -- "$dir"
@@ -2093,7 +2099,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     return $_aw_rc
 end
 
-# ── VERIFY-STATIC: BOOT (LOADER + SDBOOT + CMDLINE + MKINITCPIO + ENTRIES) ──
+# ── VERIFY-STATIC: BOOT (LOADER + SDBOOT + CMDLINE) ──
 function _vsb_loader --description "_verify_static_boot sub: /boot/loader/loader.conf key/value verification"
     _echo "── loader.conf ──"
     _chk_file /boot/loader/loader.conf; or return 0
@@ -2154,7 +2160,8 @@ function _vsb_cmdline --description "_verify_static_boot sub: cmdline KERNEL_PAR
     string match -qr -- '(^|\s)rw(\s|$)' "$cmdline_content"
     _chk_present $status rw "MISSING from /etc/kernel/cmdline"
 end
-# ── VERIFY-STATIC: BOOT (MKINITCPIO + ENTRIES) ──
+
+# ── VERIFY-STATIC: BOOT (MKINITCPIO + ENTRIES + ORCHESTRATOR) ──
 function _vsb_mkinitcpio --description "_verify_static_boot sub: /etc/mkinitcpio.conf MODULES/HOOKS/COMPRESSION checks"
     _echo "── mkinitcpio.conf ──"
     _chk_file /etc/mkinitcpio.conf; or return 0
@@ -2297,7 +2304,7 @@ function _verify_static_user --description "Verify environment.d ENV_VARS + Mang
 end
 
 # ── VERIFY-STATIC: PACKAGES + SERVICES + SYNTAX ──
-function _vsp_required --description "Check PKGS_ADD + Vulkan pkgs against installed list in argv; emits OK/FAIL per pkg"
+function _vsp_required --description "_verify_static_packages sub: Check PKGS_ADD + Vulkan pkgs against installed list in argv; emits OK/FAIL per pkg"
     _echo "── Required packages ──"
     for pkg in $PKGS_ADD
         if contains -- "$pkg" $argv
@@ -2320,7 +2327,7 @@ function _vsp_required --description "Check PKGS_ADD + Vulkan pkgs against insta
         test (count $_vk_missing) -gt 0; and _info "  Install missing: sudo pacman -S --needed $_vk_missing"
     end
 end
-function _vsp_removed --description "Check PKGS_DEL against installed; warn if still present"
+function _vsp_removed --description "_verify_static_packages sub: Check PKGS_DEL against installed; warn if still present"
     _echo "── Removed packages ──"
     for pkg in $PKGS_DEL
         if contains -- "$pkg" $argv
@@ -2330,7 +2337,7 @@ function _vsp_removed --description "Check PKGS_DEL against installed; warn if s
         end
     end
 end
-function _vsp_pacman_conf --description "Inspect IgnorePkg / ParallelDownloads in /etc/pacman.conf (section-agnostic grep; pacman only honours [options])"
+function _vsp_pacman_conf --description "_verify_static_packages sub: Inspect IgnorePkg / ParallelDownloads in /etc/pacman.conf (section-agnostic grep; pacman only honours [options])"
     _echo "── pacman.conf ──"
     if not test -f /etc/pacman.conf; _warn "  /etc/pacman.conf not found"; return 0; end
     set -l _pc_sudo false # sudo read avoids false 'not set' on 0600 conf
@@ -2572,7 +2579,7 @@ function _ry_do_check --description "Silent idempotency probe" # ERR_NO_DATA->pr
 end
 
 # ── VERIFY-RUNTIME: KERNEL CMDLINE + GPU + CPU + MODULES ──
-function _vrk_cmdline --description "Runtime kparam check: /proc/cmdline + preemption model"
+function _vrk_cmdline --description "_verify_runtime_kparams sub: Runtime kparam check: /proc/cmdline + preemption model"
     _echo "KERNEL CMDLINE"
     _echo
     set -l cmdline (command cat -- /proc/cmdline 2>/dev/null)
@@ -2608,7 +2615,7 @@ function _vrk_cmdline --description "Runtime kparam check: /proc/cmdline + preem
     end
     _echo
 end
-function _vrk_gpu_state --description "Runtime kparam check: GPU performance level (power_dpm_force_performance_level sysfs scan)"
+function _vrk_gpu_state --description "_verify_runtime_kparams sub: Runtime kparam check: GPU performance level (power_dpm_force_performance_level sysfs scan)"
     _echo "HARDWARE STATE"
     _echo "── GPU performance level ──"
     set -l gpu_ok false; set -l found_gpu false
@@ -2630,7 +2637,7 @@ function _vrk_gpu_state --description "Runtime kparam check: GPU performance lev
         _warn "  GPU not at '$GPU_DPM_LEVEL' — check dmesg for amdgpu errors"
     end
 end
-function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + amd_pstate + boost"
+function _vrk_cpu_state --description "_verify_runtime_kparams sub: Runtime kparam check: CPU governor/EPP + amd_pstate + boost"
     _echo "── CPU performance ──"
     set -g _CPU_PATH ""; for cpu_dir in /sys/devices/system/cpu/cpu*/cpufreq; if test -d "$cpu_dir"; set -g _CPU_PATH "$cpu_dir"; break; end; end
     if test -z "$_CPU_PATH"
@@ -2717,7 +2724,7 @@ function _vrkm_blacklist_modprobe --description "_vrk_module_state sub: lsmod-ch
         end
     end
 end
-function _vrk_module_state --description "Runtime kparam check: module parameters + blacklist"
+function _vrk_module_state --description "_verify_runtime_kparams sub: Runtime kparam check: module parameters + blacklist"
     _echo "MODULE STATE"
     _echo
     _echo "── Module parameters ──"
@@ -2793,7 +2800,7 @@ function _vrsv_nft_assert_ping --description "_vrsv_chk_nftables sub: assert liv
         _warn "  nftables: live input chain has no echo-request accept — inbound ping blocked until reload"
     end
 end
-function _vrsv_chk_nftables --argument-names label rec_str --description "nftables.service: oneshot reads inactive after clean load — judge by live ruleset"
+function _vrsv_chk_nftables --argument-names label rec_str --description "Nftables.service: oneshot reads inactive after clean load — judge by live ruleset"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found; _warn "  $label: not installed"; return 0; end
     set -l _nft_probe_ok false
@@ -2845,6 +2852,7 @@ function _vrsv_chk_cpupower_governor --argument-names rec_str --description "Che
     end
     _fail "  cpupower.service: $rec[2] (expected: active)"
 end
+
 # ── VERIFY-RUNTIME: SERVICE COLLECTORS ──
 function _vrsv_sys_units --description "Runtime services check: conf.d-implied + EXPECTED_SERVICES (per-unit dispatch)"
     set -l sys_units (_implicit_confd_units)
@@ -2956,6 +2964,7 @@ function _vrsv_user_units --description "Runtime services check: managed user-sc
     test "$_failed_n" -gt 0; and _warn "  systemd --user reports $_failed_n failed unit(s) — systemctl --user --failed"
     return 0
 end
+
 # ── VERIFY-RUNTIME: SERVICES ORCHESTRATOR (_verify_runtime_services) ──
 function _verify_runtime_services --description "Verify systemd unit states (sys batch) and WiFi runtime"
     _echo "SERVICE STATE"
@@ -2968,7 +2977,7 @@ function _verify_runtime_services --description "Verify systemd unit states (sys
 end
 
 # ── VERIFY-RUNTIME: ENVIRONMENT ──
-function _vre_envvars --description "Runtime env check: ENV_VARS via systemctl --user show-environment"
+function _vre_envvars --description "_verify_runtime_env sub: Runtime env check: ENV_VARS via systemctl --user show-environment"
     _echo "ENVIRONMENT STATE"
     _echo
     if not _has_user_bus_active; _info "  Skipping ENV_VARS runtime check (no active user-bus — log in graphically or enable-linger to verify)"; _echo; return 0; end
@@ -2986,7 +2995,7 @@ function _vre_envvars --description "Runtime env check: ENV_VARS via systemctl -
     end
     _echo
 end
-function _vre_sysctl_runtime --description "Runtime env check: sysctl values via /proc/sys"
+function _vre_sysctl_runtime --description "_verify_runtime_env sub: Runtime env check: sysctl values via /proc/sys"
     set -q SYSCTL_VALUES; and test (count $SYSCTL_VALUES) -gt 0; or return 0
     _echo "── sysctl (ry-install) ──"
     for entry in $SYSCTL_VALUES
@@ -3002,7 +3011,7 @@ function _vre_sysctl_runtime --description "Runtime env check: sysctl values via
     end
     _echo
 end
-function _vre_fstab --description "Runtime env check: fstab ext4 entries have noatime,lazytime,commit=10"
+function _vre_fstab --description "_verify_runtime_env sub: Runtime env check: fstab ext4 entries have noatime,lazytime,commit=10"
     _echo "── fstab mount options ──"
     set -l _fstab_ext4; set -l _fstab_malformed
     if test -r /etc/fstab
@@ -3031,7 +3040,7 @@ function _vre_fstab --description "Runtime env check: fstab ext4 entries have no
     end
     test "$_fstab_ok" = true; and _ok "  ext4 entries: noatime,lazytime,commit=10 present"
 end
-function _vre_ntsync --description "Runtime env check: ntsync state via _ntsync_state dispatch"
+function _vre_ntsync --description "_verify_runtime_env sub: Runtime env check: ntsync state via _ntsync_state dispatch"
     _echo
     _echo "── ntsync support ──"
     set -l _ns (_ntsync_state)
@@ -3053,7 +3062,7 @@ function _vre_ntsync --description "Runtime env check: ntsync state via _ntsync_
     end
     _echo
 end
-function _vre_regdom --description "Runtime env check: wireless regulatory domain via iw reg get"
+function _vre_regdom --description "_verify_runtime_env sub: Runtime env check: wireless regulatory domain via iw reg get"
     _echo
     _echo "── wireless regdom ──"
     if not command -q iw
@@ -3079,7 +3088,7 @@ function _verify_runtime_env --description "Verify ENV_VARS, sysctl, fstab, ntsy
 end
 
 # ── VERIFY-RUNTIME: SESSION + PERMS ──
-function _vrs_nm_perms --description "Runtime session check: NetworkManager system-connections perms (0600 root:root)"
+function _vrs_nm_perms --description "_verify_runtime_services sub: Runtime session check: NetworkManager system-connections perms (0600 root:root)"
     set -l nm_conn_dir /etc/NetworkManager/system-connections
     if not test -d "$nm_conn_dir"; _info "  NetworkManager connections: directory not found"; return 0; end
     set -l conn_files (sudo -n find "$nm_conn_dir" -maxdepth 1 -name '*.nmconnection' -type f -print0 2>/dev/null | string split0); set -l _conn_ps $pipestatus
@@ -3094,7 +3103,7 @@ function _vrs_nm_perms --description "Runtime session check: NetworkManager syst
         _info "  NetworkManager connections: no .nmconnection files found"
     end
 end
-function _vrs_vfat_skip --argument-names path boot_fstype --description "rc 0 = vfat/undetermined boot path (perms not verifiable, _info emitted); rc 1 = checkable"
+function _vrs_vfat_skip --argument-names path boot_fstype --description "_verify_runtime_services sub: Rc 0 = vfat/undetermined boot path (perms not verifiable, _info emitted); rc 1 = checkable"
     set -l _fst (command findmnt -n -o FSTYPE --target "$path" 2>/dev/null | string trim --) # Per-path fstype
     test -z "$_fst"; and set _fst "$boot_fstype"
     if test "$_fst" = vfat; _info "  $path: skipped (vfat — unix perms synthesized from mount options)"; return 0; end
@@ -3105,7 +3114,7 @@ function _resolve_boot_fstype --description "Emit \$BOOT partition fstype (resol
     set -l _boot_resolved (_resolve_boot_path); test -z "$_boot_resolved"; and set _boot_resolved /boot
     command findmnt -n -o FSTYPE "$_boot_resolved" 2>/dev/null | string trim --
 end
-function _vrs_installed_file_perms --description "Runtime session check: installed system/service/user file perms"
+function _vrs_installed_file_perms --description "_verify_runtime_services sub: Runtime session check: installed system/service/user file perms"
     _echo "── Installed files ──"
     set -l perm_bad 0; set -l perm_checked 0; set -l perm_vfat_skipped 0; set -l _boot_fstype (_resolve_boot_fstype)
     for dst in $SYSTEM_DESTINATIONS
@@ -3152,7 +3161,7 @@ function _vpd_dir_perm_check --argument-names dir expected_owner use_sudo --desc
     end
     return 0
 end
-function _vrs_parent_dirs --description "Runtime session check: parent dirs of managed files (system root-owned; user dir user-owned)"
+function _vrs_parent_dirs --description "_verify_runtime_services sub: Runtime session check: parent dirs of managed files (system root-owned; user dir user-owned)"
     _echo "── Parent directories ──"
     set -l dir_bad 0; set -l dir_checked 0; set -l dir_vfat_skipped 0; set -l checked_dirs
     set -l _boot_fstype (_resolve_boot_fstype)
@@ -3523,7 +3532,7 @@ function _install_system_files --description "Deploy all embedded config files"
     return 0
 end
 
-# ── INSTALL PHASE 4: SERVICES (fstab -> resolved -> pkg-remove -> mask -> enable -> regdom) ──
+# ── INSTALL PHASE 4: SERVICES (fstab → resolved → pkg-remove → mask → enable → regdom) ──
 function _fstab_needs_change --description "Scan ext4 entries for missing noatime/lazytime/commit=10"
     set -g _RY_FSTAB_NEEDS_CHANGE false; set -g _RY_FSTAB_COMMIT_OVERRIDES; set -l _malformed_warned false
     for line in $argv
@@ -3574,7 +3583,7 @@ function _far_build_awk_script --description "_far_awk_rewrite sub: Emit awk scr
         '    print substr($0, 1, pos + RSTART - 2) out substr($0, pos + RSTART + RLENGTH - 1)' \
         '}'
 end
-function _far_awk_rewrite --argument-names tmpfstab --description "awk-rewrite fstab into tmpfstab via tee"
+function _far_awk_rewrite --argument-names tmpfstab --description "Awk-rewrite fstab into tmpfstab via tee"
     set -l _awk_script (_far_build_awk_script | string collect); set -l _tee_err (_mktemp_or_null -p (_tmp_dir) "ry-fstab-tee-err.$fish_pid.XXXXXX"); set -l _awk_err (_mktemp_or_null -p (_tmp_dir) "ry-fstab-awk-err.$fish_pid.XXXXXX")
     _track_tmpfile "$_tee_err"
     _track_tmpfile "$_awk_err"
@@ -3614,6 +3623,7 @@ function _far_awk_rewrite --argument-names tmpfstab --description "awk-rewrite f
     end
     return 0
 end
+
 # ── INSTALL PHASE 4: FSTAB ATOMIC REPLACE (PARITY + SIZE + FINDMNT GATES) ──
 function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp + awk + verify + mv)"
     set -l tmpfstab (sudo -n mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null) # tmpfile in dst parent: same-FS mv -T atomic
@@ -3713,7 +3723,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when n
     end
     printf '%s\n' "$pkg"
 end
-function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on batch failure"
+function _csp_remove_pkgs --description "Pacman -Rns batch with per-pkg retry on batch failure"
     if test -f /var/lib/pacman/db.lck
         _err "pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run; skipping package removal"
         set -g INSTALL_HAD_ERRORS true
@@ -3798,7 +3808,7 @@ function _csm_retry_individual --description "_configure_services_mask sub: Per-
     end
     return $_ret
 end
-function _nft_input_drop_live --description "rc 0 iff live inet/filter/input chain has policy drop (oneshot reads inactive after clean load)"
+function _nft_input_drop_live --description "Rc 0 iff live inet/filter/input chain has policy drop (oneshot reads inactive after clean load)"
     command -q nft; or return 1
     sudo -n true 2>/dev/null; or return 1
     set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect)
@@ -3875,6 +3885,7 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     end
     return $_rc
 end
+
 # ── INSTALL PHASE 4: ENABLE UNITS + REGDOM ──
 function _cse_collect_units --description "Collect system units to enable"
     set -l _enable
@@ -3966,7 +3977,7 @@ function _install_configure_services --description "Enable, start, and configure
 end
 
 # ── BOOT PATH RESOLUTION (ESP + $BOOT via bootctl / findmnt) ──
-function _bootctl_dir --argument-names flag logtag fallnote --description "bootctl path probe (user then sudo); empty on failure"
+function _bootctl_dir --argument-names flag logtag fallnote --description "Bootctl path probe (user then sudo); empty on failure"
     command -q bootctl; or return 0
     set -l _p (command bootctl $flag 2>/dev/null | string trim -- | string trim -r -c / --)
     if test -z "$_p"
@@ -4673,6 +4684,7 @@ function _post_envd --argument-names target --description "Post-hook: env-genera
     end
     return 0
 end
+
 # ── POST-HOOKS: HARDWARE + FIREWALL (CPUPOWER, NFT, REGDOM, BT, UDEV, MODPROBE) ──
 function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change"
     _echo

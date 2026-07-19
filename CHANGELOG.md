@@ -4,6 +4,21 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.121.0
+-------
+
+  - source: section banners now name only the functions they hold - the
+    first verify-static boot banner claimed five areas but held three
+  - source: banner arrow glyph unified on U+2192 throughout
+  - source: one blank line before every section banner (12 were flush
+    against the preceding end)
+  - source: function descriptions all start with a capital; the "sub:"
+    parent marker completed across the verify helper families
+  - readme, changelog: version pins synced
+  - no functional change: generated config bytes, array counts, dispatch
+    tables and exit model are identical to 7.120.1
+
+
 7.120.1
 -------
 

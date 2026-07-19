@@ -222,27 +222,17 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 
 ### Service Keys
 
-| Key | Value | Effect |
-|---|---|---|
-| `RESOLVED_MDNS` | `no` | mDNS off in resolved |
-| `RESOLVED_LLMNR` | `no` | LLMNR off |
-| `RESOLVED_DOT` | `no` | plaintext DNS — diverges from the CachyOS DoT default |
-| `RESOLVED_DNSSEC` | `no` | DNSSEC validation off |
-| `NM_DISPATCHER_LOGLEVELMAX` | `notice` | drop info-level dispatcher lines |
-| `COUNTRY` | `US` | wireless regulatory domain |
-| `LOGIND_IGNORE_KEYS` | 8 keys | power, suspend, hibernate and reboot keys plus long-press variants, all `ignore` |
-| `NM_WIFI_BACKEND` | `wpa_supplicant` | Wi-Fi backend |
-| `NM_WIFI_POWERSAVE` | `2` | Wi-Fi powersave off — MT7925 stability |
-| `NM_LOG_LEVEL` | `WARN` | NetworkManager log level |
-| `CPUPOWER_GOVERNOR` | `powersave` | governor under `amd-pstate-epp` |
-| `BT_AUTO_ENABLE` | `true` | adapter powers on at boot |
-| `BT_FAST_CONNECTABLE` | `true` | faster paired-sink reconnect |
-| `BT_RECONNECT_ATTEMPTS` | `3` | paired-sink reconnect attempts |
-| `GPU_DPM_LEVEL` | `auto` | gfx1151 DPM floor; avoids pinning SCLK on CPU-bound titles |
-| `EPP_PREFERENCE` | `balance_performance` | energy-performance preference |
-| `EXPECTED_SCALING_DRIVER` | `amd-pstate-epp` | verify-only expectation under `amd_pstate=active` |
-| `RY_REMOTE_PLAY_PORTS` | `false` | `true` appends Sunshine and Steam stream ports to the nftables input chain |
-| `BLACKLIST_AMDXDNA` | `true` | NPU driver blacklisted — pairs with `amd_iommu=off` |
+These are variables defined in `ry-install.fish`, not CachyOS or upstream settings. Nothing reads a variable named `RESOLVED_DOT` or `GPU_DPM_LEVEL` — the script holds the value under that name and writes it out in whatever form the consuming component expects. Two reach their destination as-is: `COUNTRY` becomes the `COUNTRY=` line in `/etc/iw-regdomain`, and `LOGIND_IGNORE_KEYS` expands to eight `Handle*Key=ignore` lines in the logind drop-in. The rest are renamed on the way out — `RESOLVED_DOT` is written as `DNSOverTLS`, `BT_AUTO_ENABLE` as BlueZ's `AutoEnable`, `EPP_PREFERENCE` as a udev `ATTR{cpufreq/energy_performance_preference}` assignment. Edit the value here, not in the file it lands in; the next run rewrites that file from the value in the script.
+
+**DNS resolution.** `RESOLVED_MDNS` and `RESOLVED_LLMNR` are both `no`, which turns off multicast DNS and LLMNR in systemd-resolved. `RESOLVED_DOT` is `no`, leaving DNS in plaintext — a deliberate divergence from the CachyOS DNS-over-TLS default. `RESOLVED_DNSSEC` is `no`, so responses are not validated. All four land in the resolved drop-in.
+
+**Networking.** `NM_WIFI_BACKEND` is `wpa_supplicant`. `NM_WIFI_POWERSAVE` is `2`, which disables Wi-Fi powersave — the MT7925 handles powersave in software, and leaving it on produces latency spikes. `NM_LOG_LEVEL` is `WARN`, and `NM_DISPATCHER_LOGLEVELMAX` is `notice`, which drops info-level dispatcher lines from the journal while keeping anything more severe. `COUNTRY` is `US` and sets the wireless regulatory domain.
+
+**Bluetooth.** `BT_AUTO_ENABLE` is `true`, so the adapter powers on at boot. `BT_FAST_CONNECTABLE` is `true` and `BT_RECONNECT_ATTEMPTS` is `3`, which together speed up reconnection to paired sinks. All three are written into the BlueZ daemon config.
+
+**CPU and GPU.** `CPUPOWER_GOVERNOR` is `powersave`, the correct choice under `amd-pstate-epp` — the EPP hint, not the governor name, is what drives performance in that mode. `EPP_PREFERENCE` is `balance_performance` and is pinned per-CPU through a udev rule. `GPU_DPM_LEVEL` is `auto`, which leaves the gfx1151 clock floor alone rather than pinning SCLK on CPU-bound titles. `EXPECTED_SCALING_DRIVER` is `amd-pstate-epp`; it writes nothing and exists only so `--verify` can confirm the driver actually in use matches what `amd_pstate=active` should produce. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list before deployment, since each is interpolated into a udev attribute unquoted.
+
+**Firewall and hardware.** `RY_REMOTE_PLAY_PORTS` is `false`; setting it `true` appends the Sunshine and Steam streaming ports to the nftables input chain. `BLACKLIST_AMDXDNA` is `true`, blacklisting the NPU driver — it pairs with `amd_iommu=off`, since the NPU needs the IOMMU and will not probe without it. Setting it `false` requires switching the kernel command line to `amd_iommu=on iommu=pt`, and the script refuses to deploy an inconsistent pair.
 
 ### Session Environment
 

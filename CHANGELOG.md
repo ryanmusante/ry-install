@@ -4,7 +4,7 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.120.0 - 7.121.2
+7.120.0 - 7.122.0
 -----------------
 
   - source: comments normalised to one line each, verbose inline notes
@@ -19,6 +19,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - readme: section and row order now follows the source declaration order
   - readme: bootloader keys, initramfs and service keys tables added,
     covering 35 globals that had no documentation
+  - readme: version moved out of the shields.io badge row into inline
+    text, so it renders without a third-party image request
   - changelog: converted to kernel.org style, historical entries merged
   - no functional change across the range: executable code, generated
     config bytes, array counts and the exit model are identical to 7.119.0

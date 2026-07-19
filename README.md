@@ -1,6 +1,7 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.121.2-1793d1?style=flat-square)](CHANGELOG.md)
+**Version 7.122.0** &nbsp;·&nbsp; [Changelog](CHANGELOG.md)
+
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish%203.6%2B-1793d1?style=flat-square)](#requirements)
@@ -29,7 +30,7 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.121.2
+cd ry-install && git checkout v7.122.0
 sudo -v
 ./ry-install.fish
 ```

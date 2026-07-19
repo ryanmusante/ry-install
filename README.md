@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.120.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.120.1-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish%203.6%2B-1793d1?style=flat-square)](#requirements)
@@ -16,10 +16,10 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 - [Environment Overrides](#environment-overrides)
 - [Install Flow](#install-flow)
 - [Safety and Reliability](#safety-and-reliability)
-- [Packages](#packages)
-- [Units](#units)
 - [Managed Files](#managed-files)
 - [Embedded Values](#embedded-values)
+- [Packages](#packages)
+- [Units](#units)
 - [Tuning Notes](#tuning-notes)
 - [Troubleshooting](#troubleshooting)
 - [Uninstall](#uninstall)
@@ -29,7 +29,7 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.120.0
+cd ry-install && git checkout v7.120.1
 sudo -v
 ./ry-install.fish
 ```
@@ -110,23 +110,6 @@ Phase 4 masks `ufw.service` rather than removing the package: the nftables rules
 
 `sdboot-manage` runs with `REMOVE_EXISTING=yes`. DNS is plaintext — `DNSOverTLS=no` and `DNSSEC=no`, both diverging from the CachyOS default. The sysctl drop-in uses priority `95` so it loads after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none` where the vendor default is `kyber`.
 
-## Packages
-
-`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan a dependency-installed one.
-
-| Action | Packages |
-|---|---|
-| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `nftables`, `pacman-contrib` |
-| Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
-| Verified present | `vulkan-radeon`, `lib32-vulkan-radeon` |
-
-## Units
-
-| Action | Units |
-|---|---|
-| Enable | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service` |
-| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
-
 ## Managed Files
 
 17 embedded configs in deploy order — 4 boot-critical (`.ry.bak`-backed), 11 system, 2 user. `--verify` checks all of them; `--install-file` re-deploys one.
@@ -169,6 +152,19 @@ Permissions: system files `0644`, user files `0600`.
 
 All tunables are `set -g` globals near the top of the script — there is no external config file. Edit one, then re-run or `--install-file` the affected file. Porting to other hardware starts at `PROFILE_NAME`, `PROFILE_DESC`, and `EXPECTED_CPU_MATCH`.
 
+### Bootloader Keys
+
+| Key | Value | File |
+|---|---|---|
+| `LOADER_DEFAULT` | `@saved` | `loader.conf` |
+| `LOADER_TIMEOUT` | `0` | `loader.conf` |
+| `LOADER_CONSOLE_MODE` | `keep` | `loader.conf` |
+| `LOADER_EDITOR` | `no` | `loader.conf` |
+| `SDBOOT_DEFAULT_ENTRY` | `manual` | `sdboot-manage.conf` |
+| `SDBOOT_OVERWRITE` | `yes` | `sdboot-manage.conf` |
+| `SDBOOT_REMOVE_EXISTING` | `yes` | `sdboot-manage.conf` |
+| `SDBOOT_REMOVE_OBSOLETE` | `yes` | `sdboot-manage.conf` |
+
 ### Kernel Parameters
 
 | Token | Effect |
@@ -187,6 +183,41 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 | `split_lock_detect=off` | no split-lock throttling penalty in games |
 | `usbcore.autosuspend=-1` | USB autosuspend off globally |
 | `zswap.enabled=0` | zswap off — zram is the swap path |
+
+### Initramfs
+
+| Key | Value |
+|---|---|
+| `MKINITCPIO_MODULES` | `amdgpu` |
+| `MKINITCPIO_HOOKS` | `base`, `systemd`, `autodetect`, `microcode`, `modconf`, `kms`, `keyboard`, `sd-vconsole`, `block`, `filesystems`, `fsck` |
+| `MKINITCPIO_COMPRESSION` | `zstd` |
+| `MKINITCPIO_COMPRESSION_OPTIONS` | `-1 -T0` |
+
+`HOOKS` order is an invariant — `systemd` must precede `sd-vconsole`, and `block` must precede `filesystems`. The script validates both before writing.
+
+### Service Keys
+
+| Key | Value | Effect |
+|---|---|---|
+| `RESOLVED_MDNS` | `no` | mDNS off in resolved |
+| `RESOLVED_LLMNR` | `no` | LLMNR off |
+| `RESOLVED_DOT` | `no` | plaintext DNS — diverges from the CachyOS DoT default |
+| `RESOLVED_DNSSEC` | `no` | DNSSEC validation off |
+| `NM_DISPATCHER_LOGLEVELMAX` | `notice` | drop info-level dispatcher lines |
+| `COUNTRY` | `US` | wireless regulatory domain |
+| `LOGIND_IGNORE_KEYS` | 8 keys | power, suspend, hibernate and reboot keys plus long-press variants, all `ignore` |
+| `NM_WIFI_BACKEND` | `wpa_supplicant` | Wi-Fi backend |
+| `NM_WIFI_POWERSAVE` | `2` | Wi-Fi powersave off — MT7925 stability |
+| `NM_LOG_LEVEL` | `WARN` | NetworkManager log level |
+| `CPUPOWER_GOVERNOR` | `powersave` | governor under `amd-pstate-epp` |
+| `BT_AUTO_ENABLE` | `true` | adapter powers on at boot |
+| `BT_FAST_CONNECTABLE` | `true` | faster paired-sink reconnect |
+| `BT_RECONNECT_ATTEMPTS` | `3` | paired-sink reconnect attempts |
+| `GPU_DPM_LEVEL` | `auto` | gfx1151 DPM floor; avoids pinning SCLK on CPU-bound titles |
+| `EPP_PREFERENCE` | `balance_performance` | energy-performance preference |
+| `EXPECTED_SCALING_DRIVER` | `amd-pstate-epp` | verify-only expectation under `amd_pstate=active` |
+| `RY_REMOTE_PLAY_PORTS` | `false` | `true` appends Sunshine and Steam stream ports to the nftables input chain |
+| `BLACKLIST_AMDXDNA` | `true` | NPU driver blacklisted — pairs with `amd_iommu=off` |
 
 ### Session Environment
 
@@ -218,6 +249,23 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 | `vm.max_map_count` | `2147483642` | Steam's esync requirement |
 | `vm.swappiness` | `150` | push swap traffic onto zram |
 | `vm.watermark_boost_factor` | `0` | watermark boosting off — reclaim-stall source |
+
+## Packages
+
+`pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan a dependency-installed one.
+
+| Action | Packages |
+|---|---|
+| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `nftables`, `pacman-contrib` |
+| Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
+| Verified present | `vulkan-radeon`, `lib32-vulkan-radeon` |
+
+## Units
+
+| Action | Units |
+|---|---|
+| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
+| Enable | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service` |
 
 ## Tuning Notes
 

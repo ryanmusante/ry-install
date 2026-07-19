@@ -4,6 +4,18 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.120.1
+-------
+
+  - readme: section order now follows the source declaration order -
+    managed files and embedded values precede packages and units
+  - readme: units table lists mask before enable, matching the phase 4
+    sequence (fstab, resolved, package removal, mask, enable, regdom)
+  - readme: bootloader keys, initramfs and service keys tables added -
+    35 previously undocumented globals, each in declaration order
+  - no source change beyond the version pin
+
+
 7.120.0
 -------
 

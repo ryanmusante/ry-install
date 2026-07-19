@@ -4,44 +4,24 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.121.0
--------
+7.120.0 - 7.121.2
+-----------------
 
-  - source: section banners now name only the functions they hold - the
-    first verify-static boot banner claimed five areas but held three
-  - source: banner arrow glyph unified on U+2192 throughout
-  - source: one blank line before every section banner (12 were flush
-    against the preceding end)
-  - source: function descriptions all start with a capital; the "sub:"
-    parent marker completed across the verify helper families
-  - readme, changelog: version pins synced
-  - no functional change: generated config bytes, array counts, dispatch
-    tables and exit model are identical to 7.120.1
-
-
-7.120.1
--------
-
-  - readme: section order now follows the source declaration order -
-    managed files and embedded values precede packages and units
-  - readme: units table lists mask before enable, matching the phase 4
-    sequence (fstab, resolved, package removal, mask, enable, regdom)
-  - readme: bootloader keys, initramfs and service keys tables added -
-    35 previously undocumented globals, each in declaration order
-  - no source change beyond the version pin
-
-
-7.120.0
--------
-
-  - source: comments normalised to one line each; verbose inline notes
+  - source: comments normalised to one line each, verbose inline notes
     trimmed to the vital fact, safety and lint annotations kept
-  - source: three over-long section banners shortened
-  - readme: rewritten in GitHub style - table of contents, sysctl values
-    promoted from prose to a table, uninstall and troubleshooting reworked
+  - source: section banners name only the functions they hold, arrow glyph
+    unified, one blank line before every banner
+  - source: "sub:" parent marker completed across the verify helper
+    families; description casing left as written, since those strings open
+    with command and unit names
+  - readme: rewritten in GitHub style - contents list, tables for reference
+    data, prose for rationale and procedure
+  - readme: section and row order now follows the source declaration order
+  - readme: bootloader keys, initramfs and service keys tables added,
+    covering 35 globals that had no documentation
   - changelog: converted to kernel.org style, historical entries merged
-  - no functional change: generated config bytes, array counts, dispatch
-    tables and exit model are identical to 7.119.0
+  - no functional change across the range: executable code, generated
+    config bytes, array counts and the exit model are identical to 7.119.0
 
 
 7.118.0 - 7.119.0

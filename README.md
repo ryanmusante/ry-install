@@ -1,6 +1,6 @@
 # ry-install
 
-[![version](https://img.shields.io/badge/version-7.121.0-1793d1?style=flat-square)](CHANGELOG.md)
+[![version](https://img.shields.io/badge/version-7.121.2-1793d1?style=flat-square)](CHANGELOG.md)
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish%203.6%2B-1793d1?style=flat-square)](#requirements)
@@ -29,7 +29,7 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.121.0
+cd ry-install && git checkout v7.121.2
 sudo -v
 ./ry-install.fish
 ```
@@ -49,6 +49,10 @@ sudo -v
 
 In scope: the 17 [Managed Files](#managed-files), pacman add/remove, systemd units, and the fstab rewrite. Everything else on the system is left alone.
 
+### BIOS
+
+Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`. Full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
+
 ## Usage
 
 | Invocation | Behavior |
@@ -60,7 +64,10 @@ In scope: the 17 [Managed Files](#managed-files), pacman add/remove, systemd uni
 | `./ry-install.fish --help` | Usage summary; honored before every other check |
 | `./ry-install.fish --version` | Version string; honored before every other check |
 
-`--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes a JSONL record to `~/ry-install/logs/YYYY-MM-DD/`.
+> [!CAUTION]
+> `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
+
+`--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. Phase verdicts are `PASS`, `WARN`, `FAIL`, `DEFER`, `SKIP` and `--` (shown as `N/A` in Totals) — `WARN` keeps exit `0`, and `DEFER` means the change applies next boot, as with the NetworkManager restart over Wi-Fi.
 
 ## Exit Codes
 
@@ -81,8 +88,10 @@ Sentinels `11`–`14`, `250`, `251`, and `255` are internal function returns and
 | Variable | Effect |
 |---|---|
 | `RY_RUN_TIMEOUT=<sec>` | Per-command wall-clock cap. Default `3600`; `0` disables; package and boot operations floor at `7200` |
-| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `EXPECTED_CPU_MATCH` hard-fail. Deploying gfx1151 defaults on a non-matching CPU writes an incorrect kernel cmdline and initramfs `MODULES` |
-| `NO_COLOR` | Disable colored output ([no-color.org](https://no-color.org)). Color also auto-disables when stderr is not a TTY or `TERM` is `dumb` |
+| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `EXPECTED_CPU_MATCH` hard-fail |
+| `NO_COLOR` | Disable colored output ([no-color.org](https://no-color.org)) |
+
+Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping the hardware check is the risky one: deploying gfx1151 defaults on a non-matching CPU writes an incorrect kernel cmdline and initramfs `MODULES`.
 
 ## Install Flow
 
@@ -93,20 +102,21 @@ Sentinels `11`–`14`, `250`, `251`, and `255` are internal function returns and
 | 3 | Configuration | Deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regulatory domain |
 | 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
-| 6 | Finalize | User daemon-reload, pacman cache trim, NetworkManager restart |
+| 6 | Finalize | User `daemon-reload` (plus a PowerDevil re-apply when the env file changed), `paccache -rk2` and `-ruk0`, NetworkManager restart |
 
-Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If the ruleset cannot be confirmed, the mask is withheld for the run.
+Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If the ruleset cannot be confirmed, the mask is withheld for the run. The `ufw` package stays installed.
+
+The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and related traffic, and ICMP echo-request plus the error and PMTUD types (destination-unreachable, time-exceeded, parameter-problem) are accepted; `invalid` state is dropped; `forward` drops and `output` accepts. IPv6 is disabled system-wide via `ipv6.disable=1`.
 
 ## Safety and Reliability
 
-| Guarantee | Mechanism |
-|---|---|
-| Atomic writes | Same-filesystem temp file, pre-validation (`nft -c` for the ruleset), backup, atomic `mv -T`, re-read, restore on mismatch |
-| Backups | `<path>.ry.bak` for the 4 boot files and for `fstab` during its rewrite; a one-time `<path>.ry.orig` for any other managed file whose pre-existing content differed |
-| Boot protection | Boot-critical failures set exit `4` and skip finalization rather than leaving a half-rebuilt ESP |
-| Single instance | Atomic `mkdir` lock with dead-PID reclaim; live or ambiguous PIDs fail closed |
-| Byte verification | `--verify` compares installed bytes against the embedded generator output by SHA256 |
-| Idempotency | Re-runs converge; `--check` reports drift without writing anything |
+Every managed file is written atomically: content is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved into place with `mv -T`, then re-read and compared. A mismatch restores the backup.
+
+Backups are `<path>.ry.bak` for the 4 boot files and for `fstab` during its rewrite. Any other managed file whose pre-existing content differed at first adoption gets a one-time `<path>.ry.orig`.
+
+The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime` and existing `commit=` tokens. Everything else is byte-preserved. It is gated by line-count parity, a size floor and a mandatory `findmnt --verify`; a symlinked `/etc/fstab` aborts the rewrite, and malformed rows are left byte-identical and warned.
+
+Boot-critical failures exit `4` and skip finalization rather than leaving a half-rebuilt ESP. Only one instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes against the embedded generator output by SHA256, and re-runs converge, so `--check` reports drift without writing anything.
 
 `sdboot-manage` runs with `REMOVE_EXISTING=yes`. DNS is plaintext — `DNSOverTLS=no` and `DNSSEC=no`, both diverging from the CachyOS default. The sysctl drop-in uses priority `95` so it loads after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none` where the vendor default is `kyber`.
 
@@ -254,34 +264,41 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 
 `pacman -Rns` is rdep-aware via `pactree` (from `pacman-contrib`). Phase 2 re-marks every `PKGS_ADD` package explicit after `-Syu`, so a later `-Rns` cannot orphan a dependency-installed one.
 
-| Action | Packages |
-|---|---|
-| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `nftables`, `pacman-contrib` |
-| Remove (`-Rns`) | plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
-| Verified present | `vulkan-radeon`, `lib32-vulkan-radeon` |
+**Install** — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `nftables`, `pacman-contrib`
+
+**Remove** (`-Rns`) — the plymouth stack (`plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`), then `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect`
+
+**Verified present** — `vulkan-radeon`, `lib32-vulkan-radeon`
 
 ## Units
 
-| Action | Units |
-|---|---|
-| Mask | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
-| Enable | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service` |
+**Masked**, in declaration order — `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target`
+
+**Enabled** — `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service`
+
+Phase 4 masks before it enables.
 
 ## Tuning Notes
 
 Non-obvious choices; several list an override to reverse.
 
-| Topic | Detail |
-|---|---|
-| NTSYNC | `--verify` reports `/dev/ntsync` — present ok, module-without-node warn, absent info. Opt out with `PROTON_NO_NTSYNC=1` |
-| AMD-Vi (IOMMU) | `amd_iommu=off` breaks the XDNA NPU, hence the blacklist. For NPU, VFIO, or SR-IOV: `amd_iommu=on iommu=pt` plus `BLACKLIST_AMDXDNA false`, then re-run |
-| UMIP | `clearcpuid=umip` disables UMIP trapping and taints the kernel. The string form is version-stable since CPUID bit numbers shift between kernels. Drop it if there is no `umip_printk` stutter |
-| IPv6 | `ipv6.disable=1` with an IPv4-only ruleset. For dual-stack: drop the token, add IPv6 rules, re-run |
-| PCIe ASPM | `pcie_aspm.policy=performance` actively disables ASPM on every link — fixes MT7925 coredumps, BT reconnect, and association, plus NVMe latency. Drop to restore ASPM defaults |
-| FSR4 on RDNA3 | `FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5. Verify with `printenv FSR4_UPGRADE` |
-| Avahi | `.service` and `.socket` are masked — they collided with resolved as a second mDNS responder, and the profile runs `MulticastDNS=no`. Unmask both to restore |
-| MangoHud `cpu_temp` | Intentionally commented out in the shipped HUD — uncomment to show CPU temperature. `cpu_power` ships active but reads 0 on Zen 5 |
-| Large-VRAM compute | GTT caps usable VRAM near 62 GiB; raise the BIOS UMA carveout (up to 96 GiB) for more, since `amdgpu.gttsize` is deprecated. Check `/sys/module/ttm/parameters/pages_limit` |
+**NTSYNC** — `--verify` reports `/dev/ntsync`: present is ok, a loaded module without the node warns, absent is informational. Opt out with `PROTON_NO_NTSYNC=1`.
+
+**AMD-Vi (IOMMU)** — `amd_iommu=off` breaks the XDNA NPU, which is why the driver is blacklisted. For NPU, VFIO or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run.
+
+**UMIP** — `clearcpuid=umip` disables UMIP trapping and taints the kernel. The string form is version-stable, since CPUID bit numbers shift between kernels. Drop it if there is no `umip_printk` stutter.
+
+**IPv6** — `ipv6.disable=1` pairs with the IPv4-only ruleset. For dual-stack, drop the token, add IPv6 rules, and re-run.
+
+**PCIe ASPM** — `pcie_aspm.policy=performance` actively disables ASPM on every link, which fixes MT7925 coredumps, Bluetooth reconnect and association, plus NVMe latency. Plain `pcie_aspm=off` only inherits the BIOS state. Drop the token to restore ASPM defaults.
+
+**FSR4 on RDNA3** — `FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5. Verify with `printenv FSR4_UPGRADE`.
+
+**Avahi** — both `.service` and `.socket` are masked. They collided with resolved as a second mDNS responder, and the profile runs `MulticastDNS=no`. Unmask both to restore.
+
+**MangoHud `cpu_temp`** — intentionally commented out in the shipped HUD; uncomment to show CPU temperature. `cpu_power` ships active but reads 0 on Zen 5.
+
+**Large-VRAM compute** — GTT caps usable VRAM near 62 GiB. Raise the BIOS UMA carveout, up to 96 GiB, for more, since `amdgpu.gttsize` is deprecated. Check `/sys/module/ttm/parameters/pages_limit`.
 
 ## Troubleshooting
 
@@ -314,14 +331,12 @@ Do **not** duplicate NAT — libvirt's `guest_nat` already masquerades `192.168.
 
 There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference and work through these six steps in order.
 
-| # | Step | Action |
-|---|---|---|
-| 1 | Unmask units | `sudo systemctl unmask` all 11 masked units — exact set in [Units](#units) |
-| 2 | Remove configs | `sudo rm` the 11 system files and `rm` the 2 user files; skip the 4 boot files, step 3 reverts them |
-| 3 | Revert boot files and fstab | Restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, and `/etc/fstab` if present, then delete the `.ry.bak` files |
-| 4 | Reverse packages (optional) | `pacman -S --needed` the Remove list, `pacman -Rns` the Install list — exact sets in [Packages](#packages) |
-| 5 | Rebuild initramfs and entries | `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update` |
-| 6 | Reboot | `sudo systemctl reboot` |
+1. **Unmask units** — `sudo systemctl unmask` all 11 masked units; exact set in [Units](#units).
+2. **Remove configs** — `sudo rm` the 11 system files and `rm` the 2 user files. Skip the 4 boot files; step 3 reverts them.
+3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, and `/etc/fstab` if present, then delete the `.ry.bak` files.
+4. **Reverse packages** (optional) — `pacman -S --needed` the Remove list, `pacman -Rns` the Install list; exact sets in [Packages](#packages).
+5. **Rebuild initramfs and entries** — `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
+6. **Reboot** — `sudo systemctl reboot`.
 
 Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at start and fails once the ruleset is gone. Disable any other enabled unit you no longer want the same way. Boot files must be reverted before step 5, which regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite; for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot managed files — restore it instead of plain removal where you want the original back, then delete it.
 

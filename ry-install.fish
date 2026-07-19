@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.121.0 - CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.121.2 - CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.121.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.121.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1023,13 +1023,13 @@ function _track_tmpfile --argument-names path --description "Track a tmpfile/dir
     test "$path" = /dev/null; and return 0
     set -ga _TRACKED_TMPFILES "$path"
 end
-function _mktemp_or_null --description "Mktemp wrapper; emits path on stdout, /dev/null sentinel on failure"
+function _mktemp_or_null --description "mktemp wrapper; emits path on stdout, /dev/null sentinel on failure"
     set -l _tf (command mktemp $argv 2>/dev/null)
     if test -z "$_tf"; echo /dev/null; functions -q _log; and _log "MKTEMP_OR_NULL_FAIL: args='$argv' — falling back to /dev/null sentinel"; return 0; end
     echo "$_tf"
     return 0
 end
-function _tmp_dir --description "Tmp root (pinned /tmp)"; printf '%s' /tmp; end
+function _tmp_dir --description "tmp root (pinned /tmp)"; printf '%s' /tmp; end
 
 # ── FILESYSTEM PROBES (symlink, system-dst, byte read) ──
 function _is_symlink --argument-names path use_sudo --description "Sudo-aware test -L (rc 0/1/2 = symlink/not/sudo-lapse)"
@@ -1958,7 +1958,7 @@ function _awf_symlink_check --argument-names dst tmpfile use_sudo --description 
     test "$_sym_rc" -eq 2; and _fail "→ $dst (sudo cache lapsed during post-write symlink check — aborting)"; and return 1
     return 0
 end
-function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --description "Chmod + sudo cache check + atomic mv"
+function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --description "chmod + sudo cache check + atomic mv"
     set -l _sp
     test "$use_sudo" = true; and set _sp sudo -n
     if not _run $_sp chmod -- $perms "$tmpfile"; _fail "→ $dst (chmod failed)"; return 1; end
@@ -2059,7 +2059,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     _ok "→ $dst$_tag"
     return 0
 end
-function _ry_mkdir_0755 --argument-names use_sudo dir --description "Mkdir -p with umask capped at 0022 (own --verify rejects group-writable dirs)"
+function _ry_mkdir_0755 --argument-names use_sudo dir --description "mkdir -p with umask capped at 0022 (own --verify rejects group-writable dirs)"
     set -l _pmk 022; set -q umask; and set _pmk $umask; set -g umask 0022
     if test "$use_sudo" = true
         _run sudo -n mkdir -p -m 0755 -- "$dir"
@@ -2800,7 +2800,7 @@ function _vrsv_nft_assert_ping --description "_vrsv_chk_nftables sub: assert liv
         _warn "  nftables: live input chain has no echo-request accept — inbound ping blocked until reload"
     end
 end
-function _vrsv_chk_nftables --argument-names label rec_str --description "Nftables.service: oneshot reads inactive after clean load — judge by live ruleset"
+function _vrsv_chk_nftables --argument-names label rec_str --description "nftables.service: oneshot reads inactive after clean load — judge by live ruleset"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found; _warn "  $label: not installed"; return 0; end
     set -l _nft_probe_ok false
@@ -3103,7 +3103,7 @@ function _vrs_nm_perms --description "_verify_runtime_services sub: Runtime sess
         _info "  NetworkManager connections: no .nmconnection files found"
     end
 end
-function _vrs_vfat_skip --argument-names path boot_fstype --description "_verify_runtime_services sub: Rc 0 = vfat/undetermined boot path (perms not verifiable, _info emitted); rc 1 = checkable"
+function _vrs_vfat_skip --argument-names path boot_fstype --description "_verify_runtime_services sub: rc 0 = vfat/undetermined boot path (perms not verifiable, _info emitted); rc 1 = checkable"
     set -l _fst (command findmnt -n -o FSTYPE --target "$path" 2>/dev/null | string trim --) # Per-path fstype
     test -z "$_fst"; and set _fst "$boot_fstype"
     if test "$_fst" = vfat; _info "  $path: skipped (vfat — unix perms synthesized from mount options)"; return 0; end
@@ -3583,7 +3583,7 @@ function _far_build_awk_script --description "_far_awk_rewrite sub: Emit awk scr
         '    print substr($0, 1, pos + RSTART - 2) out substr($0, pos + RSTART + RLENGTH - 1)' \
         '}'
 end
-function _far_awk_rewrite --argument-names tmpfstab --description "Awk-rewrite fstab into tmpfstab via tee"
+function _far_awk_rewrite --argument-names tmpfstab --description "awk-rewrite fstab into tmpfstab via tee"
     set -l _awk_script (_far_build_awk_script | string collect); set -l _tee_err (_mktemp_or_null -p (_tmp_dir) "ry-fstab-tee-err.$fish_pid.XXXXXX"); set -l _awk_err (_mktemp_or_null -p (_tmp_dir) "ry-fstab-awk-err.$fish_pid.XXXXXX")
     _track_tmpfile "$_tee_err"
     _track_tmpfile "$_awk_err"
@@ -3723,7 +3723,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when n
     end
     printf '%s\n' "$pkg"
 end
-function _csp_remove_pkgs --description "Pacman -Rns batch with per-pkg retry on batch failure"
+function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on batch failure"
     if test -f /var/lib/pacman/db.lck
         _err "pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run; skipping package removal"
         set -g INSTALL_HAD_ERRORS true
@@ -3808,7 +3808,7 @@ function _csm_retry_individual --description "_configure_services_mask sub: Per-
     end
     return $_ret
 end
-function _nft_input_drop_live --description "Rc 0 iff live inet/filter/input chain has policy drop (oneshot reads inactive after clean load)"
+function _nft_input_drop_live --description "rc 0 iff live inet/filter/input chain has policy drop (oneshot reads inactive after clean load)"
     command -q nft; or return 1
     sudo -n true 2>/dev/null; or return 1
     set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect)
@@ -3977,7 +3977,7 @@ function _install_configure_services --description "Enable, start, and configure
 end
 
 # ── BOOT PATH RESOLUTION (ESP + $BOOT via bootctl / findmnt) ──
-function _bootctl_dir --argument-names flag logtag fallnote --description "Bootctl path probe (user then sudo); empty on failure"
+function _bootctl_dir --argument-names flag logtag fallnote --description "bootctl path probe (user then sudo); empty on failure"
     command -q bootctl; or return 0
     set -l _p (command bootctl $flag 2>/dev/null | string trim -- | string trim -r -c / --)
     if test -z "$_p"

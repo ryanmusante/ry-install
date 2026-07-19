@@ -1,17 +1,17 @@
 #!/usr/bin/env fish
-# ry-install v7.119.0 (2026-07-18) - CachyOS config manager for Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151)
+# ry-install v7.120.0 - CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.119.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
-set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn returns) — never a process exit
-set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only) — never a process exit
+set -g VERSION "7.120.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
+set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S%z'
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version verify check install-file= # single option-spec source (root-guard + main argparse)
+set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check,install-file h/help v/version verify check install-file= # single option-spec source (root guard + main argparse)
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available subcommands"
@@ -180,7 +180,7 @@ end
 set -gx HOME (string trim -r -c / -- (string trim -- "$HOME"))
 if test -z "$HOME"; or not test -d "$HOME"; echo "[ERR] HOME resolves to empty/non-dir after normalization: '$HOME'" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -g _RY_HOME_DIR "$HOME/ry-install"; set -g LOG_DIR "$_RY_HOME_DIR/logs/$DATE_LABEL"
-set -l _prev_mkdir_umask 022; set -q umask; and set _prev_mkdir_umask $umask # set umask var directly; autoloaded umask(1) leaks to stderr mid-load
+set -l _prev_mkdir_umask 022; set -q umask; and set _prev_mkdir_umask $umask # umask var directly; autoloaded umask(1) leaks to stderr
 set -g umask 0077
 command mkdir -p -- "$LOG_DIR" 2>/dev/null; or begin
     set -g umask $_prev_mkdir_umask
@@ -201,11 +201,11 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 # ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──
 set -g _RY_BOOT_TAINTED false
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
-set -g _RY_BACKUP_TARGETS $_RY_BOOT_CRITICAL_DSTS; set -g _RY_BACKUP_SUFFIX .ry.bak; set -g _RY_ORIG_SUFFIX .ry.orig # .ry.orig: one-time first-adoption preserve for non-boot managed files
+set -g _RY_BACKUP_TARGETS $_RY_BOOT_CRITICAL_DSTS; set -g _RY_BACKUP_SUFFIX .ry.bak; set -g _RY_ORIG_SUFFIX .ry.orig # .ry.orig: one-time first-adoption preserve (non-boot)
 set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped: never touch a peer run's files
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS; set -g _RY_PROFILE_USES_WIFI_BACKEND false
-set -g SYSTEM_UPGRADED false # cross-phase global; must exist in all modes (set in _install_packages)
+set -g SYSTEM_UPGRADED false # cross-phase global; set in _install_packages
 function _taint --description "Flag install error + boot-critical taint"; set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; end
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
@@ -330,7 +330,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     _log "LOCK_ACQUIRED: pid=$fish_pid dir=$LOCK_DIR"
     return 0
 end
-# mkdir+pidfile lock (atomic on any fs, no fd into sudo children); dead-PID reclaim only, live/ambiguous fail closed; EXIT_LOCK=5
+# mkdir+pidfile lock; live/ambiguous PID fails closed
 function _acquire_lock --description "Acquire instance lock (atomic mkdir; dead-PID stale reclaim)"
     set -g LOCK_DIR "$_RY_HOME_DIR/.lock"; set -g LOCK_FILE "$LOCK_DIR/pid"
     set -l _lk_um 022; set -q umask; and set _lk_um $umask; set -g umask 0077; command mkdir -p -- (command dirname -- "$LOCK_DIR") 2>/dev/null; set -g umask $_lk_um # state dir is 0700 by contract
@@ -588,13 +588,13 @@ set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT
 set -g GPU_DPM_LEVEL auto # gfx1151 dpm floor; auto avoids pinning SCLK on CPU-bound titles
 set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set
 set -g EPP_PREFERENCE balance_performance; set -g _RY_EPP_LEVELS default performance balance_performance balance_power power # energy_performance_preference accepted set; udev-pinned per CPU
-set -g EXPECTED_SCALING_DRIVER amd-pstate-epp # verify-only: cpufreq scaling_driver expectation under amd_pstate=active
+set -g EXPECTED_SCALING_DRIVER amd-pstate-epp # verify-only: scaling_driver under amd_pstate=active
 set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to nftables input
-set -g BLACKLIST_AMDXDNA true # false + amd_iommu=on iommu=pt enables the XDNA NPU (validator-paired)
+set -g BLACKLIST_AMDXDNA true # false + amd_iommu=on iommu=pt enables the NPU
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "DXVK_LOG_LEVEL=none" "FSR4_UPGRADE=1" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_CONFIG=descriptor_heap" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
-# netdev=10GbE (RTL8127), max_map_count=esync, swappiness=150=zram, watermark_boost=0 disables reclaim boosting
+# netdev=10GbE RTL8127, max_map_count=esync, swappiness=150=zram
 set -g SYSCTL_VALUES \
     "net.core.default_qdisc=fq" "net.core.netdev_budget=600" "net.core.netdev_budget_usecs=5000" "net.ipv4.tcp_congestion_control=bbr" \
     "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" \
@@ -608,7 +608,7 @@ set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme b
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
-set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi: 2nd mDNS responder collided with resolved; ufw: nftables owns the ruleset — masked so its rules never load
+set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi: 2nd mDNS responder; ufw: nftables owns the ruleset
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
@@ -832,7 +832,7 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        iif \"lo\" accept" \
         "        # IPv4 ICMP: inbound ping (echo-request) + error/PMTUD types (replies match ct established)" \
         "        icmp type { echo-request, destination-unreachable, time-exceeded, parameter-problem } accept"
-    if test "$RY_REMOTE_PLAY_PORTS" = true # gated: Sunshine/Moonlight + Steam Remote Play inbound stream ports
+    if test "$RY_REMOTE_PLAY_PORTS" = true # gated: Sunshine/Moonlight + Steam Remote Play inbound
         printf '%s\n' \
             "        # ry-install: remote-play inbound (RY_REMOTE_PLAY_PORTS=true)" \
             "        tcp dport { 47984, 47989, 48010, 27036, 27037 } accept" \
@@ -1382,12 +1382,12 @@ function _run_effective_timeout --description "_run sub: resolve timeout; long-r
             set _effective_cmd $_ec_arg; break
         end
     end
-    set -l _resolved (builtin command -v -- "$_effective_cmd" 2>/dev/null) # resolve via PATH; basename match alone could hit a same-named wrapper
+    set -l _resolved (builtin command -v -- "$_effective_cmd" 2>/dev/null) # resolve via PATH; basename alone could hit a wrapper
     test -n "$_resolved"; or set _resolved "$_effective_cmd"
     set _effective_cmd (command basename -- "$_resolved")
     if contains -- "$_effective_cmd" pacman mkinitcpio sdboot-manage paccache updatedb pkgfile
         if test "$_t" -eq 0 2>/dev/null; echo 0; return 0; end # RY_RUN_TIMEOUT=0 opt-out: honor it, emit 0
-        if test "$_t" -lt "$_RY_LONGOP_HARD_CAP" 2>/dev/null # raise short default to the hard cap; never below, never unbounded
+        if test "$_t" -lt "$_RY_LONGOP_HARD_CAP" 2>/dev/null # raise short default to hard cap; never below/unbounded
             _log "TIMEOUT_LONGOP_CAP: cmd=$_effective_cmd raising $_t""s → $_RY_LONGOP_HARD_CAP""s (long-running pkg/boot/db op; short SIGKILL would bypass rollback)"
             set _t $_RY_LONGOP_HARD_CAP
         end
@@ -1973,7 +1973,7 @@ function _awf_make_backup --argument-names dst use_sudo --description "Create <d
     end
     _is_symlink "$_bak" $use_sudo
     set -l _bak_sym_rc $status
-    if test "$_bak_sym_rc" -eq 2 # sudo lapse: skip best-effort backup vs cp through possible symlink
+    if test "$_bak_sym_rc" -eq 2 # sudo lapse: skip backup vs cp through possible symlink
         _warn "  $dst: backup skipped — symlink probe on $_bak inconclusive (sudo cache lapsed)"
         _log "BACKUP_SKIP_SUDO_LAPSE: $_bak"
         return 0
@@ -2075,7 +2075,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
         if test "$_read_rc" -eq 0; and test "$_new_bytes" = "$_cur_bytes"; set -l _tag ""; set -q _RY_DEPLOY_TAG; and test -n "$_RY_DEPLOY_TAG"; and set _tag " [$_RY_DEPLOY_TAG]"; set -g _RY_DEPLOY_IDEMPOTENT_COUNT (math $_RY_DEPLOY_IDEMPOTENT_COUNT + 1); _ok "→ $dst (unchanged)$_tag"; return 0; end
         test "$_read_rc" -eq 2; and _log "SKIP_PROBE_SUDO_LAPSED: dst=$dst — re-deploying"
     end
-    if set -q _read_rc; and test "$_read_rc" -eq 0; and not contains -- "$dst" $_RY_BACKUP_TARGETS # one-time first-adoption preserve (boot targets use the .ry.bak path)
+    if set -q _read_rc; and test "$_read_rc" -eq 0; and not contains -- "$dst" $_RY_BACKUP_TARGETS # one-time first-adoption preserve (boot uses .ry.bak)
         set -l _orig "$dst$_RY_ORIG_SUFFIX"
         _is_symlink "$_orig" $use_sudo; and _as $use_sudo rm -f -- "$_orig" 2>/dev/null # never cp through a pre-existing symlink at the preserve path
         if not _as $use_sudo test -e "$_orig"
@@ -2333,7 +2333,7 @@ end
 function _vsp_pacman_conf --description "Inspect IgnorePkg / ParallelDownloads in /etc/pacman.conf (section-agnostic grep; pacman only honours [options])"
     _echo "── pacman.conf ──"
     if not test -f /etc/pacman.conf; _warn "  /etc/pacman.conf not found"; return 0; end
-    set -l _pc_sudo false # sudo read avoids a false "not set" on a perms-hardened (0600) conf
+    set -l _pc_sudo false # sudo read avoids false 'not set' on 0600 conf
     if not test -r /etc/pacman.conf
         if command -q sudo; and sudo -n test -r /etc/pacman.conf 2>/dev/null
             set _pc_sudo true
@@ -2639,7 +2639,7 @@ function _vrk_cpu_state --description "Runtime kparam check: CPU governor/EPP + 
         set -l cpu_name (string replace -r '.*/cpu(\d+)/.*' 'cpu$1' -- "$_CPU_PATH")
         _info "  Checking $cpu_name (representative)"
         for check in "scaling_driver:$EXPECTED_SCALING_DRIVER:Scaling driver" \
-            "scaling_governor:$CPUPOWER_GOVERNOR:Governor" # driver + governor profile-managed
+            "scaling_governor:$CPUPOWER_GOVERNOR:Governor" # profile-managed
             set -l parts (string split ':' -- "$check"); set -l sysfs_val (command cat -- "$_CPU_PATH/$parts[1]" 2>/dev/null)
             _chk_eq "$parts[3]" "$sysfs_val" "$parts[2]"
         end
@@ -2845,7 +2845,7 @@ function _vrsv_chk_cpupower_governor --argument-names rec_str --description "Che
     end
     _fail "  cpupower.service: $rec[2] (expected: active)"
 end
-# ── VERIFY-RUNTIME: SERVICE COLLECTORS (sys-units, wifi/NM backend, masked-inactive) ──
+# ── VERIFY-RUNTIME: SERVICE COLLECTORS ──
 function _vrsv_sys_units --description "Runtime services check: conf.d-implied + EXPECTED_SERVICES (per-unit dispatch)"
     set -l sys_units (_implicit_confd_units)
     for _e in $EXPECTED_SERVICES; contains -- $_e $sys_units; or set -a sys_units $_e; end
@@ -3424,7 +3424,7 @@ function _ip_pacman_invoke --description "Run full pacman -Syu --needed (partial
         set -g SYSTEM_UPGRADED false
         _log "PKG_STATE_UNCHANGED: pacman -Q fingerprint identical pre/post -Syu (no-op upgrade)"
     end
-    set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null) # re-mark explicit post-Syu so -Rns cannot orphan them (-D idempotent)
+    set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null) # re-mark explicit post-Syu so -Rns cannot orphan (-D idempotent)
     if test (count $_add_present) -gt 0
         if not _run sudo -n pacman -D --asexplicit -- $_add_present
             _warn "  Could not mark PKGS_ADD packages explicit — orphan-removal exemption not guaranteed for any pre-installed as a dependency"
@@ -3523,7 +3523,7 @@ function _install_system_files --description "Deploy all embedded config files"
     return 0
 end
 
-# ── INSTALL PHASE 4: SERVICES (fstab → resolved → pkg-remove → mask → enable → regdom); FSTAB EXT4 OPTS (noatime,lazytime,commit=10) ──
+# ── INSTALL PHASE 4: SERVICES (fstab -> resolved -> pkg-remove -> mask -> enable -> regdom) ──
 function _fstab_needs_change --description "Scan ext4 entries for missing noatime/lazytime/commit=10"
     set -g _RY_FSTAB_NEEDS_CHANGE false; set -g _RY_FSTAB_COMMIT_OVERRIDES; set -l _malformed_warned false
     for line in $argv
@@ -3819,7 +3819,7 @@ function _csm_enable_nftables_first --description "Activate nftables before the 
     return 1
 end
 function _csm_prepare_ufw_masking --argument-names nft_live --description "Flush live ufw rules ahead of its unit mask; rc 0 iff the mask may proceed"
-    command -q ufw; or return 0 # binary absent: nothing to flush (the not-installed unit filter skips an absent ufw.service)
+    command -q ufw; or return 0 # binary absent: nothing to flush
     if test "$nft_live" != true
         _warn "ufw.service mask withheld this run — nftables default-deny not confirmed live; mask --now stops ufw (ufw-init stop flushes) and would leave the host unfirewalled until reboot. Re-run after nftables.service starts."
         _log "UFW_MASK_DEFERRED: nft_live=$nft_live (ufw.service left unmasked to avoid an unfirewalled window)"
@@ -3844,7 +3844,7 @@ function _csm_prepare_ufw_masking --argument-names nft_live --description "Flush
 end
 function _configure_services_mask --description "Apply MASK list; batch-mask with per-unit retry"
     set -l safe_mask $MASK
-    if contains -- ufw.service $safe_mask # nftables-first: mask --now stops ufw (ufw-init stop flushes) — never before default-deny is live
+    if contains -- ufw.service $safe_mask # nftables-first: mask --now stops ufw; default-deny first
         set -l _nft_live false
         _csm_enable_nftables_first; and set _nft_live true
         if not _csm_prepare_ufw_masking $_nft_live
@@ -3980,7 +3980,7 @@ function _resolve_esp --description "Resolve EFI system partition path (cached; 
     if set -q _RY_ESP_TRIED; printf '%s' "$_RY_ESP_PATH"; return 0; end
     set -l _p (_bootctl_dir -p ESP_BOOTCTL_PIPE_FAIL "falling through to findmnt")
     if test -z "$_p"; or begin; not test -d "$_p"; and not sudo -n test -d "$_p" 2>/dev/null; end
-        for _candidate in /efi /boot/efi /boot/EFI /boot # only independently-mounted vfat counts (plain dir: findmnt empty)
+        for _candidate in /efi /boot/efi /boot/EFI /boot # only independently-mounted vfat (plain dir: findmnt empty)
             set -l _fs (command findmnt -no FSTYPE -- "$_candidate" 2>/dev/null)
             if test "$_fs" = vfat; set _p "$_candidate"; break; end
         end
@@ -4562,7 +4562,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS (coverage enforced by _ir_validate_post_hooks) ──
+# ── --INSTALL-FILE: POST-HOOK HANDLERS ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot_apply sub: mkinitcpio -P + sdboot-manage cascade"
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
@@ -4663,7 +4663,7 @@ function _post_envd --argument-names target --description "Post-hook: env-genera
         _log "POST_ENVD_SKIP: no active user-bus target=$target"
         return 0
     end
-    if not _run systemctl --user daemon-reload # re-runs environment generators — systemd.environment-generator(7)
+    if not _run systemctl --user daemon-reload # re-runs systemd.environment-generator(7)
         _warn "systemctl --user daemon-reload failed — environment.d applies at next login (non-fatal; file deployed)"
         return 0
     end

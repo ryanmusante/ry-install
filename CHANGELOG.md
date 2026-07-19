@@ -4,6 +4,30 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.123.0
+-------
+
+  - kernel: add mt7925e.disable_aspm=1. The global ASPM policy governs
+    link state only, so the endpoint driver is now told to disable ASPM
+    itself; coredumps on the Wi-Fi adapter are still reported without it
+  - sysctl: add kernel.nmi_watchdog=0. The runtime check asserted this
+    value while nothing in the profile set it, leaving the result to a
+    distribution default that is supplied from a package, not the kernel
+    configuration; the profile now owns the value it verifies
+  - env: rename FSR4_UPGRADE to PROTON_FSR4_UPGRADE, the name the Proton
+    runtime actually reads. The former was consumed by nothing
+  - env: drop VKD3D_CONFIG=descriptor_heap. The path is not enabled by
+    default upstream, needs a matching driver opt-in to take effect, and
+    measures within noise on this adapter; per-title use is unaffected
+  - modprobe: correct the amdxdna probe failure noted in the generated
+    file to -ENODEV (-19); the driver returns that, not -EINVAL
+  - counts: KERNEL_PARAMS 14 to 15, SYSCTL_VALUES 10 to 11, ENV_VARS 11
+    to 10; drift tripwires and the readme tables follow
+  - affects /etc/kernel/cmdline, /etc/sdboot-manage.conf, the sysctl
+    drop-in, the modprobe drop-in and the user environment file. A boot
+    is required for the command-line change to take effect
+
+
 7.120.0 - 7.122.0
 -----------------
 

@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.122.0** &nbsp;·&nbsp; [Changelog](CHANGELOG.md)
+**Version 7.123.0** &nbsp;·&nbsp; [Changelog](CHANGELOG.md)
 
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
@@ -15,9 +15,9 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 - [Usage](#usage)
 - [Exit Codes](#exit-codes)
 - [Environment Overrides](#environment-overrides)
+- [Managed Files](#managed-files)
 - [Install Flow](#install-flow)
 - [Safety and Reliability](#safety-and-reliability)
-- [Managed Files](#managed-files)
 - [Embedded Values](#embedded-values)
 - [Packages](#packages)
 - [Units](#units)
@@ -30,13 +30,15 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.122.0
+cd ry-install && git checkout v7.123.0
 sudo -v
 ./ry-install.fish
 ```
 
 > [!WARNING]
 > Run as your normal user — never with `sudo`. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `--verify`. Re-runs are idempotent.
+
+A successful run closes with `Verdict: PASS` above the Totals line. Anything else is explained in [Usage](#usage) and [Exit Codes](#exit-codes).
 
 ## Requirements
 
@@ -68,7 +70,18 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
 
-`--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. Phase verdicts are `PASS`, `WARN`, `FAIL`, `DEFER`, `SKIP` and `--` (shown as `N/A` in Totals) — `WARN` keeps exit `0`, and `DEFER` means the change applies next boot, as with the NetworkManager restart over Wi-Fi.
+`--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
+
+Each phase reports one verdict, tallied in the closing Totals line:
+
+| Verdict | Meaning |
+|---|---|
+| `PASS` | The phase did what it set out to do |
+| `WARN` | Something non-fatal — keeps exit `0` |
+| `FAIL` | The phase did not complete |
+| `DEFER` | Applies at next boot, as with the NetworkManager restart over Wi-Fi |
+| `SKIP` | Preconditions absent, so the phase did not run |
+| `--` | Not applicable — shown as `N/A` in Totals |
 
 ## Exit Codes
 
@@ -93,33 +106,6 @@ Sentinels `11`–`14`, `250`, `251`, and `255` are internal function returns and
 | `NO_COLOR` | Disable colored output ([no-color.org](https://no-color.org)) |
 
 Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping the hardware check is the risky one: deploying gfx1151 defaults on a non-matching CPU writes an incorrect kernel cmdline and initramfs `MODULES`.
-
-## Install Flow
-
-| Phase | Name | Work |
-|---|---|---|
-| 1 | Preflight | Dependency, network, disk, and systemd gates; hardware match; lock acquisition |
-| 2 | Packages | `pacman -Syu`, install `PKGS_ADD`, re-mark them explicit |
-| 3 | Configuration | Deploy 17 embedded configs atomically |
-| 4 | Services | fstab → resolved restart → package removal → mask → enable → regulatory domain |
-| 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
-| 6 | Finalize | User `daemon-reload` (plus a PowerDevil re-apply when the env file changed), `paccache -rk2` and `-ruk0`, NetworkManager restart |
-
-Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If the ruleset cannot be confirmed, the mask is withheld for the run. The `ufw` package stays installed.
-
-The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and related traffic, and ICMP echo-request plus the error and PMTUD types (destination-unreachable, time-exceeded, parameter-problem) are accepted; `invalid` state is dropped; `forward` drops and `output` accepts. IPv6 is disabled system-wide via `ipv6.disable=1`.
-
-## Safety and Reliability
-
-Every managed file is written atomically: content is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved into place with `mv -T`, then re-read and compared. A mismatch restores the backup.
-
-Backups are `<path>.ry.bak` for the 4 boot files and for `fstab` during its rewrite. Any other managed file whose pre-existing content differed at first adoption gets a one-time `<path>.ry.orig`.
-
-The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime` and existing `commit=` tokens. Everything else is byte-preserved. It is gated by line-count parity, a size floor and a mandatory `findmnt --verify`; a symlinked `/etc/fstab` aborts the rewrite, and malformed rows are left byte-identical and warned.
-
-Boot-critical failures exit `4` and skip finalization rather than leaving a half-rebuilt ESP. Only one instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes against the embedded generator output by SHA256, and re-runs converge, so `--check` reports drift without writing anything.
-
-`sdboot-manage` runs with `REMOVE_EXISTING=yes`. DNS is plaintext — `DNSOverTLS=no` and `DNSSEC=no`, both diverging from the CachyOS default. The sysctl drop-in uses priority `95` so it loads after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none` where the vendor default is `kyber`.
 
 ## Managed Files
 
@@ -159,6 +145,33 @@ Boot-critical failures exit `4` and skip finalization rather than leaving a half
 
 Permissions: system files `0644`, user files `0600`.
 
+## Install Flow
+
+| Phase | Name | Work |
+|---|---|---|
+| 1 | Preflight | Dependency, network, disk, and systemd gates; hardware match; lock acquisition |
+| 2 | Packages | Seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD`, re-mark them explicit, refresh `updatedb` and `pkgfile` |
+| 3 | Configuration | Deploy 17 embedded configs atomically |
+| 4 | Services | fstab → resolved restart → package removal → mask → enable → regulatory domain |
+| 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
+| 6 | Finalize | User `daemon-reload` (plus a PowerDevil re-apply when the env file changed), `paccache -rk2` and `-ruk0`, NetworkManager restart |
+
+Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If the ruleset cannot be confirmed, the mask is withheld for the run. The `ufw` package stays installed.
+
+The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and related traffic, and ICMP echo-request plus the error and PMTUD types (destination-unreachable, time-exceeded, parameter-problem) are accepted; `invalid` state is dropped; `forward` drops and `output` accepts. IPv6 is disabled system-wide via `ipv6.disable=1`.
+
+## Safety and Reliability
+
+Every managed file is written atomically: content is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved into place with `mv -T`, then re-read and compared. A mismatch restores the backup.
+
+Backups are `<path>.ry.bak` for the 4 boot files and for `fstab` during its rewrite. Any other managed file whose pre-existing content differed at first adoption gets a one-time `<path>.ry.orig`.
+
+The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime` and existing `commit=` tokens. Everything else is byte-preserved. It is gated by line-count parity, a size floor and a mandatory `findmnt --verify`; a symlinked `/etc/fstab` aborts the rewrite, and malformed rows are left byte-identical and warned.
+
+Boot-critical failures exit `4` and skip finalization rather than leaving a half-rebuilt ESP. Only one instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes against the embedded generator output by SHA256, and re-runs converge, so `--check` reports drift without writing anything.
+
+`sdboot-manage` runs with `REMOVE_EXISTING=yes`. DNS is plaintext — `DNSOverTLS=no` and `DNSSEC=no`, both diverging from the CachyOS default. The sysctl drop-in uses priority `95` so it loads after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none` where the vendor default is `kyber`.
+
 ## Embedded Values
 
 All tunables are `set -g` globals near the top of the script — there is no external config file. Edit one, then re-run or `--install-file` the affected file. Porting to other hardware starts at `PROFILE_NAME`, `PROFILE_DESC`, and `EXPECTED_CPU_MATCH`.
@@ -187,6 +200,7 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 | `fsck.mode=force` | run fsck on every boot |
 | `fsck.repair=yes` | auto-repair whatever fsck finds |
 | `ipv6.disable=1` | disable the IPv6 stack |
+| `mt7925e.disable_aspm=1` | MT7925 endpoint ASPM off — driver-level coredump mitigation |
 | `nvme_core.default_ps_max_latency_us=0` | NVMe APST off — no power-state exit latency |
 | `pcie_aspm.policy=performance` | force every PCIe link out of ASPM |
 | `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
@@ -235,13 +249,12 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 | Variable | Effect |
 |---|---|
 | `DXVK_LOG_LEVEL=none` | DXVK logging off |
-| `FSR4_UPGRADE=1` | enable the FSR4 upgrade path |
 | `MANGOHUD=1` | HUD on for Vulkan titles |
 | `MESA_SHADER_CACHE_MAX_SIZE=16G` | roomy Mesa shader cache |
 | `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
 | `PROTON_ENABLE_WAYLAND=1` | native-Wayland Proton path |
+| `PROTON_FSR4_UPGRADE=1` | request the FSR4 DLL upgrade path |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
-| `VKD3D_CONFIG=descriptor_heap` | D3D12 descriptor-heap fast path |
 | `VKD3D_DEBUG=none` | vkd3d logging off |
 | `VKD3D_SHADER_DEBUG=none` | vkd3d shader logging off |
 | `WINEDEBUG=-all` | Wine debug channels off |
@@ -250,6 +263,7 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 
 | Key | Value | Effect |
 |---|---|---|
+| `kernel.nmi_watchdog` | `0` | NMI watchdog off — no per-CPU watchdog overhead |
 | `net.core.default_qdisc` | `fq` | pairs with BBR |
 | `net.core.netdev_budget` | `600` | wider NAPI polling for 10GbE |
 | `net.core.netdev_budget_usecs` | `5000` | matching poll time budget |
@@ -283,7 +297,7 @@ Phase 4 masks before it enables.
 
 Non-obvious choices; several list an override to reverse.
 
-**NTSYNC** — `--verify` reports `/dev/ntsync`: present is ok, a loaded module without the node warns, absent is informational. Opt out with `PROTON_NO_NTSYNC=1`.
+**NTSYNC** — `--verify` reports `/dev/ntsync`: present is ok, a loaded module without the node warns, absent is informational. Proton reads it directly; opt out at the Proton level with `PROTON_NO_NTSYNC=1`, which this script neither sets nor checks.
 
 **AMD-Vi (IOMMU)** — `amd_iommu=off` breaks the XDNA NPU, which is why the driver is blacklisted. For NPU, VFIO or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run.
 
@@ -291,9 +305,9 @@ Non-obvious choices; several list an override to reverse.
 
 **IPv6** — `ipv6.disable=1` pairs with the IPv4-only ruleset. For dual-stack, drop the token, add IPv6 rules, and re-run.
 
-**PCIe ASPM** — `pcie_aspm.policy=performance` actively disables ASPM on every link, which fixes MT7925 coredumps, Bluetooth reconnect and association, plus NVMe latency. Plain `pcie_aspm=off` only inherits the BIOS state. Drop the token to restore ASPM defaults.
+**PCIe ASPM** — `pcie_aspm.policy=performance` actively disables ASPM on every link, which addresses Bluetooth reconnect and association plus NVMe latency. Plain `pcie_aspm=off` only inherits the BIOS state. The global policy governs link state, so `mt7925e.disable_aspm=1` pairs with it to disable ASPM at the endpoint driver as well — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the corresponding default.
 
-**FSR4 on RDNA3** — `FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5. Verify with `printenv FSR4_UPGRADE`.
+**FSR4 on RDNA3** — `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5. Recent Proton-CachyOS builds copy the FSR4 DLL automatically, so the variable now mainly pins a specific DLL version. Verify with `printenv PROTON_FSR4_UPGRADE`.
 
 **Avahi** — both `.service` and `.socket` are masked. They collided with resolved as a second mDNS responder, and the profile runs `MulticastDNS=no`. Unmask both to restore.
 
@@ -316,7 +330,7 @@ Non-obvious choices; several list an override to reverse.
 
 The `forward { policy drop; }` chain silently breaks libvirt and QEMU NAT guest WAN access, since libvirt's own rules no longer see the traffic. VMs are out of scope, but if you run them, add to `/etc/nftables.conf`:
 
-```
+```nft
 # input - guest DHCP/DNS to the host dnsmasq:
 iifname "virbr0" udp dport { 53, 67 } accept
 iifname "virbr0" tcp dport { 53, 67 } accept

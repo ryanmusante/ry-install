@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.122.0 - CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.123.0 - CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.122.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.123.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -572,7 +572,7 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-set -g KERNEL_PARAMS amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n clearcpuid=umip fsck.mode=force fsck.repair=yes ipv6.disable=1 nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n clearcpuid=umip fsck.mode=force fsck.repair=yes ipv6.disable=1 mt7925e.disable_aspm=1 nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
@@ -593,12 +593,12 @@ set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to 
 set -g BLACKLIST_AMDXDNA true # false + amd_iommu=on iommu=pt enables the NPU
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
-set -g ENV_VARS "DXVK_LOG_LEVEL=none" "FSR4_UPGRADE=1" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_ENABLE_WAYLAND=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_CONFIG=descriptor_heap" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
+set -g ENV_VARS "DXVK_LOG_LEVEL=none" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_ENABLE_WAYLAND=1" "PROTON_FSR4_UPGRADE=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
 # netdev=10GbE RTL8127, max_map_count=esync, swappiness=150=zram
 set -g SYSCTL_VALUES \
-    "net.core.default_qdisc=fq" "net.core.netdev_budget=600" "net.core.netdev_budget_usecs=5000" "net.ipv4.tcp_congestion_control=bbr" \
-    "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" \
-    "vm.swappiness=150" "vm.watermark_boost_factor=0"
+    "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" "net.core.netdev_budget=600" "net.core.netdev_budget_usecs=5000" \
+    "net.ipv4.tcp_congestion_control=bbr" "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" \
+    "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" "vm.swappiness=150" "vm.watermark_boost_factor=0"
 
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) ──
 set -g PKGS_ADD \
@@ -665,12 +665,12 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
     set -l _expect \
-        KERNEL_PARAMS:14 \
+        KERNEL_PARAMS:15 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
-        ENV_VARS:11 \
-        SYSCTL_VALUES:10 \
+        ENV_VARS:10 \
+        SYSCTL_VALUES:11 \
         PKGS_ADD:16 \
         PKGS_DEL:9 \
         MASK:11 \
@@ -875,11 +875,11 @@ function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate con
         "# ry-install: module options + blacklist (managed file, do not edit by hand)"
     if test "$BLACKLIST_AMDXDNA" = true # false = NPU path (see BLACKLIST_AMDXDNA global)
         printf '%s\n' \
-            "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -EINVAL (ret -22) under amd_iommu=off" \
+            "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -ENODEV (ret -19) under amd_iommu=off" \
             "blacklist amdxdna"
     else
         printf '%s\n' \
-            "# no directives: BLACKLIST_AMDXDNA=false (NPU path) and MT7925 ASPM now covered by pcie_aspm.policy=performance"
+            "# no directives: BLACKLIST_AMDXDNA=false (NPU path); MT7925 ASPM handled on the kernel command line"
     end
 end
 

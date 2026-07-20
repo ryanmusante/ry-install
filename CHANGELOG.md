@@ -4,6 +4,27 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.127.0
+-------
+
+  - license: ship the MIT LICENSE file the readme had claimed since
+    7.120.0; the license badge and the license section now resolve to
+    it instead of pointing back into the readme
+  - readme: managed-file split reworded to 15 system-scope of which 4
+    are boot-critical, plus 2 user. The former "11 system" counted the
+    non-boot subset and read as a mismatch against the 15-entry array
+  - readme: quick start uses "; and" rather than "&&", matching the
+    uninstall steps and the script's own style
+  - readme: the resolver and cpu/gpu service-key paragraphs split in
+    two; both had grown past five sentences on one line
+  - readme: troubleshooting "rebuild refused" action put in the
+    imperative, as every other action cell already was
+  - readme: version separator is a plain middot, dropping the &nbsp;
+    html entities from an otherwise markdown-only document
+  - no change to executable code, generated config bytes, array counts
+    or the exit model; version pins synced across source and changelog
+
+
 7.126.0
 -------
 

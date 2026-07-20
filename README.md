@@ -1,8 +1,8 @@
 # ry-install
 
-**Version 7.126.0** &nbsp;·&nbsp; [Changelog](CHANGELOG.md)
+**Version 7.127.0** · [Changelog](CHANGELOG.md)
 
-[![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](#license)
+[![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
 [![shell](https://img.shields.io/badge/shell-fish%203.6%2B-1793d1?style=flat-square)](#requirements)
 
@@ -30,7 +30,7 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install && git checkout v7.126.0
+cd ry-install; and git checkout v7.127.0
 sudo -v
 ./ry-install.fish
 ```
@@ -109,7 +109,7 @@ Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping 
 
 ## Managed Files
 
-17 embedded configs in deploy order — 4 boot-critical (`.ry.bak`-backed), 11 system, 2 user. `--verify` checks all of them; `--install-file` re-deploys one.
+17 embedded configs in deploy order — 15 system-scope (of which 4 are boot-critical and `.ry.bak`-backed) and 2 user. `--verify` checks all of them; `--install-file` re-deploys one.
 
 ### Boot
 
@@ -224,13 +224,17 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 
 These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed on the way out — `RESOLVED_DOT` becomes `DNSOverTLS`, `BT_AUTO_ENABLE` BlueZ's `AutoEnable`, `EPP_PREFERENCE` a udev `ATTR{cpufreq/energy_performance_preference}`. Only `COUNTRY` and `LOGIND_IGNORE_KEYS` keep their names. Edit the value here, not the generated file; the next run overwrites it.
 
-**DNS resolution.** `RESOLVED_MDNS` and `RESOLVED_LLMNR` are `no`. `RESOLVED_DNS_SERVERS` holds the upstream addresses, written as a plain `DNS=` line. `RESOLVED_DOT` is `no` — the filtering is identical either way, and `DNSOverTLS=yes` fails closed, so an unreachable endpoint would stop resolution outright. `RESOLVED_DNSSEC` is `no`. The same upstreams repeat in the NetworkManager drop-in under `[global-dns-domain-*]`; without that, DHCP-supplied servers arrive as per-link DNS and outrank the global `DNS=` line.
+**DNS resolution.** `RESOLVED_MDNS` and `RESOLVED_LLMNR` are `no`. `RESOLVED_DNS_SERVERS` holds the upstream addresses, written as a plain `DNS=` line. `RESOLVED_DNSSEC` is `no`.
+
+`RESOLVED_DOT` is `no` by choice: the filtering is identical either way, and `DNSOverTLS=yes` fails closed, so an unreachable endpoint would stop resolution outright. The same upstreams repeat in the NetworkManager drop-in under `[global-dns-domain-*]` — without that, DHCP-supplied servers arrive as per-link DNS and outrank the global `DNS=` line.
 
 **Networking.** `NM_WIFI_BACKEND` is `wpa_supplicant`. `NM_WIFI_POWERSAVE` is `2`, disabling Wi-Fi powersave — the MT7925 handles it in software and produces latency spikes otherwise. `NM_LOG_LEVEL` is `WARN`; `NM_DISPATCHER_LOGLEVELMAX` is `notice`, dropping info-level dispatcher lines. `COUNTRY` is `US`, the wireless regulatory domain.
 
 **Bluetooth.** `BT_AUTO_ENABLE` is `true`, powering the adapter on at boot. `BT_FAST_CONNECTABLE` is `true` and `BT_RECONNECT_ATTEMPTS` is `3`, speeding reconnection to paired sinks. All three land in the BlueZ daemon config.
 
-**CPU and GPU.** `CPUPOWER_GOVERNOR` is `powersave`, correct under `amd-pstate-epp` — the EPP hint drives performance there, not the governor name. `EPP_PREFERENCE` is `balance_performance`, pinned per-CPU by a udev rule. `GPU_DPM_LEVEL` is `auto`, leaving the gfx1151 clock floor alone. `EXPECTED_SCALING_DRIVER` is `amd-pstate-epp`, verify-only. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
+**CPU and GPU.** `CPUPOWER_GOVERNOR` is `powersave`, correct under `amd-pstate-epp` — the EPP hint drives performance there, not the governor name. `EPP_PREFERENCE` is `balance_performance`, pinned per-CPU by a udev rule. `GPU_DPM_LEVEL` is `auto`, leaving the gfx1151 clock floor alone. `EXPECTED_SCALING_DRIVER` is `amd-pstate-epp`, verify-only.
+
+Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
 
 **Firewall and hardware.** `RY_REMOTE_PLAY_PORTS` is `false`; `true` appends the Sunshine and Steam streaming ports to the nftables input chain. `BLACKLIST_AMDXDNA` is `true`, pairing with `amd_iommu=off` — the NPU needs the IOMMU and will not probe without it. Setting it `false` requires `amd_iommu=on iommu=pt`; the script refuses an inconsistent pair.
 
@@ -310,7 +314,7 @@ Non-obvious choices; several list an override to reverse.
 | Symptom | Action |
 |---|---|
 | Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update` |
-| Rebuild refused | A phase tainted boot state — fix the cause, then re-run |
+| Rebuild refused | Fix the cause of the boot-state taint, then re-run |
 | `--verify` drift | `./ry-install.fish --install-file /etc/...` |
 | Lock held, no live PID | `rm -rf ~/ry-install/.lock`, then re-run |
 | PipeWire permission denied | `sudo usermod -aG realtime $USER`, re-login — needs `realtime-privileges` |
@@ -347,4 +351,4 @@ Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at star
 
 ## License
 
-MIT.
+MIT — see [LICENSE](LICENSE).

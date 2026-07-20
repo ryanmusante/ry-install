@@ -4,7 +4,7 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.125.0
+7.126.0
 -------
 
   - dns: the AdGuard upstreams are pinned in the resolver drop-in and
@@ -16,10 +16,13 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - dns: two refusals at preflight. An empty upstream list and an
     upstream that is not an IPv4 literal are both rejected before
     anything is written; the address family follows ipv6.disable=1
+  - style: inline comments brought inside the house length range and
+    the logind and NetworkManager drop-ins now head their first line
+    with an em dash, matching the four generated files that already did
   - readme: the resolver and NetworkManager entries describe the
     pinning and record why encryption is absent by choice
-  - affects the resolver drop-in and the NetworkManager drop-in. The
-    other fifteen generated files are unchanged
+  - affects the resolver, NetworkManager and logind drop-ins. The other
+    fourteen generated files are unchanged
 
 
 7.123.1

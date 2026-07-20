@@ -4,9 +4,15 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.128.0
+7.129.0
 -------
 
+  - readme: service keys become a key/value/emitted-as table, matching
+    the five sibling tables under embedded values
+  - readme: the renaming rule now reads off the table's third column
+    rather than three examples in prose
+  - readme: ntsync note says "present passes" so the word no longer
+    collides with the OK label in the exit-code table
   - perf: cpu governor and p-state epp hint both set to performance,
     the maximum values the preflight validators accept
   - perf: gpu dpm level forced to high, pinning the gfx1151 clocks to
@@ -15,6 +21,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     is unchanged; idle draw rises because clocks no longer scale down
   - readme: udev and cpupower rows and the cpu/gpu service-key
     paragraph carry the new values
+  - changelog: the 7.128.x entries merged into this one
   - affects the udev perf rules and the cpupower drop-in; the other
     fifteen generated files are unchanged
 
@@ -23,11 +30,9 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 -------
 
   - license: ship the MIT LICENSE file the readme had claimed since
-    7.120.0; the license badge and the license section now resolve to
-    it instead of pointing back into the readme
-  - readme: managed-file split reworded to 15 system-scope of which 4
-    are boot-critical, plus 2 user. The former "11 system" counted the
-    non-boot subset and read as a mismatch against the 15-entry array
+    7.120.0; badge and license section now resolve to it
+  - readme: managed-file split reworded to 15 system-scope, 4 of them
+    boot-critical, plus 2 user; "11 system" was the non-boot subset
   - readme: quick start uses "; and" rather than "&&", matching the
     uninstall steps and the script's own style
   - readme: the resolver and cpu/gpu service-key paragraphs split in

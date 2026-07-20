@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.128.0** · [Changelog](CHANGELOG.md)
+**Version 7.129.0** · [Changelog](CHANGELOG.md)
 
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
@@ -30,7 +30,7 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install; and git checkout v7.128.0
+cd ry-install; and git checkout v7.129.0
 sudo -v
 ./ry-install.fish
 ```
@@ -222,21 +222,35 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 
 ### Service Keys
 
-These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed on the way out — `RESOLVED_DOT` becomes `DNSOverTLS`, `BT_AUTO_ENABLE` BlueZ's `AutoEnable`, `EPP_PREFERENCE` a udev `ATTR{cpufreq/energy_performance_preference}`. Only `COUNTRY` and `LOGIND_IGNORE_KEYS` keep their names. Edit the value here, not the generated file; the next run overwrites it.
+These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed on the way out, as the third column shows. Edit the value here, not the generated file; the next run overwrites it.
 
-**DNS resolution.** `RESOLVED_MDNS` and `RESOLVED_LLMNR` are `no`. `RESOLVED_DNS_SERVERS` holds the upstream addresses, written as a plain `DNS=` line. `RESOLVED_DNSSEC` is `no`.
+| Key | Value | Emitted as |
+|---|---|---|
+| `RESOLVED_MDNS` | `no` | `MulticastDNS=` |
+| `RESOLVED_LLMNR` | `no` | `LLMNR=` |
+| `RESOLVED_DOT` | `no` | `DNSOverTLS=` |
+| `RESOLVED_DNSSEC` | `no` | `DNSSEC=` |
+| `RESOLVED_DNS_SERVERS` | `94.140.14.14 94.140.15.15` | `DNS=` |
+| `NM_DISPATCHER_LOGLEVELMAX` | `notice` | `LogLevelMax=` |
+| `COUNTRY` | `US` | `COUNTRY=` |
+| `NM_WIFI_BACKEND` | `wpa_supplicant` | `wifi.backend=` |
+| `NM_WIFI_POWERSAVE` | `2` | `wifi.powersave=` |
+| `NM_LOG_LEVEL` | `WARN` | `level=` |
+| `CPUPOWER_GOVERNOR` | `performance` | `GOVERNOR=` |
+| `BT_AUTO_ENABLE` | `true` | `AutoEnable=` |
+| `BT_FAST_CONNECTABLE` | `true` | `FastConnectable=` |
+| `BT_RECONNECT_ATTEMPTS` | `3` | `ReconnectAttempts=` |
+| `GPU_DPM_LEVEL` | `high` | udev `ATTR{device/power_dpm_force_performance_level}` |
+| `EPP_PREFERENCE` | `performance` | udev `ATTR{cpufreq/energy_performance_preference}` |
+| `EXPECTED_SCALING_DRIVER` | `amd-pstate-epp` | nothing — verify-only |
+| `RY_REMOTE_PLAY_PORTS` | `false` | nftables input chain, when `true` |
+| `BLACKLIST_AMDXDNA` | `true` | `blacklist amdxdna` |
 
 `RESOLVED_DOT` is `no` by choice: the filtering is identical either way, and `DNSOverTLS=yes` fails closed, so an unreachable endpoint would stop resolution outright. The same upstreams repeat in the NetworkManager drop-in under `[global-dns-domain-*]` — without that, DHCP-supplied servers arrive as per-link DNS and outrank the global `DNS=` line.
 
-**Networking.** `NM_WIFI_BACKEND` is `wpa_supplicant`. `NM_WIFI_POWERSAVE` is `2`, disabling Wi-Fi powersave — the MT7925 handles it in software and produces latency spikes otherwise. `NM_LOG_LEVEL` is `WARN`; `NM_DISPATCHER_LOGLEVELMAX` is `notice`, dropping info-level dispatcher lines. `COUNTRY` is `US`, the wireless regulatory domain.
+`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise. Under `amd-pstate-epp` the EPP hint drives performance more than the governor name, so `EPP_PREFERENCE` matters more than `CPUPOWER_GOVERNOR`. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
 
-**Bluetooth.** `BT_AUTO_ENABLE` is `true`, powering the adapter on at boot. `BT_FAST_CONNECTABLE` is `true` and `BT_RECONNECT_ATTEMPTS` is `3`, speeding reconnection to paired sinks. All three land in the BlueZ daemon config.
-
-**CPU and GPU.** `CPUPOWER_GOVERNOR` is `performance`. Under `amd-pstate-epp` the EPP hint drives performance more than the governor name. `EPP_PREFERENCE` is `performance`, pinned per-CPU by a udev rule. `GPU_DPM_LEVEL` is `high`, forcing the gfx1151 clocks to their highest power state. `EXPECTED_SCALING_DRIVER` is `amd-pstate-epp`, verify-only.
-
-Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
-
-**Firewall and hardware.** `RY_REMOTE_PLAY_PORTS` is `false`; `true` appends the Sunshine and Steam streaming ports to the nftables input chain. `BLACKLIST_AMDXDNA` is `true`, pairing with `amd_iommu=off` — the NPU needs the IOMMU and will not probe without it. Setting it `false` requires `amd_iommu=on iommu=pt`; the script refuses an inconsistent pair.
+`BLACKLIST_AMDXDNA` pairs with `amd_iommu=off` — the NPU needs the IOMMU and will not probe without it. Setting it `false` requires `amd_iommu=on iommu=pt`; the script refuses an inconsistent pair. `LOGIND_IGNORE_KEYS` holds the 8 `Handle*Key=ignore` lines and keeps its own names.
 
 ### Session Environment
 
@@ -291,7 +305,7 @@ Phase 4 masks before it enables.
 
 Non-obvious choices; several list an override to reverse.
 
-**NTSYNC** — `--verify` reports `/dev/ntsync`: present is ok, a loaded module without the node warns, absent is informational. Proton reads it directly; opt out at the Proton level with `PROTON_NO_NTSYNC=1`, which this script neither sets nor checks.
+**NTSYNC** — `--verify` reports `/dev/ntsync`: present passes, a loaded module without the node warns, absent is informational. Proton reads it directly; opt out at the Proton level with `PROTON_NO_NTSYNC=1`, which this script neither sets nor checks.
 
 **AMD-Vi (IOMMU)** — `amd_iommu=off` breaks the XDNA NPU, which is why the driver is blacklisted. For NPU, VFIO or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run.
 

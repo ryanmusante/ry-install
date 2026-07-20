@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.127.0** · [Changelog](CHANGELOG.md)
+**Version 7.128.0** · [Changelog](CHANGELOG.md)
 
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
@@ -30,7 +30,7 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install; and git checkout v7.127.0
+cd ry-install; and git checkout v7.128.0
 sudo -v
 ./ry-install.fish
 ```
@@ -131,9 +131,9 @@ Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping 
 | `/etc/iw-regdomain` | regulatory domain (`US`) |
 | `/etc/bluetooth/main.conf` | adapter auto-power-on, `FastConnectable`, 3 paired-sink reconnect attempts |
 | `/etc/nftables.conf` | IPv4-only default-deny-inbound, ping allowed |
-| `/etc/default/cpupower-service.conf` | governor (`powersave`) |
+| `/etc/default/cpupower-service.conf` | governor (`performance`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, netdev budget, TCP `bbr`, VM tunables |
-| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `auto` |
+| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `high` |
 | `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist |
 
 ### User
@@ -232,7 +232,7 @@ These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed
 
 **Bluetooth.** `BT_AUTO_ENABLE` is `true`, powering the adapter on at boot. `BT_FAST_CONNECTABLE` is `true` and `BT_RECONNECT_ATTEMPTS` is `3`, speeding reconnection to paired sinks. All three land in the BlueZ daemon config.
 
-**CPU and GPU.** `CPUPOWER_GOVERNOR` is `powersave`, correct under `amd-pstate-epp` — the EPP hint drives performance there, not the governor name. `EPP_PREFERENCE` is `balance_performance`, pinned per-CPU by a udev rule. `GPU_DPM_LEVEL` is `auto`, leaving the gfx1151 clock floor alone. `EXPECTED_SCALING_DRIVER` is `amd-pstate-epp`, verify-only.
+**CPU and GPU.** `CPUPOWER_GOVERNOR` is `performance`. Under `amd-pstate-epp` the EPP hint drives performance more than the governor name. `EPP_PREFERENCE` is `performance`, pinned per-CPU by a udev rule. `GPU_DPM_LEVEL` is `high`, forcing the gfx1151 clocks to their highest power state. `EXPECTED_SCALING_DRIVER` is `amd-pstate-epp`, verify-only.
 
 Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
 

@@ -4,6 +4,21 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.128.0
+-------
+
+  - perf: cpu governor and p-state epp hint both set to performance,
+    the maximum values the preflight validators accept
+  - perf: gpu dpm level forced to high, pinning the gfx1151 clocks to
+    their highest power state rather than scaling on demand
+  - perf: package power stays capped at 85W in firmware, so peak draw
+    is unchanged; idle draw rises because clocks no longer scale down
+  - readme: udev and cpupower rows and the cpu/gpu service-key
+    paragraph carry the new values
+  - affects the udev perf rules and the cpupower drop-in; the other
+    fifteen generated files are unchanged
+
+
 7.127.0
 -------
 

@@ -7,60 +7,49 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.126.0
 -------
 
-  - dns: the AdGuard upstreams are pinned in the resolver drop-in and
-    in the NetworkManager global-dns section. Without the second,
-    DHCP-supplied servers arrive as per-link config and outrank them
-  - dns: queries stay in plaintext. The filtering is identical either
-    way, while strict DNS-over-TLS fails closed, so one unreachable
-    endpoint would stop name resolution outright
-  - dns: two refusals at preflight. An empty upstream list and an
-    upstream that is not an IPv4 literal are both rejected before
-    anything is written; the address family follows ipv6.disable=1
-  - style: inline comments brought inside the house length range and
-    the logind and NetworkManager drop-ins now head their first line
-    with an em dash, matching the four generated files that already did
-  - readme: the resolver and NetworkManager entries describe the
-    pinning and record why encryption is absent by choice
-  - affects the resolver, NetworkManager and logind drop-ins. The other
-    fourteen generated files are unchanged
+  - dns: upstreams pinned in the resolver drop-in and in the
+    NetworkManager global-dns section, which per-link config outranks
+  - dns: queries stay in plaintext. Filtering is identical either way
+    and strict DNS-over-TLS fails closed on an unreachable endpoint
+  - dns: preflight refuses an empty upstream list and any upstream
+    that is not an IPv4 literal, before anything is written
+  - style: inline comments brought inside the house length range; the
+    logind and NetworkManager drop-ins now head with an em dash
+  - readme: resolver and NetworkManager entries describe the pinning
+    and record why encryption is absent by choice
+  - affects the resolver, NetworkManager and logind drop-ins; the
+    other fourteen generated files are unchanged
 
 
 7.123.1
 -------
 
-  - color: NO_COLOR now needs a non-empty value to disable color. It
-    was honored on presence alone, so an empty assignment suppressed
-    color; TERM=dumb and the non-TTY path are unchanged
-  - summary: the configuration phase now reports under its declared
-    name. It printed an abbreviation while the other five did not, so
-    grouping the summary or log by phase showed seven names for six
-  - modprobe: correct the second amdxdna comment to -ENODEV (-19). The
-    generated file was corrected in 7.123.0; the guard that refuses the
-    NPU path without an IOMMU still named the older value
+  - color: NO_COLOR now needs a non-empty value to disable color; it
+    was honored on presence alone. TERM=dumb and non-TTY unchanged
+  - summary: the configuration phase reports under its declared name;
+    an abbreviation had shown seven phase names for six
+  - modprobe: correct the second amdxdna comment to -ENODEV (-19); the
+    generated file was already corrected in 7.123.0
   - no change to any generated file, embedded value or exit code
 
 
 7.123.0
 -------
 
-  - kernel: add mt7925e.disable_aspm=1. The global ASPM policy governs
-    link state only, so the endpoint driver is now told to disable ASPM
-    itself; coredumps on the Wi-Fi adapter are still reported without it
-  - sysctl: add kernel.nmi_watchdog=0. The runtime check asserted this
-    value while nothing in the profile set it, leaving the result to a
-    package-supplied default; the profile now owns what it verifies
+  - kernel: add mt7925e.disable_aspm=1. The global policy governs link
+    state only, so the endpoint driver disables ASPM itself
+  - sysctl: add kernel.nmi_watchdog=0. The runtime check asserted it
+    while nothing set it; the profile now owns what it verifies
   - env: rename FSR4_UPGRADE to PROTON_FSR4_UPGRADE, the name the Proton
     runtime actually reads. The former was consumed by nothing
-  - env: drop VKD3D_CONFIG=descriptor_heap. The path is not enabled by
-    default upstream, needs a matching driver opt-in to take effect, and
-    measures within noise on this adapter; per-title use is unaffected
+  - env: drop VKD3D_CONFIG=descriptor_heap. Not enabled by default
+    upstream and within noise here; per-title use is unaffected
   - modprobe: correct the amdxdna probe failure noted in the generated
     file to -ENODEV (-19); the driver returns that, not -EINVAL
   - counts: KERNEL_PARAMS 14 to 15, SYSCTL_VALUES 10 to 11, ENV_VARS 11
     to 10; drift tripwires and the readme tables follow
   - affects /etc/kernel/cmdline, /etc/sdboot-manage.conf, the sysctl
-    drop-in, the modprobe drop-in and the user environment file. A boot
-    is required for the command-line change to take effect
+    and modprobe drop-ins and the user environment file; needs a boot
 
 
 7.120.0 - 7.122.0
@@ -70,9 +59,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     trimmed to the vital fact, safety and lint annotations kept
   - source: section banners name only the functions they hold, arrow glyph
     unified, one blank line before every banner
-  - source: "sub:" parent marker completed across the verify helper
-    families; description casing left as written, since those strings open
-    with command and unit names
+  - source: "sub:" parent marker completed across the verify helpers;
+    description casing left as written, opening with command names
   - readme: rewritten in GitHub style - contents list, tables for reference
     data, prose for rationale and procedure
   - readme: section and row order now follows the source declaration order
@@ -90,9 +78,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
   - services: ufw is masked, not removed - MASK 10 -> 11 (+ufw.service),
     PKGS_DEL 10 -> 9 (-ufw)
-  - services: nftables-first gate moved from the removal path to the mask
-    path; on an unconfirmed ruleset the ufw.service mask is withheld for
-    the run, since mask --now stops ufw and ufw-init flushes its rules
+  - services: nftables-first gate moved from the removal path to the
+    mask path; an unconfirmed ruleset withholds the ufw.service mask
   - nftables.conf: embedded header now reads "ufw masked", producing a
     one-time drift and redeploy
   - readme: flow, warning, packages, units and uninstall synced

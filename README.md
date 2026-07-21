@@ -53,9 +53,7 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 > `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
 
 > [!NOTE]
-> Only `/etc/modprobe.d/60-ry-modules.conf` is managed. Earlier revisions wrote `60-ry-mt7925e.conf` and `60-ry-blacklist-amdxdna.conf`; neither is referenced or removed by this script, and `--verify` does not report them. On a host upgraded from those revisions, delete them once by hand — the mt7925e file now duplicates the `mt7925e.disable_aspm=1` cmdline token rather than conflicting with it.
-
-`--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
+> `--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
 
 Each phase reports one verdict, tallied in the closing Totals line:
 

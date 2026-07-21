@@ -41,6 +41,9 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
 
+> [!NOTE]
+> `--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
+
 ## Usage
 
 | Invocation | Behavior |
@@ -51,9 +54,6 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 | `./ry-install.fish --install-file <path>` | Re-deploy a single managed file |
 | `./ry-install.fish --help` | Usage summary; honored before every other check |
 | `./ry-install.fish --version` | Version string; honored before every other check |
-
-> [!NOTE]
-> `--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
 
 Each phase reports one verdict, tallied in the closing Totals line:
 

@@ -52,6 +52,9 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
 
+> [!NOTE]
+> Only `/etc/modprobe.d/60-ry-modules.conf` is managed. Earlier revisions wrote `60-ry-mt7925e.conf` and `60-ry-blacklist-amdxdna.conf`; neither is referenced or removed by this script, and `--verify` does not report them. On a host upgraded from those revisions, delete them once by hand — the mt7925e file now duplicates the `mt7925e.disable_aspm=1` cmdline token rather than conflicting with it.
+
 `--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
 
 Each phase reports one verdict, tallied in the closing Totals line:
@@ -230,7 +233,7 @@ These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed
 
 `RESOLVED_DOT` is `no` by choice: the filtering is identical either way, and `DNSOverTLS=yes` fails closed, so an unreachable endpoint would stop resolution outright. The same upstreams repeat in the NetworkManager drop-in under `[global-dns-domain-*]` — without that, DHCP-supplied servers arrive as per-link DNS and outrank the global `DNS=` line.
 
-`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise. Under `amd-pstate-epp` the EPP hint drives performance more than the governor name, so `EPP_PREFERENCE` matters more than `CPUPOWER_GOVERNOR`. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
+`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise. Under `amd-pstate-epp` with `CPUPOWER_GOVERNOR=performance`, the driver forces the EPP hint to its maximum and rejects any other value, so `EPP_PREFERENCE=performance` restates what the governor already imposes rather than adding to it. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
 
 `BLACKLIST_AMDXDNA` pairs with `amd_iommu=off` — the NPU needs the IOMMU and will not probe without it. Setting it `false` requires `amd_iommu=on iommu=pt`; the script refuses an inconsistent pair. `LOGIND_IGNORE_KEYS` holds the 8 `Handle*Key=ignore` lines and keeps its own names.
 
@@ -295,7 +298,7 @@ Non-obvious choices; several list an override to reverse.
 
 **IPv6** — `ipv6.disable=1` pairs with the IPv4-only ruleset. For dual-stack, drop the token, add IPv6 rules, and re-run.
 
-**PCIe ASPM** — `pcie_aspm.policy=performance` actively disables ASPM on every link, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. `mt7925e.disable_aspm=1` pairs with it at the endpoint driver — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
+**PCIe ASPM** — `pcie_aspm.policy=performance` biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. Confirm actual link state with `lspci -vv` (`LnkCtl: ASPM Disabled`) rather than assuming it from the token. `mt7925e.disable_aspm=1` pairs with it at the endpoint driver — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
 
 **FSR4 on RDNA3** — `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5. Recent Proton-CachyOS builds copy the DLL automatically, so it now mainly pins a version. Verify with `printenv PROTON_FSR4_UPGRADE`.
 

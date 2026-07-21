@@ -13,14 +13,14 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 > [!WARNING]
 > Run as your normal user — never with `sudo`. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `--verify`. Re-runs are idempotent.
 
+A successful run closes with `Verdict: PASS` above the Totals line. Anything else is explained in [Usage](#usage) and [Exit Codes](#exit-codes).
+
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install; and git checkout v7.130.0
 sudo -v
 ./ry-install.fish
 ```
-
-A successful run closes with `Verdict: PASS` above the Totals line. Anything else is explained in [Usage](#usage) and [Exit Codes](#exit-codes).
 
 ## Requirements
 
@@ -34,7 +34,7 @@ A successful run closes with `Verdict: PASS` above the Totals line. Anything els
 
 In scope: the 17 [Managed Files](#managed-files), pacman add/remove, systemd units, and the fstab rewrite. Everything else on the system is left alone.
 
-### BIOS
+## BIOS
 
 Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`. 
 

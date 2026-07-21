@@ -13,35 +13,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     their highest power state rather than scaling on demand
   - perf: package power stays capped at 85W in firmware, so peak draw
     is unchanged; idle draw rises because clocks no longer scale down
-  - readme: service keys become a key/value/emitted-as table; the
-    renaming rule reads off its third column
-  - readme: udev and cpupower rows carry the new performance values
-  - readme: contents list dropped, github renders one from the
-    headings; ntsync note reworded off the exit-code OK label
-  - readme: REMOVE_EXISTING sentence cut, the bootloader keys table
-    already carries the row
-  - changelog: the 7.128.x and 7.129.x entries merged into this one
 
 
-7.127.0
--------
-
-  - license: ship the MIT LICENSE file the readme had claimed since
-    7.120.0; badge and license section now resolve to it
-  - readme: managed-file split reworded to 15 system-scope, 4 of them
-    boot-critical, plus 2 user; "11 system" was the non-boot subset
-  - readme: quick start uses "; and" rather than "&&", matching the
-    uninstall steps and the script's own style
-  - readme: the resolver and cpu/gpu service-key paragraphs split in
-    two; both had grown past five sentences on one line
-  - readme: troubleshooting "rebuild refused" action put in the
-    imperative, as every other action cell already was
-  - readme: version separator is a plain middot, dropping the &nbsp;
-    html entities from an otherwise markdown-only document
-
-
-7.126.0
--------
+7.123.0 - 7.127.0
+-----------------
 
   - dns: upstreams pinned in the resolver drop-in and in the
     NetworkManager global-dns section, which per-link config outranks
@@ -49,26 +24,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     and strict DNS-over-TLS fails closed on an unreachable endpoint
   - dns: preflight refuses an empty upstream list and any upstream
     that is not an IPv4 literal, before anything is written
-  - style: inline comments brought inside the house length range; the
-    logind and NetworkManager drop-ins now head with an em dash
-  - readme: resolver and NetworkManager entries describe the pinning
-    and record why encryption is absent by choice
-
-
-7.123.1
--------
-
-  - color: NO_COLOR now needs a non-empty value to disable color; it
-    was honored on presence alone. TERM=dumb and non-TTY unchanged
-  - summary: the configuration phase reports under its declared name;
-    an abbreviation had shown seven phase names for six
-  - modprobe: correct the second amdxdna comment to -ENODEV (-19); the
-    generated file was already corrected in 7.123.0
-
-
-7.123.0
--------
-
   - kernel: add mt7925e.disable_aspm=1. The global policy governs link
     state only, so the endpoint driver disables ASPM itself
   - sysctl: add kernel.nmi_watchdog=0. The runtime check asserted it
@@ -77,8 +32,12 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     runtime actually reads. The former was consumed by nothing
   - env: drop VKD3D_CONFIG=descriptor_heap. Not enabled by default
     upstream and within noise here; per-title use is unaffected
-  - modprobe: correct the amdxdna probe failure noted in the generated
-    file to -ENODEV (-19); the driver returns that, not -EINVAL
+  - modprobe: correct the amdxdna probe failure to -ENODEV (-19); the
+    driver returns that, not -EINVAL
+  - color: NO_COLOR now needs a non-empty value to disable color; it
+    was honored on presence alone. TERM=dumb and non-TTY unchanged
+  - summary: the configuration phase reports under its declared name;
+    an abbreviation had shown seven phase names for six
   - counts: KERNEL_PARAMS 14 to 15, SYSCTL_VALUES 10 to 11, ENV_VARS 11
     to 10; drift tripwires and the readme tables follow
 
@@ -92,14 +51,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     unified, one blank line before every banner
   - source: "sub:" parent marker completed across the verify helpers;
     description casing left as written, opening with command names
-  - readme: rewritten in GitHub style - contents list, tables for reference
-    data, prose for rationale and procedure
-  - readme: section and row order now follows the source declaration order
-  - readme: bootloader keys, initramfs and service keys tables added,
-    covering 35 globals that had no documentation
-  - readme: version moved out of the shields.io badge row into inline
-    text, so it renders without a third-party image request
-  - changelog: converted to kernel.org style, historical entries merged
 
 
 7.118.0 - 7.119.0
@@ -111,7 +62,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     mask path; an unconfirmed ruleset withholds the ufw.service mask
   - nftables.conf: embedded header now reads "ufw masked", producing a
     one-time drift and redeploy
-  - readme: flow, warning, packages, units and uninstall synced
   - version pins synced across source, readme and changelog
 
 

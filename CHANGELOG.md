@@ -4,26 +4,23 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.129.0
+7.130.0
 -------
 
-  - readme: service keys become a key/value/emitted-as table, matching
-    the five sibling tables under embedded values
-  - readme: the renaming rule now reads off the table's third column
-    rather than three examples in prose
-  - readme: ntsync note says "present passes" so the word no longer
-    collides with the OK label in the exit-code table
-  - perf: cpu governor and p-state epp hint both set to performance,
-    the maximum values the preflight validators accept
+  - perf: cpu governor and p-state epp hint set to performance, the
+    maximum values the preflight validators accept
   - perf: gpu dpm level forced to high, pinning the gfx1151 clocks to
     their highest power state rather than scaling on demand
   - perf: package power stays capped at 85W in firmware, so peak draw
     is unchanged; idle draw rises because clocks no longer scale down
-  - readme: udev and cpupower rows and the cpu/gpu service-key
-    paragraph carry the new values
-  - changelog: the 7.128.x entries merged into this one
-  - affects the udev perf rules and the cpupower drop-in; the other
-    fifteen generated files are unchanged
+  - readme: service keys become a key/value/emitted-as table; the
+    renaming rule reads off its third column
+  - readme: udev and cpupower rows carry the new performance values
+  - readme: contents list dropped, github renders one from the
+    headings; ntsync note reworded off the exit-code OK label
+  - readme: REMOVE_EXISTING sentence cut, the bootloader keys table
+    already carries the row
+  - changelog: the 7.128.x and 7.129.x entries merged into this one
 
 
 7.127.0
@@ -41,8 +38,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     imperative, as every other action cell already was
   - readme: version separator is a plain middot, dropping the &nbsp;
     html entities from an otherwise markdown-only document
-  - no change to executable code, generated config bytes, array counts
-    or the exit model; version pins synced across source and changelog
 
 
 7.126.0
@@ -58,8 +53,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     logind and NetworkManager drop-ins now head with an em dash
   - readme: resolver and NetworkManager entries describe the pinning
     and record why encryption is absent by choice
-  - affects the resolver, NetworkManager and logind drop-ins; the
-    other fourteen generated files are unchanged
 
 
 7.123.1
@@ -71,7 +64,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     an abbreviation had shown seven phase names for six
   - modprobe: correct the second amdxdna comment to -ENODEV (-19); the
     generated file was already corrected in 7.123.0
-  - no change to any generated file, embedded value or exit code
 
 
 7.123.0
@@ -89,8 +81,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     file to -ENODEV (-19); the driver returns that, not -EINVAL
   - counts: KERNEL_PARAMS 14 to 15, SYSCTL_VALUES 10 to 11, ENV_VARS 11
     to 10; drift tripwires and the readme tables follow
-  - affects /etc/kernel/cmdline, /etc/sdboot-manage.conf, the sysctl
-    and modprobe drop-ins and the user environment file; needs a boot
 
 
 7.120.0 - 7.122.0
@@ -110,8 +100,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - readme: version moved out of the shields.io badge row into inline
     text, so it renders without a third-party image request
   - changelog: converted to kernel.org style, historical entries merged
-  - no functional change across the range: executable code, generated
-    config bytes, array counts and the exit model are identical to 7.119.0
 
 
 7.118.0 - 7.119.0

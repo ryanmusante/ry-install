@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.129.0** · [Changelog](CHANGELOG.md)
+**Version 7.130.0** · [Changelog](CHANGELOG.md)
 
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
@@ -8,29 +8,11 @@
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
-## Contents
-
-- [Quick Start](#quick-start)
-- [Requirements](#requirements)
-- [Usage](#usage)
-- [Exit Codes](#exit-codes)
-- [Environment Overrides](#environment-overrides)
-- [Managed Files](#managed-files)
-- [Install Flow](#install-flow)
-- [Safety and Reliability](#safety-and-reliability)
-- [Embedded Values](#embedded-values)
-- [Packages](#packages)
-- [Units](#units)
-- [Tuning Notes](#tuning-notes)
-- [Troubleshooting](#troubleshooting)
-- [Uninstall](#uninstall)
-- [License](#license)
-
 ## Quick Start
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install; and git checkout v7.129.0
+cd ry-install; and git checkout v7.130.0
 sudo -v
 ./ry-install.fish
 ```
@@ -170,7 +152,7 @@ The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, norm
 
 Boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes to generator output by SHA256; `--check` reports drift without writing.
 
-`sdboot-manage` runs with `REMOVE_EXISTING=yes`. DNS upstreams are pinned to AdGuard by IP and queried in plaintext — `DNSOverTLS=no`, matching the router. `DNSSEC=no` matches the systemd default. The sysctl drop-in uses priority `95`, loading after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none`; the vendor default is `kyber`.
+DNS upstreams are pinned to AdGuard by IP and queried in plaintext — `DNSOverTLS=no`, matching the router. `DNSSEC=no` matches the systemd default. The sysctl drop-in uses priority `95`, loading after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none`; the vendor default is `kyber`.
 
 ## Embedded Values
 

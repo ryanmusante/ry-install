@@ -4,6 +4,13 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.131.1
+-------
+
+  - docs: promote the README uninstall lead-in to a NOTE alert; no
+    automated uninstaller, Managed Files is the rollback reference
+
+
 7.131.0
 -------
 

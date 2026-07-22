@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.131.0** · [Changelog](CHANGELOG.md)
+**Version 7.131.1** · [Changelog](CHANGELOG.md)
 
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
@@ -17,7 +17,7 @@ A successful run closes with `Verdict: PASS` above the Totals line. Anything els
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install; and git checkout v7.131.0
+cd ry-install; and git checkout v7.131.1
 sudo -v
 ./ry-install.fish
 ```
@@ -337,7 +337,8 @@ Do **not** duplicate NAT — libvirt's `guest_nat` already masquerades `192.168.
 
 ## Uninstall
 
-There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference and work through these steps in order.
+> [!NOTE]
+> There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference and work through these steps in order.
 
 1. **Unmask units** — `sudo systemctl unmask` all 11; set in [Units](#units).
 2. **Remove configs** — `sudo rm` the 11 system files and `rm` the 2 user files. Skip the 4 boot files; step 3 reverts them.

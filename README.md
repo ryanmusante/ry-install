@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.130.0** · [Changelog](CHANGELOG.md)
+**Version 7.131.0** · [Changelog](CHANGELOG.md)
 
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
@@ -36,7 +36,7 @@ In scope: the 17 [Managed Files](#managed-files), pacman add/remove, systemd uni
 
 ## BIOS
 
-Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`. 
+Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`.
 
 Full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
@@ -187,7 +187,7 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 | `ipv6.disable=1` | disable the IPv6 stack |
 | `mt7925e.disable_aspm=1` | MT7925 endpoint ASPM off — driver-level coredump mitigation |
 | `nvme_core.default_ps_max_latency_us=0` | NVMe APST off — no power-state exit latency |
-| `pcie_aspm.policy=performance` | force every PCIe link out of ASPM |
+| `pcie_aspm.policy=performance` | force every PCIe link away from ASPM |
 | `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
 | `quiet` | suppress boot console noise |
 | `split_lock_detect=off` | no split-lock throttling penalty in games |

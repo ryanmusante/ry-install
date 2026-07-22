@@ -17,7 +17,7 @@ A successful run closes with `Verdict: PASS` above the Totals line. Anything els
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install; and git checkout v7.130.0
+cd ry-install; and git checkout v7.131.0
 sudo -v
 ./ry-install.fish
 ```
@@ -187,7 +187,7 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 | `ipv6.disable=1` | disable the IPv6 stack |
 | `mt7925e.disable_aspm=1` | MT7925 endpoint ASPM off — driver-level coredump mitigation |
 | `nvme_core.default_ps_max_latency_us=0` | NVMe APST off — no power-state exit latency |
-| `pcie_aspm.policy=performance` | force every PCIe link away from ASPM |
+| `pcie_aspm.policy=performance` | bias every PCIe link away from ASPM |
 | `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
 | `quiet` | suppress boot console noise |
 | `split_lock_detect=off` | no split-lock throttling penalty in games |

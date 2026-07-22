@@ -7,13 +7,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.131.0
 -------
 
-  - docs: correct the epp claim. Under the performance governor the
-    driver pins the hint to maximum and refuses any other value, so
-    EPP_PREFERENCE restates the governor rather than outranking it
+  - docs: correct the epp claim. The performance governor pins EPP
+    to maximum, so EPP_PREFERENCE restates it rather than outranking it
   - docs: pcie_aspm.policy=performance biases links away from ASPM
     rather than disabling them outright; confirm with lspci -vv
-  - docs: note the two unmanaged modprobe drop-ins left by earlier
-    revisions. Neither is referenced, removed, nor verified
   - source: US spelling completed in the 7.120.0 - 7.122.0 range block
 
 

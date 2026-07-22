@@ -45,8 +45,7 @@ Full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmu
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
 
-> [!NOTE]
-> `--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
+`--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
 
 | Invocation | Behavior |
 |---|---|
@@ -147,7 +146,8 @@ The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and
 
 ## Safety and Reliability
 
-Every managed file is written atomically: content is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved into place with `mv -T`, then re-read and compared. A mismatch restores the backup.
+> [!NOTE]
+> Every managed file is written atomically: content is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved into place with `mv -T`, then re-read and compared. A mismatch restores the backup.
 
 Backups are `<path>.ry.bak` for the 4 boot files and for `fstab` during its rewrite. Any other managed file whose pre-existing content differed at first adoption gets a one-time `<path>.ry.orig`.
 

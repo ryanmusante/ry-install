@@ -4,6 +4,15 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.135.1
+-------
+
+  - install: fix the one-time <path>.ry.orig preserve never running for
+    non-boot managed files, which overwrote pre-existing content unbacked
+  - install: hoist the installed-bytes probe result to function scope; a
+    fish set -l inside an if block is not visible after the block ends
+
+
 7.135.0
 -------
 

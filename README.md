@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.135.0** · [Changelog](CHANGELOG.md)
+**Version 7.135.1** · [Changelog](CHANGELOG.md)
 
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)

@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.133.0** · [Changelog](CHANGELOG.md)
+**Version 7.135.0** · [Changelog](CHANGELOG.md)
 
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
@@ -118,7 +118,7 @@ Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping 
 | `/etc/default/cpupower-service.conf` | governor (`performance`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, netdev budget, TCP `bbr`, VM tunables |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `high` |
-| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist — `--verify` also warns on unmanaged `60-ry-*` drop-ins |
+| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist — unmanaged `60-ry-*` drop-ins are warned by `--verify` and recorded by `--check` |
 
 ### User
 
@@ -157,9 +157,11 @@ Boot-critical failures exit `4` and skip finalization rather than leave a half-r
 
 DNS upstreams are pinned to AdGuard by IP and queried in plaintext — `DNSOverTLS=no`, matching the router. `DNSSEC=no` matches the systemd default. The sysctl drop-in uses priority `95`, loading after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none`; the vendor default is `kyber`.
 
+Editing an array reconciles differently depending on where the value landed. Values inside a generated file self-heal, because each generator rewrites its whole file from the current array on the next run. Values that became external system state do not: a package dropped from `PKGS_ADD` stays installed, and a unit dropped from `MASK` stays masked, since the script only ever adds and never unmasks. `--verify` reports masked units that are no longer in `MASK` and warns on unmanaged `60-ry-*` drop-ins; `--check` records both in its JSONL. Neither is counted as drift, because a re-run cannot clear them — reverse them by hand. Dropped `PKGS_ADD` packages are not detected at all; the script keeps no record of what earlier versions installed.
+
 ## Embedded Values
 
-All tunables are `set -g` globals near the top of the script — there is no external config file. Edit one, then re-run or `--install-file` the affected file. Porting to other hardware starts at `PROFILE_NAME`, `PROFILE_DESC`, and `EXPECTED_CPU_MATCH`.
+All tunables are `set -g` globals near the top of the script — there is no external config file. Edit one, then re-run or `--install-file` the affected file. Porting to other hardware starts at `PROFILE_NAME`, `PROFILE_DESC`, and `EXPECTED_CPU_MATCH`. Preflight refuses to deploy when the sets contradict each other — a package in both `PKGS_ADD` and `PKGS_DEL`, or a unit in both `MASK` and `EXPECTED_SERVICES`, since phase 4 would undo phase 2.
 
 ### Bootloader Keys
 
@@ -320,6 +322,7 @@ Non-obvious choices; several list an override to reverse.
 | PipeWire permission denied | `sudo usermod -aG realtime $USER`, re-login — needs `realtime-privileges` |
 | BT speaker will not auto-reconnect | `bluetoothctl trust <MAC>`, then power the speaker on after login |
 | Unmanaged `60-ry-*` drop-in warned | `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files |
+| Masked unit not in `MASK` reported | `systemctl unmask <unit>` if an earlier `MASK` masked it; leave distro and hand-made masks alone |
 
 ### libvirt and QEMU NAT
 
@@ -348,7 +351,7 @@ Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at star
 2. **Remove configs** — `sudo rm` the 11 system files and `rm` the 2 user files. Skip the 4 boot files; step 3 reverts them.
 3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the `.ry.bak` files.
 4. **Reverse packages** (optional) — `pacman -S --needed` the Remove list, `pacman -Rns` the Install list; sets in [Packages](#packages).
-5. **Rebuild** — `sudo mkinitcpio -P; and sudo sdboot-manage gen; and sudo sdboot-manage update`.
+5. **Rebuild** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`.
 6. **Reboot** — `sudo systemctl reboot`.
 
 ## License

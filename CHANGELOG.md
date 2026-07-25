@@ -4,44 +4,52 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.133.0
+7.135.0
 -------
+
+  - check: record unmanaged 60-ry-*.conf drop-ins and masked units absent
+    from MASK. Both were visible to --verify only
+  - verify: report masked units the profile no longer declares. The script
+    only ever adds to MASK, so a dropped entry stayed masked undetected
+  - preflight: refuse to deploy when a package is in both PKGS_ADD and
+    PKGS_DEL, or a unit in both MASK and EXPECTED_SERVICES
+  - source: the drop-in sweep is one helper shared by both modes rather
+    than a verify-path copy
+  - docs: state which edits self-heal and which leave external state
+    behind; dropped PKGS_ADD packages remain undetected
+
+
+7.134.0
+-------
+
+  - summary: the abort path records the phase-3 row under the name the
+    normal path uses; the old one also overflowed the matrix column
+  - verify: two sub markers name the function that calls them, not an
+    ancestor, completing the pass begun in 7.132.0 - 7.133.0
+  - preflight: read the CPU model through cat. A missing /proc/cpuinfo
+    made the redirect emit a warning that --check must never print
+  - logging: comma-join the unmanaged drop-in list so files= stays one
+    token, matching every other multi-value key
+  - docs: uninstall rebuild step uses &&, the form the script prints
+
+
+7.132.0 - 7.133.0
+-----------------
 
   - verify: warn on unmanaged /etc/modprobe.d/60-ry-*.conf drop-ins.
     The pre-7.99 files had no owner in the profile and no detection
-  - source: sub-marker normalized inside every helper family that
-    already used one; the parent named is the calling function
-  - source: drop the phrase that restated the parent after a sub
-    marker, so each description carries the parent name once
-
-
-7.132.2
--------
-
-  - verify: three session subchecks named _verify_runtime_services as
-    their parent; _verify_runtime_session is the only caller
+  - verify: session subchecks name _verify_runtime_session, their only
+    caller, rather than the services orchestrator
   - summary: phase-3 matrix row renamed to "Configuration: file
     deployment"; its counters span the system and user sets alike
-
-
-7.132.1
--------
-
-  - docs: drop the one-time modprobe removal note added in 7.132.0;
-    the pre-7.99 drop-ins are left to host-side housekeeping
-
-
-7.132.0
--------
-
+  - source: sub marker normalized inside every helper family that uses
+    one; the parent named is the calling function, stated once
+  - source: loader-entry boundary warning uses the arrow glyph the
+    other user-facing messages already use
   - docs: quick start no longer checks out a version tag; none is
     published, so the clone lands on the default branch
   - docs: service keys table gains LOGIND_IGNORE_KEYS and the
     Handle*Key=ignore form it emits, completing the twenty keys
-  - docs: usage records the one-time removal of the pre-7.99
-    modprobe drop-ins that 60-ry-modules.conf supersedes
-  - source: loader-entry boundary warning uses the arrow glyph the
-    other user-facing messages already use
 
 
 7.130.0 - 7.131.1

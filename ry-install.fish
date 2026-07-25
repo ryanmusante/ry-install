@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.133.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.135.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.133.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.135.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -733,12 +733,23 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
         if not string match -qr -- '^[A-Za-z0-9._,=-]+$' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refuse to deploy (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
+function _ir_validate_sets --description "Refuse deploy when add and remove sets contradict each other"
+    for _p in $PKGS_ADD # phase 2 installs, phase 4 -Rns removes: verify would assert both
+        if contains -- "$_p" $PKGS_DEL; _err_loud "'$_p' is in both PKGS_ADD and PKGS_DEL — phase 4 would remove what phase 2 installed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+    for _u in $EXPECTED_SERVICES # phase 4 masks before it enables: enable would fail
+        if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and EXPECTED_SERVICES — phase 4 masks before it enables; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+    for _u in $_RY_PKG_MANAGED_SERVICES
+        if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and _RY_PKG_MANAGED_SERVICES — a masked unit cannot be package-managed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+end
 
 # ── RUNTIME INIT: ORCHESTRATOR (_init_runtime) ──
 function _init_runtime --description "Cache root UUID + validate config + precompute caches"
     _ir_resolve_root_uuid
     if set -q EXPECTED_CPU_MATCH; and test -n "$EXPECTED_CPU_MATCH"
-        set -l _cpu_model (string match -rg -- '^model name\s*:\s*(.*)$' < /proc/cpuinfo 2>/dev/null)[1]
+        set -l _cpu_model (string match -rg -- '^model name\s*:\s*(.*)$' (command cat -- /proc/cpuinfo 2>/dev/null))[1]
         if test -z "$_cpu_model"
             if test "$RY_INSTALL_SKIP_HARDWARE_CHECK" = 1 # fail-closed: empty model requires override
                 _warn_loud "Hardware check (override): CPU model unreadable from /proc/cpuinfo — proceeding"
@@ -769,6 +780,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     end
     _ir_validate_counts
     _ir_validate_keys
+    _ir_validate_sets
     _ir_validate_post_hooks
     for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
     _ir_precompute_caches
@@ -2274,10 +2286,10 @@ function _vss_nft --description "_verify_static_system sub: nftables default-den
     _chk_grep /etc/nftables.conf "echo-request" "nftables IPv4 ping accept" # regression guard: inbound ping must stay enabled
 end
 function _vss_modprobe --description "_verify_static_system sub: modprobe drop-in (optional amdxdna blacklist) + unmanaged 60-ry-* sweep"
-    set -l _stale (command find /etc/modprobe.d -maxdepth 1 -name '60-ry-*.conf' ! -name '60-ry-modules.conf' -printf '%f\n' 2>/dev/null) # pre-7.99 leftovers: unmanaged, undetected until now
+    set -l _stale (_ry_stale_ry_dropins) # same sweep --check records; one implementation, two modes
     if test (count $_stale) -gt 0
         _warn "  /etc/modprobe.d: unmanaged ry drop-in(s): $_stale — superseded by 60-ry-modules.conf; confirm with pacman -Qo, then remove"
-        _log "MODPROBE_STALE_DROPIN: count="(count $_stale)" files=$_stale"
+        _log "MODPROBE_STALE_DROPIN: count="(count $_stale)" files="(string join ',' -- $_stale)
     end
     _chk_file /etc/modprobe.d/60-ry-modules.conf; or return 0
     test "$BLACKLIST_AMDXDNA" = true; and _chk_grep /etc/modprobe.d/60-ry-modules.conf 'blacklist amdxdna' 'amdxdna blacklisted'
@@ -2415,6 +2427,14 @@ function _verify_static_services --description "Verify masked services state"
             _fail "  $_svc: load=$_rec[1] state=$_rec[2] file=$_rec[3] (expected: masked)"
         end
     end
+    _vss_orphan_masks
+end
+function _vss_orphan_masks --description "_verify_static_services sub: masked units the profile no longer declares"
+    set -l _orphan (_ry_orphan_masked_units)
+    test (count $_orphan) -eq 0; and return 0
+    _info "  "(count $_orphan)" masked unit(s) not in MASK: $_orphan"
+    _info "  Ownership is unattributable — unmask any this profile masked under an earlier MASK; leave distro and hand-made masks alone"
+    _log "MASK_ORPHAN: count="(count $_orphan)" units="(string join ',' -- $_orphan)
 end
 function _verify_static_syntax --description "Validate live mkinitcpio HOOKS presence (multi-line HOOKS tolerated)"
     _echo "SYNTAX VALIDATION"
@@ -2552,6 +2572,27 @@ function _implicit_confd_units --description "Units implied by managed conf.d dr
     test (count $_u) -gt 0; and printf '%s\n' $_u
     return 0
 end
+function _ry_stale_ry_dropins --description "Unmanaged 60-ry-* modprobe drop-ins (shared: --check + static verify)"
+    command find /etc/modprobe.d -maxdepth 1 -name '60-ry-*.conf' ! -name '60-ry-modules.conf' -printf '%f\n' 2>/dev/null
+    return 0 # pre-7.99 leftovers: profile never wrote them, never removes them
+end
+function _ry_orphan_masked_units --description "Masked units absent from MASK (shared: --check + static verify)"
+    set -l _raw (command systemctl list-unit-files --state=masked,masked-runtime --no-legend --plain 2>/dev/null)
+    test "$status" -ne 0; and return 0 # no manager or old systemctl: report nothing, never guess
+    for _line in $_raw
+        set -l _u (string match -rg -- '^(\S+)' (string trim -- "$_line")) # column padding is spaces today, tabs would still parse
+        test -z "$_u"; and continue
+        contains -- "$_u" $MASK; or printf '%s\n' "$_u"
+    end
+    return 0
+end
+function _check_record_orphans --description "_ry_do_check sub: record leftovers a re-run cannot clear; never sets drift"
+    set -l _stale (_ry_stale_ry_dropins)
+    test (count $_stale) -gt 0; and _log "MODPROBE_STALE_DROPIN: count="(count $_stale)" files="(string join ',' -- $_stale)
+    set -l _orphan (_ry_orphan_masked_units)
+    test (count $_orphan) -gt 0; and _log "MASK_ORPHAN: count="(count $_orphan)" units="(string join ',' -- $_orphan)
+    return 0
+end
 function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MASK + conf.d-driven units"
     set -l _implicit_svcs (_implicit_confd_units)
     _svc_chk_expected; or return $status
@@ -2573,6 +2614,7 @@ function _ry_do_check --description "Silent idempotency probe" # ERR_NO_DATA->pr
     _log_section "CHECK START"
     if not command -q sudo; or not sudo -n true 2>/dev/null; _log "CHECK_PREFLIGHT: sudo not cached"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
     if not command -q systemctl; _log "CHECK_PREFLIGHT: systemctl not available"; _log_section "CHECK END"; return $EXIT_PREFLIGHT; end
+    _check_record_orphans # observations only, before any phase can bail
     set -g _RY_CHECK_DRIFT 0; set -g _RY_CHECK_FILES_CHECKED 0; set -l _rc 0
     for _phase in _check_phase_files _check_phase_cmdline _check_phase_units # non-zero phase rc = cannot probe
         $_phase
@@ -2791,7 +2833,7 @@ function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware s
 end
 
 # ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, nftables, wifi, masks) ──
-function _vrsv_chk_active_enabled --argument-names label rec_str --description "_verify_runtime_services sub: ok if active+enabled, warn if active only, fail otherwise"
+function _vrsv_chk_active_enabled --argument-names label rec_str --description "_vrsv_sys_units sub: ok if active+enabled, warn if active only, fail otherwise"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found
         _warn "  $label: not installed"
@@ -3117,7 +3159,7 @@ function _vrs_nm_perms --description "_verify_runtime_session sub: NetworkManage
         _info "  NetworkManager connections: no .nmconnection files found"
     end
 end
-function _vrs_vfat_skip --argument-names path boot_fstype --description "_verify_runtime_services sub: rc 0 = vfat/undetermined boot path (perms not verifiable, _info emitted); rc 1 = checkable"
+function _vrs_vfat_skip --argument-names path boot_fstype --description "_vrs_installed_file_perms sub: rc 0 = vfat/undetermined boot path (perms not verifiable, _info emitted); rc 1 = checkable"
     set -l _fst (command findmnt -n -o FSTYPE --target "$path" 2>/dev/null | string trim --) # Per-path fstype
     test -z "$_fst"; and set _fst "$boot_fstype"
     if test "$_fst" = vfat; _info "  $path: skipped (vfat — unix perms synthesized from mount options)"; return 0; end
@@ -4334,7 +4376,7 @@ end
 function _rdi_run_phases --description "_ry_do_install sub: Run pkgs/sys/services phases"
     not _install_packages; and set -g INSTALL_HAD_ERRORS true
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
-        for _sk in "Packages: updatedb" "Packages: pkgfile --update" "Configuration: system file deployment" "Services: fstab opts" "Services: PKGS_DEL removal" "Services: mask units" "Services: enable units" "Services: regdom"
+        for _sk in "Packages: updatedb" "Packages: pkgfile --update" "Configuration: file deployment" "Services: fstab opts" "Services: PKGS_DEL removal" "Services: mask units" "Services: enable units" "Services: regdom"
             _phase_record "$_sk" SKIP "aborted"
         end
         _err "Aborting remaining phases: mkinitcpio.conf revert failed (boot state inconsistent)"

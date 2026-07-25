@@ -4,25 +4,48 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.131.1
+7.133.0
 -------
 
-  - docs: promote the README uninstall lead-in to a NOTE alert; no
-    automated uninstaller, Managed Files is the rollback reference
+  - verify: warn on unmanaged /etc/modprobe.d/60-ry-*.conf drop-ins.
+    The pre-7.99 files had no owner in the profile and no detection
+  - source: sub-marker normalized inside every helper family that
+    already used one; the parent named is the calling function
+  - source: drop the phrase that restated the parent after a sub
+    marker, so each description carries the parent name once
 
 
-7.131.0
+7.132.2
 -------
 
-  - docs: correct the epp claim. The performance governor pins EPP
-    to maximum, so EPP_PREFERENCE restates it rather than outranking it
-  - docs: pcie_aspm.policy=performance biases links away from ASPM
-    rather than disabling them outright; confirm with lspci -vv
-  - source: US spelling completed in the 7.120.0 - 7.122.0 range block
+  - verify: three session subchecks named _verify_runtime_services as
+    their parent; _verify_runtime_session is the only caller
+  - summary: phase-3 matrix row renamed to "Configuration: file
+    deployment"; its counters span the system and user sets alike
 
 
-7.130.0
+7.132.1
 -------
+
+  - docs: drop the one-time modprobe removal note added in 7.132.0;
+    the pre-7.99 drop-ins are left to host-side housekeeping
+
+
+7.132.0
+-------
+
+  - docs: quick start no longer checks out a version tag; none is
+    published, so the clone lands on the default branch
+  - docs: service keys table gains LOGIND_IGNORE_KEYS and the
+    Handle*Key=ignore form it emits, completing the twenty keys
+  - docs: usage records the one-time removal of the pre-7.99
+    modprobe drop-ins that 60-ry-modules.conf supersedes
+  - source: loader-entry boundary warning uses the arrow glyph the
+    other user-facing messages already use
+
+
+7.130.0 - 7.131.1
+-----------------
 
   - perf: cpu governor and p-state epp hint set to performance, the
     maximum values the preflight validators accept
@@ -30,6 +53,13 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     their highest power state rather than scaling on demand
   - perf: package power stays capped at 85W in firmware, so peak draw
     is unchanged; idle draw rises because clocks no longer scale down
+  - docs: correct the epp claim. The performance governor pins EPP
+    to maximum, so EPP_PREFERENCE restates it rather than outranking it
+  - docs: pcie_aspm.policy=performance biases links away from ASPM
+    rather than disabling them outright; confirm with lspci -vv
+  - docs: promote the readme uninstall lead-in to a NOTE alert; no
+    automated uninstaller, Managed Files is the rollback reference
+  - source: US spelling completed in the 7.118.0 - 7.122.0 range block
 
 
 7.123.0 - 7.127.0
@@ -59,18 +89,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     to 10; drift tripwires and the readme tables follow
 
 
-7.120.0 - 7.122.0
------------------
-
-  - source: comments normalized to one line each, verbose inline notes
-    trimmed to the vital fact, safety and lint annotations kept
-  - source: section banners name only the functions they hold, arrow glyph
-    unified, one blank line before every banner
-  - source: "sub:" parent marker completed across the verify helpers;
-    description casing left as written, opening with command names
-
-
-7.118.0 - 7.119.0
+7.118.0 - 7.122.0
 -----------------
 
   - services: ufw is masked, not removed - MASK 10 -> 11 (+ufw.service),
@@ -79,6 +98,12 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     mask path; an unconfirmed ruleset withholds the ufw.service mask
   - nftables.conf: embedded header now reads "ufw masked", producing a
     one-time drift and redeploy
+  - source: comments normalized to one line each, verbose inline notes
+    trimmed to the vital fact, safety and lint annotations kept
+  - source: section banners name only the functions they hold, arrow
+    glyph unified, one blank line before every banner
+  - source: "sub:" parent marker completed across the verify helpers;
+    description casing left as written, opening with command names
   - version pins synced across source, readme and changelog
 
 
@@ -97,26 +122,21 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     pre-existing content differed at first adoption
 
 
-7.106.0 - 7.107.3
+7.100.0 - 7.107.3
 -----------------
-
-  - packages: pacman -Rns made rdep-aware via pactree, with a timeout
-  - packages: PKGS_ADD re-marked explicit after -Syu so a later removal
-    cannot orphan a dependency-installed package
-  - preflight: hardware gate fails closed when the CPU model is unreadable
-  - progress: pinned bottom row with a scroll region
-
-
-7.100.0 - 7.105.15
-------------------
 
   - configuration: 17 embedded configs deployed atomically - same-filesystem
     temp file, pre-validation, backup, mv -T, re-read and restore
+  - packages: pacman -Rns made rdep-aware via pactree, with a timeout
+  - packages: PKGS_ADD re-marked explicit after -Syu so a later removal
+    cannot orphan a dependency-installed package
   - verify: static checksum path compares installed bytes to generator
     output by SHA256
   - check: silent idempotency probe against the live /proc/cmdline
   - services: masked unit set and enabled unit set established
   - boot: boot-critical failures exit 4 and skip finalization
+  - preflight: hardware gate fails closed when the CPU model is unreadable
+  - progress: pinned bottom row with a scroll region
 
 
 7.99.1 and earlier

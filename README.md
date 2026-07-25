@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.131.1** · [Changelog](CHANGELOG.md)
+**Version 7.133.0** · [Changelog](CHANGELOG.md)
 
 [![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
@@ -17,7 +17,7 @@ A successful run closes with `Verdict: PASS` above the Totals line. Anything els
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
-cd ry-install; and git checkout v7.131.1
+cd ry-install
 sudo -v
 ./ry-install.fish
 ```
@@ -118,7 +118,7 @@ Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping 
 | `/etc/default/cpupower-service.conf` | governor (`performance`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, netdev budget, TCP `bbr`, VM tunables |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `high` |
-| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist |
+| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist — `--verify` also warns on unmanaged `60-ry-*` drop-ins |
 
 ### User
 
@@ -218,6 +218,7 @@ These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed
 | `RESOLVED_DNS_SERVERS` | `94.140.14.14 94.140.15.15` | `DNS=` |
 | `NM_DISPATCHER_LOGLEVELMAX` | `notice` | `LogLevelMax=` |
 | `COUNTRY` | `US` | `COUNTRY=` |
+| `LOGIND_IGNORE_KEYS` | 8 power, suspend, hibernate, and reboot keys | `Handle*Key=ignore` |
 | `NM_WIFI_BACKEND` | `wpa_supplicant` | `wifi.backend=` |
 | `NM_WIFI_POWERSAVE` | `2` | `wifi.powersave=` |
 | `NM_LOG_LEVEL` | `WARN` | `level=` |
@@ -318,6 +319,7 @@ Non-obvious choices; several list an override to reverse.
 | Lock held, no live PID | `rm -rf ~/ry-install/.lock`, then re-run |
 | PipeWire permission denied | `sudo usermod -aG realtime $USER`, re-login — needs `realtime-privileges` |
 | BT speaker will not auto-reconnect | `bluetoothctl trust <MAC>`, then power the speaker on after login |
+| Unmanaged `60-ry-*` drop-in warned | `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files |
 
 ### libvirt and QEMU NAT
 

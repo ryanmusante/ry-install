@@ -4,6 +4,16 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.136.0
+-------
+
+  - verify: the dynamic_epp node ships in Linux 7.1, not absent
+    pre-6.16; correct the probe comment
+  - perf: note that manual EPP writes are blocked while
+    dynamic_epp is enabled
+  - docs: trim README prose and collapse the tuning notes
+
+
 7.135.1
 -------
 

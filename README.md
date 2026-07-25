@@ -1,11 +1,6 @@
 # ry-install
 
-**Version 7.135.1** · [Changelog](CHANGELOG.md)
-
-[![license](https://img.shields.io/badge/license-MIT-1793d1?style=flat-square)](LICENSE)
-[![platform](https://img.shields.io/badge/platform-CachyOS-1793d1?style=flat-square)](#requirements)
-[![shell](https://img.shields.io/badge/shell-fish%203.6%2B-1793d1?style=flat-square)](#requirements)
-
+**Version 7.136.0** · [Changelog](CHANGELOG.md)
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
 ## Quick Start
@@ -13,7 +8,7 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 > [!WARNING]
 > Run as your normal user — never with `sudo`. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `--verify`. Re-runs are idempotent.
 
-A successful run closes with `Verdict: PASS` above the Totals line. Anything else is explained in [Usage](#usage) and [Exit Codes](#exit-codes).
+A run closes with the Totals line — each phase's verdict tallied — then the verdict on the Elapsed line below it: `PASS` when clean, `PASS-WITH-WARNINGS` at exit `0` when warnings occurred. Anything else is explained in [Usage](#usage) and [Exit Codes](#exit-codes).
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
@@ -36,9 +31,7 @@ In scope: the 17 [Managed Files](#managed-files), pacman add/remove, systemd uni
 
 ## BIOS
 
-Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`.
-
-Full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
+Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`; full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference). Separately, GTT caps usable VRAM near 62 GiB; raise the BIOS UMA carveout (its own menu), up to 96 GiB, for more, since `amdgpu.gttsize` is deprecated — check `/sys/module/ttm/parameters/pages_limit`.
 
 ## Usage
 
@@ -55,8 +48,6 @@ Full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmu
 | `./ry-install.fish --install-file <path>` | Re-deploy a single managed file |
 | `./ry-install.fish --help` | Usage summary; honored before every other check |
 | `./ry-install.fish --version` | Version string; honored before every other check |
-
-Each phase reports one verdict, tallied in the closing Totals line:
 
 | Verdict | Meaning |
 |---|---|
@@ -93,7 +84,7 @@ Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping 
 
 ## Managed Files
 
-17 embedded configs in deploy order — 15 system-scope (of which 4 are boot-critical and `.ry.bak`-backed) and 2 user. `--verify` checks all of them; `--install-file` re-deploys one.
+17 embedded configs in deploy order — 15 system-scope at `0644` (of which 4 are boot-critical and `.ry.bak`-backed) and 2 user at `0600`. `--verify` checks all of them; `--install-file` re-deploys one.
 
 ### Boot
 
@@ -126,8 +117,6 @@ Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping 
 |---|---|
 | `~/.config/environment.d/10-environment.conf` | session env — DXVK, MangoHud, Proton, VKD3D, Wine, plus `POWERDEVIL_NO_DDCUTIL=1` |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
-
-Permissions: system files `0644`, user files `0600`.
 
 ## Install Flow
 
@@ -283,33 +272,17 @@ These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed
 
 ## Units
 
-**Masked**, in declaration order — `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target`
+**Masked**, in declaration order — `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target`. The Avahi pair is masked because it collided with resolved as a second mDNS responder; unmask both to restore.
 
 **Enabled** — `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service`
-
-Phase 4 masks before it enables.
 
 ## Tuning Notes
 
 Non-obvious choices; several list an override to reverse.
 
-**NTSYNC** — `--verify` reports `/dev/ntsync`: present passes, a loaded module without the node warns, absent is informational. Proton reads it directly; opt out at the Proton level with `PROTON_NO_NTSYNC=1`, which this script neither sets nor checks.
+**Gaming stack** — `--verify` reports `/dev/ntsync`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks. `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5; recent Proton-CachyOS builds copy the DLL automatically, so it now mainly pins a version — verify with `printenv PROTON_FSR4_UPGRADE`. The shipped HUD omits `cpu_temp`; add it on its own line to show CPU temperature — leaving it off is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
 
-**AMD-Vi (IOMMU)** — `amd_iommu=off` breaks the XDNA NPU, which is why the driver is blacklisted. For NPU, VFIO or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run.
-
-**UMIP** — `clearcpuid=umip` disables UMIP trapping and taints the kernel. The string form is version-stable, since CPUID bit numbers shift between kernels. Drop it if there is no `umip_printk` stutter.
-
-**IPv6** — `ipv6.disable=1` pairs with the IPv4-only ruleset. For dual-stack, drop the token, add IPv6 rules, and re-run.
-
-**PCIe ASPM** — `pcie_aspm.policy=performance` biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. Confirm actual link state with `lspci -vv` (`LnkCtl: ASPM Disabled`) rather than assuming it from the token. `mt7925e.disable_aspm=1` pairs with it at the endpoint driver — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
-
-**FSR4 on RDNA3** — `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5. Recent Proton-CachyOS builds copy the DLL automatically, so it now mainly pins a version. Verify with `printenv PROTON_FSR4_UPGRADE`.
-
-**Avahi** — both `.service` and `.socket` are masked; they collided with resolved as a second mDNS responder. Unmask both to restore.
-
-**MangoHud `cpu_temp`** — the shipped HUD omits `cpu_temp`; add it on its own line to show CPU temperature. Leaving it off is deliberate: on Zen 5, enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
-
-**Large-VRAM compute** — GTT caps usable VRAM near 62 GiB. Raise the BIOS UMA carveout, up to 96 GiB, for more, since `amdgpu.gttsize` is deprecated. Check `/sys/module/ttm/parameters/pages_limit`.
+**Kernel parameters** — `amd_iommu=off` breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run. `clearcpuid=umip` disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels — drop it if there is no `umip_printk` stutter. `ipv6.disable=1` pairs with the IPv4-only ruleset; for dual-stack, drop the token, add IPv6 rules, and re-run. `pcie_aspm.policy=performance` biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. Confirm actual link state with `lspci -vv` (`LnkCtl: ASPM Disabled`) rather than assuming it from the token. `mt7925e.disable_aspm=1` pairs with it at the endpoint driver — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
 
 ## Troubleshooting
 
@@ -326,7 +299,7 @@ Non-obvious choices; several list an override to reverse.
 
 ### libvirt and QEMU NAT
 
-The `forward { policy drop; }` chain silently breaks libvirt and QEMU NAT guest WAN access, since libvirt's own rules no longer see the traffic. VMs are out of scope, but if you run them, add to `/etc/nftables.conf`:
+The `forward { policy drop; }` chain silently breaks libvirt and QEMU NAT guest WAN access, since libvirt's own rules no longer see the traffic. VMs are out of scope, but if you run them, add the block below to `/etc/nftables.conf` — and do **not** duplicate NAT, since libvirt's `guest_nat` already masquerades `192.168.122.0/24`:
 
 ```nft
 # input - guest DHCP/DNS to the host dnsmasq:
@@ -337,8 +310,6 @@ iifname "virbr0" tcp dport { 53, 67 } accept
 iifname "virbr0" accept
 oifname "virbr0" ct state established,related accept
 ```
-
-Do **not** duplicate NAT — libvirt's `guest_nat` already masquerades `192.168.122.0/24`.
 
 ## Uninstall
 

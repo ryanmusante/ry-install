@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.138.0** · [Changelog](CHANGELOG.md)
+**Version 7.139.0** · [Changelog](CHANGELOG.md)
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
 ## Quick Start
@@ -135,7 +135,7 @@ The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, norm
 
 Boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes to generator output by SHA256; `--check` reports drift without writing.
 
-Edits reconcile differently by where the value landed. Generated-file values self-heal — each generator rewrites its whole file from the current array on the next run. External state does not: a package dropped from `PKGS_ADD` stays installed and a unit dropped from `MASK` stays masked; the script only adds, never unmasks. `--verify` reports orphaned masks and unmanaged `60-ry-*` drop-ins; `--check` records both in its JSONL. Neither counts as drift — a re-run cannot clear them; reverse by hand. Dropped `PKGS_ADD` packages are not detected at all: no record is kept of what earlier versions installed.
+Edits reconcile differently by where the value landed. Generated-file values self-heal — each generator rewrites its whole file from the current array on the next run. External state does not: a package dropped from `PKGS_ADD` stays installed and a unit dropped from `MASK` stays masked; the script only adds, never unmasks. `--verify` reports orphaned admin-scope masks (vendor masks and alias cascades are filtered) and unmanaged `60-ry-*` drop-ins; `--check` records both in its JSONL. Neither counts as drift — a re-run cannot clear them; reverse by hand. Dropped `PKGS_ADD` packages are not detected at all: no record is kept of what earlier versions installed.
 
 ## Embedded Values
 

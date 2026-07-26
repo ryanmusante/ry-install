@@ -4,6 +4,25 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.139.0
+-------
+
+  - verify: sweep every cpufreq policy for driver, governor and EPP
+    uniformity; cpu0 stays the representative detail readout
+  - verify: assert each non-fallback loader entry carries every
+    KERNEL_PARAMS token; fallback entries keep their own options
+  - verify: check systemd-resolved unit-file state (enabled or
+    static) so --verify and --check agree on persistence
+  - verify: report only admin-scope orphan masks and drop vendor
+    masks and Alias= cascades of units this profile masks
+  - verify: log the root filesystem type and the ext4 fstab entry
+    count; distinguish absent sysctl knobs from unreadable ones
+  - logging: millisecond JSONL timestamps; CHECK_GREP records use
+    key=value form; nftables verdict names the unit-file state
+  - internal: hoist the boot-entry list to function scope (same
+    block-scope class as the 7.135.1 backup-preserve fix)
+
+
 7.138.0
 -------
 

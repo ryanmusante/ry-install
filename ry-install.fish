@@ -1,13 +1,13 @@
 #!/usr/bin/env fish
-# ry-install v7.138.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.139.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.138.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.139.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
-set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S%z'
+set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
@@ -1526,7 +1526,7 @@ end
 # ── CHECK HELPERS: GREP/TOKEN (sudo-aware file-content assertions) ──
 function _chk_grep --argument-names file pattern label --description "Verify a file contains an expected token"
     test -z "$label"; and set label "$pattern"
-    _log "CHECK_GREP: $file for '$pattern'"
+    _log "CHECK_GREP: file=$file pattern=$pattern"
     set -l use_sudo false
     string match -q '/boot/*' -- "$file"; and set use_sudo true
     if test "$use_sudo" = false; and not test -r "$file"; and _is_system_dst "$file"; set use_sudo true; end # sudo read avoids false DENIED on perms drift
@@ -2202,14 +2202,31 @@ function _vsb_mkinitcpio --description "_verify_static_boot sub: /etc/mkinitcpio
         end
     end
 end
+function _vsb_entry_options --description "_vsb_entries sub: assert each non-fallback loader entry carries every KERNEL_PARAMS token"
+    for _e in $argv
+        set -l _n (command basename -- "$_e")
+        string match -qr -- '-fallback\.conf$' "$_n"; and continue # sdboot-manage names them *-fallback.conf
+        set -l _opts (_as true awk '/^[ \t]*options[ \t]/ { sub(/^[ \t]*options[ \t]+/, ""); print; exit }' "$_e" 2>/dev/null | string trim --)
+        if test -z "$_opts"; _warn "  $_n: no options line — cannot compare against KERNEL_PARAMS"; continue; end
+        set -l _missing
+        for _p in $KERNEL_PARAMS
+            string match -qr -- '(^|\s)'(string escape --style=regex -- "$_p")'(\s|$)' "$_opts"; or set -a _missing "$_p"
+        end
+        if test (count $_missing) -eq 0
+            _ok "  $_n: all "(count $KERNEL_PARAMS)" kernel params present"
+        else
+            _fail "  $_n: missing "(count $_missing)": $_missing"
+        end
+    end
+end
 function _vsb_entries --description "_verify_static_boot sub: \$BOOT entries enumeration + count check"
     _echo "── Boot entries ──"
     set -l _boot (_resolve_boot_path)
     if test -z "$_boot"; _warn "  Boot entries: cannot resolve \$BOOT path (bootctl/findmnt failed) — skipping"; return 0; end
-    set -l entry_count 0; set -l _entries_pipe_ok true; set -l _entries_dir_probed false
+    set -l entry_count 0; set -l _entries_pipe_ok true; set -l _entries_dir_probed false; set -l _entries
     if sudo -n test -d "$_boot/loader/entries" 2>/dev/null
         set _entries_dir_probed true
-        set -l _entries (sudo -n find "$_boot/loader/entries" -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0); set -l _ps $pipestatus
+        set _entries (sudo -n find "$_boot/loader/entries" -maxdepth 1 -type f -name "*.conf" -print0 2>/dev/null | string split0); set -l _ps $pipestatus
         test "$_ps[1]" -eq 0; or set _entries_pipe_ok false
         set entry_count (count $_entries)
     else if not sudo -n true 2>/dev/null
@@ -2223,6 +2240,7 @@ function _vsb_entries --description "_verify_static_boot sub: \$BOOT entries enu
         _info "  System may not boot! Run: sudo sdboot-manage gen --verbose"
     else if test "$entry_count" -gt 0
         _ok "  Boot entries: $entry_count found"
+        _vsb_entry_options $_entries
     else
         _fail "  Boot entries: NONE in $_boot/loader/entries/"
         _info "  System may not boot! Run: sudo sdboot-manage gen --verbose"
@@ -2427,7 +2445,7 @@ function _vss_orphan_masks --description "_verify_static_services sub: masked un
     set -l _orphan (_ry_orphan_masked_units)
     test (count $_orphan) -eq 0; and return 0
     _info "  "(count $_orphan)" masked unit(s) not in MASK: $_orphan"
-    _info "  Ownership is unattributable — unmask any this profile masked under an earlier MASK; leave distro and hand-made masks alone"
+    _info "  Admin-scope masks only (vendor masks filtered) — unmask any this profile masked under an earlier MASK"
     _log "MASK_ORPHAN: count="(count $_orphan)" units="(string join ',' -- $_orphan)
 end
 function _verify_static_syntax --description "Validate live mkinitcpio HOOKS presence (multi-line HOOKS tolerated)"
@@ -2576,7 +2594,23 @@ function _ry_orphan_masked_units --description "Masked units absent from MASK (s
     for _line in $_raw
         set -l _u (string match -rg -- '^(\S+)' (string trim -- "$_line")) # column padding is spaces today, tabs would still parse
         test -z "$_u"; and continue
-        contains -- "$_u" $MASK; or printf '%s\n' "$_u"
+        contains -- "$_u" $MASK; and continue
+        set -l _admin false
+        for _d in /etc/systemd/system /run/systemd/system
+            if test -L "$_d/$_u"; and test (command readlink -- "$_d/$_u") = /dev/null
+                set _admin true
+                break
+            end
+        end
+        test "$_admin" = false; and continue # systemctl mask writes only to /etc or /run
+        set -l _alias ""
+        for _d in /usr/lib/systemd/system /lib/systemd/system
+            test -L "$_d/$_u"; or continue
+            set _alias (string replace -r '.*/' '' -- (command readlink -- "$_d/$_u"))
+            break
+        end
+        test -n "$_alias"; and contains -- "$_alias" $MASK; and continue # Alias= of a masked unit
+        printf '%s\n' "$_u"
     end
     return 0
 end
@@ -2689,7 +2723,9 @@ function _vrk_gpu_state --description "_verify_runtime_kparams sub: GPU performa
 end
 function _vrk_cpu_state --description "_verify_runtime_kparams sub: CPU governor/EPP + amd_pstate + boost"
     _echo "── CPU performance ──"
-    set -g _CPU_PATH ""; for cpu_dir in /sys/devices/system/cpu/cpu*/cpufreq; if test -d "$cpu_dir"; set -g _CPU_PATH "$cpu_dir"; break; end; end
+    set -g _CPU_PATH ""; set -l _cpu_dirs
+    for cpu_dir in /sys/devices/system/cpu/cpu*/cpufreq; test -d "$cpu_dir"; and set -a _cpu_dirs "$cpu_dir"; end
+    test (count $_cpu_dirs) -gt 0; and set -g _CPU_PATH $_cpu_dirs[1]
     if test -z "$_CPU_PATH"
         _warn "  No CPU frequency scaling found"
     else
@@ -2705,6 +2741,19 @@ function _vrk_cpu_state --description "_verify_runtime_kparams sub: CPU governor
             _chk_eq "EPP" "$_epp" "$EPP_PREFERENCE"
         else
             _info "  EPP: unreadable"
+        end
+        for _attr in scaling_driver:$EXPECTED_SCALING_DRIVER scaling_governor:$CPUPOWER_GOVERNOR energy_performance_preference:$EPP_PREFERENCE
+            set -l _a (string split -m1 ':' -- "$_attr"); set -l _bad
+            for _d in $_cpu_dirs
+                test -r "$_d/$_a[1]"; or continue
+                set -l _v (command cat -- "$_d/$_a[1]" 2>/dev/null | string trim --)
+                test "$_v" = "$_a[2]"; or set -a _bad (string replace -r '.*/cpu(\d+)/.*' 'cpu$1' -- "$_d")":$_v"
+            end
+            if test (count $_bad) -eq 0
+                _ok "  $_a[1]: uniform across "(count $_cpu_dirs)" policies"
+            else
+                _fail "  $_a[1]: "(count $_bad)" of "(count $_cpu_dirs)" policies diverge: $_bad"
+            end
         end
     end
     _echo
@@ -2873,20 +2922,23 @@ function _vrsv_chk_nftables --argument-names label rec_str --description "_vrsv_
         return 0
     end
     if test "$rec[3]" = enabled
-        _ok "  $label: ruleset live, input policy drop ($rec[2] — oneshot, no RemainAfterExit)"
+        _ok "  $label: ruleset live, input policy drop ($rec[3]; $rec[2] — oneshot, no RemainAfterExit)"
     else
         _warn "  $label: ruleset live but unit $rec[3] (will not persist across boots)"
     end
     _vrsv_nft_assert_ping
     return 0
 end
-function _vrsv_chk_resolved --argument-names rec_str --description "_vrsv_sys_units sub: Check systemd-resolved active state, only when conf.d drop-in is deployed"
+function _vrsv_chk_resolved --argument-names rec_str --description "_vrsv_sys_units sub: Check systemd-resolved active + persistent state, only when conf.d drop-in is deployed"
     set -l rec (string split ':' -- "$rec_str")
     test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
-    if test "$rec[2]" = active
-        _ok "  systemd-resolved: active"
-    else
+    if test "$rec[1]" = not-found; _warn "  systemd-resolved: not installed"; return 0; end
+    if test "$rec[2]" != active
         _fail "  systemd-resolved: $rec[2] (expected: active — DNS may be broken)"
+    else if contains -- "$rec[3]" enabled static
+        _ok "  systemd-resolved: active ($rec[3])"
+    else
+        _warn "  systemd-resolved: active but $rec[3] (will not persist across boots)"
     end
 end
 function _vrsv_chk_cpupower_governor --argument-names rec_str --description "_vrsv_sys_units sub: Check cpupower.service (RemainAfterExit oneshot reads active); governor applied from /etc/default/cpupower-service.conf"
@@ -3055,14 +3107,18 @@ function _vre_sysctl_runtime --description "_verify_runtime_env sub: sysctl valu
             _ok "  $_key: $_actual"
         else if test -n "$_actual"
             _fail "  $_key: $_actual (expected: $_expected)"
+        else if not test -e "/proc/sys/$_proc_path"
+            _warn "  $_key: knob absent — init_net-only key under a private netns, or kernel lacks it"
         else
-            _warn "  $_key: not available"
+            _warn "  $_key: unreadable"
         end
     end
     _echo
 end
 function _vre_fstab --description "_verify_runtime_env sub: fstab ext4 entries have noatime,lazytime,commit=10"
     _echo "── fstab mount options ──"
+    set -l _rootfs (command findmnt -n -o FSTYPE / 2>/dev/null | string trim --)
+    test -n "$_rootfs"; and _info "  root filesystem: $_rootfs"
     set -l _fstab_ext4; set -l _fstab_malformed
     if test -r /etc/fstab
         set _fstab_ext4 (command awk "$_RY_AWK_EXT4_FILTER" /etc/fstab 2>/dev/null)
@@ -3088,7 +3144,7 @@ function _vre_fstab --description "_verify_runtime_env sub: fstab ext4 entries h
             if string match -qr '(^|,)'$_cre'(,|$)' -- "$_opts"; _fail "  ext4 entry has $_conflict (installer removes it — rewrite pending): $_fl"; set _fstab_ok false; end
         end
     end
-    test "$_fstab_ok" = true; and _ok "  ext4 entries: noatime,lazytime,commit=10 present"
+    test "$_fstab_ok" = true; and _ok "  ext4 entries ("(count $_fstab_ext4)"): noatime,lazytime,commit=10 present"
 end
 function _vre_ntsync --description "_verify_runtime_env sub: ntsync state via _ntsync_state dispatch"
     _echo

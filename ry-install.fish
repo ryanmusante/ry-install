@@ -448,7 +448,6 @@ function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK
     set --erase _RY_MKI_REVERT_FAILED _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED
     set --erase _RY_RUN_TIMEOUT_WARNED _RY_RUN_TIMEOUT_CLAMPED _PROG_CLOCK _PROG_NOW_LAST _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
-    set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_DEPLOY_CHANGED_DSTS _RY_BOOT_CRIT_HIT _RY_DEPLOY_TAG
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
@@ -1578,7 +1577,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; return 1; end
     if test "$_RY_SYSTEMD_VER" -lt 250; _err "systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
     set -l _opt_missing
-    for cmd in bootctl journalctl dmesg modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci kill; command -q $cmd; or set -a _opt_missing $cmd; end
+    for cmd in bootctl journalctl modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci kill; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
     _log "DEPS_CHECK_OK"
     return 0
@@ -2663,7 +2662,7 @@ function _ry_do_check --description "Silent idempotency probe" # ERR_NO_DATA->pr
 end
 
 # ── VERIFY-RUNTIME: KERNEL CMDLINE + GPU + CPU + MODULES ──
-function _vrk_cmdline --description "_verify_runtime_kparams sub: /proc/cmdline + preemption model"
+function _vrk_cmdline --description "_verify_runtime_kparams sub: /proc/cmdline token check"
     _echo "KERNEL CMDLINE"
     _echo
     set -l cmdline (command cat -- /proc/cmdline 2>/dev/null)
@@ -2679,23 +2678,6 @@ function _vrk_cmdline --description "_verify_runtime_kparams sub: /proc/cmdline 
         _ok "  rw: active"
     else
         _fail "  rw: NOT in cmdline"
-    end
-    _echo
-    _echo "── Preemption model ──"
-    set -l _preempt $_RY_DMESG_PREEMPT
-    if test -n "$_preempt"
-        if string match -q '*full*' -- "$_preempt"
-            _ok "  $_preempt"
-        else
-            _info "  $_preempt (advisory — profile does not pin preempt=)"
-        end
-    else
-        set -l _preempt_param (string match -rg -- '(?:^|\s)preempt=(\S+)' "$cmdline")
-        if test -n "$_preempt_param"
-            _info "  Preemption intent: preempt=$_preempt_param (dmesg needed to confirm)"
-        else
-            _info "  Preemption model: cannot determine (no dmesg, no preempt= token)"
-        end
     end
     _echo
 end
@@ -2849,30 +2831,10 @@ end
 
 # ── VERIFY-RUNTIME: KPARAMS ORCHESTRATOR (_verify_runtime_kparams) ──
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist"
-    set -g _RY_DMESG_LINES 0; set -g _RY_DMESG_PREEMPT
-    if command -q dmesg; and command -q sudo; and sudo -n true 2>/dev/null
-        set -l _full (sudo -n dmesg 2>/dev/null); set -l _full_count (count $_full)
-        if test "$_full_count" -gt 0
-            set -g _RY_DMESG_PREEMPT (string match -rg -- '(Dynamic Preempt: [a-z]+)' $_full)[1] # first match; avoids builtin→pipe SIGPIPE
-        end
-        set -g _RY_DMESG_LINES $_full_count
-    end
-    if test "$_RY_DMESG_LINES" -eq 0
-        if not command -q dmesg
-            _log "DMESG_CACHE_EMPTY: dmesg(1) not installed"
-        else if not command -q sudo
-            _log "DMESG_CACHE_EMPTY: sudo not installed"
-        else if not sudo -n true 2>/dev/null
-            _log "DMESG_CACHE_EMPTY: sudo cache lapsed"
-        else
-            _log "DMESG_CACHE_EMPTY: dmesg returned empty (kernel.dmesg_restrict or empty ring buffer)"
-        end
-    end
     _vrk_cmdline
     _vrk_gpu_state
     _vrk_cpu_state
     _vrk_module_state
-    set --erase _RY_DMESG_LINES _RY_DMESG_PREEMPT
 end
 
 # ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, nftables, wifi, masks) ──

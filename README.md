@@ -8,7 +8,7 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 > [!WARNING]
 > Run as your normal user — never with `sudo`. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `--verify`. Re-runs are idempotent.
 
-A run closes with the Totals line — each phase's verdict tallied — then the verdict on the Elapsed line below it: `PASS` when clean, `PASS-WITH-WARNINGS` at exit `0` when warnings occurred. Anything else is explained in [Usage](#usage) and [Exit Codes](#exit-codes).
+A run closes with the Totals line — each phase's verdict tallied — then the verdict on the Elapsed line below it: `PASS` when clean, `PASS-WITH-WARNINGS` at exit `0` when warnings occurred.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
@@ -100,7 +100,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | `/etc/default/cpupower-service.conf` | governor (`performance`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, netdev budget, TCP `bbr`, VM tunables |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none` (vendor `kyber`), P-State EPP, GPU DPM level `high` |
-| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist — unmanaged `60-ry-*` drop-ins are warned by `--verify` and recorded by `--check` |
+| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist |
 
 ### User
 
@@ -187,7 +187,7 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 
 ### Service Keys
 
-These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed on the way out, as the third column shows. Edit the value here, not the generated file; the next run overwrites it.
+These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed on the way out, as the third column shows.
 
 | Key | Value | Emitted as |
 |---|---|---|

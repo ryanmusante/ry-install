@@ -11,8 +11,12 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     mkinitcpio prepends -T0 for zstd, so the image is unchanged
   - verify: warn when a sdboot-manage drop-in is present, since
     drop-ins are sourced after /etc/sdboot-manage.conf and outrank it
+  - preflight: drop free, uptime, swapon and zramctl from the optional
+    tool probe; the script never invokes any of them
   - readme: correct the PROTON_FSR4_UPGRADE note and record the ext4
     commit=10 tradeoff against the upstream 5 second default
+  - docs: cut three readme clauses already stated elsewhere: drop-in
+    detection, the edit-the-source rule, and a redundant cross-link
 
 
 7.139.0

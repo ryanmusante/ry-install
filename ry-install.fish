@@ -1577,7 +1577,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; return 1; end
     if test "$_RY_SYSTEMD_VER" -lt 250; _err "systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
     set -l _opt_missing
-    for cmd in bootctl journalctl modinfo pgrep free uptime zcat tput swapon zramctl lsmod modprobe pkill nmcli ping realpath ip lspci kill; command -q $cmd; or set -a _opt_missing $cmd; end
+    for cmd in bootctl journalctl modinfo pgrep zcat tput lsmod modprobe pkill nmcli ping realpath ip lspci kill; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
     _log "DEPS_CHECK_OK"
     return 0

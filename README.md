@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.139.0** · [Changelog](CHANGELOG.md)
+**Version 7.140.0** · [Changelog](CHANGELOG.md)
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
 ## Quick Start
@@ -84,7 +84,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | `/boot/loader/loader.conf` | systemd-boot: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
 | `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 15 kernel tokens |
 | `/etc/sdboot-manage.conf` | `LINUX_OPTIONS` mirror, `LINUX_FALLBACK_OPTIONS="quiet"`, entry management keys |
-| `/etc/mkinitcpio.conf` | `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-1 -T0`) |
+| `/etc/mkinitcpio.conf` | `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-1`) |
 
 ### System
 
@@ -131,11 +131,11 @@ The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and
 
 Backups: `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig`.
 
-The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime` and existing `commit=` tokens; everything else is byte-preserved. It is gated by line-count parity, a size floor and a mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite; malformed rows are left byte-identical and warned.
+The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime` and existing `commit=` tokens; everything else is byte-preserved. `commit=10` doubles the upstream ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata; the filesystem itself stays consistent. It is gated by line-count parity, a size floor and a mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite; malformed rows are left byte-identical and warned.
 
 Boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes to generator output by SHA256; `--check` reports drift without writing.
 
-Edits reconcile differently by where the value landed. Generated-file values self-heal — each generator rewrites its whole file from the current array on the next run. External state does not: a package dropped from `PKGS_ADD` stays installed and a unit dropped from `MASK` stays masked; the script only adds, never unmasks. `--verify` reports orphaned admin-scope masks (vendor masks and alias cascades are filtered) and unmanaged `60-ry-*` drop-ins; `--check` records both in its JSONL. Neither counts as drift — a re-run cannot clear them; reverse by hand. Dropped `PKGS_ADD` packages are not detected at all: no record is kept of what earlier versions installed.
+Edits reconcile differently by where the value landed. Generated-file values self-heal — each generator rewrites its whole file from the current array on the next run. External state does not: a package dropped from `PKGS_ADD` stays installed and a unit dropped from `MASK` stays masked; the script only adds, never unmasks. `--verify` reports orphaned admin-scope masks (vendor masks and alias cascades are filtered), unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in, which is sourced after `/etc/sdboot-manage.conf` and overrides `LINUX_OPTIONS`; `--check` records the first two in its JSONL. None counts as drift — a re-run cannot clear them; reverse by hand. Dropped `PKGS_ADD` packages are not detected at all: no record is kept of what earlier versions installed.
 
 ## Embedded Values
 
@@ -181,7 +181,7 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 | `MKINITCPIO_MODULES` | `amdgpu` |
 | `MKINITCPIO_HOOKS` | `base`, `systemd`, `autodetect`, `microcode`, `modconf`, `kms`, `keyboard`, `sd-vconsole`, `block`, `filesystems`, `fsck` |
 | `MKINITCPIO_COMPRESSION` | `zstd` |
-| `MKINITCPIO_COMPRESSION_OPTIONS` | `-1 -T0` |
+| `MKINITCPIO_COMPRESSION_OPTIONS` | `-1` |
 
 `HOOKS` order is an invariant — `systemd` must precede `sd-vconsole`, and `block` must precede `filesystems`. The script validates both before writing.
 
@@ -270,7 +270,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 Non-obvious choices; several list an override to reverse.
 
-**Gaming stack** — `--verify` reports `/dev/ntsync`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks. `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5; recent Proton-CachyOS builds copy the DLL automatically, so it now mainly pins a version — verify with `printenv PROTON_FSR4_UPGRADE`. The shipped HUD omits `cpu_temp`; add it on its own line to show CPU temperature — leaving it off is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
+**Gaming stack** — `--verify` reports `/dev/ntsync`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks. `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically, so at value `1` the variable is inert and only takes effect when set to an explicit DLL version (`4.0.0` or `4.1.1`, wider under the OptiScaler path) — verify with `printenv PROTON_FSR4_UPGRADE`. The shipped HUD omits `cpu_temp`; add it on its own line to show CPU temperature — leaving it off is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
 
 **Kernel parameters** — `amd_iommu=off` breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run. `clearcpuid=umip` disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels — drop it if there is no `umip_printk` stutter. `ipv6.disable=1` pairs with the IPv4-only ruleset; for dual-stack, drop the token, add IPv6 rules, and re-run. `pcie_aspm.policy=performance` biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. Confirm actual link state with `lspci -vv` (`LnkCtl: ASPM Disabled`) rather than assuming it from the token. `mt7925e.disable_aspm=1` pairs with it at the endpoint driver — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
 

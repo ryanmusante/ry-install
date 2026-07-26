@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.139.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.140.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.139.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.140.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -574,7 +574,7 @@ set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_R
 set -g KERNEL_PARAMS amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n clearcpuid=umip fsck.mode=force fsck.repair=yes ipv6.disable=1 mt7925e.disable_aspm=1 nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
-set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 -T0
+set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 # mkinitcpio prepends -T0 for zstd
 
 # ── EMBEDDED DATA: SERVICE KEYS ──
 set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC no
@@ -684,7 +684,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:15 \
         USER_DESTINATIONS:2 \
-        MKINITCPIO_COMPRESSION_OPTIONS:2 # drift tripwires; sync arrays + docs on change
+        MKINITCPIO_COMPRESSION_OPTIONS:1 # drift tripwires; sync arrays + docs on change
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -2147,6 +2147,21 @@ function _vsb_sdboot --description "_verify_static_boot sub: sdboot-manage.conf 
     end
     _chk_grep /etc/sdboot-manage.conf 'LINUX_FALLBACK_OPTIONS="quiet"' "LINUX_FALLBACK_OPTIONS=quiet"
 end
+
+function _vsb_sdboot_dropins --description "_verify_static_boot sub: sdboot-manage drop-ins that outrank the managed conf"
+    _echo "── sdboot-manage drop-ins ──"
+    set -l _found
+    for _dir in /usr/lib/sdboot-manage.conf.d /etc/sdboot-manage.conf.d
+        test -d "$_dir"; or continue
+        set -a _found (command find "$_dir" -maxdepth 1 -type f -name '*.conf' 2>/dev/null)
+    end
+    if test (count $_found) -eq 0
+        _ok "  no sdboot-manage drop-ins present"
+        return 0
+    end
+    _warn "  "(count $_found)" sdboot-manage drop-in(s) sourced after /etc/sdboot-manage.conf — they override LINUX_OPTIONS: $_found"
+    _log "SDBOOT_DROPIN_PRESENT: "(string join ',' -- $_found)
+end
 function _vsb_cmdline --description "_verify_static_boot sub: cmdline KERNEL_PARAMS + root=UUID + rw"
     _echo "── kernel cmdline ──"
     _chk_file /etc/kernel/cmdline; or return 0
@@ -2249,6 +2264,7 @@ function _verify_static_boot --description "Verify loader.conf, sdboot-manage, k
     _echo "BOOT CONFIGURATION"
     _vsb_loader
     _vsb_sdboot
+    _vsb_sdboot_dropins
     _vsb_cmdline
     _vsb_mkinitcpio
     _vsb_entries

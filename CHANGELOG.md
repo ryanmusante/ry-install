@@ -4,6 +4,17 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.140.0
+-------
+
+  - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
+    mkinitcpio prepends -T0 for zstd, so the image is unchanged
+  - verify: warn when a sdboot-manage drop-in is present, since
+    drop-ins are sourced after /etc/sdboot-manage.conf and outrank it
+  - readme: correct the PROTON_FSR4_UPGRADE note and record the ext4
+    commit=10 tradeoff against the upstream 5 second default
+
+
 7.139.0
 -------
 

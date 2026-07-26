@@ -17,20 +17,15 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     masks and Alias= cascades of units this profile masks
   - verify: log the root filesystem type and the ext4 fstab entry
     count; distinguish absent sysctl knobs from unreadable ones
+  - verify: drop the preemption-model advisory and its dmesg scan;
+    the profile never pinned preempt=, so nothing was asserted
   - logging: millisecond JSONL timestamps; CHECK_GREP records use
     key=value form; nftables verdict names the unit-file state
   - internal: hoist the boot-entry list to function scope (same
     block-scope class as the 7.135.1 backup-preserve fix)
 
 
-7.138.0
--------
-
-  - docs: merge the 7.135.0 - 7.137.2 point releases into two range
-    blocks; no content change outside this file
-
-
-7.137.0 - 7.137.2
+7.137.0 - 7.138.0
 -----------------
 
   - configuration: drop the dormant RY_REMOTE_PLAY_PORTS gate and its
@@ -43,6 +38,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     scheduler notes to their home sections
   - docs: restructure Uninstall into five ordered steps and trim the
     libvirt/QEMU NAT note; the removed service-key row follows
+  - docs: merge the 7.135.0 - 7.137.2 point releases into two range
+    blocks; no content change outside this file
 
 
 7.135.0 - 7.136.1

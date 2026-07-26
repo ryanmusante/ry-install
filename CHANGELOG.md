@@ -4,6 +4,26 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.137.2
+-------
+
+  - docs: fold the Managed Files lead to one line; modes kept, the
+    rest is stated at its home sections
+  - docs: replace the Usage invocation table with prose; check-drift
+    and six-phase notes kept, Verdict table unchanged
+  - docs: trim Safety and relocate the DNS, sysctl-priority and NVMe
+    scheduler notes to their home sections
+
+
+7.137.1
+-------
+
+  - verify: tighten the three preemption advisory strings; branch
+    structure and behavior unchanged
+  - docs: restructure Uninstall - fold the ordering hazards into their
+    steps and merge rebuild with reboot; six steps become five
+
+
 7.137.0
 -------
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.137.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.137.2 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.137.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.137.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -2653,14 +2653,14 @@ function _vrk_cmdline --description "_verify_runtime_kparams sub: /proc/cmdline 
         if string match -q '*full*' -- "$_preempt"
             _ok "  $_preempt"
         else
-            _info "  $_preempt (advisory — kernel default; this profile does not pin preempt= on the cmdline)"
+            _info "  $_preempt (advisory — profile does not pin preempt=)"
         end
     else
         set -l _preempt_param (string match -rg -- '(?:^|\s)preempt=(\S+)' "$cmdline")
         if test -n "$_preempt_param"
-            _info "  Preemption (cmdline intent): preempt=$_preempt_param (runtime confirmation needs dmesg)"
+            _info "  Preemption intent: preempt=$_preempt_param (dmesg needed to confirm)"
         else
-            _info "  Preemption model: cannot determine (dmesg unavailable, no preempt= in cmdline)"
+            _info "  Preemption model: cannot determine (no dmesg, no preempt= token)"
         end
     end
     _echo

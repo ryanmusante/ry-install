@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.137.0** · [Changelog](CHANGELOG.md)
+**Version 7.137.2** · [Changelog](CHANGELOG.md)
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
 ## Quick Start
@@ -38,16 +38,7 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
 
-`--verify`, `--check`, and `--install-file` are mutually exclusive. No positional arguments are accepted. Every result goes to stderr; stdout carries only `--help` and `--version` output. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
-
-| Invocation | Behavior |
-|---|---|
-| `./ry-install.fish` | Unattended install — all six phases |
-| `./ry-install.fish --verify` | Check config files and live system state |
-| `./ry-install.fish --check` | Silent idempotency probe against live `/proc/cmdline`; a fresh install reports drift until reboot |
-| `./ry-install.fish --install-file <path>` | Re-deploy a single managed file |
-| `./ry-install.fish --help` | Usage summary; honored before every other check |
-| `./ry-install.fish --version` | Version string; honored before every other check |
+`--verify`, `--check`, and `--install-file <path>` are mutually exclusive; the bare invocation is the unattended install, all six phases, and `--install-file` re-deploys one managed file. No positional arguments are accepted; `--help` and `--version` are honored before every other check and are the only stdout output — every result goes to stderr. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
 
 | Verdict | Meaning |
 |---|---|
@@ -84,7 +75,7 @@ Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping 
 
 ## Managed Files
 
-17 embedded configs in deploy order — 15 system-scope at `0644` (of which 4 are boot-critical and `.ry.bak`-backed) and 2 user at `0600`. `--verify` checks all of them; `--install-file` re-deploys one.
+In deploy order; system files land `0644`, user files `0600`.
 
 ### Boot
 
@@ -108,7 +99,7 @@ Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping 
 | `/etc/nftables.conf` | IPv4-only default-deny-inbound, ping allowed |
 | `/etc/default/cpupower-service.conf` | governor (`performance`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, netdev budget, TCP `bbr`, VM tunables |
-| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `high` |
+| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none` (vendor `kyber`), P-State EPP, GPU DPM level `high` |
 | `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist — unmanaged `60-ry-*` drop-ins are warned by `--verify` and recorded by `--check` |
 
 ### User
@@ -138,15 +129,13 @@ The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and
 > [!NOTE]
 > Every managed file is written atomically: content is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved into place with `mv -T`, then re-read and compared. A mismatch restores the backup.
 
-Backups are `<path>.ry.bak` for the 4 boot files and for `fstab` during its rewrite. Any other managed file whose pre-existing content differed at first adoption gets a one-time `<path>.ry.orig`.
+Backups: `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig`.
 
 The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime` and existing `commit=` tokens; everything else is byte-preserved. It is gated by line-count parity, a size floor and a mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite; malformed rows are left byte-identical and warned.
 
 Boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes to generator output by SHA256; `--check` reports drift without writing.
 
-DNS upstreams are pinned to AdGuard by IP and queried in plaintext — `DNSOverTLS=no`, matching the router. `DNSSEC=no` matches the systemd default. The sysctl drop-in uses priority `95`, loading after the vendor `70-cachyos-settings.conf`. NVMe scheduler is `none`; the vendor default is `kyber`.
-
-Editing an array reconciles differently depending on where the value landed. Values inside a generated file self-heal, because each generator rewrites its whole file from the current array on the next run. Values that became external system state do not: a package dropped from `PKGS_ADD` stays installed, and a unit dropped from `MASK` stays masked, since the script only ever adds and never unmasks. `--verify` reports masked units that are no longer in `MASK` and warns on unmanaged `60-ry-*` drop-ins; `--check` records both in its JSONL. Neither is counted as drift, because a re-run cannot clear them — reverse them by hand. Dropped `PKGS_ADD` packages are not detected at all; the script keeps no record of what earlier versions installed.
+Edits reconcile differently by where the value landed. Generated-file values self-heal — each generator rewrites its whole file from the current array on the next run. External state does not: a package dropped from `PKGS_ADD` stays installed and a unit dropped from `MASK` stays masked; the script only adds, never unmasks. `--verify` reports orphaned masks and unmanaged `60-ry-*` drop-ins; `--check` records both in its JSONL. Neither counts as drift — a re-run cannot clear them; reverse by hand. Dropped `PKGS_ADD` packages are not detected at all: no record is kept of what earlier versions installed.
 
 ## Embedded Values
 
@@ -222,7 +211,7 @@ These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed
 | `EXPECTED_SCALING_DRIVER` | `amd-pstate-epp` | nothing — verify-only |
 | `BLACKLIST_AMDXDNA` | `true` | `blacklist amdxdna` |
 
-`RESOLVED_DOT` is `no` by choice: the filtering is identical either way, and `DNSOverTLS=yes` fails closed, so an unreachable endpoint would stop resolution outright. The same upstreams repeat in the NetworkManager drop-in under `[global-dns-domain-*]` — without that, DHCP-supplied servers arrive as per-link DNS and outrank the global `DNS=` line.
+`RESOLVED_DOT` is `no` by choice, matching the router: the filtering is identical either way, and `DNSOverTLS=yes` fails closed, so an unreachable endpoint would stop resolution outright. `DNSSEC=no` is the systemd default. The same upstreams repeat in the NetworkManager drop-in under `[global-dns-domain-*]` — without that, DHCP-supplied servers arrive as per-link DNS and outrank the global `DNS=` line.
 
 `NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise. Under `amd-pstate-epp` with `CPUPOWER_GOVERNOR=performance`, the driver forces the EPP hint to its maximum and rejects any other value, so `EPP_PREFERENCE=performance` restates what the governor already imposes rather than adding to it. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
 
@@ -244,6 +233,8 @@ These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed
 | `WINEDEBUG=-all` | Wine debug channels off |
 
 ### Sysctl Overrides
+
+Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 | Key | Value | Effect |
 |---|---|---|
@@ -312,16 +303,15 @@ oifname "virbr0" ct state established,related accept
 ## Uninstall
 
 > [!NOTE]
-> There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference and work through these steps in order.
+> There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference; the steps are ordered.
 
-Disable `nftables` before step 2 — its unit loads `/etc/nftables.conf` at start and fails once the ruleset is gone. Boot files must be reverted before step 5, which regenerates entries from that state. A `.ry.bak` exists only if the file was present before the overwrite; for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot files — restore that instead of deleting.
+A `.ry.bak` exists only if the file was present before the overwrite — for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot files; restore that instead of deleting.
 
 1. **Unmask units** — `sudo systemctl unmask` all 11; set in [Units](#units).
-2. **Remove configs** — `sudo rm` the 11 system files and `rm` the 2 user files. Skip the 4 boot files; step 3 reverts them.
+2. **Remove configs** — `sudo systemctl disable --now nftables` first, since its unit loads `/etc/nftables.conf` at start and fails once the ruleset is gone; then `sudo rm` the 11 system files and `rm` the 2 user files. Skip the 4 boot files; step 3 reverts them.
 3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the `.ry.bak` files.
 4. **Reverse packages** (optional) — `pacman -S --needed` the Remove list, `pacman -Rns` the Install list; sets in [Packages](#packages).
-5. **Rebuild** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`.
-6. **Reboot** — `sudo systemctl reboot`.
+5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.
 
 ## License
 

@@ -4,74 +4,46 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.137.2
+7.138.0
 -------
 
-  - docs: fold the Managed Files lead to one line; modes kept, the
-    rest is stated at its home sections
-  - docs: replace the Usage invocation table with prose; check-drift
-    and six-phase notes kept, Verdict table unchanged
-  - docs: trim Safety and relocate the DNS, sysctl-priority and NVMe
-    scheduler notes to their home sections
+  - docs: merge the 7.135.0 - 7.137.2 point releases into two range
+    blocks; no content change outside this file
 
 
-7.137.1
--------
-
-  - verify: tighten the three preemption advisory strings; branch
-    structure and behavior unchanged
-  - docs: restructure Uninstall - fold the ordering hazards into their
-    steps and merge rebuild with reboot; six steps become five
-
-
-7.137.0
--------
+7.137.0 - 7.137.2
+-----------------
 
   - configuration: drop the dormant RY_REMOTE_PLAY_PORTS gate and its
     Sunshine/Steam inbound rules from the nftables generator
-  - docs: trim the libvirt/QEMU NAT note; drop the removed service-key
-    table row
+  - verify: tighten the three preemption advisory strings; branch
+    structure and behavior unchanged
+  - docs: replace the Usage invocation table with prose and fold the
+    Managed Files lead to one line; --help carries the flag detail
+  - docs: trim Safety, relocating the DNS, sysctl-priority and NVMe
+    scheduler notes to their home sections
+  - docs: restructure Uninstall into five ordered steps and trim the
+    libvirt/QEMU NAT note; the removed service-key row follows
 
 
-7.136.1
--------
-
-  - logging: count captured lines without a redirect; fish warns on a
-    failed redirect even when stderr is silenced
-
-
-7.136.0
--------
-
-  - verify: the dynamic_epp node ships in Linux 7.1, not absent
-    pre-6.16; correct the probe comment
-  - perf: note that manual EPP writes are blocked while
-    dynamic_epp is enabled
-  - docs: trim README prose and collapse the tuning notes
-
-
-7.135.1
--------
+7.135.0 - 7.136.1
+-----------------
 
   - install: fix the one-time <path>.ry.orig preserve never running for
-    non-boot managed files, which overwrote pre-existing content unbacked
-  - install: hoist the installed-bytes probe result to function scope; a
-    fish set -l inside an if block is not visible after the block ends
-
-
-7.135.0
--------
-
-  - check: record unmanaged 60-ry-*.conf drop-ins and masked units absent
-    from MASK. Both were visible to --verify only
-  - verify: report masked units the profile no longer declares. The script
-    only ever adds to MASK, so a dropped entry stayed masked undetected
-  - preflight: refuse to deploy when a package is in both PKGS_ADD and
-    PKGS_DEL, or a unit in both MASK and EXPECTED_SERVICES
-  - source: the drop-in sweep is one helper shared by both modes rather
-    than a verify-path copy
-  - docs: state which edits self-heal and which leave external state
-    behind; dropped PKGS_ADD packages remain undetected
+    non-boot managed files; a set -l inside an if block does not leak
+  - check: record unmanaged 60-ry-*.conf drop-ins and masked units
+    absent from MASK, both previously visible to --verify only
+  - verify: report masked units the profile no longer declares; the
+    script only adds to MASK, so a dropped entry stayed masked
+  - preflight: refuse a package in both PKGS_ADD and PKGS_DEL, or a
+    unit in both MASK and EXPECTED_SERVICES
+  - verify: dynamic_epp probe comment corrected - the node ships in
+    Linux 7.1; manual EPP writes are blocked while it is enabled
+  - logging: count captured lines without a redirect; fish warns on a
+    failed redirect even when stderr is silenced
+  - source: the drop-in sweep is one helper shared by both modes
+  - docs: self-heal vs external-state reconciliation stated; README
+    prose and tuning notes trimmed
 
 
 7.134.0

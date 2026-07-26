@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.136.0** · [Changelog](CHANGELOG.md)
+**Version 7.137.0** · [Changelog](CHANGELOG.md)
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
 ## Quick Start
@@ -220,7 +220,6 @@ These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed
 | `GPU_DPM_LEVEL` | `high` | udev `ATTR{device/power_dpm_force_performance_level}` |
 | `EPP_PREFERENCE` | `performance` | udev `ATTR{cpufreq/energy_performance_preference}` |
 | `EXPECTED_SCALING_DRIVER` | `amd-pstate-epp` | nothing — verify-only |
-| `RY_REMOTE_PLAY_PORTS` | `false` | nftables input chain, when `true` |
 | `BLACKLIST_AMDXDNA` | `true` | `blacklist amdxdna` |
 
 `RESOLVED_DOT` is `no` by choice: the filtering is identical either way, and `DNSOverTLS=yes` fails closed, so an unreachable endpoint would stop resolution outright. The same upstreams repeat in the NetworkManager drop-in under `[global-dns-domain-*]` — without that, DHCP-supplied servers arrive as per-link DNS and outrank the global `DNS=` line.
@@ -299,13 +298,12 @@ Non-obvious choices; several list an override to reverse.
 
 ### libvirt and QEMU NAT
 
-The `forward { policy drop; }` chain silently breaks libvirt and QEMU NAT guest WAN access, since libvirt's own rules no longer see the traffic. VMs are out of scope, but if you run them, add the block below to `/etc/nftables.conf` — and do **not** duplicate NAT, since libvirt's `guest_nat` already masquerades `192.168.122.0/24`:
+`forward { policy drop; }` silently breaks libvirt/QEMU NAT guest WAN access. VMs are out of scope; if you run them, add to `/etc/nftables.conf` — do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`):
 
 ```nft
 # input - guest DHCP/DNS to the host dnsmasq:
 iifname "virbr0" udp dport { 53, 67 } accept
 iifname "virbr0" tcp dport { 53, 67 } accept
-
 # forward - survive the global drop:
 iifname "virbr0" accept
 oifname "virbr0" ct state established,related accept

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.136.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.137.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.136.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.137.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -590,7 +590,6 @@ set -g GPU_DPM_LEVEL high # gfx1151 dpm; high pins clocks, gating stays active
 set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set
 set -g EPP_PREFERENCE performance; set -g _RY_EPP_LEVELS default performance balance_performance balance_power power # accepted set; udev-pinned per CPU; blocked if dynamic_epp on
 set -g EXPECTED_SCALING_DRIVER amd-pstate-epp # verify-only: scaling_driver under amd_pstate=active
-set -g RY_REMOTE_PLAY_PORTS false # true appends Sunshine/Steam stream ports to nftables input
 set -g BLACKLIST_AMDXDNA true # false + amd_iommu=on iommu=pt enables the NPU
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
@@ -693,7 +692,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
     end
 end
 function _ir_validate_keys --description "Refuse deploy on out-of-domain embedded scalar keys"
-    for _k in BT_AUTO_ENABLE BT_FAST_CONNECTABLE RY_REMOTE_PLAY_PORTS BLACKLIST_AMDXDNA
+    for _k in BT_AUTO_ENABLE BT_FAST_CONNECTABLE BLACKLIST_AMDXDNA
         if not contains -- "$$_k" true false; _err_loud "$_k must be true|false (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _k in SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE RESOLVED_MDNS RESOLVED_LLMNR RESOLVED_DOT
@@ -852,12 +851,6 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        iif \"lo\" accept" \
         "        # IPv4 ICMP: inbound ping (echo-request) + error/PMTUD types (replies match ct established)" \
         "        icmp type { echo-request, destination-unreachable, time-exceeded, parameter-problem } accept"
-    if test "$RY_REMOTE_PLAY_PORTS" = true # gated: Sunshine/Moonlight + Steam Remote Play inbound
-        printf '%s\n' \
-            "        # ry-install: remote-play inbound (RY_REMOTE_PLAY_PORTS=true)" \
-            "        tcp dport { 47984, 47989, 48010, 27036, 27037 } accept" \
-            "        udp dport { 47998-48010, 27031-27036 } accept"
-    end
     printf '%s\n' \
         "    }" \
         "    chain forward { type filter hook forward priority filter; policy drop; }" \
@@ -1355,7 +1348,7 @@ function _run_resolve_timeout --description "_run_effective_timeout sub: Resolve
 end
 function _run_emit_stream --argument-names label_tag tmpfile ret cap --description "_run sub: Capture stream, log, emit per QUIET/rc"
     test -s "$tmpfile"; or return 0
-    set -l _total (command wc -l <"$tmpfile" 2>/dev/null | string trim --); set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
+    set -l _total (command wc -l -- "$tmpfile" 2>/dev/null | string match -rg '^\s*(\d+)'); set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
     test -n "$_last_byte"; and string match -qr '^\d+$' -- "$_total"; and set _total (math $_total + 1)
     set -l _captured; set -l _tail_cap (math "min(100, floor($cap / 2))"); set -l _head_cap (math "max(1, $cap - $_tail_cap)"); set -l _need_tail false # head+tail<=cap, elided>=0 for cap>=1
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and set _need_tail true

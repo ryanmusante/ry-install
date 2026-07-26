@@ -4,6 +4,22 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.137.0
+-------
+
+  - configuration: drop the dormant RY_REMOTE_PLAY_PORTS gate and its
+    Sunshine/Steam inbound rules from the nftables generator
+  - docs: trim the libvirt/QEMU NAT note; drop the removed service-key
+    table row
+
+
+7.136.1
+-------
+
+  - logging: count captured lines without a redirect; fish warns on a
+    failed redirect even when stderr is silenced
+
+
 7.136.0
 -------
 

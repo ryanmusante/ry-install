@@ -13,12 +13,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     drop-ins are sourced after /etc/sdboot-manage.conf and outrank it
   - preflight: drop free, uptime, swapon and zramctl from the optional
     tool probe; the script never invokes any of them
-  - readme: correct the PROTON_FSR4_UPGRADE note and record the ext4
-    commit=10 tradeoff against the upstream 5 second default
-  - docs: cut three readme clauses already stated elsewhere: drop-in
-    detection, the edit-the-source rule, and a redundant cross-link
-  - docs: cut two more readme clauses stated elsewhere: the ufw
-    stays-installed note and the logind key-name summary
 
 
 7.139.0
@@ -49,14 +43,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     Sunshine/Steam inbound rules from the nftables generator
   - verify: tighten the three preemption advisory strings; branch
     structure and behavior unchanged
-  - docs: replace the Usage invocation table with prose and fold the
-    Managed Files lead to one line; --help carries the flag detail
-  - docs: trim Safety, relocating the DNS, sysctl-priority and NVMe
-    scheduler notes to their home sections
-  - docs: restructure Uninstall into five ordered steps and trim the
-    libvirt/QEMU NAT note; the removed service-key row follows
-  - docs: merge the 7.135.0 - 7.137.2 point releases into two range
-    blocks; no content change outside this file
 
 
 7.135.0 - 7.136.1
@@ -75,8 +61,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - logging: count captured lines without a redirect; fish warns on a
     failed redirect even when stderr is silenced
   - source: the drop-in sweep is one helper shared by both modes
-  - docs: self-heal vs external-state reconciliation stated; README
-    prose and tuning notes trimmed
 
 
 7.134.0
@@ -90,7 +74,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     made the redirect emit a warning that --check must never print
   - logging: comma-join the unmanaged drop-in list so files= stays one
     token, matching every other multi-value key
-  - docs: uninstall rebuild step uses &&, the form the script prints
 
 
 7.132.0 - 7.133.0
@@ -106,10 +89,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     one; the parent named is the calling function, stated once
   - source: loader-entry boundary warning uses the arrow glyph the
     other user-facing messages already use
-  - docs: quick start no longer checks out a version tag; none is
-    published, so the clone lands on the default branch
-  - docs: service keys table gains LOGIND_IGNORE_KEYS and the
-    Handle*Key=ignore form it emits, completing the twenty keys
 
 
 7.130.0 - 7.131.1
@@ -121,13 +100,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     their highest power state rather than scaling on demand
   - perf: package power stays capped at 85W in firmware, so peak draw
     is unchanged; idle draw rises because clocks no longer scale down
-  - docs: correct the epp claim. The performance governor pins EPP
-    to maximum, so EPP_PREFERENCE restates it rather than outranking it
-  - docs: pcie_aspm.policy=performance biases links away from ASPM
-    rather than disabling them outright; confirm with lspci -vv
-  - docs: promote the readme uninstall lead-in to a NOTE alert; no
-    automated uninstaller, Managed Files is the rollback reference
-  - source: US spelling completed in the 7.118.0 - 7.122.0 range block
 
 
 7.123.0 - 7.127.0

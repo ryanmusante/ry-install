@@ -1,6 +1,7 @@
 # ry-install
 
 **Version 7.140.0** · [Changelog](CHANGELOG.md)
+
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
 ## Quick Start
@@ -38,7 +39,7 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
 
-`--verify`, `--check`, and `--install-file <path>` are mutually exclusive; the bare invocation is the unattended install, all six phases, and `--install-file` re-deploys one managed file. No positional arguments are accepted; `--help` and `--version` are honored before every other check and are the only stdout output — every result goes to stderr. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
+`--verify`, `--check`, and `--install-file <path>` are mutually exclusive; the bare invocation is the unattended install, all 6 phases, and `--install-file` re-deploys one managed file. No positional arguments are accepted; `--help` and `--version` are honored before every other check and are the only stdout output — every result goes to stderr. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
 
 | Verdict | Meaning |
 |---|---|
@@ -131,7 +132,7 @@ The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and
 
 Backups: `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig`.
 
-The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime` and existing `commit=` tokens; everything else is byte-preserved. `commit=10` doubles the upstream ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata; the filesystem itself stays consistent. It is gated by line-count parity, a size floor and a mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite; malformed rows are left byte-identical and warned.
+The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; everything else is byte-preserved. `commit=10` doubles the upstream ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata; the filesystem itself stays consistent. It is gated by line-count parity, a size floor, and a mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite; malformed rows are left byte-identical and warned.
 
 Boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes to generator output by SHA256; `--check` reports drift without writing.
 
@@ -272,7 +273,7 @@ Non-obvious choices; several list an override to reverse.
 
 **Gaming stack** — `--verify` reports `/dev/ntsync`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks. `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically, so at value `1` the variable is inert and only takes effect when set to an explicit DLL version (`4.0.0` or `4.1.1`, wider under the OptiScaler path) — verify with `printenv PROTON_FSR4_UPGRADE`. The shipped HUD omits `cpu_temp`; add it on its own line to show CPU temperature — leaving it off is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
 
-**Kernel parameters** — `amd_iommu=off` breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run. `clearcpuid=umip` disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels — drop it if there is no `umip_printk` stutter. `ipv6.disable=1` pairs with the IPv4-only ruleset; for dual-stack, drop the token, add IPv6 rules, and re-run. `pcie_aspm.policy=performance` biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. Confirm actual link state with `lspci -vv` (`LnkCtl: ASPM Disabled`) rather than assuming it from the token. `mt7925e.disable_aspm=1` pairs with it at the endpoint driver — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
+**Kernel parameters** — `amd_iommu=off` breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO, or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run. `clearcpuid=umip` disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels — drop it if there is no `umip_printk` stutter. `ipv6.disable=1` pairs with the IPv4-only ruleset; for dual-stack, drop the token, add IPv6 rules, and re-run. `pcie_aspm.policy=performance` biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. Confirm actual link state with `lspci -vv` (`LnkCtl: ASPM Disabled`) rather than assuming it from the token. `mt7925e.disable_aspm=1` pairs with it at the endpoint driver — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
 
 ## Troubleshooting
 

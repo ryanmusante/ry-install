@@ -9,7 +9,7 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 > [!WARNING]
 > Run as your normal user — never with `sudo`. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `--verify`. Re-runs are idempotent.
 
-A run closes with the Totals line — each phase's verdict tallied — then the verdict on the Elapsed line below it: `PASS` when clean, `PASS-WITH-WARNINGS` at exit `0` when warnings occurred.
+A run closes with the Totals line — each phase's verdict tallied — then the verdict on the Elapsed line below: `PASS` when clean, `PASS-WITH-WARNINGS` at exit `0` when warnings occurred.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
@@ -20,15 +20,9 @@ sudo -v
 
 ## Requirements
 
-| Requirement | Detail |
-|---|---|
-| OS | CachyOS (Arch-based), systemd-boot with BLS entries |
-| Shell | fish 3.6 or newer |
-| Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
-| Privileges | Normal user with sudo rights; `sudo -v` cached before the run |
-| Tools | GNU coreutils, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
+CachyOS (Arch-based) with systemd-boot BLS entries, fish 3.6 or newer, and a CPU matching `Ryzen AI Max` — bypass that check via [Environment Overrides](#environment-overrides). Run as a normal user with sudo rights and `sudo -v` cached beforehand. Needs GNU coreutils, `pacman`, `mkinitcpio`, `sdboot-manage`, and `systemctl`.
 
-In scope: the 17 [Managed Files](#managed-files), pacman add/remove, systemd units, and the fstab rewrite. Everything else on the system is left alone.
+In scope: the 17 [Managed Files](#managed-files), pacman add/remove, systemd units, and the fstab rewrite. Everything else is left alone.
 
 ## BIOS
 
@@ -41,28 +35,11 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 
 `--verify`, `--check`, and `--install-file <path>` are mutually exclusive; the bare invocation is the unattended install, all 6 phases, and `--install-file` re-deploys one managed file. No positional arguments are accepted; `--help` and `--version` are honored before every other check and are the only stdout output — every result goes to stderr. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
 
-| Verdict | Meaning |
-|---|---|
-| `PASS` | The phase did what it set out to do |
-| `WARN` | Something non-fatal — keeps exit `0` |
-| `FAIL` | The phase did not complete |
-| `DEFER` | Applies at next boot, as with the NetworkManager restart over Wi-Fi |
-| `SKIP` | Preconditions absent, so the phase did not run |
-| `--` | Not applicable — shown as `N/A` in Totals |
+Per-phase verdicts: `PASS` did what it set out to do; `WARN` hit something non-fatal and keeps exit `0`; `FAIL` did not complete; `DEFER` applies at next boot, as with the NetworkManager restart over Wi-Fi; `SKIP` found preconditions absent, so the phase did not run; `--` is not applicable, shown as `N/A` in Totals.
 
 ## Exit Codes
 
-| Code | Meaning | Emitted when |
-|---|---|---|
-| `0` | OK | Success, `WARN`-only runs, and a clean `--check` |
-| `1` | verify-FAIL / install-error | `--verify` mismatch, or an install step errored |
-| `2` | usage | Bad arguments, non-absolute or unmanaged `--install-file`, root-guard misuse |
-| `3` | preflight | Missing or non-GNU dependency, uncached sudo, gate mismatch, root with `--check` (silent) |
-| `4` | boot-critical | Boot cascade or post-rebuild sanity failed — **do not reboot**, resolve first |
-| `5` | lock | Another instance holds the lock; ambiguous pidfiles fail closed |
-| `10` | drift | `--check` found drift from the managed baseline |
-
-Sentinels `11`–`14`, `250`, `251`, and `255` are internal function returns and never surface as process exits. Signals exit `128+N`.
+`0` OK — success, `WARN`-only runs, and a clean `--check`. `1` verify-FAIL or install-error — a `--verify` mismatch, or an install step errored. `2` usage — bad arguments, a non-absolute or unmanaged `--install-file`, root-guard misuse. `3` preflight — missing or non-GNU dependency, uncached sudo, gate mismatch, root with `--check` (silent). `4` boot-critical — boot cascade or post-rebuild sanity failed; **do not reboot**, resolve first. `5` lock — another instance holds the lock, and ambiguous pidfiles fail closed. `10` drift — `--check` found drift from the managed baseline.
 
 ## Environment Overrides
 
@@ -121,7 +98,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
 | 6 | Finalize | User `daemon-reload` (PowerDevil re-apply if the env file changed), `paccache -rk2` and `-ruk0`, NetworkManager restart |
 
-Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If the ruleset cannot be confirmed, the mask is withheld for the run.
+Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If it cannot be confirmed, the mask is withheld for the run.
 
 The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and related traffic, and ICMP echo-request plus the error and PMTUD types (destination-unreachable, time-exceeded, parameter-problem) are accepted; `invalid` state is dropped; `forward` drops and `output` accepts. IPv6 is disabled system-wide via `ipv6.disable=1`.
 
@@ -134,7 +111,7 @@ Backups: `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other m
 
 The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; everything else is byte-preserved. `commit=10` doubles the upstream ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata; the filesystem itself stays consistent. It is gated by line-count parity, a size floor, and a mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite; malformed rows are left byte-identical and warned.
 
-Boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, enforced by an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes to generator output by SHA256; `--check` reports drift without writing.
+Boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance at a time, via an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes to generator output by SHA256; `--check` reports drift without writing.
 
 Edits reconcile differently by where the value landed. Generated-file values self-heal — each generator rewrites its whole file from the current array on the next run. External state does not: a package dropped from `PKGS_ADD` stays installed and a unit dropped from `MASK` stays masked; the script only adds, never unmasks. `--verify` reports orphaned admin-scope masks (vendor masks and alias cascades are filtered), unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in, which is sourced after `/etc/sdboot-manage.conf` and overrides `LINUX_OPTIONS`; `--check` records the first two in its JSONL. None counts as drift — a re-run cannot clear them; reverse by hand. Dropped `PKGS_ADD` packages are not detected at all: no record is kept of what earlier versions installed.
 
@@ -188,7 +165,7 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 
 ### Service Keys
 
-These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed on the way out, as the third column shows.
+These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed on the way out.
 
 | Key | Value | Emitted as |
 |---|---|---|
@@ -214,9 +191,9 @@ These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed
 
 `RESOLVED_DOT` is `no` by choice, matching the router: the filtering is identical either way, and `DNSOverTLS=yes` fails closed, so an unreachable endpoint would stop resolution outright. `DNSSEC=no` is the systemd default. The same upstreams repeat in the NetworkManager drop-in under `[global-dns-domain-*]` — without that, DHCP-supplied servers arrive as per-link DNS and outrank the global `DNS=` line.
 
-`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise. Under `amd-pstate-epp` with `CPUPOWER_GOVERNOR=performance`, the driver forces the EPP hint to its maximum and rejects any other value, so `EPP_PREFERENCE=performance` restates what the governor already imposes rather than adding to it. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
+`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise. Under `amd-pstate-epp` with `CPUPOWER_GOVERNOR=performance`, the driver forces the EPP hint to its maximum and rejects any other value, so `EPP_PREFERENCE=performance` restates what the governor already imposes. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
 
-`BLACKLIST_AMDXDNA` pairs with `amd_iommu=off` — the NPU needs the IOMMU and will not probe without it. Setting it `false` requires `amd_iommu=on iommu=pt`; the script refuses an inconsistent pair.
+`BLACKLIST_AMDXDNA` pairs with `amd_iommu=off`, and the script refuses an inconsistent pair; [Tuning Notes](#tuning-notes) has the override.
 
 ### Session Environment
 
@@ -271,22 +248,13 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 Non-obvious choices; several list an override to reverse.
 
-**Gaming stack** — `--verify` reports `/dev/ntsync`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks. `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically, so at value `1` the variable is inert and only takes effect when set to an explicit DLL version (`4.0.0` or `4.1.1`, wider under the OptiScaler path) — verify with `printenv PROTON_FSR4_UPGRADE`. The shipped HUD omits `cpu_temp`; add it on its own line to show CPU temperature — leaving it off is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
+**Gaming stack** — `--verify` reports `/dev/ntsync`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks. `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically, so at value `1` the variable is inert and only takes effect when set to an explicit DLL version (`4.0.0` or `4.1.1`, wider under the OptiScaler path) — verify with `printenv PROTON_FSR4_UPGRADE`. The shipped HUD omits `cpu_temp`; add it on its own line — leaving it off is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
 
 **Kernel parameters** — `amd_iommu=off` breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO, or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run. `clearcpuid=umip` disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels — drop it if there is no `umip_printk` stutter. `ipv6.disable=1` pairs with the IPv4-only ruleset; for dual-stack, drop the token, add IPv6 rules, and re-run. `pcie_aspm.policy=performance` biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. Confirm actual link state with `lspci -vv` (`LnkCtl: ASPM Disabled`) rather than assuming it from the token. `mt7925e.disable_aspm=1` pairs with it at the endpoint driver — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
 
 ## Troubleshooting
 
-| Symptom | Action |
-|---|---|
-| Boot failure | Live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update` |
-| Rebuild refused | Fix the cause of the boot-state taint, then re-run |
-| `--verify` drift | `./ry-install.fish --install-file /etc/...` |
-| Lock held, no live PID | `rm -rf ~/ry-install/.lock`, then re-run |
-| PipeWire permission denied | `sudo usermod -aG realtime $USER`, re-login — needs `realtime-privileges` |
-| BT speaker will not auto-reconnect | `bluetoothctl trust <MAC>`, then power the speaker on after login |
-| Unmanaged `60-ry-*` drop-in warned | `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files |
-| Masked unit not in `MASK` reported | `systemctl unmask <unit>` if an earlier `MASK` masked it; leave distro and hand-made masks alone |
+Boot failure — live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update`. Rebuild refused — fix the cause of the boot-state taint, then re-run. `--verify` drift — `./ry-install.fish --install-file /etc/...`. Lock held with no live PID — `rm -rf ~/ry-install/.lock`, then re-run. PipeWire permission denied — `sudo usermod -aG realtime $USER` and re-login, which needs `realtime-privileges`. BT speaker will not auto-reconnect — `bluetoothctl trust <MAC>`, then power the speaker on after login. Unmanaged `60-ry-*` drop-in warned — `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files. Masked unit not in `MASK` reported — `systemctl unmask <unit>` if an earlier `MASK` masked it; leave distro and hand-made masks alone.
 
 ### libvirt and QEMU NAT
 

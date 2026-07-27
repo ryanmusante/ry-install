@@ -120,7 +120,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
 | 6 | Finalize | User `daemon-reload` (PowerDevil re-apply if the env file changed), `paccache -rk2` and `-ruk0`, NetworkManager restart |
 
-Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If the ruleset cannot be confirmed, the mask is withheld for the run. The `ufw` package stays installed.
+Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If the ruleset cannot be confirmed, the mask is withheld for the run.
 
 The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and related traffic, and ICMP echo-request plus the error and PMTUD types (destination-unreachable, time-exceeded, parameter-problem) are accepted; `invalid` state is dropped; `forward` drops and `output` accepts. IPv6 is disabled system-wide via `ipv6.disable=1`.
 
@@ -215,7 +215,7 @@ These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed
 
 `NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise. Under `amd-pstate-epp` with `CPUPOWER_GOVERNOR=performance`, the driver forces the EPP hint to its maximum and rejects any other value, so `EPP_PREFERENCE=performance` restates what the governor already imposes rather than adding to it. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
 
-`BLACKLIST_AMDXDNA` pairs with `amd_iommu=off` — the NPU needs the IOMMU and will not probe without it. Setting it `false` requires `amd_iommu=on iommu=pt`; the script refuses an inconsistent pair. `LOGIND_IGNORE_KEYS` holds the 8 `Handle*Key=ignore` lines and keeps its own names.
+`BLACKLIST_AMDXDNA` pairs with `amd_iommu=off` — the NPU needs the IOMMU and will not probe without it. Setting it `false` requires `amd_iommu=on iommu=pt`; the script refuses an inconsistent pair.
 
 ### Session Environment
 

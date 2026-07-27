@@ -17,6 +17,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     commit=10 tradeoff against the upstream 5 second default
   - docs: cut three readme clauses already stated elsewhere: drop-in
     detection, the edit-the-source rule, and a redundant cross-link
+  - docs: cut two more readme clauses stated elsewhere: the ufw
+    stays-installed note and the logind key-name summary
 
 
 7.139.0

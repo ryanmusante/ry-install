@@ -20,7 +20,13 @@ sudo -v
 
 ## Requirements
 
-CachyOS (Arch-based) with systemd-boot BLS entries, fish 3.6 or newer, and a CPU matching `Ryzen AI Max` — bypass that check via [Environment Overrides](#environment-overrides). Run as a normal user with sudo rights and `sudo -v` cached beforehand. Needs GNU coreutils, `pacman`, `mkinitcpio`, `sdboot-manage`, and `systemctl`.
+| Requirement | Detail |
+|---|---|
+| OS | CachyOS (Arch-based), systemd-boot with BLS entries |
+| Shell | fish 3.6 or newer |
+| Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
+| Privileges | Normal user with sudo rights; `sudo -v` cached before the run |
+| Tools | GNU coreutils, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
 
 In scope: the 17 [Managed Files](#managed-files), pacman add/remove, systemd units, and the fstab rewrite. Everything else is left alone.
 

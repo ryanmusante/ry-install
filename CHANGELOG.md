@@ -4,8 +4,15 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.140.0
+7.141.0
 -------
+
+  - readme: document --, -h and -v; name the emitted mkinitcpio keys
+    and the package and unit set variables; widen --verify's scope
+
+
+7.139.0 - 7.140.0
+-----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
     mkinitcpio prepends -T0 for zstd, so the image is unchanged
@@ -13,18 +20,13 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     drop-ins are sourced after /etc/sdboot-manage.conf and outrank it
   - preflight: drop free, uptime, swapon and zramctl from the optional
     tool probe; the script never invokes any of them
-
-
-7.139.0
--------
-
   - verify: sweep every cpufreq policy for driver, governor and EPP
     uniformity; cpu0 stays the representative detail readout
   - verify: assert each non-fallback loader entry carries every
     KERNEL_PARAMS token; fallback entries keep their own options
   - verify: check systemd-resolved unit-file state (enabled or
     static) so --verify and --check agree on persistence
-  - verify: report only admin-scope orphan masks and drop vendor
+  - verify: report only admin-scope orphan masks, dropping vendor
     masks and Alias= cascades of units this profile masks
   - verify: log the root filesystem type and the ext4 fstab entry
     count; distinguish absent sysctl knobs from unreadable ones
@@ -63,22 +65,17 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - source: the drop-in sweep is one helper shared by both modes
 
 
-7.134.0
--------
-
-  - summary: the abort path records the phase-3 row under the name the
-    normal path uses; the old one also overflowed the matrix column
-  - verify: two sub markers name the function that calls them, not an
-    ancestor, completing the pass begun in 7.132.0 - 7.133.0
-  - preflight: read the CPU model through cat. A missing /proc/cpuinfo
-    made the redirect emit a warning that --check must never print
-  - logging: comma-join the unmanaged drop-in list so files= stays one
-    token, matching every other multi-value key
-
-
-7.132.0 - 7.133.0
+7.132.0 - 7.134.0
 -----------------
 
+  - summary: the abort path records the phase-3 row under the normal
+    path's name; the old one also overflowed the matrix column
+  - verify: two sub markers name the function that calls them, not an
+    ancestor, completing the pass begun earlier in this range
+  - preflight: read the CPU model through cat; a missing /proc/cpuinfo
+    made the redirect warn, which --check must never print
+  - logging: comma-join the unmanaged drop-in list so files= stays one
+    token, matching every other multi-value key
   - verify: warn on unmanaged /etc/modprobe.d/60-ry-*.conf drop-ins.
     The pre-7.99 files had no owner in the profile and no detection
   - verify: session subchecks name _verify_runtime_session, their only
@@ -138,8 +135,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     mask path; an unconfirmed ruleset withholds the ufw.service mask
   - nftables.conf: embedded header now reads "ufw masked", producing a
     one-time drift and redeploy
-  - source: comments normalized to one line each, verbose inline notes
-    trimmed to the vital fact, safety and lint annotations kept
+  - source: comments normalized to one line each; verbose inline notes
+    trimmed, safety and lint annotations kept
   - source: section banners name only the functions they hold, arrow
     glyph unified, one blank line before every banner
   - source: "sub:" parent marker completed across the verify helpers;
@@ -159,14 +156,14 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - lock: dead-PID reclaim only; live or ambiguous pidfiles fail closed
   - logging: JSONL footer carries the exit code for every mode
   - preserve: one-time <path>.ry.orig for non-boot managed files whose
-    pre-existing content differed at first adoption
+    content differed at first adoption
 
 
 7.100.0 - 7.107.3
 -----------------
 
-  - configuration: 17 embedded configs deployed atomically - same-filesystem
-    temp file, pre-validation, backup, mv -T, re-read and restore
+  - configuration: 17 embedded configs deployed atomically - temp file
+    on the same filesystem, pre-validation, backup, mv -T, re-read
   - packages: pacman -Rns made rdep-aware via pactree, with a timeout
   - packages: PKGS_ADD re-marked explicit after -Syu so a later removal
     cannot orphan a dependency-installed package
@@ -175,7 +172,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - check: silent idempotency probe against the live /proc/cmdline
   - services: masked unit set and enabled unit set established
   - boot: boot-critical failures exit 4 and skip finalization
-  - preflight: hardware gate fails closed when the CPU model is unreadable
+  - preflight: hardware gate fails closed on an unreadable CPU model
   - progress: pinned bottom row with a scroll region
 
 

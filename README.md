@@ -28,7 +28,7 @@ sudo -v
 | Privileges | Normal user with sudo rights; `sudo -v` cached before the run |
 | Tools | GNU coreutils, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
 
-In scope: the 17 [Managed Files](#managed-files), pacman add/remove, systemd units, and the fstab rewrite. Everything else is left alone.
+In scope: the 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite. Everything else is left alone.
 
 ## BIOS
 
@@ -117,7 +117,7 @@ Backups: `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other m
 
 The fstab rewrite gives ext4 rows `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; everything else is byte-preserved. `commit=10` doubles the upstream ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata; the filesystem itself stays consistent. It is gated by line-count parity, a size floor, and a mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite; malformed rows are left byte-identical and warned.
 
-Boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance at a time, via an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes to generator output by SHA256; `--check` reports drift without writing.
+Boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance at a time, via an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed. `--verify` compares installed bytes to generator output by SHA256, then checks the live state those files are meant to produce — kernel cmdline, module parameters, sysctl values, unit states, fstab options, and session environment. `--check` reports drift without writing.
 
 Edits reconcile differently by where the value landed. Generated-file values self-heal — each generator rewrites its whole file from the current array on the next run. External state does not: a package dropped from `PKGS_ADD` stays installed and a unit dropped from `MASK` stays masked; the script only adds, never unmasks. `--verify` reports orphaned admin-scope masks (vendor masks and alias cascades are filtered), unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in, which is sourced after `/etc/sdboot-manage.conf` and overrides `LINUX_OPTIONS`; `--check` records the first two in its JSONL. None counts as drift — a re-run cannot clear them; reverse by hand. Dropped `PKGS_ADD` packages are not detected at all: no record is kept of what earlier versions installed.
 
@@ -236,17 +236,17 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 ## Packages
 
-| Action | Packages |
-|---|---|
-| Install | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `nftables`, `pacman-contrib` |
-| Remove | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
+| Action | Variable | Packages |
+|---|---|---|
+| Install | `PKGS_ADD` | `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `nftables`, `pacman-contrib` |
+| Remove | `PKGS_DEL` | `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect` |
 
 ## Units
 
-| Action | Units |
-|---|---|
-| Masked | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
-| Enabled | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service` |
+| Action | Variable | Units |
+|---|---|---|
+| Masked | `MASK` | `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target` |
+| Enabled | `EXPECTED_SERVICES` | `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service` |
 
 ## Tuning Notes
 

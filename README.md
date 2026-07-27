@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.140.0** · [Changelog](CHANGELOG.md)
+**Version 7.141.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
@@ -39,7 +39,7 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
 
-`--verify`, `--check`, and `--install-file <path>` are mutually exclusive; the bare invocation is the unattended install, all 6 phases, and `--install-file` re-deploys one managed file. No positional arguments are accepted; `--help` and `--version` are honored before every other check and are the only stdout output — every result goes to stderr. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
+`--verify`, `--check`, and `--install-file <path>` are mutually exclusive; the bare invocation is the unattended install, all 6 phases, and `--install-file` re-deploys one managed file. No positional arguments are accepted; `--` ends option parsing, and anything after it exits `2`. `--help` (`-h`) and `--version` (`-v`) are honored before every other check and are the only stdout output — every result goes to stderr. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
 
 Per-phase verdicts: `PASS` did what it set out to do; `WARN` hit something non-fatal and keeps exit `0`; `FAIL` did not complete; `DEFER` applies at next boot, as with the NetworkManager restart over Wi-Fi; `SKIP` found preconditions absent, so the phase did not run; `--` is not applicable, shown as `N/A` in Totals.
 
@@ -160,12 +160,12 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 
 ### Initramfs
 
-| Key | Value |
-|---|---|
-| `MKINITCPIO_MODULES` | `amdgpu` |
-| `MKINITCPIO_HOOKS` | `base`, `systemd`, `autodetect`, `microcode`, `modconf`, `kms`, `keyboard`, `sd-vconsole`, `block`, `filesystems`, `fsck` |
-| `MKINITCPIO_COMPRESSION` | `zstd` |
-| `MKINITCPIO_COMPRESSION_OPTIONS` | `-1` |
+| Key | Value | Emitted as |
+|---|---|---|
+| `MKINITCPIO_MODULES` | `amdgpu` | `MODULES=()` |
+| `MKINITCPIO_HOOKS` | `base`, `systemd`, `autodetect`, `microcode`, `modconf`, `kms`, `keyboard`, `sd-vconsole`, `block`, `filesystems`, `fsck` | `HOOKS=()` |
+| `MKINITCPIO_COMPRESSION` | `zstd` | `COMPRESSION=` |
+| `MKINITCPIO_COMPRESSION_OPTIONS` | `-1` | `COMPRESSION_OPTIONS=()` |
 
 `HOOKS` order is an invariant — `systemd` must precede `sd-vconsole`, and `block` must precede `filesystems`. The script validates both before writing.
 
@@ -280,7 +280,7 @@ oifname "virbr0" ct state established,related accept
 
 A `.ry.bak` exists only if the file was present before the overwrite — for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot files; restore that instead of deleting.
 
-1. **Unmask units** — `sudo systemctl unmask` all 11; set in [Units](#units).
+1. **Unmask units** — `sudo systemctl unmask` all 11; set in [Units](#units). Unmask the Avahi pair to restore its mDNS responder, which resolved covers while they are masked.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first, since its unit loads `/etc/nftables.conf` at start and fails once the ruleset is gone; then `sudo rm` the 11 system files and `rm` the 2 user files. Skip the 4 boot files; step 3 reverts them.
 3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the `.ry.bak` files.
 4. **Reverse packages** (optional) — `pacman -S --needed` the Remove list, `pacman -Rns` the Install list; sets in [Packages](#packages).

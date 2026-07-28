@@ -18,13 +18,6 @@ sudo -v
 
 A run closes with the Totals line — each phase's verdict tallied — then the verdict on the Elapsed line below: `PASS` when clean, `PASS-WITH-WARNINGS` at exit `0` when warnings occurred.
 
-```text
-Totals : 20 PASS · 0 WARN · 0 FAIL · 1 DEFER · 0 SKIP · 0 N/A
-Elapsed: 6m 40s   ·   Verdict: PASS
-Log    : ~/ry-install/logs/2026-07-28/install-20260728-141530-0500-1234.jsonl
-Next   : reboot · ./ry-install.fish --verify
-```
-
 ## Requirements
 
 | Requirement | Detail |
@@ -276,12 +269,6 @@ Non-obvious choices; several name the override that reverses them.
 ## Troubleshooting
 
 **Boot failure** — live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update`.
-
-**Rebuild refused** — fix the cause of the boot-state taint, then re-run.
-
-**Verify drift** — `./ry-install.fish --install-file /etc/...` for the file `--verify` names.
-
-**Lock held with no live PID** — `rm -rf ~/ry-install/.lock`, then re-run.
 
 **PipeWire permission denied** — `sudo usermod -aG realtime $USER` and re-login, which needs `realtime-privileges`.
 

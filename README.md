@@ -123,13 +123,11 @@ The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and
 
 **Backups** — `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig`.
 
-**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; everything else is byte-preserved. `commit=10` doubles the upstream ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata; the filesystem itself stays consistent. It is gated by line-count parity, a size floor, and a mandatory `findmnt --verify`. A symlinked `/etc/fstab` aborts the rewrite; malformed rows are left byte-identical and warned.
+**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; everything else is byte-preserved. `commit=10` doubles the upstream ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata; the filesystem itself stays consistent.
 
 **Failure and concurrency** — boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, via an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed.
 
-**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks the live state those files are meant to produce: kernel cmdline, module parameters, sysctl values, unit states, fstab options, and session environment. `--check` reports drift without writing. `--verify` also reports state the script cannot own: orphaned admin-scope masks (vendor masks and alias cascades are filtered), unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in. That last one is sourced after `/etc/sdboot-manage.conf` and overrides `LINUX_OPTIONS`. `--check` records the first two in its JSONL. None counts as drift — a re-run cannot clear them; reverse by hand.
-
-**Edits and drift** — how an edit reconciles depends on where the value landed. Generated-file values self-heal, since each generator rewrites its whole file from the current array on the next run. External state does not: a package dropped from `PKGS_ADD` stays installed and a unit dropped from `MASK` stays masked, because the script only adds, never unmasks. Dropped `PKGS_ADD` packages are not detected at all — no record is kept of what earlier versions installed.
+**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks the live state those files are meant to produce: kernel cmdline, module parameters, sysctl values, unit states, fstab options, and session environment. `--check` reports drift without writing. `--verify` also reports state the script cannot own: orphaned admin-scope masks (vendor masks and alias cascades are filtered), unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in.
 
 ## Embedded Values
 

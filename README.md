@@ -272,7 +272,7 @@ Non-obvious choices; several name the override that reverses them.
 
 **Bluetooth speaker will not auto-reconnect** — `bluetoothctl trust <MAC>`, then power the speaker on after login.
 
-**Unmanaged 60-ry-* drop-in warned** — `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files.
+**Unmanaged 60-ry- drop-in warned** — `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files.
 
 **Masked unit not in `MASK` reported** — `systemctl unmask <unit>` if an earlier `MASK` masked it; leave distro and hand-made masks alone.
 

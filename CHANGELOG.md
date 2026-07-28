@@ -4,6 +4,13 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.141.2
+-------
+
+  - readme: label the five Safety and Reliability blocks and split
+    the two that carried unrelated topics in one paragraph
+
+
 7.141.1
 -------
 

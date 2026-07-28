@@ -4,6 +4,13 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.141.1
+-------
+
+  - readme: fix phase-reference casing, the -- verdict/end-of-options
+    collision, four loose sentences and two column-parallelism cells
+
+
 7.141.0
 -------
 

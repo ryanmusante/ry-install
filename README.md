@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.141.0** · [Changelog](CHANGELOG.md)
+**Version 7.141.1** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
@@ -9,14 +9,14 @@ Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+
 > [!WARNING]
 > Run as your normal user — never with `sudo`. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `--verify`. Re-runs are idempotent.
 
-A run closes with the Totals line — each phase's verdict tallied — then the verdict on the Elapsed line below: `PASS` when clean, `PASS-WITH-WARNINGS` at exit `0` when warnings occurred.
-
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
 sudo -v
 ./ry-install.fish
 ```
+
+A run closes with the Totals line — each phase's verdict tallied — then the verdict on the Elapsed line below: `PASS` when clean, `PASS-WITH-WARNINGS` at exit `0` when warnings occurred.
 
 ## Requirements
 
@@ -32,7 +32,7 @@ In scope: the 17 [Managed Files](#managed-files), `pacman` add/remove, systemd u
 
 ## BIOS
 
-Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`; full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference). Separately, GTT caps usable VRAM near 62 GiB; raise the BIOS UMA carveout (its own menu), up to 96 GiB, for more, since `amdgpu.gttsize` is deprecated — check `/sys/module/ttm/parameters/pages_limit`.
+Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`; full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference). Separately, GTT caps usable VRAM near 62 GiB. For more, raise the BIOS UMA carveout — its own menu, up to 96 GiB — since `amdgpu.gttsize` is deprecated; check `/sys/module/ttm/parameters/pages_limit`.
 
 ## Usage
 
@@ -41,7 +41,7 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 
 `--verify`, `--check`, and `--install-file <path>` are mutually exclusive; the bare invocation is the unattended install, all 6 phases, and `--install-file` re-deploys one managed file. No positional arguments are accepted; `--` ends option parsing, and anything after it exits `2`. `--help` (`-h`) and `--version` (`-v`) are honored before every other check and are the only stdout output — every result goes to stderr. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
 
-Per-phase verdicts: `PASS` did what it set out to do; `WARN` hit something non-fatal and keeps exit `0`; `FAIL` did not complete; `DEFER` applies at next boot, as with the NetworkManager restart over Wi-Fi; `SKIP` found preconditions absent, so the phase did not run; `--` is not applicable, shown as `N/A` in Totals.
+Per-phase verdicts: `PASS` did what it set out to do; `WARN` hit something non-fatal and keeps exit `0`; `FAIL` did not complete; `DEFER` applies at next boot, as with the NetworkManager restart over Wi-Fi; `SKIP` found preconditions absent, so the phase did not run; a `--` cell means not applicable, tallied as `N/A` in Totals.
 
 ## Exit Codes
 
@@ -51,11 +51,11 @@ Per-phase verdicts: `PASS` did what it set out to do; `WARN` hit something non-f
 
 | Variable | Effect |
 |---|---|
-| `RY_RUN_TIMEOUT=<sec>` | Per-command wall-clock cap. Default `3600`; `0` disables; package and boot ops floor at `7200` |
+| `RY_RUN_TIMEOUT=<sec>` | Per-command wall-clock cap — default `3600`, `0` disables, package and boot ops floor at `7200` |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `EXPECTED_CPU_MATCH` hard-fail |
 | `NO_COLOR` | Disable colored output when set to a non-empty value ([no-color.org](https://no-color.org)) |
 
-Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping the hardware check is the risky one: deploying gfx1151 defaults on a non-matching CPU writes an incorrect kernel cmdline and initramfs `MODULES`.
+Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping the hardware check is the risky override: deploying gfx1151 defaults on a non-matching CPU writes an incorrect kernel cmdline and initramfs `MODULES`.
 
 ## Managed Files
 
@@ -75,7 +75,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | File | Purpose |
 |---|---|
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | AdGuard upstreams, mDNS and LLMNR off |
-| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | ignore power, suspend, hibernate, and reboot keys — 8 keys including long-press variants |
+| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | power, suspend, hibernate, and reboot keys ignored — 8 keys including long-press variants |
 | `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | `LogLevelMax=notice` drops info-level dispatcher lines |
 | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, log level `WARN`, DNS upstreams pinned |
 | `/etc/iw-regdomain` | regulatory domain (`US`) |
@@ -123,7 +123,7 @@ Edits reconcile differently by where the value landed. Generated-file values sel
 
 ## Embedded Values
 
-All tunables are `set -g` globals near the top of the script — there is no external config file. Edit one, then re-run or `--install-file` the affected file. Porting to other hardware starts at `PROFILE_NAME`, `PROFILE_DESC`, and `EXPECTED_CPU_MATCH`. Preflight refuses to deploy when the sets contradict each other — a package in both `PKGS_ADD` and `PKGS_DEL`, or a unit in both `MASK` and `EXPECTED_SERVICES`, since phase 4 would undo phase 2.
+All tunables are `set -g` globals near the top of the script — there is no external config file. Edit one, then re-run or `--install-file` the affected file. Porting to other hardware starts at `PROFILE_NAME`, `PROFILE_DESC`, and `EXPECTED_CPU_MATCH`. Preflight refuses to deploy when the sets contradict each other — a package in both `PKGS_ADD` and `PKGS_DEL`, or a unit in both `MASK` and `EXPECTED_SERVICES`, since Phase 4 would undo Phase 2.
 
 ### Bootloader Keys
 
@@ -210,7 +210,7 @@ These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed
 | `MESA_SHADER_CACHE_MAX_SIZE=16G` | roomy Mesa shader cache |
 | `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
 | `PROTON_ENABLE_WAYLAND=1` | native-Wayland Proton path |
-| `PROTON_FSR4_UPGRADE=1` | request the FSR4 DLL upgrade path |
+| `PROTON_FSR4_UPGRADE=1` | FSR4 DLL upgrade request |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
 | `VKD3D_DEBUG=none` | vkd3d logging off |
 | `VKD3D_SHADER_DEBUG=none` | vkd3d shader logging off |
@@ -250,19 +250,19 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 ## Tuning Notes
 
-Non-obvious choices; several list an override to reverse.
+Non-obvious choices; several name the override that reverses them.
 
-**Gaming stack** — `--verify` reports `/dev/ntsync`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks. `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and 3.5; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically, so at value `1` the variable is inert and only takes effect when set to an explicit DLL version (`4.0.0` or `4.1.1`, wider under the OptiScaler path) — verify with `printenv PROTON_FSR4_UPGRADE`. The shipped HUD omits `cpu_temp`; add it on its own line — leaving it off is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
+**Gaming stack** — `--verify` reports `/dev/ntsync`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks. `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and RDNA3.5; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically, so at value `1` the variable is inert and only takes effect when set to an explicit DLL version (`4.0.0` or `4.1.1`, wider under the OptiScaler path) — verify with `printenv PROTON_FSR4_UPGRADE`. The shipped HUD omits `cpu_temp`; add it on its own line — leaving it off is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
 
 **Kernel parameters** — `amd_iommu=off` breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO, or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run. `clearcpuid=umip` disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels — drop it if there is no `umip_printk` stutter. `ipv6.disable=1` pairs with the IPv4-only ruleset; for dual-stack, drop the token, add IPv6 rules, and re-run. `pcie_aspm.policy=performance` biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. Confirm actual link state with `lspci -vv` (`LnkCtl: ASPM Disabled`) rather than assuming it from the token. `mt7925e.disable_aspm=1` pairs with it at the endpoint driver — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
 
 ## Troubleshooting
 
-Boot failure — live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update`. Rebuild refused — fix the cause of the boot-state taint, then re-run. `--verify` drift — `./ry-install.fish --install-file /etc/...`. Lock held with no live PID — `rm -rf ~/ry-install/.lock`, then re-run. PipeWire permission denied — `sudo usermod -aG realtime $USER` and re-login, which needs `realtime-privileges`. BT speaker will not auto-reconnect — `bluetoothctl trust <MAC>`, then power the speaker on after login. Unmanaged `60-ry-*` drop-in warned — `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files. Masked unit not in `MASK` reported — `systemctl unmask <unit>` if an earlier `MASK` masked it; leave distro and hand-made masks alone.
+Boot failure — live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update`. Rebuild refused — fix the cause of the boot-state taint, then re-run. `--verify` drift — `./ry-install.fish --install-file /etc/...`. Lock held with no live PID — `rm -rf ~/ry-install/.lock`, then re-run. PipeWire permission denied — `sudo usermod -aG realtime $USER` and re-login, which needs `realtime-privileges`. Bluetooth speaker will not auto-reconnect — `bluetoothctl trust <MAC>`, then power the speaker on after login. Unmanaged `60-ry-*` drop-in warned — `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files. Masked unit not in `MASK` reported — `systemctl unmask <unit>` if an earlier `MASK` masked it; leave distro and hand-made masks alone.
 
 ### libvirt and QEMU NAT
 
-`forward { policy drop; }` silently breaks libvirt/QEMU NAT guest WAN access. VMs are out of scope; if you run them, add to `/etc/nftables.conf` — do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`):
+`forward { policy drop; }` silently breaks libvirt/QEMU NAT guest WAN access. VMs are out of scope; if you run them, add the following to `/etc/nftables.conf` — do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`):
 
 ```nft
 # input - guest DHCP/DNS to the host dnsmasq:
@@ -280,10 +280,10 @@ oifname "virbr0" ct state established,related accept
 
 A `.ry.bak` exists only if the file was present before the overwrite — for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot files; restore that instead of deleting.
 
-1. **Unmask units** — `sudo systemctl unmask` all 11; set in [Units](#units). Unmask the Avahi pair to restore its mDNS responder, which resolved covers while they are masked.
+1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore its mDNS responder, which resolved covers while they are masked.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first, since its unit loads `/etc/nftables.conf` at start and fails once the ruleset is gone; then `sudo rm` the 11 system files and `rm` the 2 user files. Skip the 4 boot files; step 3 reverts them.
 3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the `.ry.bak` files.
-4. **Reverse packages** (optional) — `pacman -S --needed` the Remove list, `pacman -Rns` the Install list; sets in [Packages](#packages).
+4. **Reverse packages** (optional) — `pacman -S --needed` the Remove list, `pacman -Rns` the Install list; both listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.
 
 ## License

@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.141.4** · [Changelog](CHANGELOG.md)
+**Version 7.142.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
@@ -18,6 +18,13 @@ sudo -v
 
 A run closes with the Totals line — each phase's verdict tallied — then the verdict on the Elapsed line below: `PASS` when clean, `PASS-WITH-WARNINGS` at exit `0` when warnings occurred.
 
+```text
+Totals : 20 PASS · 0 WARN · 0 FAIL · 1 DEFER · 0 SKIP · 0 N/A
+Elapsed: 6m 40s   ·   Verdict: PASS
+Log    : ~/ry-install/logs/2026-07-28/install-20260728-141530-0500-1234.jsonl
+Next   : reboot · ./ry-install.fish --verify
+```
+
 ## Requirements
 
 | Requirement | Detail |
@@ -32,7 +39,7 @@ In scope: the 17 [Managed Files](#managed-files), `pacman` add/remove, systemd u
 
 ## BIOS
 
-Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`; full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference). Separately, GTT caps usable VRAM near 62 GiB. For more, raise the BIOS UMA carveout — its own menu, up to 96 GiB — since `amdgpu.gttsize` is deprecated; check `/sys/module/ttm/parameters/pages_limit`.
+Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`; full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
 ## Usage
 
@@ -45,7 +52,15 @@ Per-phase verdicts: `PASS` did what it set out to do; `WARN` hit something non-f
 
 ## Exit Codes
 
-`0` OK — success, `WARN`-only runs, and a clean `--check`. `1` verify-FAIL or install-error — a `--verify` mismatch or a failed install step. `2` usage — bad arguments, a non-absolute or unmanaged `--install-file`, root-guard misuse. `3` preflight — missing or non-GNU dependency, uncached sudo, gate mismatch, root with `--check` (silent). `4` boot-critical — boot cascade or post-rebuild sanity failed; **do not reboot**, resolve first. `5` lock — another instance holds the lock, and ambiguous pidfiles fail closed. `10` drift — `--check` found drift from the managed baseline.
+| Code | Meaning |
+|---|---|
+| `0` | OK — success, `WARN`-only runs, and a clean `--check` |
+| `1` | verify-FAIL or install-error — a `--verify` mismatch or a failed install step |
+| `2` | usage — bad arguments, a non-absolute or unmanaged `--install-file`, root-guard misuse |
+| `3` | preflight — missing or non-GNU dependency, uncached sudo, gate mismatch, root with `--check` (silent) |
+| `4` | boot-critical — boot cascade or post-rebuild sanity failed; **do not reboot**, resolve first |
+| `5` | lock — another instance holds the lock, and ambiguous pidfiles fail closed |
+| `10` | drift — `--check` found drift from the managed baseline |
 
 ## Environment Overrides
 
@@ -260,7 +275,21 @@ Non-obvious choices; several name the override that reverses them.
 
 ## Troubleshooting
 
-Boot failure — live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update`. Rebuild refused — fix the cause of the boot-state taint, then re-run. `--verify` drift — `./ry-install.fish --install-file /etc/...`. Lock held with no live PID — `rm -rf ~/ry-install/.lock`, then re-run. PipeWire permission denied — `sudo usermod -aG realtime $USER` and re-login, which needs `realtime-privileges`. Bluetooth speaker will not auto-reconnect — `bluetoothctl trust <MAC>`, then power the speaker on after login. Unmanaged `60-ry-*` drop-in warned — `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files. Masked unit not in `MASK` reported — `systemctl unmask <unit>` if an earlier `MASK` masked it; leave distro and hand-made masks alone.
+**Boot failure** — live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update`.
+
+**Rebuild refused** — fix the cause of the boot-state taint, then re-run.
+
+**`--verify` drift** — `./ry-install.fish --install-file /etc/...`.
+
+**Lock held with no live PID** — `rm -rf ~/ry-install/.lock`, then re-run.
+
+**PipeWire permission denied** — `sudo usermod -aG realtime $USER` and re-login, which needs `realtime-privileges`.
+
+**Bluetooth speaker will not auto-reconnect** — `bluetoothctl trust <MAC>`, then power the speaker on after login.
+
+**Unmanaged `60-ry-*` drop-in warned** — `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files.
+
+**Masked unit not in `MASK` reported** — `systemctl unmask <unit>` if an earlier `MASK` masked it; leave distro and hand-made masks alone.
 
 ### libvirt and QEMU NAT
 

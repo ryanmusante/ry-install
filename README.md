@@ -279,7 +279,7 @@ Non-obvious choices; several name the override that reverses them.
 
 **Rebuild refused** — fix the cause of the boot-state taint, then re-run.
 
-**`--verify` drift** — `./ry-install.fish --install-file /etc/...`.
+**Verify drift** — `./ry-install.fish --install-file /etc/...` for the file `--verify` names.
 
 **Lock held with no live PID** — `rm -rf ~/ry-install/.lock`, then re-run.
 

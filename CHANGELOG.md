@@ -4,6 +4,20 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
+7.141.4
+-------
+
+  - readme: split the set-contradiction rationale per example, fix the
+    exit 1 gloss parallelism and the cpu_temp enable phrasing
+
+
+7.141.3
+-------
+
+  - readme: name the emitted bootloader keys, including the
+    SDBOOT_OVERWRITE to OVERWRITE_EXISTING rename
+
+
 7.141.2
 -------
 

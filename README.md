@@ -2,7 +2,9 @@
 
 **Version 7.143.0** · [Changelog](CHANGELOG.md)
 
-Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
+Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo).
+
+One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
 ## Quick Start
 
@@ -38,6 +40,12 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
+
+```fish
+./ry-install.fish --verify
+./ry-install.fish --check
+./ry-install.fish --install-file /etc/nftables.conf
+```
 
 `--verify`, `--check`, and `--install-file <path>` are mutually exclusive; the bare invocation is the unattended install, all 6 phases, and `--install-file` re-deploys one managed file. No positional arguments are accepted; `--` ends option parsing, and anything after it exits `2`. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
 
@@ -118,8 +126,7 @@ The shipped ruleset is IPv4-only default-deny-inbound. IPv6 is disabled system-w
 
 ## Safety and Reliability
 
-> [!NOTE]
-> Every managed file is written atomically: content is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved into place with `mv -T`, then re-read and compared. A mismatch restores the backup.
+**Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved into place with `mv -T`, then re-read and compared; a mismatch restores the backup.
 
 **Backups** — `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig`.
 
@@ -289,8 +296,7 @@ oifname "virbr0" ct state established,related accept
 
 ## Uninstall
 
-> [!NOTE]
-> There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference; the steps are ordered.
+There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference; the steps are ordered.
 
 A `.ry.bak` exists only if the file was present before the overwrite — for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot files; restore that instead of deleting.
 
@@ -299,6 +305,10 @@ A `.ry.bak` exists only if the file was present before the overwrite — for fst
 3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the `.ry.bak` files.
 4. **Reverse packages** — optional: `pacman -S --needed` the Remove list, `pacman -Rns` the Install list; both listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.
+
+## Contributing
+
+Questions and bug reports: [GitHub issues](https://github.com/ryanmusante/ry-install/issues). Single-host scope — open an issue before a PR.
 
 ## License
 

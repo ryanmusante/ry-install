@@ -4,26 +4,10 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.142.0
+7.143.0
 -------
 
-  - readme: add a sample run tail, tabulate Exit Codes, give
-    Troubleshooting bold leads and trim the BIOS carveout notes
-
-
-7.141.0 - 7.141.4
------------------
-
-  - readme: split the set-contradiction rationale per example, fix the
-    exit 1 gloss parallelism and the cpu_temp enable phrasing
-  - readme: name the emitted bootloader keys, including the
-    SDBOOT_OVERWRITE to OVERWRITE_EXISTING rename
-  - readme: label the five Safety and Reliability blocks and split
-    the two that carried unrelated topics in one paragraph
-  - readme: fix phase-reference casing, the -- verdict/end-of-options
-    collision, four loose sentences and two column-parallelism cells
-  - readme: document --, -h and -v; name the emitted mkinitcpio keys
-    and the package and unit set variables; widen --verify's scope
+  - changelog: drop readme entries, keep functional changes only
 
 
 7.139.0 - 7.140.0

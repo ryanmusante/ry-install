@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.142.0** · [Changelog](CHANGELOG.md)
+**Version 7.143.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible.
 
@@ -16,7 +16,7 @@ sudo -v
 ./ry-install.fish
 ```
 
-A run closes with the Totals line — each phase's verdict tallied — then the verdict on the Elapsed line below: `PASS` when clean, `PASS-WITH-WARNINGS` at exit `0` when warnings occurred.
+A run closes with the Totals line and a `PASS` or `PASS-WITH-WARNINGS` (exit `0`) verdict.
 
 ## Requirements
 
@@ -39,7 +39,7 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
 
-`--verify`, `--check`, and `--install-file <path>` are mutually exclusive; the bare invocation is the unattended install, all 6 phases, and `--install-file` re-deploys one managed file. No positional arguments are accepted; `--` ends option parsing, and anything after it exits `2`. `--help` (`-h`) and `--version` (`-v`) are honored before every other check and are the only stdout output — every result goes to stderr. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
+`--verify`, `--check`, and `--install-file <path>` are mutually exclusive; the bare invocation is the unattended install, all 6 phases, and `--install-file` re-deploys one managed file. No positional arguments are accepted; `--` ends option parsing, and anything after it exits `2`. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr. Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
 
 Per-phase verdicts: `PASS` did what it set out to do; `WARN` hit something non-fatal and keeps exit `0`; `FAIL` did not complete; `DEFER` applies at next boot, as with the NetworkManager restart over Wi-Fi; `SKIP` found preconditions absent, so the phase did not run; a `--` cell means not applicable, tallied as `N/A` in Totals.
 
@@ -63,7 +63,7 @@ Per-phase verdicts: `PASS` did what it set out to do; `WARN` hit something non-f
 | `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `EXPECTED_CPU_MATCH` hard-fail |
 | `NO_COLOR` | Disable colored output when set to a non-empty value ([no-color.org](https://no-color.org)) |
 
-Color also auto-disables when stderr is not a TTY or `TERM` is `dumb`. Skipping the hardware check is the risky override: deploying gfx1151 defaults on a non-matching CPU writes an incorrect kernel cmdline and initramfs `MODULES`.
+Skipping the hardware check is the risky override: deploying gfx1151 defaults on a non-matching CPU writes an incorrect kernel cmdline and initramfs `MODULES`.
 
 ## Managed Files
 
@@ -114,7 +114,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If it cannot be confirmed, the mask is withheld for the run.
 
-The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and related traffic, and ICMP echo-request plus the error and PMTUD types (destination-unreachable, time-exceeded, parameter-problem) are accepted; `invalid` state is dropped; `forward` drops and `output` accepts. IPv6 is disabled system-wide via `ipv6.disable=1`.
+The shipped ruleset is IPv4-only default-deny-inbound. IPv6 is disabled system-wide via `ipv6.disable=1`.
 
 ## Safety and Reliability
 
@@ -131,7 +131,7 @@ The shipped ruleset is IPv4-only default-deny-inbound. Loopback, established and
 
 ## Embedded Values
 
-All tunables are `set -g` globals near the top of the script — there is no external config file. Edit one, then re-run or `--install-file` the affected file. Porting to other hardware starts at `PROFILE_NAME`, `PROFILE_DESC`, and `EXPECTED_CPU_MATCH`. Preflight refuses to deploy when the sets contradict each other — a package in both `PKGS_ADD` and `PKGS_DEL` (Phase 4 would remove what Phase 2 installed), or a unit in both `MASK` and `EXPECTED_SERVICES` (Phase 4 masks before it enables).
+All tunables are `set -g` globals near the top of the script — there is no external config file. Edit one, then re-run or `--install-file` the affected file.
 
 ### Bootloader Keys
 
@@ -175,7 +175,7 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 | `MKINITCPIO_COMPRESSION` | `zstd` | `COMPRESSION=` |
 | `MKINITCPIO_COMPRESSION_OPTIONS` | `-1` | `COMPRESSION_OPTIONS=()` |
 
-`HOOKS` order is an invariant — `systemd` must precede `sd-vconsole`, and `block` must precede `filesystems`. The script validates both before writing.
+`HOOKS` order is an invariant — `systemd` must precede `sd-vconsole`, and `block` must precede `filesystems`.
 
 ### Service Keys
 
@@ -205,7 +205,7 @@ These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed
 
 `RESOLVED_DOT` is `no` by choice, matching the router: the filtering is identical either way, and `DNSOverTLS=yes` fails closed, so an unreachable endpoint would stop resolution outright. `DNSSEC=no` is the systemd default. The same upstreams repeat in the NetworkManager drop-in under `[global-dns-domain-*]` — without that, DHCP-supplied servers arrive as per-link DNS and outrank the global `DNS=` line.
 
-`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise. Under `amd-pstate-epp` with `CPUPOWER_GOVERNOR=performance`, the driver forces the EPP hint to its maximum and rejects any other value, so `EPP_PREFERENCE=performance` restates what the governor already imposes. Both `GPU_DPM_LEVEL` and `EPP_PREFERENCE` are checked against an accepted-value list, since each is interpolated into a udev attribute unquoted.
+`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise.
 
 `BLACKLIST_AMDXDNA` pairs with `amd_iommu=off`, and the script refuses an inconsistent pair; [Tuning Notes](#tuning-notes) has the override.
 
@@ -258,8 +258,6 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 ## Tuning Notes
 
-Non-obvious choices; several name the override that reverses them.
-
 **Gaming stack** — `--verify` reports `/dev/ntsync`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks. `PROTON_FSR4_UPGRADE=1` ships enabled for RDNA3 and RDNA3.5; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically, so at value `1` the variable is inert and only takes effect when set to an explicit DLL version (`4.0.0` or `4.1.1`, wider under the OptiScaler path) — verify with `printenv PROTON_FSR4_UPGRADE`. The shipped HUD omits `cpu_temp`; to enable it, add it on its own line — the omission is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
 
 **Kernel parameters** — `amd_iommu=off` breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO, or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run. `clearcpuid=umip` disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels — drop it if there is no `umip_printk` stutter. `ipv6.disable=1` pairs with the IPv4-only ruleset; for dual-stack, drop the token, add IPv6 rules, and re-run. `pcie_aspm.policy=performance` biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. Confirm actual link state with `lspci -vv` (`LnkCtl: ASPM Disabled`) rather than assuming it from the token. `mt7925e.disable_aspm=1` pairs with it at the endpoint driver — coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
@@ -272,7 +270,7 @@ Non-obvious choices; several name the override that reverses them.
 
 **Bluetooth speaker will not auto-reconnect** — `bluetoothctl trust <MAC>`, then power the speaker on after login.
 
-**Unmanaged 60-ry- drop-in warned** — `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files.
+**Unmanaged `60-ry-*` drop-in warned** — `pacman -Qo /etc/modprobe.d/*` to confirm ownership, then `sudo rm` the pre-7.99 files.
 
 **Masked unit not in `MASK` reported** — `systemctl unmask <unit>` if an earlier `MASK` masked it; leave distro and hand-made masks alone.
 

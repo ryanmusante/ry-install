@@ -122,8 +122,6 @@ In deploy order; system files land `0644`, user files `0600`.
 
 Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If it cannot be confirmed, the mask is withheld for the run.
 
-The shipped ruleset is IPv4-only default-deny-inbound. IPv6 is disabled system-wide via `ipv6.disable=1`.
-
 ## Safety and Reliability
 
 **Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved into place with `mv -T`, then re-read and compared; a mismatch restores the backup.
@@ -186,7 +184,7 @@ All tunables are `set -g` globals near the top of the script — there is no ext
 
 ### Service Keys
 
-These are variables in `ry-install.fish`, not CachyOS settings. Most are renamed on the way out.
+These are variables in `ry-install.fish`, not CachyOS settings.
 
 | Key | Value | Emitted as |
 |---|---|---|

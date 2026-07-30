@@ -4,13 +4,13 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.143.0
+7.144.0
 -------
 
-  - changelog: drop readme entries, keep functional changes only
+  - changelog: fold the 7.143.0 block into its adjacent range
 
 
-7.139.0 - 7.140.0
+7.139.0 - 7.143.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
@@ -35,6 +35,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     key=value form; nftables verdict names the unit-file state
   - internal: hoist the boot-entry list to function scope (same
     block-scope class as the 7.135.1 backup-preserve fix)
+  - changelog: drop readme entries, keep functional changes only
 
 
 7.137.0 - 7.138.0

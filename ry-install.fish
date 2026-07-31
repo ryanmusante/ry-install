@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.145.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.148.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.145.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.148.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -98,7 +98,7 @@ function _ry_exit --argument-names code --description "Set bail sentinel and exi
     exit $code
 end
 function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE and _INTENDED_EXIT_CODE atomically"; set -g _RY_EXIT_CODE $_code; set -g _INTENDED_EXIT_CODE $_code; end
-function _ry_root_usage --description "Root-guard usage error: print msg + help to stderr, exit EXIT_USAGE (parity with non-root argparse path)"; echo "[ERR] $argv" >&2; echo >&2; _ry_show_help >&2; _ry_exit $EXIT_USAGE; end
+function _ry_root_usage --description "Root-guard usage error: print msg + help to stderr, exit EXIT_USAGE"; echo "[ERR] $argv" >&2; echo >&2; _ry_show_help >&2; _ry_exit $EXIT_USAGE; end
 
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
 set -g QUIET true; set -g MODE bootstrap # pinned pre-argparse for signal footers
@@ -577,8 +577,7 @@ set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard s
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -1 # mkinitcpio prepends -T0 for zstd
 
 # ── EMBEDDED DATA: SERVICE KEYS ──
-set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no; set -g RESOLVED_DOT no; set -g RESOLVED_DNSSEC no
-set -g RESOLVED_DNS_SERVERS 94.140.14.14 94.140.15.15 # AdGuard default tier; filtering only, no DoT
+set -g RESOLVED_MDNS no; set -g RESOLVED_LLMNR no
 set -g NM_DISPATCHER_LOGLEVELMAX notice # drop info-level dispatcher spam, keep notice+
 set -g COUNTRY US
 set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKey HandleSuspendKeyLongPress HandleHibernateKey HandleHibernateKeyLongPress HandleRebootKey HandleRebootKeyLongPress
@@ -694,7 +693,7 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
     for _k in BT_AUTO_ENABLE BT_FAST_CONNECTABLE BLACKLIST_AMDXDNA
         if not contains -- "$$_k" true false; _err_loud "$_k must be true|false (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
-    for _k in SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE RESOLVED_MDNS RESOLVED_LLMNR RESOLVED_DOT
+    for _k in SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE RESOLVED_MDNS RESOLVED_LLMNR
         if not contains -- "$$_k" yes no; _err_loud "$_k must be yes|no (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _k in LOADER_TIMEOUT NM_WIFI_POWERSAVE BT_RECONNECT_ATTEMPTS
@@ -708,16 +707,10 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
     if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # IPv4-only ruleset: ICMPv6/ND would hit policy drop
         _err_loud "IPv4-only nftables ruleset requires ipv6.disable=1 in KERNEL_PARAMS — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
     end
-    if test (count $RESOLVED_DNS_SERVERS) -eq 0 # no upstream: NM global-dns would render an empty servers= line
-        _err_loud "RESOLVED_DNS_SERVERS must list at least one upstream — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
-    end
-    for _ds in $RESOLVED_DNS_SERVERS # IPv4 only: ipv6.disable=1 makes AAAA upstreams dead
-        if not string match -qr '^\d{1,3}(\.\d{1,3}){3}$' -- "$_ds"; _err_loud "RESOLVED_DNS_SERVERS entry invalid IPv4: '$_ds' — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    end
     if test "$BLACKLIST_AMDXDNA" = false; and contains -- amd_iommu=off $KERNEL_PARAMS # amdxdna probes -ENODEV (-19) without the IOMMU
         _err_loud "BLACKLIST_AMDXDNA=false requires the IOMMU (drop amd_iommu=off; set amd_iommu=on iommu=pt) — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
     end
-    for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY RESOLVED_DNSSEC NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION EXPECTED_SCALING_DRIVER
+    for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION EXPECTED_SCALING_DRIVER
         if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     set -l _scalar_metachar_re '[\s"`$;\\\\&|<>(){}*?\x27~!#]' # shell metachar class for scalars written to boot configs
@@ -811,7 +804,7 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test (count $MKINITCPIO_COMPRESSION_OPTIONS) -gt 0; printf '%s\n' "COMPRESSION_OPTIONS=("(string join -- " " $MKINITCPIO_COMPRESSION_OPTIONS)")"; end
 end
 function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
-    printf '%s\n' "# systemd-resolved: AdGuard upstreams, plaintext, mDNS/LLMNR off" "[Resolve]" "DNS="(string join ' ' -- $RESOLVED_DNS_SERVERS) "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"
+    printf '%s\n' "# systemd-resolved: link DNS from DHCP, mDNS/LLMNR off" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR"
 end
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
     printf '%s\n' "# systemd-logind configuration — desktop power handling"
@@ -824,7 +817,7 @@ function _content__etc_systemd_system_NetworkManager-dispatcher.service.d_loggin
     printf '%s\n' "# LogLevelMax drops info-level dispatcher lines (journald-logged; StandardError=null ineffective)" "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
 end
 function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (wifi.backend from NM_WIFI_BACKEND)"
-    printf '%s\n' "# NetworkManager configuration — $NM_WIFI_BACKEND backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[global-dns]" "" "[global-dns-domain-*]" "servers="(string join ',' -- $RESOLVED_DNS_SERVERS) "" "[logging]" "level=$NM_LOG_LEVEL"
+    printf '%s\n' "# NetworkManager configuration — $NM_WIFI_BACKEND backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"
 end
 function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"; printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"; end
 function _content__etc_bluetooth_main.conf --description "Generate content for /etc/bluetooth/main.conf (adapter auto-power-on + paired-sink reconnect)"
@@ -862,7 +855,7 @@ function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate con
     end
     if test "$_printed" -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
 end
-function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate content for combined udev perf rules (NVMe scheduler none + AMD P-State EPP performance + gfx1151 GPU clock-floor)"
+function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate content for combined udev perf rules"
     printf '%s\n' \
         "# ry-install: udev performance rules (managed file, do not edit by hand)" \
         "# NVMe scheduler none (lowest tail latency; diverges from CachyOS kyber default)" \
@@ -1017,13 +1010,13 @@ function _rm_tmp --argument-names path use_sudo --description "Sudo-aware tmpfil
     end
 end
 function _track_tmpfile --argument-names path --description "Track a tmpfile/dir in _TRACKED_TMPFILES"; test -n "$path"; or return 0; test "$path" = /dev/null; and return 0; set -ga _TRACKED_TMPFILES "$path"; end
-function _mktemp_or_null --description "mktemp wrapper; emits path on stdout, /dev/null sentinel on failure"
+function _mktemp_or_null --description "Wrapper for mktemp; emits path on stdout, /dev/null sentinel on failure"
     set -l _tf (command mktemp $argv 2>/dev/null)
     if test -z "$_tf"; echo /dev/null; functions -q _log; and _log "MKTEMP_OR_NULL_FAIL: args='$argv' — falling back to /dev/null sentinel"; return 0; end
     echo "$_tf"
     return 0
 end
-function _tmp_dir --description "tmp root (pinned /tmp)"; printf '%s' /tmp; end
+function _tmp_dir --description "Tmp root (pinned /tmp)"; printf '%s' /tmp; end
 
 # ── FILESYSTEM PROBES (symlink, system-dst, byte read) ──
 function _is_symlink --argument-names path use_sudo --description "Sudo-aware test -L (rc 0/1/2 = symlink/not/sudo-lapse)"
@@ -1035,7 +1028,7 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
     end
 end
 function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"; string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"; end
-function _installed_bytes --argument-names dst --description "Raw bytes of installed file (rc: 0=ok 1=fail 2=sudo-lapse; text-only — fish strings cannot carry NUL)" # callers read $pipestatus[1] only
+function _installed_bytes --argument-names dst --description "Raw bytes of installed file" # callers read $pipestatus[1] only
     set -l _bytes
     if _is_system_dst "$dst"
         sudo -n true 2>/dev/null; or return 2
@@ -1353,7 +1346,7 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
     end
 end
 function _run_redact_cmd --description "_run sub: logged cmd string with /tmp/ry-* redacted"; string replace -ar -- '/tmp/ry-[A-Za-z0-9_.-]+' '/tmp/ry-[REDACTED]' (string join -- " " $argv); end
-function _run_effective_timeout --description "_run sub: resolve timeout; long-running pkg/boot/db ops get a hard cap, not the short default (SIGKILL mid-txn corrupts db.lck)" # 0 = user disabled
+function _run_effective_timeout --description "_run sub: resolve timeout; long-running pkg/boot/db ops get a hard cap, not the short default" # 0 = user disabled
     set -l _t (_run_resolve_timeout); set -l _effective_cmd $argv[1]
     if test "$_effective_cmd" = sudo
         set -l _skip_next false
@@ -1749,7 +1742,7 @@ function _grep_ini_header --argument-names dst --description 'Validate ≥1 [Sec
 end
 
 # ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (MODPROBE → MANGOHUD) ──
-function _grep_modprobe_entry --argument-names dst --description 'Validate modprobe.d content: comment-only ok, else every non-comment line is a directive (options/blacklist/install/alias/softdep/remove)'
+function _grep_modprobe_entry --argument-names dst --description 'Validate modprobe.d content: comment-only ok, else every non-comment line is a directive'
     test (count $argv) -lt 2; and _log "BUG: _grep_modprobe_entry called without content (dst=$dst)"; and return 2
     for _line in $argv[2..-1]
         string match -qr '^[[:space:]]*(#|$)' -- "$_line"; and continue # comment or blank ok
@@ -1946,7 +1939,7 @@ function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --descript
 end
 
 # ── ATOMIC FILE INSTALL: BACKUP + POST-WRITE VERIFY/RESTORE + PUBLIC ENTRY ──
-function _awf_make_backup --argument-names dst use_sudo --description "_atomic_write_file sub: Create <dst>.ry.bak before overwrite (auto for _RY_BACKUP_TARGETS; fstab via direct call)"
+function _awf_make_backup --argument-names dst use_sudo --description "_atomic_write_file sub: Create <dst>.ry.bak before overwrite"
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"
     set -l _sp; test "$use_sudo" = true; and set _sp sudo -n
     if test "$use_sudo" = true
@@ -1998,7 +1991,7 @@ function _awf_postwrite_verify_restore --argument-names dst use_sudo --descripti
     end
     return 1
 end
-function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --description "_atomic_write_file sub: Dst-specific rendered-bytes validation before commit; rc 1 = refuse deploy (installed file and live state unchanged)"
+function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --description "_atomic_write_file sub: Dst-specific rendered-bytes validation before commit"
     switch "$dst"
         case /etc/nftables.conf
             if not command -q nft # --install-file may run before nftables is installed
@@ -2037,7 +2030,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     _ok "→ $dst$_tag"
     return 0
 end
-function _ry_mkdir_0755 --argument-names use_sudo dir --description "mkdir -p with umask capped at 0022 (own --verify rejects group-writable dirs)"
+function _ry_mkdir_0755 --argument-names use_sudo dir --description "Create dirs via mkdir -p with umask capped at 0022 (own --verify rejects group-writable dirs)"
     set -l _pmk 022; set -q umask; and set _pmk $umask; set -g umask 0022
     if test "$use_sudo" = true
         _run sudo -n mkdir -p -m 0755 -- "$dir"
@@ -2242,7 +2235,6 @@ function _vss_nm --description "_verify_static_system sub: NetworkManager config
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.backend=$NM_WIFI_BACKEND" "wifi backend $NM_WIFI_BACKEND"
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "wifi.powersave=$NM_WIFI_POWERSAVE" "WiFi powersave $NM_WIFI_POWERSAVE"
     _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "level=$NM_LOG_LEVEL" "logging level $NM_LOG_LEVEL"
-    for _s in $RESOLVED_DNS_SERVERS; _chk_grep /etc/NetworkManager/conf.d/99-cachyos-nm.conf "$_s" "NM global-dns $_s"; end
 end
 function _vss_sysctl --description "_verify_static_system sub: sysctl drop-in key=value check"
     _echo "── sysctl drop-in ──"
@@ -2271,7 +2263,7 @@ function _vss_nft --description "_verify_static_system sub: nftables default-den
     _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
     _chk_grep /etc/nftables.conf "echo-request" "nftables IPv4 ping accept" # regression guard: inbound ping must stay enabled
 end
-function _vss_modprobe --description "_verify_static_system sub: modprobe drop-in (optional amdxdna blacklist) + unmanaged 60-ry-* sweep"
+function _vss_modprobe --description "_verify_static_system sub: modprobe drop-in + unmanaged 60-ry-* sweep"
     set -l _stale (_ry_stale_ry_dropins) # same sweep --check records; one implementation, two modes
     if test (count $_stale) -gt 0
         _warn "  /etc/modprobe.d: unmanaged ry drop-in(s): $_stale — superseded by 60-ry-modules.conf; confirm with pacman -Qo, then remove"
@@ -2280,12 +2272,11 @@ function _vss_modprobe --description "_verify_static_system sub: modprobe drop-i
     _chk_file /etc/modprobe.d/60-ry-modules.conf; or return 0
     test "$BLACKLIST_AMDXDNA" = true; and _chk_grep /etc/modprobe.d/60-ry-modules.conf 'blacklist amdxdna' 'amdxdna blacklisted'
 end
-function _verify_static_system --description "Verify resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, modprobe, nftables"
+function _verify_static_system --description "Verify resolved, logind, NM, regdom, bluetooth, cpupower-service.conf, sysctl, udev, modprobe"
     _echo "SYSTEM CONFIGURATION"
     _echo "── resolved ──"
     if _chk_file /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf
-        for kv in "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR" "DNSOverTLS=$RESOLVED_DOT" "DNSSEC=$RESOLVED_DNSSEC"; _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "$kv"; end
-        for _s in $RESOLVED_DNS_SERVERS; _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "$_s" "DNS upstream $_s"; end
+        for kv in "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR"; _chk_grep /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf "$kv"; end
     end
     _echo "── logind.conf ──"
     _vss_logind
@@ -2316,7 +2307,7 @@ function _verify_static_user --description "Verify environment.d ENV_VARS + Mang
 end
 
 # ── VERIFY-STATIC: PACKAGES + SERVICES + SYNTAX ──
-function _vsp_required --description "_verify_static_packages sub: Check PKGS_ADD + Vulkan pkgs against installed list in argv; emits OK/FAIL per pkg"
+function _vsp_required --description "_verify_static_packages sub: Check PKGS_ADD + Vulkan pkgs against installed list in argv"
     _echo "── Required packages ──"
     for pkg in $PKGS_ADD
         if contains -- "$pkg" $argv
@@ -2349,7 +2340,7 @@ function _vsp_removed --description "_verify_static_packages sub: Check PKGS_DEL
         end
     end
 end
-function _vsp_pacman_conf --description "_verify_static_packages sub: Inspect IgnorePkg / ParallelDownloads in /etc/pacman.conf (section-agnostic grep; pacman only honours [options])"
+function _vsp_pacman_conf --description "_verify_static_packages sub: Inspect IgnorePkg / ParallelDownloads in /etc/pacman.conf"
     _echo "── pacman.conf ──"
     if not test -f /etc/pacman.conf; _warn "  /etc/pacman.conf not found"; return 0; end
     set -l _pc_sudo false # sudo read avoids false 'not set' on 0600 conf
@@ -2494,7 +2485,7 @@ function _ry_verify_static --description "Verify installed configs: boot, system
 end
 
 # ── --CHECK MODE: SILENT IDEMPOTENCY PROBE ──
-function _check_phase_files --description "--check phase: file content hash compare"
+function _check_phase_files --description "Check-mode phase: file content hash compare"
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
         set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _gen_rc $pipestatus[1]
         if test "$_gen_rc" -ne 0; _log "CHECK_PREFLIGHT: generator failed for $dst (rc=$_gen_rc)"; return $EXIT_PREFLIGHT; end
@@ -2516,7 +2507,7 @@ function _check_phase_files --description "--check phase: file content hash comp
     end
     return 0
 end
-function _check_phase_cmdline --description "--check phase: cmdline contains KERNEL_PARAMS + rw"
+function _check_phase_cmdline --description "Check-mode phase: cmdline contains KERNEL_PARAMS + rw"
     set -l _cmdline (command cat -- /proc/cmdline 2>/dev/null)
     if test -z "$_cmdline"; _log "CHECK_PREFLIGHT: /proc/cmdline empty or unreadable"; return $EXIT_PREFLIGHT; end
     for _p in $KERNEL_PARAMS; set -l _p_re (string escape --style=regex -- "$_p"); string match -qr -- "(^|\s)$_p_re(\s|\$)" "$_cmdline"; or set -g _RY_CHECK_DRIFT 1; end
@@ -2595,7 +2586,7 @@ function _check_record_orphans --description "_ry_do_check sub: record leftovers
     test (count $_orphan) -gt 0; and _log "MASK_ORPHAN: count="(count $_orphan)" units="(string join ',' -- $_orphan)
     return 0
 end
-function _check_phase_units --description "--check phase: EXPECTED_SERVICES + MASK + conf.d-driven units"
+function _check_phase_units --description "Check-mode phase: EXPECTED_SERVICES + MASK + conf.d-driven units"
     set -l _implicit_svcs (_implicit_confd_units)
     _svc_chk_expected; or return $status
     for unit in $MASK
@@ -2656,7 +2647,7 @@ function _vrk_cmdline --description "_verify_runtime_kparams sub: /proc/cmdline 
     end
     _echo
 end
-function _vrk_gpu_state --description "_verify_runtime_kparams sub: GPU performance level (power_dpm_force_performance_level sysfs scan)"
+function _vrk_gpu_state --description "_verify_runtime_kparams sub: GPU performance level"
     _echo "HARDWARE STATE"
     _echo "── GPU performance level ──"
     set -l gpu_ok false; set -l found_gpu false
@@ -2831,7 +2822,7 @@ function _vrsv_nft_assert_ping --description "_vrsv_chk_nftables sub: assert liv
         _warn "  nftables: live input chain has no echo-request accept — inbound ping blocked until reload"
     end
 end
-function _vrsv_chk_nftables --argument-names label rec_str --description "_vrsv_sys_units sub: nftables.service: oneshot reads inactive after clean load — judge by live ruleset"
+function _vrsv_chk_nftables --argument-names label rec_str --description "_vrsv_sys_units sub: nftables.service: oneshot reads inactive after clean load"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found; _warn "  $label: not installed"; return 0; end
     set -l _nft_probe_ok false
@@ -2861,7 +2852,7 @@ function _vrsv_chk_nftables --argument-names label rec_str --description "_vrsv_
     _vrsv_nft_assert_ping
     return 0
 end
-function _vrsv_chk_resolved --argument-names rec_str --description "_vrsv_sys_units sub: Check systemd-resolved active + persistent state, only when conf.d drop-in is deployed"
+function _vrsv_chk_resolved --argument-names rec_str --description "_vrsv_sys_units sub: Check systemd-resolved active + persistent state"
     set -l rec (string split ':' -- "$rec_str")
     test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
     if test "$rec[1]" = not-found; _warn "  systemd-resolved: not installed"; return 0; end
@@ -2873,7 +2864,7 @@ function _vrsv_chk_resolved --argument-names rec_str --description "_vrsv_sys_un
         _warn "  systemd-resolved: active but $rec[3] (will not persist across boots)"
     end
 end
-function _vrsv_chk_cpupower_governor --argument-names rec_str --description "_vrsv_sys_units sub: Check cpupower.service (RemainAfterExit oneshot reads active); governor applied from /etc/default/cpupower-service.conf"
+function _vrsv_chk_cpupower_governor --argument-names rec_str --description "_vrsv_sys_units sub: Check cpupower.service (RemainAfterExit oneshot reads active)"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found; _warn "  cpupower.service: not installed (cpupower is a CachyOS default; pacman db may be stale)"; return 0; end
     if test "$rec[2]" = active
@@ -2983,7 +2974,7 @@ function _vrsv_masked_inactive --description "_verify_runtime_services sub: MASK
     end
 end
 
-function _vrsv_user_units --description "_verify_runtime_services sub: managed user-scope units not failed (PowerDevil reads POWERDEVIL_NO_DDCUTIL from the user-manager environment)"
+function _vrsv_user_units --description "_verify_runtime_services sub: managed user-scope units not failed"
     if not _has_user_bus_active; _info "  user units: skipped (no active user-bus — log in graphically or enable-linger to verify)"; return 0; end
     if test (command systemctl --user list-unit-files --no-legend plasma-powerdevil.service 2>/dev/null | count) -eq 0
         _info "  plasma-powerdevil.service: unit not present — skipping user-unit health check"
@@ -3127,14 +3118,14 @@ function _vrs_nm_perms --description "_verify_runtime_session sub: NetworkManage
         _info "  NetworkManager connections: no .nmconnection files found"
     end
 end
-function _vrs_vfat_skip --argument-names path boot_fstype --description "_vrs_installed_file_perms sub: rc 0 = vfat/undetermined boot path (perms not verifiable, _info emitted); rc 1 = checkable"
+function _vrs_vfat_skip --argument-names path boot_fstype --description "_vrs_installed_file_perms sub: rc 0 = vfat/undetermined boot path"
     set -l _fst (command findmnt -n -o FSTYPE --target "$path" 2>/dev/null | string trim --) # Per-path fstype
     test -z "$_fst"; and set _fst "$boot_fstype"
     if test "$_fst" = vfat; _info "  $path: skipped (vfat — unix perms synthesized from mount options)"; return 0; end
     if test -z "$_fst"; _info "  $path: skipped (boot fstype undetermined — vfat-safe default)"; return 0; end
     return 1
 end
-function _resolve_boot_fstype --description "Emit \$BOOT partition fstype (resolve \$BOOT, default /boot, findmnt FSTYPE); empty when undetermined"
+function _resolve_boot_fstype --description "Emit \$BOOT partition fstype (resolve \$BOOT, default /boot, findmnt FSTYPE)"
     set -l _boot_resolved (_resolve_boot_path); test -z "$_boot_resolved"; and set _boot_resolved /boot
     command findmnt -n -o FSTYPE "$_boot_resolved" 2>/dev/null | string trim --
 end
@@ -3185,7 +3176,7 @@ function _vpd_dir_perm_check --argument-names dir expected_owner use_sudo --desc
     end
     return 0
 end
-function _vrs_parent_dirs --description "_verify_runtime_session sub: parent dirs of managed files (system root-owned; user dir user-owned)"
+function _vrs_parent_dirs --description "_verify_runtime_session sub: parent dirs of managed files"
     _echo "── Parent directories ──"
     set -l dir_bad 0; set -l dir_checked 0; set -l dir_vfat_skipped 0; set -l checked_dirs
     set -l _boot_fstype (_resolve_boot_fstype)
@@ -3268,7 +3259,7 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
 end
 
 # ── MISC HELPERS: PERM CHECK, WIFI ROUTE, USER-BUS, SUDO BANNER ──
-function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit (unparseable mode reads as writable — fail-closed)"
+function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit"
     not string match -qr '^[0-7]+$' -- "$mode"; and return 0 # unparseable mode -> writable (fail-closed)
     test (string length -- "$mode") -gt 3; and set mode (string sub -s -3 -- "$mode") # drop special-bits digit
     while test (string length -- "$mode") -lt 3; set mode "0$mode"; end # stat %a strips leading zeros
@@ -3741,7 +3732,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when n
     end
     printf '%s\n' "$pkg"
 end
-function _csp_remove_pkgs --description "pacman -Rns batch with per-pkg retry on batch failure"
+function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg retry on batch failure"
     if test -f /var/lib/pacman/db.lck
         _err "pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run; skipping package removal"
         set -g INSTALL_HAD_ERRORS true
@@ -3813,7 +3804,7 @@ function _csm_filter_units --description "_configure_services_mask sub: Pre-filt
         printf '%s\n' "$_unit"
     end
 end
-function _csm_retry_individual --description "_configure_services_mask sub: Per-unit retry after batch mask failed (argv pre-filtered by _csm_filter_units)"
+function _csm_retry_individual --description "_configure_services_mask sub: Per-unit retry after batch mask failed"
     set -l _ret 0
     for _unit in $argv
         if _run sudo -n systemctl mask --now -- $_unit
@@ -3826,13 +3817,13 @@ function _csm_retry_individual --description "_configure_services_mask sub: Per-
     end
     return $_ret
 end
-function _nft_input_drop_live --description "rc 0 iff live inet/filter/input chain has policy drop (oneshot reads inactive after clean load)"
+function _nft_input_drop_live --description "True when live inet/filter/input chain has policy drop"
     command -q nft; or return 1
     sudo -n true 2>/dev/null; or return 1
     set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect)
     string match -q -- '*policy drop*' "$_in_chain"
 end
-function _csm_enable_nftables_first --description "_configure_services_mask sub: Activate nftables before the ufw flush + mask; rc 0 iff default-deny ruleset confirmed live"
+function _csm_enable_nftables_first --description "_configure_services_mask sub: Activate nftables before the ufw flush + mask"
     contains -- ufw.service $MASK; or return 0
     contains -- nftables.service $EXPECTED_SERVICES; or return 0
     if _nft_input_drop_live; _log "NFT_PRE_ENABLE_SKIP: ruleset already live"; return 0; end
@@ -3846,7 +3837,7 @@ function _csm_enable_nftables_first --description "_configure_services_mask sub:
     _log "NFT_PRE_ENABLE_FAIL: live ruleset unconfirmed"
     return 1
 end
-function _csm_prepare_ufw_masking --argument-names nft_live --description "_configure_services_mask sub: Flush live ufw rules ahead of its unit mask; rc 0 iff the mask may proceed"
+function _csm_prepare_ufw_masking --argument-names nft_live --description "_configure_services_mask sub: Flush live ufw rules ahead of its unit mask"
     command -q ufw; or return 0 # binary absent: nothing to flush
     if test "$nft_live" != true
         _warn "ufw.service mask withheld this run — nftables default-deny not confirmed live; mask --now stops ufw (ufw-init stop flushes) and would leave the host unfirewalled until reboot. Re-run after nftables.service starts."
@@ -3975,7 +3966,7 @@ function _apply_wireless_regdom --description "Apply the wireless regulatory dom
     set -g _RY_REGDOM_RESULT WARN; set -g _RY_REGDOM_EVIDENCE "iw reg set failed — applies via /etc/iw-regdomain"
     return 0
 end
-function _install_configure_services --description "Enable, start, and configure systemd services (fstab opts + resolved + PKGS_DEL + mask + enable + regdom)"
+function _install_configure_services --description "Enable, start, and configure systemd services"
     _progress Services
     _info "Post-installation tasks..."
     set -l _ret 0
@@ -3995,7 +3986,7 @@ function _install_configure_services --description "Enable, start, and configure
 end
 
 # ── BOOT PATH RESOLUTION (ESP + $BOOT via bootctl / findmnt) ──
-function _bootctl_dir --argument-names flag logtag fallnote --description "bootctl path probe (user then sudo); empty on failure"
+function _bootctl_dir --argument-names flag logtag fallnote --description "Probe bootctl path (user then sudo); empty on failure"
     command -q bootctl; or return 0
     set -l _p (command bootctl $flag 2>/dev/null | string trim -- | string trim -r -c / --)
     if test -z "$_p"
@@ -4168,7 +4159,7 @@ function _irb_verify_entries --argument-names boot --description "_install_rebui
         end
     end
 end
-function _check_boot_taint_gate --description "Verify boot state not tainted (shared by _irb_taint_gate + _post_boot_apply); rc=0 ok, 1=revert-failed, 2=tainted"
+function _check_boot_taint_gate --description "Verify boot state not tainted (shared by _irb_taint_gate + _post_boot_apply)"
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
         _err "Refusing initramfs rebuild — mkinitcpio.conf revert failed (boot state inconsistent)"
         _err "  Manual recovery required before re-running"
@@ -4182,7 +4173,7 @@ function _check_boot_taint_gate --description "Verify boot state not tainted (sh
     end
     return 0
 end
-function _irb_taint_gate --description "_install_rebuild_boot sub: Verify mkinitcpio.conf is consistent and boot state is not tainted; returns non-zero with _phase_record + _irb_skip_post_mki on bail"
+function _irb_taint_gate --description "_install_rebuild_boot sub: Verify mkinitcpio.conf is consistent and boot state is not tainted"
     _check_boot_taint_gate
     set -l _gate_rc $status
     test "$_gate_rc" -eq 0; and return 0
@@ -4626,7 +4617,7 @@ function _post_boot_apply --argument-names target skip_mki --description "Shared
 end
 function _post_boot --argument-names target --description "Post-hook: rebuild boot entries (mkinitcpio + sdboot-manage)"; _post_boot_apply "$target" false; end
 function _post_cmdline --argument-names target --description "Post-hook: regenerate sdboot entries only (cmdline is not an initramfs input)"; _post_boot_apply "$target" true; end
-function _post_loader --argument-names target --description "Post-hook: regenerate sdboot entries only (loader.conf is read by systemd-boot directly, not an initramfs input)"; _post_boot_apply "$target" true; end
+function _post_loader --argument-names target --description "Post-hook: regenerate sdboot entries only"; _post_boot_apply "$target" true; end
 
 # ── POST-HOOKS: NON-BOOT LIVE-APPLY (SERVICE/CONFIG; FAILURES NON-FATAL, EXIT 0) ──
 function _post_resolved --argument-names target --description "Post-hook: restart systemd-resolved"
@@ -4764,7 +4755,7 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
     _run sudo -n udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change; or _warn "udevadm trigger failed — scheduler/EPP apply at next boot or device event" # drm rule is ACTION==add: applies at boot
     return 0
 end
-function _post_modprobe --argument-names target --description "Post-hook: notify reboot needed for modprobe.d option change (load-time; cannot live-apply to an already-loaded module)"
+function _post_modprobe --argument-names target --description "Post-hook: notify reboot needed for modprobe.d option change"
     _info "modprobe.d $target changed — reboot required to apply (module options are read at load time; an already-loaded module keeps its current parameters until reloaded)"
     _info "  No initramfs rebuild needed for this file; the option takes effect when the module next loads (reboot, or manual rmmod/modprobe of the affected module)"
     return 0

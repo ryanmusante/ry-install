@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.145.0** · [Changelog](CHANGELOG.md)
+**Version 7.148.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo).
 
@@ -90,10 +90,10 @@ In deploy order; system files land `0644`, user files `0600`.
 
 | File | Purpose |
 |---|---|
-| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | AdGuard upstreams, mDNS and LLMNR off |
+| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | mDNS and LLMNR off |
 | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | power, suspend, hibernate, and reboot keys ignored — 8 keys including long-press variants |
 | `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | `LogLevelMax=notice` drops info-level dispatcher lines |
-| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, log level `WARN`, DNS upstreams pinned |
+| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, log level `WARN` |
 | `/etc/iw-regdomain` | regulatory domain (`US`) |
 | `/etc/bluetooth/main.conf` | adapter auto-power-on, `FastConnectable`, 3 paired-sink reconnect attempts |
 | `/etc/nftables.conf` | IPv4-only default-deny-inbound, ping allowed |
@@ -190,9 +190,6 @@ These are variables in `ry-install.fish`, not CachyOS settings.
 |---|---|---|
 | `RESOLVED_MDNS` | `no` | `MulticastDNS=` |
 | `RESOLVED_LLMNR` | `no` | `LLMNR=` |
-| `RESOLVED_DOT` | `no` | `DNSOverTLS=` |
-| `RESOLVED_DNSSEC` | `no` | `DNSSEC=` |
-| `RESOLVED_DNS_SERVERS` | `94.140.14.14 94.140.15.15` | `DNS=` |
 | `NM_DISPATCHER_LOGLEVELMAX` | `notice` | `LogLevelMax=` |
 | `COUNTRY` | `US` | `COUNTRY=` |
 | `LOGIND_IGNORE_KEYS` | 8 power, suspend, hibernate, and reboot keys | `Handle*Key=ignore` |
@@ -208,7 +205,7 @@ These are variables in `ry-install.fish`, not CachyOS settings.
 | `EXPECTED_SCALING_DRIVER` | `amd-pstate-epp` | nothing — verify-only |
 | `BLACKLIST_AMDXDNA` | `true` | `blacklist amdxdna` |
 
-`RESOLVED_DOT` is `no` by choice, matching the router: the filtering is identical either way, and `DNSOverTLS=yes` fails closed, so an unreachable endpoint would stop resolution outright. `DNSSEC=no` is the systemd default. The same upstreams repeat in the NetworkManager drop-in under `[global-dns-domain-*]` — without that, DHCP-supplied servers arrive as per-link DNS and outrank the global `DNS=` line.
+No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declares no `[global-dns]` section, so DHCP-supplied servers arrive as per-link DNS and the router decides where queries go, including any filtering it applies. `DNSOverTLS=` and `DNSSEC=` are left unset, since this build of systemd already defaults both to `no`.
 
 `NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise.
 

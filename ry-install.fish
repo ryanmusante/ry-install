@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.144.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.145.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.144.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.145.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -788,13 +788,8 @@ function _init_runtime --description "Cache root UUID + validate config + precom
 end
 
 # ── CONTENT GENERATORS (via _ry_get_file_content) ──
-function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"
-    printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"
-end
-function _content__etc_kernel_cmdline --description "Generate content for /etc/kernel/cmdline"
-    test -z "$_ROOT_UUID"; and return $EXIT_GEN_NOUUID
-    printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS)
-end
+function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"; printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"; end
+function _content__etc_kernel_cmdline --description "Generate content for /etc/kernel/cmdline"; test -z "$_ROOT_UUID"; and return $EXIT_GEN_NOUUID; printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS); end
 function _content__etc_sdboot-manage.conf --description "Generate content for /etc/sdboot-manage.conf"
     printf '%s\n' \
         "# sdboot-manage configuration — changes require: sudo sdboot-manage gen && sudo sdboot-manage update" \
@@ -831,9 +826,7 @@ end
 function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (wifi.backend from NM_WIFI_BACKEND)"
     printf '%s\n' "# NetworkManager configuration — $NM_WIFI_BACKEND backend" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[global-dns]" "" "[global-dns-domain-*]" "servers="(string join ',' -- $RESOLVED_DNS_SERVERS) "" "[logging]" "level=$NM_LOG_LEVEL"
 end
-function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"
-    printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"
-end
+function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"; printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"; end
 function _content__etc_bluetooth_main.conf --description "Generate content for /etc/bluetooth/main.conf (adapter auto-power-on + paired-sink reconnect)"
     printf '%s\n' "# ry-install: BlueZ daemon config (managed file, do not edit by hand)" "[General]" "FastConnectable=$BT_FAST_CONNECTABLE" "" "[Policy]" "AutoEnable=$BT_AUTO_ENABLE" "ReconnectAttempts=$BT_RECONNECT_ATTEMPTS"
 end
@@ -856,9 +849,7 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "    chain output { type filter hook output priority filter; policy accept; }" \
         "}"
 end
-function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"
-    printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"
-end
+function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"; printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"; end
 function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
     printf '%s\n' "# ry-install sysctl tunables (priority 95 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
@@ -933,11 +924,7 @@ end
 
 # ── CONTENT DISPATCH (_ry_get_file_content; fn name derived via _content_fn_for) ──
 function _content_fn_for --argument-names dst --description "Resolve the _content_ generator function name for a destination"; echo "_content_"(_tmpfile_key "$dst"); end
-function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"
-    set -l fn (_content_fn_for "$dst")
-    functions -q $fn; or return $EXIT_GEN_NOFN
-    $fn
-end
+function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"; set -l fn (_content_fn_for "$dst"); functions -q $fn; or return $EXIT_GEN_NOFN; $fn; end
 
 # ── SUDO CREDENTIAL CACHE + COMMAND ESCALATION ──
 function _ensure_sudo_cached --description "Cache sudo credential once before repeated sudo -n calls"
@@ -1029,11 +1016,7 @@ function _rm_tmp --argument-names path use_sudo --description "Sudo-aware tmpfil
         functions -q _log; and _log "RM_TMP_DEFER: path=$path use_sudo=$use_sudo is_dir=$_is_dir rc=$_rm_rc — left tracked for cleanup retry"
     end
 end
-function _track_tmpfile --argument-names path --description "Track a tmpfile/dir in _TRACKED_TMPFILES"
-    test -n "$path"; or return 0
-    test "$path" = /dev/null; and return 0
-    set -ga _TRACKED_TMPFILES "$path"
-end
+function _track_tmpfile --argument-names path --description "Track a tmpfile/dir in _TRACKED_TMPFILES"; test -n "$path"; or return 0; test "$path" = /dev/null; and return 0; set -ga _TRACKED_TMPFILES "$path"; end
 function _mktemp_or_null --description "mktemp wrapper; emits path on stdout, /dev/null sentinel on failure"
     set -l _tf (command mktemp $argv 2>/dev/null)
     if test -z "$_tf"; echo /dev/null; functions -q _log; and _log "MKTEMP_OR_NULL_FAIL: args='$argv' — falling back to /dev/null sentinel"; return 0; end
@@ -1147,12 +1130,7 @@ function _msg --argument-names level --description "Format and print a leveled s
     end
     _msg_print $argv
 end
-function _msg_nocount --argument-names level --description "Like _msg but skips VERIFY_* counter bump"
-    set -l msg (string join -- " " $argv[2..-1])
-    test -z "$msg"; and return 0
-    _log "$level: $msg"
-    _msg_print $argv
-end
+function _msg_nocount --argument-names level --description "Like _msg but skips VERIFY_* counter bump"; set -l msg (string join -- " " $argv[2..-1]); test -z "$msg"; and return 0; _log "$level: $msg"; _msg_print $argv; end
 function _ok --description "Emit OK-level message and increment VERIFY_OK"; _msg OK $argv; return 0; end # always return 0 (callers chain via and)
 function _fail --description "Emit FAIL-level message and increment VERIFY_FAIL"; _msg FAIL $argv; return 0; end
 function _info --description "Emit INFO-level message (no counter)"; _msg INFO $argv; return 0; end
@@ -1179,12 +1157,7 @@ function _err_loud --description "Fatal-preflight err: stderr regardless of QUIE
     test "$MODE" = check; and return 0
     _msg_print --force ERR $argv
 end
-function _err_loud_cont --description "Continuation for _err_loud: same routing, no VERIFY_FAIL bump"
-    set -l msg (string join -- " " $argv)
-    _log "ERR: $msg"
-    test "$MODE" = check; and return 0
-    _msg_print --force ERR $argv
-end
+function _err_loud_cont --description "Continuation for _err_loud: same routing, no VERIFY_FAIL bump"; set -l msg (string join -- " " $argv); _log "ERR: $msg"; test "$MODE" = check; and return 0; _msg_print --force ERR $argv; end
 function _warn_loud --description "Override-path warn: stderr regardless of QUIET, except MODE=check (silent-probe contract)" # mirrors _err_loud
     set -l msg (string join -- " " $argv)
     _log "WARN: $msg"
@@ -1379,9 +1352,7 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
         end
     end
 end
-function _run_redact_cmd --description "_run sub: logged cmd string with /tmp/ry-* redacted"
-    string replace -ar -- '/tmp/ry-[A-Za-z0-9_.-]+' '/tmp/ry-[REDACTED]' (string join -- " " $argv)
-end
+function _run_redact_cmd --description "_run sub: logged cmd string with /tmp/ry-* redacted"; string replace -ar -- '/tmp/ry-[A-Za-z0-9_.-]+' '/tmp/ry-[REDACTED]' (string join -- " " $argv); end
 function _run_effective_timeout --description "_run sub: resolve timeout; long-running pkg/boot/db ops get a hard cap, not the short default (SIGKILL mid-txn corrupts db.lck)" # 0 = user disabled
     set -l _t (_run_resolve_timeout); set -l _effective_cmd $argv[1]
     if test "$_effective_cmd" = sudo
@@ -1459,11 +1430,7 @@ function _chk_sysfs_match --argument-names path regex label --description "Read 
         _fail "  $label: $_v (expected match: $regex)"
     end
 end
-function _chk_sysfs_eq --argument-names path expected label --description "Read sysfs/proc, compare to expected (silent on missing path)"
-    test -f "$path"; or return 0
-    set -l _val (command cat -- "$path" 2>/dev/null | string trim --)
-    _chk_eq "$label" "$_val" "$expected"
-end
+function _chk_sysfs_eq --argument-names path expected label --description "Read sysfs/proc, compare to expected (silent on missing path)"; test -f "$path"; or return 0; set -l _val (command cat -- "$path" 2>/dev/null | string trim --); _chk_eq "$label" "$_val" "$expected"; end
 function _chk_perms --argument-names path expected_perms expected_owner use_sudo --description "Compare file mode+owner; refuses 4-digit modes (setuid/sgid/sticky)"
     set -l _po
     if test "$use_sudo" = true
@@ -2260,15 +2227,7 @@ function _vsb_entries --description "_verify_static_boot sub: \$BOOT entries enu
         _info "  System may not boot! Run: sudo sdboot-manage gen --verbose"
     end
 end
-function _verify_static_boot --description "Verify loader.conf, sdboot-manage, kernel cmdline, mkinitcpio, boot entries"
-    _echo "BOOT CONFIGURATION"
-    _vsb_loader
-    _vsb_sdboot
-    _vsb_sdboot_dropins
-    _vsb_cmdline
-    _vsb_mkinitcpio
-    _vsb_entries
-end
+function _verify_static_boot --description "Verify loader.conf, sdboot-manage, kernel cmdline, mkinitcpio, boot entries"; _echo "BOOT CONFIGURATION"; _vsb_loader; _vsb_sdboot; _vsb_sdboot_dropins; _vsb_cmdline; _vsb_mkinitcpio; _vsb_entries; end
 
 # ── VERIFY-STATIC: SYSTEM + USER (drop-ins, env.d) ──
 function _vss_logind --description "_verify_static_system sub: logind.conf.d keys"
@@ -2846,12 +2805,7 @@ function _vrk_module_state --description "_verify_runtime_kparams sub: module pa
 end
 
 # ── VERIFY-RUNTIME: KPARAMS ORCHESTRATOR (_verify_runtime_kparams) ──
-function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist"
-    _vrk_cmdline
-    _vrk_gpu_state
-    _vrk_cpu_state
-    _vrk_module_state
-end
+function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist"; _vrk_cmdline; _vrk_gpu_state; _vrk_cpu_state; _vrk_module_state; end
 
 # ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, nftables, wifi, masks) ──
 function _vrsv_chk_active_enabled --argument-names label rec_str --description "_vrsv_sys_units sub: ok if active+enabled, warn if active only, fail otherwise"
@@ -3046,15 +3000,7 @@ function _vrsv_user_units --description "_verify_runtime_services sub: managed u
 end
 
 # ── VERIFY-RUNTIME: SERVICES ORCHESTRATOR (_verify_runtime_services) ──
-function _verify_runtime_services --description "Verify systemd unit states (sys batch) and WiFi runtime"
-    _echo "SERVICE STATE"
-    _echo
-    _vrsv_sys_units
-    _vrsv_masked_inactive
-    _vrsv_user_units
-    _vrsv_wifi
-    return 0
-end
+function _verify_runtime_services --description "Verify systemd unit states (sys batch) and WiFi runtime"; _echo "SERVICE STATE"; _echo; _vrsv_sys_units; _vrsv_masked_inactive; _vrsv_user_units; _vrsv_wifi; return 0; end
 
 # ── VERIFY-RUNTIME: ENVIRONMENT ──
 function _vre_envvars --description "_verify_runtime_env sub: ENV_VARS via systemctl --user show-environment"
@@ -3163,13 +3109,7 @@ function _vre_regdom --description "_verify_runtime_env sub: wireless regulatory
 end
 
 # ── VERIFY-RUNTIME: ENV ORCHESTRATOR (_verify_runtime_env) ──
-function _verify_runtime_env --description "Verify ENV_VARS, sysctl, fstab, ntsync, regdom runtime"
-    _vre_envvars
-    _vre_sysctl_runtime
-    _vre_fstab
-    _vre_ntsync
-    _vre_regdom
-end
+function _verify_runtime_env --description "Verify ENV_VARS, sysctl, fstab, ntsync, regdom runtime"; _vre_envvars; _vre_sysctl_runtime; _vre_fstab; _vre_ntsync; _vre_regdom; end
 
 # ── VERIFY-RUNTIME: SESSION + PERMS ──
 function _vrs_nm_perms --description "_verify_runtime_session sub: NetworkManager system-connections perms (0600 root:root)"
@@ -3279,13 +3219,7 @@ function _vrs_parent_dirs --description "_verify_runtime_session sub: parent dir
 end
 
 # ── VERIFY-RUNTIME: SESSION ORCHESTRATOR (_verify_runtime_session) ──
-function _verify_runtime_session --description "Verify NM connection perms, installed-file perms, parent dirs"
-    _echo "FILE PERMISSIONS"
-    _echo "── Sensitive files ──"
-    _vrs_nm_perms
-    _vrs_installed_file_perms
-    _vrs_parent_dirs
-end
+function _verify_runtime_session --description "Verify NM connection perms, installed-file perms, parent dirs"; _echo "FILE PERMISSIONS"; _echo "── Sensitive files ──"; _vrs_nm_perms; _vrs_installed_file_perms; _vrs_parent_dirs; end
 
 # ── VERIFY: TOP-LEVEL ORCHESTRATORS (_ry_verify_runtime + _ry_verify_all) ──
 function _ry_verify_runtime --description "Verify runtime kernel params, services, environment, and session/permissions"
@@ -4792,10 +4726,7 @@ function _post_nft --argument-names target --description "Post-hook: validate + 
     end
     return 0
 end
-function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"
-    _echo
-    _apply_wireless_regdom
-end
+function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"; _echo; _apply_wireless_regdom; end
 function _post_bluetooth --argument-names target --description "Post-hook: restart bluetooth.service after /etc/bluetooth/main.conf change"
     _echo
     if not command -q bluetoothctl; and not test -e /usr/lib/systemd/system/bluetooth.service
@@ -4851,12 +4782,7 @@ function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/d
     set -g _RY_LOG_SUPPRESS_CREATE true # Suppress lazy-create
 end
 function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: log/dir cleanup, then exit"; _pre_dispatch_log_cleanup; _ry_exit $code; end
-function _early_usage_exit --description "Print usage error to stderr, remove pre-dispatch log, exit EXIT_USAGE"
-    echo "[ERR] $argv" >&2
-    echo >&2
-    _ry_show_help >&2
-    _pre_dispatch_exit $EXIT_USAGE
-end
+function _early_usage_exit --description "Print usage error to stderr, remove pre-dispatch log, exit EXIT_USAGE"; echo "[ERR] $argv" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
 
 # ── MAIN: ARGPARSE + MODE DISPATCH + LOG HEADER + EXIT ──
 set -g MODE install; set -g INSTALL_FILE_TARGET ""

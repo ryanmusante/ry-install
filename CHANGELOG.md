@@ -4,13 +4,13 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.144.0
+7.145.0
 -------
 
-  - changelog: fold the 7.143.0 block into its adjacent range
+  - source: pack 17 single-statement helpers onto one line each (-74 lines)
 
 
-7.139.0 - 7.143.0
+7.139.0 - 7.144.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
@@ -36,6 +36,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - internal: hoist the boot-entry list to function scope (same
     block-scope class as the 7.135.1 backup-preserve fix)
   - changelog: drop readme entries, keep functional changes only
+  - changelog: fold the 7.143.0 block into its adjacent range
 
 
 7.137.0 - 7.138.0
@@ -43,8 +44,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
   - configuration: drop the dormant RY_REMOTE_PLAY_PORTS gate and its
     Sunshine/Steam inbound rules from the nftables generator
-  - verify: tighten the three preemption advisory strings; branch
-    structure and behavior unchanged
+  - verify: tighten the three preemption advisory strings
 
 
 7.135.0 - 7.136.1
@@ -135,12 +135,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     mask path; an unconfirmed ruleset withholds the ufw.service mask
   - nftables.conf: embedded header now reads "ufw masked", producing a
     one-time drift and redeploy
-  - source: comments normalized to one line each; verbose inline notes
-    trimmed, safety and lint annotations kept
+  - source: comments normalized to one line each, verbose notes trimmed
   - source: section banners name only the functions they hold, arrow
     glyph unified, one blank line before every banner
-  - source: "sub:" parent marker completed across the verify helpers;
-    description casing left as written, opening with command names
+  - source: "sub:" parent marker completed across the verify helpers
   - version pins synced across source, readme and changelog
 
 

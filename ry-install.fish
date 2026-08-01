@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.148.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.149.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.148.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.149.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -803,6 +803,8 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
         "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test (count $MKINITCPIO_COMPRESSION_OPTIONS) -gt 0; printf '%s\n' "COMPRESSION_OPTIONS=("(string join -- " " $MKINITCPIO_COMPRESSION_OPTIONS)")"; end
 end
+
+# ── CONTENT GENERATORS: SYSTEM (resolved, logind, NM, bluetooth, nft, sysctl, udev) ──
 function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
     printf '%s\n' "# systemd-resolved: link DNS from DHCP, mDNS/LLMNR off" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR"
 end
@@ -1133,6 +1135,8 @@ function _phase_record --argument-names check result evidence --description "App
     set -ga _RY_PHASE_RESULTS "$_c│$_r│$_e"
     _log "PHASE_RESULT: check='$_c' result=$_r evidence='$_e'"
 end
+
+# ── MESSAGING: LOUD EMITTERS (_err, _err_loud, _warn_loud; bypass QUIET) ──
 function _err --description "Emit ERR-level message (force-prints to stderr when _RY_LOUD_ERR=true)"
     if set -q _RY_LOUD_ERR; and test "$_RY_LOUD_ERR" = true; and test "$MODE" != check
         _log "ERR: "(string join -- " " $argv)
@@ -2071,7 +2075,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     return $_aw_rc
 end
 
-# ── VERIFY-STATIC: BOOT (LOADER + SDBOOT + CMDLINE) ──
+# ── VERIFY-STATIC: BOOT (LOADER + SDBOOT) ──
 function _vsb_loader --description "_verify_static_boot sub: /boot/loader/loader.conf key/value verification"
     _echo "── loader.conf ──"
     _chk_file /boot/loader/loader.conf; or return 0
@@ -2108,6 +2112,7 @@ function _vsb_sdboot --description "_verify_static_boot sub: sdboot-manage.conf 
     _chk_grep /etc/sdboot-manage.conf 'LINUX_FALLBACK_OPTIONS="quiet"' "LINUX_FALLBACK_OPTIONS=quiet"
 end
 
+# ── VERIFY-STATIC: BOOT (SDBOOT DROP-INS + CMDLINE) ──
 function _vsb_sdboot_dropins --description "_verify_static_boot sub: sdboot-manage drop-ins that outrank the managed conf"
     _echo "── sdboot-manage drop-ins ──"
     set -l _found
@@ -2538,6 +2543,8 @@ function _svc_chk_expected --description "Check EXPECTED_SERVICES units"
     end
     return 0
 end
+
+# ── SHARED COLLECTORS: conf.d UNITS + STALE DROP-INS + ORPHAN MASKS (--check + verify) ──
 function _implicit_confd_units --description "Units implied by managed conf.d drop-ins (shared: --check + runtime verify)"
     set -l _u
     for _dst in $SYSTEM_DESTINATIONS
@@ -2974,6 +2981,7 @@ function _vrsv_masked_inactive --description "_verify_runtime_services sub: MASK
     end
 end
 
+# ── VERIFY-RUNTIME: USER-SCOPE UNIT COLLECTOR ──
 function _vrsv_user_units --description "_verify_runtime_services sub: managed user-scope units not failed"
     if not _has_user_bus_active; _info "  user units: skipped (no active user-bus — log in graphically or enable-linger to verify)"; return 0; end
     if test (command systemctl --user list-unit-files --no-legend plasma-powerdevil.service 2>/dev/null | count) -eq 0

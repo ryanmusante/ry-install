@@ -4,14 +4,14 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.148.0
+7.149.0
 -------
 
-  - dns: stop pinning DNSOverTLS= and DNSSEC=; this build of systemd
-    already defaults both to no, so the drop-in only sets mDNS and LLMNR
+  - source: add five section banners, two of them on the only blank
+    lines that did not already precede one
 
 
-7.139.0 - 7.147.0
+7.139.0 - 7.148.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
@@ -39,6 +39,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     cap every description at 96 characters
   - dns: drop the pinned upstreams; the resolved drop-in emits no DNS=
     line and NetworkManager no [global-dns], so link DNS from DHCP wins
+  - dns: stop pinning DNSOverTLS= and DNSSEC=; this build of systemd
+    already defaults both to no, so the drop-in only sets mDNS and LLMNR
   - internal: hoist the boot-entry list to function scope (same
     block-scope class as the 7.135.1 backup-preserve fix)
   - changelog: drop readme entries, keep functional changes only

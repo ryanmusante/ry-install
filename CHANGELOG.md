@@ -4,14 +4,15 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.150.0
+7.151.0
 -------
 
-  - source: trim two section banner titles that still named subjects
-    moved into their own child banners
+  - readme: add the missing sudo to the unmask and pacman commands
+    in Troubleshooting and Uninstall; both failed as printed
+  - changelog: record README corrections that change a printed command
 
 
-7.139.0 - 7.149.0
+7.139.0 - 7.150.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
@@ -39,6 +40,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     cap every description at 96 characters
   - source: add five section banners, two of them on the only blank
     lines that did not already precede one
+  - source: trim two section banner titles that still named subjects
+    moved into their own child banners
   - dns: drop the pinned upstreams; the resolved drop-in emits no DNS=
     line and NetworkManager no [global-dns], so link DNS from DHCP wins
   - dns: stop pinning DNSOverTLS= and DNSSEC=; this build of systemd

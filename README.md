@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.149.0** · [Changelog](CHANGELOG.md)
+**Version 7.150.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo).
 

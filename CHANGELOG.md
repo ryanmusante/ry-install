@@ -4,14 +4,14 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.149.0
+7.150.0
 -------
 
-  - source: add five section banners, two of them on the only blank
-    lines that did not already precede one
+  - source: trim two section banner titles that still named subjects
+    moved into their own child banners
 
 
-7.139.0 - 7.148.0
+7.139.0 - 7.149.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
@@ -37,6 +37,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - source: pack 17 single-statement helpers onto one line each (-74 lines)
   - source: capitalize the remaining lowercase function descriptions and
     cap every description at 96 characters
+  - source: add five section banners, two of them on the only blank
+    lines that did not already precede one
   - dns: drop the pinned upstreams; the resolved drop-in emits no DNS=
     line and NetworkManager no [global-dns], so link DNS from DHCP wins
   - dns: stop pinning DNSOverTLS= and DNSSEC=; this build of systemd

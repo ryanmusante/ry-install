@@ -4,15 +4,16 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.151.0
+7.153.0
 -------
 
-  - readme: add the missing sudo to the unmask and pacman commands
-    in Troubleshooting and Uninstall; both failed as printed
-  - changelog: record README corrections that change a printed command
+  - readme: document the systemd 250 floor, a hard preflight gate the
+    Requirements table never stated
+  - readme: rename the Tuning Notes heading that collided with the
+    Embedded Values one on the same anchor slug
 
 
-7.139.0 - 7.150.0
+7.139.0 - 7.152.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
@@ -48,8 +49,13 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     already defaults both to no, so the drop-in only sets mDNS and LLMNR
   - internal: hoist the boot-entry list to function scope (same
     block-scope class as the 7.135.1 backup-preserve fix)
+  - readme: add the missing sudo to the unmask and pacman commands
+    in Troubleshooting and Uninstall; both failed as printed
+  - readme: link Requirements to the BIOS section; the section move left
+    the power-limit prerequisite unreachable before the install
   - changelog: drop readme entries, keep functional changes only
   - changelog: fold the 7.143.0 block into its adjacent range
+  - changelog: record README corrections that change a printed command
 
 
 7.137.0 - 7.138.0

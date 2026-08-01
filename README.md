@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.151.0** · [Changelog](CHANGELOG.md)
+**Version 7.153.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo).
 
@@ -26,9 +26,10 @@ A run closes with the Totals line and a `PASS` or `PASS-WITH-WARNINGS` (exit `0`
 
 | Requirement | Detail |
 |---|---|
-| OS | CachyOS (Arch-based), systemd-boot with BLS entries |
+| OS | CachyOS (Arch-based), systemd 250 or newer, systemd-boot with BLS entries |
 | Shell | fish 3.6 or newer |
 | Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
+| BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
 | Privileges | Normal user with sudo rights; `sudo -v` cached before the run |
 | Tools | GNU coreutils, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
 
@@ -137,7 +138,9 @@ Phase 4 masks `ufw.service` rather than removing the package: the nftables rules
 
 **Failure and concurrency** — boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, via an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed.
 
-**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks the live state those files are meant to produce: kernel cmdline, module parameters, sysctl values, unit states, fstab options, and session environment. `--check` reports drift without writing. `--verify` also reports state the script cannot own: orphaned admin-scope masks (vendor masks and alias cascades are filtered), unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in.
+**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks the live state those files are meant to produce: kernel cmdline, module parameters, sysctl values, unit states, fstab options, and session environment. `--check` reports drift without writing.
+
+`--verify` also reports state the script cannot own: orphaned admin-scope masks (vendor masks and alias cascades are filtered), unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in.
 
 ## Embedded Values
 
@@ -249,25 +252,25 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 ## Packages
 
-**Install** (`PKGS_ADD`, 16) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `nftables`, `pacman-contrib`
+**Install** (`PKGS_ADD`, 16) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `nftables`, `pacman-contrib`.
 
-**Remove** (`PKGS_DEL`, 9) — `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect`
+**Remove** (`PKGS_DEL`, 9) — `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect`.
 
 ## Units
 
-**Masked** (`MASK`, 11) — `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target`
+**Masked** (`MASK`, 11) — `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target`.
 
-**Enabled** (`EXPECTED_SERVICES`, 5) — `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service`
+**Enabled** (`EXPECTED_SERVICES`, 5) — `fstrim.timer`, `NetworkManager.service`, `cpupower.service`, `nftables.service`, `bluetooth.service`.
 
 ## Tuning Notes
 
-**Gaming stack**
+### Gaming Stack
 
-- `/dev/ntsync` — `--verify` reports it: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks.
+- `/dev/ntsync` — reported by `--verify`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks.
 - `PROTON_FSR4_UPGRADE=1` — ships enabled for RDNA3 and RDNA3.5; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically, so at value `1` the variable is inert and only takes effect when set to an explicit DLL version (`4.0.0` or `4.1.1`, wider under the OptiScaler path) — verify with `printenv PROTON_FSR4_UPGRADE`.
-- `cpu_temp` — the shipped HUD omits it; to enable, add it on its own line. The omission is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
+- `cpu_temp` — omitted from the shipped HUD; to enable, add it on its own line. The omission is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
 
-**Kernel parameters**
+### Kernel Parameter Notes
 
 - `amd_iommu=off` — breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO, or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run.
 - `clearcpuid=umip` — disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels — drop it if there is no `umip_printk` stutter.

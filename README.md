@@ -2,7 +2,7 @@
 
 **Version 7.154.1** · [Changelog](CHANGELOG.md)
 
-Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible. In scope: the 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite. Everything else is left alone.
+Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible. In scope: the 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
 ## Quick Start
 

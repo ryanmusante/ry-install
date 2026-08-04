@@ -263,7 +263,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 ### Gaming Stack
 
 - `/dev/ntsync` — reported by `--verify`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks.
-- `FSR4_WATERMARK=1` — on-screen indicator confirming FSR4 is active; replaces `PROTON_FSR4_UPGRADE=1` as the shipped FSR4 setting, since Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically and the pinned `=1` no longer triggered anything. To pin an explicit DLL version, set `PROTON_FSR4_UPGRADE=4.0.0` or `=4.1.1` per launch options (wider range under the OptiScaler path).
+- `FSR4_WATERMARK=1` — on-screen indicator confirming FSR4 is active; replaces `PROTON_FSR4_UPGRADE=1` as the shipped FSR4 setting, since Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically and the pinned `=1` no longer triggered anything.
 - `cpu_temp` — omitted from the shipped HUD; to enable, add it on its own line. The omission is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
 
 ### Kernel Parameter Notes

@@ -4,16 +4,16 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.153.0
+7.154.0
 -------
 
-  - readme: document the systemd 250 floor, a hard preflight gate the
-    Requirements table never stated
-  - readme: rename the Tuning Notes heading that collided with the
-    Embedded Values one on the same anchor slug
+  - env: remove PROTON_FSR4_UPGRADE=1 from ENV_VARS; proton-cachyos
+    11.0-20260702 copies the DLL automatically now, so =1 does nothing
+  - env: add FSR4_WATERMARK=1 to ENV_VARS, an on-screen indicator
+    confirming FSR4 is active while a title is running
 
 
-7.139.0 - 7.152.0
+7.139.0 - 7.153.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
@@ -53,6 +53,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     in Troubleshooting and Uninstall; both failed as printed
   - readme: link Requirements to the BIOS section; the section move left
     the power-limit prerequisite unreachable before the install
+  - readme: document the systemd 250 floor, a hard preflight gate the
+    Requirements table never stated
+  - readme: rename the Tuning Notes heading that collided with the
+    Embedded Values one on the same anchor slug
   - changelog: drop readme entries, keep functional changes only
   - changelog: fold the 7.143.0 block into its adjacent range
   - changelog: record README corrections that change a printed command

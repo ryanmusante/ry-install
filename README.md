@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.153.0** · [Changelog](CHANGELOG.md)
+**Version 7.154.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible. In scope: the 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite. Everything else is left alone.
 
@@ -218,11 +218,11 @@ No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declar
 | Variable | Effect |
 |---|---|
 | `DXVK_LOG_LEVEL=none` | DXVK logging off |
+| `FSR4_WATERMARK=1` | on-screen FSR4-active indicator |
 | `MANGOHUD=1` | HUD on for Vulkan titles |
 | `MESA_SHADER_CACHE_MAX_SIZE=16G` | roomy Mesa shader cache |
 | `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
 | `PROTON_ENABLE_WAYLAND=1` | native-Wayland Proton path |
-| `PROTON_FSR4_UPGRADE=1` | FSR4 DLL upgrade request |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
 | `VKD3D_DEBUG=none` | vkd3d logging off |
 | `VKD3D_SHADER_DEBUG=none` | vkd3d shader logging off |
@@ -263,7 +263,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 ### Gaming Stack
 
 - `/dev/ntsync` — reported by `--verify`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks.
-- `PROTON_FSR4_UPGRADE=1` — ships enabled for RDNA3 and RDNA3.5; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically, so at value `1` the variable is inert and only takes effect when set to an explicit DLL version (`4.0.0` or `4.1.1`, wider under the OptiScaler path) — verify with `printenv PROTON_FSR4_UPGRADE`.
+- `FSR4_WATERMARK=1` — on-screen indicator confirming FSR4 is active; replaces `PROTON_FSR4_UPGRADE=1` as the shipped FSR4 setting, since Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically and the pinned `=1` no longer triggered anything. To pin an explicit DLL version, set `PROTON_FSR4_UPGRADE=4.0.0` or `=4.1.1` per launch options (wider range under the OptiScaler path).
 - `cpu_temp` — omitted from the shipped HUD; to enable, add it on its own line. The omission is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
 
 ### Kernel Parameter Notes

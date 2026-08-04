@@ -271,7 +271,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 - `amd_iommu=off` — breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO, or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run.
 - `clearcpuid=umip` — disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels — drop it if there is no `umip_printk` stutter.
 - `ipv6.disable=1` — pairs with the IPv4-only ruleset; for dual-stack, drop the token, add IPv6 rules, and re-run.
-- `pcie_aspm.policy=performance` — biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state. Confirm actual link state with `lspci -vv` (`LnkCtl: ASPM Disabled`) rather than assuming it from the token.
+- `pcie_aspm.policy=performance` — biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
 
 ## BIOS
@@ -292,16 +292,7 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 
 ### libvirt and QEMU NAT
 
-`forward { policy drop; }` silently breaks libvirt/QEMU NAT guest WAN access. VMs are out of scope; if you run them, add the following to `/etc/nftables.conf` — do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`):
-
-```nft
-# input - guest DHCP/DNS to the host dnsmasq:
-iifname "virbr0" udp dport { 53, 67 } accept
-iifname "virbr0" tcp dport { 53, 67 } accept
-# forward - survive the global drop:
-iifname "virbr0" accept
-oifname "virbr0" ct state established,related accept
-```
+`forward { policy drop; }` silently breaks libvirt/QEMU NAT guest WAN access. VMs are out of scope; if you run them — do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`).
 
 ## Uninstall
 

@@ -4,16 +4,14 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.154.0
+7.154.1
 -------
 
-  - env: remove PROTON_FSR4_UPGRADE=1 from ENV_VARS; proton-cachyos
-    11.0-20260702 copies the DLL automatically now, so =1 does nothing
-  - env: add FSR4_WATERMARK=1 to ENV_VARS, an on-screen indicator
-    confirming FSR4 is active while a title is running
+  - readme: correct why DNSOverTLS=/DNSSEC= stay unset: the
+    router's DoT is WAN-side only, not a coincidental systemd default
 
 
-7.139.0 - 7.153.0
+7.139.0 - 7.154.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
@@ -49,6 +47,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     already defaults both to no, so the drop-in only sets mDNS and LLMNR
   - internal: hoist the boot-entry list to function scope (same
     block-scope class as the 7.135.1 backup-preserve fix)
+  - env: remove PROTON_FSR4_UPGRADE=1 from ENV_VARS; proton-cachyos
+    11.0-20260702 copies the DLL automatically now, so =1 does nothing
+  - env: add FSR4_WATERMARK=1 to ENV_VARS, an on-screen indicator
+    confirming FSR4 is active while a title is running
   - readme: add the missing sudo to the unmask and pacman commands
     in Troubleshooting and Uninstall; both failed as printed
   - readme: link Requirements to the BIOS section; the section move left

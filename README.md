@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.154.0** · [Changelog](CHANGELOG.md)
+**Version 7.154.1** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible. In scope: the 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite. Everything else is left alone.
 
@@ -207,7 +207,7 @@ All tunables are `set -g` globals in `ry-install.fish`, not CachyOS settings —
 | `EXPECTED_SCALING_DRIVER` | `amd-pstate-epp` | nothing — verify-only |
 | `BLACKLIST_AMDXDNA` | `true` | `blacklist amdxdna` |
 
-No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declares no `[global-dns]` section, so DHCP-supplied servers arrive as per-link DNS and the router decides where queries go, including any filtering it applies. `DNSOverTLS=` and `DNSSEC=` are left unset, since this build of systemd already defaults both to `no`.
+No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declares no `[global-dns]` section, so DHCP-supplied servers arrive as per-link DNS and the router decides where queries go, including any filtering it applies. `DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC on its own servers; since it serves DoT WAN-side only, pinning `DNSOverTLS=yes` here would TLS-handshake a plaintext-only LAN resolver and fail closed.
 
 `NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise.
 

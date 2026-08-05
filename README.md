@@ -182,6 +182,10 @@ All tunables are `set -g` globals in `ry-install.fish`, not CachyOS settings —
 
 ### Service Keys
 
+No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declares no `[global-dns]` section, so DHCP-supplied servers arrive as per-link DNS and the router decides where queries go, including any filtering it applies. `DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC on its own servers; since it serves DoT WAN-side only, pinning `DNSOverTLS=yes` here would TLS-handshake a plaintext-only LAN resolver and fail closed.
+
+`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise. `BLACKLIST_AMDXDNA` pairs with `amd_iommu=off`, and the script refuses an inconsistent pair; [Tuning Notes](#tuning-notes) has the override.
+
 | Key | Value | Emitted as |
 |---|---|---|
 | `RESOLVED_MDNS` | `no` | `MulticastDNS=` |
@@ -200,12 +204,6 @@ All tunables are `set -g` globals in `ry-install.fish`, not CachyOS settings —
 | `EPP_PREFERENCE` | `performance` | udev `ATTR{cpufreq/energy_performance_preference}` |
 | `EXPECTED_SCALING_DRIVER` | `amd-pstate-epp` | nothing — verify-only |
 | `BLACKLIST_AMDXDNA` | `true` | `blacklist amdxdna` |
-
-No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declares no `[global-dns]` section, so DHCP-supplied servers arrive as per-link DNS and the router decides where queries go, including any filtering it applies. `DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC on its own servers; since it serves DoT WAN-side only, pinning `DNSOverTLS=yes` here would TLS-handshake a plaintext-only LAN resolver and fail closed.
-
-`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise.
-
-`BLACKLIST_AMDXDNA` pairs with `amd_iommu=off`, and the script refuses an inconsistent pair; [Tuning Notes](#tuning-notes) has the override.
 
 ### Session Environment
 

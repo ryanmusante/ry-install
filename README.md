@@ -61,13 +61,13 @@ Per-phase verdicts:
 
 ## Environment Overrides
 
+Skipping the hardware check is the risky override: deploying gfx1151 defaults on a non-matching CPU writes an incorrect kernel cmdline and initramfs `MODULES`.
+
 | Variable | Effect |
 |---|---|
 | `RY_RUN_TIMEOUT=<sec>` | Per-command wall-clock cap — default `3600`, `0` disables, package and boot ops floor at `7200` |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `EXPECTED_CPU_MATCH` hard-fail |
 | `NO_COLOR` | Disable colored output when set to a non-empty value ([no-color.org](https://no-color.org)) |
-
-Skipping the hardware check is the risky override: deploying gfx1151 defaults on a non-matching CPU writes an incorrect kernel cmdline and initramfs `MODULES`.
 
 ## Managed Files
 

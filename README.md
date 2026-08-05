@@ -1,13 +1,13 @@
 # ry-install
 
-**Version 7.154.1** · [Changelog](CHANGELOG.md)
+**Version 7.155.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible. In scope: the 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
 ## Quick Start
 
 > [!WARNING]
-> Run as your normal user — never run the script itself with `sudo`. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `--verify`. Re-runs are idempotent.
+> Run as your normal user — never run the script itself with `sudo`. Meet [Requirements](#requirements) first. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `--verify`. Re-runs are idempotent.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
@@ -16,7 +16,7 @@ sudo -v
 ./ry-install.fish
 ```
 
-A run closes with the Totals line and a `PASS` or `PASS-WITH-WARNINGS` (exit `0`) verdict.
+A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` on exit `0`, otherwise `PREFLIGHT`, `FAIL`, or `FAIL-BOOT-CRITICAL` — see [Exit Codes](#exit-codes).
 
 ## Requirements
 
@@ -171,7 +171,7 @@ All tunables are `set -g` globals in `ry-install.fish`, not CachyOS settings —
 
 ### Initramfs
 
-`HOOKS` order is an invariant — `systemd` must precede `sd-vconsole`, and `block` must precede `filesystems`.
+`HOOKS` order is an invariant, enforced at preflight: `base` first, `fsck` last, no duplicates, and `systemd` before `autodetect`, `keyboard`, and `sd-vconsole`; `autodetect` before `microcode` and `modconf`; `keyboard` before `sd-vconsole`; `modconf` before `kms`; `block` before `filesystems`.
 
 | Key | Value | Emitted as |
 |---|---|---|
@@ -182,7 +182,9 @@ All tunables are `set -g` globals in `ry-install.fish`, not CachyOS settings —
 
 ### Service Keys
 
-No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declares no `[global-dns]` section, so DHCP-supplied servers arrive as per-link DNS and the router decides where queries go, including any filtering it applies. `DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC on its own servers; since it serves DoT WAN-side only, pinning `DNSOverTLS=yes` here would TLS-handshake a plaintext-only LAN resolver and fail closed.
+No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declares no `[global-dns]` section, so DHCP-supplied servers arrive as per-link DNS and the router decides where queries go, including any filtering it applies.
+
+`DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC on its own servers; since it serves DoT WAN-side only, pinning `DNSOverTLS=yes` here would TLS-handshake a plaintext-only LAN resolver and fail closed.
 
 `NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise. `BLACKLIST_AMDXDNA` pairs with `amd_iommu=off`, and the script refuses an inconsistent pair; [Tuning Notes](#tuning-notes) has the override.
 

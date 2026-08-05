@@ -4,63 +4,45 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.154.1
+7.155.0
 -------
 
-  - readme: correct why DNSOverTLS=/DNSSEC= stay unset: the
-    router's DoT is WAN-side only, not a coincidental systemd default
+  - readme: document all eleven mkinitcpio HOOKS ordering constraints the
+    preflight enforces; the Initramfs note named two of them
+  - readme: name the failure verdicts the run summary prints; only the two
+    success verdicts were documented
 
 
-7.139.0 - 7.154.0
+7.139.0 - 7.154.1
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
-    mkinitcpio prepends -T0 for zstd, so the image is unchanged
-  - verify: warn when a sdboot-manage drop-in is present, since
-    drop-ins are sourced after /etc/sdboot-manage.conf and outrank it
-  - preflight: drop free, uptime, swapon and zramctl from the optional
-    tool probe; the script never invokes any of them
+    mkinitcpio prepends it for zstd, so the image is unchanged
+  - dns: drop the pinned upstreams and stop pinning DNSOverTLS= and
+    DNSSEC=; link DNS from DHCP wins, systemd already defaults both to no
+  - env: replace PROTON_FSR4_UPGRADE=1 with FSR4_WATERMARK=1; the runtime
+    now copies the DLL itself, so the old pin did nothing
   - verify: sweep every cpufreq policy for driver, governor and EPP
     uniformity; cpu0 stays the representative detail readout
   - verify: assert each non-fallback loader entry carries every
     KERNEL_PARAMS token; fallback entries keep their own options
-  - verify: check systemd-resolved unit-file state (enabled or
-    static) so --verify and --check agree on persistence
-  - verify: report only admin-scope orphan masks, dropping vendor
-    masks and Alias= cascades of units this profile masks
-  - verify: log the root filesystem type and the ext4 fstab entry
-    count; distinguish absent sysctl knobs from unreadable ones
-  - verify: drop the preemption-model advisory and its dmesg scan;
-    the profile never pinned preempt=, so nothing was asserted
+  - verify: check the systemd-resolved unit-file state, warn on any
+    sdboot-manage drop-in, and report only admin-scope orphan masks
+  - verify: log the root filesystem type and the ext4 fstab entry count
+  - verify: drop the preemption-model advisory and its dmesg scan
+  - preflight: drop free, uptime, swapon and zramctl from the optional
+    tool probe; the script never invokes any of them
   - logging: millisecond JSONL timestamps; CHECK_GREP records use
     key=value form; nftables verdict names the unit-file state
-  - source: pack 17 single-statement helpers onto one line each (-74 lines)
-  - source: capitalize the remaining lowercase function descriptions and
-    cap every description at 96 characters
-  - source: add five section banners, two of them on the only blank
-    lines that did not already precede one
-  - source: trim two section banner titles that still named subjects
-    moved into their own child banners
-  - dns: drop the pinned upstreams; the resolved drop-in emits no DNS=
-    line and NetworkManager no [global-dns], so link DNS from DHCP wins
-  - dns: stop pinning DNSOverTLS= and DNSSEC=; this build of systemd
-    already defaults both to no, so the drop-in only sets mDNS and LLMNR
-  - internal: hoist the boot-entry list to function scope (same
-    block-scope class as the 7.135.1 backup-preserve fix)
-  - env: remove PROTON_FSR4_UPGRADE=1 from ENV_VARS; proton-cachyos
-    11.0-20260702 copies the DLL automatically now, so =1 does nothing
-  - env: add FSR4_WATERMARK=1 to ENV_VARS, an on-screen indicator
-    confirming FSR4 is active while a title is running
+  - internal: hoist the boot-entry list to function scope
+  - source: pack 17 single-statement helpers onto one line each
+  - source: capitalize descriptions and cap each at 96 characters
+  - source: add five section banners, trim two banner titles
   - readme: add the missing sudo to the unmask and pacman commands
-    in Troubleshooting and Uninstall; both failed as printed
-  - readme: link Requirements to the BIOS section; the section move left
-    the power-limit prerequisite unreachable before the install
-  - readme: document the systemd 250 floor, a hard preflight gate the
-    Requirements table never stated
-  - readme: rename the Tuning Notes heading that collided with the
-    Embedded Values one on the same anchor slug
-  - changelog: drop readme entries, keep functional changes only
-  - changelog: fold the 7.143.0 block into its adjacent range
+  - readme: link Requirements to the BIOS section
+  - readme: document the systemd 250 floor and why DNSOverTLS= and
+    DNSSEC= stay unset
+  - readme: rename the heading that collided on an anchor slug
   - changelog: record README corrections that change a printed command
 
 
@@ -69,7 +51,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
   - configuration: drop the dormant RY_REMOTE_PLAY_PORTS gate and its
     Sunshine/Steam inbound rules from the nftables generator
-  - verify: tighten the three preemption advisory strings
 
 
 7.135.0 - 7.136.1
@@ -77,17 +58,12 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
   - install: fix the one-time <path>.ry.orig preserve never running for
     non-boot managed files; a set -l inside an if block does not leak
-  - check: record unmanaged 60-ry-*.conf drop-ins and masked units
-    absent from MASK, both previously visible to --verify only
-  - verify: report masked units the profile no longer declares; the
-    script only adds to MASK, so a dropped entry stayed masked
-  - preflight: refuse a package in both PKGS_ADD and PKGS_DEL, or a
-    unit in both MASK and EXPECTED_SERVICES
-  - verify: dynamic_epp probe comment corrected - the node ships in
-    Linux 7.1; manual EPP writes are blocked while it is enabled
+  - check: record unmanaged 60-ry-*.conf drop-ins and masked units absent
+    from MASK, both previously visible to --verify only
+  - preflight: refuse a package in both PKGS_ADD and PKGS_DEL, or a unit
+    in both MASK and EXPECTED_SERVICES
   - logging: count captured lines without a redirect; fish warns on a
     failed redirect even when stderr is silenced
-  - source: the drop-in sweep is one helper shared by both modes
 
 
 7.132.0 - 7.134.0
@@ -95,33 +71,17 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
   - summary: the abort path records the phase-3 row under the normal
     path's name; the old one also overflowed the matrix column
-  - verify: two sub markers name the function that calls them, not an
-    ancestor, completing the pass begun earlier in this range
   - preflight: read the CPU model through cat; a missing /proc/cpuinfo
     made the redirect warn, which --check must never print
-  - logging: comma-join the unmanaged drop-in list so files= stays one
-    token, matching every other multi-value key
-  - verify: warn on unmanaged /etc/modprobe.d/60-ry-*.conf drop-ins.
-    The pre-7.99 files had no owner in the profile and no detection
-  - verify: session subchecks name _verify_runtime_session, their only
-    caller, rather than the services orchestrator
-  - summary: phase-3 matrix row renamed to "Configuration: file
-    deployment"; its counters span the system and user sets alike
-  - source: sub marker normalized inside every helper family that uses
-    one; the parent named is the calling function, stated once
-  - source: loader-entry boundary warning uses the arrow glyph the
-    other user-facing messages already use
+  - verify: warn on unmanaged /etc/modprobe.d/60-ry-*.conf drop-ins
+  - source: sub marker names the calling function across every family
 
 
 7.130.0 - 7.131.1
 -----------------
 
-  - perf: cpu governor and p-state epp hint set to performance, the
-    maximum values the preflight validators accept
-  - perf: gpu dpm level forced to high, pinning the gfx1151 clocks to
-    their highest power state rather than scaling on demand
-  - perf: package power stays capped at 85W in firmware, so peak draw
-    is unchanged; idle draw rises because clocks no longer scale down
+  - perf: cpu governor and p-state epp hint set to performance, gpu dpm
+    level forced to high; package power stays capped at 85W in firmware
 
 
 7.123.0 - 7.127.0
@@ -129,24 +89,13 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
   - dns: upstreams pinned in the resolver drop-in and in the
     NetworkManager global-dns section, which per-link config outranks
-  - dns: queries stay in plaintext. Filtering is identical either way
-    and strict DNS-over-TLS fails closed on an unreachable endpoint
-  - dns: preflight refuses an empty upstream list and any upstream
-    that is not an IPv4 literal, before anything is written
   - kernel: add mt7925e.disable_aspm=1. The global policy governs link
     state only, so the endpoint driver disables ASPM itself
   - sysctl: add kernel.nmi_watchdog=0. The runtime check asserted it
     while nothing set it; the profile now owns what it verifies
-  - env: rename FSR4_UPGRADE to PROTON_FSR4_UPGRADE, the name the Proton
-    runtime actually reads. The former was consumed by nothing
-  - env: drop VKD3D_CONFIG=descriptor_heap. Not enabled by default
-    upstream and within noise here; per-title use is unaffected
-  - modprobe: correct the amdxdna probe failure to -ENODEV (-19); the
-    driver returns that, not -EINVAL
-  - color: NO_COLOR now needs a non-empty value to disable color; it
-    was honored on presence alone. TERM=dumb and non-TTY unchanged
-  - summary: the configuration phase reports under its declared name;
-    an abbreviation had shown seven phase names for six
+  - env: rename FSR4_UPGRADE to PROTON_FSR4_UPGRADE and drop
+    VKD3D_CONFIG=descriptor_heap
+  - color: NO_COLOR now needs a non-empty value to disable color
   - counts: KERNEL_PARAMS 14 to 15, SYSCTL_VALUES 10 to 11, ENV_VARS 11
     to 10; drift tripwires and the readme tables follow
 
@@ -158,13 +107,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     PKGS_DEL 10 -> 9 (-ufw)
   - services: nftables-first gate moved from the removal path to the
     mask path; an unconfirmed ruleset withholds the ufw.service mask
-  - nftables.conf: embedded header now reads "ufw masked", producing a
-    one-time drift and redeploy
-  - source: comments normalized to one line each, verbose notes trimmed
-  - source: section banners name only the functions they hold, arrow
-    glyph unified, one blank line before every banner
-  - source: "sub:" parent marker completed across the verify helpers
-  - version pins synced across source, readme and changelog
+  - source: comments normalized to one line each, section banners name
+    only the functions they hold
 
 
 7.108.0 - 7.117.0
@@ -172,12 +116,9 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
   - install-file: post-hook dispatch table with per-target handlers,
     coverage enforced by an invariant validator
-  - verify: runtime module-state subchecks split out of the kernel-param
-    orchestrator
   - boot: mkinitcpio.conf snapshot and revert with byte-exact compare
   - fstab: atomic replace behind parity, size and findmnt gates
   - lock: dead-PID reclaim only; live or ambiguous pidfiles fail closed
-  - logging: JSONL footer carries the exit code for every mode
   - preserve: one-time <path>.ry.orig for non-boot managed files whose
     content differed at first adoption
 
@@ -187,20 +128,16 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
   - configuration: 17 embedded configs deployed atomically - temp file
     on the same filesystem, pre-validation, backup, mv -T, re-read
-  - packages: pacman -Rns made rdep-aware via pactree, with a timeout
-  - packages: PKGS_ADD re-marked explicit after -Syu so a later removal
-    cannot orphan a dependency-installed package
+  - packages: pacman -Rns made rdep-aware via pactree, with a timeout;
+    PKGS_ADD re-marked explicit after -Syu
   - verify: static checksum path compares installed bytes to generator
-    output by SHA256
-  - check: silent idempotency probe against the live /proc/cmdline
+    output by SHA256; --check is a silent idempotency probe
   - services: masked unit set and enabled unit set established
   - boot: boot-critical failures exit 4 and skip finalization
-  - preflight: hardware gate fails closed on an unreadable CPU model
-  - progress: pinned bottom row with a scroll region
 
 
 7.99.1 and earlier
 ------------------
 
-  - initial profile for the Beelink GTR9 Pro: kernel parameters, mkinitcpio,
-    sysctl, udev, session environment and the systemd-boot layout
+  - initial profile for the Beelink GTR9 Pro: kernel parameters,
+    mkinitcpio, sysctl, udev, session environment and systemd-boot

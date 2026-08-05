@@ -171,14 +171,14 @@ All tunables are `set -g` globals in `ry-install.fish`, not CachyOS settings —
 
 ### Initramfs
 
+`HOOKS` order is an invariant — `systemd` must precede `sd-vconsole`, and `block` must precede `filesystems`.
+
 | Key | Value | Emitted as |
 |---|---|---|
 | `MKINITCPIO_MODULES` | `amdgpu` | `MODULES=()` |
 | `MKINITCPIO_HOOKS` | `base`, `systemd`, `autodetect`, `microcode`, `modconf`, `kms`, `keyboard`, `sd-vconsole`, `block`, `filesystems`, `fsck` | `HOOKS=()` |
 | `MKINITCPIO_COMPRESSION` | `zstd` | `COMPRESSION=` |
 | `MKINITCPIO_COMPRESSION_OPTIONS` | `-1` | `COMPRESSION_OPTIONS=()` |
-
-`HOOKS` order is an invariant — `systemd` must precede `sd-vconsole`, and `block` must precede `filesystems`.
 
 ### Service Keys
 

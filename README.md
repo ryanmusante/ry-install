@@ -34,12 +34,6 @@ A run closes with the Totals line and a `PASS` or `PASS-WITH-WARNINGS` (exit `0`
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
 
-```fish
-./ry-install.fish --verify
-./ry-install.fish --check
-./ry-install.fish --install-file /etc/nftables.conf
-```
-
 `--verify`, `--check`, and `--install-file <path>` are mutually exclusive. The bare invocation is the unattended install, all 6 phases; `--install-file` re-deploys one managed file. No positional arguments are accepted; `--` ends option parsing, and anything after it exits `2`. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
 
 Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
@@ -113,6 +107,8 @@ In deploy order; system files land `0644`, user files `0600`.
 
 ## Install Flow
 
+Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If it cannot be confirmed, the mask is withheld for the run.
+
 | Phase | Name | Work |
 |---|---|---|
 | 1 | Preflight | Dependency, network, disk, and systemd gates; hardware match; lock acquisition |
@@ -121,8 +117,6 @@ In deploy order; system files land `0644`, user files `0600`.
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regulatory domain |
 | 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
 | 6 | Finalize | User `daemon-reload` (PowerDevil re-apply if the env file changed), `paccache -rk2` and `-ruk0`, NetworkManager restart |
-
-Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If it cannot be confirmed, the mask is withheld for the run.
 
 ## Safety and Reliability
 

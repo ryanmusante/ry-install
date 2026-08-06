@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.155.0** · [Changelog](CHANGELOG.md)
+**Version 7.156.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible. In scope: the 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -216,7 +216,6 @@ No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declar
 | `MANGOHUD=1` | HUD on for Vulkan titles |
 | `MESA_SHADER_CACHE_MAX_SIZE=16G` | roomy Mesa shader cache |
 | `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
-| `PROTON_ENABLE_WAYLAND=1` | native-Wayland Proton path |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
 | `VKD3D_DEBUG=none` | vkd3d logging off |
 | `VKD3D_SHADER_DEBUG=none` | vkd3d shader logging off |
@@ -267,6 +266,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 - `ipv6.disable=1` — pairs with the IPv4-only ruleset; for dual-stack, drop the token, add IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
+- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled under the IPv4-only ruleset, and firmware-default ASPM; the `amdxdna` blacklist is a modprobe file, so it still applies. `--verify` skips `*-fallback.conf` by design.
 
 ## BIOS
 

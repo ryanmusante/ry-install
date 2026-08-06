@@ -4,16 +4,18 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.155.0
+7.156.0
 -------
 
-  - readme: document all eleven mkinitcpio HOOKS ordering constraints the
-    preflight enforces; the Initramfs note named two of them
-  - readme: name the failure verdicts the run summary prints; only the two
-    success verdicts were documented
+  - env: drop PROTON_ENABLE_WAYLAND=1; winewayland is a per-title opt-in
+    and the global pin applied it to every Proton game
+  - check: record unmanaged 60-ry-* drop-ins before the sudo gate; the
+    sweep needs no privilege
+  - readme: note that the fallback entry carries none of the kernel
+    parameters
 
 
-7.139.0 - 7.154.1
+7.139.0 - 7.155.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS;
@@ -43,6 +45,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - readme: document the systemd 250 floor and why DNSOverTLS= and
     DNSSEC= stay unset
   - readme: rename the heading that collided on an anchor slug
+  - readme: document all eleven mkinitcpio HOOKS ordering constraints the
+    preflight enforces; the Initramfs note named two of them
+  - readme: name the failure verdicts the run summary prints; only the two
+    success verdicts were documented
   - changelog: record README corrections that change a printed command
 
 

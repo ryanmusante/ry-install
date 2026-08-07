@@ -1,13 +1,13 @@
 # ry-install
 
-**Version 7.156.0** · [Changelog](CHANGELOG.md)
+**Version 7.158.0** · [Changelog](CHANGELOG.md)
 
-Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One self-contained fish script, 17 embedded configs — atomic, byte-verifiable, reversible. In scope: the 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
+Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
 ## Quick Start
 
 > [!WARNING]
-> Run as your normal user — never run the script itself with `sudo`. Meet [Requirements](#requirements) first. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `--verify`. Re-runs are idempotent.
+> Run as your normal user — never run the script itself with `sudo`. Meet [Requirements](#requirements) first. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `--verify`.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
@@ -32,9 +32,9 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 ## Usage
 
 > [!CAUTION]
-> `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds. ESP autodetect (`bootctl` → `findmnt`) failure falls back to `/boot` with a warning; a non-vfat fallback then refuses sdboot (exit `4`).
+> `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds.
 
-`--verify`, `--check`, and `--install-file <path>` are mutually exclusive. The bare invocation is the unattended install, all 6 phases; `--install-file` re-deploys one managed file. No positional arguments are accepted; `--` ends option parsing, and anything after it exits `2`. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
+`--verify`, `--check`, and `--install-file <path>` are mutually exclusive. The bare invocation is the unattended install, all 6 phases; `--install-file` re-deploys one managed file. Positional arguments exit `2`. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
 
 Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
 
@@ -80,34 +80,34 @@ In deploy order; system files land `0644`, user files `0600`.
 | `/boot/loader/loader.conf` | systemd-boot: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
 | `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 15 kernel tokens |
 | `/etc/sdboot-manage.conf` | `LINUX_OPTIONS` mirror, `LINUX_FALLBACK_OPTIONS="quiet"`, entry management keys |
-| `/etc/mkinitcpio.conf` | `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-1`) |
+| `/etc/mkinitcpio.conf` | `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-3`) |
 
 ### System
 
 | File | Purpose |
 |---|---|
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | mDNS and LLMNR off |
-| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | power, suspend, hibernate, and reboot keys ignored — 8 keys including long-press variants |
-| `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | `LogLevelMax=notice` drops info-level dispatcher lines |
+| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | 8 power, suspend, hibernate, and reboot keys ignored, long-press included |
+| `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | `LogLevelMax=notice` |
 | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, log level `WARN` |
 | `/etc/iw-regdomain` | regulatory domain (`US`) |
-| `/etc/bluetooth/main.conf` | adapter auto-power-on, `FastConnectable`, 3 paired-sink reconnect attempts |
+| `/etc/bluetooth/main.conf` | auto-power-on, `FastConnectable`, 3 reconnect attempts |
 | `/etc/nftables.conf` | IPv4-only default-deny-inbound, ping allowed |
 | `/etc/default/cpupower-service.conf` | governor (`performance`) |
-| `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, netdev budget, TCP `bbr`, VM tunables |
-| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none` (vendor `kyber`), P-State EPP, GPU DPM level `high` |
+| `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, TCP `bbr`, VM tunables |
+| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `high` |
 | `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist |
 
 ### User
 
 | File | Purpose |
 |---|---|
-| `~/.config/environment.d/10-environment.conf` | session env — DXVK, MangoHud, Proton, VKD3D, Wine, plus `POWERDEVIL_NO_DDCUTIL=1` |
+| `~/.config/environment.d/10-environment.conf` | session env — DXVK, MangoHud, Proton, VKD3D, Wine, PowerDevil |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
 
 ## Install Flow
 
-Phase 4 masks `ufw.service` rather than removing the package: the nftables ruleset is confirmed live and default-deny before the ufw flush, so there is no window without inbound protection. If it cannot be confirmed, the mask is withheld for the run.
+Phase 4 masks `ufw.service` rather than removing the package, and withholds the mask for the run unless the nftables ruleset is confirmed live and default-deny first.
 
 | Phase | Name | Work |
 |---|---|---|
@@ -116,25 +116,25 @@ Phase 4 masks `ufw.service` rather than removing the package: the nftables rules
 | 3 | Configuration | Deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regulatory domain |
 | 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
-| 6 | Finalize | User `daemon-reload` (PowerDevil re-apply if the env file changed), `paccache -rk2` and `-ruk0`, NetworkManager restart |
+| 6 | Finalize | User `daemon-reload` and PowerDevil re-apply, `paccache -rk2` and `-ruk0`, NetworkManager restart |
 
 ## Safety and Reliability
 
-**Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved into place with `mv -T`, then re-read and compared; a mismatch restores the backup.
+**Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved with `mv -T`, then re-read; a mismatch restores the backup.
 
 **Backups** — `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig`.
 
-**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, normalizing away redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; everything else is byte-preserved. `commit=10` doubles the upstream ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata; the filesystem itself stays consistent.
+**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; every other row is byte-preserved. `commit=10` doubles the ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata.
 
-**Failure and concurrency** — boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, via an atomic `mkdir` lock with dead-PID reclaim — live or ambiguous PIDs fail closed.
+**Failure and concurrency** — boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, via an atomic `mkdir` lock with dead-PID reclaim; live or ambiguous PIDs fail closed.
 
-**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks the live state those files are meant to produce: kernel cmdline, module parameters, sysctl values, unit states, fstab options, and session environment. `--check` reports drift without writing.
+**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks the live state: kernel cmdline, module parameters, sysctl values, unit states, fstab options, and session environment. `--check` reports drift without writing.
 
-`--verify` also reports state the script cannot own: orphaned admin-scope masks (vendor masks and alias cascades are filtered), unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in.
+`--verify` also reports state the script cannot own: orphaned admin-scope masks, unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in.
 
 ## Embedded Values
 
-All tunables are `set -g` globals in `ry-install.fish`, not CachyOS settings — there is no external config file. Edit one, then re-run or `--install-file` the affected file.
+All tunables are `set -g` globals in `ry-install.fish` — there is no external config file. Edit one, then re-run or `--install-file` the affected file.
 
 ### Bootloader Keys
 
@@ -155,9 +155,9 @@ All tunables are `set -g` globals in `ry-install.fish`, not CachyOS settings —
 |---|---|
 | `amd_iommu=off` | IOMMU fully off — lowest DMA-mapping overhead |
 | `amd_pstate=active` | CPPC autonomous mode — the `amd-pstate-epp` scaling driver |
-| `btusb.enable_autosuspend=n` | keep the BT controller powered — no wake or reconnect stalls |
+| `btusb.enable_autosuspend=n` | keep the BT controller powered — no reconnect stalls |
 | `clearcpuid=umip` | disable UMIP trapping |
-| `fsck.mode=force` | run fsck on every boot |
+| `fsck.mode=auto` | fsck only when the filesystem asks for it |
 | `fsck.repair=yes` | auto-repair whatever fsck finds |
 | `ipv6.disable=1` | disable the IPv6 stack |
 | `mt7925e.disable_aspm=1` | MT7925 endpoint ASPM off — driver-level coredump mitigation |
@@ -178,15 +178,15 @@ All tunables are `set -g` globals in `ry-install.fish`, not CachyOS settings —
 | `MKINITCPIO_MODULES` | `amdgpu` | `MODULES=()` |
 | `MKINITCPIO_HOOKS` | `base`, `systemd`, `autodetect`, `microcode`, `modconf`, `kms`, `keyboard`, `sd-vconsole`, `block`, `filesystems`, `fsck` | `HOOKS=()` |
 | `MKINITCPIO_COMPRESSION` | `zstd` | `COMPRESSION=` |
-| `MKINITCPIO_COMPRESSION_OPTIONS` | `-1` | `COMPRESSION_OPTIONS=()` |
+| `MKINITCPIO_COMPRESSION_OPTIONS` | `-3` | `COMPRESSION_OPTIONS=()` |
 
 ### Service Keys
 
-No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declares no `[global-dns]` section, so DHCP-supplied servers arrive as per-link DNS and the router decides where queries go, including any filtering it applies.
+No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declares no `[global-dns]` section, so DHCP-supplied servers arrive as per-link DNS and the router decides where queries go.
 
-`DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC on its own servers; since it serves DoT WAN-side only, pinning `DNSOverTLS=yes` here would TLS-handshake a plaintext-only LAN resolver and fail closed.
+`DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC. It serves DoT WAN-side only, so pinning `DNSOverTLS=yes` here would fail closed against a plaintext-only LAN resolver.
 
-`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and produces latency spikes otherwise. `BLACKLIST_AMDXDNA` pairs with `amd_iommu=off`, and the script refuses an inconsistent pair; [Tuning Notes](#tuning-notes) has the override.
+`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and spikes latency otherwise. `BLACKLIST_AMDXDNA` pairs with `amd_iommu=off` and the script refuses an inconsistent pair; [Tuning Notes](#tuning-notes) has the override.
 
 | Key | Value | Emitted as |
 |---|---|---|
@@ -227,17 +227,15 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 | Key | Value | Effect |
 |---|---|---|
-| `kernel.nmi_watchdog` | `0` | NMI watchdog off — no per-CPU watchdog overhead |
+| `kernel.nmi_watchdog` | `0` | NMI watchdog off |
 | `net.core.default_qdisc` | `fq` | pairs with BBR |
-| `net.core.netdev_budget` | `600` | wider NAPI polling for 10GbE |
-| `net.core.netdev_budget_usecs` | `5000` | matching poll time budget |
 | `net.ipv4.tcp_congestion_control` | `bbr` | BBR congestion control |
-| `net.ipv4.tcp_notsent_lowat` | `16384` | cap unsent buffer at 16 KiB for send latency |
+| `net.ipv4.tcp_notsent_lowat` | `16384` | cap unsent buffer at 16 KiB |
 | `net.ipv4.tcp_slow_start_after_idle` | `0` | keep the congestion window across idle |
-| `vm.compaction_proactiveness` | `0` | proactive compaction off — reclaim-stall source |
+| `vm.compaction_proactiveness` | `0` | proactive compaction off |
 | `vm.max_map_count` | `2147483642` | Steam's esync requirement |
 | `vm.swappiness` | `150` | push swap traffic onto zram |
-| `vm.watermark_boost_factor` | `0` | watermark boosting off — reclaim-stall source |
+| `vm.watermark_boost_factor` | `0` | watermark boosting off |
 
 ## Packages
 
@@ -255,18 +253,18 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 ### Gaming Stack
 
-- `/dev/ntsync` — reported by `--verify`: present passes, a loaded module without the node warns, absent is informational; Proton reads it directly, and `PROTON_NO_NTSYNC=1` opts out at the Proton level, which this script neither sets nor checks.
-- `FSR4_WATERMARK=1` — on-screen indicator confirming FSR4 is active; replaces `PROTON_FSR4_UPGRADE=1` as the shipped FSR4 setting, since Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` automatically and the pinned `=1` no longer triggered anything.
-- `cpu_temp` — omitted from the shipped HUD; to enable, add it on its own line. The omission is deliberate, since on Zen 5 enabling it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
+- `/dev/ntsync` — reported by `--verify`: present passes, a loaded module without the node warns, absent is informational. Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out at the Proton level.
+- `FSR4_WATERMARK=1` — on-screen indicator confirming FSR4 is active; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` themselves, so no upgrade pin is needed.
+- `cpu_temp` — omitted from the shipped HUD; to enable, add it on its own line. On Zen 5 it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
 
 ### Kernel Parameter Notes
 
 - `amd_iommu=off` — breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO, or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run.
-- `clearcpuid=umip` — disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels — drop it if there is no `umip_printk` stutter.
+- `clearcpuid=umip` — disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels. Drop it if there is no `umip_printk` stutter.
 - `ipv6.disable=1` — pairs with the IPv4-only ruleset; for dual-stack, drop the token, add IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
-- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled under the IPv4-only ruleset, and firmware-default ASPM; the `amdxdna` blacklist is a modprobe file, so it still applies. `--verify` skips `*-fallback.conf` by design.
+- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled under the IPv4-only ruleset, and firmware-default ASPM; the `amdxdna` blacklist is a modprobe file, so it still applies. `--verify` skips `*-fallback.conf`.
 
 ## BIOS
 
@@ -292,10 +290,10 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 
 There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference; the steps are ordered.
 
-A `.ry.bak` exists only if the file was present before the overwrite — for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot files; restore that instead of deleting.
+A `.ry.bak` exists only if the file was present before the overwrite — for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot files; restore it instead of deleting.
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore its mDNS responder; `systemd-resolved` covers mDNS while the pair is masked.
-2. **Remove configs** — `sudo systemctl disable --now nftables` first, since its unit loads `/etc/nftables.conf` at start and fails once the ruleset is gone; then `sudo rm` the 11 system files and `rm` the 2 user files. Skip the 4 boot files; step 3 reverts them.
+2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
 3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the `.ry.bak` files.
 4. **Reverse packages** — optional: `sudo pacman -S --needed` the Remove list, `sudo pacman -Rns` the Install list; both listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.

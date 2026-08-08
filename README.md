@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.158.0** · [Changelog](CHANGELOG.md)
+**Version 7.159.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -92,7 +92,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, log level `WARN` |
 | `/etc/iw-regdomain` | regulatory domain (`US`) |
 | `/etc/bluetooth/main.conf` | auto-power-on, `FastConnectable`, 3 reconnect attempts |
-| `/etc/nftables.conf` | IPv4-only default-deny-inbound, ping allowed |
+| `/etc/nftables.conf` | default-deny-inbound, IPv4 ping allowed, ICMPv6 base accept |
 | `/etc/default/cpupower-service.conf` | governor (`performance`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, TCP `bbr`, VM tunables |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `high` |
@@ -255,16 +255,17 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 - `/dev/ntsync` — reported by `--verify`: present passes, a loaded module without the node warns, absent is informational. Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out at the Proton level.
 - `FSR4_WATERMARK=1` — on-screen indicator confirming FSR4 is active; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` themselves, so no upgrade pin is needed.
-- `cpu_temp` — omitted from the shipped HUD; to enable, add it on its own line. On Zen 5 it makes `cpu_power` read 0 ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794), open upstream).
+- `cpu_stats` and `cpu_temp` — both shipped commented out; add either on its own line to enable. `cpu_custom_temp_sensor` is inert here: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. The Zen 5 `cpu_power` report is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
 
 ### Kernel Parameter Notes
 
 - `amd_iommu=off` — breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO, or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run.
 - `clearcpuid=umip` — disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels. Drop it if there is no `umip_printk` stutter.
-- `ipv6.disable=1` — pairs with the IPv4-only ruleset; for dual-stack, drop the token, add IPv6 rules, and re-run.
+- `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
-- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled under the IPv4-only ruleset, and firmware-default ASPM; the `amdxdna` blacklist is a modprobe file, so it still applies. `--verify` skips `*-fallback.conf`.
+- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; the `amdxdna` blacklist is a modprobe file, so it still applies. `--verify` skips `*-fallback.conf`.
+- `timeout 0` with `default @saved` — after an ESP wipe or a fresh install no saved entry exists, so sd-boot picks by its own sort order and can boot the fallback with no menu shown; hold a key at power-on and select the tuned entry once to set `@saved`.
 
 ## BIOS
 
@@ -292,7 +293,7 @@ There is no automated uninstaller. Use [Managed Files](#managed-files) as the ro
 
 A `.ry.bak` exists only if the file was present before the overwrite — for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot files; restore it instead of deleting.
 
-1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore its mDNS responder; `systemd-resolved` covers mDNS while the pair is masked.
+1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS: the profile runs no mDNS responder while it is masked, because the resolved drop-in also sets `MulticastDNS=no`.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
 3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the `.ry.bak` files.
 4. **Reverse packages** — optional: `sudo pacman -S --needed` the Remove list, `sudo pacman -Rns` the Install list; both listed in [Packages](#packages).

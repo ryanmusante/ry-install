@@ -4,20 +4,30 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.158.0
+7.159.0
 -------
 
+  - configuration: ship cpu_stats commented in the MangoHud generator
+    and record that cpu_custom_temp_sensor is inert on this APU
+  - configuration: add the ICMPv6 base accept to the nftables
+    generator; the fallback entry boots with IPv6 enabled
+  - configuration: correct the MASK comment; masking avahi with
+    MulticastDNS=no leaves no mDNS responder at all
+  - preflight: the nftables ipv6.disable=1 coupling gate warns
+    instead of refusing; the ruleset now accepts the ICMPv6 base
+  - verify: assert the ICMPv6 base accept in the nftables ruleset
+  - readme: document the HUD keys, the mDNS effect, and that timeout 0
+    with no saved entry can boot the fallback unannounced
+
+
+7.139.0 - 7.158.0
+-----------------
+
+  - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS
   - boot: fsck.mode=force -> auto; root is ext4, so force ran a full
     check on every boot
   - boot: MKINITCPIO_COMPRESSION_OPTIONS -1 -> -3; smaller initramfs,
     more ESP headroom
-  - readme: trim prose and table cells to the operative values
-
-
-7.139.0 - 7.157.0
------------------
-
-  - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS
   - dns: drop the pinned upstreams and stop pinning DNSOverTLS= and
     DNSSEC=; link DNS from DHCP wins
   - env: replace PROTON_FSR4_UPGRADE=1 with FSR4_WATERMARK=1; the

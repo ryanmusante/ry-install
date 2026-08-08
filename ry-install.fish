@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.158.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.159.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.158.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.159.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -606,7 +606,7 @@ set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme b
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
-set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi: 2nd mDNS responder; ufw: nftables owns the ruleset
+set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi+resolved: mDNS off by design; ufw: nft owns the ruleset
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
@@ -704,8 +704,8 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
     if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
     if not contains -- "$EPP_PREFERENCE" $_RY_EPP_LEVELS; _err_loud "EPP_PREFERENCE must be one of "(string join '|' -- $_RY_EPP_LEVELS)" (got: '$EPP_PREFERENCE') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
     if not string match -qr '^[a-z][a-z0-9_-]*$' -- "$CPUPOWER_GOVERNOR"; _err_loud "CPUPOWER_GOVERNOR must match ^[a-z][a-z0-9_-]*\$ (got: '$CPUPOWER_GOVERNOR') — refuse to deploy (the domain _grep_cpupower_entry accepts)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # IPv4-only ruleset: ICMPv6/ND would hit policy drop
-        _err_loud "IPv4-only nftables ruleset requires ipv6.disable=1 in KERNEL_PARAMS — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
+    if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # base ICMPv6 is accepted; service rules are not
+        _warn "Dual-stack: the ruleset accepts only the ICMPv6 base set — add service-specific IPv6 rules to /etc/nftables.conf"
     end
     if test "$BLACKLIST_AMDXDNA" = false; and contains -- amd_iommu=off $KERNEL_PARAMS # amdxdna probes -ENODEV (-19) without the IOMMU
         _err_loud "BLACKLIST_AMDXDNA=false requires the IOMMU (drop amd_iommu=off; set amd_iommu=on iommu=pt) — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
@@ -828,7 +828,7 @@ end
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset"
     printf '%s\n' \
         "#!/usr/bin/nft -f" \
-        "# ry-install: default-deny-inbound, IPv4-only (ufw masked; ipv6.disable=1). Add inbound ports below." \
+        "# ry-install: default-deny-inbound (ufw masked). ICMPv6 is live on the fallback entry. Add inbound ports below." \
         "flush ruleset" \
         "table inet filter {" \
         "    chain input {" \
@@ -837,7 +837,9 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        ct state established,related accept" \
         "        iif \"lo\" accept" \
         "        # IPv4 ICMP: inbound ping (echo-request) + error/PMTUD types (replies match ct established)" \
-        "        icmp type { echo-request, destination-unreachable, time-exceeded, parameter-problem } accept"
+        "        icmp type { echo-request, destination-unreachable, time-exceeded, parameter-problem } accept" \
+        "        # ICMPv6: NDP, MLD, and error/PMTUD types (RFC 4890 host minimum); live on the fallback entry" \
+        "        icmpv6 type { echo-request, destination-unreachable, packet-too-big, time-exceeded, parameter-problem, nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert, mld-listener-query } accept"
     printf '%s\n' \
         "    }" \
         "    chain forward { type filter hook forward priority filter; policy drop; }" \
@@ -906,8 +908,9 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
         "gpu_temp" \
         "gpu_core_clock" \
         "gpu_power" \
-        "cpu_stats" \
+        "# cpu_stats intentionally disabled — enable for CPU load in the HUD" \
         "# cpu_temp intentionally disabled — enable if you want CPU temperature in the HUD" \
+        "# cpu_custom_temp_sensor is inert here — MangoHud reads apu_cpu_temp from gpu_metrics before any hwmon lookup" \
         "cpu_mhz" \
         "cpu_power" \
         "vram" \
@@ -2263,10 +2266,11 @@ function _vss_udev --description "_verify_static_system sub: combined udev perf 
     _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"' "GPU dpm=$GPU_DPM_LEVEL"
     _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'KERNEL=="card[0-9]*"' "GPU rule card-scoped"
 end
-function _vss_nft --description "_verify_static_system sub: nftables default-deny-inbound + IPv4 ping accept (IPv4-only ruleset)"
+function _vss_nft --description "_verify_static_system sub: nftables default-deny-inbound + IPv4 ping and ICMPv6 base accept"
     _chk_file /etc/nftables.conf; or return 0
     _chk_grep /etc/nftables.conf "policy drop" "nftables input policy drop"
     _chk_grep /etc/nftables.conf "echo-request" "nftables IPv4 ping accept" # regression guard: inbound ping must stay enabled
+    _chk_grep /etc/nftables.conf "icmpv6 type" "nftables ICMPv6 base accept" # NDP/MLD; the fallback entry boots with IPv6 up
 end
 function _vss_modprobe --description "_verify_static_system sub: modprobe drop-in + unmanaged 60-ry-* sweep"
     set -l _stale (_ry_stale_ry_dropins) # same sweep --check records; one implementation, two modes

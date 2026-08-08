@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.159.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.160.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.159.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.160.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -571,7 +571,7 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-set -g KERNEL_PARAMS amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n clearcpuid=umip fsck.mode=auto fsck.repair=yes ipv6.disable=1 mt7925e.disable_aspm=1 nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n fsck.mode=auto fsck.repair=yes ipv6.disable=1 mt7925e.disable_aspm=1 nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -3 # mkinitcpio prepends -T0 for zstd
@@ -663,7 +663,7 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
     set -l _expect \
-        KERNEL_PARAMS:15 \
+        KERNEL_PARAMS:14 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \

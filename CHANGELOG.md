@@ -4,23 +4,15 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.159.0
+7.160.0
 -------
 
-  - configuration: ship cpu_stats commented in the MangoHud generator
-    and record that cpu_custom_temp_sensor is inert on this APU
-  - configuration: add the ICMPv6 base accept to the nftables
-    generator; the fallback entry boots with IPv6 enabled
-  - configuration: correct the MASK comment; masking avahi with
-    MulticastDNS=no leaves no mDNS responder at all
-  - preflight: the nftables ipv6.disable=1 coupling gate warns
-    instead of refusing; the ruleset now accepts the ICMPv6 base
-  - verify: assert the ICMPv6 base accept in the nftables ruleset
-  - readme: document the HUD keys, the mDNS effect, and that timeout 0
-    with no saved entry can boot the fallback unannounced
+  - kernel: drop clearcpuid=umip; 64-bit SGDT, SIDT and SMSW are
+    emulated since 5.4, and the token taints the kernel
+  - counts: KERNEL_PARAMS 15 to 14
 
 
-7.139.0 - 7.158.0
+7.139.0 - 7.159.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS
@@ -33,8 +25,15 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - env: replace PROTON_FSR4_UPGRADE=1 with FSR4_WATERMARK=1; the
     runtime now copies the DLL itself
   - env: drop PROTON_ENABLE_WAYLAND=1; winewayland is a per-title opt-in
+  - configuration: ship cpu_stats commented in the MangoHud generator
+    and record that cpu_custom_temp_sensor is inert on this APU
+  - configuration: add the ICMPv6 base accept to the nftables
+    generator; the fallback entry boots with IPv6 enabled
+  - configuration: correct the MASK comment; masking avahi with
+    MulticastDNS=no leaves no mDNS responder at all
   - sysctl: drop both net.core.netdev_budget keys; the softnet squeezed
     counter never left zero
+  - verify: assert the ICMPv6 base accept in the nftables ruleset
   - verify: sweep every cpufreq policy for driver, governor and EPP
     uniformity
   - verify: assert each non-fallback loader entry carries every
@@ -43,13 +42,14 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     admin-scope orphan masks
   - verify: log the root filesystem type and the ext4 fstab entry count
   - check: record unmanaged 60-ry-* drop-ins before the sudo gate
+  - preflight: the nftables ipv6.disable=1 coupling gate warns
+    instead of refusing; the ruleset now accepts the ICMPv6 base
   - preflight: drop free, uptime, swapon and zramctl from the optional
     tool probe
   - logging: millisecond JSONL timestamps; CHECK_GREP records use
     key=value form
   - source: pack 17 single-statement helpers onto one line each, cap
     descriptions at 96 characters, add five section banners
-
 
 7.137.0 - 7.138.0
 -----------------

@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.159.0** · [Changelog](CHANGELOG.md)
+**Version 7.160.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -156,7 +156,6 @@ All tunables are `set -g` globals in `ry-install.fish` — there is no external 
 | `amd_iommu=off` | IOMMU fully off — lowest DMA-mapping overhead |
 | `amd_pstate=active` | CPPC autonomous mode — the `amd-pstate-epp` scaling driver |
 | `btusb.enable_autosuspend=n` | keep the BT controller powered — no reconnect stalls |
-| `clearcpuid=umip` | disable UMIP trapping |
 | `fsck.mode=auto` | fsck only when the filesystem asks for it |
 | `fsck.repair=yes` | auto-repair whatever fsck finds |
 | `ipv6.disable=1` | disable the IPv6 stack |
@@ -260,7 +259,6 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 ### Kernel Parameter Notes
 
 - `amd_iommu=off` — breaks the XDNA NPU, which is why the driver is blacklisted; for NPU, VFIO, or SR-IOV work, switch to `amd_iommu=on iommu=pt`, set `BLACKLIST_AMDXDNA false`, and re-run.
-- `clearcpuid=umip` — disables UMIP trapping and taints the kernel; the string form is version-stable, since CPUID bit numbers shift between kernels. Drop it if there is no `umip_printk` stutter.
 - `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.

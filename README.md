@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.160.0** · [Changelog](CHANGELOG.md)
+**Version 7.161.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -78,7 +78,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
-| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 15 kernel tokens |
+| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 14 kernel tokens |
 | `/etc/sdboot-manage.conf` | `LINUX_OPTIONS` mirror, `LINUX_FALLBACK_OPTIONS="quiet"`, entry management keys |
 | `/etc/mkinitcpio.conf` | `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-3`) |
 

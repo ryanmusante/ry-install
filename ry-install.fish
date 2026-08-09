@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.160.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.161.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.160.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.161.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -376,7 +376,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; dead-
 end
 
 # ── CLEANUP ORCHESTRATION: REVERT → TMPFILES → CHILDREN → GLOBALS ──
-function _dc_mki_revert --description "_do_cleanup sub: signal-time mkinitcpio.conf revert"
+function _dc_mki_revert --description "_do_cleanup sub: Signal-time mkinitcpio.conf revert"
     set -q _RY_MKI_HAD_ORIG; and test "$_RY_MKI_HAD_ORIG" = true; or return 0
     set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; or return 0
     set -l _rv_rc 1; set -l _rv_tried false
@@ -491,7 +491,7 @@ function _do_cleanup --description "Master cleanup: reap children → revert →
     _dc_mki_revert
     _dc_sweep_tmpfiles
     _dc_sweep_filesystem
-    _dc_release_lock # Sweeps run while the lock is still held.
+    _dc_release_lock # sweeps run while the lock is still held
     _dc_erase_globals
 end
 
@@ -628,7 +628,7 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
         case install
             _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
             _pre_dispatch_exit $EXIT_PREFLIGHT
-        case install-file # Only cmdline embeds root=UUID
+        case install-file # only cmdline embeds root=UUID
             set -l _cmdline_canon (command realpath -m -- /etc/kernel/cmdline 2>/dev/null)
             if test "$INSTALL_FILE_TARGET" = /etc/kernel/cmdline; or begin; test -n "$_cmdline_canon"; and test "$INSTALL_FILE_TARGET" = "$_cmdline_canon"; end
                 _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
@@ -1258,7 +1258,7 @@ function _progress_done --description "Finalize progress bar and log elapsed sec
     set -l _skip false
     set -q _PROG_FINALIZED_SKIP; and test "$_PROG_FINALIZED_SKIP" = true; and set _skip true
     _log "PROG_DONE: elapsed_secs=$elapsed skip=$_skip"
-    set -q _RY_OUTPUT_BROKEN; and set -g _PROG_PINNED false # SIGPIPE seen: skip terminal writes.
+    set -q _RY_OUTPUT_BROKEN; and set -g _PROG_PINNED false # SIGPIPE seen: skip terminal writes
     test "$_PROG_PINNED" = true; or return 0
     printf '\e[r' >&2
     if test "$_skip" = true
@@ -1272,7 +1272,7 @@ function _progress_done --description "Finalize progress bar and log elapsed sec
     set -g _PROG_PINNED false
 end
 function _progress_teardown --description "Clear pinned progress bar and reset scroll region (signal/abort path)"
-    set -q _RY_OUTPUT_BROKEN; and set -g _PROG_PINNED false # SIGPIPE seen: skip terminal writes.
+    set -q _RY_OUTPUT_BROKEN; and set -g _PROG_PINNED false # SIGPIPE seen: skip terminal writes
     set -q _PROG_PINNED; or return 0
     test "$_PROG_PINNED" = true; or return 0
     printf '\e[r\e[%d;1H\e[K\n' $_PROG_ROWS >&2
@@ -1352,8 +1352,8 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
         end
     end
 end
-function _run_redact_cmd --description "_run sub: logged cmd string with /tmp/ry-* redacted"; string replace -ar -- '/tmp/ry-[A-Za-z0-9_.-]+' '/tmp/ry-[REDACTED]' (string join -- " " $argv); end
-function _run_effective_timeout --description "_run sub: resolve timeout; long-running pkg/boot/db ops get a hard cap, not the short default" # 0 = user disabled
+function _run_redact_cmd --description "_run sub: Logged cmd string with /tmp/ry-* redacted"; string replace -ar -- '/tmp/ry-[A-Za-z0-9_.-]+' '/tmp/ry-[REDACTED]' (string join -- " " $argv); end
+function _run_effective_timeout --description "_run sub: Resolve timeout; long-running pkg/boot/db ops get a hard cap, not the short default" # 0 = user disabled
     set -l _t (_run_resolve_timeout); set -l _effective_cmd $argv[1]
     if test "$_effective_cmd" = sudo
         set -l _skip_next false
@@ -1637,7 +1637,7 @@ function _vmh_existence_only --description "_ry_validate_mkinitcpio_hooks sub: E
     end
     test "$errors" -eq 0
 end
-function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: hook ordering"
+function _vmh_order_checks --description "_ry_validate_mkinitcpio_hooks sub: Hook ordering"
     set -l hooks $argv; set -l errors 0
     if test (count $hooks) -eq 0; echo 0; return 0; end
     if test "$hooks[1]" != base; _err "mkinitcpio hook order: 'base' must be first (found: $hooks[1])"; set errors (math $errors + 1); end
@@ -1739,7 +1739,7 @@ function _grep_sysctl_kv --argument-names dst --description "Validate sysctl.d h
     end
     return 0
 end
-function _grep_ini_header --argument-names dst --description 'Validate ≥1 [Section] header present'
+function _grep_ini_header --argument-names dst --description "Validate ≥1 [Section] header present"
     test (count $argv) -lt 2; and _log "BUG: _grep_ini_header called without content (dst=$dst)"; and return 2
     string match -qr '^\[[^]]+\]$' -- $argv[2..-1]; or begin
         _fail "  $dst: no [Section] header found"
@@ -1749,7 +1749,7 @@ function _grep_ini_header --argument-names dst --description 'Validate ≥1 [Sec
 end
 
 # ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (MODPROBE → MANGOHUD) ──
-function _grep_modprobe_entry --argument-names dst --description 'Validate modprobe.d content: comment-only ok, else every non-comment line is a directive'
+function _grep_modprobe_entry --argument-names dst --description "Validate modprobe.d content: comment-only ok, else every non-comment line is a directive"
     test (count $argv) -lt 2; and _log "BUG: _grep_modprobe_entry called without content (dst=$dst)"; and return 2
     for _line in $argv[2..-1]
         string match -qr '^[[:space:]]*(#|$)' -- "$_line"; and continue # comment or blank ok
@@ -1760,7 +1760,7 @@ function _grep_modprobe_entry --argument-names dst --description 'Validate modpr
     end
     return 0
 end
-function _grep_regdomain_entry --argument-names dst --description 'Validate a COUNTRY=<ISO-3166 alpha-2> line (/etc/iw-regdomain; # comments allowed)'
+function _grep_regdomain_entry --argument-names dst --description "Validate a COUNTRY=<ISO-3166 alpha-2> line (/etc/iw-regdomain; # comments allowed)"
     test (count $argv) -lt 2; and _log "BUG: _grep_regdomain_entry called without content (dst=$dst)"; and return 2
     string match -qr '^[[:space:]]*COUNTRY=[A-Z][A-Z][[:space:]]*$' -- $argv[2..-1]; or begin
         _fail "  $dst: no COUNTRY=<ISO-3166 alpha-2> line found"
@@ -1768,7 +1768,7 @@ function _grep_regdomain_entry --argument-names dst --description 'Validate a CO
     end
     return 0
 end
-function _grep_udev_entry --argument-names dst --description 'Validate ≥1 udev rule line (KEY{...}op match/assignment, # comments allowed)'
+function _grep_udev_entry --argument-names dst --description "Validate ≥1 udev rule line (KEY{...}op match/assignment, # comments allowed)"
     test (count $argv) -lt 2; and _log "BUG: _grep_udev_entry called without content (dst=$dst)"; and return 2
     string match -qr '^[[:space:]]*[A-Z][A-Z_]*(\{[^}]*\})?[[:space:]]*(==|!=|\+=|:=|=)' -- $argv[2..-1]; or begin
         _fail "  $dst: no udev rule directive (KEY[{attr}]op\"val\") found"
@@ -1776,7 +1776,7 @@ function _grep_udev_entry --argument-names dst --description 'Validate ≥1 udev
     end
     return 0
 end
-function _grep_nft_entry --argument-names dst --description 'Validate nftables ruleset skeleton (table + chain); loaded via nft -f, not INI' # nft has no [Section]
+function _grep_nft_entry --argument-names dst --description "Validate nftables ruleset skeleton (table + chain); loaded via nft -f, not INI" # nft has no [Section]
     test (count $argv) -lt 2; and _log "BUG: _grep_nft_entry called without content (dst=$dst)"; and return 2
     string match -qr '^[[:space:]]*table[[:space:]]+\S' -- $argv[2..-1]; or begin
         _fail "  $dst: no nftables 'table <family> <name>' declaration found"
@@ -1788,7 +1788,7 @@ function _grep_nft_entry --argument-names dst --description 'Validate nftables r
     end
     return 0
 end
-function _grep_envd_entry --argument-names dst --description 'Validate ≥1 KEY=value line (environment.d)'
+function _grep_envd_entry --argument-names dst --description "Validate ≥1 KEY=value line (environment.d)"
     test (count $argv) -lt 2; and _log "BUG: _grep_envd_entry called without content (dst=$dst)"; and return 2
     string match -qr '^[A-Za-z_][A-Za-z0-9_]*=\S' -- $argv[2..-1]; or begin
         _fail "  $dst: no KEY=value line found"
@@ -1804,7 +1804,7 @@ function _grep_cpupower_entry --argument-names dst --description "Validate a GOV
     end
     return 0
 end
-function _grep_mangohud_entry --argument-names dst --description 'Validate ≥1 MangoHud directive line (bareword token or key=value; # comments allowed)'
+function _grep_mangohud_entry --argument-names dst --description "Validate ≥1 MangoHud directive line (bareword token or key=value; # comments allowed)"
     test (count $argv) -lt 2; and _log "BUG: _grep_mangohud_entry called without content (dst=$dst)"; and return 2
     string match -qr '^[a-z][a-z0-9_]*(=\S+)?[[:space:]]*$' -- $argv[2..-1]; or begin
         _fail "  $dst: no MangoHud directive (bareword or key=value) found"
@@ -1929,7 +1929,7 @@ function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description 
     _rm_tmp "$_tee_err" false
     return 0
 end
-function _awf_symlink_check --argument-names dst tmpfile use_sudo --description "_atomic_write_file sub: probe tmpfile for post-write symlink swap"
+function _awf_symlink_check --argument-names dst tmpfile use_sudo --description "_atomic_write_file sub: Probe tmpfile for post-write symlink swap"
     _is_symlink "$tmpfile" $use_sudo
     set -l _sym_rc $status
     if test "$_sym_rc" -eq 0; _fail "→ $dst (temp file replaced with symlink during write — aborting)"; return 1; end
@@ -2184,7 +2184,7 @@ function _vsb_mkinitcpio --description "_verify_static_boot sub: /etc/mkinitcpio
         end
     end
 end
-function _vsb_entry_options --description "_vsb_entries sub: assert each non-fallback loader entry carries every KERNEL_PARAMS token"
+function _vsb_entry_options --description "_vsb_entries sub: Assert each non-fallback loader entry carries every KERNEL_PARAMS token"
     for _e in $argv
         set -l _n (command basename -- "$_e")
         string match -qr -- '-fallback\.conf$' "$_n"; and continue # sdboot-manage names them *-fallback.conf
@@ -2250,7 +2250,7 @@ function _vss_sysctl --description "_verify_static_system sub: sysctl drop-in ke
         for entry in $SYSCTL_VALUES; set -l parts (string split -m1 '=' -- "$entry"); set -l key $parts[1]; set -l val $parts[2]; _chk_grep /etc/sysctl.d/95-ry-overrides.conf "$key = $val" "$key=$val"; end
     end
 end
-function _vss_regdom --description "_verify_static_system sub: wireless regdom (/etc/iw-regdomain)"; _echo "── wireless regdom (iw-regdomain) ──"; _chk_file /etc/iw-regdomain; and _chk_grep /etc/iw-regdomain "COUNTRY=$COUNTRY" "iw-regdomain COUNTRY=$COUNTRY"; end
+function _vss_regdom --description "_verify_static_system sub: Wireless regdom (/etc/iw-regdomain)"; _echo "── wireless regdom (iw-regdomain) ──"; _chk_file /etc/iw-regdomain; and _chk_grep /etc/iw-regdomain "COUNTRY=$COUNTRY" "iw-regdomain COUNTRY=$COUNTRY"; end
 function _vss_bluetooth --description "_verify_static_system sub: BlueZ main.conf (adapter auto-power-on)"
     _echo "── bluetooth (main.conf) ──"
     _chk_file /etc/bluetooth/main.conf; or return 0
@@ -2258,7 +2258,7 @@ function _vss_bluetooth --description "_verify_static_system sub: BlueZ main.con
     _chk_grep /etc/bluetooth/main.conf "FastConnectable=$BT_FAST_CONNECTABLE"
     _chk_grep /etc/bluetooth/main.conf "ReconnectAttempts=$BT_RECONNECT_ATTEMPTS"
 end
-function _vss_udev --description "_verify_static_system sub: combined udev perf rules (NVMe scheduler + EPP + GPU clock-floor)"
+function _vss_udev --description "_verify_static_system sub: Combined udev perf rules (NVMe scheduler + EPP + GPU clock-floor)"
     _echo "── udev (perf: I/O scheduler + EPP + GPU clock-floor) ──"
     _chk_file /etc/udev/rules.d/99-ry-perf.rules; or return 0
     _chk_grep /etc/udev/rules.d/99-ry-perf.rules 'queue/scheduler}="none"' "nvme scheduler=none"
@@ -2415,7 +2415,7 @@ function _verify_static_services --description "Verify masked services state"
     end
     _vss_orphan_masks
 end
-function _vss_orphan_masks --description "_verify_static_services sub: masked units the profile no longer declares"
+function _vss_orphan_masks --description "_verify_static_services sub: Masked units the profile no longer declares"
     set -l _orphan (_ry_orphan_masked_units)
     test (count $_orphan) -eq 0; and return 0
     _info "  "(count $_orphan)" masked unit(s) not in MASK: $_orphan"
@@ -2590,7 +2590,7 @@ function _ry_orphan_masked_units --description "Masked units absent from MASK (s
     end
     return 0
 end
-function _check_record_orphans --description "_ry_do_check sub: record masked-unit leftovers a re-run cannot clear; never sets drift"
+function _check_record_orphans --description "_ry_do_check sub: Record masked-unit leftovers a re-run cannot clear; never sets drift"
     set -l _orphan (_ry_orphan_masked_units)
     test (count $_orphan) -gt 0; and _log "MASK_ORPHAN: count="(count $_orphan)" units="(string join ',' -- $_orphan)
     return 0
@@ -2782,7 +2782,7 @@ function _vrkm_blacklist_modprobe --description "_vrk_module_state sub: lsmod-ch
         end
     end
 end
-function _vrk_module_state --description "_verify_runtime_kparams sub: module parameters + blacklist"
+function _vrk_module_state --description "_verify_runtime_kparams sub: Module parameters + blacklist"
     _echo "MODULE STATE"
     _echo
     _echo "── Module parameters ──"
@@ -2825,7 +2825,7 @@ function _vrsv_chk_active_enabled --argument-names label rec_str --description "
         _fail "  $label: $rec[2] (expected: active)"
     end
 end
-function _vrsv_nft_assert_ping --description "_vrsv_chk_nftables sub: assert live input chain accepts inbound IPv4 ping (warn-only)"
+function _vrsv_nft_assert_ping --description "_vrsv_chk_nftables sub: Assert live input chain accepts inbound IPv4 ping (warn-only)"
     set -l _chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)
     if string match -q -- '*echo-request*' "$_chain"
         _ok "  nftables: live IPv4 ping (echo-request) accept present"
@@ -2907,7 +2907,7 @@ function _vrsv_sys_units --description "_verify_runtime_services sub: conf.d-imp
         end
     end
 end
-function _vrsv_wifi_nm_backend --description "_vrsv_wifi sub: verify NM effective wifi.backend vs NM_WIFI_BACKEND"
+function _vrsv_wifi_nm_backend --description "_vrsv_wifi sub: Verify NM effective wifi.backend vs NM_WIFI_BACKEND"
     if not command -q NetworkManager
         _info "  NetworkManager binary absent — backend check skipped"
         return 0
@@ -2986,7 +2986,7 @@ function _vrsv_masked_inactive --description "_verify_runtime_services sub: MASK
 end
 
 # ── VERIFY-RUNTIME: USER-SCOPE UNIT COLLECTOR ──
-function _vrsv_user_units --description "_verify_runtime_services sub: managed user-scope units not failed"
+function _vrsv_user_units --description "_verify_runtime_services sub: Managed user-scope units not failed"
     if not _has_user_bus_active; _info "  user units: skipped (no active user-bus — log in graphically or enable-linger to verify)"; return 0; end
     if test (command systemctl --user list-unit-files --no-legend plasma-powerdevil.service 2>/dev/null | count) -eq 0
         _info "  plasma-powerdevil.service: unit not present — skipping user-unit health check"
@@ -3095,7 +3095,7 @@ function _vre_ntsync --description "_verify_runtime_env sub: ntsync state via _n
     end
     _echo
 end
-function _vre_regdom --description "_verify_runtime_env sub: wireless regulatory domain via iw reg get"
+function _vre_regdom --description "_verify_runtime_env sub: Wireless regulatory domain via iw reg get"
     _echo
     _echo "── wireless regdom ──"
     if not command -q iw
@@ -3131,7 +3131,7 @@ function _vrs_nm_perms --description "_verify_runtime_session sub: NetworkManage
     end
 end
 function _vrs_vfat_skip --argument-names path boot_fstype --description "_vrs_installed_file_perms sub: rc 0 = vfat/undetermined boot path"
-    set -l _fst (command findmnt -n -o FSTYPE --target "$path" 2>/dev/null | string trim --) # Per-path fstype
+    set -l _fst (command findmnt -n -o FSTYPE --target "$path" 2>/dev/null | string trim --) # per-path fstype
     test -z "$_fst"; and set _fst "$boot_fstype"
     if test "$_fst" = vfat; _info "  $path: skipped (vfat — unix perms synthesized from mount options)"; return 0; end
     if test -z "$_fst"; _info "  $path: skipped (boot fstype undetermined — vfat-safe default)"; return 0; end
@@ -3141,7 +3141,7 @@ function _resolve_boot_fstype --description "Emit \$BOOT partition fstype (resol
     set -l _boot_resolved (_resolve_boot_path); test -z "$_boot_resolved"; and set _boot_resolved /boot
     command findmnt -n -o FSTYPE "$_boot_resolved" 2>/dev/null | string trim --
 end
-function _vrs_installed_file_perms --description "_verify_runtime_session sub: installed system/service/user file perms"
+function _vrs_installed_file_perms --description "_verify_runtime_session sub: Installed system/service/user file perms"
     _echo "── Installed files ──"
     set -l perm_bad 0; set -l perm_checked 0; set -l perm_vfat_skipped 0; set -l _boot_fstype (_resolve_boot_fstype)
     for dst in $SYSTEM_DESTINATIONS
@@ -3188,7 +3188,7 @@ function _vpd_dir_perm_check --argument-names dir expected_owner use_sudo --desc
     end
     return 0
 end
-function _vrs_parent_dirs --description "_verify_runtime_session sub: parent dirs of managed files"
+function _vrs_parent_dirs --description "_verify_runtime_session sub: Parent dirs of managed files"
     _echo "── Parent directories ──"
     set -l dir_bad 0; set -l dir_checked 0; set -l dir_vfat_skipped 0; set -l checked_dirs
     set -l _boot_fstype (_resolve_boot_fstype)
@@ -3202,7 +3202,7 @@ function _vrs_parent_dirs --description "_verify_runtime_session sub: parent dir
             end
             set dir_checked (math $dir_checked + 1)
             _vpd_dir_perm_check "$dir" root:root true; or set dir_bad (math $dir_bad + 1)
-        else if not sudo -n true 2>/dev/null # Lapse mid-loop: warn once, stop.
+        else if not sudo -n true 2>/dev/null # lapse mid-loop: warn once, stop
             _warn "  Parent dirs: sudo cache lapsed — remaining system dirs skipped"
             break
         end
@@ -3317,7 +3317,7 @@ function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache m
 end
 
 # ── INSTALL PHASE 1: PREFLIGHT ──
-function _ip_bail_prep --description "_install_preflight sub: bail prep: clear LOUD_ERR, mark progress skip"; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; end
+function _ip_bail_prep --description "_install_preflight sub: Bail prep: clear LOUD_ERR, mark progress skip"; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; end
 function _install_preflight --description "Run all preflight checks before installation"
     _progress Preflight
     _ry_sudo_cache_banner
@@ -3465,7 +3465,7 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
     end
     return 0
 end
-function _ip_run_and_verify --description "_install_packages sub: run pacman -Syu + verify + revalidate hooks"
+function _ip_run_and_verify --description "_install_packages sub: Run pacman -Syu + verify + revalidate hooks"
     set -l pkgs_to_install $argv; set -l _err false
     if not _ip_pacman_invoke $pkgs_to_install; _taint; set _err true; end
     _info "Verifying package installation..."
@@ -4059,7 +4059,7 @@ function _enum_boot_entries --argument-names boot --description "Enumerate \$boo
     if test "$_ps[1]" -ne 0; set -g _RY_BOOT_ENUM_OK false; set -g _RY_BOOT_COUNT 0; functions -q _log; and _log "BOOT_ENUM_FAIL: boot=$boot pipestatus=$_ps (sudo lapse or read error)"; return 0; end
     set -g _RY_BOOT_COUNT (count $_basenames)
 end
-function _pbs_check_boot_files --argument-names boot glob label --description "_preflight_boot_sanity sub: enumerate \$glob in \$boot root"
+function _pbs_check_boot_files --argument-names boot glob label --description "_preflight_boot_sanity sub: Enumerate \$glob in \$boot root"
     set -l errors 0; set -l files (sudo -n find "$boot" -maxdepth 1 -name "$glob" -type f -print0 2>/dev/null | string split0); set -l _ps $pipestatus
     if test "$_ps[1]" -ne 0
         _err "Cannot enumerate $boot/ for $glob (sudo lapsed or read error)"
@@ -4782,7 +4782,7 @@ function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/d
     command rmdir -- "$LOG_DIR" 2>/dev/null
     command rmdir -- (command dirname -- "$LOG_DIR") 2>/dev/null
     command rmdir -- "$_RY_HOME_DIR" 2>/dev/null
-    set -g _RY_LOG_SUPPRESS_CREATE true # Suppress lazy-create
+    set -g _RY_LOG_SUPPRESS_CREATE true # suppress lazy-create
 end
 function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: log/dir cleanup, then exit"; _pre_dispatch_log_cleanup; _ry_exit $code; end
 function _early_usage_exit --description "Print usage error to stderr, remove pre-dispatch log, exit EXIT_USAGE"; echo "[ERR] $argv" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
@@ -4853,7 +4853,7 @@ if test -f "$old_log"; and test "$old_log" != "$new_log"
             command rm -f -- "$old_log" 2>/dev/null
             test "$MODE" != check; and echo "[WARN] Log rename via mv failed; recovered via cp+rm: $old_log -> $new_log" >&2
         else
-            set _log_rename_ok false # Old path stays writable: keep logging there
+            set _log_rename_ok false # old path stays writable: keep logging there
             test "$MODE" != check; and echo "[WARN] Log rename failed (mv and cp both): $old_log -> $new_log (keeping old path)" >&2
         end
     end

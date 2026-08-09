@@ -4,15 +4,18 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.160.0
+7.161.0
 -------
 
-  - kernel: drop clearcpuid=umip; 64-bit SGDT, SIDT and SMSW are
-    emulated since 5.4, and the token taints the kernel
-  - counts: KERNEL_PARAMS 15 to 14
+  - readme: correct the /etc/kernel/cmdline row; it still claimed 15
+    kernel tokens after the drop to 14
+  - source: normalize inline comments; drop four trailing periods and
+    lowercase six sentence starts
+  - source: capitalize twenty sub: description bodies and switch seven
+    single-quoted descriptions to double quotes
 
 
-7.139.0 - 7.159.0
+7.139.0 - 7.160.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS
@@ -20,6 +23,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     check on every boot
   - boot: MKINITCPIO_COMPRESSION_OPTIONS -1 -> -3; smaller initramfs,
     more ESP headroom
+  - kernel: drop clearcpuid=umip; 64-bit SGDT, SIDT and SMSW are
+    emulated since 5.4, and the token taints the kernel
   - dns: drop the pinned upstreams and stop pinning DNSOverTLS= and
     DNSSEC=; link DNS from DHCP wins
   - env: replace PROTON_FSR4_UPGRADE=1 with FSR4_WATERMARK=1; the
@@ -50,6 +55,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     key=value form
   - source: pack 17 single-statement helpers onto one line each, cap
     descriptions at 96 characters, add five section banners
+  - counts: KERNEL_PARAMS 15 to 14
 
 
 7.137.0 - 7.138.0

@@ -281,9 +281,7 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 
 **Masked unit not in `MASK` reported** — `sudo systemctl unmask <unit>` if an earlier `MASK` masked it; leave distro and hand-made masks alone.
 
-### libvirt and QEMU NAT
-
-`forward { policy drop; }` silently breaks libvirt/QEMU NAT guest WAN access. VMs are out of scope; if you run them — do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`).
+**libvirt and QEMU NAT** — `forward { policy drop; }` silently breaks libvirt/QEMU NAT guest WAN access. VMs are out of scope; if you run them — do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`).
 
 ## Uninstall
 

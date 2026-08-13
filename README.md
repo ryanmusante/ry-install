@@ -26,7 +26,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 | Shell | fish 3.6 or newer |
 | Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
-| Privileges | Normal user with sudo rights; `sudo -v` cached before the run |
+| Privileges | normal user with sudo rights; `sudo -v` cached before the run |
 | Tools | GNU coreutils, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
 
 ## Usage
@@ -41,7 +41,7 @@ Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYY
 Per-phase verdicts:
 
 - `PASS` — completed its work.
-- `WARN` — hit something non-fatal and keeps exit `0`.
+- `WARN` — hits something non-fatal and keeps exit `0`.
 - `FAIL` — did not complete.
 - `DEFER` — applies at next boot, as with the NetworkManager restart over Wi-Fi.
 - `SKIP` — found preconditions absent, so the phase did not run.
@@ -65,9 +65,9 @@ Skipping the hardware check is the risky override: deploying gfx1151 defaults on
 
 | Variable | Effect |
 |---|---|
-| `RY_RUN_TIMEOUT=<sec>` | Per-command wall-clock cap — default `3600`, `0` disables, package and boot ops floor at `7200` |
-| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | Bypass the `EXPECTED_CPU_MATCH` hard-fail |
-| `NO_COLOR` | Disable colored output when set to a non-empty value ([no-color.org](https://no-color.org)) |
+| `RY_RUN_TIMEOUT=<sec>` | per-command wall-clock cap — default `3600`, `0` disables, package and boot ops floor at `7200` |
+| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | bypass the `EXPECTED_CPU_MATCH` hard-fail |
+| `NO_COLOR` | disable colored output when set to a non-empty value ([no-color.org](https://no-color.org)) |
 
 ## Managed Files
 
@@ -111,12 +111,12 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 
 | Phase | Name | Work |
 |---|---|---|
-| 1 | Preflight | Dependency, network, disk, and systemd gates; hardware match; lock acquisition |
-| 2 | Packages | Seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` and re-mark explicit, refresh `updatedb` and `pkgfile` |
-| 3 | Configuration | Deploy 17 embedded configs atomically |
+| 1 | Preflight | dependency, network, disk, and systemd gates; hardware match; lock acquisition |
+| 2 | Packages | seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` and re-mark explicit, refresh `updatedb` and `pkgfile` |
+| 3 | Configuration | deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regulatory domain |
 | 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
-| 6 | Finalize | User `daemon-reload` and PowerDevil re-apply, `paccache -rk2` and `-ruk0`, NetworkManager restart |
+| 6 | Finalize | user `daemon-reload` and PowerDevil re-apply, `paccache -rk2` and `-ruk0`, NetworkManager restart |
 
 ## Safety and Reliability
 

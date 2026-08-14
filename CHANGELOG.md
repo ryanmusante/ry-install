@@ -4,18 +4,14 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.162.0
+7.162.1
 -------
 
-  - kernel: amd_iommu=off -> amd_iommu=on iommu=pt; the IOMMU comes on
-    in passthrough mode for the XDNA NPU, VFIO and SR-IOV
-  - kernel: BLACKLIST_AMDXDNA true -> false; the amdxdna driver loads
-    now that the IOMMU is on
-  - preflight: add readlink to the optional tool probe
-  - counts: KERNEL_PARAMS 14 to 15
+  - preflight: sync the _ir_validate_counts tripwire to KERNEL_PARAMS 15;
+    left at 14 by the token change, it refused every run at rc 3
 
 
-7.139.0 - 7.161.0
+7.139.0 - 7.162.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS
@@ -25,6 +21,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     more ESP headroom
   - kernel: drop clearcpuid=umip; 64-bit SGDT, SIDT and SMSW are
     emulated since 5.4, and the token taints the kernel
+  - kernel: amd_iommu=off -> amd_iommu=on iommu=pt; the IOMMU comes on
+    in passthrough mode for the XDNA NPU, VFIO and SR-IOV
+  - kernel: BLACKLIST_AMDXDNA true -> false; the amdxdna driver loads
+    now that the IOMMU is on
   - dns: drop the pinned upstreams and stop pinning DNSOverTLS= and
     DNSSEC=; link DNS from DHCP wins
   - env: replace PROTON_FSR4_UPGRADE=1 with FSR4_WATERMARK=1; the
@@ -51,6 +51,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     instead of refusing; the ruleset now accepts the ICMPv6 base
   - preflight: drop free, uptime, swapon and zramctl from the optional
     tool probe
+  - preflight: add readlink to the optional tool probe
   - logging: millisecond JSONL timestamps; CHECK_GREP records use
     key=value form
   - source: pack 17 single-statement helpers onto one line each, cap
@@ -60,6 +61,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - source: capitalize twenty sub: description bodies and switch seven
     single-quoted descriptions to double quotes
   - counts: KERNEL_PARAMS 15 to 14
+  - counts: KERNEL_PARAMS 14 to 15
 
 
 7.137.0 - 7.138.0

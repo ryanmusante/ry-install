@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.162.1** · [Changelog](CHANGELOG.md)
+**Version 7.162.2** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -96,7 +96,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | `/etc/default/cpupower-service.conf` | governor (`performance`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, TCP `bbr`, VM tunables |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `high` |
-| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist |
+| `/etc/modprobe.d/60-ry-modules.conf` | optional `amdxdna` blacklist — comment-only while `BLACKLIST_AMDXDNA` is `false` |
 
 ### User
 
@@ -205,7 +205,7 @@ No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declar
 | `GPU_DPM_LEVEL` | `high` | udev `ATTR{device/power_dpm_force_performance_level}` |
 | `EPP_PREFERENCE` | `performance` | udev `ATTR{cpufreq/energy_performance_preference}` |
 | `EXPECTED_SCALING_DRIVER` | `amd-pstate-epp` | nothing — verify-only |
-| `BLACKLIST_AMDXDNA` | `true` | `blacklist amdxdna` |
+| `BLACKLIST_AMDXDNA` | `false` | nothing — `true` emits `blacklist amdxdna` |
 
 ### Session Environment
 
@@ -263,7 +263,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 - `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
-- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; the `amdxdna` blacklist is a modprobe file, so it still applies. `--verify` skips `*-fallback.conf`.
+- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; an enabled `amdxdna` blacklist is a modprobe file, so it still applies. `--verify` skips `*-fallback.conf`.
 - `timeout 0` with `default @saved` — after an ESP wipe or a fresh install no saved entry exists, so sd-boot picks by its own sort order and can boot the fallback with no menu shown; hold a key at power-on and select the tuned entry once to set `@saved`.
 
 ## BIOS

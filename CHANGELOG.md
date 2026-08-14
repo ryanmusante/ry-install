@@ -4,14 +4,14 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.162.1
+7.162.2
 -------
 
-  - preflight: sync the _ir_validate_counts tripwire to KERNEL_PARAMS 15;
-    left at 14 by the token change, it refused every run at rc 3
+  - readme: sync the amdxdna docs to the false default; the service-keys
+    row said true, two prose sites implied an active blacklist
 
 
-7.139.0 - 7.162.0
+7.139.0 - 7.162.1
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS
@@ -52,6 +52,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - preflight: drop free, uptime, swapon and zramctl from the optional
     tool probe
   - preflight: add readlink to the optional tool probe
+  - preflight: sync the _ir_validate_counts tripwire to KERNEL_PARAMS 15;
+    left at 14 by the token change, it refused every run at rc 3
   - logging: millisecond JSONL timestamps; CHECK_GREP records use
     key=value form
   - source: pack 17 single-statement helpers onto one line each, cap

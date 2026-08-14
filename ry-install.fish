@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.161.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.162.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.161.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.162.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -571,7 +571,7 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-set -g KERNEL_PARAMS amd_iommu=off amd_pstate=active btusb.enable_autosuspend=n fsck.mode=auto fsck.repair=yes ipv6.disable=1 mt7925e.disable_aspm=1 nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS amd_iommu=on amd_pstate=active btusb.enable_autosuspend=n fsck.mode=auto fsck.repair=yes iommu=pt ipv6.disable=1 mt7925e.disable_aspm=1 nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -3 # mkinitcpio prepends -T0 for zstd
@@ -588,7 +588,7 @@ set -g GPU_DPM_LEVEL high # gfx1151 dpm; high pins clocks, gating stays active
 set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set
 set -g EPP_PREFERENCE performance; set -g _RY_EPP_LEVELS default performance balance_performance balance_power power # accepted set; udev-pinned per CPU; blocked if dynamic_epp on
 set -g EXPECTED_SCALING_DRIVER amd-pstate-epp # verify-only: scaling_driver under amd_pstate=active
-set -g BLACKLIST_AMDXDNA true # false + amd_iommu=on iommu=pt enables the NPU
+set -g BLACKLIST_AMDXDNA false # false + amd_iommu=on iommu=pt enables the NPU
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "DXVK_LOG_LEVEL=none" "FSR4_WATERMARK=1" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
@@ -1544,7 +1544,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; return 1; end
     if test "$_RY_SYSTEMD_VER" -lt 250; _err "systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
     set -l _opt_missing
-    for cmd in bootctl journalctl modinfo pgrep zcat tput lsmod modprobe pkill nmcli ping realpath ip lspci kill; command -q $cmd; or set -a _opt_missing $cmd; end
+    for cmd in bootctl journalctl modinfo pgrep zcat tput lsmod modprobe pkill nmcli ping realpath readlink ip lspci kill; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
     _log "DEPS_CHECK_OK"
     return 0

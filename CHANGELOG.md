@@ -4,18 +4,18 @@ Changes for ry-install
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
 
-7.161.0
+7.162.0
 -------
 
-  - readme: correct the /etc/kernel/cmdline row; it still claimed 15
-    kernel tokens after the drop to 14
-  - source: normalize inline comments; drop four trailing periods and
-    lowercase six sentence starts
-  - source: capitalize twenty sub: description bodies and switch seven
-    single-quoted descriptions to double quotes
+  - kernel: amd_iommu=off -> amd_iommu=on iommu=pt; the IOMMU comes on
+    in passthrough mode for the XDNA NPU, VFIO and SR-IOV
+  - kernel: BLACKLIST_AMDXDNA true -> false; the amdxdna driver loads
+    now that the IOMMU is on
+  - preflight: add readlink to the optional tool probe
+  - counts: KERNEL_PARAMS 14 to 15
 
 
-7.139.0 - 7.160.0
+7.139.0 - 7.161.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS
@@ -55,6 +55,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     key=value form
   - source: pack 17 single-statement helpers onto one line each, cap
     descriptions at 96 characters, add five section banners
+  - source: normalize inline comments; drop four trailing periods and
+    lowercase six sentence starts
+  - source: capitalize twenty sub: description bodies and switch seven
+    single-quoted descriptions to double quotes
   - counts: KERNEL_PARAMS 15 to 14
 
 

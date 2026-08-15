@@ -182,8 +182,6 @@ All tunables are `set -g` globals in `ry-install.fish` — there is no external 
 
 ### Service Keys
 
-No upstream is pinned: the drop-in sets no `DNS=` line and NetworkManager declares no `[global-dns]` section, so DHCP-supplied servers arrive as per-link DNS and the router decides where queries go.
-
 `DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC. It serves DoT WAN-side only, so pinning `DNSOverTLS=yes` here would fail closed against a plaintext-only LAN resolver.
 
 `NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and spikes latency otherwise. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; the script refuses `false` alongside `amd_iommu=off`; [Tuning Notes](#tuning-notes) has the reverse switch.

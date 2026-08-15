@@ -3,7 +3,6 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-
 7.162.2
 -------
 
@@ -62,9 +61,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     lowercase six sentence starts
   - source: capitalize twenty sub: description bodies and switch seven
     single-quoted descriptions to double quotes
-  - counts: KERNEL_PARAMS 15 to 14
-  - counts: KERNEL_PARAMS 14 to 15
-
 
 7.137.0 - 7.138.0
 -----------------
@@ -101,7 +97,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     level forced to high
 
 
-7.123.0 - 7.127.0
+7.123.0 - 7.129.0
 -----------------
 
   - dns: upstreams pinned in the resolver drop-in and the NetworkManager

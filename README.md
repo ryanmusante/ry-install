@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.162.2** · [Changelog](CHANGELOG.md)
+**Version 7.163.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -89,7 +89,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | mDNS and LLMNR off |
 | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | 8 power, suspend, hibernate, and reboot keys ignored, long-press included |
 | `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | `LogLevelMax=notice` |
-| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, log level `WARN` |
+| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, unlimited autoconnect retries, log level `WARN` |
 | `/etc/iw-regdomain` | regulatory domain (`US`) |
 | `/etc/bluetooth/main.conf` | auto-power-on, `FastConnectable`, 3 reconnect attempts |
 | `/etc/nftables.conf` | default-deny-inbound, IPv4 ping allowed, ICMPv6 base accept |
@@ -102,7 +102,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 | File | Purpose |
 |---|---|
-| `~/.config/environment.d/10-environment.conf` | session env — DXVK, MangoHud, Proton, VKD3D, Wine, PowerDevil |
+| `~/.config/environment.d/10-environment.conf` | session env — DXVK, GTK, MangoHud, Proton, VKD3D, Wine, PowerDevil |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
 
 ## Install Flow
@@ -211,6 +211,7 @@ All tunables are `set -g` globals in `ry-install.fish` — there is no external 
 |---|---|
 | `DXVK_LOG_LEVEL=none` | DXVK logging off |
 | `FSR4_WATERMARK=1` | on-screen FSR4-active indicator |
+| `GSK_RENDERER=ngl` | GTK4 GL renderer; the Vulkan renderer aborts on gfx1151 |
 | `MANGOHUD=1` | HUD on for Vulkan titles |
 | `MESA_SHADER_CACHE_MAX_SIZE=16G` | roomy Mesa shader cache |
 | `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |

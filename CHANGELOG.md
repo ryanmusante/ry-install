@@ -3,51 +3,41 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.162.2
+7.163.0
 -------
 
-  - readme: sync the amdxdna docs to the false default; the service-keys
-    row said true, two prose sites implied an active blacklist
+  - env: add GSK_RENDERER=ngl; the GTK4 Vulkan renderer aborts on gfx1151
+  - network: emit autoconnect-retries-default=0; wlan0 gave up after four
+    tries at the daily group-rekey drop
+  - counts: ENV_VARS 9 to 10
 
 
-7.139.0 - 7.162.1
+7.139.0 - 7.162.2
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS
-  - boot: fsck.mode=force -> auto; root is ext4, so force ran a full
-    check on every boot
-  - boot: MKINITCPIO_COMPRESSION_OPTIONS -1 -> -3; smaller initramfs,
-    more ESP headroom
-  - kernel: drop clearcpuid=umip; 64-bit SGDT, SIDT and SMSW are
-    emulated since 5.4, and the token taints the kernel
-  - kernel: amd_iommu=off -> amd_iommu=on iommu=pt; the IOMMU comes on
-    in passthrough mode for the XDNA NPU, VFIO and SR-IOV
+  - boot: fsck.mode=force -> auto; force checked the ext4 root every boot
+  - boot: MKINITCPIO_COMPRESSION_OPTIONS -1 -> -3; smaller initramfs
+  - kernel: drop clearcpuid=umip; emulated since 5.4 and it taints
+  - kernel: amd_iommu=off -> amd_iommu=on iommu=pt for the XDNA NPU
   - kernel: BLACKLIST_AMDXDNA true -> false; the amdxdna driver loads
-    now that the IOMMU is on
-  - dns: drop the pinned upstreams and stop pinning DNSOverTLS= and
-    DNSSEC=; link DNS from DHCP wins
-  - env: replace PROTON_FSR4_UPGRADE=1 with FSR4_WATERMARK=1; the
-    runtime now copies the DLL itself
+  - dns: drop the pinned upstreams, DNSOverTLS= and DNSSEC=; link DNS wins
+  - env: replace PROTON_FSR4_UPGRADE=1 with FSR4_WATERMARK=1
   - env: drop PROTON_ENABLE_WAYLAND=1; winewayland is a per-title opt-in
-  - configuration: ship cpu_stats commented in the MangoHud generator
-    and record that cpu_custom_temp_sensor is inert on this APU
-  - configuration: add the ICMPv6 base accept to the nftables
-    generator; the fallback entry boots with IPv6 enabled
+  - configuration: ship cpu_stats commented in the MangoHud generator;
+    cpu_custom_temp_sensor is inert on this APU
+  - configuration: add the ICMPv6 base accept to the nftables generator
   - configuration: correct the MASK comment; masking avahi with
     MulticastDNS=no leaves no mDNS responder at all
-  - sysctl: drop both net.core.netdev_budget keys; the softnet squeezed
-    counter never left zero
+  - sysctl: drop both net.core.netdev_budget keys; squeezed stayed zero
   - verify: assert the ICMPv6 base accept in the nftables ruleset
   - verify: sweep every cpufreq policy for driver, governor and EPP
-    uniformity
-  - verify: assert each non-fallback loader entry carries every
-    KERNEL_PARAMS token
+  - verify: assert each non-fallback loader entry carries every token
   - verify: check the systemd-resolved unit-file state and report only
     admin-scope orphan masks
   - verify: log the root filesystem type and the ext4 fstab entry count
   - check: record unmanaged 60-ry-* drop-ins before the sudo gate
-  - preflight: the nftables ipv6.disable=1 coupling gate warns
-    instead of refusing; the ruleset now accepts the ICMPv6 base
+  - preflight: the nftables ipv6.disable=1 coupling gate warns, not refuses
   - preflight: drop free, uptime, swapon and zramctl from the optional
     tool probe
   - preflight: add readlink to the optional tool probe
@@ -61,6 +51,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     lowercase six sentence starts
   - source: capitalize twenty sub: description bodies and switch seven
     single-quoted descriptions to double quotes
+
 
 7.137.0 - 7.138.0
 -----------------

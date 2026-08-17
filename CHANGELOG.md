@@ -3,6 +3,15 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.164.0
+-------
+
+  - kernel: drop amd_iommu=on; the parser has no on branch and the kernel
+    logs AMD-Vi: Unknown option - 'on'
+  - verify: assert autoconnect-retries-default=0 in the NM drop-in
+  - counts: KERNEL_PARAMS 15 to 14
+
+
 7.163.0
 -------
 

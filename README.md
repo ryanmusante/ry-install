@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.163.0** · [Changelog](CHANGELOG.md)
+**Version 7.164.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -78,7 +78,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
-| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 15 kernel tokens |
+| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 14 kernel tokens |
 | `/etc/sdboot-manage.conf` | `LINUX_OPTIONS` mirror, `LINUX_FALLBACK_OPTIONS="quiet"`, entry management keys |
 | `/etc/mkinitcpio.conf` | `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-3`) |
 
@@ -153,7 +153,6 @@ All tunables are `set -g` globals in `ry-install.fish` — there is no external 
 
 | Token | Effect |
 |---|---|
-| `amd_iommu=on` | IOMMU on — required by the XDNA NPU, VFIO and SR-IOV |
 | `amd_pstate=active` | CPPC autonomous mode — the `amd-pstate-epp` scaling driver |
 | `btusb.enable_autosuspend=n` | keep the BT controller powered — no reconnect stalls |
 | `fsck.mode=auto` | fsck only when the filesystem asks for it |
@@ -258,7 +257,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 ### Kernel Parameter Notes
 
-- `amd_iommu=on iommu=pt` — IOMMU on for the XDNA NPU, VFIO and SR-IOV; to shed the last DMA-mapping overhead on a box using none of them, switch to `amd_iommu=off`, set `BLACKLIST_AMDXDNA true`, and re-run.
+- `iommu=pt` — IOMMU on for the XDNA NPU, VFIO and SR-IOV; to shed the last DMA-mapping overhead on a box using none of them, add `amd_iommu=off`, set `BLACKLIST_AMDXDNA true`, and re-run.
 - `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.

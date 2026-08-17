@@ -126,7 +126,7 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 
 **fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; every other row is byte-preserved. `commit=10` doubles the ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata.
 
-**Failure and concurrency** — boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, via an atomic `mkdir` lock with dead-PID reclaim; live or ambiguous PIDs fail closed.
+**Failure and concurrency** — boot-critical failures exit `4` and skip finalization. One instance runs at a time, with dead-PID lock reclaim; live or ambiguous PIDs fail closed.
 
 **Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks the live state: kernel cmdline, kernel parameter acceptance in the boot ring buffer, module parameters, sysctl values, unit states, fstab options as written and as mounted, and session environment. `--check` reports drift without writing.
 
@@ -251,7 +251,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 ### Gaming Stack
 
-- `/dev/ntsync` — reported by `--verify`: present passes, a loaded module without the node warns, absent is informational. Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out at the Proton level.
+- `/dev/ntsync` — reported by `--verify`. Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out at the Proton level.
 - `FSR4_WATERMARK=1` — on-screen indicator confirming FSR4 is active; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` themselves, so no upgrade pin is needed.
 - `cpu_stats` and `cpu_temp` — both shipped commented out; add either on its own line to enable. `cpu_custom_temp_sensor` is inert here: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. The Zen 5 `cpu_power` report is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
 

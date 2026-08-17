@@ -6,10 +6,9 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.165.0
 -------
 
-  - verify: scan the boot ring buffer for kernel parser rejections and
-    fail when a complaint names a managed cmdline token
-  - verify: compare /etc/kernel/cmdline under the UUID found in the file
-    when findmnt cannot resolve the root UUID, instead of skipping
+  - verify: fail when a kernel parser complaint names a managed token
+  - verify: compare /etc/kernel/cmdline under the UUID in the file when
+    findmnt cannot resolve the root UUID
   - verify: report .ry.bak and .ry.orig copies, failing on an empty one
   - verify: check live ext4 mount options, not only the fstab rows
 
@@ -17,8 +16,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.164.0
 -------
 
-  - kernel: drop amd_iommu=on; the parser has no on branch and the kernel
-    logs AMD-Vi: Unknown option - 'on'
+  - kernel: drop amd_iommu=on; the parser has no on branch
   - verify: assert autoconnect-retries-default=0 in the NM drop-in
   - counts: KERNEL_PARAMS 15 to 14
 
@@ -44,11 +42,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - dns: drop the pinned upstreams, DNSOverTLS= and DNSSEC=; link DNS wins
   - env: replace PROTON_FSR4_UPGRADE=1 with FSR4_WATERMARK=1
   - env: drop PROTON_ENABLE_WAYLAND=1; winewayland is a per-title opt-in
-  - configuration: ship cpu_stats commented in the MangoHud generator;
-    cpu_custom_temp_sensor is inert on this APU
+  - configuration: ship cpu_stats commented in the MangoHud generator
   - configuration: add the ICMPv6 base accept to the nftables generator
-  - configuration: correct the MASK comment; masking avahi with
-    MulticastDNS=no leaves no mDNS responder at all
+  - configuration: correct the MASK comment; masking avahi leaves no mDNS
+    responder at all
   - sysctl: drop both net.core.netdev_budget keys; squeezed stayed zero
   - verify: assert the ICMPv6 base accept in the nftables ruleset
   - verify: sweep every cpufreq policy for driver, governor and EPP
@@ -58,19 +55,12 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - verify: log the root filesystem type and the ext4 fstab entry count
   - check: record unmanaged 60-ry-* drop-ins before the sudo gate
   - preflight: the nftables ipv6.disable=1 coupling gate warns, not refuses
-  - preflight: drop free, uptime, swapon and zramctl from the optional
-    tool probe
-  - preflight: add readlink to the optional tool probe
+  - preflight: optional tool probe drops free, uptime, swapon and zramctl,
+    and adds readlink
   - preflight: sync the _ir_validate_counts tripwire to KERNEL_PARAMS 15;
-    left at 14 by the token change, it refused every run at rc 3
+    left at 14 it refused every run at rc 3
   - logging: millisecond JSONL timestamps; CHECK_GREP records use
     key=value form
-  - source: pack 17 single-statement helpers onto one line each, cap
-    descriptions at 96 characters, add five section banners
-  - source: normalize inline comments; drop four trailing periods and
-    lowercase six sentence starts
-  - source: capitalize twenty sub: description bodies and switch seven
-    single-quoted descriptions to double quotes
 
 
 7.137.0 - 7.138.0
@@ -85,8 +75,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
   - install: fix the one-time <path>.ry.orig preserve never running for
     non-boot managed files; a set -l inside an if block does not leak
-  - check: record unmanaged 60-ry-*.conf drop-ins and masked units
-    absent from MASK
+  - check: record unmanaged 60-ry-*.conf drop-ins and masked units absent
+    from MASK
   - preflight: refuse a package in both PKGS_ADD and PKGS_DEL, or a unit
     in both MASK and EXPECTED_SERVICES
 
@@ -115,8 +105,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     global-dns section, which per-link config outranks
   - kernel: add mt7925e.disable_aspm=1; the global policy governs link
     state only
-  - sysctl: add kernel.nmi_watchdog=0; the runtime check asserted it
-    while nothing set it
+  - sysctl: add kernel.nmi_watchdog=0; nothing set what the check asserted
   - env: rename FSR4_UPGRADE to PROTON_FSR4_UPGRADE and drop
     VKD3D_CONFIG=descriptor_heap
   - color: NO_COLOR now needs a non-empty value to disable color
@@ -147,10 +136,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.100.0 - 7.107.3
 -----------------
 
-  - configuration: 17 embedded configs deployed atomically - temp file
-    on the same filesystem, pre-validation, backup, mv -T, re-read
-  - packages: pacman -Rns made rdep-aware via pactree; PKGS_ADD
-    re-marked explicit after -Syu
+  - configuration: 17 embedded configs deployed atomically - temp file on
+    the same filesystem, pre-validation, backup, mv -T, re-read
+  - packages: pacman -Rns made rdep-aware via pactree; PKGS_ADD re-marked
+    explicit after -Syu
   - verify: static checksum path compares installed bytes to generator
     output by SHA256
   - boot: boot-critical failures exit 4 and skip finalization

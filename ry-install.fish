@@ -539,12 +539,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     string match -qr '^[A-Z]+$' -- "$_sig_name"; and exec /bin/sh -c "kill -$_sig_name \$\$ 2>/dev/null; exit $_sig_exit"
     exit $_sig_exit # fallback: non-signal label or exec failure
 end
-function _cleanup_pipe --on-signal PIPE --description "Signal handler: mark stderr/stdout broken"
-    set -q _RY_OUTPUT_BROKEN; and return 0
-    set -g _RY_OUTPUT_BROKEN true
-    set -q _RY_HEADER_WRITTEN; or return 0
-    _log "SIGPIPE_RECEIVED: stderr/stdout consumer closed; continuing with JSONL log only"
-end
+function _cleanup_pipe --on-signal PIPE --description "Signal handler: mark stderr/stdout broken"; set -q _RY_OUTPUT_BROKEN; and return 0; set -g _RY_OUTPUT_BROKEN true; set -q _RY_HEADER_WRITTEN; or return 0; _log "SIGPIPE_RECEIVED: stderr/stdout consumer closed; continuing with JSONL log only"; end
 function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensure cleanup runs on fish_exit"
     set -l _exit_status $status
     if set -q _INTENDED_EXIT_CODE
@@ -805,9 +800,7 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
 end
 
 # ── CONTENT GENERATORS: SYSTEM (resolved, logind, NM, bluetooth, nft, sysctl, udev) ──
-function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
-    printf '%s\n' "# systemd-resolved: link DNS from DHCP, mDNS/LLMNR off" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR"
-end
+function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"; printf '%s\n' "# systemd-resolved: link DNS from DHCP, mDNS/LLMNR off" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR"; end
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
     printf '%s\n' "# systemd-logind configuration — desktop power handling"
     printf '%s\n' "[Login]"
@@ -815,9 +808,7 @@ function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --descriptio
         printf '%s\n' "$key=ignore"
     end
 end
-function _content__etc_systemd_system_NetworkManager-dispatcher.service.d_logging.conf --description "Generate content for NetworkManager-dispatcher logging drop-in (journal noise suppression)"
-    printf '%s\n' "# LogLevelMax drops info-level dispatcher lines (journald-logged; StandardError=null ineffective)" "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
-end
+function _content__etc_systemd_system_NetworkManager-dispatcher.service.d_logging.conf --description "Generate content for NetworkManager-dispatcher logging drop-in (journal noise suppression)"; printf '%s\n' "# LogLevelMax drops info-level dispatcher lines (journald-logged; StandardError=null ineffective)" "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"; end
 function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (wifi.backend from NM_WIFI_BACKEND)"
     printf '%s\n' "# NetworkManager configuration — $NM_WIFI_BACKEND backend" "[main]" "autoconnect-retries-default=0" "" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL"
 end
@@ -1150,13 +1141,7 @@ function _err --description "Emit ERR-level message (force-prints to stderr when
     end
     return 0
 end
-function _err_loud --description "Fatal-preflight err: stderr regardless of QUIET, except MODE=check (silent-probe contract)"
-    set -l msg (string join -- " " $argv)
-    _log "ERR: $msg"
-    set -q VERIFY_FAIL; and set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
-    test "$MODE" = check; and return 0
-    _msg_print --force ERR $argv
-end
+function _err_loud --description "Fatal-preflight err: stderr regardless of QUIET, except MODE=check (silent-probe contract)"; set -l msg (string join -- " " $argv); _log "ERR: $msg"; set -q VERIFY_FAIL; and set -g VERIFY_FAIL (math $VERIFY_FAIL + 1); test "$MODE" = check; and return 0; _msg_print --force ERR $argv; end
 function _err_loud_cont --description "Continuation for _err_loud: same routing, no VERIFY_FAIL bump"; set -l msg (string join -- " " $argv); _log "ERR: $msg"; test "$MODE" = check; and return 0; _msg_print --force ERR $argv; end
 function _warn_loud --description "Override-path warn: stderr regardless of QUIET, except MODE=check (silent-probe contract)" # mirrors _err_loud
     set -l msg (string join -- " " $argv)
@@ -2634,11 +2619,7 @@ function _ry_orphan_masked_units --description "Masked units absent from MASK (s
     end
     return 0
 end
-function _check_record_orphans --description "_ry_do_check sub: Record masked-unit leftovers a re-run cannot clear; never sets drift"
-    set -l _orphan (_ry_orphan_masked_units)
-    test (count $_orphan) -gt 0; and _log "MASK_ORPHAN: count="(count $_orphan)" units="(string join ',' -- $_orphan)
-    return 0
-end
+function _check_record_orphans --description "_ry_do_check sub: Record masked-unit leftovers a re-run cannot clear; never sets drift"; set -l _orphan (_ry_orphan_masked_units); test (count $_orphan) -gt 0; and _log "MASK_ORPHAN: count="(count $_orphan)" units="(string join ',' -- $_orphan); return 0; end
 function _check_phase_units --description "Check-mode phase: EXPECTED_SERVICES + MASK + conf.d-driven units"
     set -l _implicit_svcs (_implicit_confd_units)
     _svc_chk_expected; or return $status
@@ -3240,10 +3221,7 @@ function _vrs_vfat_skip --argument-names path boot_fstype --description "_vrs_in
     if test -z "$_fst"; _info "  $path: skipped (boot fstype undetermined — vfat-safe default)"; return 0; end
     return 1
 end
-function _resolve_boot_fstype --description "Emit \$BOOT partition fstype (resolve \$BOOT, default /boot, findmnt FSTYPE)"
-    set -l _boot_resolved (_resolve_boot_path); test -z "$_boot_resolved"; and set _boot_resolved /boot
-    command findmnt -n -o FSTYPE "$_boot_resolved" 2>/dev/null | string trim --
-end
+function _resolve_boot_fstype --description "Emit \$BOOT partition fstype (resolve \$BOOT, default /boot, findmnt FSTYPE)"; set -l _boot_resolved (_resolve_boot_path); test -z "$_boot_resolved"; and set _boot_resolved /boot; command findmnt -n -o FSTYPE "$_boot_resolved" 2>/dev/null | string trim --; end
 function _vrs_installed_file_perms --description "_verify_runtime_session sub: Installed system/service/user file perms"
     _echo "── Installed files ──"
     set -l perm_bad 0; set -l perm_checked 0; set -l perm_vfat_skipped 0; set -l _boot_fstype (_resolve_boot_fstype)
@@ -3402,12 +3380,7 @@ function _is_wifi_active_route --description "True if default route exits via wi
     end
     return 1
 end
-function _has_user_bus_active --description "True iff user systemd manager is reachable"
-    set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"; and return 0
-    set -l _user_state (command systemctl --user is-system-running 2>/dev/null | string trim --)
-    test -n "$_user_state"; and test "$_user_state" != offline; and return 0
-    return 1
-end
+function _has_user_bus_active --description "True iff user systemd manager is reachable"; set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"; and return 0; set -l _user_state (command systemctl --user is-system-running 2>/dev/null | string trim --); test -n "$_user_state"; and test "$_user_state" != offline; and return 0; return 1; end
 function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache may lapse mid-run"
     set -q _RY_OUTPUT_BROKEN; and return 0
     _log "SUDO_CACHE_BANNER: emitted (install-mode preflight)"
@@ -3932,12 +3905,7 @@ function _csm_retry_individual --description "_configure_services_mask sub: Per-
     end
     return $_ret
 end
-function _nft_input_drop_live --description "True when live inet/filter/input chain has policy drop"
-    command -q nft; or return 1
-    sudo -n true 2>/dev/null; or return 1
-    set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect)
-    string match -q -- '*policy drop*' "$_in_chain"
-end
+function _nft_input_drop_live --description "True when live inet/filter/input chain has policy drop"; command -q nft; or return 1; sudo -n true 2>/dev/null; or return 1; set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect); string match -q -- '*policy drop*' "$_in_chain"; end
 function _csm_enable_nftables_first --description "_configure_services_mask sub: Activate nftables before the ufw flush + mask"
     contains -- ufw.service $MASK; or return 0
     contains -- nftables.service $EXPECTED_SERVICES; or return 0
@@ -4230,11 +4198,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
 end
 
 # ── INSTALL PHASE 5: BOOT REBUILD (MKINITCPIO -P + SDBOOT GEN/UPDATE) ──
-function _irb_skip_post_mki --description "_install_rebuild_boot sub: Record SKIP rows for sdboot-gen, sdboot-update, post-rebuild sanity"
-    _phase_record "Boot: sdboot-manage gen" SKIP "aborted"
-    _phase_record "Boot: sdboot-manage update" SKIP "aborted"
-    _phase_record "Boot: post-rebuild sanity" SKIP "aborted"
-end
+function _irb_skip_post_mki --description "_install_rebuild_boot sub: Record SKIP rows for sdboot-gen, sdboot-update, post-rebuild sanity"; _phase_record "Boot: sdboot-manage gen" SKIP "aborted"; _phase_record "Boot: sdboot-manage update" SKIP "aborted"; _phase_record "Boot: post-rebuild sanity" SKIP "aborted"; end
 function _irb_sdboot_apply --description "_install_rebuild_boot sub: Run sdboot-manage gen + update"
     if not _sdboot_fallback_vfat_ok
         _phase_record "Boot: sdboot-manage gen" FAIL "ESP fallback to /boot not vfat (fstype=$_RY_SDBOOT_REFUSE_FS)"
@@ -4785,11 +4749,7 @@ function _post_sysctl --argument-names target --description "Post-hook: apply sy
     end
     return 0
 end
-function _post_mangohud --argument-names target --description "Post-hook: notify MangoHud.conf change (read at next game/Vulkan app launch)"
-    _info "MangoHud $target changed — applies at next launch under 'mangohud %command%' (no service restart needed)"
-    _info "  Toggle the HUD in-app with Shift_R+F12 (MangoHud default)"
-    return 0
-end
+function _post_mangohud --argument-names target --description "Post-hook: notify MangoHud.conf change (read at next game/Vulkan app launch)"; _info "MangoHud $target changed — applies at next launch under 'mangohud %command%' (no service restart needed)"; _info "  Toggle the HUD in-app with Shift_R+F12 (MangoHud default)"; return 0; end
 function _post_envd --argument-names target --description "Post-hook: env-generator re-run + PowerDevil re-apply after environment.d change"
     _info "environment.d $target changed — log out and back in (or restart the user session) to apply session-wide"
     _info "  Active systemd --user services retain the old environment until restarted"

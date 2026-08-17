@@ -3,6 +3,17 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.165.0
+-------
+
+  - verify: scan the boot ring buffer for kernel parser rejections and
+    fail when a complaint names a managed cmdline token
+  - verify: compare /etc/kernel/cmdline under the UUID found in the file
+    when findmnt cannot resolve the root UUID, instead of skipping
+  - verify: report .ry.bak and .ry.orig copies, failing on an empty one
+  - verify: check live ext4 mount options, not only the fstab rows
+
+
 7.164.0
 -------
 

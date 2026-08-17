@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.164.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.165.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.164.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.165.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -2441,7 +2441,7 @@ function _vsc_check_one --argument-names dst --description "_verify_static_check
     set -l expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
     set -l _gen_rc $pipestatus[1]
     if test "$_gen_rc" -ne 0
-        if test "$_gen_rc" -eq "$EXIT_GEN_NOUUID"; and test -z "$_ROOT_UUID"; _warn "  $dst: checksum skipped — root UUID unresolved (presence verified separately)"; _log "VERIFY_STATIC_GEN_SKIP_NOUUID: dst=$dst"; return 0; end
+        if test "$_gen_rc" -eq "$EXIT_GEN_NOUUID"; and test -z "$_ROOT_UUID"; _vsc_uuid_fallback "$dst"; return 0; end
         _msg_nocount FAIL "  $dst: generator failed (rc=$_gen_rc)"; set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc"; return 0
     end
     set -l actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
@@ -2466,6 +2466,48 @@ function _vsc_check_one --argument-names dst --description "_verify_static_check
     end
     return 0
 end
+function _vsc_uuid_fallback --argument-names dst --description "_vsc_check_one sub: Compare under the root UUID carried by the installed file"
+    set -l _actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
+    if test "$pipestatus[1]" -ne 0; _warn "  $dst: checksum skipped — root UUID unresolved and file unreadable"; _log "VERIFY_STATIC_GEN_SKIP_NOUUID: dst=$dst reason=unreadable"; return 0; end
+    set -l _uuid (string match -rg -- 'root=UUID=(\S+)' "$_actual")
+    if test -z "$_uuid"; _warn "  $dst: checksum skipped — no root=UUID= in the installed file either"; _log "VERIFY_STATIC_GEN_SKIP_NOUUID: dst=$dst reason=no_uuid_in_file"; return 0; end
+    set -l _had false; set -q _ROOT_UUID; and set _had true # generators read the global, not a caller local
+    set -g _ROOT_UUID "$_uuid"
+    set -l _expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty)
+    set -l _gen_rc $pipestatus[1]
+    if test "$_had" = true; set -g _ROOT_UUID ""; else; set --erase _ROOT_UUID; end
+    if test "$_gen_rc" -ne 0
+        _msg_nocount FAIL "  $dst: generator failed under the adopted root UUID (rc=$_gen_rc)"
+        set -g VERIFY_GEN_FAIL (math $VERIFY_GEN_FAIL + 1); _log "VERIFY_STATIC_GEN_FAIL: dst=$dst rc=$_gen_rc phase=nouuid_fallback"
+        return 0
+    end
+    if test "$_expected" = "$_actual"
+        _ok "  $dst: match (root UUID adopted from the file; its value unverified)"
+    else
+        _fail "  $dst: MISMATCH (compared under the file's own root UUID)"
+    end
+    _log "VERIFY_STATIC_NOUUID_FALLBACK: dst=$dst adopted_uuid=$_uuid"
+end
+function _vsc_backups --description "_verify_static_checksum sub: Recovery copies present at managed paths are non-empty"
+    _echo "── recovery copies ──"
+    for _suf in $_RY_BACKUP_SUFFIX $_RY_ORIG_SUFFIX
+        set -l _present 0; set -l _empty
+        for _dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS /etc/fstab
+            set -l _su false; _is_system_dst "$_dst"; and set _su true
+            _as $_su test -f "$_dst$_suf" 2>/dev/null; or continue
+            set _present (math $_present + 1)
+            _as $_su test -s "$_dst$_suf" 2>/dev/null; or set -a _empty "$_dst$_suf"
+        end
+        if test "$_present" -eq 0
+            _info "  no $_suf copies (nothing pre-existed, or they were removed by hand)"
+        else if test (count $_empty) -gt 0
+            _fail "  $_suf: "(count $_empty)" of $_present empty — unusable for recovery: $_empty"
+        else
+            _ok "  $_suf: $_present present, all non-empty"
+        end
+        _log "BACKUP_SWEEP: suffix=$_suf present=$_present empty="(count $_empty)
+    end
+end
 function _verify_static_checksum --description "Verify embedded content hash matches installed file SHA256"
     _echo "CHECKSUM VERIFICATION"
     _echo
@@ -2473,6 +2515,7 @@ function _verify_static_checksum --description "Verify embedded content hash mat
     for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
         _vsc_check_one "$dst"
     end
+    _vsc_backups
     _echo
 end
 function _ry_verify_static --description "Verify installed configs: boot, system, user, packages, services, syntax, checksums"
@@ -2807,8 +2850,47 @@ function _vrk_module_state --description "_verify_runtime_kparams sub: Module pa
     _echo
 end
 
+function _vrk_param_rejects --description "_verify_runtime_kparams sub: Kernel parser rejections naming a managed token"
+    _echo "── kernel parameter acceptance ──"
+    set -l _krn
+    command -q journalctl; and set _krn (command journalctl -k -b 0 --no-pager -o cat 2>/dev/null)
+    if test -z "$_krn"; and command -q dmesg; set _krn (_as true dmesg 2>/dev/null); end
+    if test -z "$_krn"
+        _warn "  kernel ring buffer unreadable (journalctl and dmesg both empty) — token acceptance unverified"
+        _log "KPARAM_REJECT_SCAN_SKIP: ring buffer unreadable"
+        return 0
+    end
+    set -l _susp (printf '%s\n' $_krn | command grep -iE -- 'unknown (option|parameter|kernel command line)|malformed early option|invalid (option|parameter)' 2>/dev/null)
+    if test -z "$_susp"; _ok "  no kernel parser rejections this boot ("(count $KERNEL_PARAMS)" tokens)"; return 0; end
+    set -l _hit; set -l _maybe
+    for _line in $_susp
+        _log "KPARAM_REJECT_LINE: $_line"
+        for _p in $KERNEL_PARAMS
+            set -l _parts (string split -m1 '=' -- "$_p"); set -l _key $_parts[1]; set -l _val ""
+            test (count $_parts) -gt 1; and set _val $_parts[2]
+            set -l _kre (string escape --style=regex -- "$_key") # dots and dashes count as token chars
+            if string match -qr -- '(^|[^A-Za-z0-9_.-])'$_kre'([^A-Za-z0-9_.-]|$)' "$_line"
+                contains -- "$_p" $_hit; or set -a _hit "$_p"
+            else if test -n "$_val"; and begin; string match -q -- "*'$_val'*" "$_line"; or string match -q -- "*\"$_val\"*" "$_line"; end
+                contains -- "$_p" $_maybe; or set -a _maybe "$_p" # message quotes the value, not the key
+            end
+        end
+    end
+    if test (count $_hit) -gt 0
+        _fail "  kernel REJECTED managed token(s): "(string join ',' -- $_hit)" — inert, drop or correct them"
+        _log "KPARAM_REJECTED: tokens="(string join ',' -- $_hit)
+    end
+    if test (count $_maybe) -gt 0
+        _warn "  parser complaint quotes the value of: "(string join ',' -- $_maybe)" — read the log lines and confirm"
+        _log "KPARAM_REJECT_VALUE_MATCH: tokens="(string join ',' -- $_maybe)
+    end
+    if test (count $_hit) -eq 0; and test (count $_maybe) -eq 0
+        _info "  "(count $_susp)" parser complaint(s) in the ring buffer, none naming a managed token"
+        _log "KPARAM_REJECT_UNRELATED: count="(count $_susp)
+    end
+end
 # ── VERIFY-RUNTIME: KPARAMS ORCHESTRATOR (_verify_runtime_kparams) ──
-function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist"; _vrk_cmdline; _vrk_gpu_state; _vrk_cpu_state; _vrk_module_state; end
+function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist"; _vrk_cmdline; _vrk_param_rejects; _vrk_gpu_state; _vrk_cpu_state; _vrk_module_state; end
 
 # ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, nftables, wifi, masks) ──
 function _vrsv_chk_active_enabled --argument-names label rec_str --description "_vrsv_sys_units sub: ok if active+enabled, warn if active only, fail otherwise"
@@ -3074,6 +3156,26 @@ function _vre_fstab --description "_verify_runtime_env sub: fstab ext4 entries h
     end
     test "$_fstab_ok" = true; and _ok "  ext4 entries ("(count $_fstab_ext4)"): noatime,lazytime,commit=10 present"
 end
+function _vre_fstab_live --description "_verify_runtime_env sub: Live ext4 mounts carry the fstab options"
+    _echo "── fstab options applied live ──"
+    if not command -q findmnt; _warn "  findmnt unavailable — live mount options unverified"; return 0; end
+    set -l _rows (command findmnt -rn -t ext4 -o TARGET,OPTIONS 2>/dev/null)
+    if test (count $_rows) -eq 0; _info "  no ext4 filesystem mounted"; return 0; end
+    set -l _pending
+    for _row in $_rows
+        set -l _f (string split -m1 ' ' -- "$_row"); set -l _mp $_f[1]; set -l _opts "$_f[2]"
+        for _tok in noatime lazytime commit=10 # same triad the rewrite writes
+            set -l _re (string escape --style=regex -- "$_tok")
+            string match -qr -- '(^|,)'$_re'(,|$)' "$_opts"; or set -a _pending "$_mp:$_tok"
+        end
+    end
+    if test (count $_pending) -eq 0
+        _ok "  ext4 mounts ("(count $_rows)"): noatime,lazytime,commit=10 live"
+    else
+        _warn "  written to fstab but not live: $_pending — sudo mount -o remount <target>, or reboot"
+        _log "FSTAB_REMOUNT_PENDING: "(string join ',' -- $_pending)
+    end
+end
 function _vre_ntsync --description "_verify_runtime_env sub: ntsync state via _ntsync_state dispatch"
     _echo
     _echo "── ntsync support ──"
@@ -3113,7 +3215,7 @@ function _vre_regdom --description "_verify_runtime_env sub: Wireless regulatory
 end
 
 # ── VERIFY-RUNTIME: ENV ORCHESTRATOR (_verify_runtime_env) ──
-function _verify_runtime_env --description "Verify ENV_VARS, sysctl, fstab, ntsync, regdom runtime"; _vre_envvars; _vre_sysctl_runtime; _vre_fstab; _vre_ntsync; _vre_regdom; end
+function _verify_runtime_env --description "Verify ENV_VARS, sysctl, fstab, ntsync, regdom runtime"; _vre_envvars; _vre_sysctl_runtime; _vre_fstab; _vre_fstab_live; _vre_ntsync; _vre_regdom; end
 
 # ── VERIFY-RUNTIME: SESSION + PERMS ──
 function _vrs_nm_perms --description "_verify_runtime_session sub: NetworkManager system-connections perms (0600 root:root)"

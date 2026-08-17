@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.164.0** · [Changelog](CHANGELOG.md)
+**Version 7.165.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -122,13 +122,13 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 
 **Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved with `mv -T`, then re-read; a mismatch restores the backup.
 
-**Backups** — `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig`.
+**Backups** — `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig`. `--verify` counts both and fails on an empty one.
 
 **fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; every other row is byte-preserved. `commit=10` doubles the ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata.
 
 **Failure and concurrency** — boot-critical failures exit `4` and skip finalization rather than leave a half-rebuilt ESP. One instance runs at a time, via an atomic `mkdir` lock with dead-PID reclaim; live or ambiguous PIDs fail closed.
 
-**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks the live state: kernel cmdline, module parameters, sysctl values, unit states, fstab options, and session environment. `--check` reports drift without writing.
+**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks the live state: kernel cmdline, kernel parameter acceptance in the boot ring buffer, module parameters, sysctl values, unit states, fstab options as written and as mounted, and session environment. `--check` reports drift without writing.
 
 `--verify` also reports state the script cannot own: orphaned admin-scope masks, unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in.
 

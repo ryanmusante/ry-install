@@ -2830,7 +2830,6 @@ function _vrk_module_state --description "_verify_runtime_kparams sub: Module pa
     _vrkm_blacklist_modprobe
     _echo
 end
-
 function _vrk_param_rejects --description "_verify_runtime_kparams sub: Kernel parser rejections naming a managed token"
     _echo "── kernel parameter acceptance ──"
     set -l _krn
@@ -2870,6 +2869,7 @@ function _vrk_param_rejects --description "_verify_runtime_kparams sub: Kernel p
         _log "KPARAM_REJECT_UNRELATED: count="(count $_susp)
     end
 end
+
 # ── VERIFY-RUNTIME: KPARAMS ORCHESTRATOR (_verify_runtime_kparams) ──
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist"; _vrk_cmdline; _vrk_param_rejects; _vrk_gpu_state; _vrk_cpu_state; _vrk_module_state; end
 

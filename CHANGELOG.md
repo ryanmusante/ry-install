@@ -21,16 +21,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - counts: KERNEL_PARAMS 15 to 14
 
 
-7.163.0
--------
-
-  - env: add GSK_RENDERER=ngl; the GTK4 Vulkan renderer aborts on gfx1151
-  - network: emit autoconnect-retries-default=0; wlan0 gave up after four
-    tries at the daily group-rekey drop
-  - counts: ENV_VARS 9 to 10
-
-
-7.139.0 - 7.162.2
+7.139.0 - 7.163.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS
@@ -40,8 +31,11 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - kernel: amd_iommu=off -> amd_iommu=on iommu=pt for the XDNA NPU
   - kernel: BLACKLIST_AMDXDNA true -> false; the amdxdna driver loads
   - dns: drop the pinned upstreams, DNSOverTLS= and DNSSEC=; link DNS wins
+  - network: emit autoconnect-retries-default=0; wlan0 gave up after four
+    tries at the daily group-rekey drop
   - env: replace PROTON_FSR4_UPGRADE=1 with FSR4_WATERMARK=1
   - env: drop PROTON_ENABLE_WAYLAND=1; winewayland is a per-title opt-in
+  - env: add GSK_RENDERER=ngl; the GTK4 Vulkan renderer aborts on gfx1151
   - configuration: ship cpu_stats commented in the MangoHud generator
   - configuration: add the ICMPv6 base accept to the nftables generator
   - configuration: fix the MASK comment; masking avahi drops mDNS entirely
@@ -59,6 +53,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - preflight: sync the _ir_validate_counts tripwire to KERNEL_PARAMS 15;
     left at 14 it refused every run at rc 3
   - logging: millisecond JSONL timestamps; CHECK_GREP records use key=value
+  - counts: ENV_VARS 9 to 10
 
 
 7.137.0 - 7.138.0

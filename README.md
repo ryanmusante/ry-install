@@ -259,7 +259,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 - `iommu=pt` — IOMMU on for the XDNA NPU, VFIO and SR-IOV; to shed the last DMA-mapping overhead on a box using none of them, add `amd_iommu=off`, set `BLACKLIST_AMDXDNA true`, and re-run.
 - `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
-- `pcie_aspm.policy=performance` — biases every link away from ASPM, addressing Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
+- `pcie_aspm.policy=performance` — addresses Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
 - `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; an enabled `amdxdna` blacklist is a modprobe file, so it still applies. `--verify` skips `*-fallback.conf`.
 - `timeout 0` with `default @saved` — after an ESP wipe or a fresh install no saved entry exists, so sd-boot picks by its own sort order and can boot the fallback with no menu shown; hold a key at power-on and select the tuned entry once to set `@saved`.
@@ -286,7 +286,7 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 
 There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference; the steps are ordered.
 
-A `.ry.bak` exists only if the file was present before the overwrite — for fstab, only if it was rewritten. A one-time `<path>.ry.orig` may exist for non-boot files; restore it instead of deleting.
+A one-time `<path>.ry.orig` may exist for non-boot files; restore it instead of deleting.
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS: the profile runs no mDNS responder while it is masked, because the resolved drop-in also sets `MulticastDNS=no`.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.

@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.170.0** · [Changelog](CHANGELOG.md)
+**Version 7.172.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -232,7 +232,6 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 | `net.ipv4.tcp_slow_start_after_idle` | `0` | keep the congestion window across idle |
 | `vm.compaction_proactiveness` | `0` | proactive compaction off |
 | `vm.max_map_count` | `2147483642` | Steam's esync requirement |
-| `vm.swappiness` | `150` | push swap traffic onto zram |
 | `vm.watermark_boost_factor` | `0` | watermark boosting off |
 
 ## Packages

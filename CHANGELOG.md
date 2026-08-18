@@ -3,6 +3,26 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.172.0
+-------
+
+  - summary: render the run summary as aligned columns instead of a
+    box-drawn table; four render functions collapse to one
+
+
+7.171.0
+-------
+
+  - sysctl: drop vm.swappiness=150; the CachyOS vendor default of 100
+    now governs, and zram sizing is unchanged
+  - install: repair a managed file whose mode drifted while its bytes
+    did not; the byte-compare used to return before the chmod
+  - check: mode-only drift now sets drift, matching verify
+  - counts: SYSCTL_VALUES 9 to 8
+  - style: restore backslash continuations on the six printf bodies
+    that emit one config or message line per source line
+
+
 7.170.0
 -------
 
@@ -32,32 +52,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     an escaped space in a mount point no longer skips the check
 
 
-7.166.0
--------
-
-  - verify: check live ext4 mount options only for filesystems listed
-    in fstab, not every mounted ext4
-
-
-7.165.0
--------
-
-  - verify: fail when a kernel parser complaint names a managed token
-  - verify: compare /etc/kernel/cmdline under the UUID in the file when
-    findmnt cannot resolve the root UUID
-  - verify: report .ry.bak and .ry.orig copies, failing on an empty one
-  - verify: check live ext4 mount options, not only the fstab rows
-
-
-7.164.0
--------
-
-  - kernel: drop amd_iommu=on; the parser has no on branch
-  - verify: assert autoconnect-retries-default=0 in the NM drop-in
-  - counts: KERNEL_PARAMS 15 to 14
-
-
-7.139.0 - 7.163.0
+7.139.0 - 7.166.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS
@@ -66,6 +61,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - kernel: drop clearcpuid=umip; emulated since 5.4 and it taints
   - kernel: amd_iommu=off -> amd_iommu=on iommu=pt for the XDNA NPU
   - kernel: BLACKLIST_AMDXDNA true -> false; the amdxdna driver loads
+  - kernel: drop amd_iommu=on; the parser has no on branch
   - dns: drop the pinned upstreams, DNSOverTLS= and DNSSEC=; link DNS wins
   - network: emit autoconnect-retries-default=0; wlan0 gave up after four
     tries at the daily group-rekey drop
@@ -82,6 +78,14 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - verify: check the systemd-resolved unit-file state and report only
     admin-scope orphan masks
   - verify: log the root filesystem type and the ext4 fstab entry count
+  - verify: assert autoconnect-retries-default=0 in the NM drop-in
+  - verify: fail when a kernel parser complaint names a managed token
+  - verify: compare /etc/kernel/cmdline under the UUID in the file when
+    findmnt cannot resolve the root UUID
+  - verify: report .ry.bak and .ry.orig copies, failing on an empty one
+  - verify: check live ext4 mount options, not only the fstab rows
+  - verify: check live ext4 mount options only for filesystems listed
+    in fstab, not every mounted ext4
   - check: record unmanaged 60-ry-* drop-ins before the sudo gate
   - preflight: the nftables ipv6.disable=1 coupling gate warns, not refuses
   - preflight: optional tool probe drops free, uptime, swapon and zramctl,
@@ -90,6 +94,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     left at 14 it refused every run at rc 3
   - logging: millisecond JSONL timestamps; CHECK_GREP records use key=value
   - counts: ENV_VARS 9 to 10
+  - counts: KERNEL_PARAMS 15 to 14
 
 
 7.137.0 - 7.138.0

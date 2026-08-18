@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.170.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.172.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.170.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.172.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -586,8 +586,8 @@ set -g BLACKLIST_AMDXDNA false # false + iommu=pt enables the NPU
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "DXVK_LOG_LEVEL=none" "FSR4_WATERMARK=1" "GSK_RENDERER=ngl" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
-# max_map_count=esync, swappiness=150=zram
-set -g SYSCTL_VALUES "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" "net.ipv4.tcp_congestion_control=bbr" "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" "vm.swappiness=150" "vm.watermark_boost_factor=0"
+# max_map_count=esync
+set -g SYSCTL_VALUES "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" "net.ipv4.tcp_congestion_control=bbr" "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" "vm.watermark_boost_factor=0"
 
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) ──
 set -g PKGS_ADD \
@@ -659,7 +659,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:10 \
-        SYSCTL_VALUES:9 \
+        SYSCTL_VALUES:8 \
         PKGS_ADD:16 \
         PKGS_DEL:9 \
         MASK:11 \
@@ -785,7 +785,13 @@ function _content__etc_sdboot-manage.conf --description "Generate content for /e
         "REMOVE_OBSOLETE=\"$SDBOOT_REMOVE_OBSOLETE\""
 end
 function _content__etc_mkinitcpio.conf --description "Generate content for /etc/mkinitcpio.conf"
-    printf '%s\n' "# mkinitcpio configuration — changes require: sudo mkinitcpio -P && sudo sdboot-manage update" "MODULES=("(string join -- " " $MKINITCPIO_MODULES)")" "BINARIES=()" "FILES=()" "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")" "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
+    printf '%s\n' \
+        "# mkinitcpio configuration — changes require: sudo mkinitcpio -P && sudo sdboot-manage update" \
+        "MODULES=("(string join -- " " $MKINITCPIO_MODULES)")" \
+        "BINARIES=()" \
+        "FILES=()" \
+        "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")" \
+        "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test (count $MKINITCPIO_COMPRESSION_OPTIONS) -gt 0; printf '%s\n' "COMPRESSION_OPTIONS=("(string join -- " " $MKINITCPIO_COMPRESSION_OPTIONS)")"; end
 end
 
@@ -821,7 +827,11 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        icmp type { echo-request, destination-unreachable, time-exceeded, parameter-problem } accept" \
         "        # ICMPv6: NDP, MLD, and error/PMTUD types (RFC 4890 host minimum); live on the fallback entry" \
         "        icmpv6 type { echo-request, destination-unreachable, packet-too-big, time-exceeded, parameter-problem, nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert, mld-listener-query } accept"
-    printf '%s\n' "    }" "    chain forward { type filter hook forward priority filter; policy drop; }" "    chain output { type filter hook output priority filter; policy accept; }" "}"
+    printf '%s\n' \
+        "    }" \
+        "    chain forward { type filter hook forward priority filter; policy drop; }" \
+        "    chain output { type filter hook output priority filter; policy accept; }" \
+        "}"
 end
 function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"; printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"; end
 function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
@@ -847,11 +857,15 @@ function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate con
         'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
 end
 function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate content for /etc/modprobe.d/60-ry-modules.conf (optional amdxdna blacklist)"
-    printf '%s\n' "# ry-install: module options + blacklist (managed file, do not edit by hand)"
+    printf '%s\n' \
+        "# ry-install: module options + blacklist (managed file, do not edit by hand)"
     if test "$BLACKLIST_AMDXDNA" = true # false = NPU path (see BLACKLIST_AMDXDNA global)
-        printf '%s\n' "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -ENODEV (ret -19) under amd_iommu=off" "blacklist amdxdna"
+        printf '%s\n' \
+            "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -ENODEV (ret -19) under amd_iommu=off" \
+            "blacklist amdxdna"
     else
-        printf '%s\n' "# no directives: BLACKLIST_AMDXDNA=false (NPU path); MT7925 ASPM handled on the kernel command line"
+        printf '%s\n' \
+            "# no directives: BLACKLIST_AMDXDNA=false (NPU path); MT7925 ASPM handled on the kernel command line"
     end
 end
 
@@ -1900,6 +1914,21 @@ function _awf_symlink_check --argument-names dst tmpfile use_sudo --description 
     test "$_sym_rc" -eq 2; and _fail "→ $dst (sudo cache lapsed during post-write symlink check — aborting)"; and return 1
     return 0
 end
+function _ry_mode_drift --argument-names dst use_sudo perms --description "Emit the current mode when it differs from the managed contract, else nothing"
+    string match -q '/boot/*' -- "$dst"; and return 1 # vfat synthesizes modes from mount options
+    set -l _cur (_as $use_sudo stat -c '%a' -- "$dst" 2>/dev/null | string trim --); test -z "$_cur"; and return 1
+    test "$_cur" = (string replace -r '^0+(?=.)' '' -- "$perms"); and return 1
+    printf '%s' "$_cur"
+end
+function _ry_mode_repair --argument-names dst use_sudo perms --description "_ry_install_file sub: Restore the managed mode after mode-only drift"
+    set -l cur (_ry_mode_drift "$dst" "$use_sudo" "$perms"); test -z "$cur"; and return 0
+    set -l _sp; test "$use_sudo" = true; and set _sp sudo -n
+    if _run $_sp chmod -- $perms "$dst"
+        _warn "  $dst: mode $cur repaired to $perms (content unchanged)"; _log "MODE_DRIFT_REPAIRED: dst=$dst from=$cur to=$perms"
+    else
+        _warn "  $dst: mode $cur differs from $perms and chmod failed - repair by hand"; _log "MODE_DRIFT_REPAIR_FAIL: dst=$dst from=$cur to=$perms"
+    end
+end
 function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --description "_atomic_write_file sub: chmod + sudo cache check + atomic mv"
     set -l _sp
     test "$use_sudo" = true; and set _sp sudo -n
@@ -2021,7 +2050,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     set -l _cur_bytes ""; set -l _read_rc -1 # fn scope: set -l inside the if below is not visible after it
     if test "$_gen_rc" -eq 0
         set _cur_bytes (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set _read_rc $pipestatus[1]
-        if test "$_read_rc" -eq 0; and test "$_new_bytes" = "$_cur_bytes"; set -l _tag ""; set -q _RY_DEPLOY_TAG; and test -n "$_RY_DEPLOY_TAG"; and set _tag " [$_RY_DEPLOY_TAG]"; set -g _RY_DEPLOY_IDEMPOTENT_COUNT (math $_RY_DEPLOY_IDEMPOTENT_COUNT + 1); _ok "→ $dst (unchanged)$_tag"; return 0; end
+        if test "$_read_rc" -eq 0; and test "$_new_bytes" = "$_cur_bytes"; set -l _tag ""; set -q _RY_DEPLOY_TAG; and test -n "$_RY_DEPLOY_TAG"; and set _tag " [$_RY_DEPLOY_TAG]"; set -g _RY_DEPLOY_IDEMPOTENT_COUNT (math $_RY_DEPLOY_IDEMPOTENT_COUNT + 1); _ry_mode_repair "$dst" "$use_sudo" "$perms"; _ok "→ $dst (unchanged)$_tag"; return 0; end
         test "$_read_rc" -eq 2; and _log "SKIP_PROBE_SUDO_LAPSED: dst=$dst — re-deploying"
     end
     if set -q _read_rc; and test "$_read_rc" -eq 0; and not contains -- "$dst" $_RY_BACKUP_TARGETS # one-time first-adoption preserve (boot uses .ry.bak)
@@ -2517,6 +2546,8 @@ function _check_phase_files --description "Check-mode phase: file content hash c
                 return $EXIT_PREFLIGHT
         end
         test "$expected" = "$actual"; or set -g _RY_CHECK_DRIFT 1
+        set -l _mp 0644; set -l _ms true; contains -- "$dst" $USER_DESTINATIONS; and set _mp 0600; and set _ms false
+        set -l _mc (_ry_mode_drift "$dst" "$_ms" "$_mp"); test -n "$_mc"; and set -g _RY_CHECK_DRIFT 1; and _log "CHECK_MODE_DRIFT: dst=$dst mode=$_mc expected=$_mp"
         set -g _RY_CHECK_FILES_CHECKED (math $_RY_CHECK_FILES_CHECKED + 1)
     end
     return 0
@@ -3375,7 +3406,12 @@ function _has_user_bus_active --description "True iff user systemd manager is re
 function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache may lapse mid-run"
     set -q _RY_OUTPUT_BROKEN; and return 0
     _log "SUDO_CACHE_BANNER: emitted (install-mode preflight)"
-    printf '%s\n' "" "[WARN] sudo cache may lapse during 3-8 min install. Mitigations:" "[WARN]   Defaults timestamp_timeout=60 in /etc/sudoers, sudo -v keepalive in parallel shell," "[WARN]   or a scoped NOPASSWD drop-in (pacman/mkinitcpio/sdboot-manage/systemctl — avoid ALL)." "[WARN]   Recovery: re-run ry-install (idempotent)." "" >&2
+    printf '%s\n' "" \
+        "[WARN] sudo cache may lapse during 3-8 min install. Mitigations:" \
+        "[WARN]   Defaults timestamp_timeout=60 in /etc/sudoers, sudo -v keepalive in parallel shell," \
+        "[WARN]   or a scoped NOPASSWD drop-in (pacman/mkinitcpio/sdboot-manage/systemctl — avoid ALL)." \
+        "[WARN]   Recovery: re-run ry-install (idempotent)." \
+        "" >&2
 end
 
 # ── INSTALL PHASE 1: PREFLIGHT ──
@@ -4415,7 +4451,7 @@ function _rdi_run_phases --description "_ry_do_install sub: Run pkgs/sys/service
 end
 
 # ── RUN-SUMMARY MATRIX RENDERER (STDERR-ONLY; JSONL IS THE DURABLE RECORD) ──
-function _rdi_elapsed --description "_rdi_matrix_footer sub: Format wall-clock elapsed since _PROG_START as 'Nm Ms'"
+function _rdi_elapsed --description "_rdi_render_matrix sub: Format wall-clock elapsed since _PROG_START as 'Nm Ms'"
     set -q _PROG_START; or begin; printf '%s' "?"; return 0; end
     set -l _now (_progress_now); set -l _secs (math $_now - $_PROG_START)
     if test "$_secs" -lt 60
@@ -4425,68 +4461,38 @@ function _rdi_elapsed --description "_rdi_matrix_footer sub: Format wall-clock e
         printf '%dm %ds' $_m $_s
     end
 end
-function _rdi_matrix_header --description "_rdi_render_matrix sub: Emit top bar, title, column header, separator"
-    set -l _bar_top $argv[1]; set -l _sep_c $argv[2]; set -l _sep_r $argv[3]; set -l _sep_e $argv[4]
-    set -l _inner $argv[5]; set -l _w_c $argv[6]; set -l _w_r $argv[7]; set -l _w_e $argv[8]
-    set -l _title "ry-install v$VERSION — RUN SUMMARY"; set -l _title_lpad (math -s0 "max(0, ($_inner - "(string length -- $_title)") / 2)"); set -l _title_padded $_title
-    test "$_title_lpad" -gt 0; and set _title_padded (string repeat -n $_title_lpad ' ')$_title
-    set _title_padded (string pad -r -w $_inner -- $_title_padded)
-    printf '╔%s╗\n' $_bar_top >&2
-    printf '║%s║\n' $_title_padded >&2
-    printf '╠%s╦%s╦%s╣\n' $_sep_c $_sep_r $_sep_e >&2
-    printf '║ %s ║ %s ║ %s ║\n' (string pad -r -w $_w_c -- CHECK) (string pad -r -w $_w_r -- RESULT) (string pad -r -w $_w_e -- EVIDENCE) >&2
-    printf '╠%s╬%s╬%s╣\n' $_sep_c $_sep_r $_sep_e >&2
-end
-function _rdi_matrix_rows --description "_rdi_render_matrix sub: Emit data rows; tally buckets via _RY_MTX_* globals"
-    set -l _w_c $argv[1]; set -l _w_r $argv[2]; set -l _w_e $argv[3]
-    set -g _RY_MTX_PASS 0; set -g _RY_MTX_WARN 0; set -g _RY_MTX_FAIL 0
-    set -g _RY_MTX_DEFER 0; set -g _RY_MTX_SKIP 0; set -g _RY_MTX_NA 0
-    for _row in $_RY_PHASE_RESULTS
-        set -l _parts (string split '│' -- $_row)
-        test (string length -- $_parts[1]) -gt "$_w_c"; and functions -q _log; and _log "MATRIX_TRUNCATED: check label "(string length -- $_parts[1])" > $_w_c chars: $_parts[1]"
-        test (string length -- $_parts[3]) -gt "$_w_e"; and functions -q _log; and _log "MATRIX_TRUNCATED: evidence "(string length -- $_parts[3])" > $_w_e chars: $_parts[3]"
-        set -l _chk (string sub -l $_w_c -- $_parts[1]); set -l _res $_parts[2]; set -l _evd (string sub -l $_w_e -- $_parts[3])
-        set -l _res_lpad (math -s0 "max(0, ($_w_r - "(string length -- $_res)") / 2)"); set -l _res_padded $_res
-        test "$_res_lpad" -gt 0; and set _res_padded (string repeat -n $_res_lpad ' ')$_res
-        set _res_padded (string pad -r -w $_w_r -- $_res_padded)
-        printf '║ %s ║ %s ║ %s ║\n' (string pad -r -w $_w_c -- $_chk) $_res_padded (string pad -r -w $_w_e -- $_evd) >&2
-        switch "$_parts[2]"
-            case PASS;  set -g _RY_MTX_PASS  (math $_RY_MTX_PASS + 1)
-            case WARN;  set -g _RY_MTX_WARN  (math $_RY_MTX_WARN + 1)
-            case FAIL;  set -g _RY_MTX_FAIL  (math $_RY_MTX_FAIL + 1)
-            case DEFER; set -g _RY_MTX_DEFER (math $_RY_MTX_DEFER + 1)
-            case SKIP;  set -g _RY_MTX_SKIP  (math $_RY_MTX_SKIP + 1)
-            case '*';   set -g _RY_MTX_NA    (math $_RY_MTX_NA + 1)
-        end
-    end
-end
-function _rdi_matrix_footer --description "_rdi_render_matrix sub: Emit verdict-bearing footer rows + bottom bar"
-    set -l _bar_top $argv[1]; set -l _inner $argv[2]; set -l _sep_c $argv[3]; set -l _sep_r $argv[4]; set -l _sep_e $argv[5]
-    set -l _verdict PASS
-    test "$_RY_MTX_WARN" -gt 0; and set _verdict PASS-WITH-WARNINGS
-    test "$_RY_MTX_FAIL" -gt 0; and set _verdict FAIL
-    set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true; and set _verdict FAIL-BOOT-CRITICAL
-    set -q _RY_PREFLIGHT_ABORT; and test "$_RY_PREFLIGHT_ABORT" = true; and set _verdict PREFLIGHT # preflight abort = exit 3, not FAIL
-    set -l _totals "Totals : $_RY_MTX_PASS PASS · $_RY_MTX_WARN WARN · $_RY_MTX_FAIL FAIL · $_RY_MTX_DEFER DEFER · $_RY_MTX_SKIP SKIP · $_RY_MTX_NA N/A"; set -l _elapsed "Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_verdict"; set -l _log_line "Log    : $LOG_FILE"; set -l _next_msg "Next   : reboot · ./ry-install.fish --verify"
-    test "$_verdict" != PASS; and set _next_msg "Next   : review FAIL/WARN above · re-run install (idempotent)"
-    set -l _pad_inner (math "$_inner - 2")
-    printf '╠%s╩%s╩%s╣\n' $_sep_c $_sep_r $_sep_e >&2
-    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_totals) >&2
-    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_elapsed) >&2
-    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- (string sub -l $_pad_inner -- $_log_line)) >&2
-    printf '║ %s ║\n' (string pad -r -w $_pad_inner -- $_next_msg) >&2
-    printf '╚%s╝\n' $_bar_top >&2
-    _log "MATRIX_RENDERED: rows="(count $_RY_PHASE_RESULTS)" pass=$_RY_MTX_PASS warn=$_RY_MTX_WARN fail=$_RY_MTX_FAIL defer=$_RY_MTX_DEFER skip=$_RY_MTX_SKIP na=$_RY_MTX_NA verdict=$_verdict"
-    set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
-end
-function _rdi_render_matrix --description "_rdi_summary sub: Render install phase matrix as box-drawn Unicode table"
+function _rdi_render_matrix --description "_rdi_summary sub: Render the install phase summary as aligned columns"
     test (count $_RY_PHASE_RESULTS) -eq 0; and return 0
     set -q _RY_OUTPUT_BROKEN; and return 0
-    set -l _w_check 34; set -l _w_result 6; set -l _w_evidence 50
-    set -l _inner (math "$_w_check + $_w_result + $_w_evidence + 8"); set -l _bar_top (string repeat -n $_inner '═'); set -l _sep_c (string repeat -n (math "$_w_check + 2") '═'); set -l _sep_r (string repeat -n (math "$_w_result + 2") '═'); set -l _sep_e (string repeat -n (math "$_w_evidence + 2") '═')
-    _rdi_matrix_header $_bar_top $_sep_c $_sep_r $_sep_e $_inner $_w_check $_w_result $_w_evidence
-    _rdi_matrix_rows $_w_check $_w_result $_w_evidence
-    _rdi_matrix_footer $_bar_top $_inner $_sep_c $_sep_r $_sep_e
+    set -l _w_c 34; set -l _w_e 50
+    set -l _rule (string repeat -n (math "$_w_c + $_w_e + 12") '─')
+    set -g _RY_MTX_PASS 0; set -g _RY_MTX_WARN 0; set -g _RY_MTX_FAIL 0
+    set -g _RY_MTX_DEFER 0; set -g _RY_MTX_SKIP 0; set -g _RY_MTX_NA 0
+    printf '%s\n' "" "ry-install v$VERSION — RUN SUMMARY" $_rule >&2
+    for _row in $_RY_PHASE_RESULTS
+        set -l _p (string split '│' -- $_row)
+        test (string length -- $_p[1]) -gt "$_w_c"; and functions -q _log; and _log "MATRIX_TRUNCATED: check "(string length -- $_p[1])" > $_w_c chars: $_p[1]"
+        test (string length -- $_p[3]) -gt "$_w_e"; and functions -q _log; and _log "MATRIX_TRUNCATED: evidence "(string length -- $_p[3])" > $_w_e chars: $_p[3]"
+        printf '  %s  %s  %s\n' (string pad -r -w 5 -- $_p[2]) (string pad -r -w $_w_c -- (string sub -l $_w_c -- $_p[1])) (string sub -l $_w_e -- $_p[3]) >&2
+        switch "$_p[2]"
+            case PASS; set -g _RY_MTX_PASS (math $_RY_MTX_PASS + 1)
+            case WARN; set -g _RY_MTX_WARN (math $_RY_MTX_WARN + 1)
+            case FAIL; set -g _RY_MTX_FAIL (math $_RY_MTX_FAIL + 1)
+            case DEFER; set -g _RY_MTX_DEFER (math $_RY_MTX_DEFER + 1)
+            case SKIP; set -g _RY_MTX_SKIP (math $_RY_MTX_SKIP + 1)
+            case '*'; set -g _RY_MTX_NA (math $_RY_MTX_NA + 1)
+        end
+    end
+    set -l _v PASS
+    test "$_RY_MTX_WARN" -gt 0; and set _v PASS-WITH-WARNINGS
+    test "$_RY_MTX_FAIL" -gt 0; and set _v FAIL
+    set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true; and set _v FAIL-BOOT-CRITICAL
+    set -q _RY_PREFLIGHT_ABORT; and test "$_RY_PREFLIGHT_ABORT" = true; and set _v PREFLIGHT # preflight abort = exit 3, not FAIL
+    set -l _next "reboot · ./ry-install.fish --verify"
+    test "$_v" != PASS; and set _next "review FAIL/WARN above · re-run install (idempotent)"
+    printf '%s\n' $_rule "  Totals : $_RY_MTX_PASS PASS · $_RY_MTX_WARN WARN · $_RY_MTX_FAIL FAIL · $_RY_MTX_DEFER DEFER · $_RY_MTX_SKIP SKIP · $_RY_MTX_NA N/A" "  Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_v" "  Log    : $LOG_FILE" "  Next   : $_next" "" >&2
+    _log "MATRIX_RENDERED: rows="(count $_RY_PHASE_RESULTS)" pass=$_RY_MTX_PASS warn=$_RY_MTX_WARN fail=$_RY_MTX_FAIL defer=$_RY_MTX_DEFER skip=$_RY_MTX_SKIP na=$_RY_MTX_NA verdict=$_v"
+    set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
 end
 
 # ── INSTALL SUMMARY: FINAL VERDICT + MANUAL STEPS + DO-NOT-REBOOT GATE ──

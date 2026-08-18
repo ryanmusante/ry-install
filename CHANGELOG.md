@@ -3,6 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.167.0
+-------
+
+  - verify: match live ext4 mounts to fstab entries by decoded path, so
+    an escaped space in a mount point no longer skips the check
+
+
 7.166.0
 -------
 

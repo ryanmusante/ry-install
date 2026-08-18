@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.166.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.167.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.166.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.167.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -3138,6 +3138,7 @@ function _vre_fstab --description "_verify_runtime_env sub: fstab ext4 entries h
     test "$_fstab_ok" = true; and _ok "  ext4 entries ("(count $_fstab_ext4)"): noatime,lazytime,commit=10 present"
 end
 function _vre_fstab_live --description "_verify_runtime_env sub: Live ext4 mounts carry the fstab options"
+    _echo
     _echo "── fstab options applied live ──"
     if not command -q findmnt; _warn "  findmnt unavailable — live mount options unverified"; return 0; end
     set -l _rows (command findmnt -rn -t ext4 -o TARGET,OPTIONS 2>/dev/null)
@@ -3151,10 +3152,12 @@ function _vre_fstab_live --description "_verify_runtime_env sub: Live ext4 mount
         _warn "  /etc/fstab not readable (even via sudo) — live mount options unverified"
         return 0
     end
+    set -l _fstab_paths # fstab escapes \040, findmnt -r escapes \x20 — compare decoded
+    for _m in $_fstab_mps; set -a _fstab_paths (printf '%b' "$_m"); end
     set -l _pending; set -l _checked 0; set -l _skipped 0
     for _row in $_rows
-        set -l _f (string split -m1 ' ' -- "$_row"); set -l _mp $_f[1]; set -l _opts "$_f[2]"
-        if not contains -- "$_mp" $_fstab_mps; set _skipped (math $_skipped + 1); continue; end
+        set -l _f (string split -m1 ' ' -- "$_row"); set -l _mp (printf '%b' "$_f[1]"); set -l _opts "$_f[2]"
+        if not contains -- "$_mp" $_fstab_paths; set _skipped (math $_skipped + 1); continue; end
         set _checked (math $_checked + 1)
         for _tok in noatime lazytime commit=10 # same triad the rewrite writes
             set -l _re (string escape --style=regex -- "$_tok")

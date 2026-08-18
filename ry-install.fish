@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.169.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.170.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.169.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.170.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -265,8 +265,7 @@ function _write_footer --argument-names exit_code extra_key --description "Appen
     test -n "$extra_key"; and set _extra ",\""(_json_str "$extra_key")"\":true"
     set -l _gen_fail 0
     set -q VERIFY_GEN_FAIL; and set _gen_fail $VERIFY_GEN_FAIL
-    printf '{"ts":"%s","event":"footer","mode":"%s","exit_code":%d,"pass":%d,"fail":%d,"warn":%d,"gen_fail":%d%s}\n' \
-        "$_ts" "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" "$_gen_fail" "$_extra" >>"$LOG_FILE" 2>/dev/null
+    printf '{"ts":"%s","event":"footer","mode":"%s","exit_code":%d,"pass":%d,"fail":%d,"warn":%d,"gen_fail":%d%s}\n' "$_ts" "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" "$_gen_fail" "$_extra" >>"$LOG_FILE" 2>/dev/null
     test "$status" -ne 0; and not set -q _RY_LOG_WRITE_FAIL; and set -g _RY_LOG_WRITE_FAIL true
 end
 function _cleanup_tmpfiles --description "Remove temporary files created during this run"
@@ -588,10 +587,7 @@ set -g BLACKLIST_AMDXDNA false # false + iommu=pt enables the NPU
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "DXVK_LOG_LEVEL=none" "FSR4_WATERMARK=1" "GSK_RENDERER=ngl" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
 # max_map_count=esync, swappiness=150=zram
-set -g SYSCTL_VALUES \
-    "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" \
-    "net.ipv4.tcp_congestion_control=bbr" "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" \
-    "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" "vm.swappiness=150" "vm.watermark_boost_factor=0"
+set -g SYSCTL_VALUES "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" "net.ipv4.tcp_congestion_control=bbr" "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" "vm.swappiness=150" "vm.watermark_boost_factor=0"
 
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) ──
 set -g PKGS_ADD \
@@ -789,13 +785,7 @@ function _content__etc_sdboot-manage.conf --description "Generate content for /e
         "REMOVE_OBSOLETE=\"$SDBOOT_REMOVE_OBSOLETE\""
 end
 function _content__etc_mkinitcpio.conf --description "Generate content for /etc/mkinitcpio.conf"
-    printf '%s\n' \
-        "# mkinitcpio configuration — changes require: sudo mkinitcpio -P && sudo sdboot-manage update" \
-        "MODULES=("(string join -- " " $MKINITCPIO_MODULES)")" \
-        "BINARIES=()" \
-        "FILES=()" \
-        "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")" \
-        "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
+    printf '%s\n' "# mkinitcpio configuration — changes require: sudo mkinitcpio -P && sudo sdboot-manage update" "MODULES=("(string join -- " " $MKINITCPIO_MODULES)")" "BINARIES=()" "FILES=()" "HOOKS=("(string join -- " " $MKINITCPIO_HOOKS)")" "COMPRESSION=\"$MKINITCPIO_COMPRESSION\""
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test (count $MKINITCPIO_COMPRESSION_OPTIONS) -gt 0; printf '%s\n' "COMPRESSION_OPTIONS=("(string join -- " " $MKINITCPIO_COMPRESSION_OPTIONS)")"; end
 end
 
@@ -831,11 +821,7 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "        icmp type { echo-request, destination-unreachable, time-exceeded, parameter-problem } accept" \
         "        # ICMPv6: NDP, MLD, and error/PMTUD types (RFC 4890 host minimum); live on the fallback entry" \
         "        icmpv6 type { echo-request, destination-unreachable, packet-too-big, time-exceeded, parameter-problem, nd-router-solicit, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert, mld-listener-query } accept"
-    printf '%s\n' \
-        "    }" \
-        "    chain forward { type filter hook forward priority filter; policy drop; }" \
-        "    chain output { type filter hook output priority filter; policy accept; }" \
-        "}"
+    printf '%s\n' "    }" "    chain forward { type filter hook forward priority filter; policy drop; }" "    chain output { type filter hook output priority filter; policy accept; }" "}"
 end
 function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"; printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"; end
 function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
@@ -861,15 +847,11 @@ function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate con
         'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
 end
 function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate content for /etc/modprobe.d/60-ry-modules.conf (optional amdxdna blacklist)"
-    printf '%s\n' \
-        "# ry-install: module options + blacklist (managed file, do not edit by hand)"
+    printf '%s\n' "# ry-install: module options + blacklist (managed file, do not edit by hand)"
     if test "$BLACKLIST_AMDXDNA" = true # false = NPU path (see BLACKLIST_AMDXDNA global)
-        printf '%s\n' \
-            "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -ENODEV (ret -19) under amd_iommu=off" \
-            "blacklist amdxdna"
+        printf '%s\n' "# blacklist amdxdna: XDNA NPU needs IOMMU, probes -ENODEV (ret -19) under amd_iommu=off" "blacklist amdxdna"
     else
-        printf '%s\n' \
-            "# no directives: BLACKLIST_AMDXDNA=false (NPU path); MT7925 ASPM handled on the kernel command line"
+        printf '%s\n' "# no directives: BLACKLIST_AMDXDNA=false (NPU path); MT7925 ASPM handled on the kernel command line"
     end
 end
 
@@ -1234,8 +1216,7 @@ function _progress_redraw --argument-names name current --description "Redraw pi
     set -l pct (math "floor($current * 100 / $_PROG_TOTAL)"); set -l filled (math "floor($current * $_PROG_BAR_WIDTH / $_PROG_TOTAL)"); set -l empty (math "$_PROG_BAR_WIDTH - $filled"); set -l bar
     test "$filled" -gt 0; and set bar (string repeat -n $filled '█')
     test "$empty" -gt 0; and set bar "$bar"(string repeat -n $empty '░')
-    printf '\e[s\e[%d;1H\e[K[%s] %3d%% %s\e[u' \
-        $_PROG_ROWS "$bar" $pct "$name" >&2
+    printf '\e[s\e[%d;1H\e[K[%s] %3d%% %s\e[u' $_PROG_ROWS "$bar" $pct "$name" >&2
 end
 function _progress_done --description "Finalize progress bar and log elapsed seconds"
     set -l _now (_progress_now); set -l elapsed (math $_now - $_PROG_START)
@@ -1248,11 +1229,9 @@ function _progress_done --description "Finalize progress bar and log elapsed sec
     printf '\e[r' >&2
     if test "$_skip" = true
         set -l pct (math "floor($_PROG_CUR * 100 / $_PROG_TOTAL)")
-        printf '\e[%d;1H\e[K[%s] %3d%% Aborted (%ds)\n' \
-            $_PROG_ROWS (string repeat -n $_PROG_BAR_WIDTH '░') $pct $elapsed >&2
+        printf '\e[%d;1H\e[K[%s] %3d%% Aborted (%ds)\n' $_PROG_ROWS (string repeat -n $_PROG_BAR_WIDTH '░') $pct $elapsed >&2
     else
-        printf '\e[%d;1H\e[K[%s] 100%% Done (%ds)\n' \
-            $_PROG_ROWS (string repeat -n $_PROG_BAR_WIDTH '█') $elapsed >&2
+        printf '\e[%d;1H\e[K[%s] 100%% Done (%ds)\n' $_PROG_ROWS (string repeat -n $_PROG_BAR_WIDTH '█') $elapsed >&2
     end
     set -g _PROG_PINNED false
 end
@@ -3396,12 +3375,7 @@ function _has_user_bus_active --description "True iff user systemd manager is re
 function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache may lapse mid-run"
     set -q _RY_OUTPUT_BROKEN; and return 0
     _log "SUDO_CACHE_BANNER: emitted (install-mode preflight)"
-    printf '%s\n' "" \
-        "[WARN] sudo cache may lapse during 3-8 min install. Mitigations:" \
-        "[WARN]   Defaults timestamp_timeout=60 in /etc/sudoers, sudo -v keepalive in parallel shell," \
-        "[WARN]   or a scoped NOPASSWD drop-in (pacman/mkinitcpio/sdboot-manage/systemctl — avoid ALL)." \
-        "[WARN]   Recovery: re-run ry-install (idempotent)." \
-        "" >&2
+    printf '%s\n' "" "[WARN] sudo cache may lapse during 3-8 min install. Mitigations:" "[WARN]   Defaults timestamp_timeout=60 in /etc/sudoers, sudo -v keepalive in parallel shell," "[WARN]   or a scoped NOPASSWD drop-in (pacman/mkinitcpio/sdboot-manage/systemctl — avoid ALL)." "[WARN]   Recovery: re-run ry-install (idempotent)." "" >&2
 end
 
 # ── INSTALL PHASE 1: PREFLIGHT ──

@@ -3,6 +3,12 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.170.0
+-------
+
+  - style: join 11 backslash-continued statements, 4,997 -> 4,971 lines
+
+
 7.169.0
 -------
 

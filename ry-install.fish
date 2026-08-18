@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.167.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.169.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.167.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.169.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -2090,10 +2090,7 @@ function _vsb_sdboot --description "_verify_static_boot sub: sdboot-manage.conf 
         set -l opts (printf '%s\n' "$_opts_raw" | string replace -r -- '^LINUX_OPTIONS="([^"]*)".*$' '$1')
         for param in $KERNEL_PARAMS; set -l _param_re (string escape --style=regex -- "$param"); string match -qr -- "(^|\s)$_param_re(\s|\$)" "$opts"; _chk_present $status "$param"; end
     end
-    for _kv in "OVERWRITE_EXISTING:$SDBOOT_OVERWRITE" \
-        "REMOVE_EXISTING:$SDBOOT_REMOVE_EXISTING" \
-        "REMOVE_OBSOLETE:$SDBOOT_REMOVE_OBSOLETE" \
-        "DEFAULT_ENTRY:$SDBOOT_DEFAULT_ENTRY"
+    for _kv in "OVERWRITE_EXISTING:$SDBOOT_OVERWRITE" "REMOVE_EXISTING:$SDBOOT_REMOVE_EXISTING" "REMOVE_OBSOLETE:$SDBOOT_REMOVE_OBSOLETE" "DEFAULT_ENTRY:$SDBOOT_DEFAULT_ENTRY"
         set -l _p (string split -m1 ':' -- $_kv)
         _chk_grep /etc/sdboot-manage.conf "$_p[1]=\"$_p[2]\"" "$_p[1]=$_p[2]"
     end
@@ -2976,9 +2973,7 @@ function _vrsv_wifi_nm_backend --description "_vrsv_wifi sub: Verify NM effectiv
         _info "  NetworkManager binary absent — backend check skipped"
         return 0
     end
-    set -l _eff (_as true NetworkManager --print-config 2>/dev/null \
-        | command grep -E -- '^[[:space:]]*wifi\.backend[[:space:]]*=' \
-        | command head -n1 | string replace -r '.*=[[:space:]]*' '' | string trim --)
+    set -l _eff (_as true NetworkManager --print-config 2>/dev/null | command grep -E -- '^[[:space:]]*wifi\.backend[[:space:]]*=' | command head -n1 | string replace -r '.*=[[:space:]]*' '' | string trim --)
     if test -z "$_eff"
         if not sudo -n true 2>/dev/null
             _warn "  NM effective wifi.backend: sudo cache lapsed — cannot determine"
@@ -4524,12 +4519,7 @@ end
 function _idf_boot_crit_banner --description "Forced DO-NOT-REBOOT recovery banner (shared: full install + --install-file)"
     _msg_print --force ERR "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)" # force bypasses QUIET
     _log "ERR: DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
-    for _bcl in \
-        "Recovery steps:" \
-        "  1. Inspect: ls -la /boot/vmlinuz-* /boot/initramfs-*.img; sudo bootctl list" \
-        "  2. Rebuild: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update" \
-        "  3. Re-run ry-install (idempotent) — only reboot once verdict is PASS or PASS-WITH-WARNINGS" \
-        "JSONL log captures the exact failure: $LOG_FILE"
+    for _bcl in "Recovery steps:" "  1. Inspect: ls -la /boot/vmlinuz-* /boot/initramfs-*.img; sudo bootctl list" "  2. Rebuild: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update" "  3. Re-run ry-install (idempotent) — only reboot once verdict is PASS or PASS-WITH-WARNINGS" "JSONL log captures the exact failure: $LOG_FILE"
         _msg_print --force INFO "$_bcl"; _log "INFO: $_bcl"
     end
 end
@@ -4604,13 +4594,20 @@ end
 
 # ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR ──
 set -g _RY_POST_HOOKS \
-    "/boot/*|loader" "/etc/kernel/cmdline|cmdline" "/etc/sdboot-manage.conf|boot" "/etc/mkinitcpio.conf|boot" \
+    "/boot/loader/loader.conf|loader" "/etc/kernel/cmdline|cmdline" "/etc/sdboot-manage.conf|boot" "/etc/mkinitcpio.conf|boot" \
     "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/NetworkManager-dispatcher.service.d/*|nmdispatch" "*/NetworkManager/conf.d/*|nm" \
     "/etc/iw-regdomain|regdom" "/etc/bluetooth/main.conf|bluetooth" "/etc/nftables.conf|nft" "/etc/default/cpupower-service.conf|cpupower" \
     "*/sysctl.d/*|sysctl" "/etc/udev/rules.d/*|udev" "*/modprobe.d/*|modprobe" "*/environment.d/*|envd" \
     "*/MangoHud/MangoHud.conf|mangohud"
-function _ir_validate_post_hooks --description "Refuse deploy when any _RY_POST_HOOKS tag lacks a _post_<tag> handler" # mirrors _ir_validate_keys
+function _ir_validate_post_hooks --description "Refuse deploy when a _RY_POST_HOOKS tag lacks a handler or breaks destination mirror" # mirrors _ir_validate_keys
     set -l _seen_tags
+    set -l _mirror_dsts $SYSTEM_DESTINATIONS $USER_DESTINATIONS
+    set -l _mirror_n (count $_mirror_dsts)
+    if test (count $_RY_POST_HOOKS) -ne "$_mirror_n"; _err_loud "_RY_POST_HOOKS count "(count $_RY_POST_HOOKS)" does not mirror destination count $_mirror_n — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    for _i in (seq $_mirror_n)
+        set -l _mparts (string split -m1 '|' -- "$_RY_POST_HOOKS[$_i]"); set -l _mpat $_mparts[1]
+        if not string match -q "$_mpat" -- "$_mirror_dsts[$_i]"; _err_loud "_RY_POST_HOOKS mirror break at index $_i: pattern '$_mpat' does not match destination '$_mirror_dsts[$_i]' — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
     for _entry in $_RY_POST_HOOKS
         set -l _parts (string split -m1 '|' -- "$_entry"); set -l _tag $_parts[2]
         if test -z "$_tag"; _err_loud "_RY_POST_HOOKS entry has empty tag: '$_entry' — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -4669,6 +4666,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
             _idf_dispatch_hook "$_mdst" "$_h"; set _hook_rc $status
         else
             _log "POST_HOOK_NONE: target=$_mdst (no _RY_POST_HOOKS pattern matched — live-apply skipped; file deployed)"
+            _warn "No post-hook matched $_mdst — file deployed but not live-applied; apply by hand"
         end
     else
         _log "POST_HOOK_SKIP_UNCHANGED: target=$_mdst (bytes identical; no live-apply)"

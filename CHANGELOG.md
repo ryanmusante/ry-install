@@ -3,6 +3,22 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.169.0
+-------
+
+  - preflight: _ir_validate_post_hooks now asserts that _RY_POST_HOOKS
+    mirrors the destination arrays 1:1 by index, and refuses on a break
+  - install-file: an unmatched post-hook now emits a WARN, not a log-only
+    line, so a deployed-but-not-live-applied file is visible on stderr
+
+
+7.168.0
+-------
+
+  - install-file: /boot post-hook now keys on the exact path, not
+    the glob /boot/*, so a new /boot file cannot misroute to loader
+
+
 7.167.0
 -------
 

@@ -3,6 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.166.0
+-------
+
+  - verify: check live ext4 mount options only for filesystems listed
+    in fstab, not every mounted ext4
+
+
 7.165.0
 -------
 

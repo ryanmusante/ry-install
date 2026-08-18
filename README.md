@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.165.0** · [Changelog](CHANGELOG.md)
+**Version 7.166.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -111,7 +111,7 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 
 | Phase | Name | Work |
 |---|---|---|
-| 1 | Preflight | dependency, network, disk, and systemd gates; hardware match; lock acquisition |
+| 1 | Preflight | sudo cache, dependency, systemd, disk, network, and time-sync gates; config validation |
 | 2 | Packages | seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` and re-mark explicit, refresh `updatedb` and `pkgfile` |
 | 3 | Configuration | deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regulatory domain |

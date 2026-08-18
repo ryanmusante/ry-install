@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.165.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.166.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.165.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.166.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1277,7 +1277,7 @@ function _progress_on_winch --on-signal WINCH --description "Re-anchor progress 
     _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
 end
 
-# ── COMMAND RUNNER: _run + STDOUT/STDERR CAPTURE + TIMEOUT DISPATCH ──
+# ── COMMAND RUNNER: _run HELPERS (STREAM EMIT + REDACTION + TIMEOUT RESOLUTION) ──
 function _run_resolve_timeout --description "_run_effective_timeout sub: Resolve RY_RUN_TIMEOUT to a usable seconds integer (0 = disabled)"
     if not set -q RY_RUN_TIMEOUT; echo $_RY_RUN_TIMEOUT_DEFAULT; return 0; end
     if test -z "$RY_RUN_TIMEOUT"; echo $_RY_RUN_TIMEOUT_DEFAULT; return 0; end
@@ -1681,7 +1681,7 @@ function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODU
     test "$_errors" -eq 0
 end
 
-# ── CONFIG-FORMAT VALIDATORS (KV, KPARAM, SYSCTL, INI, MODPROBE, UDEV, NFT, REGDOM) ──
+# ── CONFIG-FORMAT VALIDATORS (KV, KPARAM, SYSCTL, INI) ──
 function _grep_kv --argument-names dst --description "Validate kv pairs (loader.conf space-sep; sdboot-manage.conf eq-sep)"
     test (count $argv) -lt 2; and _log "BUG: _grep_kv called without content (dst=$dst)"; and return 2
     set -l content $argv[2..-1]; set -l keys; set -l sep
@@ -1930,7 +1930,7 @@ function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --descript
     return 0
 end
 
-# ── ATOMIC FILE INSTALL: BACKUP + POST-WRITE VERIFY/RESTORE + PUBLIC ENTRY ──
+# ── ATOMIC FILE INSTALL: BACKUP + POST-WRITE VERIFY/RESTORE + CONTENT PREVALIDATE ──
 function _awf_make_backup --argument-names dst use_sudo --description "_atomic_write_file sub: Create <dst>.ry.bak before overwrite"
     set -l _bak "$dst$_RY_BACKUP_SUFFIX"
     set -l _sp; test "$use_sudo" = true; and set _sp sudo -n
@@ -2663,7 +2663,7 @@ function _ry_do_check --description "Silent idempotency probe" # ERR_NO_DATA->pr
     return $EXIT_OK
 end
 
-# ── VERIFY-RUNTIME: KERNEL CMDLINE + GPU + CPU + MODULES ──
+# ── VERIFY-RUNTIME: KERNEL CMDLINE + PARAM ACCEPTANCE + GPU + CPU ──
 function _vrk_cmdline --description "_verify_runtime_kparams sub: /proc/cmdline token check"
     _echo "KERNEL CMDLINE"
     _echo
@@ -2682,6 +2682,45 @@ function _vrk_cmdline --description "_verify_runtime_kparams sub: /proc/cmdline 
         _fail "  rw: NOT in cmdline"
     end
     _echo
+end
+function _vrk_param_rejects --description "_verify_runtime_kparams sub: Kernel parser rejections naming a managed token"
+    _echo "── kernel parameter acceptance ──"
+    set -l _krn
+    command -q journalctl; and set _krn (command journalctl -k -b 0 --no-pager -o cat 2>/dev/null)
+    if test -z "$_krn"; and command -q dmesg; set _krn (_as true dmesg 2>/dev/null); end
+    if test -z "$_krn"
+        _warn "  kernel ring buffer unreadable (journalctl and dmesg both empty) — token acceptance unverified"
+        _log "KPARAM_REJECT_SCAN_SKIP: ring buffer unreadable"
+        return 0
+    end
+    set -l _susp (printf '%s\n' $_krn | command grep -iE -- 'unknown (option|parameter|kernel command line)|malformed early option|invalid (option|parameter)' 2>/dev/null)
+    if test -z "$_susp"; _ok "  no kernel parser rejections this boot ("(count $KERNEL_PARAMS)" tokens)"; return 0; end
+    set -l _hit; set -l _maybe
+    for _line in $_susp
+        _log "KPARAM_REJECT_LINE: $_line"
+        for _p in $KERNEL_PARAMS
+            set -l _parts (string split -m1 '=' -- "$_p"); set -l _key $_parts[1]; set -l _val ""
+            test (count $_parts) -gt 1; and set _val $_parts[2]
+            set -l _kre (string escape --style=regex -- "$_key") # dots and dashes count as token chars
+            if string match -qr -- '(^|[^A-Za-z0-9_.-])'$_kre'([^A-Za-z0-9_.-]|$)' "$_line"
+                contains -- "$_p" $_hit; or set -a _hit "$_p"
+            else if test -n "$_val"; and begin; string match -q -- "*'$_val'*" "$_line"; or string match -q -- "*\"$_val\"*" "$_line"; end
+                contains -- "$_p" $_maybe; or set -a _maybe "$_p" # message quotes the value, not the key
+            end
+        end
+    end
+    if test (count $_hit) -gt 0
+        _fail "  kernel REJECTED managed token(s): "(string join ',' -- $_hit)" — inert, drop or correct them"
+        _log "KPARAM_REJECTED: tokens="(string join ',' -- $_hit)
+    end
+    if test (count $_maybe) -gt 0
+        _warn "  parser complaint quotes the value of: "(string join ',' -- $_maybe)" — read the log lines and confirm"
+        _log "KPARAM_REJECT_VALUE_MATCH: tokens="(string join ',' -- $_maybe)
+    end
+    if test (count $_hit) -eq 0; and test (count $_maybe) -eq 0
+        _info "  "(count $_susp)" parser complaint(s) in the ring buffer, none naming a managed token"
+        _log "KPARAM_REJECT_UNRELATED: count="(count $_susp)
+    end
 end
 function _vrk_gpu_state --description "_verify_runtime_kparams sub: GPU performance level"
     _echo "HARDWARE STATE"
@@ -2830,50 +2869,11 @@ function _vrk_module_state --description "_verify_runtime_kparams sub: Module pa
     _vrkm_blacklist_modprobe
     _echo
 end
-function _vrk_param_rejects --description "_verify_runtime_kparams sub: Kernel parser rejections naming a managed token"
-    _echo "── kernel parameter acceptance ──"
-    set -l _krn
-    command -q journalctl; and set _krn (command journalctl -k -b 0 --no-pager -o cat 2>/dev/null)
-    if test -z "$_krn"; and command -q dmesg; set _krn (_as true dmesg 2>/dev/null); end
-    if test -z "$_krn"
-        _warn "  kernel ring buffer unreadable (journalctl and dmesg both empty) — token acceptance unverified"
-        _log "KPARAM_REJECT_SCAN_SKIP: ring buffer unreadable"
-        return 0
-    end
-    set -l _susp (printf '%s\n' $_krn | command grep -iE -- 'unknown (option|parameter|kernel command line)|malformed early option|invalid (option|parameter)' 2>/dev/null)
-    if test -z "$_susp"; _ok "  no kernel parser rejections this boot ("(count $KERNEL_PARAMS)" tokens)"; return 0; end
-    set -l _hit; set -l _maybe
-    for _line in $_susp
-        _log "KPARAM_REJECT_LINE: $_line"
-        for _p in $KERNEL_PARAMS
-            set -l _parts (string split -m1 '=' -- "$_p"); set -l _key $_parts[1]; set -l _val ""
-            test (count $_parts) -gt 1; and set _val $_parts[2]
-            set -l _kre (string escape --style=regex -- "$_key") # dots and dashes count as token chars
-            if string match -qr -- '(^|[^A-Za-z0-9_.-])'$_kre'([^A-Za-z0-9_.-]|$)' "$_line"
-                contains -- "$_p" $_hit; or set -a _hit "$_p"
-            else if test -n "$_val"; and begin; string match -q -- "*'$_val'*" "$_line"; or string match -q -- "*\"$_val\"*" "$_line"; end
-                contains -- "$_p" $_maybe; or set -a _maybe "$_p" # message quotes the value, not the key
-            end
-        end
-    end
-    if test (count $_hit) -gt 0
-        _fail "  kernel REJECTED managed token(s): "(string join ',' -- $_hit)" — inert, drop or correct them"
-        _log "KPARAM_REJECTED: tokens="(string join ',' -- $_hit)
-    end
-    if test (count $_maybe) -gt 0
-        _warn "  parser complaint quotes the value of: "(string join ',' -- $_maybe)" — read the log lines and confirm"
-        _log "KPARAM_REJECT_VALUE_MATCH: tokens="(string join ',' -- $_maybe)
-    end
-    if test (count $_hit) -eq 0; and test (count $_maybe) -eq 0
-        _info "  "(count $_susp)" parser complaint(s) in the ring buffer, none naming a managed token"
-        _log "KPARAM_REJECT_UNRELATED: count="(count $_susp)
-    end
-end
 
 # ── VERIFY-RUNTIME: KPARAMS ORCHESTRATOR (_verify_runtime_kparams) ──
 function _verify_runtime_kparams --description "Verify /proc/cmdline, hardware state, module params, blacklist"; _vrk_cmdline; _vrk_param_rejects; _vrk_gpu_state; _vrk_cpu_state; _vrk_module_state; end
 
-# ── VERIFY-RUNTIME: SERVICES (units, resolved, NM, cpupower, nftables, wifi, masks) ──
+# ── VERIFY-RUNTIME: SERVICES (units, resolved, cpupower, nftables) ──
 function _vrsv_chk_active_enabled --argument-names label rec_str --description "_vrsv_sys_units sub: ok if active+enabled, warn if active only, fail otherwise"
     set -l rec (string split ':' -- "$rec_str")
     if test "$rec[1]" = not-found
@@ -3142,16 +3142,30 @@ function _vre_fstab_live --description "_verify_runtime_env sub: Live ext4 mount
     if not command -q findmnt; _warn "  findmnt unavailable — live mount options unverified"; return 0; end
     set -l _rows (command findmnt -rn -t ext4 -o TARGET,OPTIONS 2>/dev/null)
     if test (count $_rows) -eq 0; _info "  no ext4 filesystem mounted"; return 0; end
-    set -l _pending
+    set -l _fstab_mps
+    if test -r /etc/fstab
+        set _fstab_mps (command awk "$_RY_AWK_EXT4_FILTER" /etc/fstab 2>/dev/null | command awk '{ print $2 }')
+    else if sudo -n test -r /etc/fstab 2>/dev/null
+        set _fstab_mps (sudo -n awk "$_RY_AWK_EXT4_FILTER" /etc/fstab 2>/dev/null | command awk '{ print $2 }')
+    else
+        _warn "  /etc/fstab not readable (even via sudo) — live mount options unverified"
+        return 0
+    end
+    set -l _pending; set -l _checked 0; set -l _skipped 0
     for _row in $_rows
         set -l _f (string split -m1 ' ' -- "$_row"); set -l _mp $_f[1]; set -l _opts "$_f[2]"
+        if not contains -- "$_mp" $_fstab_mps; set _skipped (math $_skipped + 1); continue; end
+        set _checked (math $_checked + 1)
         for _tok in noatime lazytime commit=10 # same triad the rewrite writes
             set -l _re (string escape --style=regex -- "$_tok")
             string match -qr -- '(^|,)'$_re'(,|$)' "$_opts"; or set -a _pending "$_mp:$_tok"
         end
     end
-    if test (count $_pending) -eq 0
-        _ok "  ext4 mounts ("(count $_rows)"): noatime,lazytime,commit=10 live"
+    test "$_skipped" -gt 0; and _info "  $_skipped mounted ext4 filesystem(s) absent from /etc/fstab — unmanaged, not checked"
+    if test "$_checked" -eq 0
+        _info "  no fstab-listed ext4 filesystem is mounted"
+    else if test (count $_pending) -eq 0
+        _ok "  ext4 mounts ($_checked): noatime,lazytime,commit=10 live"
     else
         _warn "  written to fstab but not live: $_pending — sudo mount -o remount <target>, or reboot"
         _log "FSTAB_REMOUNT_PENDING: "(string join ',' -- $_pending)
@@ -4850,7 +4864,7 @@ end
 function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: log/dir cleanup, then exit"; _pre_dispatch_log_cleanup; _ry_exit $code; end
 function _early_usage_exit --description "Print usage error to stderr, remove pre-dispatch log, exit EXIT_USAGE"; echo "[ERR] $argv" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
 
-# ── MAIN: ARGPARSE + MODE DISPATCH + LOG HEADER + EXIT ──
+# ── MAIN: ARGPARSE + MODE SELECTION + LOG HEADER + EXIT ──
 set -g MODE install; set -g INSTALL_FILE_TARGET ""
 set -l _ORIG_ARGV $argv; set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) "ry-argparse-err.$fish_pid.XXXXXX")
 _track_tmpfile "$_ap_errfile"

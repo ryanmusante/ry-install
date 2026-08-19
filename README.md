@@ -32,7 +32,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 ## Usage
 
 > [!CAUTION]
-> `--install-file` of a boot config runs the boot cascade (`loader.conf` and `/etc/kernel/cmdline` regenerate sdboot entries only — no initramfs rebuild); a cascade failure exits `4` — **do not reboot** until it succeeds.
+> `--install-file` of a boot config runs the boot cascade; a cascade failure exits `4` — **do not reboot** until it succeeds.
 
 `--verify`, `--check`, and `--install-file <path>` are mutually exclusive. The bare invocation is the unattended install, all 6 phases; `--install-file` re-deploys one managed file. Positional arguments exit `2`. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
 
@@ -43,8 +43,8 @@ Per-phase verdicts:
 - `PASS` — completed its work.
 - `WARN` — hits something non-fatal and keeps exit `0`.
 - `FAIL` — did not complete.
-- `DEFER` — applies at next boot, as with the NetworkManager restart over Wi-Fi.
-- `SKIP` — found preconditions absent, so the phase did not run.
+- `DEFER` — applies at next boot.
+- `SKIP` — preconditions absent; the phase did not run.
 - `--` — not applicable, tallied as `N/A` in Totals.
 
 ## Exit Codes
@@ -52,16 +52,16 @@ Per-phase verdicts:
 | Code | Meaning |
 |---|---|
 | `0` | OK — success, `WARN`-only runs, and a clean `--check` |
-| `1` | verify-FAIL or install-error — a `--verify` mismatch or a failed install step |
-| `2` | usage — bad arguments, a non-absolute or unmanaged `--install-file`, root-guard misuse |
-| `3` | preflight — missing or non-GNU dependency, uncached sudo, gate mismatch, root with `--check` (silent) |
+| `1` | a `--verify` mismatch or a failed install step |
+| `2` | bad arguments, a non-absolute or unmanaged `--install-file`, root misuse |
+| `3` | missing dependency, uncached sudo, gate mismatch; root `--check` is silent |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed; **do not reboot**, resolve first |
-| `5` | lock — another instance holds the lock, and ambiguous pidfiles fail closed |
+| `5` | another instance holds the lock; ambiguous pidfiles fail closed |
 | `10` | drift — `--check` found drift from the managed baseline |
 
 ## Environment Overrides
 
-Skipping the hardware check is the risky override: deploying gfx1151 defaults on a non-matching CPU writes an incorrect kernel cmdline and initramfs `MODULES`.
+Skipping the hardware check is the risky override — a wrong-CPU deploy writes an incorrect kernel cmdline and initramfs `MODULES`.
 
 | Variable | Effect |
 |---|---|
@@ -96,7 +96,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | `/etc/default/cpupower-service.conf` | governor (`performance`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, TCP `bbr`, VM tunables |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `high` |
-| `/etc/modprobe.d/60-ry-modules.conf` | optional `amdxdna` blacklist — comment-only while `BLACKLIST_AMDXDNA` is `false` |
+| `/etc/modprobe.d/60-ry-modules.conf` | optional `amdxdna` blacklist — comment-only while `BLACKLIST_AMDXDNA=false` |
 
 ### User
 
@@ -120,15 +120,15 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 
 ## Safety and Reliability
 
-**Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c` for the ruleset), backed up, moved with `mv -T`, then re-read; a mismatch restores the backup.
+**Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c`), backed up, moved with `mv -T`, then re-read; a mismatch restores the backup.
 
 **Backups** — `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig`. `--verify` counts both and fails on an empty one.
 
-**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; every other row is byte-preserved. `commit=10` doubles the ext4 default of 5 seconds, so a power loss can discard up to 10 seconds of metadata.
+**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; every other row is byte-preserved. A power loss can discard up to 10 s of metadata (`commit` default is 5).
 
 **Failure and concurrency** — boot-critical failures exit `4` and skip finalization. One instance runs at a time, with dead-PID lock reclaim; live or ambiguous PIDs fail closed.
 
-**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks the live state: kernel cmdline, kernel parameter acceptance in the boot ring buffer, module parameters, sysctl values, unit states, fstab options as written and as mounted, and session environment. `--check` reports drift without writing.
+**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks live state: cmdline, parameter acceptance in the boot ring, module parameters, sysctl, unit states, fstab as written and as mounted, session environment. `--check` reports drift without writing.
 
 `--verify` also reports state the script cannot own: orphaned admin-scope masks, unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in.
 
@@ -157,7 +157,7 @@ All tunables are `set -g` globals in `ry-install.fish` — there is no external 
 | `btusb.enable_autosuspend=n` | keep the BT controller powered — no reconnect stalls |
 | `fsck.mode=auto` | fsck only when the filesystem asks for it |
 | `fsck.repair=yes` | auto-repair whatever fsck finds |
-| `iommu=pt` | passthrough default domain — host devices identity-mapped, DMA overhead stays low |
+| `iommu=pt` | passthrough default domain — low DMA overhead |
 | `ipv6.disable=1` | disable the IPv6 stack |
 | `mt7925e.disable_aspm=1` | MT7925 endpoint ASPM off — driver-level coredump mitigation |
 | `nvme_core.default_ps_max_latency_us=0` | NVMe APST off — no power-state exit latency |
@@ -181,7 +181,7 @@ All tunables are `set -g` globals in `ry-install.fish` — there is no external 
 
 ### Service Keys
 
-`DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC. It serves DoT WAN-side only, so pinning `DNSOverTLS=yes` here would fail closed against a plaintext-only LAN resolver.
+`DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC. The router serves DoT WAN-side only, so a host `DNSOverTLS=yes` would fail closed.
 
 `NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and spikes latency otherwise. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; the script refuses `false` alongside `amd_iommu=off`; [Tuning Notes](#tuning-notes) has the reverse switch.
 
@@ -251,8 +251,8 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 ### Gaming Stack
 
 - `/dev/ntsync` — reported by `--verify`. Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out at the Proton level.
-- `FSR4_WATERMARK=1` — on-screen indicator confirming FSR4 is active; Proton-CachyOS 11.0-20260702 and later copy `amdxcffx64.dll` themselves, so no upgrade pin is needed.
-- `cpu_stats` and `cpu_temp` — both shipped commented out; add either on its own line to enable. `cpu_custom_temp_sensor` is inert here: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. The Zen 5 `cpu_power` report is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
+- `FSR4_WATERMARK=1` — on-screen indicator confirming FSR4 is active.
+- `cpu_stats` and `cpu_temp` — shipped commented out; add either on its own line. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
 
 ### Kernel Parameter Notes
 
@@ -260,8 +260,8 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 - `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — addresses Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
-- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; an enabled `amdxdna` blacklist is a modprobe file, so it still applies. `--verify` skips `*-fallback.conf`.
-- `timeout 0` with `default @saved` — after an ESP wipe or a fresh install no saved entry exists, so sd-boot picks by its own sort order and can boot the fallback with no menu shown; hold a key at power-on and select the tuned entry once to set `@saved`.
+- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM. `--verify` skips `*-fallback.conf`.
+- `timeout 0` with `default @saved` — with no saved entry (fresh ESP), sd-boot picks by its own sort order and can boot the fallback unseen; hold a key at power-on and select the tuned entry once.
 
 ## BIOS
 
@@ -279,7 +279,7 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 
 **Masked unit not in `MASK` reported** — `sudo systemctl unmask <unit>` if an earlier `MASK` masked it; leave distro and hand-made masks alone.
 
-**libvirt and QEMU NAT** — `forward { policy drop; }` silently breaks libvirt/QEMU NAT guest WAN access. VMs are out of scope; if you run them — do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`).
+**libvirt and QEMU NAT** — `forward { policy drop; }` breaks libvirt/QEMU NAT guest WAN access. VMs are out of scope; if you run them, do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`).
 
 ## Uninstall
 
@@ -287,7 +287,7 @@ There is no automated uninstaller. Use [Managed Files](#managed-files) as the ro
 
 A one-time `<path>.ry.orig` may exist for non-boot files; restore it instead of deleting.
 
-1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS: the profile runs no mDNS responder while it is masked, because the resolved drop-in also sets `MulticastDNS=no`.
+1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
 3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the `.ry.bak` files.
 4. **Reverse packages** — optional: `sudo pacman -S --needed` the Remove list, `sudo pacman -Rns` the Install list; both listed in [Packages](#packages).

@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.172.0** · [Changelog](CHANGELOG.md)
+**Version 7.174.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -65,7 +65,7 @@ Skipping the hardware check is the risky override — a wrong-CPU deploy writes 
 
 | Variable | Effect |
 |---|---|
-| `RY_RUN_TIMEOUT=<sec>` | per-command wall-clock cap — default `3600`, `0` disables, package and boot ops floor at `7200` |
+| `RY_RUN_TIMEOUT=<sec>` | per-command wall-clock cap; default `3600`, `0` disables, package/boot ops floor `7200` |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | bypass the `EXPECTED_CPU_MATCH` hard-fail |
 | `NO_COLOR` | disable colored output when set to a non-empty value ([no-color.org](https://no-color.org)) |
 
@@ -89,7 +89,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | mDNS and LLMNR off |
 | `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | 8 power, suspend, hibernate, and reboot keys ignored, long-press included |
 | `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | `LogLevelMax=notice` |
-| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, unlimited autoconnect retries, log level `WARN` |
+| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, unlimited autoconnect retries, log `WARN` |
 | `/etc/iw-regdomain` | regulatory domain (`US`) |
 | `/etc/bluetooth/main.conf` | auto-power-on, `FastConnectable`, 3 reconnect attempts |
 | `/etc/nftables.conf` | default-deny-inbound, IPv4 ping allowed, ICMPv6 base accept |
@@ -112,23 +112,23 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 | Phase | Name | Work |
 |---|---|---|
 | 1 | Preflight | sudo cache, dependency, systemd, disk, network, and time-sync gates; config validation |
-| 2 | Packages | seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` and re-mark explicit, refresh `updatedb` and `pkgfile` |
+| 2 | Packages | seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit), refresh `updatedb`/`pkgfile` |
 | 3 | Configuration | deploy 17 embedded configs atomically |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regulatory domain |
 | 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
-| 6 | Finalize | user `daemon-reload` and PowerDevil re-apply, `paccache -rk2` and `-ruk0`, NetworkManager restart |
+| 6 | Finalize | user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart |
 
 ## Safety and Reliability
 
 **Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c`), backed up, moved with `mv -T`, then re-read; a mismatch restores the backup.
 
-**Backups** — `<path>.ry.bak` for the 4 boot files and the fstab rewrite; any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig`. `--verify` counts both and fails on an empty one.
+**Backups** — `.ry.bak` copies for the 4 boot files and the fstab rewrite land in `~/ry-install/backups/` under slash-encoded names (`/etc/fstab` → `_etc_fstab.ry.bak`); any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig` beside it. `--verify` counts both and fails on an empty one.
 
-**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing redundant `defaults`, `relatime`, `atime`, `strictatime`, and existing `commit=` tokens; every other row is byte-preserved. A power loss can discard up to 10 s of metadata (`commit` default is 5).
+**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing redundant `defaults`, `*atime` tokens, and any existing `commit=`; every other row is byte-preserved. A power loss can discard up to 10 s of metadata.
 
 **Failure and concurrency** — boot-critical failures exit `4` and skip finalization. One instance runs at a time, with dead-PID lock reclaim; live or ambiguous PIDs fail closed.
 
-**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks live state: cmdline, parameter acceptance in the boot ring, module parameters, sysctl, unit states, fstab as written and as mounted, session environment. `--check` reports drift without writing.
+**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks live kernel-cmdline, module, sysctl, unit, fstab, and session state. `--check` reports drift without writing.
 
 `--verify` also reports state the script cannot own: orphaned admin-scope masks, unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in.
 
@@ -236,7 +236,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 ## Packages
 
-**Install** (`PKGS_ADD`, 16) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `nftables`, `pacman-contrib`.
+**Install** (`PKGS_ADD`, 17) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `cachyos-benchmarker`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `nftables`, `pacman-contrib`.
 
 **Remove** (`PKGS_DEL`, 9) — `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect`.
 
@@ -289,7 +289,7 @@ A one-time `<path>.ry.orig` may exist for non-boot files; restore it instead of 
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
-3. **Revert boot files and fstab** — restore `.ry.bak` over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the `.ry.bak` files.
+3. **Revert boot files and fstab** — restore the matching `~/ry-install/backups/*.ry.bak` copy over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the backups; older deployments keep the copies beside each file instead.
 4. **Reverse packages** — optional: `sudo pacman -S --needed` the Remove list, `sudo pacman -Rns` the Install list; both listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.
 

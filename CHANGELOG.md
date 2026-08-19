@@ -3,6 +3,23 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.174.0
+-------
+
+  - backup: .ry.bak copies move to ~/ry-install/backups with slash-encoded
+    names via _ry_bak_path; .ry.orig stays beside its file
+  - backup: verify audits the new directory and reports legacy sibling
+    .ry.bak files as INFO; nothing is auto-removed
+  - style: join 40 adjacent two-statement lines; file 4,977 -> 4,945
+
+
+7.173.0
+-------
+
+  - packages: add cachyos-benchmarker to PKGS_ADD; [cachyos] benchmark suite
+  - counts: PKGS_ADD 16 -> 17
+
+
 7.172.0
 -------
 
@@ -32,13 +49,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - install-file: an unmatched post-hook now WARNs, not log-only
 
 
-7.168.0
--------
-
-  - install-file: /boot post-hook keys on the exact path, not /boot/*
-
-
-7.139.0 - 7.167.0
+7.139.0 - 7.168.0
 -----------------
 
   - boot: COMPRESSION_OPTIONS -1 -> -3 and drop the redundant -T0
@@ -62,6 +73,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - verify: report .ry.bak/.ry.orig copies, fail on an empty one
   - verify: live ext4 mount options for fstab-listed rows, paths decoded
   - check: record unmanaged 60-ry-* drop-ins before the sudo gate
+  - install-file: /boot post-hook keys on the exact path, not /boot/*
   - preflight: the nftables ipv6.disable=1 coupling gate warns, not refuses
   - preflight: optional probe drops free/uptime/swapon/zramctl, adds readlink
   - preflight: sync the _ir_validate_counts tripwire; stale count refused rc 3

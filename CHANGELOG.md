@@ -45,14 +45,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     the glob /boot/*, so a new /boot file cannot misroute to loader
 
 
-7.167.0
--------
-
-  - verify: match live ext4 mounts to fstab entries by decoded path, so
-    an escaped space in a mount point no longer skips the check
-
-
-7.139.0 - 7.166.0
+7.139.0 - 7.167.0
 -----------------
 
   - boot: drop the redundant -T0 from MKINITCPIO_COMPRESSION_OPTIONS
@@ -80,16 +73,13 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - verify: log the root filesystem type and the ext4 fstab entry count
   - verify: assert autoconnect-retries-default=0 in the NM drop-in
   - verify: fail when a kernel parser complaint names a managed token
-  - verify: compare /etc/kernel/cmdline under the UUID in the file when
-    findmnt cannot resolve the root UUID
+  - verify: compare cmdline under the file's own UUID when findmnt fails
   - verify: report .ry.bak and .ry.orig copies, failing on an empty one
-  - verify: check live ext4 mount options, not only the fstab rows
-  - verify: check live ext4 mount options only for filesystems listed
-    in fstab, not every mounted ext4
+  - verify: check live ext4 mount options for fstab-listed filesystems only
+  - verify: decode path escapes matching live ext4 mounts to fstab entries
   - check: record unmanaged 60-ry-* drop-ins before the sudo gate
   - preflight: the nftables ipv6.disable=1 coupling gate warns, not refuses
-  - preflight: optional tool probe drops free, uptime, swapon and zramctl,
-    and adds readlink
+  - preflight: optional probe drops free/uptime/swapon/zramctl, adds readlink
   - preflight: sync the _ir_validate_counts tripwire to KERNEL_PARAMS 15;
     left at 14 it refused every run at rc 3
   - logging: millisecond JSONL timestamps; CHECK_GREP records use key=value

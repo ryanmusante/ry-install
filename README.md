@@ -1,19 +1,21 @@
 # ry-install
 
-**Version 7.175.0** · [Changelog](CHANGELOG.md)
+**Version 7.177.0** · [Changelog](CHANGELOG.md)
 
-Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). One fish script covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
+Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). Two fish scripts — `ry-install.fish` (unattended install + `--install-file`) and `ry-verify.fish` (`--verify` + `--check`) — covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
 ## Quick Start
 
 > [!WARNING]
-> Run as your normal user — never run the script itself with `sudo`. Meet [Requirements](#requirements) first. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `--verify`.
+> Run as your normal user — never run the scripts themselves with `sudo`. Meet [Requirements](#requirements) first. The unattended run **removes packages** ([Packages](#packages)). Reboot, then `./ry-verify.fish`.
 
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
 sudo -v
 ./ry-install.fish
+# after the reboot:
+./ry-verify.fish
 ```
 
 A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` on exit `0`, otherwise `PREFLIGHT`, `FAIL`, or `FAIL-BOOT-CRITICAL` — see [Exit Codes](#exit-codes).
@@ -34,9 +36,9 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits `4` — **do not reboot** until it succeeds.
 
-`--verify`, `--check`, and `--install-file <path>` are mutually exclusive. The bare invocation is the unattended install, all 6 phases; `--install-file` re-deploys one managed file. Positional arguments exit `2`. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
+The modes are split across the pair: `ry-install.fish` — the bare invocation is the unattended install, all 6 phases, and `--install-file <path>` re-deploys one managed file; `ry-verify.fish` — the bare invocation equals `--verify`, and `--check` is the silent idempotency probe (`--verify` and `--check` are mutually exclusive). A mode flag given to the wrong script is an unknown option, exit `2`. Positional arguments exit `2`. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
 
-Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `--check` reports drift until reboot.
+Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`. A fresh install's `./ry-verify.fish --check` reports drift until reboot.
 
 Per-phase verdicts:
 
@@ -49,12 +51,14 @@ Per-phase verdicts:
 
 ## Exit Codes
 
+`ry-install.fish` exits `0 1 2 3 4 5`; `ry-verify.fish` exits `0 1 2 3 10`.
+
 | Code | Meaning |
 |---|---|
 | `0` | OK — success, `WARN`-only runs, and a clean `--check` |
 | `1` | a `--verify` mismatch or a failed install step |
 | `2` | bad arguments, a non-absolute or unmanaged `--install-file`, root misuse |
-| `3` | missing dependency, uncached sudo, gate mismatch; root `--check` is silent |
+| `3` | missing dependency, uncached sudo, gate mismatch; root `--check` (`ry-verify.fish`) is silent |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed; **do not reboot**, resolve first |
 | `5` | another instance holds the lock; ambiguous pidfiles fail closed |
 | `10` | drift — `--check` found drift from the managed baseline |
@@ -122,7 +126,7 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 
 **Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c`), backed up, moved with `mv -T`, then re-read; a mismatch restores the backup.
 
-**Backups** — `.ry.bak` copies for the 4 boot files and the fstab rewrite land in `~/ry-install/backups/` under slash-encoded names (`/etc/fstab` → `_etc_fstab.ry.bak`); any other managed file whose content differed at first adoption gets a one-time `<path>.ry.orig` beside it. `--verify` counts both and fails on an empty one.
+**Backups** — `.ry.bak` copies for the 4 boot files and the fstab rewrite land in `~/ry-install/backups/` under slash-encoded names (`/etc/fstab` → `_etc_fstab.ry.bak`). `--verify` counts them and fails on an empty one.
 
 **fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing redundant `defaults`, `*atime` tokens, and any existing `commit=`; every other row is byte-preserved. A power loss can discard up to 10 s of metadata.
 
@@ -284,8 +288,6 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 ## Uninstall
 
 There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference; the steps are ordered.
-
-A one-time `<path>.ry.orig` may exist for non-boot files; restore it instead of deleting.
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.

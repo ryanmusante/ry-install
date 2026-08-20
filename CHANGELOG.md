@@ -3,6 +3,24 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.177.0
+-------
+
+  - split: verify and check move to ry-verify.fish; ry-install.fish keeps
+    install and install-file
+  - split: 102 shared functions duplicated verbatim; parity cert enforces
+    byte-identical bodies with 2 declared per-script variants
+  - counts: 2 scripts; version sync sites 4 -> 6; zip entries 5 -> 6
+
+
+7.176.0
+-------
+
+  - backup: drop the .ry.orig first-adoption preserve; .ry.bak is the only
+    recovery copy class
+  - backup: verify reports stray .ry.orig files as INFO; nothing auto-removed
+
+
 7.175.0
 -------
 

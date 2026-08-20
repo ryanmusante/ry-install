@@ -3,6 +3,12 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.175.0
+-------
+
+  - help: print the backups path beside the log path
+
+
 7.174.0
 -------
 

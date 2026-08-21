@@ -3,12 +3,21 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.177.2
+-------
+
+  - help: both scripts described themselves as a single script; each now
+    names its counterpart
+  - help: drop RY_RUN_TIMEOUT from ry-verify; the timeout wrapper it tunes
+    ships only in ry-install
+  - verify: sudo-lapse remedy in the config-access gate said re-run
+    ry-install; corrected to ry-verify
+
+
 7.177.1
 -------
 
   - verify: source guard message named ry-install; corrected to ry-verify
-  - readme: Embedded Values now states tunables live in both scripts and
-    must be edited in lockstep
 
 
 7.177.0

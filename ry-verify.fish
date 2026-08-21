@@ -1,13 +1,13 @@
 #!/usr/bin/env fish
-# ry-verify v7.177.1 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-verify v7.177.2 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-verify: must be executed as a file, not sourced or piped (use ./ry-verify.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.177.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.177.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
-set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
+set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
@@ -19,7 +19,7 @@ function _ry_show_help --description "Display usage information and available su
         "" \
         "ry-verify v$VERSION" \
         "Self-contained CachyOS configuration for $PROFILE_DESC" \
-        "Single fish script, $_RY_MANAGED_FILE_COUNT embedded configs, no bundled dependencies." \
+        "Paired with ry-install.fish; $_RY_MANAGED_FILE_COUNT embedded configs, no bundled dependencies." \
         "Usage: "(status filename)" [OPTIONS]" \
         "  (no args)              Same as --verify" \
         "  --verify               Check config files + live system state" \
@@ -31,7 +31,6 @@ function _ry_show_help --description "Display usage information and available su
         "EXIT CODES: 0 ok · 1 verify-FAIL · 2 usage · 3 preflight · 10 --check drift" \
         "  (sentinels 11-14/250/251/255 are internal; signals exit 128+N)" \
         "ENVIRONMENT (see README.md for detail):" \
-        "  RY_RUN_TIMEOUT=<sec>  Per-command wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT""s; 0 disables; pkg/boot ops floor $_RY_LONGOP_HARD_CAP""s." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
         "  NO_COLOR              Disable colored output when set non-empty (no-color.org)." \
         "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl" \
@@ -1153,7 +1152,7 @@ function _cg_access_ok --argument-names file label use_sudo --description "Pre-f
         return 1
     end
     if not command -q sudo; _fail "  $label: sudo required to read $file"; return 1; end
-    if not sudo -n true 2>/dev/null; _warn "  $label: sudo cache lapsed — re-run ry-install"; return 1; end
+    if not sudo -n true 2>/dev/null; _warn "  $label: sudo cache lapsed — re-run ry-verify"; return 1; end
     if not sudo -n test -f "$file" 2>/dev/null; _fail "  $label: FILE NOT FOUND"; return 1; end
     return 0
 end

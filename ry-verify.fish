@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-verify v7.177.2 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-verify v7.178.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-verify: must be executed as a file, not sourced or piped (use ./ry-verify.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.177.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.178.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -39,14 +39,10 @@ function _ry_show_help --description "Display usage information and available su
 end
 
 # ── EARLY ARG INTERCEPT: -h/-v BEFORE ROOT GUARD ──
-set -l _skip_if_val false
 for _early_arg in $argv
-    if test "$_skip_if_val" = true; set _skip_if_val false; continue; end # --install-file value: defer to argparse
     switch "$_early_arg"
         case --
             break
-        case --install-file
-            set _skip_if_val true
         case -h --help
             _ry_show_help
             exit $EXIT_OK
@@ -64,7 +60,6 @@ for _early_arg in $argv
 end
 set -q _early_arg; and set --erase _early_arg
 set -q _early_ch; and set --erase _early_ch
-set --erase _skip_if_val
 
 # ── PATH HARDENING (before first external command: id -u) ──
 set -l _ry_path_new
@@ -102,16 +97,13 @@ function _ry_root_usage --description "Root-guard usage error: print msg + help 
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
 set -g QUIET true; set -g MODE bootstrap # pinned pre-argparse for signal footers
 if not string match -qr '^\d+$' -- "$_MY_UID"; echo "[ERR] id -u returned non-numeric value: '$_MY_UID' — cannot determine user identity" >&2; _ry_exit $EXIT_PREFLIGHT; end
-set -l _ry_root_silent_check false; set -l _rsc_skip false; set -l _rsc_other_mode false; set -l _rsc_after_dd false # --check silent contract holds on root-refusal path
+set -l _ry_root_silent_check false; set -l _rsc_other_mode false; set -l _rsc_after_dd false # --check silent contract holds on root-refusal path
 for _rsc_a in $argv
-    if test "$_rsc_skip" = true; set _rsc_skip false; continue; end # a literal --check path is not the flag
     if test "$_rsc_after_dd" = true; set _rsc_other_mode true; break; end # positional after --: exit-2 parity
     switch "$_rsc_a"
         case --
             set _rsc_after_dd true
-        case --install-file
-            set _rsc_skip true; set _rsc_other_mode true
-        case '--install-file=*' --verify
+        case --verify
             set _rsc_other_mode true
         case --check
             set _ry_root_silent_check true
@@ -120,7 +112,7 @@ for _rsc_a in $argv
     end
 end
 set -q _rsc_a; and set --erase _rsc_a
-set --erase _rsc_skip _rsc_after_dd
+set --erase _rsc_after_dd
 set -g _RY_ARGV_CHECK_ONLY false # pre-argparse hint: --check silence must hold before MODE is set
 test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; and set -g _RY_ARGV_CHECK_ONLY true
 if test "$_MY_UID" -eq 0
@@ -130,13 +122,12 @@ if test "$_MY_UID" -eq 0
     for _rg_l in $_rg_msgout
         if string match -q '@@RC@@*' -- "$_rg_l"; set _rg_prc (string replace '@@RC@@' '' -- "$_rg_l"); else if test -z "$_rg_msg"; set _rg_msg (string replace -ra '\e\[[0-9;]*[a-zA-Z]' '' -- "$_rg_l" | string trim --); end
     end
-    set -l _rg_state (begin; argparse --name=ry-install $_RY_ARGPARSE_SPEC -- $argv 2>/dev/null; for _rg_p in $argv; echo "@@LEFT@@$_rg_p"; end; set -q _flag_install_file; and echo "@@IF@@$_flag_install_file"; end) # one @@LEFT@@ per leftover; display-only
-    set -l _rg_left; set -l _rg_if_present false; set -l _rg_if_val ""
+    set -l _rg_state (begin; argparse --name=ry-install $_RY_ARGPARSE_SPEC -- $argv 2>/dev/null; for _rg_p in $argv; echo "@@LEFT@@$_rg_p"; end; end) # one @@LEFT@@ per leftover; display-only
+    set -l _rg_left
     for _rg_l in $_rg_state
-        if string match -q '@@LEFT@@*' -- "$_rg_l"; set -a _rg_left "$_rg_l"; else if string match -q '@@IF@@*' -- "$_rg_l"; set _rg_if_present true; set _rg_if_val (string replace '@@IF@@' '' -- "$_rg_l"); end # LEFT before IF; prefix stripped later
+        string match -q '@@LEFT@@*' -- "$_rg_l"; and set -a _rg_left "$_rg_l"
     end
     if test "$_rg_prc" -ne 0; test -n "$_rg_msg"; or set _rg_msg "Invalid arguments: $argv"; _ry_root_usage "$_rg_msg"; end
-    if test "$_rg_if_present" = true; and test -z "$_rg_if_val"; _ry_root_usage "--install-file requires a non-empty absolute path"; end
     if test (count $_rg_left) -gt 0; set -l _rg_disp (string replace -r -- '^@@LEFT@@' '' $_rg_left); _ry_root_usage "Unexpected positional argument(s): $_rg_disp"; end
     set -q _rg_l; and set --erase _rg_l
     set -q _rg_p; and set --erase _rg_p
@@ -158,8 +149,6 @@ set --erase fish_ver parts _fish_minor _fish_ok
 # ── TMP ROOT (PINNED /tmp) + COREUTILS PROBES ──
 set -q TMPDIR; and set --erase TMPDIR # pin tmp to /tmp; children must not honor inherited TMPDIR
 if not test -w /tmp; echo "[ERR] tmp dir not writable: /tmp" >&2; _ry_exit $EXIT_PREFLIGHT; end
-if not command -q timeout; echo "[ERR] GNU coreutils timeout(1) required (used for hang-protection)" >&2; _ry_exit $EXIT_PREFLIGHT; end
-if not command timeout --foreground --kill-after=1 1 true 2>/dev/null; echo "[ERR] timeout(1) lacks --foreground/--kill-after (need GNU coreutils ≥ 8.x; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command -q find; echo "[ERR] GNU findutils find(1) required (tmpfile sweeps + boot-entry enumeration)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command find /dev/null -maxdepth 0 -printf '' 2>/dev/null; echo "[ERR] find(1) lacks -maxdepth/-printf (need GNU findutils; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -l _ry_mv_a (command mktemp 2>/dev/null); set -l _ry_mv_b (command mktemp 2>/dev/null)
@@ -270,8 +259,6 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
 end
 set -g _CLEANUP_DONE false
 
-# ── INSTANCE LOCK: ATOMIC MKDIR + STALE-PID RECLAIM ──
-# mkdir+pidfile lock; live/ambiguous PID fails closed
 
 # ── CLEANUP ORCHESTRATION: REVERT → TMPFILES → CHILDREN → GLOBALS ──
 function _dc_mki_revert --description "_do_cleanup sub: Signal-time mkinitcpio.conf revert"
@@ -1263,7 +1250,7 @@ function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS 
     test "$errors" -eq 0
 end
 
-# ── ATOMIC FILE INSTALL: RENDER → SYMLINK CHECK → CHMOD → MV -T ──
+# ── MANAGED FILE PROBES: CONF ARRAY + CONTENT BYTES + MODE DRIFT ──
 function _ry_mkinitcpio_array --argument-names key file --description "Last KEY=... assignment from a conf file; multi-line KEY=( ... ) joined"
     test -z "$file"; and set file /etc/mkinitcpio.conf
     set -l _awk 'BEGIN{n=0}
@@ -2576,7 +2563,7 @@ function _dir_group_or_world_writable --argument-names mode --description "True 
 end
 function _has_user_bus_active --description "True iff user systemd manager is reachable"; set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"; and return 0; set -l _user_state (command systemctl --user is-system-running 2>/dev/null | string trim --); test -n "$_user_state"; and test "$_user_state" != offline; and return 0; return 1; end
 
-# ── INSTALL PHASE 4: MASK + FIREWALL HANDOFF (NFTABLES LIVE BEFORE UFW FLUSH) ──
+# ── FIREWALL PROBE: LIVE NFTABLES INPUT POLICY ──
 function _nft_input_drop_live --description "True when live inet/filter/input chain has policy drop"; command -q nft; or return 1; sudo -n true 2>/dev/null; or return 1; set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect); string match -q -- '*policy drop*' "$_in_chain"; end
 
 # ── BOOT PATH RESOLUTION (ESP + $BOOT via bootctl / findmnt) ──
@@ -2624,7 +2611,7 @@ function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, 
     printf '%s' "$_p"
 end
 
-# ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR ──
+# ── POST-HOOK TABLE VALIDATOR: MIRROR + HANDLER PRESENCE ──
 set -g _RY_POST_HOOKS \
     "/boot/loader/loader.conf|loader" "/etc/kernel/cmdline|cmdline" "/etc/sdboot-manage.conf|boot" "/etc/mkinitcpio.conf|boot" \
     "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/NetworkManager-dispatcher.service.d/*|nmdispatch" "*/NetworkManager/conf.d/*|nm" \
@@ -2649,7 +2636,7 @@ function _ir_validate_post_hooks --description "Refuse deploy when a _RY_POST_HO
     end
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS ──
+# ── POST-HOOKS: BOOT CASCADE HANDLERS ──
 function _post_boot_apply --argument-names target skip_mki --description "Shared post-hook body: taint gate + cascade + entry verify + sanity"
     _echo
     _check_boot_taint_gate

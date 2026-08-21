@@ -3,6 +3,31 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.178.0
+-------
+
+  - install: drop the --check argv peek; ry-install has no --check mode,
+    so the flag and its two guards could never fire
+  - install: --verify leaves the root-argv classifier; the catch-all arm
+    already gives it the same classification
+  - verify: drop the timeout(1) preflight gates; the command runner they
+    protect ships only in ry-install
+  - style: two ry-install comments named flags that script does not accept
+
+
+7.177.3
+-------
+
+  - verify: -h and -v were swallowed after --install-file, an option
+    ry-verify does not accept; the early intercept no longer skips it
+  - verify: drop the unreachable --install-file arms from the root-argv
+    classifier and its argparse peek
+  - install: post-run hint pointed at ry-install.fish --verify; corrected
+    to ry-verify.fish
+  - style: retitle 4 ry-verify banners that named install-only surfaces;
+    drop the empty instance-lock banner left by the split
+
+
 7.177.2
 -------
 

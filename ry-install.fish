@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.177.2 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.178.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.177.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.178.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -101,16 +101,16 @@ function _ry_root_usage --description "Root-guard usage error: print msg + help 
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
 set -g QUIET true; set -g MODE bootstrap # pinned pre-argparse for signal footers
 if not string match -qr '^\d+$' -- "$_MY_UID"; echo "[ERR] id -u returned non-numeric value: '$_MY_UID' — cannot determine user identity" >&2; _ry_exit $EXIT_PREFLIGHT; end
-set -l _ry_root_silent_check false; set -l _rsc_skip false; set -l _rsc_other_mode false; set -l _rsc_after_dd false # root-refusal argv classification (--check contract: ry-verify)
+set -l _rsc_skip false; set -l _rsc_other_mode false; set -l _rsc_after_dd false # root-refusal argv classification (--check: ry-verify)
 for _rsc_a in $argv
-    if test "$_rsc_skip" = true; set _rsc_skip false; continue; end # a literal --check path is not the flag
+    if test "$_rsc_skip" = true; set _rsc_skip false; continue; end # an --install-file value is never a flag
     if test "$_rsc_after_dd" = true; set _rsc_other_mode true; break; end # positional after --: exit-2 parity
     switch "$_rsc_a"
         case --
             set _rsc_after_dd true
         case --install-file
             set _rsc_skip true; set _rsc_other_mode true
-        case '--install-file=*' --verify
+        case '--install-file=*'
             set _rsc_other_mode true
         case '*'
             set _rsc_other_mode true # unknown flag/positional: non-root exits 2 — keep parity
@@ -118,10 +118,7 @@ for _rsc_a in $argv
 end
 set -q _rsc_a; and set --erase _rsc_a
 set --erase _rsc_skip _rsc_after_dd
-set -g _RY_ARGV_CHECK_ONLY false # pre-argparse hint: --check silence must hold before MODE is set
-test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; and set -g _RY_ARGV_CHECK_ONLY true
 if test "$_MY_UID" -eq 0
-    if test "$_ry_root_silent_check" = true; and test "$_rsc_other_mode" = false; _ry_exit $EXIT_PREFLIGHT; end # --check + valid mode: silent, 3 = cannot probe
     set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) $_RY_ARGPARSE_SPEC -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity argparse in subshell; parent argv intact
     set -l _rg_prc 0; set -l _rg_msg ""
     for _rg_l in $_rg_msgout
@@ -140,7 +137,7 @@ if test "$_MY_UID" -eq 0
     echo "[ERR] "(command basename -- (status filename))" must not run as root. Run as your normal user; sudo is invoked internally." >&2
     _ry_exit $EXIT_USAGE
 end
-set --erase _ry_root_silent_check _rsc_other_mode
+set --erase _rsc_other_mode
 set -g _RY_NO_COLOR false
 test "$TERM" = dumb; and set -g _RY_NO_COLOR true
 set -q NO_COLOR; and test -n "$NO_COLOR"; and set -g _RY_NO_COLOR true # no-color.org: non-empty value disables color
@@ -1837,7 +1834,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     _ok "→ $dst$_tag"
     return 0
 end
-function _ry_mkdir_0755 --argument-names use_sudo dir --description "Create dirs via mkdir -p with umask capped at 0022 (own --verify rejects group-writable dirs)"
+function _ry_mkdir_0755 --argument-names use_sudo dir --description "Create dirs via mkdir -p with umask capped at 0022 (ry-verify rejects group-writable dirs)"
     set -l _pmk 022; set -q umask; and set _pmk $umask; set -g umask 0022
     if test "$use_sudo" = true
         _run sudo -n mkdir -p -m 0755 -- "$dir"
@@ -3018,7 +3015,7 @@ function _rdi_summary --description "_ry_do_install sub: Print final install sum
             _info "       sudo usermod -aG i2c $_post_uname  (then log out and back in)"
         end
     end
-    _info "Post-reboot verification: ./ry-install.fish --verify"
+    _info "Post-reboot verification: ./ry-verify.fish"
     if test "$INSTALL_HAD_ERRORS" = true
         _warn "Done (with errors - see above)"
     else
@@ -3380,7 +3377,6 @@ if set -q _flag_install_file
         set -g INSTALL_FILE_TARGET "$_if_val"
     end
 end
-set --erase _RY_ARGV_CHECK_ONLY # MODE is authoritative past this point
 if test (count $argv) -gt 0; echo "[ERR] Unexpected positional argument(s): $argv" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
 test "$MODE" != install; and set -g QUIET false
 

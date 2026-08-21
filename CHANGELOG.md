@@ -3,6 +3,14 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.177.1
+-------
+
+  - verify: source guard message named ry-install; corrected to ry-verify
+  - readme: Embedded Values now states tunables live in both scripts and
+    must be edited in lockstep
+
+
 7.177.0
 -------
 

@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.177.0** · [Changelog](CHANGELOG.md)
+**Version 7.177.1** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). Two fish scripts — `ry-install.fish` (unattended install + `--install-file`) and `ry-verify.fish` (`--verify` + `--check`) — covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -134,11 +134,11 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 
 **Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks live kernel-cmdline, module, sysctl, unit, fstab, and session state. `--check` reports drift without writing.
 
-`--verify` also reports state the script cannot own: orphaned admin-scope masks, unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in.
+`--verify` also reports state the scripts cannot own: orphaned admin-scope masks, unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in.
 
 ## Embedded Values
 
-All tunables are `set -g` globals in `ry-install.fish` — there is no external config file. Edit one, then re-run or `--install-file` the affected file.
+All tunables are `set -g` globals carried verbatim in both scripts — there is no external config file. Edit both copies in lockstep, then re-run or `--install-file` the affected file; a one-sided edit leaves `ry-verify.fish` checking stale values.
 
 ### Bootloader Keys
 

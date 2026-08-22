@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.182.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.182.2 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.182.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.182.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1829,7 +1829,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     return $_aw_rc
 end
 
-# ── MISC HELPERS: PERM CHECK, WIFI ROUTE, USER-BUS, SUDO BANNER ──
+# ── MISC HELPERS: WIFI ROUTE, USER-BUS, SUDO BANNER ──
 function _is_wifi_active_route --description "True if default route exits via wireless interface"
     command -q ip; or return 1
     set -l _def_iface ""
@@ -2169,7 +2169,7 @@ function _far_awk_rewrite --argument-names tmpfstab --description "_fstab_atomic
     end
     _rm_tmp "$_awk_err" false
     _rm_tmp "$_tee_err" false
-    set -l _src_lines (sudo -n awk 'END{print NR}' /etc/fstab 2>/dev/null); set -l _tmp_lines (sudo -n awk 'END{print NR}' -- "$tmpfstab" 2>/dev/null) # awk is 1-in-1-out: counts must match
+    set -l _src_lines (sudo -n awk 'END{print NR}' /etc/fstab 2>/dev/null); set -l _tmp_lines (sudo -n awk 'END{print NR}' "$tmpfstab" 2>/dev/null) # awk is 1-in-1-out: counts must match
     if string match -qr '^[0-9]+$' -- "$_src_lines"; and string match -qr '^[0-9]+$' -- "$_tmp_lines"
         if test "$_src_lines" -ne "$_tmp_lines"
             _fail "  /etc/fstab: rewrite changed line count ($_src_lines → $_tmp_lines) — refusing to install (awk is 1-in-1-out)"

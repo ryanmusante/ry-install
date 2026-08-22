@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-verify v7.182.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-verify v7.182.2 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-verify: must be executed as a file, not sourced or piped (use ./ry-verify.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.182.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_DRIFT 10
+set -g VERSION "7.182.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250 # internal sentinel, never a process exit
 set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
@@ -186,7 +186,7 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"
 # ── GLOBAL STATE: TRACKED RESOURCES + AWK FILTERS ──
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS $_RY_BOOT_CRITICAL_DSTS; set -g _RY_BACKUP_SUFFIX .ry.bak
-set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped: never touch a peer run's files
+set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-argparse-err.$fish_pid.*" # PID-scoped: never touch a peer run's files
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS
 set -g _RY_PROFILE_USES_WIFI_BACKEND false
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
@@ -334,7 +334,7 @@ end
 
 # ── VERIFY COUNTERS + TEARDOWN + SIGNAL/EXIT HANDLERS ──
 set -g VERIFY_OK 0; set -g VERIFY_FAIL 0; set -g VERIFY_WARN 0; set -g VERIFY_GEN_FAIL 0
-function _teardown --argument-names mode --description "Unified cleanup: progress teardown, footer, resources"
+function _teardown --argument-names mode --description "Unified cleanup: footer, resources"
     set -l _signum 0 # validate argv[2] numeric before footer
     test (count $argv) -ge 2; and string match -qr '^\d+$' -- "$argv[2]"; and set _signum $argv[2]
     switch "$mode"
@@ -418,7 +418,7 @@ set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT
 set -g GPU_DPM_LEVEL high # gfx1151 dpm; high pins clocks, gating stays active
 set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set
 set -g EPP_PREFERENCE performance; set -g _RY_EPP_LEVELS default performance balance_performance balance_power power # accepted set; udev-pinned per CPU; blocked if dynamic_epp on
-set -g EXPECTED_SCALING_DRIVER amd-pstate-epp # verify-only: scaling_driver under amd_pstate=active
+set -g EXPECTED_SCALING_DRIVER amd-pstate-epp # scaling_driver under amd_pstate=active
 set -g BLACKLIST_AMDXDNA false # false + iommu=pt enables the NPU
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
@@ -494,7 +494,7 @@ function _ir_validate_counts --description "Refuse to run when array counts drif
         _RY_ARGPARSE_SPEC:5 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_BACKUP_TARGETS:4 \
-        _RY_TMPDIR_GLOBS:6 \
+        _RY_TMPDIR_GLOBS:2 \
         SYSTEM_DESTINATIONS:15 \
         USER_DESTINATIONS:2 \
         MKINITCPIO_COMPRESSION_OPTIONS:1 # drift tripwires; sync arrays + docs on change
@@ -833,7 +833,7 @@ function _mktemp_or_null --description "Wrapper for mktemp; emits path on stdout
 end
 function _tmp_dir --description "Tmp root (pinned /tmp)"; printf '%s' /tmp; end
 
-# ── FILESYSTEM PROBES (symlink, system-dst, byte read) ──
+# ── FILESYSTEM PROBES (system-dst, byte read) ──
 function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"; string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"; end
 function _installed_bytes --argument-names dst --description "Raw bytes of installed file" # callers read $pipestatus[1] only
     set -l _bytes
@@ -1091,7 +1091,7 @@ function _chk_token_in --argument-names line token label --description "Verify a
     end
 end
 
-# ── MKINITCPIO HOOK + MODULE VALIDATORS (ordering invariants) ──
+# ── MKINITCPIO HOOK VALIDATORS (ordering invariants) ──
 function _mkinitcpio_hook_exists --argument-names hook --description "True iff hook file exists in any mkinitcpio install/hooks dir"
     test -z "$hook"; and return 1
     for _d in /usr/lib/initcpio/install /usr/lib/initcpio/hooks /etc/initcpio/install /etc/initcpio/hooks; test -f "$_d/$hook"; and return 0; end
@@ -2466,7 +2466,7 @@ function _ry_verify_all --description "Verify both: static configs + runtime sta
     return $_rc_s
 end
 
-# ── MISC HELPERS: PERM CHECK, WIFI ROUTE, USER-BUS, SUDO BANNER ──
+# ── MISC HELPERS: PERM CHECK, USER-BUS ──
 function _dir_group_or_world_writable --argument-names mode --description "True when octal mode has group or world write bit"
     not string match -qr '^[0-7]+$' -- "$mode"; and return 0 # unparseable mode -> writable (fail-closed)
     test (string length -- "$mode") -gt 3; and set mode (string sub -s -3 -- "$mode") # drop special-bits digit

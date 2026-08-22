@@ -3,6 +3,20 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.182.2
+-------
+
+  - cleanup: ry-verify swept four tmpfile globs only ry-install creates
+  - counts: ry-verify count tripwire _RY_TMPDIR_GLOBS 6 -> 2
+
+
+7.182.1
+-------
+
+  - fstab: the line-count parity probe passed awk a -- separator awk
+    reads as a filename, so the probe never ran
+
+
 7.182.0
 -------
 
@@ -20,8 +34,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     named a function that ships in ry-install
   - counts: exit constants split per script; ry-verify count tripwires
     21 -> 19
-  - readme: name ry-install.fish as the tool gate; ry-verify guards at the
-    call site
 
 
 7.181.0

@@ -124,13 +124,13 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 
 ## Safety and Reliability
 
-**Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c`), backed up, moved with `mv -T`, then re-read; a mismatch restores the backup.
+**Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c`), then moved with `mv -T`; a post-write mismatch restores the backup.
 
 **Backups** — `.ry.bak` copies for the 4 boot files and the fstab rewrite land in `~/ry-install/backups/` under slash-encoded names (`/etc/fstab` → `_etc_fstab.ry.bak`). `--verify` counts them and fails on an empty one.
 
 **fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing redundant `defaults`, `*atime` tokens, and any existing `commit=`; every other row is byte-preserved. A power loss can discard up to 10 s of metadata.
 
-**Failure and concurrency** — boot-critical failures exit `4` and skip finalization. One instance runs at a time, with dead-PID lock reclaim; live or ambiguous PIDs fail closed.
+**Failure and concurrency** — boot-critical failures exit `4` and skip finalization. One instance runs at a time; a second exits `5`.
 
 **Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks live kernel-cmdline, module, sysctl, unit, fstab, and session state. `--check` reports drift without writing.
 
@@ -187,7 +187,7 @@ All tunables are `set -g` globals carried verbatim in both scripts — there is 
 
 `DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC. The router serves DoT WAN-side only, so a host `DNSOverTLS=yes` would fail closed.
 
-`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and spikes latency otherwise. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; the script refuses `false` alongside `amd_iommu=off`; [Tuning Notes](#tuning-notes) has the reverse switch.
+`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and spikes latency otherwise. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; [Tuning Notes](#tuning-notes) has the reverse switch.
 
 | Key | Value | Emitted as |
 |---|---|---|

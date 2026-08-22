@@ -6,23 +6,20 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.180.0
 -------
 
-  - verify: drop the 17 _post_* handlers; only ry-install dispatches
-    them, and the table validator keeps the destination-mirror check
-  - verify: assert the MangoHud layout directives and the empty
-    mkinitcpio BINARIES/FILES arrays; whole-file drift now localizes
-  - help: drop "Self-contained" from the banner line; each script is
-    half of a pair
-  - style: drop a stray second blank line above a ry-verify banner
+  - verify: drop the 17 _post_* handlers; ry-install dispatches them and
+    the table validator keeps the destination-mirror check
   - verify: prune the install-only arms the split left in the shared
-    root-UUID resolver, and drop install's check-only cleanup branch
-  - verify: mode selection re-set MODE to verify, the value it already
-    held; --check is the only flag that changes it
+    root-UUID resolver; drop install's check-only cleanup branch
+  - verify: mode selection re-set MODE to verify, the value it held;
+    --check is the only flag that moves it
+  - verify: assert the MangoHud layout directives and the empty
+    mkinitcpio BINARIES/FILES arrays
   - verify: refusal text said "refuse to deploy" and pointed the
     hardware override at ry-install.fish
-  - readme: the tools row named coreutils only; findmnt, awk, grep,
-    find and curl are hard preflight dependencies too
-  - changelog: the 7.177.0 zip-entry count named the release shape;
-    say so
+  - help: drop "Self-contained"; each script is half of a pair
+  - readme: the tools row named coreutils only; findmnt, awk, grep, find
+    and curl are hard preflight dependencies too
+  - changelog: the 7.177.0 zip-entry count named the release shape
 
 
 7.179.1
@@ -94,67 +91,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     5 -> 6 (topdir and LICENSE included)
 
 
-7.176.0
--------
-
-  - backup: drop the .ry.orig first-adoption preserve; .ry.bak is the only
-    recovery copy class
-  - backup: verify reports stray .ry.orig files as INFO; nothing auto-removed
-
-
-7.175.0
--------
-
-  - help: print the backups path beside the log path
-
-
-7.174.0
--------
-
-  - backup: .ry.bak copies move to ~/ry-install/backups with slash-encoded
-    names via _ry_bak_path; .ry.orig stays beside its file
-  - backup: verify audits the new directory and reports legacy sibling
-    .ry.bak files as INFO; nothing is auto-removed
-  - style: join 40 adjacent two-statement lines; file 4,977 -> 4,945
-
-
-7.173.0
--------
-
-  - packages: add cachyos-benchmarker to PKGS_ADD; [cachyos] benchmark suite
-  - counts: PKGS_ADD 16 -> 17
-
-
-7.172.0
--------
-
-  - summary: aligned columns replace the box-drawn table; 4 fns collapse to 1
-
-
-7.171.0
--------
-
-  - sysctl: drop vm.swappiness=150; the vendor default 100 governs
-  - install: chmod a managed file whose mode drifted while bytes did not
-  - check: mode-only drift now sets drift, matching verify
-  - counts: SYSCTL_VALUES 9 to 8
-  - style: restore continuations on six one-emitted-line-per-source printfs
-
-
-7.170.0
--------
-
-  - style: join 11 backslash-continued statements, 4,997 -> 4,971 lines
-
-
-7.169.0
--------
-
-  - preflight: _ir_validate_post_hooks refuses a broken 1:1 index mirror
-  - install-file: an unmatched post-hook now WARNs, not log-only
-
-
-7.139.0 - 7.168.0
+7.139.0 - 7.176.0
 -----------------
 
   - boot: COMPRESSION_OPTIONS -1 -> -3 and drop the redundant -T0
@@ -168,7 +105,15 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - env: add GSK_RENDERER=ngl; GTK4 Vulkan aborts on gfx1151
   - configuration: ship cpu_stats commented in the MangoHud generator
   - configuration: ICMPv6 base accept added to nftables and asserted by verify
+  - packages: 7.173.0 adds cachyos-benchmarker; [cachyos] benchmark suite
   - sysctl: drop both net.core.netdev_budget keys; squeezed stayed zero
+  - sysctl: 7.171.0 drops vm.swappiness=150; the vendor default 100 governs
+  - install: chmod a managed file whose mode drifted while bytes did not
+  - install-file: /boot post-hook keys on the exact path, not /boot/*
+  - install-file: an unmatched post-hook WARNs, not log-only
+  - backup: .ry.bak copies move to ~/ry-install/backups, slash-encoded
+  - backup: 7.176.0 drops the .ry.orig preserve; verify reports strays and
+    legacy siblings as INFO, nothing auto-removed
   - verify: sweep every cpufreq policy for driver, governor, EPP
   - verify: each non-fallback loader entry carries every token
   - verify: resolved unit-file state; only admin-scope orphan masks reported
@@ -178,12 +123,18 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - verify: report .ry.bak/.ry.orig copies, fail on an empty one
   - verify: live ext4 mount options for fstab-listed rows, paths decoded
   - check: record unmanaged 60-ry-* drop-ins before the sudo gate
-  - install-file: /boot post-hook keys on the exact path, not /boot/*
+  - check: mode-only drift sets drift, matching verify
   - preflight: the nftables ipv6.disable=1 coupling gate warns, not refuses
   - preflight: optional probe drops free/uptime/swapon/zramctl, adds readlink
   - preflight: sync the _ir_validate_counts tripwire; stale count refused rc 3
+  - preflight: _ir_validate_post_hooks refuses a broken 1:1 index mirror
   - logging: millisecond JSONL timestamps; CHECK_GREP uses key=value
-  - counts: KERNEL_PARAMS 15 -> 14, ENV_VARS 9 -> 10
+  - help: print the backups path beside the log path
+  - summary: aligned columns replace the box-drawn table; 4 fns collapse to 1
+  - style: join continuations and adjacent statement pairs; 4,997 -> 4,945
+  - style: restore continuations on six one-emitted-line-per-source printfs
+  - counts: KERNEL_PARAMS 15 -> 14, ENV_VARS 9 -> 10, SYSCTL_VALUES 9 -> 8,
+    PKGS_ADD 16 -> 17
 
 
 7.137.0 - 7.138.0

@@ -3,6 +3,29 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.184.0
+-------
+
+  - install: drop the six remaining MODE=check guards; the log setup,
+    footer, and _err all tested a mode ry-install cannot enter
+  - install: drop EXPECTED_VULKAN_PKGS and EXPECTED_SCALING_DRIVER;
+    only ry-verify reads them
+  - verify: drop _RY_PKG_MANAGED_SERVICES and its set-contradiction arm;
+    only ry-install acts on the value
+  - counts: ry-install count tripwires 21 -> 20; ry-verify 19 -> 18
+
+
+7.183.0
+-------
+
+  - verify: drop the deploy-tmpfile sweep; ry-verify writes no .ry-install.*
+    tmpfile and the sudo-escalated delete could take a live ry-install one
+  - verify: drop the ry-run directory sweep and the stuck-tmpfile escalation
+    arm; both need install-only state
+  - install: drop the MODE=check guards from the loud err and warn helpers;
+    ry-install has no check mode
+
+
 7.182.2
 -------
 
@@ -36,20 +59,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     21 -> 19
 
 
-7.181.0
--------
-
-  - env: FSR4_WATERMARK=1 is a Proton-EM variable and inert under
-    Proton-CachyOS; PROTON_FSR4_INDICATOR=1 raises the same watermark
-  - verify: drop the signal-time mkinitcpio revert and the progress
-    teardown and resize handlers; all three need install-only state
-  - verify: help listed the _run sentinels 251 and 255, which only
-    ry-install can return
-  - cleanup: erase only globals the script can set; 31 verify-side and 3
-    install-side names never existed there
-
-
-7.139.0 - 7.180.0
+7.139.0 - 7.181.0
 -----------------
 
   - boot: COMPRESSION_OPTIONS -1 -> -3 and drop the redundant -T0
@@ -61,6 +71,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - env: replace PROTON_FSR4_UPGRADE=1 with FSR4_WATERMARK=1
   - env: drop PROTON_ENABLE_WAYLAND=1; per-title opt-in
   - env: add GSK_RENDERER=ngl; GTK4 Vulkan aborts on gfx1151
+  - env: 7.181.0 replaces FSR4_WATERMARK=1, a Proton-EM variable inert
+    under Proton-CachyOS, with PROTON_FSR4_INDICATOR=1
   - configuration: ICMPv6 base accept added to nftables and asserted by
     verify
   - packages: 7.173.0 adds cachyos-benchmarker
@@ -87,6 +99,12 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     BINARIES and FILES arrays
   - verify: 7.177.3 -h and -v were swallowed after --install-file, an
     option ry-verify does not accept
+  - verify: 7.181.0 drops the signal-time mkinitcpio revert and the
+    progress teardown and resize handlers; all need install-only state
+  - verify: 7.181.0 help listed the _run sentinels 251 and 255, which
+    only ry-install can return
+  - cleanup: 7.181.0 erases only globals the script can set; 31
+    verify-side and 3 install-side names never existed there
   - check: record unmanaged 60-ry-* drop-ins before the sudo gate
   - check: mode-only drift sets drift, matching verify
   - preflight: the nftables ipv6.disable=1 coupling gate warns, not refuses

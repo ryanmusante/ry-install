@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.182.2** · [Changelog](CHANGELOG.md)
+**Version 7.184.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). Two fish scripts — `ry-install.fish` (unattended install + `--install-file`) and `ry-verify.fish` (`--verify` + `--check`) — covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -22,7 +22,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 
 ## Requirements
 
-`ry-install.fish` gates the tools below at preflight. `ry-verify.fish` has no preflight gate: it assumes base coreutils and guards the optional tools at their call sites; `curl`, `mkinitcpio`, and `sdboot-manage` are install-only.
+`ry-install.fish` gates the tools below at preflight. `ry-verify.fish` runs no dependency phase — it still refuses to start without GNU `find`, `stat`, `date`, `mktemp`, and `mv -T`, and guards the rest at their call sites; `curl`, `mkinitcpio`, and `sdboot-manage` are install-only.
 
 | Requirement | Detail |
 |---|---|
@@ -132,15 +132,15 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 
 **fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing redundant `defaults`, `*atime` tokens, and any existing `commit=`; every other row is byte-preserved. A power loss can discard up to 10 s of metadata.
 
-**Failure and concurrency** — boot-critical failures exit `4` and skip finalization. One instance runs at a time; a second exits `5`.
+**Failure and concurrency** — boot-critical failures exit `4` and skip finalization. One `ry-install.fish` runs at a time; a second exits `5`. `ry-verify.fish` takes no lock and never writes outside its log tree.
 
-**Verification** — `--verify` compares installed bytes to generator output by SHA256, then checks live kernel-cmdline, module, sysctl, unit, fstab, and session state. `--check` reports drift without writing.
+**Verification** — `--verify` compares installed bytes to generator output byte for byte, logging both SHA256 digests on a mismatch, then checks live kernel-cmdline, module, sysctl, unit, fstab, and session state. `--check` reports drift without writing outside the log tree.
 
 `--verify` also reports state the scripts cannot own: orphaned admin-scope masks, unmanaged `60-ry-*` drop-ins, and any `sdboot-manage.conf.d` drop-in.
 
 ## Embedded Values
 
-All tunables are `set -g` globals carried verbatim in both scripts — there is no external config file. Edit both copies in lockstep, then re-run or `--install-file` the affected file; a one-sided edit leaves `ry-verify.fish` checking stale values.
+All tunables are `set -g` globals carried verbatim in both scripts — there is no external config file, and only `EXPECTED_SCALING_DRIVER` is verify-side alone. Edit both copies in lockstep, then re-run or `--install-file` the affected file; a one-sided edit leaves `ry-verify.fish` checking stale values.
 
 ### Bootloader Keys
 
@@ -207,7 +207,7 @@ All tunables are `set -g` globals carried verbatim in both scripts — there is 
 | `BT_RECONNECT_ATTEMPTS` | `3` | `ReconnectAttempts=` |
 | `GPU_DPM_LEVEL` | `high` | udev `ATTR{device/power_dpm_force_performance_level}` |
 | `EPP_PREFERENCE` | `performance` | udev `ATTR{cpufreq/energy_performance_preference}` |
-| `EXPECTED_SCALING_DRIVER` | `amd-pstate-epp` | nothing — verify-only |
+| `EXPECTED_SCALING_DRIVER` | `amd-pstate-epp` | nothing — `ry-verify.fish` only |
 | `BLACKLIST_AMDXDNA` | `false` | nothing — `true` emits `blacklist amdxdna` |
 
 ### Session Environment

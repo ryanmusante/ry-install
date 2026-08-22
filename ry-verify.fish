@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-verify v7.182.2 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-verify v7.184.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-verify: must be executed as a file, not sourced or piped (use ./ry-verify.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.182.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_DRIFT 10
+set -g VERSION "7.184.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250 # internal sentinel, never a process exit
 set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
@@ -187,7 +187,7 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS $_RY_BOOT_CRITICAL_DSTS; set -g _RY_BACKUP_SUFFIX .ry.bak
 set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-argparse-err.$fish_pid.*" # PID-scoped: never touch a peer run's files
-set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS
+set -g _TRACKED_TMPFILES
 set -g _RY_PROFILE_USES_WIFI_BACKEND false
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
@@ -238,24 +238,10 @@ function _write_footer --argument-names exit_code extra_key --description "Appen
     printf '{"ts":"%s","event":"footer","mode":"%s","exit_code":%d,"pass":%d,"fail":%d,"warn":%d,"gen_fail":%d%s}\n' "$_ts" "$_mode_esc" "$exit_code" "$VERIFY_OK" "$VERIFY_FAIL" "$VERIFY_WARN" "$_gen_fail" "$_extra" >>"$LOG_FILE" 2>/dev/null
     test "$status" -ne 0; and not set -q _RY_LOG_WRITE_FAIL; and set -g _RY_LOG_WRITE_FAIL true
 end
-function _cleanup_tmpfiles --description "Remove temporary files created during this run"
-    not set -q _FOOTER_WRITTEN; and functions -q _log; and _log "CLEANUP_TMPFILES: sweep starting" # signals may precede _log
-    set -l _has_sudo false
-    command -q sudo; and sudo -n true 2>/dev/null; and set _has_sudo true
-    for dir in $_SYS_TMP_DIRS
-        if test "$_has_sudo" = true
-            sudo -n find "$dir" -maxdepth 1 -name '.ry-install.*' -type f -delete 2>/dev/null
-        else
-            command find "$dir" -maxdepth 1 -name '.ry-install.*' -type f -delete 2>/dev/null
-        end
-    end
-    for dir in $_USR_TMP_DIRS; command find "$dir" -maxdepth 1 -name '.ry-install.*' -type f -delete 2>/dev/null; end
-end
 set -g _CLEANUP_DONE false
 
 # ── CLEANUP ORCHESTRATION: TMPFILES → CHILDREN → GLOBALS ──
 function _dc_sweep_tmpfiles --description "_do_cleanup sub: Remove tracked tmpfiles/dirs"
-    _cleanup_tmpfiles
     set -l _stuck_tmpfiles
     for _tf in $_TRACKED_TMPFILES
         if test -d "$_tf"
@@ -264,24 +250,8 @@ function _dc_sweep_tmpfiles --description "_do_cleanup sub: Remove tracked tmpfi
             command rm -f -- "$_tf" 2>/dev/null; or set -a _stuck_tmpfiles "$_tf"
         end
     end
-    set -l _has_sudo false
-    test (count $_stuck_tmpfiles) -gt 0; and command -q sudo; and sudo -n true 2>/dev/null; and set _has_sudo true
-    set -l _esc_roots /run/ry-install # escalation roots = dest parents + /run
-    for _d in $SYSTEM_DESTINATIONS; set -a _esc_roots (command dirname -- "$_d"); end
-    for _tf in $_stuck_tmpfiles
-        if test "$_has_sudo" = true; and contains -- (command dirname -- "$_tf") $_esc_roots
-            if sudo -n test -d "$_tf" 2>/dev/null
-                sudo -n rm -rf --preserve-root -- "$_tf" 2>/dev/null; or begin
-                    functions -q _log; and _log "TMPFILE_STUCK: $_tf (sudo rm -rf failed)"
-                end
-            else if sudo -n test -f "$_tf" 2>/dev/null
-                sudo -n rm -f -- "$_tf" 2>/dev/null; or begin
-                    functions -q _log; and _log "TMPFILE_STUCK: $_tf (sudo rm -f failed)"
-                end
-            end
-        else
-            functions -q _log; and _log "TMPFILE_STUCK: $_tf (no sudo or outside escalation paths)"
-        end
+    for _tf in $_stuck_tmpfiles # tracked paths are user-owned tmp files: nothing to escalate
+        functions -q _log; and _log "TMPFILE_STUCK: $_tf"
     end
     set --erase _TRACKED_TMPFILES
 end
@@ -292,16 +262,12 @@ function _dc_sweep_filesystem --description "_do_cleanup sub: Sweep tmp root for
     set -l _find_name_args
     for _g in $_tmp_globs; test -n "$_find_name_args"; and set -a _find_name_args -o; set -a _find_name_args -name "$_g"; end
     command find "$_tmpdir" -xdev -maxdepth 1 \( $_find_name_args \) -type f -uid "$_MY_UID" -delete 2>/dev/null
-    for _rd in "$_tmpdir"/ry-run.$fish_pid.* # per-dir descent keeps glob metachars literal
-        test -d "$_rd"; and command find "$_rd" -xdev -maxdepth 1 -type f -uid "$_MY_UID" -delete 2>/dev/null
-    end
-    command find "$_tmpdir" -xdev -maxdepth 1 -name "ry-run.$fish_pid.*" -type d -empty -uid "$_MY_UID" -delete 2>/dev/null
 end
 function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _KCONFIG_DATA _KCONFIG_LOADED _RY_ESP_PATH _RY_BOOT_PATH
     set --erase _RY_ESP_TRIED _RY_BOOT_TRIED
     set --erase _CPU_PATH
-    set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
+    set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS
     set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK
     set --erase _RY_SYSCTL_BAD_ENTRIES _RY_ENVD_BAD_ENTRIES
 end
@@ -436,7 +402,6 @@ set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan driv
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) ──
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi+resolved: mDNS off by design; ufw: nft owns the ruleset
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
-set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ──
@@ -459,11 +424,7 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
             _log "ROOT_UUID_UNAVAILABLE: mode=$MODE reason=$_reason — non-fatal for this mode"
     end
 end
-function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend / canonical-dst caches" # canon list index-aligned to source
-    set -g _SYS_TMP_DIRS
-    for _d in $SYSTEM_DESTINATIONS; set -l _dir (command dirname -- "$_d"); contains -- "$_dir" $_SYS_TMP_DIRS; or set -a _SYS_TMP_DIRS "$_dir"; end
-    set -g _USR_TMP_DIRS
-    for _d in $USER_DESTINATIONS; set -l _dir (command dirname -- "$_d"); contains -- "$_dir" $_USR_TMP_DIRS; or set -a _USR_TMP_DIRS "$_dir"; end
+function _ir_precompute_caches --description "Precompute WiFi-backend and canonical-dst caches" # canon list index-aligned to source
     set -g _RY_PROFILE_USES_WIFI_BACKEND false
     for _d in $SYSTEM_DESTINATIONS
         if string match -q '*nm.conf' -- "$_d"; set -g _RY_PROFILE_USES_WIFI_BACKEND true; break; end
@@ -490,7 +451,6 @@ function _ir_validate_counts --description "Refuse to run when array counts drif
         MASK:11 \
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:5 \
-        _RY_PKG_MANAGED_SERVICES:1 \
         _RY_ARGPARSE_SPEC:5 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_BACKUP_TARGETS:4 \
@@ -544,9 +504,6 @@ function _ir_validate_sets --description "Refuse to run when add and remove sets
     end
     for _u in $EXPECTED_SERVICES # phase 4 masks before it enables: enable would fail
         if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and EXPECTED_SERVICES — phase 4 masks before it enables; refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    end
-    for _u in $_RY_PKG_MANAGED_SERVICES
-        if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and _RY_PKG_MANAGED_SERVICES — a masked unit cannot be package-managed; refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 

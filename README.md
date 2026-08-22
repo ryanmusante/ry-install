@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.180.0** · [Changelog](CHANGELOG.md)
+**Version 7.181.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). Two fish scripts — `ry-install.fish` (unattended install + `--install-file`) and `ry-verify.fish` (`--verify` + `--check`) — covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -24,7 +24,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 
 | Requirement | Detail |
 |---|---|
-| OS | CachyOS (Arch-based), systemd 250 or newer, systemd-boot with BLS entries |
+| OS | CachyOS (Arch-based), systemd 250 or newer (gated by `ry-install.fish`), systemd-boot with BLS entries |
 | Shell | fish 3.6 or newer |
 | Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
@@ -213,11 +213,11 @@ All tunables are `set -g` globals carried verbatim in both scripts — there is 
 | Variable | Effect |
 |---|---|
 | `DXVK_LOG_LEVEL=none` | DXVK logging off |
-| `FSR4_WATERMARK=1` | on-screen FSR4-active indicator |
 | `GSK_RENDERER=ngl` | GTK4 GL renderer; the Vulkan renderer aborts on gfx1151 |
 | `MANGOHUD=1` | HUD on for Vulkan titles |
 | `MESA_SHADER_CACHE_MAX_SIZE=16G` | roomy Mesa shader cache |
 | `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
+| `PROTON_FSR4_INDICATOR=1` | on-screen FSR4-active watermark (Proton-CachyOS) |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
 | `VKD3D_DEBUG=none` | vkd3d logging off |
 | `VKD3D_SHADER_DEBUG=none` | vkd3d shader logging off |
@@ -255,7 +255,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 ### Gaming Stack
 
 - `/dev/ntsync` — reported by `--verify`. Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out at the Proton level.
-- `FSR4_WATERMARK=1` — on-screen indicator confirming FSR4 is active.
+- `PROTON_FSR4_INDICATOR=1` — Proton-CachyOS watermark confirming FSR4 is active; it sets `FSR_WATERMARK=1` and `FSR_FG_WATERMARK=1` inside the prefix. Proton-EM uses `FSR4_WATERMARK=1` instead.
 - `cpu_stats` and `cpu_temp` — shipped commented out; add either on its own line. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
 
 ### Kernel Parameter Notes

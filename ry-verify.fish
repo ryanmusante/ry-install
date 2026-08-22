@@ -1,14 +1,12 @@
 #!/usr/bin/env fish
-# ry-verify v7.180.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-verify v7.181.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-verify: must be executed as a file, not sourced or piped (use ./ry-verify.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.180.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.181.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
-set -g EXIT_RUN_TMPFAIL 251 # internal sentinel (fn return only)
-set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
+set -g EXIT_AS_MISUSE 250 # internal sentinel, never a process exit
 set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
-set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check h/help v/version verify check # single option-spec source (root guard + main argparse)
@@ -29,7 +27,7 @@ function _ry_show_help --description "Display usage information and available su
         "  -h, --help             Show this help (honored before all checks)" \
         "  -v, --version          Show version (honored before all checks)" \
         "EXIT CODES: 0 ok · 1 verify-FAIL · 2 usage · 3 preflight · 10 --check drift" \
-        "  (sentinels 11-14/250/251/255 are internal; signals exit 128+N)" \
+        "  (sentinels 11-14/250 are internal; signals exit 128+N)" \
         "ENVIRONMENT (see README.md for detail):" \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
         "  NO_COLOR              Disable colored output when set non-empty (no-color.org)." \
@@ -73,7 +71,7 @@ command -q id; or begin; echo "[ERR] GNU coreutils id(1) required (resolves UID 
 set -g _MY_UID (command id -u)
 
 # ── BAIL PRIMITIVES: _RY_EXIT + _SET_EXIT + HANDLER ERASE ──
-function _ry_erase_handlers --description "Erase signal/exit handler functions"; functions -e _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null; end
+function _ry_erase_handlers --description "Erase signal/exit handler functions"; functions -e _cleanup _cleanup_pipe _cleanup_on_exit 2>/dev/null; end
 function _ry_exit --argument-names code --description "Set bail sentinel and exit"
     test -z "$code"; and set code 0
     string match -qr '^\d+$' -- "$code"; or set code $EXIT_FAIL # non-numeric breaks footer printf %d
@@ -184,7 +182,7 @@ for _ld_path in "$_RY_HOME_DIR" "$_RY_HOME_DIR/logs" "$LOG_DIR" "$_RY_BACKUP_DIR
     if test "$_post" != 700; echo "[ERR] Log dir mode is $_post (expected 700): $_ld_path" >&2; _ry_exit $EXIT_PREFLIGHT; end
 end
 set --erase _ld_path _prev_mkdir_umask
-set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS false
+set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"
 
 # ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──
 set -g _RY_BOOT_TAINTED false
@@ -193,10 +191,8 @@ set -g _RY_BACKUP_TARGETS $_RY_BOOT_CRITICAL_DSTS; set -g _RY_BACKUP_SUFFIX .ry.
 set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped: never touch a peer run's files
 set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
 set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS; set -g _RY_PROFILE_USES_WIFI_BACKEND false
-set -g SYSTEM_UPGRADED false # cross-phase global (set install-side)
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
-set -g NM_RESTART_DELAY 3; set -g _PROG_BAR_WIDTH 40
 
 # ── KERNEL / SYSTEMD STATE PROBES ──
 function _kconfig_cache --description "Load /proc/config.gz into _KCONFIG_DATA (lazy; empty when unavailable)"
@@ -259,27 +255,7 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
 end
 set -g _CLEANUP_DONE false
 
-# ── CLEANUP ORCHESTRATION: REVERT → TMPFILES → CHILDREN → GLOBALS ──
-function _dc_mki_revert --description "_do_cleanup sub: Signal-time mkinitcpio.conf revert"
-    set -q _RY_MKI_HAD_ORIG; and test "$_RY_MKI_HAD_ORIG" = true; or return 0
-    set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; or return 0
-    set -l _rv_rc 1; set -l _rv_tried false
-    if functions -q _mkinitcpio_revert; and command -q sudo; and sudo -n test -f "$_RY_MKI_BACKUP_FILE" 2>/dev/null
-        set _rv_tried true
-        functions -q _log; and _log "MKINITCPIO_REVERT_SIGNAL: cleanup-time revert triggered (backup=$_RY_MKI_BACKUP_FILE)"
-        _mkinitcpio_revert "$_RY_MKI_BACKUP_FILE" 2>/dev/null
-        set _rv_rc $status
-    else
-        functions -q _log; and _log "MKINITCPIO_REVERT_SIGNAL_SKIP: backup unavailable or sudo missing (backup=$_RY_MKI_BACKUP_FILE)"
-    end
-    if test "$_rv_tried" = true; and test "$_rv_rc" -eq 0
-        command -q sudo; and functions -q _rm_tmp; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
-    else # keep /run snapshot for manual restore
-        functions -q _untrack_tmpfile; and _untrack_tmpfile "$_RY_MKI_BACKUP_FILE"
-        functions -q _log; and _log "MKINITCPIO_SNAPSHOT_PRESERVED: $_RY_MKI_BACKUP_FILE (signal-time revert failed or skipped)"
-    end
-    set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
-end
+# ── CLEANUP ORCHESTRATION: TMPFILES → CHILDREN → GLOBALS ──
 function _dc_sweep_tmpfiles --description "_do_cleanup sub: Remove tracked tmpfiles/dirs"
     _cleanup_tmpfiles
     set -l _stuck_tmpfiles
@@ -326,17 +302,13 @@ end
 function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _KCONFIG_DATA _KCONFIG_LOADED _RY_ESP_PATH _RY_BOOT_PATH
     set --erase _RY_ESP_TRIED _RY_BOOT_TRIED
-    set --erase _RY_SYSTEMD_VER _RY_SYSTEMD_VER_TRIED
-    set --erase _RY_BOOT_COUNT _RY_BOOT_ENUM_OK _CPU_PATH
+    set --erase _CPU_PATH
     set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
     set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK
-    set --erase _RY_MKI_REVERT_FAILED _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED
-    set --erase _RY_RUN_TIMEOUT_WARNED _RY_RUN_TIMEOUT_CLAMPED _PROG_CLOCK _PROG_NOW_LAST _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
-    set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK
-    set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_DEPLOY_CHANGED_DSTS _RY_BOOT_CRIT_HIT _RY_DEPLOY_TAG
-    set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
-    set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_ENVD_BAD_ENTRIES _RY_FSTAB_EVIDENCE _RY_FSTAB_RESULT
-    set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE _RY_SDBOOT_REFUSE_FS _RY_NET_FAIL_EVIDENCE
+    set --erase _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
+    set --erase _RY_BOOT_TAINTED
+    set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_DEPLOY_CHANGED_DSTS
+    set --erase _RY_SYSCTL_BAD_ENTRIES _RY_ENVD_BAD_ENTRIES
 end
 function _dc_release_lock --description "_do_cleanup sub: Release the instance lock (ownership-gated)"
     if begin; set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED; end; and set -q LOCK_DIR; and not test -L "$LOCK_DIR"
@@ -372,7 +344,6 @@ end
 # ── CLEANUP: MASTER ORCHESTRATOR (_do_cleanup) ──
 function _do_cleanup --description "Master cleanup: reap children → revert → tmpfiles → fs sweep → lock release → globals"
     _dc_kill_children # quiesce children first: revert must not race live pacman
-    _dc_mki_revert
     _dc_sweep_tmpfiles
     _dc_sweep_filesystem
     _dc_release_lock # sweeps run while the lock is still held
@@ -382,7 +353,6 @@ end
 # ── VERIFY COUNTERS + TEARDOWN + SIGNAL/EXIT HANDLERS ──
 set -g VERIFY_OK 0; set -g VERIFY_FAIL 0; set -g VERIFY_WARN 0; set -g VERIFY_GEN_FAIL 0
 function _teardown --argument-names mode --description "Unified cleanup: progress teardown, footer, resources"
-    functions -q _progress_teardown; and _progress_teardown # signals may precede progress module
     set -l _signum 0 # validate argv[2] numeric before footer
     test (count $argv) -ge 2; and string match -qr '^\d+$' -- "$argv[2]"; and set _signum $argv[2]
     switch "$mode"
@@ -470,7 +440,7 @@ set -g EXPECTED_SCALING_DRIVER amd-pstate-epp # verify-only: scaling_driver unde
 set -g BLACKLIST_AMDXDNA false # false + iommu=pt enables the NPU
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
-set -g ENV_VARS "DXVK_LOG_LEVEL=none" "FSR4_WATERMARK=1" "GSK_RENDERER=ngl" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
+set -g ENV_VARS "DXVK_LOG_LEVEL=none" "GSK_RENDERER=ngl" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_FSR4_INDICATOR=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
 # max_map_count=esync
 set -g SYSCTL_VALUES "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" "net.ipv4.tcp_congestion_control=bbr" "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" "vm.watermark_boost_factor=0"
 
@@ -481,11 +451,10 @@ set -g PKGS_ADD \
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
 
-# ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
+# ── EMBEDDED DATA: UNITS (MASK / EXPECTED) ──
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi+resolved: mDNS off by design; ufw: nft owns the ruleset
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
-set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ──
@@ -1032,28 +1001,6 @@ function _verify_summary --description "Print verification pass/fail/warn summar
         _log "VERIFY_RESULT: status=ok ok=$snap_ok fail=$snap_fail warn=$snap_warn gen_fail=$snap_gen_fail"
         return 0
     end
-end
-
-# ── PROGRESS BAR: TEARDOWN + RESIZE HANDLERS (shared signal paths only) ──
-function _progress_teardown --description "Clear pinned progress bar and reset scroll region (signal/abort path)"
-    set -q _RY_OUTPUT_BROKEN; and set -g _PROG_PINNED false # SIGPIPE seen: skip terminal writes
-    set -q _PROG_PINNED; or return 0
-    test "$_PROG_PINNED" = true; or return 0
-    printf '\e[r\e[%d;1H\e[K\n' $_PROG_ROWS >&2
-    set -g _PROG_PINNED false
-end
-function _progress_on_winch --on-signal WINCH --description "Re-anchor progress bar on terminal resize"
-    set -q _RY_OUTPUT_BROKEN; and return 0 # SIGPIPE: stderr consumer gone
-    set -q _PROG_PINNED; or return 0
-    test "$_PROG_PINNED" = true; or return 0
-    set -l _new_rows (command tput lines 2>/dev/null)
-    string match -qr '^\d+$' -- "$_new_rows"; or return 0
-    if test "$_new_rows" -lt 10; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <10 rows: tear down (mirrors init)
-    set -l _new_cols (command tput cols 2>/dev/null)
-    if string match -qr '^\d+$' -- "$_new_cols"; and test "$_new_cols" -lt 64; set -g _PROG_ROWS $_new_rows; _progress_teardown; return 0; end # <64 cols: tear down (mirrors init)
-    set -g _PROG_ROWS $_new_rows
-    printf '\e[s\e[1;%dr\e[u' (math $_PROG_ROWS - 1) >&2
-    _progress_redraw "$_PROG_STEP_NAME" $_PROG_CUR
 end
 
 # ── GENERIC CHECK HELPERS (file, perms, sysfs) ──

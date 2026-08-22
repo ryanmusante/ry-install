@@ -3,22 +3,17 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.187.0
+7.188.0
 -------
 
-  - verify: the root pre-scan takes every argparse abbreviation of --check,
-    single dash included; -ch through -check exited 2 loud, --check 3 silent
-  - logging: the sudo credential cache and the config validation gate log a
-    START and a terminal record; all six preflight gates now pair
-  - changelog: fold 7.186.1 into the range; trim every block
+  - changelog: fold 7.187.0 into the range, merge and shorten its bullets
 
 
-7.139.0 - 7.186.1
+7.139.0 - 7.187.0
 -----------------
 
   - boot: COMPRESSION_OPTIONS -1 -> -3, drop -T0; fsck.mode=force -> auto
-  - kernel: land on iommu=pt; drop amd_iommu and clearcpuid=umip, and the
-    amdxdna blacklist
+  - kernel: land on iommu=pt; drop amd_iommu, clearcpuid=umip, amdxdna
   - dns: drop pinned upstreams, DNSOverTLS= and DNSSEC=; link DNS wins
   - network: autoconnect-retries-default=0, wlan0 quit after four tries
   - env: PROTON_FSR4_UPGRADE -> FSR4_WATERMARK -> PROTON_FSR4_INDICATOR=1;
@@ -27,10 +22,9 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - packages: 7.173.0 adds cachyos-benchmarker
   - sysctl: drop both net.core.netdev_budget keys and vm.swappiness=150
   - fstab: 7.182.1 parity probe never ran, awk read its -- as a filename
-  - install: chmod a managed file whose mode drifted while bytes did not;
-    7.182.0 - 7.184.0 drop the ext4 awk filter and the MODE=check guards
-  - install: 7.177.3 post-run hint and 7.179.0 optional-tools warning both
-    named things ry-install never runs
+  - install: chmod a file whose mode drifted but bytes did not
+  - install: 7.177.3 and 7.179.0 named tools it never runs; 7.182.0 - 7.184.0
+    drop the ext4 awk filter and the MODE=check guards
   - install-file: /boot post-hook keys on the exact path, an unmatched hook
     WARNs; 7.185.0 an unmanaged path lists the managed files
   - backup: .ry.bak moves to ~/ry-install/backups, slash-encoded; 7.176.0
@@ -38,14 +32,13 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - verify: every cpufreq policy, every non-fallback loader entry, resolved
     unit-file state, live ext4 opts, MangoHud, .ry.bak, parser complaints
   - verify: 7.177.3 -h and -v were swallowed after --install-file; 7.186.1
-    the root pre-scan missed -c, exiting 2 loud where --check exits 3 silent
+    then 7.187.0 take every --check abbreviation, -c to -check, silent rc 3
   - cleanup: 7.181.0 - 7.182.2 erase and sweep only what each script sets
   - check: record 60-ry-* drop-ins before the sudo gate; mode drift sets drift
-  - preflight: _ir_validate_post_hooks refuses a broken 1:1 index mirror;
-    the nftables ipv6.disable=1 coupling gate warns, not refuses
-  - preflight: a stale _ir_validate_counts tripwire refused rc 3; 7.185.1
-    NM_WIFI_POWERSAVE takes 0-3, all NetworkManager accepts
-  - logging: millisecond JSONL timestamps; CHECK_GREP uses key=value
+  - preflight: _ir_validate_post_hooks refuses a broken 1:1 mirror; a stale
+    counts tripwire refused rc 3; ipv6.disable=1 warns; NM_WIFI_POWERSAVE 0-3
+  - logging: millisecond JSONL timestamps, CHECK_GREP key=value; the sudo
+    cache and config validation gates log a START, so all six now pair
   - help: the backups path beside the log path; each script names its
     counterpart; 7.181.0 listed the _run sentinels 251 and 255
   - summary: aligned columns replace the box-drawn table; 4 fns -> 1

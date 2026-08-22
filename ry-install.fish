@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.186.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.186.1 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.186.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.186.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1298,11 +1298,11 @@ function _ry_check_deps --description "Verify required packages are installed"
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum timeout mktemp awk grep curl getent id sudo head df mv tee stat find cp chmod chown install cat rm date wc tail basename dirname mkdir rmdir touch env sleep cmp
         command -q $cmd; or set -a missing $cmd
     end
-    if test (count $missing) -gt 0; _err "missing: $missing"; return 1; end
-    if not command env LC_ALL=C df --output=avail / >/dev/null 2>&1; _err "df(1) lacks --output flag — GNU coreutils required (busybox/uutils not supported)"; return 1; end
+    if test (count $missing) -gt 0; _err "missing: $missing"; _log "DEPS_CHECK_FAIL: missing=$missing"; return 1; end
+    if not command env LC_ALL=C df --output=avail / >/dev/null 2>&1; _err "df(1) lacks --output flag — GNU coreutils required (busybox/uutils not supported)"; _log "DEPS_CHECK_FAIL: df lacks --output"; return 1; end
     _resolve_systemd_ver
-    if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; return 1; end
-    if test "$_RY_SYSTEMD_VER" -lt 250; _err "systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
+    if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; _log "DEPS_CHECK_FAIL: systemd version unparseable"; return 1; end
+    if test "$_RY_SYSTEMD_VER" -lt 250; _err "systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; _log "DEPS_CHECK_FAIL: systemd $_RY_SYSTEMD_VER < 250"; return 1; end
     set -l _opt_missing
     for cmd in bootctl modinfo pgrep tput pkill ping realpath ip kill; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
@@ -1320,7 +1320,7 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
             else
                 _ok "Network connectivity: OK (fallback host)"
             end
-            return 0
+            _log "NET_CHECK_OK: $_host"; return 0
         end
     end
     set -l _icmp_ok false
@@ -1334,15 +1334,15 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
         _err "Network connectivity: FAILED — cannot reach archlinux.org, cloudflare.com, 1.1.1.1, or 8.8.8.8"
         set -g _RY_NET_FAIL_EVIDENCE "archlinux.org, cloudflare.com, 1.1.1.1, 8.8.8.8 unreachable"
     end
-    return 1
+    _log "NET_CHECK_FAIL: $_RY_NET_FAIL_EVIDENCE"; return 1
 end
 function _ry_check_time_sync --description "Verify NTP sync (warn-only; no remediation)"
     _log "TIME_SYNC_CHECK_START"
-    if not command -q timedatectl; _warn "  Time sync: timedatectl not found — cannot verify (pacman GPG checks may fail on a skewed clock)"; _log "TIME_SYNC_SKIP: timedatectl absent"; return 1; end
+    if not command -q timedatectl; _warn "  Time sync: timedatectl not found — cannot verify (pacman GPG checks may fail on a skewed clock)"; _log "TIME_SYNC_CHECK_SKIP: timedatectl absent"; return 1; end
     set -l _synced (command timedatectl show -p NTPSynchronized --value 2>/dev/null | string trim --)
-    if test "$_synced" = yes; _ok "  Time sync: NTP synchronized"; _log "TIME_SYNC_OK"; return 0; end
+    if test "$_synced" = yes; _ok "  Time sync: NTP synchronized"; _log "TIME_SYNC_CHECK_OK"; return 0; end
     _warn "  Time sync: clock NOT NTP-synchronized (NTPSynchronized=$_synced) — pacman signature checks can fail; enable an NTP client manually (e.g. sudo timedatectl set-ntp true)"
-    _log "TIME_SYNC_UNSYNCED: NTPSynchronized=$_synced"
+    _log "TIME_SYNC_CHECK_UNSYNCED: NTPSynchronized=$_synced"
     return 1
 end
 function _check_avail --argument-names path divisor unit crit warn --description "Compare available bytes at path against crit/warn thresholds (in scaled units)"
@@ -1367,15 +1367,15 @@ function _check_avail --argument-names path divisor unit crit warn --description
 end
 function _ry_check_disk_space --description "Verify sufficient free disk space for installation"
     _log "DISK_CHECK_START"
-    _check_avail / 1073741824 GiB $ROOT_AVAIL_CRIT $ROOT_AVAIL_WARN; or return 1
+    if not _check_avail / 1073741824 GiB $ROOT_AVAIL_CRIT $ROOT_AVAIL_WARN; _log "DISK_CHECK_FAIL: /"; return 1; end
     set -l _boot_mnt (command findmnt -no TARGET /boot 2>/dev/null | string trim --) # gate only when /boot is its own mount
     if test "$_boot_mnt" = /boot
-        _check_avail /boot 1048576 MiB $BOOT_SPACE_CRIT $BOOT_SPACE_WARN; or return 1
+        if not _check_avail /boot 1048576 MiB $BOOT_SPACE_CRIT $BOOT_SPACE_WARN; _log "DISK_CHECK_FAIL: /boot"; return 1; end
     else
         _info "  /boot is not a separate mount — its free space is covered by the / check"
         _log "DISK_CHECK_BOOT_NOT_SEPARATE: findmnt target='$_boot_mnt' (expected /boot); skipping dedicated /boot gate"
     end
-    return 0
+    _log "DISK_CHECK_OK"; return 0
 end
 
 # ── MKINITCPIO HOOK + MODULE VALIDATORS (ordering invariants) ──
@@ -1658,7 +1658,7 @@ function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description 
         _rm_tmp "$_tee_err" false
         return 1
     end
-    if test "$_ps[2]" -eq $EXIT_AS_MISUSE
+    if test "$_ps[2]" -eq "$EXIT_AS_MISUSE"
         _fail "→ $dst (BUG: _as called with non-bool use_sudo='$use_sudo' in render pipe)"
         _rm_tmp "$_tee_err" false
         return 1

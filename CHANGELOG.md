@@ -3,6 +3,16 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.185.0
+-------
+
+  - install-file: an unmanaged path now lists the managed files; the
+    branch that printed the list could never be reached
+  - cleanup: remove a ry-run tmpdir recursively; a file landing after the
+    file-only sweep left the directory behind
+  - readme: the MIT link had no LICENSE file to resolve to; LICENSE ships
+
+
 7.184.0
 -------
 
@@ -15,51 +25,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - counts: ry-install count tripwires 21 -> 20; ry-verify 19 -> 18
 
 
-7.183.0
--------
-
-  - verify: drop the deploy-tmpfile sweep; ry-verify writes no .ry-install.*
-    tmpfile and the sudo-escalated delete could take a live ry-install one
-  - verify: drop the ry-run directory sweep and the stuck-tmpfile escalation
-    arm; both need install-only state
-  - install: drop the MODE=check guards from the loud err and warn helpers;
-    ry-install has no check mode
-
-
-7.182.2
--------
-
-  - cleanup: ry-verify swept four tmpfile globs only ry-install creates
-  - counts: ry-verify count tripwire _RY_TMPDIR_GLOBS 6 -> 2
-
-
-7.182.1
--------
-
-  - fstab: the line-count parity probe passed awk a -- separator awk
-    reads as a filename, so the probe never ran
-
-
-7.182.0
--------
-
-  - cleanup: drop the eight erase targets ry-verify cannot set, including
-    the lock trio it never declares
-  - verify: remove the unreachable lock release; ry-verify takes no lock
-  - verify: _err always routed through the quiet path; the loud branch
-    needed a flag only ry-install sets
-  - verify: drop _RY_POST_HOOKS and its validator; the handlers it mirrors
-    all ship install-side
-  - verify: drop _RY_PHASE_NAMES and the five install-only accumulators;
-    nothing here reads them
-  - install: drop the malformed-ext4 awk filter; only ry-verify reads it
-  - verify: the raw-argv peek named ry-install, and a refusal message
-    named a function that ships in ry-install
-  - counts: exit constants split per script; ry-verify count tripwires
-    21 -> 19
-
-
-7.139.0 - 7.181.0
+7.139.0 - 7.183.0
 -----------------
 
   - boot: COMPRESSION_OPTIONS -1 -> -3 and drop the redundant -T0
@@ -78,11 +44,15 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - packages: 7.173.0 adds cachyos-benchmarker
   - sysctl: drop both net.core.netdev_budget keys; squeezed stayed zero
   - sysctl: 7.171.0 drops vm.swappiness=150; the vendor default 100 governs
+  - fstab: 7.182.1 the line-count parity probe passed awk a -- separator
+    awk reads as a filename, so the probe never ran
   - install: chmod a managed file whose mode drifted while bytes did not
   - install: 7.177.3 post-run hint pointed at ry-install.fish --verify;
     corrected to ry-verify.fish
   - install: 7.179.0 optional-tools warning named seven commands
     ry-install never runs
+  - install: 7.182.0 drops the malformed-ext4 awk filter and 7.183.0 the
+    MODE=check guards in the loud err and warn helpers
   - install-file: /boot post-hook keys on the exact path, not /boot/*
   - install-file: an unmatched post-hook WARNs, not log-only
   - backup: .ry.bak copies move to ~/ry-install/backups, slash-encoded
@@ -103,8 +73,18 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     progress teardown and resize handlers; all need install-only state
   - verify: 7.181.0 help listed the _run sentinels 251 and 255, which
     only ry-install can return
+  - verify: 7.182.0 drops the unreachable lock release, the loud _err
+    branch, _RY_POST_HOOKS and _RY_PHASE_NAMES; none are reachable here
+  - verify: 7.182.0 raw-argv peek named ry-install, and a refusal message
+    named a function that ships in ry-install
+  - verify: 7.183.0 drops the deploy-tmpfile and ry-run sweeps and the
+    stuck-tmpfile escalation arm; all need install-only state
   - cleanup: 7.181.0 erases only globals the script can set; 31
     verify-side and 3 install-side names never existed there
+  - cleanup: 7.182.0 drops the eight erase targets ry-verify cannot set,
+    including the lock trio it never declares
+  - cleanup: 7.182.2 stops ry-verify sweeping four tmpfile globs only
+    ry-install creates
   - check: record unmanaged 60-ry-* drop-ins before the sudo gate
   - check: mode-only drift sets drift, matching verify
   - preflight: the nftables ipv6.disable=1 coupling gate warns, not refuses
@@ -127,6 +107,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     zip entries 5 -> 6
   - counts: KERNEL_PARAMS 15 -> 14, ENV_VARS 9 -> 10, SYSCTL_VALUES 9 -> 8,
     PKGS_ADD 16 -> 17
+  - counts: 7.182.0 splits the exit constants per script; ry-verify count
+    tripwires 21 -> 19, then _RY_TMPDIR_GLOBS 6 -> 2 at 7.182.2
 
 
 7.137.0 - 7.138.0

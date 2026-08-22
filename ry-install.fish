@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.184.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.185.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.184.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.185.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -375,10 +375,9 @@ function _dc_sweep_filesystem --description "_do_cleanup sub: Sweep tmp root for
     set -l _find_name_args
     for _g in $_tmp_globs; test -n "$_find_name_args"; and set -a _find_name_args -o; set -a _find_name_args -name "$_g"; end
     command find "$_tmpdir" -xdev -maxdepth 1 \( $_find_name_args \) -type f -uid "$_MY_UID" -delete 2>/dev/null
-    for _rd in "$_tmpdir"/ry-run.$fish_pid.* # per-dir descent keeps glob metachars literal
-        test -d "$_rd"; and command find "$_rd" -xdev -maxdepth 1 -type f -uid "$_MY_UID" -delete 2>/dev/null
+    for _rd in "$_tmpdir"/ry-run.$fish_pid.* # recursive: a file landing after a file-only sweep left the dir
+        test -d "$_rd"; and test -O "$_rd"; and command rm -rf --preserve-root -- "$_rd" 2>/dev/null
     end
-    command find "$_tmpdir" -xdev -maxdepth 1 -name "ry-run.$fish_pid.*" -type d -empty -uid "$_MY_UID" -delete 2>/dev/null
 end
 function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_ESP_PATH _RY_BOOT_PATH
@@ -3063,15 +3062,13 @@ end
 function _idf_dispatch_hook --argument-names target tag --description "Dispatch a post-hook tag to its _post_<tag> handler"; if test -z "$tag"; or not functions -q "_post_$tag"; _err "Internal: unknown post-hook tag '$tag' (target=$target)"; return 1; end; _post_$tag "$target"; end
 function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"
     _log_section "INSTALL-FILE START"
-    if test -z "$target"
-        _err "Usage: ry-install.fish --install-file <path>"
-        _echo
+    set -l _use_sudo (_idf_use_sudo_for_dst "$target")
+    if test -z "$_use_sudo"
+        _err "Not a managed file: $target"
         _info "Managed files:"
         for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS; _echo "  $dst"; end
         return $EXIT_USAGE
     end
-    set -l _use_sudo (_idf_use_sudo_for_dst "$target")
-    if test -z "$_use_sudo"; _err "Not a managed file: $target"; _info "Run without path to see managed files"; return $EXIT_USAGE; end
     set -l _mdst "$_RY_RESOLVED_MANAGED_DST" # literal dst; canonical key may diverge
     _echo "── ry-install v$VERSION - Install Single File ──"
     set -l _if_content (_ry_get_file_content "$_mdst" 2>/dev/null) # format-validate before write (preflight parity)

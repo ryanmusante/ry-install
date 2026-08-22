@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-verify v7.178.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-verify v7.180.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-verify: must be executed as a file, not sourced or piped (use ./ry-verify.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.178.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.180.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -18,7 +18,7 @@ function _ry_show_help --description "Display usage information and available su
     printf '%s\n' \
         "" \
         "ry-verify v$VERSION" \
-        "Self-contained CachyOS configuration for $PROFILE_DESC" \
+        "CachyOS configuration for $PROFILE_DESC" \
         "Paired with ry-install.fish; $_RY_MANAGED_FILE_COUNT embedded configs, no bundled dependencies." \
         "Usage: "(status filename)" [OPTIONS]" \
         "  (no args)              Same as --verify" \
@@ -258,7 +258,6 @@ function _cleanup_tmpfiles --description "Remove temporary files created during 
     for dir in $_USR_TMP_DIRS; command find "$dir" -maxdepth 1 -name '.ry-install.*' -type f -delete 2>/dev/null; end
 end
 set -g _CLEANUP_DONE false
-
 
 # ── CLEANUP ORCHESTRATION: REVERT → TMPFILES → CHILDREN → GLOBALS ──
 function _dc_mki_revert --description "_do_cleanup sub: Signal-time mkinitcpio.conf revert"
@@ -502,17 +501,6 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
         case check
             _log "ROOT_UUID_UNAVAILABLE: $_reason (silent for --check)"
             _pre_dispatch_exit $EXIT_PREFLIGHT
-        case install
-            _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
-            _pre_dispatch_exit $EXIT_PREFLIGHT
-        case install-file # only cmdline embeds root=UUID
-            set -l _cmdline_canon (command realpath -m -- /etc/kernel/cmdline 2>/dev/null)
-            if test "$INSTALL_FILE_TARGET" = /etc/kernel/cmdline; or begin; test -n "$_cmdline_canon"; and test "$INSTALL_FILE_TARGET" = "$_cmdline_canon"; end
-                _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
-                _pre_dispatch_exit $EXIT_PREFLIGHT
-            end
-            _warn "Cannot detect root UUID ($_reason) — only /etc/kernel/cmdline embeds it; continuing for --install-file $INSTALL_FILE_TARGET"
-            _log "ROOT_UUID_UNAVAILABLE: $_reason — install-file target=$INSTALL_FILE_TARGET does not embed root=UUID; continuing"
         case verify
             _warn "Cannot detect root UUID ($_reason) — exact root=UUID match in /etc/kernel/cmdline skipped; other checks continue"
             _log "ROOT_UUID_UNAVAILABLE: $_reason — verify continues with generic root=UUID presence check"
@@ -538,7 +526,7 @@ function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend /
     set -l _usr_in (count $USER_DESTINATIONS); set -l _usr_out (count $_RY_CANON_USER_DSTS)
     if test "$_usr_in" -ne "$_usr_out"; _err_loud "BUG: _RY_CANON_USER_DSTS count drift: in=$_usr_in out=$_usr_out"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
 end
-function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
+function _ir_validate_counts --description "Refuse to run when array counts drift from expected"
     set -l _expect \
         KERNEL_PARAMS:14 \
         MKINITCPIO_HOOKS:11 \
@@ -563,53 +551,53 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         MKINITCPIO_COMPRESSION_OPTIONS:1 # drift tripwires; sync arrays + docs on change
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
-        if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _ir_validate_keys --description "Refuse deploy on out-of-domain embedded scalar keys"
+function _ir_validate_keys --description "Refuse to run on out-of-domain embedded scalar keys"
     for _k in BT_AUTO_ENABLE BT_FAST_CONNECTABLE BLACKLIST_AMDXDNA
-        if not contains -- "$$_k" true false; _err_loud "$_k must be true|false (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not contains -- "$$_k" true false; _err_loud "$_k must be true|false (got: '$$_k') — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _k in SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE RESOLVED_MDNS RESOLVED_LLMNR
-        if not contains -- "$$_k" yes no; _err_loud "$_k must be yes|no (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not contains -- "$$_k" yes no; _err_loud "$_k must be yes|no (got: '$$_k') — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _k in LOADER_TIMEOUT NM_WIFI_POWERSAVE BT_RECONNECT_ATTEMPTS
-        if not string match -qr '^\d+$' -- "$$_k"; _err_loud "$_k must be a non-negative integer (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not string match -qr '^\d+$' -- "$$_k"; _err_loud "$_k must be a non-negative integer (got: '$$_k') — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
-    if not string match -qr '^[A-Z][A-Z]$' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166-1 alpha-2 code (got: '$COUNTRY') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain. Refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
-    if not contains -- "$EPP_PREFERENCE" $_RY_EPP_LEVELS; _err_loud "EPP_PREFERENCE must be one of "(string join '|' -- $_RY_EPP_LEVELS)" (got: '$EPP_PREFERENCE') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
-    if not string match -qr '^[a-z][a-z0-9_-]*$' -- "$CPUPOWER_GOVERNOR"; _err_loud "CPUPOWER_GOVERNOR must match ^[a-z][a-z0-9_-]*\$ (got: '$CPUPOWER_GOVERNOR') — refuse to deploy (the domain _grep_cpupower_entry accepts)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if not string match -qr '^[A-Z][A-Z]$' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166-1 alpha-2 code (got: '$COUNTRY') — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain. Refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
+    if not contains -- "$EPP_PREFERENCE" $_RY_EPP_LEVELS; _err_loud "EPP_PREFERENCE must be one of "(string join '|' -- $_RY_EPP_LEVELS)" (got: '$EPP_PREFERENCE') — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
+    if not string match -qr '^[a-z][a-z0-9_-]*$' -- "$CPUPOWER_GOVERNOR"; _err_loud "CPUPOWER_GOVERNOR must match ^[a-z][a-z0-9_-]*\$ (got: '$CPUPOWER_GOVERNOR') — refuse to run (the domain _grep_cpupower_entry accepts)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # base ICMPv6 is accepted; service rules are not
         _warn "Dual-stack: the ruleset accepts only the ICMPv6 base set — add service-specific IPv6 rules to /etc/nftables.conf"
     end
     if test "$BLACKLIST_AMDXDNA" = false; and contains -- amd_iommu=off $KERNEL_PARAMS # amdxdna probes -ENODEV (-19) without the IOMMU
-        _err_loud "BLACKLIST_AMDXDNA=false requires the IOMMU (drop amd_iommu=off; set iommu=pt) — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
+        _err_loud "BLACKLIST_AMDXDNA=false requires the IOMMU (drop amd_iommu=off; set iommu=pt) — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT
     end
     for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY NM_WIFI_BACKEND NM_LOG_LEVEL CPUPOWER_GOVERNOR NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION EXPECTED_SCALING_DRIVER
-        if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     set -l _scalar_metachar_re '[\s"`$;\\\\&|<>(){}*?\x27~!#]' # shell metachar class for scalars written to boot configs
     for _k in MKINITCPIO_COMPRESSION SDBOOT_DEFAULT_ENTRY LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR CPUPOWER_GOVERNOR
-        if string match -qr -- "$_scalar_metachar_re" "$$_k"; _err_loud "$_k contains whitespace, quote, or shell metachar: '$$_k' — refuse to deploy (would corrupt a shell-sourced or parser-read boot config)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if string match -qr -- "$_scalar_metachar_re" "$$_k"; _err_loud "$_k contains whitespace, quote, or shell metachar: '$$_k' — refuse to run (would corrupt a shell-sourced or parser-read boot config)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _co in $MKINITCPIO_COMPRESSION_OPTIONS # spliced into a shell array literal; flag charset only
-        if not string match -qr -- '^-?[A-Za-z0-9]+$' "$_co"; _err_loud "MKINITCPIO_COMPRESSION_OPTIONS token invalid: '$_co' — refuse to deploy (spliced into a shell-sourced array literal)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not string match -qr -- '^-?[A-Za-z0-9]+$' "$_co"; _err_loud "MKINITCPIO_COMPRESSION_OPTIONS token invalid: '$_co' — refuse to run (spliced into a shell-sourced array literal)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _kp in $KERNEL_PARAMS # spliced into boot configs; charset excludes shell metachars
-        if not string match -qr -- '^[A-Za-z0-9._,=-]+$' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refuse to deploy (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not string match -qr -- '^[A-Za-z0-9._,=-]+$' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refuse to run (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _ir_validate_sets --description "Refuse deploy when add and remove sets contradict each other"
+function _ir_validate_sets --description "Refuse to run when add and remove sets contradict each other"
     for _p in $PKGS_ADD # phase 2 installs, phase 4 -Rns removes: verify would assert both
-        if contains -- "$_p" $PKGS_DEL; _err_loud "'$_p' is in both PKGS_ADD and PKGS_DEL — phase 4 would remove what phase 2 installed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if contains -- "$_p" $PKGS_DEL; _err_loud "'$_p' is in both PKGS_ADD and PKGS_DEL — phase 4 would remove what phase 2 installed; refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _u in $EXPECTED_SERVICES # phase 4 masks before it enables: enable would fail
-        if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and EXPECTED_SERVICES — phase 4 masks before it enables; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and EXPECTED_SERVICES — phase 4 masks before it enables; refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _u in $_RY_PKG_MANAGED_SERVICES
-        if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and _RY_PKG_MANAGED_SERVICES — a masked unit cannot be package-managed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and _RY_PKG_MANAGED_SERVICES — a masked unit cannot be package-managed; refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 
@@ -626,9 +614,9 @@ function _init_runtime --description "Cache root UUID + validate config + precom
                 _warn "Hardware check: CPU model unreadable from /proc/cpuinfo — verify continues; deploy would refuse"
                 _log "HARDWARE_MODEL_UNREADABLE_VERIFY: /proc/cpuinfo missing 'model name'"
             else
-                _err_loud "Hardware check: CPU model unreadable from /proc/cpuinfo (no 'model name' field) — refusing to deploy"
-                _err_loud_cont "  Deploying gfx1151/Strix Halo defaults without CPU validation risks incorrect kernel cmdline + initramfs MODULES."
-                _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish"
+                _err_loud "Hardware check: CPU model unreadable from /proc/cpuinfo (no 'model name' field) — refusing to run"
+                _err_loud_cont "  Checking gfx1151/Strix Halo expectations without CPU validation reports meaningless drift."
+                _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-verify.fish"
                 _pre_dispatch_exit $EXIT_PREFLIGHT
             end
         else if not string match -q -i -- "*$EXPECTED_CPU_MATCH*" "$_cpu_model"
@@ -640,8 +628,8 @@ function _init_runtime --description "Cache root UUID + validate config + precom
                 _log "HARDWARE_MISMATCH_VERIFY: expected=$EXPECTED_CPU_MATCH detected=$_cpu_model"
             else
                 _err_loud "Hardware mismatch: profile $PROFILE_NAME expects $EXPECTED_CPU_MATCH, detected: $_cpu_model"
-                _err_loud_cont "  Deploying gfx1151/Strix Halo defaults on non-matching CPU would set incorrect kernel cmdline + initramfs MODULES."
-                _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish"
+                _err_loud_cont "  Checking gfx1151/Strix Halo expectations on a non-matching CPU reports meaningless drift."
+                _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-verify.fish"
                 _pre_dispatch_exit $EXIT_PREFLIGHT
             end
         end
@@ -650,10 +638,10 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     _ir_validate_keys
     _ir_validate_sets
     _ir_validate_post_hooks
-    for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
+    for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — the install-side post-write restore would mutate run state; refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
     _ir_precompute_caches
     for _pn in $PKGS_ADD $PKGS_DEL
-        if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman would parse as flag, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman would parse as flag, refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 
@@ -1046,7 +1034,7 @@ function _verify_summary --description "Print verification pass/fail/warn summar
     end
 end
 
-# ── PROGRESS BAR (PINNED BOTTOM ROW WITH SCROLL REGION) ──
+# ── PROGRESS BAR: TEARDOWN + RESIZE HANDLERS (shared signal paths only) ──
 function _progress_teardown --description "Clear pinned progress bar and reset scroll region (signal/abort path)"
     set -q _RY_OUTPUT_BROKEN; and set -g _PROG_PINNED false # SIGPIPE seen: skip terminal writes
     set -q _PROG_PINNED; or return 0
@@ -1361,6 +1349,10 @@ function _vsb_mkinitcpio --description "_verify_static_boot sub: /etc/mkinitcpio
     string match -qr -- '\bamdgpu\b' "$modules_line"
     _chk_present $status amdgpu MISSING "present (early KMS)"
     for mod in $MKINITCPIO_MODULES; test "$mod" = amdgpu; and continue; _chk_token_in "$modules_line" "$mod" "$mod"; end
+    for _mka in BINARIES FILES # generator emits both empty; a populated array is drift
+        set -l _mkl (_ry_mkinitcpio_array $_mka)
+        if string match -qr -- "^$_mka=\\(\\s*\\)\$" "$_mkl"; _ok "  $_mka=(): empty"; else; _fail "  $_mka: expected an empty array (found: $_mkl)"; end
+    end
     set -l hooks_line (_ry_mkinitcpio_array HOOKS)
     _echo "  Config: $hooks_line"
     for hook in $MKINITCPIO_HOOKS; _chk_token_in "$hooks_line" "$hook" "$hook"; end
@@ -1504,7 +1496,13 @@ function _verify_static_user --description "Verify environment.d ENV_VARS + Mang
     end
     _echo "── MangoHud (readout-only HUD) ──"
     if _chk_file "$HOME/.config/MangoHud/MangoHud.conf"
+        for _hud in horizontal legacy_layout=0 position=top-left toggle_hud=Shift_R+F12 # generator literals; lockstep with the generator
+            _chk_grep "$HOME/.config/MangoHud/MangoHud.conf" "$_hud"
+        end
         _chk_grep "$HOME/.config/MangoHud/MangoHud.conf" "fps" "MangoHud fps readout"
+        for _hud in font_size=20 background_alpha=0.4
+            _chk_grep "$HOME/.config/MangoHud/MangoHud.conf" "$_hud"
+        end
     end
 end
 
@@ -2611,188 +2609,25 @@ function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, 
     printf '%s' "$_p"
 end
 
-# ── POST-HOOK TABLE VALIDATOR: MIRROR + HANDLER PRESENCE ──
+# ── POST-HOOK TABLE VALIDATOR: DESTINATION MIRROR ──
 set -g _RY_POST_HOOKS \
     "/boot/loader/loader.conf|loader" "/etc/kernel/cmdline|cmdline" "/etc/sdboot-manage.conf|boot" "/etc/mkinitcpio.conf|boot" \
     "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/NetworkManager-dispatcher.service.d/*|nmdispatch" "*/NetworkManager/conf.d/*|nm" \
     "/etc/iw-regdomain|regdom" "/etc/bluetooth/main.conf|bluetooth" "/etc/nftables.conf|nft" "/etc/default/cpupower-service.conf|cpupower" \
     "*/sysctl.d/*|sysctl" "/etc/udev/rules.d/*|udev" "*/modprobe.d/*|modprobe" "*/environment.d/*|envd" \
     "*/MangoHud/MangoHud.conf|mangohud"
-function _ir_validate_post_hooks --description "Refuse deploy when a _RY_POST_HOOKS tag lacks a handler or breaks destination mirror" # mirrors _ir_validate_keys
-    set -l _seen_tags
+function _ir_validate_post_hooks --description "Refuse to run when _RY_POST_HOOKS breaks the destination mirror or carries an empty tag" # handlers ship install-side
     set -l _mirror_dsts $SYSTEM_DESTINATIONS $USER_DESTINATIONS
     set -l _mirror_n (count $_mirror_dsts)
-    if test (count $_RY_POST_HOOKS) -ne "$_mirror_n"; _err_loud "_RY_POST_HOOKS count "(count $_RY_POST_HOOKS)" does not mirror destination count $_mirror_n — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if test (count $_RY_POST_HOOKS) -ne "$_mirror_n"; _err_loud "_RY_POST_HOOKS count "(count $_RY_POST_HOOKS)" does not mirror destination count $_mirror_n — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     for _i in (seq $_mirror_n)
         set -l _mparts (string split -m1 '|' -- "$_RY_POST_HOOKS[$_i]"); set -l _mpat $_mparts[1]
-        if not string match -q "$_mpat" -- "$_mirror_dsts[$_i]"; _err_loud "_RY_POST_HOOKS mirror break at index $_i: pattern '$_mpat' does not match destination '$_mirror_dsts[$_i]' — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not string match -q "$_mpat" -- "$_mirror_dsts[$_i]"; _err_loud "_RY_POST_HOOKS mirror break at index $_i: pattern '$_mpat' does not match destination '$_mirror_dsts[$_i]' — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _entry in $_RY_POST_HOOKS
         set -l _parts (string split -m1 '|' -- "$_entry"); set -l _tag $_parts[2]
-        if test -z "$_tag"; _err_loud "_RY_POST_HOOKS entry has empty tag: '$_entry' — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-        contains -- "$_tag" $_seen_tags; and continue
-        set -a _seen_tags "$_tag"
-        if not functions -q "_post_$_tag"; _err_loud "_RY_POST_HOOKS tag '$_tag' has no handler '_post_$_tag' (entry '$_entry') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if test -z "$_tag"; _err_loud "_RY_POST_HOOKS entry has empty tag: '$_entry' — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
-end
-
-# ── POST-HOOKS: BOOT CASCADE HANDLERS ──
-function _post_boot_apply --argument-names target skip_mki --description "Shared post-hook body: taint gate + cascade + entry verify + sanity"
-    _echo
-    _check_boot_taint_gate
-    set -l _gate_rc $status
-    if test "$_gate_rc" -ne 0
-        _log "POST_BOOT_REFUSED: target=$target gate_rc=$_gate_rc"
-        return $EXIT_BOOT_CRIT
-    end
-    _pb_rebuild_cascade "$target" "$skip_mki"
-    set -l _cas_rc $status
-    if test "$_cas_rc" -ne 0; _err "CRITICAL: boot rebuild cascade failed — DO NOT REBOOT"; _info "  Fix: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update"; return $_cas_rc; end
-    set -l _boot_v (_resolve_boot_path)
-    test -n "$_boot_v"; and _irb_verify_entries "$_boot_v"
-    if not _preflight_boot_sanity; _err "CRITICAL: boot sanity check failed after single-file install — DO NOT REBOOT"; return $EXIT_BOOT_CRIT; end
-    return 0
-end
-function _post_boot --argument-names target --description "Post-hook: rebuild boot entries (mkinitcpio + sdboot-manage)"; _post_boot_apply "$target" false; end
-function _post_cmdline --argument-names target --description "Post-hook: regenerate sdboot entries only (cmdline is not an initramfs input)"; _post_boot_apply "$target" true; end
-function _post_loader --argument-names target --description "Post-hook: regenerate sdboot entries only"; _post_boot_apply "$target" true; end
-
-# ── POST-HOOKS: NON-BOOT LIVE-APPLY (SERVICE/CONFIG; FAILURES NON-FATAL, EXIT 0) ──
-function _post_resolved --argument-names target --description "Post-hook: restart systemd-resolved"
-    _echo
-    if not _run sudo -n systemctl restart systemd-resolved
-        _warn "systemd-resolved restart failed — drop-in applies at next boot (non-fatal; file deployed)"
-        return 0
-    end
-    return 0
-end
-function _post_logind --argument-names target --description "Post-hook: notify reboot needed for logind"; _info "Logind config $target changed — reboot required (restarting logind kills all sessions)"; return 0; end
-function _post_nmdispatch --argument-names target --description "Post-hook: daemon-reload after NetworkManager-dispatcher logging drop-in change"
-    _echo
-    if not _run sudo -n systemctl daemon-reload
-        _warn "systemctl daemon-reload failed — dispatcher LogLevelMax applies at next boot (non-fatal; file deployed)"
-        return 0
-    end
-    _info "  nm-dispatcher LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX active on next dispatch activation"
-    return 0
-end
-function _post_nm --argument-names target --description "Post-hook: restart NetworkManager; deferred when WiFi is active route"
-    _echo
-    if not command -q NetworkManager
-        _warn "NetworkManager config deployed but NetworkManager not installed — restart skipped; drop-in keys apply once installed or at next boot"
-        _log "POST_NM_SKIP_NO_NM: target=$target"
-        return 0
-    end
-    if _is_wifi_active_route
-        _warn "NetworkManager config installed but restart deferred — WiFi is the active route."
-        _info "  Config change will not take effect until next reboot or manual restart."
-        _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=install_file target=$target"
-        return 0
-    end
-    if not _run sudo -n systemctl restart NetworkManager
-        _warn "NetworkManager restart failed — config applies on next reboot (non-fatal; file deployed)"
-    end
-    return 0
-end
-function _post_sysctl --argument-names target --description "Post-hook: apply sysctl tunables"
-    _echo
-    if not command -q sysctl
-        _warn "sysctl(8) not found — tunables will apply on next reboot via systemd-sysctl.service"
-        _info "  Install procps-ng for immediate apply: sudo pacman -S --needed procps-ng"
-        return 0
-    end
-    if not _run sudo -n sysctl --system
-        _warn "sysctl --system failed — tunables not applied until reboot (non-fatal; file deployed)"
-        _info "  Retry: sudo sysctl --system"
-        return 0
-    end
-    return 0
-end
-function _post_mangohud --argument-names target --description "Post-hook: notify MangoHud.conf change (read at next game/Vulkan app launch)"; _info "MangoHud $target changed — applies at next launch under 'mangohud %command%' (no service restart needed)"; _info "  Toggle the HUD in-app with Shift_R+F12 (MangoHud default)"; return 0; end
-function _post_envd --argument-names target --description "Post-hook: env-generator re-run + PowerDevil re-apply after environment.d change"
-    _info "environment.d $target changed — log out and back in (or restart the user session) to apply session-wide"
-    _info "  Active systemd --user services retain the old environment until restarted"
-    if not _has_user_bus_active
-        _info "  No active user-bus — POWERDEVIL_NO_DDCUTIL applies at next graphical login"
-        _log "POST_ENVD_SKIP: no active user-bus target=$target"
-        return 0
-    end
-    if not _run systemctl --user daemon-reload # re-runs systemd.environment-generator(7)
-        _warn "systemctl --user daemon-reload failed — environment.d applies at next login (non-fatal; file deployed)"
-        return 0
-    end
-    if not _run systemctl --user restart plasma-powerdevil.service
-        _warn "plasma-powerdevil.service restart failed — POWERDEVIL_NO_DDCUTIL applies at next login (non-fatal; file deployed)"
-        return 0
-    end
-    return 0
-end
-
-# ── POST-HOOKS: HARDWARE + FIREWALL (CPUPOWER, NFT, REGDOM, BT, UDEV, MODPROBE) ──
-function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change"
-    _echo
-    if not _run sudo -n systemctl restart cpupower.service
-        _warn "cpupower.service restart failed — governor change applies on next boot (non-fatal; file deployed)"
-        _info "  Governor from /etc/default/cpupower-service.conf re-applies on next boot"
-        return 0
-    end
-    return 0
-end
-function _post_nft --argument-names target --description "Post-hook: validate + (if active) reload nftables ruleset"
-    _echo
-    if not _run sudo -n nft -c -f /etc/nftables.conf
-        _warn "nftables ruleset failed validation (nft -c) — not reloaded; fix /etc/nftables.conf"
-        return 0
-    end
-    if _run sudo -n systemctl restart nftables.service # oneshot re-runs nft -f (no ExecReload)
-        _ok "nftables ruleset applied (systemctl restart — oneshot re-runs nft -f)"
-    else
-        _warn "nftables restart failed — validated ruleset applies when the service next starts (reboot)"
-    end
-    return 0
-end
-function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"; _echo; _apply_wireless_regdom; end
-function _post_bluetooth --argument-names target --description "Post-hook: restart bluetooth.service after /etc/bluetooth/main.conf change"
-    _echo
-    if not command -q bluetoothctl; and not test -e /usr/lib/systemd/system/bluetooth.service
-        _warn "bluetooth/main.conf deployed but bluez not installed — restart skipped; keys apply once bluez is installed or at next boot"
-        _log "POST_BT_SKIP_NO_BLUEZ: target=$target"
-        return 0
-    end
-    if not _run sudo -n systemctl try-restart bluetooth.service
-        _warn "bluetooth.service try-restart failed — config applies on next reboot (non-fatal; file deployed)"
-    end
-    return 0
-end
-function _post_udev --argument-names target --description "Post-hook: reload udev rules + retrigger block/cpu devices after /etc/udev/rules.d/* change"
-    _echo
-    if not command -q udevadm
-        _warn "udevadm(8) not found — I/O scheduler rule applies at next boot"
-        return 0
-    end
-    _resolve_systemd_ver
-    if set -q _RY_SYSTEMD_VER; and test "$_RY_SYSTEMD_VER" -ge 254 # udevadm verify landed in v254
-        if not _run sudo -n udevadm verify -- "$target"
-            _warn "udevadm verify failed for $target — rules not reloaded; fix the rule file"
-            return 0
-        end
-    else
-        set -l _sv (set -q _RY_SYSTEMD_VER; and echo $_RY_SYSTEMD_VER; or echo unknown)
-        _warn "udevadm verify unavailable (systemd $_sv < 254) — reloading $target unvalidated; check the rule by hand if you edited it"
-        _log "UDEV_VERIFY_SKIP: systemd $_sv < 254 — udevadm verify unavailable; reloading rule unvalidated"
-    end
-    if not _run sudo -n udevadm control --reload-rules
-        _warn "udevadm control --reload-rules failed — rule applies at next boot (non-fatal; file deployed)"
-        _info "  Retry: sudo udevadm control --reload-rules; and sudo udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change"
-        return 0
-    end
-    _run sudo -n udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change; or _warn "udevadm trigger failed — scheduler/EPP apply at next boot or device event" # drm rule is ACTION==add: applies at boot
-    return 0
-end
-function _post_modprobe --argument-names target --description "Post-hook: notify reboot needed for modprobe.d option change"
-    _info "modprobe.d $target changed — reboot required to apply (module options are read at load time; an already-loaded module keeps its current parameters until reloaded)"
-    _info "  No initramfs rebuild needed for this file; the option takes effect when the module next loads (reboot, or manual rmmod/modprobe of the affected module)"
-    return 0
 end
 
 # ── PRE-DISPATCH EXIT (ARGPARSE-ERROR + EARLY-BAIL LOG CLEANUP) ──
@@ -2831,8 +2666,7 @@ end
 _rm_tmp "$_ap_errfile" false
 if set -q _flag_help; _ry_show_help; _pre_dispatch_exit $EXIT_OK; end
 if set -q _flag_version; echo "v$VERSION"; _pre_dispatch_exit $EXIT_OK; end
-set -q _flag_verify; and set -g MODE verify
-set -q _flag_check; and set -g MODE check
+set -q _flag_check; and set -g MODE check # default is verify (set above)
 set --erase _RY_ARGV_CHECK_ONLY # MODE is authoritative past this point
 if test (count $argv) -gt 0; echo "[ERR] Unexpected positional argument(s): $argv" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
 test "$MODE" != check; and set -g QUIET false
@@ -2880,7 +2714,7 @@ if set -q _RY_PERM_FIX_NOTICES
     set --erase _RY_PERM_FIX_NOTICES _n
 end
 
-# ── MAIN: RUNTIME INIT + LOCK + MODE DISPATCH + FOOTER ──
+# ── MAIN: RUNTIME INIT + MODE DISPATCH + FOOTER ──
 set -g _RY_EXIT_CODE 0
 _init_runtime
 switch "$MODE"

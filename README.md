@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.178.0** · [Changelog](CHANGELOG.md)
+**Version 7.180.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). Two fish scripts — `ry-install.fish` (unattended install + `--install-file`) and `ry-verify.fish` (`--verify` + `--check`) — covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -29,7 +29,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 | Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
 | Privileges | normal user with sudo rights; `sudo -v` cached before the run |
-| Tools | GNU coreutils, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
+| Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `curl`, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
 
 ## Usage
 
@@ -69,7 +69,7 @@ Skipping the hardware check is the risky override — a wrong-CPU deploy writes 
 
 | Variable | Effect |
 |---|---|
-| `RY_RUN_TIMEOUT=<sec>` | per-command wall-clock cap; default `3600`, `0` disables, package/boot ops floor `7200` |
+| `RY_RUN_TIMEOUT=<sec>` | `ry-install.fish` only — per-command wall-clock cap; default `3600`, `0` disables, package/boot ops floor `7200` |
 | `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | bypass the `EXPECTED_CPU_MATCH` hard-fail |
 | `NO_COLOR` | disable colored output when set to a non-empty value ([no-color.org](https://no-color.org)) |
 

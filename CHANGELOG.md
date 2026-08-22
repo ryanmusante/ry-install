@@ -3,6 +3,44 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.180.0
+-------
+
+  - verify: drop the 17 _post_* handlers; only ry-install dispatches
+    them, and the table validator keeps the destination-mirror check
+  - verify: assert the MangoHud layout directives and the empty
+    mkinitcpio BINARIES/FILES arrays; whole-file drift now localizes
+  - help: drop "Self-contained" from the banner line; each script is
+    half of a pair
+  - style: drop a stray second blank line above a ry-verify banner
+  - verify: prune the install-only arms the split left in the shared
+    root-UUID resolver, and drop install's check-only cleanup branch
+  - verify: mode selection re-set MODE to verify, the value it already
+    held; --check is the only flag that changes it
+  - verify: refusal text said "refuse to deploy" and pointed the
+    hardware override at ry-install.fish
+  - readme: the tools row named coreutils only; findmnt, awk, grep,
+    find and curl are hard preflight dependencies too
+  - changelog: the 7.177.0 zip-entry count named the release shape;
+    say so
+
+
+7.179.1
+-------
+
+  - install: drop the write-only root-refusal argv classifier; only
+    ry-verify reads that result, for its silent --check path
+  - style: two ry-verify banners named install-only machinery, an
+    instance lock and a pinned progress bar
+
+
+7.179.0
+-------
+
+  - install: the optional-tools warning named seven commands ry-install
+    never runs; ry-verify guards its own at each call site
+
+
 7.178.0
 -------
 
@@ -52,7 +90,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     install and install-file
   - split: 102 shared functions duplicated verbatim; parity cert enforces
     byte-identical bodies with 2 declared per-script variants
-  - counts: 2 scripts; version sync sites 4 -> 6; zip entries 5 -> 6
+  - counts: 2 scripts; version sync sites 4 -> 6; release zip entries
+    5 -> 6 (topdir and LICENSE included)
 
 
 7.176.0

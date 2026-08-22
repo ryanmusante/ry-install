@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.178.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.180.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.178.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.180.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -18,7 +18,7 @@ function _ry_show_help --description "Display usage information and available su
     printf '%s\n' \
         "" \
         "ry-install v$VERSION" \
-        "Self-contained CachyOS configuration for $PROFILE_DESC" \
+        "CachyOS configuration for $PROFILE_DESC" \
         "Paired with ry-verify.fish; $_RY_MANAGED_FILE_COUNT embedded configs, no bundled dependencies." \
         "Usage: "(status filename)" [OPTIONS]" \
         "  (no args)              Unattended install" \
@@ -101,23 +101,6 @@ function _ry_root_usage --description "Root-guard usage error: print msg + help 
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
 set -g QUIET true; set -g MODE bootstrap # pinned pre-argparse for signal footers
 if not string match -qr '^\d+$' -- "$_MY_UID"; echo "[ERR] id -u returned non-numeric value: '$_MY_UID' — cannot determine user identity" >&2; _ry_exit $EXIT_PREFLIGHT; end
-set -l _rsc_skip false; set -l _rsc_other_mode false; set -l _rsc_after_dd false # root-refusal argv classification (--check: ry-verify)
-for _rsc_a in $argv
-    if test "$_rsc_skip" = true; set _rsc_skip false; continue; end # an --install-file value is never a flag
-    if test "$_rsc_after_dd" = true; set _rsc_other_mode true; break; end # positional after --: exit-2 parity
-    switch "$_rsc_a"
-        case --
-            set _rsc_after_dd true
-        case --install-file
-            set _rsc_skip true; set _rsc_other_mode true
-        case '--install-file=*'
-            set _rsc_other_mode true
-        case '*'
-            set _rsc_other_mode true # unknown flag/positional: non-root exits 2 — keep parity
-    end
-end
-set -q _rsc_a; and set --erase _rsc_a
-set --erase _rsc_skip _rsc_after_dd
 if test "$_MY_UID" -eq 0
     set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) $_RY_ARGPARSE_SPEC -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity argparse in subshell; parent argv intact
     set -l _rg_prc 0; set -l _rg_msg ""
@@ -137,7 +120,6 @@ if test "$_MY_UID" -eq 0
     echo "[ERR] "(command basename -- (status filename))" must not run as root. Run as your normal user; sudo is invoked internally." >&2
     _ry_exit $EXIT_USAGE
 end
-set --erase _rsc_other_mode
 set -g _RY_NO_COLOR false
 test "$TERM" = dumb; and set -g _RY_NO_COLOR true
 set -q NO_COLOR; and test -n "$NO_COLOR"; and set -g _RY_NO_COLOR true # no-color.org: non-empty value disables color
@@ -478,10 +460,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     set -g _CLEANUP_DONE true; set -l _sig_label SIG$argv[1]
     string match -q 'SIG*' -- "$argv[1]"; and set _sig_label "$argv[1]"
     test -z "$argv[1]"; and set _sig_label exit
-    set -l _sig_silent false # --check stays stderr-silent even before argparse sets MODE
-    test "$MODE" = check; and set _sig_silent true
-    test "$MODE" = bootstrap; and set -q _RY_ARGV_CHECK_ONLY; and test "$_RY_ARGV_CHECK_ONLY" = true; and set _sig_silent true
-    if not set -q _RY_OUTPUT_BROKEN; and test "$_sig_silent" = false
+    if not set -q _RY_OUTPUT_BROKEN
         echo "" >&2
         echo "[WARN] Caught $_sig_label - cleaning up..." >&2
     end
@@ -574,9 +553,6 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
     end
     test -n "$_ROOT_UUID"; and return 0
     switch "$MODE"
-        case check
-            _log "ROOT_UUID_UNAVAILABLE: $_reason (silent for --check)"
-            _pre_dispatch_exit $EXIT_PREFLIGHT
         case install
             _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
             _pre_dispatch_exit $EXIT_PREFLIGHT
@@ -588,9 +564,6 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
             end
             _warn "Cannot detect root UUID ($_reason) — only /etc/kernel/cmdline embeds it; continuing for --install-file $INSTALL_FILE_TARGET"
             _log "ROOT_UUID_UNAVAILABLE: $_reason — install-file target=$INSTALL_FILE_TARGET does not embed root=UUID; continuing"
-        case verify
-            _warn "Cannot detect root UUID ($_reason) — exact root=UUID match in /etc/kernel/cmdline skipped; other checks continue"
-            _log "ROOT_UUID_UNAVAILABLE: $_reason — verify continues with generic root=UUID presence check"
         case '*'
             _log "ROOT_UUID_UNAVAILABLE: mode=$MODE reason=$_reason — non-fatal for this mode"
     end
@@ -697,9 +670,6 @@ function _init_runtime --description "Cache root UUID + validate config + precom
             if test "$RY_INSTALL_SKIP_HARDWARE_CHECK" = 1 # fail-closed: empty model requires override
                 _warn_loud "Hardware check (override): CPU model unreadable from /proc/cpuinfo — proceeding"
                 _log "HARDWARE_MODEL_UNREADABLE_OVERRIDE: /proc/cpuinfo missing 'model name'"
-            else if test "$MODE" = verify # read-only: warn and continue
-                _warn "Hardware check: CPU model unreadable from /proc/cpuinfo — verify continues; deploy would refuse"
-                _log "HARDWARE_MODEL_UNREADABLE_VERIFY: /proc/cpuinfo missing 'model name'"
             else
                 _err_loud "Hardware check: CPU model unreadable from /proc/cpuinfo (no 'model name' field) — refusing to deploy"
                 _err_loud_cont "  Deploying gfx1151/Strix Halo defaults without CPU validation risks incorrect kernel cmdline + initramfs MODULES."
@@ -710,9 +680,6 @@ function _init_runtime --description "Cache root UUID + validate config + precom
             if test "$RY_INSTALL_SKIP_HARDWARE_CHECK" = 1
                 _warn_loud "Hardware mismatch (override): expected $EXPECTED_CPU_MATCH, detected: $_cpu_model"
                 _log "HARDWARE_MISMATCH_OVERRIDE: expected=$EXPECTED_CPU_MATCH detected=$_cpu_model"
-            else if test "$MODE" = verify # read-only: warn and continue
-                _warn "Hardware mismatch: expected $EXPECTED_CPU_MATCH, detected: $_cpu_model — verify continues; deploy would refuse"
-                _log "HARDWARE_MISMATCH_VERIFY: expected=$EXPECTED_CPU_MATCH detected=$_cpu_model"
             else
                 _err_loud "Hardware mismatch: profile $PROFILE_NAME expects $EXPECTED_CPU_MATCH, detected: $_cpu_model"
                 _err_loud_cont "  Deploying gfx1151/Strix Halo defaults on non-matching CPU would set incorrect kernel cmdline + initramfs MODULES."
@@ -1342,7 +1309,7 @@ function _ry_check_deps --description "Verify required packages are installed"
     if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; return 1; end
     if test "$_RY_SYSTEMD_VER" -lt 250; _err "systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; return 1; end
     set -l _opt_missing
-    for cmd in bootctl journalctl modinfo pgrep zcat tput lsmod modprobe pkill nmcli ping realpath readlink ip lspci kill; command -q $cmd; or set -a _opt_missing $cmd; end
+    for cmd in bootctl modinfo pgrep tput pkill ping realpath ip kill; command -q $cmd; or set -a _opt_missing $cmd; end
     test (count $_opt_missing) -gt 0; and _warn "Expected tools not found (from base packages): $_opt_missing"
     _log "DEPS_CHECK_OK"
     return 0

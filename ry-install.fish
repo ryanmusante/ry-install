@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.181.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.182.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.181.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.182.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -183,7 +183,6 @@ set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g 
 set -g SYSTEM_UPGRADED false # cross-phase global; set in _install_packages
 function _taint --description "Flag install error + boot-critical taint"; set -g INSTALL_HAD_ERRORS true; set -g _RY_BOOT_TAINTED true; end
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
-set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 set -g NM_RESTART_DELAY 3; set -g _PROG_BAR_WIDTH 40
 
 # ── KERNEL / SYSTEMD STATE PROBES ──
@@ -534,7 +533,7 @@ set -g PKGS_ADD \
     nvme-cli cachyos-gaming-meta cachyos-gaming-applications cachyos-benchmarker lib32-mesa mkinitcpio-firmware fd sd dust procs \
     bottom htop lm_sensors rtkit realtime-privileges nftables pacman-contrib # pacman-contrib: pactree + paccache
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
-set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers
+set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # verify-only: chwd Vulkan drivers
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi+resolved: mDNS off by design; ufw: nft owns the ruleset
@@ -2112,7 +2111,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
             end
             continue
         end
-        if not string match -qr '(^|,)noatime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)lazytime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"; or string match -qr '(^|,)(defaults|relatime|atime|strictatime)(,|$)' -- "$opts_field" # tokens _vre_fstab rejects must force rewrite
+        if not string match -qr '(^|,)noatime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)lazytime(,|$)' -- "$opts_field"; or not string match -qr '(^|,)commit=10(,|$)' -- "$opts_field"; or string match -qr '(^|,)(defaults|relatime|atime|strictatime)(,|$)' -- "$opts_field" # tokens ry-verify rejects must force rewrite
             set -g _RY_FSTAB_NEEDS_CHANGE true
             set -l _existing_commit (string match -rg -- '(?:^|,)commit=([0-9]+)(?:,|$)' "$opts_field")
             test -n "$_existing_commit"; and test "$_existing_commit" != 10; and set -ga _RY_FSTAB_COMMIT_OVERRIDES "$_existing_commit"

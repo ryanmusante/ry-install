@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.181.0** · [Changelog](CHANGELOG.md)
+**Version 7.182.0** · [Changelog](CHANGELOG.md)
 
 Idempotent CachyOS configuration manager for the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). Two fish scripts — `ry-install.fish` (unattended install + `--install-file`) and `ry-verify.fish` (`--verify` + `--check`) — covering 17 [Managed Files](#managed-files), `pacman` add/remove, systemd units, and the fstab rewrite.
 
@@ -21,6 +21,8 @@ sudo -v
 A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` on exit `0`, otherwise `PREFLIGHT`, `FAIL`, or `FAIL-BOOT-CRITICAL` — see [Exit Codes](#exit-codes).
 
 ## Requirements
+
+`ry-install.fish` gates the tools below at preflight; `ry-verify.fish` guards each at its call site instead.
 
 | Requirement | Detail |
 |---|---|

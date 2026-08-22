@@ -1,14 +1,13 @@
 #!/usr/bin/env fish
-# ry-verify v7.181.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-verify v7.182.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-verify: must be executed as a file, not sourced or piped (use ./ry-verify.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.181.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5; set -g EXIT_DRIFT 10
+set -g VERSION "7.182.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_DRIFT 10
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250 # internal sentinel, never a process exit
 set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
-set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC --exclusive=verify,check h/help v/version verify check # single option-spec source (root guard + main argparse)
 
 # ── HELP TEXT ──
@@ -120,7 +119,7 @@ if test "$_MY_UID" -eq 0
     for _rg_l in $_rg_msgout
         if string match -q '@@RC@@*' -- "$_rg_l"; set _rg_prc (string replace '@@RC@@' '' -- "$_rg_l"); else if test -z "$_rg_msg"; set _rg_msg (string replace -ra '\e\[[0-9;]*[a-zA-Z]' '' -- "$_rg_l" | string trim --); end
     end
-    set -l _rg_state (begin; argparse --name=ry-install $_RY_ARGPARSE_SPEC -- $argv 2>/dev/null; for _rg_p in $argv; echo "@@LEFT@@$_rg_p"; end; end) # one @@LEFT@@ per leftover; display-only
+    set -l _rg_state (begin; argparse --name=ry-verify $_RY_ARGPARSE_SPEC -- $argv 2>/dev/null; for _rg_p in $argv; echo "@@LEFT@@$_rg_p"; end; end) # one @@LEFT@@ per leftover; display-only
     set -l _rg_left
     for _rg_l in $_rg_state
         string match -q '@@LEFT@@*' -- "$_rg_l"; and set -a _rg_left "$_rg_l"
@@ -184,13 +183,12 @@ end
 set --erase _ld_path _prev_mkdir_umask
 set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"
 
-# ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──
-set -g _RY_BOOT_TAINTED false
+# ── GLOBAL STATE: TRACKED RESOURCES + AWK FILTERS ──
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS $_RY_BOOT_CRITICAL_DSTS; set -g _RY_BACKUP_SUFFIX .ry.bak
 set -g _RY_TMPDIR_GLOBS "ry-sudo-err.$fish_pid.*" "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-argparse-err.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped: never touch a peer run's files
-set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS; set -g _RY_PHASE_RESULTS
-set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS; set -g _RY_PROFILE_USES_WIFI_BACKEND false
+set -g _TRACKED_TMPFILES; set -g _SYS_TMP_DIRS; set -g _USR_TMP_DIRS
+set -g _RY_PROFILE_USES_WIFI_BACKEND false
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g _RY_AWK_EXT4_MALFORMED_FILTER '!/^[ \t]*#/ && NF < 4 && $0 ~ /(^|[ \t,])ext4([ \t,]|$)/ { print $0 }'
 
@@ -305,22 +303,7 @@ function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _CPU_PATH
     set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
     set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK
-    set --erase _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
-    set --erase _RY_BOOT_TAINTED
-    set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_DEPLOY_CHANGED_DSTS
     set --erase _RY_SYSCTL_BAD_ENTRIES _RY_ENVD_BAD_ENTRIES
-end
-function _dc_release_lock --description "_do_cleanup sub: Release the instance lock (ownership-gated)"
-    if begin; set -q _RY_HOLDS_LOCK; or set -q _RY_LOCK_DIR_OWNED; end; and set -q LOCK_DIR; and not test -L "$LOCK_DIR"
-        set -l _own false # rm only if lock held or pidfile empty/ours
-        if set -q _RY_HOLDS_LOCK
-            set _own true
-        else if set -q _RY_LOCK_MKDIR_OK # empty pidfile ours only if we created LOCK_DIR
-            set -l _lp (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
-            test -z "$_lp"; or test "$_lp" = "$fish_pid"; and set _own true
-        end
-        test "$_own" = true; and command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null
-    end
 end
 function _dc_kill_children --description "_do_cleanup sub: Reap child PIDs (TERM → bounded grace → KILL)"
     command -q pkill; or return 0
@@ -342,11 +325,10 @@ function _dc_kill_children --description "_do_cleanup sub: Reap child PIDs (TERM
 end
 
 # ── CLEANUP: MASTER ORCHESTRATOR (_do_cleanup) ──
-function _do_cleanup --description "Master cleanup: reap children → revert → tmpfiles → fs sweep → lock release → globals"
+function _do_cleanup --description "Master cleanup: reap children → tmpfiles → filesystem sweep → globals"
     _dc_kill_children # quiesce children first: revert must not race live pacman
     _dc_sweep_tmpfiles
     _dc_sweep_filesystem
-    _dc_release_lock # sweeps run while the lock is still held
     _dc_erase_globals
 end
 
@@ -405,7 +387,7 @@ function _cleanup_on_exit --on-event fish_exit --description "Exit handler: ensu
     _teardown exit $_exit_status
 end
 
-# ── EMBEDDED CONFIG: DESTINATIONS (_content_ fns + _RY_POST_HOOKS mirror order) ──
+# ── EMBEDDED CONFIG: DESTINATIONS (_content_ fns, deploy order) ──
 set -g SYSTEM_DESTINATIONS \
     "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf" \
     "/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf" "/etc/systemd/logind.conf.d/99-cachyos-logind.conf" \
@@ -509,10 +491,8 @@ function _ir_validate_counts --description "Refuse to run when array counts drif
         EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:17 \
         _RY_ARGPARSE_SPEC:5 \
         _RY_BOOT_CRITICAL_DSTS:4 \
-        _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:4 \
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:15 \
@@ -537,7 +517,7 @@ function _ir_validate_keys --description "Refuse to run on out-of-domain embedde
     if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain. Refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
     if not contains -- "$EPP_PREFERENCE" $_RY_EPP_LEVELS; _err_loud "EPP_PREFERENCE must be one of "(string join '|' -- $_RY_EPP_LEVELS)" (got: '$EPP_PREFERENCE') — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
-    if not string match -qr '^[a-z][a-z0-9_-]*$' -- "$CPUPOWER_GOVERNOR"; _err_loud "CPUPOWER_GOVERNOR must match ^[a-z][a-z0-9_-]*\$ (got: '$CPUPOWER_GOVERNOR') — refuse to run (the domain _grep_cpupower_entry accepts)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if not string match -qr '^[a-z][a-z0-9_-]*$' -- "$CPUPOWER_GOVERNOR"; _err_loud "CPUPOWER_GOVERNOR must match ^[a-z][a-z0-9_-]*\$ (got: '$CPUPOWER_GOVERNOR') — refuse to run (the domain the cpupower check accepts)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # base ICMPv6 is accepted; service rules are not
         _warn "Dual-stack: the ruleset accepts only the ICMPv6 base set — add service-specific IPv6 rules to /etc/nftables.conf"
     end
@@ -606,7 +586,6 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     _ir_validate_counts
     _ir_validate_keys
     _ir_validate_sets
-    _ir_validate_post_hooks
     for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — the install-side post-write restore would mutate run state; refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
     _ir_precompute_caches
     for _pn in $PKGS_ADD $PKGS_DEL
@@ -956,18 +935,9 @@ function _ok --description "Emit OK-level message and increment VERIFY_OK"; _msg
 function _fail --description "Emit FAIL-level message and increment VERIFY_FAIL"; _msg FAIL $argv; return 0; end
 function _info --description "Emit INFO-level message (no counter)"; _msg INFO $argv; return 0; end
 function _warn --description "Emit WARN-level message and increment VERIFY_WARN"; _msg WARN $argv; return 0; end
+function _err --description "Emit ERR-level message and increment VERIFY_FAIL"; _msg ERR $argv; return 0; end
 
-# ── MESSAGING: LOUD EMITTERS (_err, _err_loud, _warn_loud; bypass QUIET) ──
-function _err --description "Emit ERR-level message (force-prints to stderr when _RY_LOUD_ERR=true)"
-    if set -q _RY_LOUD_ERR; and test "$_RY_LOUD_ERR" = true; and test "$MODE" != check
-        _log "ERR: "(string join -- " " $argv)
-        set -q VERIFY_FAIL; and set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
-        _msg_print --force ERR $argv
-    else
-        _msg ERR $argv
-    end
-    return 0
-end
+# ── MESSAGING: LOUD EMITTERS (_err_loud, _warn_loud; bypass QUIET) ──
 function _err_loud --description "Fatal-preflight err: stderr regardless of QUIET, except MODE=check (silent-probe contract)"; set -l msg (string join -- " " $argv); _log "ERR: $msg"; set -q VERIFY_FAIL; and set -g VERIFY_FAIL (math $VERIFY_FAIL + 1); test "$MODE" = check; and return 0; _msg_print --force ERR $argv; end
 function _err_loud_cont --description "Continuation for _err_loud: same routing, no VERIFY_FAIL bump"; set -l msg (string join -- " " $argv); _log "ERR: $msg"; test "$MODE" = check; and return 0; _msg_print --force ERR $argv; end
 function _warn_loud --description "Override-path warn: stderr regardless of QUIET, except MODE=check (silent-probe contract)" # mirrors _err_loud
@@ -2554,27 +2524,6 @@ function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, 
     test -z "$_p"; or begin; not test -d "$_p"; and not sudo -n test -d "$_p" 2>/dev/null; end; and set _p (_resolve_esp)
     set -g _RY_BOOT_PATH "$_p"; set -g _RY_BOOT_TRIED true
     printf '%s' "$_p"
-end
-
-# ── POST-HOOK TABLE VALIDATOR: DESTINATION MIRROR ──
-set -g _RY_POST_HOOKS \
-    "/boot/loader/loader.conf|loader" "/etc/kernel/cmdline|cmdline" "/etc/sdboot-manage.conf|boot" "/etc/mkinitcpio.conf|boot" \
-    "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/NetworkManager-dispatcher.service.d/*|nmdispatch" "*/NetworkManager/conf.d/*|nm" \
-    "/etc/iw-regdomain|regdom" "/etc/bluetooth/main.conf|bluetooth" "/etc/nftables.conf|nft" "/etc/default/cpupower-service.conf|cpupower" \
-    "*/sysctl.d/*|sysctl" "/etc/udev/rules.d/*|udev" "*/modprobe.d/*|modprobe" "*/environment.d/*|envd" \
-    "*/MangoHud/MangoHud.conf|mangohud"
-function _ir_validate_post_hooks --description "Refuse to run when _RY_POST_HOOKS breaks the destination mirror or carries an empty tag" # handlers ship install-side
-    set -l _mirror_dsts $SYSTEM_DESTINATIONS $USER_DESTINATIONS
-    set -l _mirror_n (count $_mirror_dsts)
-    if test (count $_RY_POST_HOOKS) -ne "$_mirror_n"; _err_loud "_RY_POST_HOOKS count "(count $_RY_POST_HOOKS)" does not mirror destination count $_mirror_n — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    for _i in (seq $_mirror_n)
-        set -l _mparts (string split -m1 '|' -- "$_RY_POST_HOOKS[$_i]"); set -l _mpat $_mparts[1]
-        if not string match -q "$_mpat" -- "$_mirror_dsts[$_i]"; _err_loud "_RY_POST_HOOKS mirror break at index $_i: pattern '$_mpat' does not match destination '$_mirror_dsts[$_i]' — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    end
-    for _entry in $_RY_POST_HOOKS
-        set -l _parts (string split -m1 '|' -- "$_entry"); set -l _tag $_parts[2]
-        if test -z "$_tag"; _err_loud "_RY_POST_HOOKS entry has empty tag: '$_entry' — refuse to run"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    end
 end
 
 # ── PRE-DISPATCH EXIT (ARGPARSE-ERROR + EARLY-BAIL LOG CLEANUP) ──

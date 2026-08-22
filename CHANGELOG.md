@@ -3,6 +3,27 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.182.0
+-------
+
+  - cleanup: drop the eight erase targets ry-verify cannot set, including
+    the lock trio it never declares
+  - verify: remove the unreachable lock release; ry-verify takes no lock
+  - verify: _err always routed through the quiet path; the loud branch
+    needed a flag only ry-install sets
+  - verify: drop _RY_POST_HOOKS and its validator; the handlers it mirrors
+    all ship install-side
+  - verify: drop _RY_PHASE_NAMES and the five install-only accumulators;
+    nothing here reads them
+  - install: drop the malformed-ext4 awk filter; only ry-verify reads it
+  - verify: the raw-argv peek named ry-install, and a refusal message
+    named a function that ships in ry-install
+  - counts: exit constants split per script; ry-verify count tripwires
+    21 -> 19
+  - readme: name ry-install.fish as the tool gate; ry-verify guards at the
+    call site
+
+
 7.181.0
 -------
 
@@ -14,8 +35,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     ry-install can return
   - cleanup: erase only globals the script can set; 31 verify-side and 3
     install-side names never existed there
-  - readme: the FSR4 row and note name PROTON_FSR4_INDICATOR; the OS row
-    credits ry-install.fish with the systemd floor
 
 
 7.139.0 - 7.180.0
@@ -70,8 +89,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     to 1
   - split: 7.177.0 moves verify and check to ry-verify.fish; ry-install.fish
     keeps install and install-file
-  - split: 102 shared functions duplicated verbatim; parity cert enforces
-    byte-identical bodies with 2 declared per-script variants
+  - split: shared functions are duplicated verbatim; the parity cert
+    enforces byte-identical bodies outside the declared variants
   - split: 7.177.1 - 7.180.0 shed every arm, gate, banner and comment each
     script carried for its counterpart, including all 17 _post_* handlers
   - counts: 7.177.0 ships 2 scripts; version sync sites 4 -> 6, release

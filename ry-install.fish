@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.186.1 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.187.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.186.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.187.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -837,7 +837,8 @@ function _ry_get_file_content --argument-names dst --description "Generate expec
 
 # ── SUDO CREDENTIAL CACHE + COMMAND ESCALATION ──
 function _ensure_sudo_cached --description "Cache sudo credential once before repeated sudo -n calls"
-    if not command -q sudo; _err "sudo credential cache failed: sudo not found"; return 1; end
+    _log "SUDO_CACHE_START"
+    if not command -q sudo; _err "sudo credential cache failed: sudo not found"; _log "SUDO_CACHE_FAIL: sudo not found"; return 1; end
     set -l _sudo_err (_mktemp_or_null -p (_tmp_dir) "ry-sudo-err.$fish_pid.XXXXXX")
     _track_tmpfile "$_sudo_err"
     sudo -n -v 2>"$_sudo_err"
@@ -863,6 +864,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before re
         return 1
     end
     _rm_tmp "$_sudo_err" false
+    _log "SUDO_CACHE_OK"
     return 0
 end
 function _as --argument-names use_sudo --description "Prefix command with sudo or command based on use_sudo flag"
@@ -1607,6 +1609,7 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
     end
 end
 function _ry_validate_configs --description "Run all embedded config validators"
+    _log "CONFIG_CHECK_START"
     _info "Validating configuration syntax..."
     set -l errors 0
     _ry_validate_mkinitcpio_hooks; or set errors (math $errors + 1)
@@ -1618,8 +1621,9 @@ function _ry_validate_configs --description "Run all embedded config validators"
         if test "$status" -ne 0; _fail "  $dst: content generator failed"; set errors (math $errors + 1); continue; end
         _rvc_dispatch "$dst" $content; or set errors (math $errors + 1)
     end
-    if test "$errors" -gt 0; _err "Validation failed with $errors error(s)"; return $EXIT_PREFLIGHT; end
+    if test "$errors" -gt 0; _err "Validation failed with $errors error(s)"; _log "CONFIG_CHECK_FAIL: errors=$errors"; return $EXIT_PREFLIGHT; end
     _ok "All configurations validated"
+    _log "CONFIG_CHECK_OK"
     return 0
 end
 

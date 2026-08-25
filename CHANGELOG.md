@@ -3,6 +3,12 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.191.0
+-------
+
+  - readme: deploy-voice intro and Embedded Values lead
+
+
 7.190.0
 -------
 

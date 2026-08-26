@@ -3,6 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.192.0
+-------
+
+  - split: Embedded Values here is now the sole home of the shared value
+    tables; ry-verify points at it instead of restating
+
+
 7.191.0
 -------
 

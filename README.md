@@ -29,7 +29,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 | Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
 | Privileges | normal user with sudo rights; `sudo -v` cached before the run |
-| Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `curl`, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
+| Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `cmp`, `curl`, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
 
 ## Usage
 

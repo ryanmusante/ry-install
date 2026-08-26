@@ -3,6 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.193.0
+-------
+
+  - split: managed-file, package, unit, and tuning documentation now lives
+    here alone; ry-verify keeps only its verify-side keys
+
+
 7.192.0
 -------
 

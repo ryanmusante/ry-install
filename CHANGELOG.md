@@ -3,6 +3,12 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.194.0
+-------
+
+  - changelog: fold the 7.190.0 and 7.191.0 blocks into the range
+
+
 7.193.0
 -------
 
@@ -17,20 +23,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     tables; ry-verify points at it instead of restating
 
 
-7.191.0
--------
-
-  - readme: deploy-voice intro and Embedded Values lead
-
-
-7.190.0
--------
-
-  - split: ry-verify.fish moves to the ry-verify repository; README and
-    CHANGELOG rescoped to ry-install.fish
-
-
-7.139.0 - 7.189.0
+7.139.0 - 7.191.0
 -----------------
 
   - boot: COMPRESSION_OPTIONS -1 -> -3, drop -T0; fsck.mode=force -> auto
@@ -59,6 +52,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     7.181.0 lists _run sentinels 251 and 255
   - split: 7.177.0 moves verify and check to ry-verify.fish, shared fns
     verbatim; 7.177.1 - 7.180.0 shed every counterpart arm
+  - split: 7.190.0 moves ry-verify.fish to the ry-verify repository;
+    README and CHANGELOG rescoped to ry-install.fish
   - counts: 2 scripts, sync sites 4 -> 6, zip entries 5 -> 6; KERNEL_PARAMS
     15 -> 14, ENV_VARS 9 -> 10, SYSCTL_VALUES 9 -> 8, PKGS_ADD 16 -> 17
 

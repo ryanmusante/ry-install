@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.194.0** · [Changelog](CHANGELOG.md)
+**Version 7.195.0** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files) from embedded generators, installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended run, idempotent on every pass, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -157,7 +157,7 @@ All tunables are `set -g` globals rendered straight into the managed files at de
 |---|---|
 | `amd_pstate=active` | CPPC autonomous mode — the `amd-pstate-epp` scaling driver |
 | `btusb.enable_autosuspend=n` | keep the BT controller powered — no reconnect stalls |
-| `fsck.mode=auto` | fsck only when the filesystem asks for it |
+| `fsck.mode=force` | full fsck on every boot, not only when the filesystem asks |
 | `fsck.repair=yes` | auto-repair whatever fsck finds |
 | `iommu=pt` | passthrough default domain — low DMA overhead |
 | `ipv6.disable=1` | disable the IPv6 stack |
@@ -168,7 +168,7 @@ All tunables are `set -g` globals rendered straight into the managed files at de
 | `quiet` | suppress boot console noise |
 | `split_lock_detect=off` | no split-lock throttling penalty in games |
 | `usbcore.autosuspend=-1` | USB autosuspend off globally |
-| `zswap.enabled=0` | zswap off — zram is the swap path |
+| `zswap.enabled=0` | zswap off from early boot — zram is the swap path, and the vendor `30-zram.rules` disables zswap again once `zram0` initializes |
 
 ### Initramfs
 
@@ -210,11 +210,10 @@ All tunables are `set -g` globals rendered straight into the managed files at de
 | Variable | Effect |
 |---|---|
 | `DXVK_LOG_LEVEL=none` | DXVK logging off |
-| `GSK_RENDERER=ngl` | GTK4 GL renderer; the Vulkan renderer aborts on gfx1151 |
+| `GSK_RENDERER=gl` | GTK4 GL renderer; the Vulkan renderer aborts on gfx1151 |
 | `MANGOHUD=1` | HUD on for Vulkan titles |
 | `MESA_SHADER_CACHE_MAX_SIZE=16G` | roomy Mesa shader cache |
 | `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
-| `PROTON_FSR4_INDICATOR=1` | on-screen FSR4-active watermark (Proton-CachyOS) |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
 | `VKD3D_DEBUG=none` | vkd3d logging off |
 | `VKD3D_SHADER_DEBUG=none` | vkd3d shader logging off |
@@ -222,7 +221,7 @@ All tunables are `set -g` globals rendered straight into the managed files at de
 
 ### Sysctl Overrides
 
-Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
+Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.max_map_count` carries the SteamOS value; Arch already defaults to `1048576`, which covers current titles, and the larger value can confuse older programs reading core dumps. `vm.page-cluster` is left to the vendor file, which sets `0`.
 
 | Key | Value | Effect |
 |---|---|---|
@@ -234,6 +233,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 | `vm.compaction_proactiveness` | `0` | proactive compaction off |
 | `vm.max_map_count` | `2147483642` | Steam's esync requirement |
 | `vm.watermark_boost_factor` | `0` | watermark boosting off |
+| `vm.watermark_scale_factor` | `125` | wider reclaim band for zram swap |
 
 ## Packages
 
@@ -252,8 +252,9 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 ### Gaming Stack
 
 - `/dev/ntsync` — Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out at the Proton level.
-- `PROTON_FSR4_INDICATOR=1` — Proton-CachyOS watermark confirming FSR4 is active; it sets `FSR_WATERMARK=1` and `FSR_FG_WATERMARK=1` inside the prefix. Proton-EM uses `FSR4_WATERMARK=1` instead.
-- `cpu_stats` and `cpu_temp` — shipped commented out; add either on its own line. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
+- `PROTON_FSR4_UPGRADE=1` — the Proton-CachyOS lever that upgrades FSR 3.1 titles to FSR 4, per title in the Steam launch options rather than session-wide, since the DLL lands in the prefix; a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.1`. `PROTON_FSR4_INDICATOR=1` only draws the watermark (`FSR_WATERMARK=1` plus `FSR_FG_WATERMARK=1`) and is no longer shipped.
+- `cpu_stats` ships enabled; `cpu_temp` stays commented out — add it on its own line to turn it on. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
+- `game-performance` — the CachyOS wrapper needs `power-profiles-daemon`, whose service this profile masks, and the governor is already pinned to `performance`, so the wrapper is redundant here and fails when the daemon is absent.
 
 ### Kernel Parameter Notes
 

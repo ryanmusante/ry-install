@@ -3,6 +3,20 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.195.0
+-------
+
+  - env: drop PROTON_FSR4_INDICATOR=1, a watermark and not an upscaler
+    lever; GSK_RENDERER ngl -> gl, the name GTK 4.19.1 renamed it to
+  - sysctl: add vm.watermark_scale_factor=125, the one zram-recipe key
+    the vendor file does not set
+  - kernel: fsck.mode auto -> force
+  - configuration: MangoHud ships cpu_stats enabled; cpu_temp stays off
+  - counts: ENV_VARS 10 -> 9, SYSCTL_VALUES 8 -> 9
+  - readme: FSR4 upgrade lever, game-performance needs power-profiles-
+    daemon, zswap disabled twice, max_map_count against the Arch default
+
+
 7.194.0
 -------
 

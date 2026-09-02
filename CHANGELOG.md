@@ -3,6 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.195.1
+-------
+
+  - split: version bump in lockstep with ry-verify 7.195.1 (verify-side
+    fixes only); ry-install.fish is unchanged
+
+
 7.195.0
 -------
 
@@ -13,8 +20,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - kernel: fsck.mode auto -> force
   - configuration: MangoHud ships cpu_stats enabled; cpu_temp stays off
   - counts: ENV_VARS 10 -> 9, SYSCTL_VALUES 8 -> 9
-  - readme: FSR4 upgrade lever, game-performance needs power-profiles-
-    daemon, zswap disabled twice, max_map_count against the Arch default
 
 
 7.194.0

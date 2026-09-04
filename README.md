@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.195.1** · [Changelog](CHANGELOG.md)
+**Version 7.195.2** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files) from embedded generators, installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended run, idempotent on every pass, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -105,7 +105,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 | File | Purpose |
 |---|---|
-| `~/.config/environment.d/10-environment.conf` | session env — DXVK, GTK, MangoHud, Proton, VKD3D, Wine, PowerDevil |
+| `~/.config/environment.d/10-environment.conf` | session env — DXVK, GTK, MangoHud, Mesa, Proton, VKD3D, Wine, PowerDevil |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
 
 ## Install Flow
@@ -231,7 +231,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.max_map
 | `net.ipv4.tcp_notsent_lowat` | `16384` | cap unsent buffer at 16 KiB |
 | `net.ipv4.tcp_slow_start_after_idle` | `0` | keep the congestion window across idle |
 | `vm.compaction_proactiveness` | `0` | proactive compaction off |
-| `vm.max_map_count` | `2147483642` | Steam's esync requirement |
+| `vm.max_map_count` | `2147483642` | map headroom for games (SteamOS value) |
 | `vm.watermark_boost_factor` | `0` | watermark boosting off |
 | `vm.watermark_scale_factor` | `125` | wider reclaim band for zram swap |
 

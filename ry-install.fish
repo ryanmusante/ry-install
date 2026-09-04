@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.195.1 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.195.2 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.195.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.195.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -271,8 +271,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     _log "LOCK_ACQUIRED: pid=$fish_pid dir=$LOCK_DIR"
     return 0
 end
-# mkdir+pidfile lock; live/ambiguous PID fails closed
-function _acquire_lock --description "Acquire instance lock (atomic mkdir; dead-PID stale reclaim)"
+function _acquire_lock --description "Acquire instance lock (atomic mkdir; dead-PID reclaim only, live/ambiguous fails closed)"
     set -g LOCK_DIR "$_RY_HOME_DIR/.lock"; set -g LOCK_FILE "$LOCK_DIR/pid"
     set -l _lk_um 022; set -q umask; and set _lk_um $umask; set -g umask 0077; command mkdir -p -- (command dirname -- "$LOCK_DIR") 2>/dev/null; set -g umask $_lk_um # state dir is 0700 by contract
     _acquire_lock_fresh
@@ -523,7 +522,6 @@ set -g BLACKLIST_AMDXDNA false # false + iommu=pt enables the NPU
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "DXVK_LOG_LEVEL=none" "GSK_RENDERER=gl" "MANGOHUD=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_LOCAL_SHADER_CACHE=1" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
-# max_map_count=esync
 set -g SYSCTL_VALUES "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" "net.ipv4.tcp_congestion_control=bbr" "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" "vm.watermark_boost_factor=0" "vm.watermark_scale_factor=125"
 
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL) ──
@@ -609,7 +607,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _ir_validate_keys --description "Refuse deploy on out-of-domain embedded scalar keys"
+function _ir_validate_keys --description "Refuse to deploy on out-of-domain embedded scalar keys"
     for _k in BT_AUTO_ENABLE BT_FAST_CONNECTABLE BLACKLIST_AMDXDNA
         if not contains -- "$$_k" true false; _err_loud "$_k must be true|false (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
@@ -645,7 +643,7 @@ function _ir_validate_keys --description "Refuse deploy on out-of-domain embedde
         if not string match -qr -- '^[A-Za-z0-9._,=-]+$' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refuse to deploy (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _ir_validate_sets --description "Refuse deploy when add and remove sets contradict each other"
+function _ir_validate_sets --description "Refuse to deploy when add and remove sets contradict each other"
     for _p in $PKGS_ADD # phase 2 installs, phase 4 -Rns removes: verify would assert both
         if contains -- "$_p" $PKGS_DEL; _err_loud "'$_p' is in both PKGS_ADD and PKGS_DEL — phase 4 would remove what phase 2 installed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
@@ -3026,7 +3024,7 @@ set -g _RY_POST_HOOKS \
     "/etc/iw-regdomain|regdom" "/etc/bluetooth/main.conf|bluetooth" "/etc/nftables.conf|nft" "/etc/default/cpupower-service.conf|cpupower" \
     "*/sysctl.d/*|sysctl" "/etc/udev/rules.d/*|udev" "*/modprobe.d/*|modprobe" "*/environment.d/*|envd" \
     "*/MangoHud/MangoHud.conf|mangohud"
-function _ir_validate_post_hooks --description "Refuse deploy when a _RY_POST_HOOKS tag lacks a handler or breaks destination mirror" # mirrors _ir_validate_keys
+function _ir_validate_post_hooks --description "Refuse to deploy when a _RY_POST_HOOKS tag lacks a handler or breaks destination mirror" # mirrors _ir_validate_keys
     set -l _seen_tags
     set -l _mirror_dsts $SYSTEM_DESTINATIONS $USER_DESTINATIONS
     set -l _mirror_n (count $_mirror_dsts)

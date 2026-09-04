@@ -3,6 +3,15 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.195.2
+-------
+
+  - split: version bump in lockstep with ry-verify 7.195.2; ry-install.fish
+    changes are comments and descriptions only
+  - readme: vm.max_map_count is map headroom for games, not an esync
+    requirement; Mesa joins the session-env family list
+
+
 7.195.1
 -------
 

@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.195.2** · [Changelog](CHANGELOG.md)
+**Version 7.196.0** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files) from embedded generators, installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended run, idempotent on every pass, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -12,6 +12,7 @@ Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryz
 ```fish
 git clone https://github.com/ryanmusante/ry-install.git
 cd ry-install
+chmod +x ry-install.fish
 sudo -v
 ./ry-install.fish
 ```
@@ -134,7 +135,7 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 ## Embedded Values
 
 > [!CAUTION]
-> `ry-install.fish` and `ry-verify.fish` carry their shared tunables verbatim and ship at the same version. Clone both repos at the same tag. A version mismatch leaves `ry-verify.fish` checking values `ry-install.fish` no longer deploys.
+> `ry-install.fish` and `ry-verify.fish` carry their shared tunables verbatim and ship at the same version. Clone both repos at the same version. A version mismatch leaves `ry-verify.fish` checking values `ry-install.fish` no longer deploys.
 
 All tunables are `set -g` globals rendered straight into the managed files at deploy — there is no external config file to edit afterward. Every key below is carried verbatim by [ry-verify](https://github.com/ryanmusante/ry-verify) at the same version; edit both repos in lockstep, then re-run or `--install-file` the affected file.
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.195.2 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.196.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.195.2"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.196.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -147,7 +147,7 @@ if not command -q date; echo "[ERR] GNU coreutils date(1) required (used for tim
 if not string match -qr '^[+-]\d{4}$' -- (command date '+%z' 2>/dev/null); echo "[ERR] date(1) lacks %z timezone offset support (need GNU coreutils ≥ 8.x; rejects empty or literal-%z output)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 
 # ── TIMESTAMPS + HOME + LOG_DIR ──
-set -l _ry_now (command date '+%Y-%m-%d|%Y%m%d-%H%M%S%z'); set -l _ry_dt (string split -m1 '|' -- "$_ry_now"); set -g DATE_LABEL $_ry_dt[1]; set -g TIMESTAMP (string join '-' $_ry_dt[2] $fish_pid); set --erase _ry_now _ry_dt
+set -l _ry_now (command date '+%Y-%m-%d|%Y%m%d-%H%M%S%z'); set -l _ry_dt (string split -m1 '|' -- "$_ry_now"); set -g DATE_LABEL $_ry_dt[1]; set -g TIMESTAMP (string join -- '-' $_ry_dt[2] $fish_pid); set --erase _ry_now _ry_dt
 if test -z "$HOME"; or not test -d "$HOME"
     set -gx HOME (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $6}')
     if test -z "$HOME"; or not test -d "$HOME"; echo "[ERR] Cannot determine HOME directory" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -2375,7 +2375,7 @@ end
 function _nft_input_drop_live --description "True when live inet/filter/input chain has policy drop"; command -q nft; or return 1; sudo -n true 2>/dev/null; or return 1; set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null | string collect); string match -q -- '*policy drop*' "$_in_chain"; end
 function _csm_enable_nftables_first --description "_configure_services_mask sub: Activate nftables before the ufw flush + mask"
     contains -- ufw.service $MASK; or return 0
-    contains -- nftables.service $EXPECTED_SERVICES; or return 0
+    contains -- nftables.service $EXPECTED_SERVICES; or return 1 # not a managed unit: ruleset cannot be confirmed live
     if _nft_input_drop_live; _log "NFT_PRE_ENABLE_SKIP: ruleset already live"; return 0; end
     _run sudo -n systemctl enable --now -- nftables.service
     if _nft_input_drop_live
@@ -3141,6 +3141,7 @@ function _post_resolved --argument-names target --description "Post-hook: restar
     _echo
     if not _run sudo -n systemctl restart systemd-resolved
         _warn "systemd-resolved restart failed — drop-in applies at next boot (non-fatal; file deployed)"
+        _log "POST_RESOLVED_RESTART_FAIL: target=$target"
         return 0
     end
     return 0
@@ -3150,6 +3151,7 @@ function _post_nmdispatch --argument-names target --description "Post-hook: daem
     _echo
     if not _run sudo -n systemctl daemon-reload
         _warn "systemctl daemon-reload failed — dispatcher LogLevelMax applies at next boot (non-fatal; file deployed)"
+        _log "POST_NMDISPATCH_RELOAD_FAIL: target=$target"
         return 0
     end
     _info "  nm-dispatcher LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX active on next dispatch activation"
@@ -3178,11 +3180,13 @@ function _post_sysctl --argument-names target --description "Post-hook: apply sy
     if not command -q sysctl
         _warn "sysctl(8) not found — tunables will apply on next reboot via systemd-sysctl.service"
         _info "  Install procps-ng for immediate apply: sudo pacman -S --needed procps-ng"
+        _log "POST_SYSCTL_SKIP_NO_SYSCTL: target=$target"
         return 0
     end
     if not _run sudo -n sysctl --system
         _warn "sysctl --system failed — tunables not applied until reboot (non-fatal; file deployed)"
         _info "  Retry: sudo sysctl --system"
+        _log "POST_SYSCTL_APPLY_FAIL: target=$target"
         return 0
     end
     return 0
@@ -3213,6 +3217,7 @@ function _post_cpupower --argument-names target --description "Post-hook: restar
     if not _run sudo -n systemctl restart cpupower.service
         _warn "cpupower.service restart failed — governor change applies on next boot (non-fatal; file deployed)"
         _info "  Governor from /etc/default/cpupower-service.conf re-applies on next boot"
+        _log "POST_CPUPOWER_RESTART_FAIL: target=$target"
         return 0
     end
     return 0
@@ -3221,16 +3226,18 @@ function _post_nft --argument-names target --description "Post-hook: validate + 
     _echo
     if not _run sudo -n nft -c -f /etc/nftables.conf
         _warn "nftables ruleset failed validation (nft -c) — not reloaded; fix /etc/nftables.conf"
+        _log "POST_NFT_VALIDATE_FAIL: target=$target"
         return 0
     end
     if _run sudo -n systemctl restart nftables.service # oneshot re-runs nft -f (no ExecReload)
         _ok "nftables ruleset applied (systemctl restart — oneshot re-runs nft -f)"
     else
         _warn "nftables restart failed — validated ruleset applies when the service next starts (reboot)"
+        _log "POST_NFT_RESTART_FAIL: target=$target"
     end
     return 0
 end
-function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"; _echo; _apply_wireless_regdom; end
+function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"; _echo; _log "POST_REGDOM_APPLY: target=$target"; _apply_wireless_regdom; end
 function _post_bluetooth --argument-names target --description "Post-hook: restart bluetooth.service after /etc/bluetooth/main.conf change"
     _echo
     if not command -q bluetoothctl; and not test -e /usr/lib/systemd/system/bluetooth.service
@@ -3370,7 +3377,7 @@ else
     command chmod -- 600 "$LOG_FILE" 2>/dev/null
 end
 set -l _argv_parts; set -l _argv_in (status filename) $_ORIG_ARGV
-for _r in $_argv_in; set -a _argv_parts '"'(_json_str "$_r")'"'; end
+for _r in $_argv_in; set -a _argv_parts '"'(_json_str "$_r" | string collect --allow-empty)'"'; end
 set --erase _r
 set -l _argv_json '['(string join -- ',' $_argv_parts)']'; set -l _verbose_json false
 test "$QUIET" = false; and set _verbose_json true

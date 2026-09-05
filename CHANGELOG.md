@@ -3,13 +3,22 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.196.0
+-------
+
+  - services: the nftables-first gate withholds the ufw mask when
+    nftables.service is not an expected unit; it used to flush and mask
+  - logging: JSONL header keeps an empty argv element; post-hook skip and
+    failure paths record target=
+  - readme: Quick Start runs chmod +x first (git tracks the script 0644);
+    lockstep wording says version, not tag
+
+
 7.195.2
 -------
 
   - split: version bump in lockstep with ry-verify 7.195.2; ry-install.fish
     changes are comments and descriptions only
-  - readme: vm.max_map_count is map headroom for games, not an esync
-    requirement; Mesa joins the session-env family list
 
 
 7.195.1

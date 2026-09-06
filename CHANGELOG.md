@@ -3,6 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.197.1
+-------
+
+  - split: version bump in lockstep with ry-verify 7.197.1 (verify-side
+    additions only); ry-install.fish is unchanged
+
+
 7.197.0
 -------
 
@@ -12,8 +19,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     failure paths record target=
   - preflight: the resolved, NetworkManager and environment.d change keys must
     be managed destinations, else refusal rc 3 (a rename would skip restarts)
-  - readme: Quick Start runs chmod +x first (git tracks the script 0644);
-    lockstep wording says version, not tag
 
 
 7.195.2

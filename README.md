@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.198.0** · [Changelog](CHANGELOG.md)
+**Version 7.199.0** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files) from embedded generators, installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended run, idempotent on every pass, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -168,6 +168,7 @@ All tunables are `set -g` globals rendered straight into the managed files at de
 | `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
 | `quiet` | suppress boot console noise |
 | `split_lock_detect=off` | no split-lock throttling penalty in games |
+| `ttm.pages_limit=20971520` | TTM page cap in 4 KiB pages — raises the GTT ceiling `amdgpu` may size; the supported successor of the deprecated `amdgpu.gttsize` |
 | `usbcore.autosuspend=-1` | USB autosuspend off globally |
 | `zswap.enabled=0` | zswap off from early boot — zram is the swap path, and the vendor `30-zram.rules` disables zswap again once `zram0` initializes |
 

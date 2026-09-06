@@ -3,6 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.199.0
+-------
+
+  - kernel: add ttm.pages_limit=20971520 (TTM page cap; amdgpu.gttsize is
+    deprecated); KERNEL_PARAMS 14 -> 15, tripwire follows
+
+
 7.198.0
 -------
 

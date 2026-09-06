@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.196.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.197.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.196.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.197.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -654,6 +654,11 @@ function _ir_validate_sets --description "Refuse to deploy when add and remove s
         if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and _RY_PKG_MANAGED_SERVICES — a masked unit cannot be package-managed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
+function _ir_validate_change_keys --description "Refuse to deploy when a phase change-key literal is not a managed destination" # resolved restart, NM restart, PowerDevil re-apply
+    for _k in /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf "$HOME/.config/environment.d/10-environment.conf"
+        if not contains -- "$_k" $SYSTEM_DESTINATIONS $USER_DESTINATIONS; _err_loud "'$_k' keys a phase restart but is not a managed destination — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+end
 
 # ── RUNTIME INIT: ORCHESTRATOR (_init_runtime) ──
 function _init_runtime --description "Cache root UUID + validate config + precompute caches"
@@ -686,6 +691,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     _ir_validate_keys
     _ir_validate_sets
     _ir_validate_post_hooks
+    _ir_validate_change_keys
     for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
     _ir_precompute_caches
     for _pn in $PKGS_ADD $PKGS_DEL
@@ -2452,7 +2458,7 @@ function _cse_collect_units --description "Collect system units to enable"
         if not contains -- "$_exp" $_RY_PKG_MANAGED_SERVICES
             set -a _enable "$_exp"; continue
         end
-        set -l _st (command systemctl is-enabled "$_exp" 2>/dev/null | string trim --) # enable only if preset did not
+        set -l _st (command systemctl is-enabled -- "$_exp" 2>/dev/null | string trim --) # enable only if preset did not
         if test "$_st" = enabled
             _ok "$_exp: already enabled (package preset)"
         else if test -z "$_st"

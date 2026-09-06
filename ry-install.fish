@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.197.1 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.198.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.197.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.198.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -527,13 +527,13 @@ set -g SYSCTL_VALUES "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" "net.ip
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL) ──
 set -g PKGS_ADD \
     nvme-cli cachyos-gaming-meta cachyos-gaming-applications cachyos-benchmarker lib32-mesa mkinitcpio-firmware fd sd dust procs \
-    bottom htop lm_sensors rtkit realtime-privileges nftables pacman-contrib # pacman-contrib: pactree + paccache
+    bottom htop lm_sensors rtkit realtime-privileges nftables pacman-contrib dmemcg-booster plasma-foreground-booster # pacman-contrib: pactree + paccache
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi+resolved: mDNS off by design; ufw: nft owns the ruleset
-set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
-set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
+set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service dmemcg-booster-system.service # enabled in Phase 4/6
+set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service dmemcg-booster-system.service # enabled by their package presets/scriptlets
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 
@@ -588,11 +588,11 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         LOGIND_IGNORE_KEYS:8 \
         ENV_VARS:9 \
         SYSCTL_VALUES:9 \
-        PKGS_ADD:17 \
+        PKGS_ADD:19 \
         PKGS_DEL:9 \
         MASK:11 \
-        EXPECTED_SERVICES:5 \
-        _RY_PKG_MANAGED_SERVICES:1 \
+        EXPECTED_SERVICES:6 \
+        _RY_PKG_MANAGED_SERVICES:2 \
         _RY_POST_HOOKS:17 \
         _RY_ARGPARSE_SPEC:3 \
         _RY_BOOT_CRITICAL_DSTS:4 \

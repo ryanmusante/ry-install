@@ -3,11 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.197.1
+7.198.0
 -------
 
-  - split: version bump in lockstep with ry-verify 7.197.1 (verify-side
-    additions only); ry-install.fish is unchanged
+  - packages: add dmemcg-booster and plasma-foreground-booster (dmem cgroup
+    VRAM protection); PKGS_ADD 17 -> 19, tripwire follows
+  - services: dmemcg-booster-system.service joins EXPECTED_SERVICES as a
+    package-managed unit (enabled by its scriptlet); 5 -> 6, tripwires follow
 
 
 7.197.0

@@ -62,21 +62,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - changelog: fold the 7.190.0 and 7.191.0 blocks into the range
 
 
-7.193.0
--------
-
-  - split: managed-file, package, unit, and tuning documentation now lives
-    here alone; ry-verify keeps only its verify-side keys
-
-
-7.192.0
--------
-
-  - split: Embedded Values here is now the sole home of the shared value
-    tables; ry-verify points at it instead of restating
-
-
-7.139.0 - 7.191.0
+7.139.0 - 7.193.0
 -----------------
 
   - boot: COMPRESSION_OPTIONS -1 -> -3, drop -T0; fsck.mode=force -> auto
@@ -107,6 +93,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     verbatim; 7.177.1 - 7.180.0 shed every counterpart arm
   - split: 7.190.0 moves ry-verify.fish to the ry-verify repository;
     README and CHANGELOG rescoped to ry-install.fish
+  - split: 7.192.0 - 7.193.0 make this the sole home of the shared value
+    tables and the managed-file, package, unit and tuning documentation
   - counts: 2 scripts, sync sites 4 -> 6, zip entries 5 -> 6; KERNEL_PARAMS
     15 -> 14, ENV_VARS 9 -> 10, SYSCTL_VALUES 9 -> 8, PKGS_ADD 16 -> 17
 

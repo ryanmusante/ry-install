@@ -2,7 +2,7 @@
 
 **Version 7.199.0** · [Changelog](CHANGELOG.md)
 
-Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files) from embedded generators, installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended run, idempotent on every pass, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
+Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended run, idempotent on every pass, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
 ## Quick Start
 
@@ -20,8 +20,6 @@ sudo -v
 A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` on exit `0`, otherwise `PREFLIGHT`, `FAIL`, or `FAIL-BOOT-CRITICAL` — see [Exit Codes](#exit-codes).
 
 ## Requirements
-
-`ry-install.fish` gates the tools below at preflight.
 
 | Requirement | Detail |
 |---|---|
@@ -100,7 +98,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | `/etc/default/cpupower-service.conf` | governor (`performance`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, TCP `bbr`, VM tunables |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `high` |
-| `/etc/modprobe.d/60-ry-modules.conf` | optional `amdxdna` blacklist — comment-only while `BLACKLIST_AMDXDNA=false` |
+| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist — comment-only while `BLACKLIST_AMDXDNA=false` |
 
 ### User
 
@@ -111,7 +109,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 ## Install Flow
 
-Phase 4 masks `ufw.service` rather than removing the package, and withholds the mask for the run unless the nftables ruleset is confirmed live and default-deny first.
+Phase 4 masks `ufw.service` rather than removing the package, and withholds the mask unless the nftables ruleset is confirmed live and default-deny first.
 
 | Phase | Name | Work |
 |---|---|---|
@@ -124,11 +122,11 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 
 ## Safety and Reliability
 
-**Atomic writes** — every managed file is rendered to a temp file on the same filesystem, pre-validated where a validator exists (`nft -c`), then moved with `mv -T`; a post-write mismatch restores the backup.
+**Atomic writes** — each file is rendered to a temp file, validated where a validator exists (`nft -c`), then moved with `mv -T`; a post-write mismatch restores the backup.
 
 **Backups** — `.ry.bak` copies for the 4 boot files and the fstab rewrite land in `~/ry-install/backups/` under slash-encoded names (`/etc/fstab` → `_etc_fstab.ry.bak`).
 
-**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing redundant `defaults`, `*atime` tokens, and any existing `commit=`; every other row is byte-preserved. A power loss can discard up to 10 s of metadata.
+**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `*atime`, and any existing `commit=`; every other row is byte-preserved. A power loss can discard up to 10 s of metadata.
 
 **Failure and concurrency** — boot-critical failures exit `4` and skip finalization. One `ry-install.fish` runs at a time; a second exits `5`.
 
@@ -137,7 +135,7 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 > [!CAUTION]
 > `ry-install.fish` and `ry-verify.fish` carry their shared tunables verbatim and ship at the same version. Clone both repos at the same version. A version mismatch leaves `ry-verify.fish` checking values `ry-install.fish` no longer deploys.
 
-All tunables are `set -g` globals rendered straight into the managed files at deploy — there is no external config file to edit afterward. Every key below is carried verbatim by [ry-verify](https://github.com/ryanmusante/ry-verify) at the same version; edit both repos in lockstep, then re-run or `--install-file` the affected file.
+All tunables are `set -g` globals in the script — there is no external config file. Edit both repos in lockstep, then re-run or `--install-file` the affected file.
 
 ### Bootloader Keys
 
@@ -168,9 +166,9 @@ All tunables are `set -g` globals rendered straight into the managed files at de
 | `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
 | `quiet` | suppress boot console noise |
 | `split_lock_detect=off` | no split-lock throttling penalty in games |
-| `ttm.pages_limit=20971520` | TTM page cap in 4 KiB pages — raises the GTT ceiling `amdgpu` may size; the supported successor of the deprecated `amdgpu.gttsize` |
+| `ttm.pages_limit=20971520` | TTM page cap in 4 KiB pages — the GTT ceiling `amdgpu` sizes from; replaces the deprecated `amdgpu.gttsize` |
 | `usbcore.autosuspend=-1` | USB autosuspend off globally |
-| `zswap.enabled=0` | zswap off from early boot — zram is the swap path, and the vendor `30-zram.rules` disables zswap again once `zram0` initializes |
+| `zswap.enabled=0` | zswap off from early boot — zram is the swap path |
 
 ### Initramfs
 
@@ -185,9 +183,7 @@ All tunables are `set -g` globals rendered straight into the managed files at de
 
 ### Service Keys
 
-`DNSOverTLS=` and `DNSSEC=` are left unset by design — the router does DoT upstream and validates DNSSEC. The router serves DoT WAN-side only, so a host `DNSOverTLS=yes` would fail closed.
-
-`NM_WIFI_POWERSAVE` is `2` because the MT7925 handles powersave in software and spikes latency otherwise. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; [Tuning Notes](#tuning-notes) has the reverse switch.
+`DNSOverTLS=` and `DNSSEC=` are unset by design — the router does DoT upstream and validates DNSSEC. `NM_WIFI_POWERSAVE` is `2` because the MT7925 spikes latency otherwise. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; [Tuning Notes](#tuning-notes) has the reverse switch.
 
 | Key | Value | Emitted as |
 |---|---|---|
@@ -223,7 +219,7 @@ All tunables are `set -g` globals rendered straight into the managed files at de
 
 ### Sysctl Overrides
 
-Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.max_map_count` carries the SteamOS value; Arch already defaults to `1048576`, which covers current titles, and the larger value can confuse older programs reading core dumps. `vm.page-cluster` is left to the vendor file, which sets `0`.
+Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cluster` is left to the vendor file, which sets `0`.
 
 | Key | Value | Effect |
 |---|---|---|
@@ -254,13 +250,13 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.max_map
 ### Gaming Stack
 
 - `/dev/ntsync` — Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out at the Proton level.
-- `PROTON_FSR4_UPGRADE=1` — the Proton-CachyOS lever that upgrades FSR 3.1 titles to FSR 4, per title in the Steam launch options rather than session-wide, since the DLL lands in the prefix; a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.1`. `PROTON_FSR4_INDICATOR=1` only draws the watermark (`FSR_WATERMARK=1` plus `FSR_FG_WATERMARK=1`) and is no longer shipped.
+- `PROTON_FSR4_UPGRADE=1` — the Proton-CachyOS lever that upgrades FSR 3.1 titles to FSR 4; per title in the Steam launch options, never session-wide, and a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.1`. `PROTON_FSR4_INDICATOR=1` draws only the watermark and is not shipped.
 - `cpu_stats` ships enabled; `cpu_temp` stays commented out — add it on its own line to turn it on. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
-- `game-performance` — the CachyOS wrapper needs `power-profiles-daemon`, whose service this profile masks, and the governor is already pinned to `performance`, so the wrapper is redundant here and fails when the daemon is absent.
+- `game-performance` — the CachyOS wrapper needs `power-profiles-daemon`, whose service this profile masks; the governor is already `performance`, so the wrapper is redundant here.
 
 ### Kernel Parameter Notes
 
-- `iommu=pt` — IOMMU on for the XDNA NPU, VFIO and SR-IOV; to shed the last DMA-mapping overhead on a box using none of them, add `amd_iommu=off`, set `BLACKLIST_AMDXDNA true`, and re-run.
+- `iommu=pt` — IOMMU on for the XDNA NPU, VFIO and SR-IOV; to shed the DMA-mapping overhead on a box using none of them, add `amd_iommu=off`, set `BLACKLIST_AMDXDNA true`, and re-run.
 - `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — addresses Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
@@ -269,7 +265,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.max_map
 
 ## BIOS
 
-Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` ceiling (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`; full per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
+Multi-thread gains flatten past ~85 W. Set `SPL = fPPT = sPPT = 85 W` (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`; per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
 ## Troubleshooting
 
@@ -279,7 +275,7 @@ Multi-thread gains flatten past ~85 W. Set a flat `SPL = fPPT = sPPT = 85 W` cei
 
 **Bluetooth speaker will not auto-reconnect** — `bluetoothctl trust <MAC>`, then power the speaker on after login.
 
-**libvirt and QEMU NAT** — `forward { policy drop; }` breaks libvirt/QEMU NAT guest WAN access. VMs are out of scope; if you run them, do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`).
+**libvirt and QEMU NAT** — `forward { policy drop; }` breaks guest WAN access. VMs are out of scope; if you run them, do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`).
 
 ## Uninstall
 
@@ -287,7 +283,7 @@ There is no automated uninstaller. Use [Managed Files](#managed-files) as the ro
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
-3. **Revert boot files and fstab** — restore the matching `~/ry-install/backups/*.ry.bak` copy over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the backups; older deployments keep the copies beside each file instead.
+3. **Revert boot files and fstab** — restore the matching `~/ry-install/backups/*.ry.bak` copy over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the backups; older deployments keep the copies beside each file.
 4. **Reverse packages** — optional: `sudo pacman -S --needed` the Remove list, `sudo pacman -Rns` the Install list; both listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.
 

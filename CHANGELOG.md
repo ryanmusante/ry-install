@@ -3,6 +3,17 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.200.0
+-------
+
+  - packages: drop dmemcg-booster and plasma-foreground-booster; the dmem
+    controller accounts only the VRAM carveout here; PKGS_ADD 19 -> 17
+  - services: dmemcg-booster-system.service leaves EXPECTED_SERVICES and the
+    package-managed list; 6 -> 5 and 2 -> 1, tripwires follow
+  - network: disable NetworkManager connectivity checking in the managed
+    drop-in; the periodic reachability request is unwanted on the gaming path
+
+
 7.199.0
 -------
 

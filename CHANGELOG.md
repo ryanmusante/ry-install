@@ -6,8 +6,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.200.0
 -------
 
-  - packages: drop dmemcg-booster and plasma-foreground-booster; the dmem
-    controller accounts only the VRAM carveout here; PKGS_ADD 19 -> 17
+  - packages: drop dmemcg-booster and plasma-foreground-booster (dmem sees
+    only the VRAM carveout, not GTT); PKGS_ADD 19 -> 17, tripwire follows
   - services: dmemcg-booster-system.service leaves EXPECTED_SERVICES and the
     package-managed list; 6 -> 5 and 2 -> 1, tripwires follow
   - network: disable NetworkManager connectivity checking in the managed

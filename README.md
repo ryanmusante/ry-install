@@ -50,8 +50,6 @@ Per-phase verdicts:
 
 ## Exit Codes
 
-`ry-install.fish` exits `0 1 2 3 4 5`.
-
 | Code | Meaning |
 |---|---|
 | `0` | OK — success and `WARN`-only runs |
@@ -109,8 +107,6 @@ In deploy order; system files land `0644`, user files `0600`.
 
 ## Install Flow
 
-Phase 4 masks `ufw.service` rather than removing the package, and withholds the mask unless the nftables ruleset is confirmed live and default-deny first.
-
 | Phase | Name | Work |
 |---|---|---|
 | 1 | Preflight | sudo cache, dependency, systemd, disk, network, and time-sync gates; config validation |
@@ -122,20 +118,18 @@ Phase 4 masks `ufw.service` rather than removing the package, and withholds the 
 
 ## Safety and Reliability
 
-**Atomic writes** — each file is rendered to a temp file, validated where a validator exists (`nft -c`), then moved with `mv -T`; a post-write mismatch restores the backup.
+**Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; a post-write mismatch restores the backup.
 
 **Backups** — `.ry.bak` copies for the 4 boot files and the fstab rewrite land in `~/ry-install/backups/` under slash-encoded names (`/etc/fstab` → `_etc_fstab.ry.bak`).
 
 **fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `*atime`, and any existing `commit=`; every other row is byte-preserved. A power loss can discard up to 10 s of metadata.
-
-**Failure and concurrency** — boot-critical failures exit `4` and skip finalization. One `ry-install.fish` runs at a time; a second exits `5`.
 
 ## Embedded Values
 
 > [!CAUTION]
 > `ry-install.fish` and `ry-verify.fish` carry their shared tunables verbatim and ship at the same version. Clone both repos at the same version. A version mismatch leaves `ry-verify.fish` checking values `ry-install.fish` no longer deploys.
 
-All tunables are `set -g` globals in the script — there is no external config file. Edit both repos in lockstep, then re-run or `--install-file` the affected file.
+All tunables are `set -g` globals in the script. Edit both repos in lockstep, then re-run or `--install-file` the affected file.
 
 ### Bootloader Keys
 
@@ -279,7 +273,7 @@ Multi-thread gains flatten past ~85 W. Set `SPL = fPPT = sPPT = 85 W` (stock boo
 
 ## Uninstall
 
-There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference; the steps are ordered.
+There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference.
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.

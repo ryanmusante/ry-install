@@ -3,6 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.200.1
+-------
+
+  - split: version bump in lockstep with ry-verify (verify-side check-mode
+    logging only; ry-install.fish unchanged)
+
+
 7.200.0
 -------
 

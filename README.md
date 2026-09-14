@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.200.1** · [Changelog](CHANGELOG.md)
+**Version 7.201.0** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended run, idempotent on every pass, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -120,7 +120,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 **Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; a post-write mismatch restores the backup.
 
-**Backups** — `.ry.bak` copies for the 4 boot files and the fstab rewrite land in `~/ry-install/backups/` under slash-encoded names (`/etc/fstab` → `_etc_fstab.ry.bak`).
+**Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab. A run that finds a file already current rewrites nothing and copies nothing.
 
 **fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `*atime`, and any existing `commit=`; every other row is byte-preserved. A power loss can discard up to 10 s of metadata.
 
@@ -277,7 +277,7 @@ There is no automated uninstaller. Use [Managed Files](#managed-files) as the ro
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
-3. **Revert boot files and fstab** — restore the matching `~/ry-install/backups/*.ry.bak` copy over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the backups; older deployments keep the copies beside each file.
+3. **Revert boot files and fstab** — restore the matching `~/ry-install/backups/*.ry.bak` copy over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present — a file no run ever rewrote has no copy — then delete the backups; older deployments keep the copies beside each file.
 4. **Reverse packages** — optional: `sudo pacman -S --needed` the Remove list, `sudo pacman -Rns` the Install list; both listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.
 

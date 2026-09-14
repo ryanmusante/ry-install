@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.200.1 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.201.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.200.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.201.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1690,6 +1690,7 @@ function _awf_symlink_check --argument-names dst tmpfile use_sudo --description 
 end
 function _ry_mode_drift --argument-names dst use_sudo perms --description "Emit the current mode when it differs from the managed contract, else nothing"
     string match -q '/boot/*' -- "$dst"; and return 1 # vfat synthesizes modes from mount options
+    test -L "$dst"; and return 1 # a symlink's own mode is meaningless; chmod follows it
     set -l _cur (_as $use_sudo stat -c '%a' -- "$dst" 2>/dev/null | string trim --); test -z "$_cur"; and return 1
     test "$_cur" = (string replace -r '^0+(?=.)' '' -- "$perms"); and return 1
     printf '%s' "$_cur"
@@ -1824,6 +1825,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     set -l _cur_bytes ""; set -l _read_rc -1 # fn scope: shared by the probe and compare branches
     if test "$_gen_rc" -eq 0
         set _cur_bytes (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set _read_rc $pipestatus[1]
+        test -L "$dst"; and set _read_rc -1; and _log "SYMLINK_DST: dst=$dst — replacing symlink with a regular file"
         if test "$_read_rc" -eq 0; and test "$_new_bytes" = "$_cur_bytes"; set -l _tag ""; set -q _RY_DEPLOY_TAG; and test -n "$_RY_DEPLOY_TAG"; and set _tag " [$_RY_DEPLOY_TAG]"; set -g _RY_DEPLOY_IDEMPOTENT_COUNT (math $_RY_DEPLOY_IDEMPOTENT_COUNT + 1); _ry_mode_repair "$dst" "$use_sudo" "$perms"; _ok "→ $dst (unchanged)$_tag"; return 0; end
         test "$_read_rc" -eq 2; and _log "SKIP_PROBE_SUDO_LAPSED: dst=$dst — re-deploying"
     end

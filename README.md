@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.201.0** · [Changelog](CHANGELOG.md)
+**Version 7.202.0** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended run, idempotent on every pass, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -119,6 +119,8 @@ In deploy order; system files land `0644`, user files `0600`.
 ## Safety and Reliability
 
 **Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; a post-write mismatch restores the backup.
+
+**Symlinked destinations** — a managed path that is a symlink is replaced with a regular file at the managed mode; the link target is left in place.
 
 **Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab. A run that finds a file already current rewrites nothing and copies nothing.
 

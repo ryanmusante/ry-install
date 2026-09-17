@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.203.0** · [Changelog](CHANGELOG.md)
+**Version 7.204.0** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended run, idempotent on every pass, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -78,7 +78,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
-| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 15 kernel tokens |
+| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 16 kernel tokens |
 | `/etc/sdboot-manage.conf` | `LINUX_OPTIONS` mirror, `LINUX_FALLBACK_OPTIONS="quiet"`, entry management keys |
 | `/etc/mkinitcpio.conf` | `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-3`) |
 
@@ -93,7 +93,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | `/etc/iw-regdomain` | regulatory domain (`US`) |
 | `/etc/bluetooth/main.conf` | auto-power-on, `FastConnectable`, 3 reconnect attempts |
 | `/etc/nftables.conf` | default-deny-inbound, IPv4 ping allowed, ICMPv6 base accept |
-| `/etc/default/cpupower-service.conf` | governor (`performance`) |
+| `/etc/default/cpupower-service.conf` | governor (`powersave`) |
 | `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, TCP `bbr`, VM tunables |
 | `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `high` |
 | `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist — comment-only while `BLACKLIST_AMDXDNA=false` |
@@ -157,6 +157,7 @@ All tunables are `set -g` globals in the script. Edit both repos in lockstep, th
 | `iommu=pt` | passthrough default domain — low DMA overhead |
 | `ipv6.disable=1` | disable the IPv6 stack |
 | `mt7925e.disable_aspm=1` | MT7925 endpoint ASPM off — driver-level coredump mitigation |
+| `nowatchdog` | soft- and hard-lockup detectors off — the CachyOS `sdboot-manage.conf` default |
 | `nvme_core.default_ps_max_latency_us=0` | NVMe APST off — no power-state exit latency |
 | `pcie_aspm.policy=performance` | bias every PCIe link away from ASPM |
 | `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
@@ -179,7 +180,7 @@ All tunables are `set -g` globals in the script. Edit both repos in lockstep, th
 
 ### Service Keys
 
-`DNSOverTLS=` and `DNSSEC=` are unset by design — the router does DoT upstream and validates DNSSEC. `NM_WIFI_POWERSAVE` is `2` because the MT7925 spikes latency otherwise. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; [Tuning Notes](#tuning-notes) has the reverse switch.
+`DNSOverTLS=` and `DNSSEC=` are unset by design — the router does DoT upstream and validates DNSSEC. `NM_WIFI_POWERSAVE` is `2` because the MT7925 spikes latency otherwise. `CPUPOWER_GOVERNOR` is `powersave` because `performance` pins every core's CPPC floor at nominal; `EPP_PREFERENCE` `performance` still carries the maximum hint. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; [Tuning Notes](#tuning-notes) has the reverse switch.
 
 | Key | Value | Emitted as |
 |---|---|---|
@@ -191,7 +192,7 @@ All tunables are `set -g` globals in the script. Edit both repos in lockstep, th
 | `NM_WIFI_BACKEND` | `wpa_supplicant` | `wifi.backend=` |
 | `NM_WIFI_POWERSAVE` | `2` (disabled) | `wifi.powersave=` |
 | `NM_LOG_LEVEL` | `WARN` | `level=` |
-| `CPUPOWER_GOVERNOR` | `performance` | `GOVERNOR=` |
+| `CPUPOWER_GOVERNOR` | `powersave` | `GOVERNOR=` |
 | `BT_AUTO_ENABLE` | `true` | `AutoEnable=` |
 | `BT_FAST_CONNECTABLE` | `true` | `FastConnectable=` |
 | `BT_RECONNECT_ATTEMPTS` | `3` | `ReconnectAttempts=` |
@@ -248,7 +249,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 - `/dev/ntsync` — Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out at the Proton level.
 - `PROTON_FSR4_UPGRADE=1` — the Proton-CachyOS lever that upgrades FSR 3.1 titles to FSR 4; per title in the Steam launch options, never session-wide, and a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.1`. `PROTON_FSR4_INDICATOR=1` draws only the watermark and is not shipped.
 - `cpu_stats` ships enabled; `cpu_temp` stays commented out — to turn it on, add it on its own line in the MangoHud generator of both scripts, then `--install-file` the file. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
-- `game-performance` — the CachyOS wrapper needs `power-profiles-daemon`, whose service this profile masks; the governor is already `performance`, so the wrapper is redundant here.
+- `game-performance` — the CachyOS wrapper needs `power-profiles-daemon`, whose service this profile masks, so it runs the game unchanged; the profile pins EPP `performance` under the `powersave` governor instead.
 
 ### Kernel Parameter Notes
 

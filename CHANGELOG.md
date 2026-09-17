@@ -3,20 +3,18 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.203.0
+7.204.0
 -------
 
-  - configuration: every managed file but /etc/kernel/cmdline opens with one
-    ry-install managed-file header; nftables.conf drops its add-ports invite
-  - services: a withheld ufw mask records WARN and names the unit; the row
-    read PASS, masked 10 units
-  - readme: MangoHud cpu_temp is turned on in the generators, not the deployed
-    file; a post-write mismatch restores a backup only where one exists
-  - changelog: trimmed to value changes, operator-visible behavior and fixes;
-    both prior single-version blocks folded into the range below
+  - kernel: adds nowatchdog, the CachyOS sdboot-manage default that the
+    profile's LINUX_OPTIONS had dropped
+  - perf: governor performance -> powersave, EPP performance stays pinned;
+    performance held every core's CPPC floor at nominal
+  - readme: game-performance runs the game unchanged with
+    power-profiles-daemon masked; Service Keys explains the governor
 
 
-7.190.0 - 7.202.0
+7.190.0 - 7.203.0
 -----------------
 
   - kernel: 7.195.0 fsck.mode auto -> force; 7.199.0 adds
@@ -24,10 +22,14 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - network: 7.200.0 disables NetworkManager connectivity checking
   - env: 7.195.0 drops PROTON_FSR4_INDICATOR=1
   - configuration: 7.195.0 MangoHud ships cpu_stats enabled, cpu_temp off
+  - configuration: 7.203.0 one ry-install managed-file header on every file
+    but /etc/kernel/cmdline; nftables.conf drops its add-ports invite
   - packages: 7.198.0 adds dmemcg-booster and plasma-foreground-booster,
     7.200.0 drops both (dmem sees VRAM only)
   - services: 7.197.0 withholds the ufw mask unless nftables.service is
     expected
+  - services: 7.203.0 a withheld ufw mask records WARN and names the unit;
+    the row read PASS, masked 10 units
   - sysctl: 7.195.0 adds vm.watermark_scale_factor=125
   - install-file: 7.201.0 a symlinked destination is always replaced with a
     regular file; its mode drift is no longer reported

@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.202.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.203.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.202.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.203.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -562,19 +562,19 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
             _log "ROOT_UUID_UNAVAILABLE: mode=$MODE reason=$_reason — non-fatal for this mode"
     end
 end
-function _ir_precompute_caches --description "Precompute tmpdir / WiFi-backend / canonical-dst caches" # canon list index-aligned to source
+function _ir_precompute_caches --description "Precompute tmpdir / Wi-Fi-backend / canonical-dst caches" # canon list index-aligned to source
     set -g _SYS_TMP_DIRS
-    for _d in $SYSTEM_DESTINATIONS; set -l _dir (command dirname -- "$_d"); contains -- "$_dir" $_SYS_TMP_DIRS; or set -a _SYS_TMP_DIRS "$_dir"; end
+    for _d in $SYSTEM_DESTINATIONS; set -l _dir (command dirname -- "$_d"); contains -- "$_dir" $_SYS_TMP_DIRS; or set -ga _SYS_TMP_DIRS "$_dir"; end
     set -g _USR_TMP_DIRS
-    for _d in $USER_DESTINATIONS; set -l _dir (command dirname -- "$_d"); contains -- "$_dir" $_USR_TMP_DIRS; or set -a _USR_TMP_DIRS "$_dir"; end
+    for _d in $USER_DESTINATIONS; set -l _dir (command dirname -- "$_d"); contains -- "$_dir" $_USR_TMP_DIRS; or set -ga _USR_TMP_DIRS "$_dir"; end
     set -g _RY_PROFILE_USES_WIFI_BACKEND false
     for _d in $SYSTEM_DESTINATIONS
         if string match -q '*nm.conf' -- "$_d"; set -g _RY_PROFILE_USES_WIFI_BACKEND true; break; end
     end
     set -g _RY_CANON_SYSTEM_DSTS
-    for _d in $SYSTEM_DESTINATIONS; set -a _RY_CANON_SYSTEM_DSTS (command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
+    for _d in $SYSTEM_DESTINATIONS; set -ga _RY_CANON_SYSTEM_DSTS (command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
     set -g _RY_CANON_USER_DSTS
-    for _d in $USER_DESTINATIONS; set -a _RY_CANON_USER_DSTS (command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
+    for _d in $USER_DESTINATIONS; set -ga _RY_CANON_USER_DSTS (command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
     set -l _sys_in (count $SYSTEM_DESTINATIONS); set -l _sys_out (count $_RY_CANON_SYSTEM_DSTS)
     if test "$_sys_in" -ne "$_sys_out"; _err_loud "BUG: _RY_CANON_SYSTEM_DSTS count drift: in=$_sys_in out=$_sys_out"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     set -l _usr_in (count $USER_DESTINATIONS); set -l _usr_out (count $_RY_CANON_USER_DSTS)
@@ -700,11 +700,11 @@ function _init_runtime --description "Cache root UUID + validate config + precom
 end
 
 # ── CONTENT GENERATORS: BOOT (loader, cmdline, sdboot-manage, mkinitcpio) ──
-function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"; printf '%s\n' "# systemd-boot loader configuration" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"; end
+function _content__boot_loader_loader.conf --description "Generate content for /boot/loader/loader.conf"; printf '%s\n' "# ry-install: systemd-boot loader config (managed file, do not edit by hand)" "default $LOADER_DEFAULT" "timeout $LOADER_TIMEOUT" "console-mode $LOADER_CONSOLE_MODE" "editor $LOADER_EDITOR"; end
 function _content__etc_kernel_cmdline --description "Generate content for /etc/kernel/cmdline"; test -z "$_ROOT_UUID"; and return $EXIT_GEN_NOUUID; printf '%s %s\n' "rw root=UUID=$_ROOT_UUID" (string join -- " " $KERNEL_PARAMS); end
 function _content__etc_sdboot-manage.conf --description "Generate content for /etc/sdboot-manage.conf"
     printf '%s\n' \
-        "# sdboot-manage configuration — changes require: sudo sdboot-manage gen && sudo sdboot-manage update" \
+        "# ry-install: sdboot-manage config (managed file, do not edit by hand)" \
         "LINUX_OPTIONS=\""(string join -- " " $KERNEL_PARAMS)"\"" \
         "LINUX_FALLBACK_OPTIONS=\"quiet\"" \
         "DEFAULT_ENTRY=\"$SDBOOT_DEFAULT_ENTRY\"" \
@@ -714,7 +714,7 @@ function _content__etc_sdboot-manage.conf --description "Generate content for /e
 end
 function _content__etc_mkinitcpio.conf --description "Generate content for /etc/mkinitcpio.conf"
     printf '%s\n' \
-        "# mkinitcpio configuration — changes require: sudo mkinitcpio -P && sudo sdboot-manage update" \
+        "# ry-install: mkinitcpio config (managed file, do not edit by hand)" \
         "MODULES=("(string join -- " " $MKINITCPIO_MODULES)")" \
         "BINARIES=()" \
         "FILES=()" \
@@ -724,17 +724,19 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
 end
 
 # ── CONTENT GENERATORS: SYSTEM (resolved, logind, NM, bluetooth, nft, sysctl, udev) ──
-function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"; printf '%s\n' "# systemd-resolved: link DNS from DHCP, mDNS/LLMNR off" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR"; end
+function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"; printf '%s\n' "# ry-install: systemd-resolved drop-in, link DNS from DHCP, mDNS/LLMNR off (managed file, do not edit by hand)" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR"; end
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
-    printf '%s\n' "# systemd-logind configuration — desktop power handling"
+    printf '%s\n' "# ry-install: systemd-logind drop-in, desktop power handling (managed file, do not edit by hand)"
     printf '%s\n' "[Login]"
     for key in $LOGIND_IGNORE_KEYS
         printf '%s\n' "$key=ignore"
     end
 end
-function _content__etc_systemd_system_NetworkManager-dispatcher.service.d_logging.conf --description "Generate content for NetworkManager-dispatcher logging drop-in (journal noise suppression)"; printf '%s\n' "# LogLevelMax drops info-level dispatcher lines (journald-logged; StandardError=null ineffective)" "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"; end
+function _content__etc_systemd_system_NetworkManager-dispatcher.service.d_logging.conf --description "Generate content for NetworkManager-dispatcher logging drop-in (journal noise suppression)"
+    printf '%s\n' "# ry-install: NetworkManager-dispatcher logging drop-in (managed file, do not edit by hand)" "# LogLevelMax drops info-level dispatcher lines (journald-logged; StandardError=null ineffective)" "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
+end
 function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (wifi.backend from NM_WIFI_BACKEND)"
-    printf '%s\n' "# NetworkManager configuration — $NM_WIFI_BACKEND backend" "[main]" "autoconnect-retries-default=0" "" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL" "" "[connectivity]" "enabled=false"
+    printf '%s\n' "# ry-install: NetworkManager config, $NM_WIFI_BACKEND backend (managed file, do not edit by hand)" "[main]" "autoconnect-retries-default=0" "" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL" "" "[connectivity]" "enabled=false"
 end
 function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"; printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"; end
 function _content__etc_bluetooth_main.conf --description "Generate content for /etc/bluetooth/main.conf (adapter auto-power-on + paired-sink reconnect)"
@@ -743,7 +745,7 @@ end
 function _content__etc_nftables.conf --description "Generate content for nftables default-deny-inbound ruleset"
     printf '%s\n' \
         "#!/usr/bin/nft -f" \
-        "# ry-install: default-deny-inbound (ufw masked). ICMPv6 is live on the fallback entry. Add inbound ports below." \
+        "# ry-install: default-deny-inbound ruleset, ufw masked (managed file, do not edit by hand)" \
         "flush ruleset" \
         "table inet filter {" \
         "    chain input {" \
@@ -761,9 +763,9 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "    chain output { type filter hook output priority filter; policy accept; }" \
         "}"
 end
-function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"; printf '%s\n' "# cpupower-service.conf — sourced by /usr/lib/systemd/scripts/cpupower (cpupower.service)" "GOVERNOR='$CPUPOWER_GOVERNOR'"; end
+function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"; printf '%s\n' "# ry-install: cpupower.service governor, sourced by /usr/lib/systemd/scripts/cpupower (managed file, do not edit by hand)" "GOVERNOR='$CPUPOWER_GOVERNOR'"; end
 function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
-    printf '%s\n' "# ry-install sysctl tunables (priority 95 — loaded after CachyOS vendor 70-cachyos-settings.conf)"
+    printf '%s\n' "# ry-install: sysctl tunables, priority 95 loads after vendor 70-cachyos-settings.conf (managed file, do not edit by hand)"
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
     for entry in $SYSCTL_VALUES
         if not string match -qr '^\s*[A-Za-z0-9._-]+\s*=\s*\S' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; functions -q _log; and _log "SYSCTL_SKIP_MALFORMED: '$entry' (require key=value, key charset [A-Za-z0-9._-])"; continue; end
@@ -799,7 +801,7 @@ end
 
 # ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
-    printf '%s\n' "# Environment for systemd --user services and graphical sessions (Plasma, Flatpak, D-Bus apps)"
+    printf '%s\n' "# ry-install: session environment for systemd --user services and graphical sessions (managed file, do not edit by hand)"
     set -l _printed 0; set -g _RY_ENVD_BAD_ENTRIES
     for var in $ENV_VARS
         if not string match -qr '^[A-Za-z_][A-Za-z0-9_]*=' -- "$var"; set -ga _RY_ENVD_BAD_ENTRIES "$var"; functions -q _log; and _log "ENVD_SKIP_MALFORMED: '$var' (require KEY=value, KEY charset [A-Za-z_][A-Za-z0-9_]*)"; continue; end
@@ -2290,7 +2292,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when n
     for _r in $_rdeps_raw; contains -- "$_r" $PKGS_DEL; and continue; set -a _rdeps "$_r"; end
     if test (count $_rdeps) -gt 0
         _info "  $pkg: skipped (reverse deps: $_rdeps)"
-        set -a _RY_PKG_REMOVE_SKIPS "$pkg"
+        set -ga _RY_PKG_REMOVE_SKIPS "$pkg"
         return 0
     end
     printf '%s\n' "$pkg"
@@ -2420,12 +2422,12 @@ function _csm_prepare_ufw_masking --argument-names nft_live --description "_conf
     return 0
 end
 function _configure_services_mask --description "Apply MASK list; batch-mask with per-unit retry"
-    set -l safe_mask $MASK
+    set -l safe_mask $MASK; set -l _res PASS; set -l _held ""
     if contains -- ufw.service $safe_mask # nftables-first: mask --now stops ufw; default-deny first
         set -l _nft_live false
         _csm_enable_nftables_first; and set _nft_live true
         if not _csm_prepare_ufw_masking $_nft_live
-            set safe_mask (string match -v -- ufw.service $safe_mask)
+            set safe_mask (string match -v -- ufw.service $safe_mask); set _res WARN; set _held "; ufw.service withheld, re-run"
         end
     end
     if test (count $safe_mask) -eq 0
@@ -2434,19 +2436,19 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     end
     set -l _to_mask (_csm_filter_units $safe_mask)
     if test (count $_to_mask) -eq 0
-        _phase_record "Services: mask units" PASS "all "(count $safe_mask)" already masked or not installed"
+        _phase_record "Services: mask units" $_res "all "(count $safe_mask)" already masked or not installed$_held"
         return 0
     end
     set -l _mask_count (count $_to_mask)
     if _run sudo -n systemctl mask --now -- $_to_mask
-        _phase_record "Services: mask units" PASS "masked $_mask_count units"
+        _phase_record "Services: mask units" $_res "masked $_mask_count units$_held"
         return 0
     end
     _warn "Batch mask failed — retrying individually to identify failures"
     _csm_retry_individual $_to_mask
     set -l _rc $status
     if test "$_rc" -eq 0
-        _phase_record "Services: mask units" PASS "$_mask_count masked (per-unit retry)"
+        _phase_record "Services: mask units" $_res "$_mask_count masked (per-unit retry)$_held"
     else
         _phase_record "Services: mask units" FAIL "some masks failed; see JSONL log"
     end
@@ -2823,10 +2825,10 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
         return 0
     end
     if _is_wifi_active_route
-        _warn "NetworkManager restart deferred — WiFi is the active route; drop-in takes effect on reboot."
+        _warn "NetworkManager restart deferred — Wi-Fi is the active route; drop-in takes effect on reboot."
         _info "  Or, after switching to ethernet: sudo systemctl restart NetworkManager"
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=finalize_backend_switch"
-        _phase_record "Finalize: NetworkManager restart" DEFER "over WiFi — applies on reboot"
+        _phase_record "Finalize: NetworkManager restart" DEFER "over Wi-Fi — applies on reboot"
         return 0
     end
     _info "NetworkManager will restart (D-Bus disconnect expected)"
@@ -3165,7 +3167,7 @@ function _post_nmdispatch --argument-names target --description "Post-hook: daem
     _info "  nm-dispatcher LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX active on next dispatch activation"
     return 0
 end
-function _post_nm --argument-names target --description "Post-hook: restart NetworkManager; deferred when WiFi is active route"
+function _post_nm --argument-names target --description "Post-hook: restart NetworkManager; deferred when Wi-Fi is active route"
     _echo
     if not command -q NetworkManager
         _warn "NetworkManager config deployed but NetworkManager not installed — restart skipped; drop-in keys apply once installed or at next boot"
@@ -3173,7 +3175,7 @@ function _post_nm --argument-names target --description "Post-hook: restart Netw
         return 0
     end
     if _is_wifi_active_route
-        _warn "NetworkManager config installed but restart deferred — WiFi is the active route."
+        _warn "NetworkManager config installed but restart deferred — Wi-Fi is the active route."
         _info "  Config change will not take effect until next reboot or manual restart."
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=install_file target=$target"
         return 0

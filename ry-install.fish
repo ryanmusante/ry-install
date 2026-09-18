@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.204.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.205.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.204.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.205.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -763,7 +763,7 @@ function _content__etc_nftables.conf --description "Generate content for nftable
         "    chain output { type filter hook output priority filter; policy accept; }" \
         "}"
 end
-function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"; printf '%s\n' "# ry-install: cpupower.service governor, sourced by /usr/lib/systemd/scripts/cpupower (managed file, do not edit by hand)" "GOVERNOR='$CPUPOWER_GOVERNOR'"; end
+function _content__etc_default_cpupower-service.conf --description "Generate content for cpupower-service.conf"; printf '%s\n' "# ry-install: cpupower.service governor, read via EnvironmentFile= (managed file, do not edit by hand)" "GOVERNOR='$CPUPOWER_GOVERNOR'"; end
 function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate content for sysctl drop-in"
     printf '%s\n' "# ry-install: sysctl tunables, priority 95 loads after vendor 70-cachyos-settings.conf (managed file, do not edit by hand)"
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES

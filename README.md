@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.204.0** · [Changelog](CHANGELOG.md)
+**Version 7.205.0** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended run, idempotent on every pass, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -180,7 +180,7 @@ All tunables are `set -g` globals in the script. Edit both repos in lockstep, th
 
 ### Service Keys
 
-`DNSOverTLS=` and `DNSSEC=` are unset by design — the router does DoT upstream and validates DNSSEC. `NM_WIFI_POWERSAVE` is `2` because the MT7925 spikes latency otherwise. `CPUPOWER_GOVERNOR` is `powersave` because `performance` pins every core's CPPC floor at nominal; `EPP_PREFERENCE` `performance` still carries the maximum hint. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; [Tuning Notes](#tuning-notes) has the reverse switch.
+`DNSOverTLS=` and `DNSSEC=` are unset by design — the router does DoT upstream and validates DNSSEC. `NM_WIFI_POWERSAVE` is `2` because the MT7925 spikes latency otherwise. `CPUPOWER_GOVERNOR` is `powersave` because `performance` pins every core's CPPC floor at nominal; `EPP_PREFERENCE` `performance` carries the maximum hint. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; [Tuning Notes](#tuning-notes) has the reverse switch.
 
 | Key | Value | Emitted as |
 |---|---|---|
@@ -207,7 +207,7 @@ All tunables are `set -g` globals in the script. Edit both repos in lockstep, th
 | `DXVK_LOG_LEVEL=none` | DXVK logging off |
 | `GSK_RENDERER=gl` | GTK4 GL renderer; the Vulkan renderer aborts on gfx1151 |
 | `MANGOHUD=1` | HUD on for Vulkan titles |
-| `MESA_SHADER_CACHE_MAX_SIZE=16G` | roomy Mesa shader cache |
+| `MESA_SHADER_CACHE_MAX_SIZE=16G` | Mesa shader cache cap |
 | `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
 | `VKD3D_DEBUG=none` | vkd3d logging off |

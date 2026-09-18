@@ -3,38 +3,31 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.204.0
+7.205.0
 -------
 
-  - kernel: adds nowatchdog, the CachyOS sdboot-manage default that the
-    profile's LINUX_OPTIONS had dropped
-  - perf: governor performance -> powersave, EPP performance stays pinned;
-    performance held every core's CPPC floor at nominal
-  - readme: game-performance runs the game unchanged with
-    power-profiles-daemon masked; Service Keys explains the governor
+  - configuration: cpupower-service.conf header names EnvironmentFile=
+  - readme: filler words trimmed; no value or remedy changed
+  - changelog: the prior single-version block folded into the range below
 
 
-7.190.0 - 7.203.0
+7.190.0 - 7.204.0
 -----------------
 
-  - kernel: 7.195.0 fsck.mode auto -> force; 7.199.0 adds
-    ttm.pages_limit=20971520
+  - kernel: 7.195.0 fsck.mode=force; 7.199.0 adds ttm.pages_limit=20971520;
+    7.204.0 adds nowatchdog, the CachyOS sdboot-manage default
+  - perf: 7.204.0 governor performance -> powersave, EPP performance kept
   - network: 7.200.0 disables NetworkManager connectivity checking
   - env: 7.195.0 drops PROTON_FSR4_INDICATOR=1
-  - configuration: 7.195.0 MangoHud ships cpu_stats enabled, cpu_temp off
-  - configuration: 7.203.0 one ry-install managed-file header on every file
-    but /etc/kernel/cmdline; nftables.conf drops its add-ports invite
+  - configuration: 7.195.0 MangoHud ships cpu_stats enabled, cpu_temp off;
+    7.203.0 one managed-file header per file, nftables drops its ports invite
   - packages: 7.198.0 adds dmemcg-booster and plasma-foreground-booster,
     7.200.0 drops both (dmem sees VRAM only)
   - services: 7.197.0 withholds the ufw mask unless nftables.service is
-    expected
-  - services: 7.203.0 a withheld ufw mask records WARN and names the unit;
-    the row read PASS, masked 10 units
+    expected; 7.203.0 records a withheld mask as WARN, not PASS
   - sysctl: 7.195.0 adds vm.watermark_scale_factor=125
-  - install-file: 7.201.0 a symlinked destination is always replaced with a
-    regular file; its mode drift is no longer reported
-  - split: 7.190.0 moves ry-verify.fish to its repository; 7.195.1 - 7.195.2,
-    7.200.1 and 7.202.0 are lockstep bumps
+  - install-file: 7.201.0 a symlinked destination becomes a regular file
+  - split: 7.190.0 moves ry-verify.fish to its repository
 
 
 7.139.0 - 7.189.0
@@ -51,13 +44,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - sysctl: drop both net.core.netdev_budget keys and vm.swappiness=150
   - fstab: 7.182.1 parity probe never ran, awk read its -- as a filename
   - install: chmod on mode drift, bytes unchanged
-  - install-file: 7.177.3 -h and -v were swallowed after --install-file;
-    7.185.0 lists the managed set
+  - install-file: 7.177.3 -h and -v were swallowed after --install-file
   - backup: .ry.bak moves to ~/ry-install/backups, slash-encoded; 7.176.0
     drops the .ry.orig preserve
-  - preflight: rc 3 on a reserved COUNTRY, NM_WIFI_POWERSAVE outside 0-3; no
-    ipv6.disable=1 warns
-  - logging: millisecond JSONL timestamps
+  - preflight: rc 3 on a reserved COUNTRY, NM_WIFI_POWERSAVE outside 0-3
   - split: 7.177.0 moves verify and check to ry-verify.fish
 
 

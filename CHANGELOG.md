@@ -3,15 +3,19 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.205.0
+7.206.0
 -------
 
-  - configuration: cpupower-service.conf header names EnvironmentFile=
-  - readme: filler words trimmed; no value or remedy changed
-  - changelog: the prior single-version block folded into the range below
+  - summary: PASS-WITH-WARNINGS Next says reboot; realtime and i2c group
+    steps print after the matrix; abort paths record every SKIP row
+  - install-file: INSTALL-FILE END on every return; nm, bluetooth, envd and
+    udev hook failures log POST_* keys; dash-path and modprobe hints trimmed
+  - logging: a signal-time mkinitcpio.conf revert lands before the footer
+  - services: the ufw SECURITY note is INFO once ufw.service is masked
+  - boot: every rebuild hint names sdboot-manage update
 
 
-7.190.0 - 7.204.0
+7.190.0 - 7.205.0
 -----------------
 
   - kernel: 7.195.0 fsck.mode=force; 7.199.0 adds ttm.pages_limit=20971520;
@@ -21,6 +25,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - env: 7.195.0 drops PROTON_FSR4_INDICATOR=1
   - configuration: 7.195.0 MangoHud ships cpu_stats enabled, cpu_temp off;
     7.203.0 one managed-file header per file, nftables drops its ports invite
+  - configuration: 7.205.0 cpupower-service.conf header names EnvironmentFile=
   - packages: 7.198.0 adds dmemcg-booster and plasma-foreground-booster,
     7.200.0 drops both (dmem sees VRAM only)
   - services: 7.197.0 withholds the ufw mask unless nftables.service is

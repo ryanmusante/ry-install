@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.205.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.206.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.205.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.206.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -315,7 +315,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; dead-
     return 1
 end
 
-# ── CLEANUP ORCHESTRATION: REVERT → TMPFILES → CHILDREN → GLOBALS ──
+# ── CLEANUP ORCHESTRATION: CHILDREN → REVERT → TMPFILES → LOCK → GLOBALS ──
 function _dc_mki_revert --description "_do_cleanup sub: Signal-time mkinitcpio.conf revert"
     set -q _RY_MKI_HAD_ORIG; and test "$_RY_MKI_HAD_ORIG" = true; or return 0
     set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; or return 0
@@ -442,6 +442,7 @@ function _teardown --argument-names mode --description "Unified cleanup: progres
     test (count $argv) -ge 2; and string match -qr '^\d+$' -- "$argv[2]"; and set _signum $argv[2]
     switch "$mode"
         case signal
+            _dc_kill_children; _dc_mki_revert # revert records precede the footer; re-entry no-ops
             _write_footer "$_signum" interrupted
             _do_cleanup
         case exit
@@ -2019,20 +2020,20 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
     return 0
 end
 function _ip_run_and_verify --description "_install_packages sub: Run pacman -Syu + verify + revalidate hooks"
-    set -l pkgs_to_install $argv; set -l _err false
-    if not _ip_pacman_invoke $pkgs_to_install; _taint; set _err true; end
+    set -l pkgs_to_install $argv; set -l _fn_err false
+    if not _ip_pacman_invoke $pkgs_to_install; _taint; set _fn_err true; end
     _info "Verifying package installation..."
-    if not command -q pacman; _err "pacman binary unavailable after install — cannot verify package state"; _taint; set _err true; return 1; end # vanished pacman must not read as all-present
+    if not command -q pacman; _err "pacman binary unavailable after install — cannot verify package state"; _taint; set _fn_err true; return 1; end # vanished pacman must not read as all-present
     set -l missing_pkgs (command pacman -T -- $pkgs_to_install 2>/dev/null); set -l _pt_rc $status
     if test "$_pt_rc" -ne 0; and test "$_pt_rc" -ne 127 # pacman -T rc: 0=present 127=targets-missing
         _err "pacman -T failed (rc=$_pt_rc) — cannot verify install state"
         _taint
-        set _err true
+        set _fn_err true
     else if test (count $missing_pkgs) -gt 0
         _err "Missing packages: $missing_pkgs"
         _warn "  Install manually: sudo pacman -S --needed $missing_pkgs"
         _taint
-        set _err true
+        set _fn_err true
     else
         _ok "All packages verified installed"
     end
@@ -2041,9 +2042,9 @@ function _ip_run_and_verify --description "_install_packages sub: Run pacman -Sy
         _err "  pacman -Syu may have removed or renamed a hook this profile references"
         _err "  Inspect: ls /usr/lib/initcpio/{install,hooks}/ /etc/initcpio/{install,hooks}/"
         _taint
-        set _err true
+        set _fn_err true
     end
-    test "$_err" = false
+    test "$_fn_err" = false
     return $status
 end
 function _install_packages --description "Install managed packages via pacman -Syu"
@@ -2258,7 +2259,7 @@ end
 
 # ── INSTALL PHASE 4: RESOLVED RESTART (conf.d drop-in changed this run) ──
 function _configure_services_resolved_restart --description "Restart systemd-resolved when its conf.d drop-in changed this run"
-    test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; or return 0
+    if not test -f /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf; _phase_record "Services: resolved restart" SKIP "drop-in absent"; return 0; end
     if not contains -- /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf $_RY_DEPLOY_CHANGED_DSTS # unchanged bytes: no DNS blip on idempotent re-runs
         _log "RESOLVED_RESTART_SKIP_UNCHANGED: drop-in bytes identical this run"
         _phase_record "Services: resolved restart" SKIP "drop-in unchanged (no restart needed)"
@@ -2349,9 +2350,9 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
     else if test "$_del_count" -eq 0
         _phase_record "Services: PKGS_DEL removal" WARN "$_skip_count skipped (rdep gate)"
     else if test "$_RY_PKGS_REMOVED_COUNT" -lt "$_del_count"
-        set -l _msg "removed $_RY_PKGS_REMOVED_COUNT of $_del_count"
-        test "$_skip_count" -gt 0; and set _msg "$_msg, $_skip_count rdep-skipped"
-        _phase_record "Services: PKGS_DEL removal" WARN "$_msg"
+        set -l _rm_ev "removed $_RY_PKGS_REMOVED_COUNT of $_del_count"
+        test "$_skip_count" -gt 0; and set _rm_ev "$_rm_ev, $_skip_count rdep-skipped"
+        _phase_record "Services: PKGS_DEL removal" WARN "$_rm_ev"
     else if test "$_skip_count" -gt 0
         _phase_record "Services: PKGS_DEL removal" WARN "removed $_RY_PKGS_REMOVED_COUNT, $_skip_count rdep-skipped"
     else
@@ -2417,7 +2418,9 @@ function _csm_prepare_ufw_masking --argument-names nft_live --description "_conf
     else
         _log "UFW_RULE_FLUSH_SKIP: ufw.service is-active=$_state"
     end
-    _warn "SECURITY: ufw rules inert (flushed or already inactive) — ufw.service masked by profile; nftables default-deny-inbound is the active host firewall"
+    set -l _ufs (command systemctl is-enabled -- ufw.service 2>/dev/null | string trim --); set -l _say _warn
+    test "$_ufs" = masked; and set _say _info # already masked: steady-state posture note
+    $_say "SECURITY: ufw rules inert (flushed or already inactive) — ufw.service masked by profile; nftables default-deny-inbound is the active host firewall"
     _log "SECURITY_POSTURE: ufw masked; nftables default-deny-inbound active (/etc/nftables.conf)"
     return 0
 end
@@ -2667,7 +2670,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     if test "$errors" -gt 0
         _err "Boot sanity check failed ($errors error(s)) — DO NOT REBOOT"
         _info "  Inspect: ls -la $_boot/vmlinuz-* $_boot/initramfs-*.img"
-        _info "  Rebuild: sudo mkinitcpio -P && sudo sdboot-manage gen"
+        _info "  Rebuild: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update"
         return 1
     end
     _ok "Boot sanity: vmlinuz present, initramfs non-zero, entries valid"
@@ -2845,26 +2848,30 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
 end
 function _install_finalize --description "Finalize: user daemon-reload + pacman cache trim + NetworkManager restart"
     _progress Finalize
+    set -l _pd_res SKIP; set -l _pd_ev "environment.d unchanged (no restart needed)" # one row per run, like the restart siblings
     if _has_user_bus_active
         if _run systemctl --user daemon-reload
             _phase_record "Finalize: systemctl --user reload" PASS "user-bus active"
             if contains -- "$HOME/.config/environment.d/10-environment.conf" $_RY_DEPLOY_CHANGED_DSTS # reload re-ran env generators — re-apply to PowerDevil
                 if _run systemctl --user restart plasma-powerdevil.service
-                    _phase_record "Finalize: PowerDevil env re-apply" PASS "environment.d changed"
+                    set _pd_res PASS; set _pd_ev "environment.d changed"
                 else
                     _warn "plasma-powerdevil.service restart failed — POWERDEVIL_NO_DDCUTIL applies at next login (non-fatal)"
-                    _phase_record "Finalize: PowerDevil env re-apply" WARN "restart failed (non-fatal)"
+                    set _pd_res WARN; set _pd_ev "restart failed (non-fatal)"
                 end
             end
         else
             _warn "systemctl --user daemon-reload failed — re-login refreshes the user session (non-fatal)"
             _phase_record "Finalize: systemctl --user reload" WARN "daemon-reload failed (non-fatal)"
+            set _pd_ev "user daemon-reload failed"
         end
     else
         _info "Skipping systemctl --user daemon-reload (no active user-bus — log in graphically or enable-linger)"
         _log "USER_DAEMON_RELOAD_SKIP: no active user-bus"
         _phase_record "Finalize: systemctl --user reload" SKIP "no active user-bus"
+        set _pd_ev "no active user-bus"
     end
+    _phase_record "Finalize: PowerDevil env re-apply" $_pd_res "$_pd_ev"
     _if_trim_pacman_cache
     _if_nm_restart
     test "$INSTALL_HAD_ERRORS" = true; and return 1
@@ -2885,7 +2892,7 @@ end
 function _rdi_run_phases --description "_ry_do_install sub: Run pkgs/sys/services phases"
     not _install_packages; and set -g INSTALL_HAD_ERRORS true
     if set -q _RY_MKI_REVERT_FAILED; and test "$_RY_MKI_REVERT_FAILED" = true
-        for _sk in "Packages: updatedb" "Packages: pkgfile --update" "Configuration: file deployment" "Services: fstab opts" "Services: PKGS_DEL removal" "Services: mask units" "Services: enable units" "Services: regdom"
+        for _sk in "Packages: updatedb" "Packages: pkgfile --update" "Configuration: file deployment" "Services: fstab opts" "Services: resolved restart" "Services: PKGS_DEL removal" "Services: mask units" "Services: enable units" "Services: regdom"
             _phase_record "$_sk" SKIP "aborted"
         end
         _err "Aborting remaining phases: mkinitcpio.conf revert failed (boot state inconsistent)"
@@ -2944,7 +2951,8 @@ function _rdi_render_matrix --description "_rdi_summary sub: Render the install 
     set -q _RY_BOOT_CRIT_HIT; and test "$_RY_BOOT_CRIT_HIT" = true; and set _v FAIL-BOOT-CRITICAL
     set -q _RY_PREFLIGHT_ABORT; and test "$_RY_PREFLIGHT_ABORT" = true; and set _v PREFLIGHT # preflight abort = exit 3, not FAIL
     set -l _next "reboot · ./ry-verify.fish"
-    test "$_v" != PASS; and set _next "review FAIL/WARN above · re-run install (idempotent)"
+    test "$_v" = PASS-WITH-WARNINGS; and set _next "review WARN above · reboot · ./ry-verify.fish"
+    contains -- "$_v" FAIL FAIL-BOOT-CRITICAL PREFLIGHT; and set _next "review FAIL/WARN above · re-run install (idempotent)"
     printf '%s\n' $_rule "  Totals : $_RY_MTX_PASS PASS · $_RY_MTX_WARN WARN · $_RY_MTX_FAIL FAIL · $_RY_MTX_DEFER DEFER · $_RY_MTX_SKIP SKIP · $_RY_MTX_NA N/A" "  Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_v" "  Log    : $LOG_FILE" "  Next   : $_next" "" >&2
     _log "MATRIX_RENDERED: rows="(count $_RY_PHASE_RESULTS)" pass=$_RY_MTX_PASS warn=$_RY_MTX_WARN fail=$_RY_MTX_FAIL defer=$_RY_MTX_DEFER skip=$_RY_MTX_SKIP na=$_RY_MTX_NA verdict=$_v"
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
@@ -2958,6 +2966,7 @@ function _idf_boot_crit_banner --description "Forced DO-NOT-REBOOT recovery bann
         _msg_print --force INFO "$_bcl"; _log "INFO: $_bcl"
     end
 end
+function _rdi_hint --description "_rdi_summary sub: Forced manual-step line (install pins QUIET, which hides _info)"; _log "INFO: "(string join -- " " $argv); _msg_print --force INFO $argv; end
 function _rdi_summary --description "_ry_do_install sub: Print final install summary"
     if test "$INSTALL_HAD_ERRORS" = true
         _echo "INSTALLATION FINISHED WITH ERRORS"
@@ -2973,20 +2982,15 @@ function _rdi_summary --description "_ry_do_install sub: Print final install sum
     _info "Manual steps required:"
     _info "  1. Start a new shell to pick up new commands (bash: hash -r; fish rescans PATH automatically)"
     _info "  2. REBOOT to apply kernel cmdline and module changes"
-    set -l _hint_n 2 # counter keeps hint numbering gap-free
     set -l _post_uname (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}') # single resolve
     if command -q pacman; and command pacman -Qq realtime-privileges >/dev/null 2>&1
         if test -n "$_post_uname"; and not contains -- realtime (command id -Gn -- "$_post_uname" 2>/dev/null | string split ' ')
-            set _hint_n (math $_hint_n + 1)
-            _info "  $_hint_n. Add user to realtime group for PipeWire RT scheduling:"
-            _info "       sudo usermod -aG realtime $_post_uname  (then log out and back in)"
+            _rdi_hint "Manual step: sudo usermod -aG realtime $_post_uname (then log out and back in) — PipeWire RT scheduling"
         end
     end
     if command -q pacman; and command pacman -Qq ddcutil >/dev/null 2>&1
         if test -n "$_post_uname"; and not contains -- i2c (command id -Gn -- "$_post_uname" 2>/dev/null | string split ' ')
-            set _hint_n (math $_hint_n + 1)
-            _info "  $_hint_n. Add user to i2c group for ddcutil monitor control:"
-            _info "       sudo usermod -aG i2c $_post_uname  (then log out and back in)"
+            _rdi_hint "Manual step: sudo usermod -aG i2c $_post_uname (then log out and back in) — ddcutil monitor control"
         end
     end
     _info "Post-reboot verification: ./ry-verify.fish"
@@ -3013,9 +3017,10 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     test "$_boot_rc" -ne 0; and set -g INSTALL_HAD_ERRORS true
     if test "$_boot_rc" -eq "$EXIT_BOOT_CRIT"
         _err "Boot-critical failure — skipping finalization"
-        _err "Fix boot issue first: sudo mkinitcpio -P && sudo sdboot-manage gen"
+        _err "Fix boot issue first: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update"
         set -g _PROG_FINALIZED_SKIP true; set -g _RY_BOOT_CRIT_HIT true
         _progress Finalize skip
+        for _sk in "Finalize: systemctl --user reload" "Finalize: PowerDevil env re-apply" "Finalize: pacman cache trim" "Finalize: NetworkManager restart"; _phase_record "$_sk" SKIP "aborted"; end
     else
         not _install_finalize; and set -g INSTALL_HAD_ERRORS true
     end
@@ -3080,6 +3085,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
         _err "Not a managed file: $target"
         _info "Managed files:"
         for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS; _echo "  $dst"; end
+        _log_section "INSTALL-FILE END"
         return $EXIT_USAGE
     end
     set -l _mdst "$_RY_RESOLVED_MANAGED_DST" # literal dst; canonical key may diverge
@@ -3087,7 +3093,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     set -l _if_content (_ry_get_file_content "$_mdst" 2>/dev/null) # format-validate before write (preflight parity)
     if test "$status" -ne 0; _err "Content generator failed for $_mdst — refusing to deploy"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     if not _rvc_dispatch "$_mdst" $_if_content; _err "Embedded content failed format validation for $_mdst — refusing to deploy"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
-    if test "$_use_sudo" = true; _ensure_sudo_cached; or return $EXIT_PREFLIGHT; end
+    if test "$_use_sudo" = true; and not _ensure_sudo_cached; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     set -l _changed_before $_RY_DEPLOY_CHANGED_COUNT
     if not _ry_install_file "$_mdst" $_use_sudo; _err "Failed to install: $_mdst"; _log_section "INSTALL-FILE END"; return 1; end
     _echo
@@ -3182,6 +3188,7 @@ function _post_nm --argument-names target --description "Post-hook: restart Netw
     end
     if not _run sudo -n systemctl restart NetworkManager
         _warn "NetworkManager restart failed — config applies on next reboot (non-fatal; file deployed)"
+        _log "POST_NM_RESTART_FAIL: target=$target"
     end
     return 0
 end
@@ -3212,10 +3219,12 @@ function _post_envd --argument-names target --description "Post-hook: env-genera
     end
     if not _run systemctl --user daemon-reload # re-runs systemd.environment-generator(7)
         _warn "systemctl --user daemon-reload failed — environment.d applies at next login (non-fatal; file deployed)"
+        _log "POST_ENVD_RELOAD_FAIL: target=$target"
         return 0
     end
     if not _run systemctl --user restart plasma-powerdevil.service
         _warn "plasma-powerdevil.service restart failed — POWERDEVIL_NO_DDCUTIL applies at next login (non-fatal; file deployed)"
+        _log "POST_ENVD_POWERDEVIL_FAIL: target=$target"
         return 0
     end
     return 0
@@ -3257,6 +3266,7 @@ function _post_bluetooth --argument-names target --description "Post-hook: resta
     end
     if not _run sudo -n systemctl try-restart bluetooth.service
         _warn "bluetooth.service try-restart failed — config applies on next reboot (non-fatal; file deployed)"
+        _log "POST_BT_RESTART_FAIL: target=$target"
     end
     return 0
 end
@@ -3264,12 +3274,14 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
     _echo
     if not command -q udevadm
         _warn "udevadm(8) not found — I/O scheduler rule applies at next boot"
+        _log "POST_UDEV_SKIP_NO_UDEVADM: target=$target"
         return 0
     end
     _resolve_systemd_ver
     if set -q _RY_SYSTEMD_VER; and test "$_RY_SYSTEMD_VER" -ge 254 # udevadm verify landed in v254
         if not _run sudo -n udevadm verify -- "$target"
             _warn "udevadm verify failed for $target — rules not reloaded; fix the rule file"
+            _log "POST_UDEV_VERIFY_FAIL: target=$target"
             return 0
         end
     else
@@ -3280,16 +3292,16 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
     if not _run sudo -n udevadm control --reload-rules
         _warn "udevadm control --reload-rules failed — rule applies at next boot (non-fatal; file deployed)"
         _info "  Retry: sudo udevadm control --reload-rules; and sudo udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change"
+        _log "POST_UDEV_RELOAD_FAIL: target=$target"
         return 0
     end
-    _run sudo -n udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change; or _warn "udevadm trigger failed — scheduler/EPP apply at next boot or device event" # drm rule is ACTION==add: applies at boot
+    if not _run sudo -n udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change # drm rule is ACTION==add: applies at boot
+        _warn "udevadm trigger failed — scheduler/EPP apply at next boot or device event"
+        _log "POST_UDEV_TRIGGER_FAIL: target=$target"
+    end
     return 0
 end
-function _post_modprobe --argument-names target --description "Post-hook: notify reboot needed for modprobe.d option change"
-    _info "modprobe.d $target changed — reboot required to apply (module options are read at load time; an already-loaded module keeps its current parameters until reloaded)"
-    _info "  No initramfs rebuild needed for this file; the option takes effect when the module next loads (reboot, or manual rmmod/modprobe of the affected module)"
-    return 0
-end
+function _post_modprobe --argument-names target --description "Post-hook: notify reboot needed for modprobe.d option change"; _info "modprobe.d $target changed — module options are read at load time: reboot, or rmmod/modprobe the affected module"; _info "  No initramfs rebuild needed for this file"; return 0; end
 
 # ── PRE-DISPATCH EXIT (ARGPARSE-ERROR + EARLY-BAIL LOG CLEANUP) ──
 function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/dir (no exit; for caller-managed return paths)"
@@ -3335,7 +3347,7 @@ if set -q _flag_install_file
         if string match -qr -- '^--(verify|check|help|version)$' "$_if_val"
             _early_usage_exit "--install-file requires a value, but the next argument is the flag $_if_val. Use --install-file=<path> or place the path immediately after"
         else if string match -q -- '-*' "$_if_val"
-            _early_usage_exit "--install-file requires an absolute path argument (got flag: $_if_val). Use --install-file=<path> for paths starting with '-'"
+            _early_usage_exit "--install-file requires an absolute path argument (got flag: $_if_val)"
         else
             _early_usage_exit "--install-file requires absolute path (got: $_if_val)"
         end

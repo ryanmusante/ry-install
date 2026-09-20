@@ -3,21 +3,22 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.206.0
+7.207.0
 -------
 
-  - summary: PASS-WITH-WARNINGS Next says reboot; realtime and i2c group
-    steps print after the matrix; abort paths record every SKIP row
-  - install-file: INSTALL-FILE END on every return; nm, bluetooth, envd and
-    udev hook failures log POST_* keys; dash-path and modprobe hints trimmed
-  - logging: a signal-time mkinitcpio.conf revert lands before the footer
-  - services: the ufw SECURITY note is INFO once ufw.service is masked
-  - boot: every rebuild hint names sdboot-manage update
+  - services: mask and enable filters skip units is-enabled reports not-found
+  - summary: network, withheld-ufw and mask-retry evidence fit the 50-ch cell
+  - logging: key suffixes _FAILED, _SKIPPED and _LAPSED become _FAIL, _SKIP
+    and _LAPSE; MKINITCPIO_REVERT_OK drops its pacman-failure clause
+  - install: a signal-time revert removes the empty /run/ry-install
+  - install-file: output drops its blank lines; the udev retry hint joins
+    its commands with &&
 
 
-7.190.0 - 7.205.0
+7.190.0 - 7.206.0
 -----------------
 
+  - boot: 7.206.0 every rebuild hint names sdboot-manage update
   - kernel: 7.195.0 fsck.mode=force; 7.199.0 adds ttm.pages_limit=20971520;
     7.204.0 adds nowatchdog, the CachyOS sdboot-manage default
   - perf: 7.204.0 governor performance -> powersave, EPP performance kept
@@ -30,8 +31,17 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     7.200.0 drops both (dmem sees VRAM only)
   - services: 7.197.0 withholds the ufw mask unless nftables.service is
     expected; 7.203.0 records a withheld mask as WARN, not PASS
+  - services: 7.206.0 the ufw SECURITY note is INFO once ufw.service is masked
   - sysctl: 7.195.0 adds vm.watermark_scale_factor=125
   - install-file: 7.201.0 a symlinked destination becomes a regular file
+  - install-file: 7.206.0 INSTALL-FILE END on every return; dash-path and
+    modprobe hints trimmed
+  - install-file: 7.206.0 nm, bluetooth, envd and udev hook failures log
+    POST_* keys
+  - summary: 7.206.0 PASS-WITH-WARNINGS Next says reboot; realtime and i2c
+    group steps print after the matrix; abort paths record every SKIP row
+  - logging: 7.206.0 a signal-time mkinitcpio.conf revert lands before the
+    footer
   - split: 7.190.0 moves ry-verify.fish to its repository
 
 

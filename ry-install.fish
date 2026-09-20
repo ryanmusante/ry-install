@@ -1,20 +1,20 @@
 #!/usr/bin/env fish
-# ry-install v7.206.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.207.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.206.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.207.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro - Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC h/help v/version install-file= # single option-spec source (root guard + main argparse)
 
 # ── HELP TEXT ──
-function _ry_show_help --description "Display usage information and available subcommands"
+function _ry_show_help --description "Display usage information and available options"
     printf '%s\n' \
         "" \
         "ry-install v$VERSION" \
@@ -185,7 +185,7 @@ function _taint --description "Flag install error + boot-critical taint"; set -g
 set -g _RY_AWK_EXT4_FILTER '!/^[ \t]*#/ && NF >= 4 && $3 == "ext4" { print $0 }'
 set -g NM_RESTART_DELAY 3; set -g _PROG_BAR_WIDTH 40
 
-# ── KERNEL / SYSTEMD STATE PROBES ──
+# ── SYSTEMD STATE PROBES ──
 function _resolve_systemd_ver --description "Cache systemd major version into _RY_SYSTEMD_VER"
     set -q _RY_SYSTEMD_VER_TRIED; and return 0
     set -l _v (command systemctl --version 2>/dev/null | command head -n 1 | string match -rg -- '^systemd (\d+)')
@@ -330,6 +330,7 @@ function _dc_mki_revert --description "_do_cleanup sub: Signal-time mkinitcpio.c
     end
     if test "$_rv_tried" = true; and test "$_rv_rc" -eq 0
         command -q sudo; and functions -q _rm_tmp; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
+        command -q sudo; and sudo -n rmdir /run/ry-install 2>/dev/null # reclaim empty snapshot dir
     else # keep /run snapshot for manual restore
         functions -q _untrack_tmpfile; and _untrack_tmpfile "$_RY_MKI_BACKUP_FILE"
         functions -q _log; and _log "MKINITCPIO_SNAPSHOT_PRESERVED: $_RY_MKI_BACKUP_FILE (signal-time revert failed or skipped)"
@@ -460,7 +461,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     test -z "$argv[1]"; and set _sig_label exit
     if not set -q _RY_OUTPUT_BROKEN
         echo "" >&2
-        echo "[WARN] Caught $_sig_label - cleaning up..." >&2
+        echo "[WARN] Caught $_sig_label — cleaning up..." >&2
     end
     set -l _sig_name (string replace -r '^SIG' '' -- "$_sig_label")
     set -l _sig_exit ""
@@ -672,7 +673,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
                 _log "HARDWARE_MODEL_UNREADABLE_OVERRIDE: /proc/cpuinfo missing 'model name'"
             else
                 _err_loud "Hardware check: CPU model unreadable from /proc/cpuinfo (no 'model name' field) — refusing to deploy"
-                _err_loud_cont "  Deploying gfx1151/Strix Halo defaults without CPU validation risks incorrect kernel cmdline + initramfs MODULES."
+                _err_loud_cont "  Deploying gfx1151/Strix Halo defaults without CPU validation risks incorrect kernel cmdline + initramfs MODULES"
                 _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish"
                 _pre_dispatch_exit $EXIT_PREFLIGHT
             end
@@ -682,7 +683,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
                 _log "HARDWARE_MISMATCH_OVERRIDE: expected=$EXPECTED_CPU_MATCH detected=$_cpu_model"
             else
                 _err_loud "Hardware mismatch: profile $PROFILE_NAME expects $EXPECTED_CPU_MATCH, detected: $_cpu_model"
-                _err_loud_cont "  Deploying gfx1151/Strix Halo defaults on non-matching CPU would set incorrect kernel cmdline + initramfs MODULES."
+                _err_loud_cont "  Deploying gfx1151/Strix Halo defaults on non-matching CPU would set incorrect kernel cmdline + initramfs MODULES"
                 _err_loud_cont "  Override (at your risk): RY_INSTALL_SKIP_HARDWARE_CHECK=1 ./ry-install.fish"
                 _pre_dispatch_exit $EXIT_PREFLIGHT
             end
@@ -1301,7 +1302,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
 end
 
 # ── PREFLIGHT GATES: DEPS + NETWORK + DISK + SYSTEMD ──
-function _ry_check_deps --description "Verify required packages are installed"
+function _ry_check_deps --description "Verify required commands, GNU df --output, and the systemd 250 floor"
     _log "DEPS_CHECK_START"
     set -l missing
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum timeout mktemp awk grep curl getent id sudo head df mv tee stat find cp chmod chown install cat rm date wc tail basename dirname mkdir rmdir touch env sleep cmp
@@ -1341,7 +1342,7 @@ function _ry_check_network --description "Verify network connectivity (HTTPS pri
         set -g _RY_NET_FAIL_EVIDENCE "HTTPS/DNS unreachable (raw-IP ICMP ok)"
     else
         _err "Network connectivity: FAILED — cannot reach archlinux.org, cloudflare.com, 1.1.1.1, or 8.8.8.8"
-        set -g _RY_NET_FAIL_EVIDENCE "archlinux.org, cloudflare.com, 1.1.1.1, 8.8.8.8 unreachable"
+        set -g _RY_NET_FAIL_EVIDENCE "2 HTTPS hosts + 2 raw IPs unreachable"
     end
     _log "NET_CHECK_FAIL: $_RY_NET_FAIL_EVIDENCE"; return 1
 end
@@ -1704,7 +1705,7 @@ function _ry_mode_repair --argument-names dst use_sudo perms --description "_ry_
     if _run $_sp chmod -- $perms "$dst"
         _warn "  $dst: mode $cur repaired to $perms (content unchanged)"; _log "MODE_DRIFT_REPAIRED: dst=$dst from=$cur to=$perms"
     else
-        _warn "  $dst: mode $cur differs from $perms and chmod failed - repair by hand"; _log "MODE_DRIFT_REPAIR_FAIL: dst=$dst from=$cur to=$perms"
+        _warn "  $dst: mode $cur differs from $perms and chmod failed — repair by hand"; _log "MODE_DRIFT_REPAIR_FAIL: dst=$dst from=$cur to=$perms"
     end
 end
 function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --description "_atomic_write_file sub: chmod + sudo cache check + atomic mv"
@@ -1774,7 +1775,7 @@ function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --descri
         case /etc/nftables.conf
             if not command -q nft # --install-file may run before nftables is installed
                 _warn "  $dst: nft(8) absent — pre-deploy ruleset validation skipped"
-                _log "NFT_PREVALIDATE_SKIPPED: nft absent"
+                _log "NFT_PREVALIDATE_SKIP: nft absent"
                 return 0
             end
             set -l _sp; test "$use_sudo" = true; and set _sp sudo -n
@@ -1830,7 +1831,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
         set _cur_bytes (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set _read_rc $pipestatus[1]
         test -L "$dst"; and set _read_rc -1; and _log "SYMLINK_DST: dst=$dst — replacing symlink with a regular file"
         if test "$_read_rc" -eq 0; and test "$_new_bytes" = "$_cur_bytes"; set -l _tag ""; set -q _RY_DEPLOY_TAG; and test -n "$_RY_DEPLOY_TAG"; and set _tag " [$_RY_DEPLOY_TAG]"; set -g _RY_DEPLOY_IDEMPOTENT_COUNT (math $_RY_DEPLOY_IDEMPOTENT_COUNT + 1); _ry_mode_repair "$dst" "$use_sudo" "$perms"; _ok "→ $dst (unchanged)$_tag"; return 0; end
-        test "$_read_rc" -eq 2; and _log "SKIP_PROBE_SUDO_LAPSED: dst=$dst — re-deploying"
+        test "$_read_rc" -eq 2; and _log "SKIP_PROBE_SUDO_LAPSE: dst=$dst — re-deploying"
     end
     _atomic_write_file "$dst" "$perms" "$use_sudo"
     set -l _aw_rc $status
@@ -1884,7 +1885,7 @@ function _install_preflight --description "Run all preflight checks before insta
         return $EXIT_PREFLIGHT
     end
     if not _ry_check_network
-        set -l _net_ev "archlinux.org, cloudflare.com, 1.1.1.1, 8.8.8.8 unreachable" # fallback; _RY_NET_FAIL_EVIDENCE overrides
+        set -l _net_ev "2 HTTPS hosts + 2 raw IPs unreachable" # fallback; _RY_NET_FAIL_EVIDENCE overrides
         set -q _RY_NET_FAIL_EVIDENCE; and test -n "$_RY_NET_FAIL_EVIDENCE"; and set _net_ev "$_RY_NET_FAIL_EVIDENCE"
         _phase_record "Preflight: network reachability" FAIL "$_net_ev"
         _err "Network required for package installation — aborting"
@@ -1897,8 +1898,7 @@ function _install_preflight --description "Run all preflight checks before insta
     else
         _phase_record "Preflight: time sync" WARN "clock not NTP-synced or unverifiable"
     end
-    _echo
-    if not _ry_validate_configs; _phase_record "Preflight: config validation" FAIL "see JSONL log"; _err "Configuration validation failed - aborting"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
+    if not _ry_validate_configs; _phase_record "Preflight: config validation" FAIL "see JSONL log"; _err "Configuration validation failed — aborting"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
     _phase_record "Preflight: config validation" PASS "$_RY_MANAGED_FILE_COUNT/$_RY_MANAGED_FILE_COUNT destinations"
     set --erase _RY_LOUD_ERR
     return 0
@@ -1958,12 +1958,12 @@ function _mkinitcpio_revert --argument-names backup_file --description "Restore 
     if not _mr_chmod_chown_mv "$_mki_tmp"; _rm_tmp "$_mki_tmp" true; return 1; end
     _untrack_tmpfile "$_mki_tmp"
     _warn "  /etc/mkinitcpio.conf restored to pre-install content"
-    _log "MKINITCPIO_REVERT_OK: pacman failure → restored backup from $backup_file"
+    _log "MKINITCPIO_REVERT_OK: restored backup from $backup_file"
     return 0
 end
 function _ip_snapshot_mkinitcpio --description "_install_packages sub: Snapshot /etc/mkinitcpio.conf for rollback"
     set -g _RY_MKI_BACKUP_FILE ""; set -g _RY_MKI_HAD_ORIG false
-    if not sudo -n true 2>/dev/null; _log "MKINITCPIO_BACKUP_SKIPPED: sudo -n returned non-zero before snapshot"; return 0; end
+    if not sudo -n true 2>/dev/null; _log "MKINITCPIO_BACKUP_SKIP: sudo -n returned non-zero before snapshot"; return 0; end
     sudo -n test -f /etc/mkinitcpio.conf 2>/dev/null; or return 0
     sudo -n install -d -m 0700 -o root -g root /run/ry-install 2>/dev/null
     set -l _snap (sudo -n mktemp -p /run/ry-install ry-install.mki-snap.XXXXXX 2>/dev/null)
@@ -2023,7 +2023,7 @@ function _ip_run_and_verify --description "_install_packages sub: Run pacman -Sy
     set -l pkgs_to_install $argv; set -l _fn_err false
     if not _ip_pacman_invoke $pkgs_to_install; _taint; set _fn_err true; end
     _info "Verifying package installation..."
-    if not command -q pacman; _err "pacman binary unavailable after install — cannot verify package state"; _taint; set _fn_err true; return 1; end # vanished pacman must not read as all-present
+    if not command -q pacman; _err "pacman binary unavailable after install — cannot verify package state"; _taint; return 1; end # vanished pacman must not read as all-present
     set -l missing_pkgs (command pacman -T -- $pkgs_to_install 2>/dev/null); set -l _pt_rc $status
     if test "$_pt_rc" -ne 0; and test "$_pt_rc" -ne 127 # pacman -T rc: 0=present 127=targets-missing
         _err "pacman -T failed (rc=$_pt_rc) — cannot verify install state"
@@ -2098,10 +2098,10 @@ function _install_system_files --description "Deploy all embedded config files"
     set -l _fn_err false
     _progress Configuration
     _info "Installing system configuration files..."
-    _log "=== INSTALL SYSTEM FILES ==="
+    _log_section "INSTALL SYSTEM FILES"
     if not _isf_deploy_set true System $SYSTEM_DESTINATIONS; set -g INSTALL_HAD_ERRORS true; set _fn_err true; end
     _info "Installing user configuration files..."
-    _log "=== INSTALL USER FILES ==="
+    _log_section "INSTALL USER FILES"
     if not _isf_deploy_set false User $USER_DESTINATIONS; set -g INSTALL_HAD_ERRORS true; set _fn_err true; end
     test "$_fn_err" = true; and return 1
     return 0
@@ -2366,7 +2366,7 @@ function _csm_filter_units --description "_configure_services_mask sub: Pre-filt
     for _unit in $argv # per-unit avoids batched positional drift
         set -l _state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
         if test "$_state" = masked; _log "MASK_ALREADY: $_unit"; continue; end
-        if test -z "$_state"; _info "Mask skip (unit not installed): $_unit"; _log "MASK_NOT_INSTALLED: $_unit"; continue; end
+        if test -z "$_state"; or test "$_state" = not-found; _info "Mask skip (unit not installed): $_unit"; _log "MASK_NOT_INSTALLED: $_unit"; continue; end # systemd 253+ prints not-found; 250-252 print nothing
         printf '%s\n' "$_unit"
     end
 end
@@ -2439,7 +2439,8 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     end
     set -l _to_mask (_csm_filter_units $safe_mask)
     if test (count $_to_mask) -eq 0
-        _phase_record "Services: mask units" $_res "all "(count $safe_mask)" already masked or not installed$_held"
+        set -l _all_ev "all "(count $safe_mask)" already masked or not installed"; test -n "$_held"; and set _all_ev "rest already masked$_held" # held form fits the 50-column cell
+        _phase_record "Services: mask units" $_res "$_all_ev"
         return 0
     end
     set -l _mask_count (count $_to_mask)
@@ -2451,7 +2452,7 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     _csm_retry_individual $_to_mask
     set -l _rc $status
     if test "$_rc" -eq 0
-        _phase_record "Services: mask units" $_res "$_mask_count masked (per-unit retry)$_held"
+        _phase_record "Services: mask units" $_res "$_mask_count masked (retry)$_held"
     else
         _phase_record "Services: mask units" FAIL "some masks failed; see JSONL log"
     end
@@ -2468,7 +2469,7 @@ function _cse_collect_units --description "Collect system units to enable"
         set -l _st (command systemctl is-enabled -- "$_exp" 2>/dev/null | string trim --) # enable only if preset did not
         if test "$_st" = enabled
             _ok "$_exp: already enabled (package preset)"
-        else if test -z "$_st"
+        else if test -z "$_st"; or test "$_st" = not-found
             _info "$_exp: not installed — skipping enable"
         else
             set -a _enable "$_exp"
@@ -2529,7 +2530,7 @@ function _apply_wireless_regdom --description "Apply the wireless regulatory dom
     set -g _RY_REGDOM_RESULT WARN; set -g _RY_REGDOM_EVIDENCE "iw reg set failed — applies via /etc/iw-regdomain"
     return 0
 end
-function _install_configure_services --description "Enable, start, and configure systemd services"
+function _install_configure_services --description "Phase 4: fstab opts, resolved restart, package removal, mask, enable, regdom"
     _progress Services
     _info "Post-installation tasks..."
     set -l _ret 0
@@ -2828,7 +2829,7 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
         return 0
     end
     if _is_wifi_active_route
-        _warn "NetworkManager restart deferred — Wi-Fi is the active route; drop-in takes effect on reboot."
+        _warn "NetworkManager restart deferred — Wi-Fi is the active route; drop-in takes effect on reboot"
         _info "  Or, after switching to ethernet: sudo systemctl restart NetworkManager"
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=finalize_backend_switch"
         _phase_record "Finalize: NetworkManager restart" DEFER "over Wi-Fi — applies on reboot"
@@ -2837,7 +2838,7 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
     _info "NetworkManager will restart (D-Bus disconnect expected)"
     if not _run sudo -n systemctl restart NetworkManager
         _warn "NetworkManager restart failed (will recover on reboot)"
-        _log "NM_RESTART_FAILED: context=finalize_backend_switch"
+        _log "NM_RESTART_FAIL: context=finalize_backend_switch"
         _phase_record "Finalize: NetworkManager restart" WARN "restart failed (will recover on reboot)"
     else
         _phase_record "Finalize: NetworkManager restart" PASS "restarted"
@@ -2846,7 +2847,7 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
     command sleep $_nm_delay </dev/null 2>/dev/null; or _warn "Sleep interrupted during NM restart settle window"
     return 0
 end
-function _install_finalize --description "Finalize: user daemon-reload + pacman cache trim + NetworkManager restart"
+function _install_finalize --description "Finalize: user daemon-reload + PowerDevil re-apply + pacman cache trim + NetworkManager restart"
     _progress Finalize
     set -l _pd_res SKIP; set -l _pd_ev "environment.d unchanged (no restart needed)" # one row per run, like the restart siblings
     if _has_user_bus_active
@@ -2970,7 +2971,7 @@ function _rdi_hint --description "_rdi_summary sub: Forced manual-step line (ins
 function _rdi_summary --description "_ry_do_install sub: Print final install summary"
     if test "$INSTALL_HAD_ERRORS" = true
         _echo "INSTALLATION FINISHED WITH ERRORS"
-        _err "Some steps had errors - review log for details"
+        _err "Some steps had errors — review log for details"
     else
         _echo "INSTALLATION COMPLETE"
     end
@@ -2995,7 +2996,7 @@ function _rdi_summary --description "_ry_do_install sub: Print final install sum
     end
     _info "Post-reboot verification: ./ry-verify.fish"
     if test "$INSTALL_HAD_ERRORS" = true
-        _warn "Done (with errors - see above)"
+        _warn "Done (with errors — see above)"
     else
         _ok "Done!"
     end
@@ -3089,14 +3090,13 @@ function _ry_do_install_file --argument-names target --description "Install a si
         return $EXIT_USAGE
     end
     set -l _mdst "$_RY_RESOLVED_MANAGED_DST" # literal dst; canonical key may diverge
-    _echo "── ry-install v$VERSION - Install Single File ──"
+    _echo "── ry-install v$VERSION — Install Single File ──"
     set -l _if_content (_ry_get_file_content "$_mdst" 2>/dev/null) # format-validate before write (preflight parity)
     if test "$status" -ne 0; _err "Content generator failed for $_mdst — refusing to deploy"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     if not _rvc_dispatch "$_mdst" $_if_content; _err "Embedded content failed format validation for $_mdst — refusing to deploy"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     if test "$_use_sudo" = true; and not _ensure_sudo_cached; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     set -l _changed_before $_RY_DEPLOY_CHANGED_COUNT
     if not _ry_install_file "$_mdst" $_use_sudo; _err "Failed to install: $_mdst"; _log_section "INSTALL-FILE END"; return 1; end
-    _echo
     _ok "Installed: $_mdst"
     set -l _hook_rc 0 # live-apply post-hook on byte change
     if test "$_RY_DEPLOY_CHANGED_COUNT" -gt "$_changed_before"
@@ -3118,7 +3118,7 @@ end
 # ── --INSTALL-FILE: POST-HOOK HANDLERS ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot_apply sub: mkinitcpio -P + sdboot-manage cascade"
     if test "$skip_mki" != true
-        if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAILED: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
+        if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAIL: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     end
     set -l _boot (_resolve_boot_path) # resolve ESP-fallback before the vfat gate (mirrors phase 5)
     if not _sdboot_fallback_vfat_ok; _log "POST_BOOT_SDBOOT_REFUSED: target=$target"; return $EXIT_BOOT_CRIT; end
@@ -3128,12 +3128,11 @@ function _pb_rebuild_cascade --argument-names target skip_mki --description "_po
         _log "POST_BOOT_BOOT_RESOLVE_FAIL: target=$target"
         return $EXIT_BOOT_CRIT
     end
-    if not _run sudo -n sdboot-manage gen; _err "sdboot-manage gen failed"; _log "BOOT_REBUILD_FAILED: step='sdboot-manage gen' target=$target"; return $EXIT_BOOT_CRIT; end
-    if not _run sudo -n sdboot-manage update; _err "sdboot-manage update failed"; _log "BOOT_REBUILD_FAILED: step='sdboot-manage update' target=$target"; return $EXIT_BOOT_CRIT; end
+    if not _run sudo -n sdboot-manage gen; _err "sdboot-manage gen failed"; _log "BOOT_REBUILD_FAIL: step='sdboot-manage gen' target=$target"; return $EXIT_BOOT_CRIT; end
+    if not _run sudo -n sdboot-manage update; _err "sdboot-manage update failed"; _log "BOOT_REBUILD_FAIL: step='sdboot-manage update' target=$target"; return $EXIT_BOOT_CRIT; end
     return 0
 end
 function _post_boot_apply --argument-names target skip_mki --description "Shared post-hook body: taint gate + cascade + entry verify + sanity"
-    _echo
     _check_boot_taint_gate
     set -l _gate_rc $status
     if test "$_gate_rc" -ne 0
@@ -3154,7 +3153,6 @@ function _post_loader --argument-names target --description "Post-hook: regenera
 
 # ── POST-HOOKS: NON-BOOT LIVE-APPLY (SERVICE/CONFIG; FAILURES NON-FATAL, EXIT 0) ──
 function _post_resolved --argument-names target --description "Post-hook: restart systemd-resolved"
-    _echo
     if not _run sudo -n systemctl restart systemd-resolved
         _warn "systemd-resolved restart failed — drop-in applies at next boot (non-fatal; file deployed)"
         _log "POST_RESOLVED_RESTART_FAIL: target=$target"
@@ -3164,7 +3162,6 @@ function _post_resolved --argument-names target --description "Post-hook: restar
 end
 function _post_logind --argument-names target --description "Post-hook: notify reboot needed for logind"; _info "Logind config $target changed — reboot required (restarting logind kills all sessions)"; return 0; end
 function _post_nmdispatch --argument-names target --description "Post-hook: daemon-reload after NetworkManager-dispatcher logging drop-in change"
-    _echo
     if not _run sudo -n systemctl daemon-reload
         _warn "systemctl daemon-reload failed — dispatcher LogLevelMax applies at next boot (non-fatal; file deployed)"
         _log "POST_NMDISPATCH_RELOAD_FAIL: target=$target"
@@ -3174,15 +3171,14 @@ function _post_nmdispatch --argument-names target --description "Post-hook: daem
     return 0
 end
 function _post_nm --argument-names target --description "Post-hook: restart NetworkManager; deferred when Wi-Fi is active route"
-    _echo
     if not command -q NetworkManager
         _warn "NetworkManager config deployed but NetworkManager not installed — restart skipped; drop-in keys apply once installed or at next boot"
         _log "POST_NM_SKIP_NO_NM: target=$target"
         return 0
     end
     if _is_wifi_active_route
-        _warn "NetworkManager config installed but restart deferred — Wi-Fi is the active route."
-        _info "  Config change will not take effect until next reboot or manual restart."
+        _warn "NetworkManager config installed but restart deferred — Wi-Fi is the active route"
+        _info "  Config change will not take effect until next reboot or manual restart"
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=install_file target=$target"
         return 0
     end
@@ -3193,7 +3189,6 @@ function _post_nm --argument-names target --description "Post-hook: restart Netw
     return 0
 end
 function _post_sysctl --argument-names target --description "Post-hook: apply sysctl tunables"
-    _echo
     if not command -q sysctl
         _warn "sysctl(8) not found — tunables will apply on next reboot via systemd-sysctl.service"
         _info "  Install procps-ng for immediate apply: sudo pacman -S --needed procps-ng"
@@ -3232,7 +3227,6 @@ end
 
 # ── POST-HOOKS: HARDWARE + FIREWALL (CPUPOWER, NFT, REGDOM, BT, UDEV, MODPROBE) ──
 function _post_cpupower --argument-names target --description "Post-hook: restart cpupower.service after /etc/default/cpupower-service.conf change"
-    _echo
     if not _run sudo -n systemctl restart cpupower.service
         _warn "cpupower.service restart failed — governor change applies on next boot (non-fatal; file deployed)"
         _info "  Governor from /etc/default/cpupower-service.conf re-applies on next boot"
@@ -3241,8 +3235,7 @@ function _post_cpupower --argument-names target --description "Post-hook: restar
     end
     return 0
 end
-function _post_nft --argument-names target --description "Post-hook: validate + (if active) reload nftables ruleset"
-    _echo
+function _post_nft --argument-names target --description "Post-hook: validate, then restart nftables.service to reload the ruleset"
     if not _run sudo -n nft -c -f /etc/nftables.conf
         _warn "nftables ruleset failed validation (nft -c) — not reloaded; fix /etc/nftables.conf"
         _log "POST_NFT_VALIDATE_FAIL: target=$target"
@@ -3256,9 +3249,8 @@ function _post_nft --argument-names target --description "Post-hook: validate + 
     end
     return 0
 end
-function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"; _echo; _log "POST_REGDOM_APPLY: target=$target"; _apply_wireless_regdom; end
+function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"; _log "POST_REGDOM_APPLY: target=$target"; _apply_wireless_regdom; end
 function _post_bluetooth --argument-names target --description "Post-hook: restart bluetooth.service after /etc/bluetooth/main.conf change"
-    _echo
     if not command -q bluetoothctl; and not test -e /usr/lib/systemd/system/bluetooth.service
         _warn "bluetooth/main.conf deployed but bluez not installed — restart skipped; keys apply once bluez is installed or at next boot"
         _log "POST_BT_SKIP_NO_BLUEZ: target=$target"
@@ -3271,7 +3263,6 @@ function _post_bluetooth --argument-names target --description "Post-hook: resta
     return 0
 end
 function _post_udev --argument-names target --description "Post-hook: reload udev rules + retrigger block/cpu devices after /etc/udev/rules.d/* change"
-    _echo
     if not command -q udevadm
         _warn "udevadm(8) not found — I/O scheduler rule applies at next boot"
         _log "POST_UDEV_SKIP_NO_UDEVADM: target=$target"
@@ -3291,7 +3282,7 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
     end
     if not _run sudo -n udevadm control --reload-rules
         _warn "udevadm control --reload-rules failed — rule applies at next boot (non-fatal; file deployed)"
-        _info "  Retry: sudo udevadm control --reload-rules; and sudo udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change"
+        _info "  Retry: sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change"
         _log "POST_UDEV_RELOAD_FAIL: target=$target"
         return 0
     end

@@ -3,19 +3,18 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.207.0
+7.208.0
 -------
 
-  - services: mask and enable filters skip units is-enabled reports not-found
-  - summary: network, withheld-ufw and mask-retry evidence fit the 50-ch cell
-  - logging: key suffixes _FAILED, _SKIPPED and _LAPSED become _FAIL, _SKIP
-    and _LAPSE; MKINITCPIO_REVERT_OK drops its pacman-failure clause
-  - install: a signal-time revert removes the empty /run/ry-install
-  - install-file: output drops its blank lines; the udev retry hint joins
-    its commands with &&
+  - summary: the tainted-boot SKIP row reads boot state tainted by an earlier
+    phase, not the _RY_BOOT_TAINTED variable name
+  - install: one blank line, not two, separates the sudo banner from the RUN
+    SUMMARY and a usage error from the help text
+  - install: the sudo banner, withheld-ufw and non-systemd-boot messages drop
+    their trailing periods
 
 
-7.190.0 - 7.206.0
+7.190.0 - 7.207.0
 -----------------
 
   - boot: 7.206.0 every rebuild hint names sdboot-manage update
@@ -32,16 +31,25 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - services: 7.197.0 withholds the ufw mask unless nftables.service is
     expected; 7.203.0 records a withheld mask as WARN, not PASS
   - services: 7.206.0 the ufw SECURITY note is INFO once ufw.service is masked
+  - services: 7.207.0 mask and enable filters skip units is-enabled reports
+    not-found
   - sysctl: 7.195.0 adds vm.watermark_scale_factor=125
+  - install: 7.207.0 a signal-time revert removes the empty /run/ry-install
   - install-file: 7.201.0 a symlinked destination becomes a regular file
   - install-file: 7.206.0 INSTALL-FILE END on every return; dash-path and
     modprobe hints trimmed
   - install-file: 7.206.0 nm, bluetooth, envd and udev hook failures log
     POST_* keys
+  - install-file: 7.207.0 output drops its blank lines; the udev retry hint
+    joins its commands with &&
   - summary: 7.206.0 PASS-WITH-WARNINGS Next says reboot; realtime and i2c
     group steps print after the matrix; abort paths record every SKIP row
+  - summary: 7.207.0 network, withheld-ufw and mask-retry evidence fit the
+    50-ch cell
   - logging: 7.206.0 a signal-time mkinitcpio.conf revert lands before the
     footer
+  - logging: 7.207.0 key suffixes _FAILED, _SKIPPED and _LAPSED become _FAIL,
+    _SKIP and _LAPSE; MKINITCPIO_REVERT_OK drops its pacman-failure clause
   - split: 7.190.0 moves ry-verify.fish to its repository
 
 

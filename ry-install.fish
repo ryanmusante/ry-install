@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.207.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.208.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.207.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.208.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -96,7 +96,7 @@ function _ry_exit --argument-names code --description "Set bail sentinel and exi
     exit $code
 end
 function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE and _INTENDED_EXIT_CODE atomically"; set -g _RY_EXIT_CODE $_code; set -g _INTENDED_EXIT_CODE $_code; end
-function _ry_root_usage --description "Root-guard usage error: print msg + help to stderr, exit EXIT_USAGE"; echo "[ERR] $argv" >&2; echo >&2; _ry_show_help >&2; _ry_exit $EXIT_USAGE; end
+function _ry_root_usage --description "Root-guard usage error: print msg + help to stderr, exit EXIT_USAGE"; echo "[ERR] $argv" >&2; _ry_show_help >&2; _ry_exit $EXIT_USAGE; end
 
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
 set -g QUIET true; set -g MODE bootstrap # pinned pre-argparse for signal footers
@@ -1866,9 +1866,8 @@ function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache m
     printf '%s\n' "" \
         "[WARN] sudo cache may lapse during 3-8 min install. Mitigations:" \
         "[WARN]   Defaults timestamp_timeout=60 in /etc/sudoers, sudo -v keepalive in parallel shell," \
-        "[WARN]   or a scoped NOPASSWD drop-in (pacman/mkinitcpio/sdboot-manage/systemctl — avoid ALL)." \
-        "[WARN]   Recovery: re-run ry-install (idempotent)." \
-        "" >&2
+        "[WARN]   or a scoped NOPASSWD drop-in (pacman/mkinitcpio/sdboot-manage/systemctl — avoid ALL)" \
+        "[WARN]   Recovery: re-run ry-install (idempotent)" >&2
 end
 
 # ── INSTALL PHASE 1: PREFLIGHT ──
@@ -2401,7 +2400,7 @@ end
 function _csm_prepare_ufw_masking --argument-names nft_live --description "_configure_services_mask sub: Flush live ufw rules ahead of its unit mask"
     command -q ufw; or return 0 # binary absent: nothing to flush
     if test "$nft_live" != true
-        _warn "ufw.service mask withheld this run — nftables default-deny not confirmed live; mask --now stops ufw (ufw-init stop flushes) and would leave the host unfirewalled until reboot. Re-run after nftables.service starts."
+        _warn "ufw.service mask withheld this run — nftables default-deny not confirmed live; mask --now stops ufw (ufw-init stop flushes) and would leave the host unfirewalled until reboot. Re-run after nftables.service starts"
         _log "UFW_MASK_DEFERRED: nft_live=$nft_live (ufw.service left unmasked to avoid an unfirewalled window)"
         return 1
     end
@@ -2599,7 +2598,7 @@ function _sdboot_fallback_vfat_ok --description "Refuse sdboot when ESP fell bac
     if test "$_boot_fs" = vfat; return 0; end
     set -g _RY_SDBOOT_REFUSE_FS "$_boot_fs"
     _err "Refusing sdboot-manage: ESP autodetect fell back to /boot but /boot is not vfat (fstype=$_boot_fs)"
-    _err "  ry-install targets systemd-boot. Detected non-systemd-boot bootloader — aborting."
+    _err "  ry-install targets systemd-boot. Detected non-systemd-boot bootloader — aborting"
     _log "SDBOOT_APPLY_REFUSED: esp_fallback=true boot_fstype=$_boot_fs"
     return 1
 end
@@ -2740,7 +2739,7 @@ function _irb_taint_gate --description "_install_rebuild_boot sub: Verify mkinit
     if test "$_gate_rc" -eq 1
         _phase_record "Boot: mkinitcpio -P" SKIP "mkinitcpio.conf revert failed"
     else
-        _phase_record "Boot: mkinitcpio -P" SKIP "_RY_BOOT_TAINTED=true"
+        _phase_record "Boot: mkinitcpio -P" SKIP "boot state tainted by an earlier phase"
     end
     _irb_skip_post_mki
     return $EXIT_BOOT_CRIT
@@ -3306,7 +3305,7 @@ function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/d
     set -g _RY_LOG_SUPPRESS_CREATE true # suppress lazy-create
 end
 function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: log/dir cleanup, then exit"; _pre_dispatch_log_cleanup; _ry_exit $code; end
-function _early_usage_exit --description "Print usage error to stderr, remove pre-dispatch log, exit EXIT_USAGE"; echo "[ERR] $argv" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
+function _early_usage_exit --description "Print usage error to stderr, remove pre-dispatch log, exit EXIT_USAGE"; echo "[ERR] $argv" >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
 
 # ── MAIN: ARGPARSE + MODE SELECTION + LOG HEADER + EXIT ──
 set -g MODE install; set -g INSTALL_FILE_TARGET ""
@@ -3324,7 +3323,6 @@ if test "$_argparse_rc" -ne 0
     test -n "$_ap_msg"; or set _ap_msg "Invalid arguments: $_ORIG_ARGV"
     echo "[ERR] $_ap_msg" >&2
     _rm_tmp "$_ap_errfile" false
-    echo >&2
     _ry_show_help >&2
     _pre_dispatch_exit $EXIT_USAGE
 end
@@ -3359,7 +3357,7 @@ if set -q _flag_install_file
         set -g INSTALL_FILE_TARGET "$_if_val"
     end
 end
-if test (count $argv) -gt 0; echo "[ERR] Unexpected positional argument(s): $argv" >&2; echo >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
+if test (count $argv) -gt 0; echo "[ERR] Unexpected positional argument(s): $argv" >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
 test "$MODE" != install; and set -g QUIET false
 
 # ── MAIN: LOG RENAME + 0600 CREATE + JSONL HEADER ──

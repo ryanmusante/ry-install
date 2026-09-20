@@ -3,18 +3,14 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.208.0
+7.209.0
 -------
 
-  - summary: the tainted-boot SKIP row reads boot state tainted by an earlier
-    phase, not the _RY_BOOT_TAINTED variable name
-  - install: one blank line, not two, separates the sudo banner from the RUN
-    SUMMARY and a usage error from the help text
-  - install: the sudo banner, withheld-ufw and non-systemd-boot messages drop
-    their trailing periods
+  - perf: governor powersave -> performance, reverting 7.204.0; EPP stays
+    performance and the udev write is a no-op the kernel rejects
 
 
-7.190.0 - 7.207.0
+7.190.0 - 7.208.0
 -----------------
 
   - boot: 7.206.0 every rebuild hint names sdboot-manage update
@@ -35,6 +31,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     not-found
   - sysctl: 7.195.0 adds vm.watermark_scale_factor=125
   - install: 7.207.0 a signal-time revert removes the empty /run/ry-install
+  - install: 7.208.0 single blank lines before the RUN SUMMARY and the help
+    text; sudo-banner, withheld-ufw and non-systemd-boot periods dropped
   - install-file: 7.201.0 a symlinked destination becomes a regular file
   - install-file: 7.206.0 INSTALL-FILE END on every return; dash-path and
     modprobe hints trimmed
@@ -46,6 +44,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     group steps print after the matrix; abort paths record every SKIP row
   - summary: 7.207.0 network, withheld-ufw and mask-retry evidence fit the
     50-ch cell
+  - summary: 7.208.0 the tainted-boot SKIP row names the boot state, not the
+    _RY_BOOT_TAINTED variable
   - logging: 7.206.0 a signal-time mkinitcpio.conf revert lands before the
     footer
   - logging: 7.207.0 key suffixes _FAILED, _SKIPPED and _LAPSED become _FAIL,

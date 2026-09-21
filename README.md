@@ -1,8 +1,8 @@
 # ry-install
 
-**Version 7.209.0** · [Changelog](CHANGELOG.md)
+**Version 7.210.0** · [Changelog](CHANGELOG.md)
 
-Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended run, idempotent on every pass, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
+Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
 ## Quick Start
 
@@ -246,7 +246,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 
 ### Gaming Stack
 
-- `/dev/ntsync` — Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out at the Proton level.
+- `/dev/ntsync` — Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out.
 - `PROTON_FSR4_UPGRADE=1` — the Proton-CachyOS lever that upgrades FSR 3.1 titles to FSR 4; per title in the Steam launch options, never session-wide, and a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.1`. `PROTON_FSR4_INDICATOR=1` draws only the watermark and is not shipped.
 - `cpu_stats` ships enabled; `cpu_temp` stays commented out — to turn it on, add it on its own line in the MangoHud generator of both scripts, then `--install-file` the file. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
 - `game-performance` — the CachyOS wrapper needs `power-profiles-daemon`, whose service this profile masks, so it runs the game unchanged; the profile pins the `performance` governor and EPP `performance` instead.

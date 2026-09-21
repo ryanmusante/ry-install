@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.209.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.210.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.209.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.210.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -53,7 +53,7 @@ for _early_arg in $argv
             echo "v$VERSION"
             exit $EXIT_OK
         case '-*'
-            if string match -qr -- '^-[hvV]+$' "$_early_arg" # glued h/v/V only; first h/v wins (getopt order)
+            if string match -qr -- '^-[hv]+$' "$_early_arg" # glued h/v only; first h/v wins (getopt order)
                 for _early_ch in (string split '' -- (string sub -s 2 -- "$_early_arg"))
                     test "$_early_ch" = h; and begin; _ry_show_help; exit $EXIT_OK; end
                     test "$_early_ch" = v; and begin; echo "v$VERSION"; exit $EXIT_OK; end
@@ -102,7 +102,7 @@ function _ry_root_usage --description "Root-guard usage error: print msg + help 
 set -g QUIET true; set -g MODE bootstrap # pinned pre-argparse for signal footers
 if not string match -qr '^\d+$' -- "$_MY_UID"; echo "[ERR] id -u returned non-numeric value: '$_MY_UID' — cannot determine user identity" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if test "$_MY_UID" -eq 0
-    set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) $_RY_ARGPARSE_SPEC -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity argparse in subshell; parent argv intact
+    set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) $_RY_ARGPARSE_SPEC -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity argparse in a cmdsub block; parent argv intact
     set -l _rg_prc 0; set -l _rg_msg ""
     for _rg_l in $_rg_msgout
         if string match -q '@@RC@@*' -- "$_rg_l"; set _rg_prc (string replace '@@RC@@' '' -- "$_rg_l"); else if test -z "$_rg_msg"; set _rg_msg (string replace -ra '\e\[[0-9;]*[a-zA-Z]' '' -- "$_rg_l" | string trim --); end
@@ -534,7 +534,7 @@ set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme b
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi+resolved: mDNS off by design; ufw: nft owns the ruleset
-set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4/6
+set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
@@ -621,7 +621,7 @@ function _ir_validate_keys --description "Refuse to deploy on out-of-domain embe
     end
     if not string match -qr '^[0-3]$' -- "$NM_WIFI_POWERSAVE"; _err_loud "NM_WIFI_POWERSAVE must be 0|1|2|3 (got: '$NM_WIFI_POWERSAVE') — refuse to deploy (NetworkManager wifi.powersave accepts no other value)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if not string match -qr '^[A-Z][A-Z]$' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166-1 alpha-2 code (got: '$COUNTRY') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain. Refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)$' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
     if not contains -- "$EPP_PREFERENCE" $_RY_EPP_LEVELS; _err_loud "EPP_PREFERENCE must be one of "(string join '|' -- $_RY_EPP_LEVELS)" (got: '$EPP_PREFERENCE') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
     if not string match -qr '^[a-z][a-z0-9_-]*$' -- "$CPUPOWER_GOVERNOR"; _err_loud "CPUPOWER_GOVERNOR must match ^[a-z][a-z0-9_-]*\$ (got: '$CPUPOWER_GOVERNOR') — refuse to deploy (the domain _grep_cpupower_entry accepts)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
@@ -697,7 +697,7 @@ function _init_runtime --description "Cache root UUID + validate config + precom
     for _bt in $_RY_BACKUP_TARGETS; if string match -q '*/sysctl.d/*' -- "$_bt"; _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end; end
     _ir_precompute_caches
     for _pn in $PKGS_ADD $PKGS_DEL
-        if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman would parse as flag, refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman would parse as flag; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 
@@ -1981,7 +1981,7 @@ end
 function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacman -Syu --needed (partial upgrades forbidden — Arch policy)"
     set -l _pacman_first -Syu --needed --noconfirm; set -l _pacman_retry -Syyu --needed --noconfirm
     if test -f /var/lib/pacman/db.lck
-        _err "pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or stale lock from a crashed run"
+        _err "pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run"
         _err "  Skipping package install — remove the lock file manually if no pacman process is active"
         return 1
     end
@@ -2229,7 +2229,7 @@ end
 function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ext4 fstab entries"
     set -g _RY_FSTAB_EVIDENCE "noatime,lazytime,commit=10"; set -g _RY_FSTAB_RESULT PASS # row: PASS=applied SKIP=no fstab --=no ext4
     if not test -f /etc/fstab; _warn "  /etc/fstab not found — skipping"; set -g _RY_FSTAB_EVIDENCE "fstab absent — skipped"; set -g _RY_FSTAB_RESULT SKIP; return 0; end
-    if test -L /etc/fstab; _fail "  /etc/fstab is a symlink — refusing to rewrite (resolve symlink first or skip fstab opts)"; return 1; end
+    if test -L /etc/fstab; _fail "  /etc/fstab is a symlink — refusing to rewrite (resolve the symlink first)"; return 1; end
     set -l ext4_lines
     if not test -r /etc/fstab
         if not sudo -n test -r /etc/fstab 2>/dev/null; _fail "  /etc/fstab not readable (even via sudo) — cannot rewrite (check fstab perms)"; return 1; end
@@ -2306,7 +2306,7 @@ function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg re
     end
     if _run sudo -n pacman -Rns --noconfirm -- $argv; _ok "Removed: $argv"; _log "PKG_REMOVE_BATCH_OK: $argv"; set -g _RY_PKGS_REMOVED_COUNT (math $_RY_PKGS_REMOVED_COUNT + (count $argv)); return 0; end
     if test -f /var/lib/pacman/db.lck; _err "pacman database became locked during removal — aborting"; set -g INSTALL_HAD_ERRORS true; set -g _RY_PKG_REMOVE_DBLOCK true; _log "PKG_REMOVE_BATCH_FAIL_DBLOCK: $argv"; return 0; end
-    _warn "Batch removal failed, trying individually..."
+    _warn "Batch removal failed — retrying individually to identify failures"
     _log "PKG_REMOVE_BATCH_FAIL: $argv"
     set -l _retry_installed (command pacman -Qq 2>/dev/null)
     if test "$status" -ne 0; _warn "pacman -Qq failed during retry — aborting per-pkg removal"; _log "PKG_REMOVE_RETRY_QQ_FAIL: pacman -Qq returned non-zero"; return 0; end
@@ -2355,7 +2355,7 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
     else if test "$_skip_count" -gt 0
         _phase_record "Services: PKGS_DEL removal" WARN "removed $_RY_PKGS_REMOVED_COUNT, $_skip_count rdep-skipped"
     else
-        _phase_record "Services: PKGS_DEL removal" PASS "removed $_RY_PKGS_REMOVED_COUNT packages"
+        _phase_record "Services: PKGS_DEL removal" PASS "removed $_RY_PKGS_REMOVED_COUNT package(s)"
     end
     return 0
 end
@@ -2444,7 +2444,7 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     end
     set -l _mask_count (count $_to_mask)
     if _run sudo -n systemctl mask --now -- $_to_mask
-        _phase_record "Services: mask units" $_res "masked $_mask_count units$_held"
+        _phase_record "Services: mask units" $_res "masked $_mask_count unit(s)$_held"
         return 0
     end
     _warn "Batch mask failed — retrying individually to identify failures"
@@ -2506,7 +2506,7 @@ function _configure_services_enable --description "Batch-enable system units (pe
         return 0
     end
     if _cse_batch_enable $_units
-        _phase_record "Services: enable units" PASS "enabled $_enable_count units"
+        _phase_record "Services: enable units" PASS "enabled $_enable_count unit(s)"
     else
         _phase_record "Services: enable units" FAIL "$_enable_count requested; see JSONL log"
         set _ret 1
@@ -2713,7 +2713,7 @@ function _irb_verify_entries --argument-names boot --description "_install_rebui
         else
             _err "No boot entries found in $boot/loader/entries/"
             _info "  System may not boot! Check /etc/sdboot-manage.conf LINUX_OPTIONS"
-            _info "  Try: sudo sdboot-manage gen --verbose"
+            _info "  Try: sudo sdboot-manage gen"
             set -g INSTALL_HAD_ERRORS true
         end
     end
@@ -2802,14 +2802,14 @@ function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk
         if test "$_pc_ok" = true
             _phase_record "Finalize: pacman cache trim" PASS "paccache -rk2 + -ruk0 ($_reason)"
         else
-            _warn "paccache cache trim failed"
+            _warn "pacman cache trim failed (paccache)"
             _phase_record "Finalize: pacman cache trim" WARN "paccache failed"
         end
     else
         if _run sudo -n pacman -Sc --noconfirm
             _phase_record "Finalize: pacman cache trim" PASS "pacman -Sc ($_reason)"
         else
-            _warn "pacman cache clear failed"
+            _warn "pacman cache trim failed (pacman -Sc)"
             _phase_record "Finalize: pacman cache trim" WARN "pacman -Sc failed"
         end
     end
@@ -3159,7 +3159,7 @@ function _post_resolved --argument-names target --description "Post-hook: restar
     end
     return 0
 end
-function _post_logind --argument-names target --description "Post-hook: notify reboot needed for logind"; _info "Logind config $target changed — reboot required (restarting logind kills all sessions)"; return 0; end
+function _post_logind --argument-names target --description "Post-hook: notify logind change (applies at next boot or on SIGHUP reload)"; _info "Logind config $target changed — applies at next boot, or now via: sudo systemctl kill -s HUP systemd-logind"; return 0; end
 function _post_nmdispatch --argument-names target --description "Post-hook: daemon-reload after NetworkManager-dispatcher logging drop-in change"
     if not _run sudo -n systemctl daemon-reload
         _warn "systemctl daemon-reload failed — dispatcher LogLevelMax applies at next boot (non-fatal; file deployed)"
@@ -3202,7 +3202,7 @@ function _post_sysctl --argument-names target --description "Post-hook: apply sy
     end
     return 0
 end
-function _post_mangohud --argument-names target --description "Post-hook: notify MangoHud.conf change (read at next game/Vulkan app launch)"; _info "MangoHud $target changed — applies at next launch under 'mangohud %command%' (no service restart needed)"; _info "  Toggle the HUD in-app with Shift_R+F12 (MangoHud default)"; return 0; end
+function _post_mangohud --argument-names target --description "Post-hook: notify MangoHud.conf change (read at next game/Vulkan app launch)"; _info "MangoHud $target changed — read at the next game or Vulkan app launch (no service restart needed)"; _info "  Toggle the HUD in-app with Shift_R+F12 (MangoHud default)"; return 0; end
 function _post_envd --argument-names target --description "Post-hook: env-generator re-run + PowerDevil re-apply after environment.d change"
     _info "environment.d $target changed — log out and back in (or restart the user session) to apply session-wide"
     _info "  Active systemd --user services retain the old environment until restarted"
@@ -3248,7 +3248,17 @@ function _post_nft --argument-names target --description "Post-hook: validate, t
     end
     return 0
 end
-function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"; _log "POST_REGDOM_APPLY: target=$target"; _apply_wireless_regdom; end
+function _post_regdom --argument-names target --description "Post-hook: apply wireless regdom after /etc/iw-regdomain change"
+    _log "POST_REGDOM_APPLY: target=$target"
+    _apply_wireless_regdom
+    switch "$_RY_REGDOM_RESULT"
+        case WARN
+            _log "POST_REGDOM_APPLY_FAIL: target=$target"
+        case DEFER
+            _log "POST_REGDOM_SKIP_NO_IW: target=$target"
+    end
+    return 0
+end
 function _post_bluetooth --argument-names target --description "Post-hook: restart bluetooth.service after /etc/bluetooth/main.conf change"
     if not command -q bluetoothctl; and not test -e /usr/lib/systemd/system/bluetooth.service
         _warn "bluetooth/main.conf deployed but bluez not installed — restart skipped; keys apply once bluez is installed or at next boot"
@@ -3263,7 +3273,7 @@ function _post_bluetooth --argument-names target --description "Post-hook: resta
 end
 function _post_udev --argument-names target --description "Post-hook: reload udev rules + retrigger block/cpu devices after /etc/udev/rules.d/* change"
     if not command -q udevadm
-        _warn "udevadm(8) not found — I/O scheduler rule applies at next boot"
+        _warn "udevadm(8) not found — udev rules apply at next boot"
         _log "POST_UDEV_SKIP_NO_UDEVADM: target=$target"
         return 0
     end
@@ -3280,7 +3290,7 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
         _log "UDEV_VERIFY_SKIP: systemd $_sv < 254 — udevadm verify unavailable; reloading rule unvalidated"
     end
     if not _run sudo -n udevadm control --reload-rules
-        _warn "udevadm control --reload-rules failed — rule applies at next boot (non-fatal; file deployed)"
+        _warn "udevadm control --reload-rules failed — rules apply at next boot (non-fatal; file deployed)"
         _info "  Retry: sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change"
         _log "POST_UDEV_RELOAD_FAIL: target=$target"
         return 0
@@ -3338,7 +3348,7 @@ if set -q _flag_install_file
         else if string match -q -- '-*' "$_if_val"
             _early_usage_exit "--install-file requires an absolute path argument (got flag: $_if_val)"
         else
-            _early_usage_exit "--install-file requires absolute path (got: $_if_val)"
+            _early_usage_exit "--install-file requires an absolute path (got: $_if_val)"
         end
     end
     if string match -qr -- '[\x00-\x1f\x7f]' "$_if_val"; _early_usage_exit "--install-file path contains control character — refusing (would break JSONL header / shell quoting)"; end

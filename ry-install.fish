@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.210.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.211.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.210.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.211.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -298,7 +298,7 @@ function _acquire_lock --description "Acquire instance lock (atomic mkdir; dead-
             end
         else # fail-closed: unreadable pidfile may be a live peer mid-install
             _log "LOCK_PIDFILE_UNREADABLE: '$_stale_pid' not a PID after settle — refusing reclaim (fail-closed)"
-            echo "[ERR] Lock pidfile unreadable — refusing reclaim: $LOCK_DIR (no live instance? rm -rf $LOCK_DIR)" >&2
+            echo "[ERR] Lock pidfile holds no PID — refusing reclaim: $LOCK_DIR (no live instance? rm -rf $LOCK_DIR)" >&2
             return 1
         end
         if test -L "$LOCK_DIR"; _log "LOCK_RECLAIM_REFUSED: $LOCK_DIR is a symlink"; echo "[ERR] Lock dir is a symlink — refusing reclaim: $LOCK_DIR" >&2; return 1; end
@@ -459,6 +459,7 @@ function _cleanup --on-signal INT --on-signal TERM --on-signal HUP --on-signal Q
     set -g _CLEANUP_DONE true; set -l _sig_label SIG$argv[1]
     string match -q 'SIG*' -- "$argv[1]"; and set _sig_label "$argv[1]"
     test -z "$argv[1]"; and set _sig_label exit
+    set -q _RY_HEADER_WRITTEN; and not set -q _FOOTER_WRITTEN; and _log "WARN: Caught $_sig_label — cleaning up..." # JSONL first, like _msg
     if not set -q _RY_OUTPUT_BROKEN
         echo "" >&2
         echo "[WARN] Caught $_sig_label — cleaning up..." >&2
@@ -541,8 +542,8 @@ set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ──
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
-    set -g _ROOT_UUID (command findmnt -no UUID / 2>/dev/null)
-    set -l _reason "findmnt failed"
+    set -g _ROOT_UUID (command findmnt -no UUID / 2>/dev/null); set -l _fm_rc $status
+    set -l _reason "findmnt failed (rc=$_fm_rc)"; test "$_fm_rc" -eq 0; and set _reason "findmnt returned no UUID"
     if test -n "$_ROOT_UUID"; and not string match -qr '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -- "$_ROOT_UUID"
         set _reason "invalid UUID shape (got: $_ROOT_UUID)"
         set --erase _ROOT_UUID
@@ -726,7 +727,7 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
 end
 
 # ── CONTENT GENERATORS: SYSTEM (resolved, logind, NM, bluetooth, nft, sysctl, udev) ──
-function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"; printf '%s\n' "# ry-install: systemd-resolved drop-in, link DNS from DHCP, mDNS/LLMNR off (managed file, do not edit by hand)" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR"; end
+function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"; printf '%s\n' "# ry-install: systemd-resolved drop-in, link DNS from DHCP (managed file, do not edit by hand)" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR"; end
 function _content__etc_systemd_logind.conf.d_99-cachyos-logind.conf --description "Generate content for systemd-logind drop-in"
     printf '%s\n' "# ry-install: systemd-logind drop-in, desktop power handling (managed file, do not edit by hand)"
     printf '%s\n' "[Login]"
@@ -783,9 +784,9 @@ function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate con
         "# ry-install: udev performance rules (managed file, do not edit by hand)" \
         "# NVMe scheduler none (lowest tail latency; diverges from CachyOS kyber default)" \
         'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
-        "# AMD P-State EPP performance (maximum CPPC hint)" \
+        "# AMD P-State EPP $EPP_PREFERENCE (CPPC hint)" \
         'ACTION=="add|change", SUBSYSTEM=="cpu", KERNEL=="cpu[0-9]*", ATTR{cpufreq/energy_performance_preference}="'$EPP_PREFERENCE'"' \
-        "# GPU performance level (gfx1151 clock-floor; forced high)" \
+        "# GPU performance level $GPU_DPM_LEVEL (gfx1151)" \
         'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
 end
 function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate content for /etc/modprobe.d/60-ry-modules.conf (optional amdxdna blacklist)"
@@ -1939,6 +1940,7 @@ function _mr_chmod_chown_mv --argument-names _mki_tmp --description "_mkinitcpio
 end
 function _mkinitcpio_revert --argument-names backup_file --description "Restore /etc/mkinitcpio.conf from backup path (pacman -Syu rollback)"
     if test -z "$backup_file"; _err "  /etc/mkinitcpio.conf revert: empty backup_file path"; _log "MKINITCPIO_REVERT_FAIL: empty path"; return 1; end
+    if not sudo -n true 2>/dev/null; _err "  /etc/mkinitcpio.conf revert failed at probe — sudo cache lapsed"; _log "MKINITCPIO_REVERT_FAIL: sudo lapse at probe"; return 1; end
     if not sudo -n test -f "$backup_file" 2>/dev/null
         _err "  /etc/mkinitcpio.conf revert failed at probe — backup file missing: $backup_file"
         _log "MKINITCPIO_REVERT_FAIL: backup file missing $backup_file"
@@ -2299,7 +2301,8 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when n
 end
 function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg retry on batch failure"
     if test -f /var/lib/pacman/db.lck
-        _err "pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run; skipping package removal"
+        _err "pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run"
+        _err "  Skipping package removal — remove the lock file manually if no pacman process is active"
         set -g INSTALL_HAD_ERRORS true
         set -g _RY_PKG_REMOVE_DBLOCK true
         return 0
@@ -2960,10 +2963,10 @@ end
 
 # ── INSTALL SUMMARY: FINAL VERDICT + MANUAL STEPS + DO-NOT-REBOOT GATE ──
 function _idf_boot_crit_banner --description "Forced DO-NOT-REBOOT recovery banner (shared: full install + --install-file)"
-    _msg_print --force ERR "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)" # force bypasses QUIET
     _log "ERR: DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
+    _msg_print --force ERR "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)" # force bypasses QUIET
     for _bcl in "Recovery steps:" "  1. Inspect: ls -la /boot/vmlinuz-* /boot/initramfs-*.img; sudo bootctl list" "  2. Rebuild: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update" "  3. Re-run ry-install (idempotent) — only reboot once verdict is PASS or PASS-WITH-WARNINGS" "JSONL log captures the exact failure: $LOG_FILE"
-        _msg_print --force INFO "$_bcl"; _log "INFO: $_bcl"
+        _log "INFO: $_bcl"; _msg_print --force INFO "$_bcl"
     end
 end
 function _rdi_hint --description "_rdi_summary sub: Forced manual-step line (install pins QUIET, which hides _info)"; _log "INFO: "(string join -- " " $argv); _msg_print --force INFO $argv; end
@@ -3157,6 +3160,7 @@ function _post_resolved --argument-names target --description "Post-hook: restar
         _log "POST_RESOLVED_RESTART_FAIL: target=$target"
         return 0
     end
+    _ok "systemd-resolved restarted — drop-in applied"
     return 0
 end
 function _post_logind --argument-names target --description "Post-hook: notify logind change (applies at next boot or on SIGHUP reload)"; _info "Logind config $target changed — applies at next boot, or now via: sudo systemctl kill -s HUP systemd-logind"; return 0; end
@@ -3181,7 +3185,9 @@ function _post_nm --argument-names target --description "Post-hook: restart Netw
         _log "NM_RESTART_DEFERRED: reason=wifi_active_route context=install_file target=$target"
         return 0
     end
-    if not _run sudo -n systemctl restart NetworkManager
+    if _run sudo -n systemctl restart NetworkManager
+        _ok "NetworkManager restarted — drop-in applied"
+    else
         _warn "NetworkManager restart failed — config applies on next reboot (non-fatal; file deployed)"
         _log "POST_NM_RESTART_FAIL: target=$target"
     end
@@ -3200,6 +3206,7 @@ function _post_sysctl --argument-names target --description "Post-hook: apply sy
         _log "POST_SYSCTL_APPLY_FAIL: target=$target"
         return 0
     end
+    _ok "sysctl tunables applied (sysctl --system)"
     return 0
 end
 function _post_mangohud --argument-names target --description "Post-hook: notify MangoHud.conf change (read at next game/Vulkan app launch)"; _info "MangoHud $target changed — read at the next game or Vulkan app launch (no service restart needed)"; _info "  Toggle the HUD in-app with Shift_R+F12 (MangoHud default)"; return 0; end
@@ -3221,6 +3228,7 @@ function _post_envd --argument-names target --description "Post-hook: env-genera
         _log "POST_ENVD_POWERDEVIL_FAIL: target=$target"
         return 0
     end
+    _ok "environment.d re-applied — user manager reloaded, plasma-powerdevil.service restarted"
     return 0
 end
 
@@ -3232,6 +3240,7 @@ function _post_cpupower --argument-names target --description "Post-hook: restar
         _log "POST_CPUPOWER_RESTART_FAIL: target=$target"
         return 0
     end
+    _ok "cpupower.service restarted — governor applied"
     return 0
 end
 function _post_nft --argument-names target --description "Post-hook: validate, then restart nftables.service to reload the ruleset"
@@ -3252,6 +3261,8 @@ function _post_regdom --argument-names target --description "Post-hook: apply wi
     _log "POST_REGDOM_APPLY: target=$target"
     _apply_wireless_regdom
     switch "$_RY_REGDOM_RESULT"
+        case PASS
+            _ok "wireless regdom $COUNTRY applied (iw reg set)"
         case WARN
             _log "POST_REGDOM_APPLY_FAIL: target=$target"
         case DEFER
@@ -3265,7 +3276,9 @@ function _post_bluetooth --argument-names target --description "Post-hook: resta
         _log "POST_BT_SKIP_NO_BLUEZ: target=$target"
         return 0
     end
-    if not _run sudo -n systemctl try-restart bluetooth.service
+    if _run sudo -n systemctl try-restart bluetooth.service
+        _ok "bluetooth.service try-restarted (restarts only if running)"
+    else
         _warn "bluetooth.service try-restart failed — config applies on next reboot (non-fatal; file deployed)"
         _log "POST_BT_RESTART_FAIL: target=$target"
     end
@@ -3295,7 +3308,9 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
         _log "POST_UDEV_RELOAD_FAIL: target=$target"
         return 0
     end
-    if not _run sudo -n udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change # drm rule is ACTION==add: applies at boot
+    if _run sudo -n udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change # drm rule is ACTION==add: applies at boot
+        _ok "udev rules reloaded; block and cpu devices re-triggered"
+    else
         _warn "udevadm trigger failed — scheduler/EPP apply at next boot or device event"
         _log "POST_UDEV_TRIGGER_FAIL: target=$target"
     end
@@ -3429,8 +3444,8 @@ switch "$MODE"
         _ry_do_install
         _set_exit $status
     case '*'
-        _msg_print --force ERR "Unknown mode: $MODE"
         _log "ERR: Unknown mode: $MODE"
+        _msg_print --force ERR "Unknown mode: $MODE"
         _set_exit $EXIT_USAGE
 end
 _write_footer "$_RY_EXIT_CODE" ""

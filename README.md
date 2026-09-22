@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.212.1** · [Changelog](CHANGELOG.md)
+**Version 7.214.0** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -35,7 +35,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits `4` — **do not reboot** until it succeeds.
 
-The bare invocation is the unattended install, all 6 phases; `--install-file <path>` re-deploys one managed file. `--verify` and `--check` belong to [ry-verify](https://github.com/ryanmusante/ry-verify) and are unknown options here, exit `2`. Positional arguments exit `2`. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
+The bare invocation is the unattended install, all 6 phases; `--install-file <path>` re-deploys one managed file. `--verify`, `--check`, and `--report` belong to [ry-verify](https://github.com/ryanmusante/ry-verify) and are unknown options here, exit `2`. Positional arguments exit `2`. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
 
 Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
 

@@ -3,14 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.212.1
+7.214.0
 -------
 
-  - env: adds RADV_PERFTEST=nggc and MANGOHUD_DLSYM=1
-  - changelog: presentation-only clauses cut, same-tag bullets merged
+  - readme: Usage lists --report with --verify and --check as ry-verify modes
 
 
-7.190.0 - 7.211.0
+7.190.0 - 7.212.1
 -----------------
 
   - boot: 7.206.0 every rebuild hint names sdboot-manage update
@@ -21,7 +20,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - perf: 7.204.0 governor performance -> powersave, EPP performance kept;
     7.211.0 governor powersave -> performance, reverting 7.204.0
   - network: 7.200.0 disables NetworkManager connectivity checking
-  - env: 7.195.0 drops PROTON_FSR4_INDICATOR=1
+  - env: 7.195.0 drops PROTON_FSR4_INDICATOR=1; 7.212.1 adds
+    RADV_PERFTEST=nggc and MANGOHUD_DLSYM=1
   - configuration: 7.195.0 MangoHud cpu_stats enabled, cpu_temp off; 7.203.0
     one managed-file header per file, nftables drops its ports invite
   - configuration: 7.205.0 cpupower-service.conf header names EnvironmentFile=

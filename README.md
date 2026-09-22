@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.211.0** · [Changelog](CHANGELOG.md)
+**Version 7.212.1** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -28,7 +28,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 | Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
 | Privileges | normal user with sudo rights; `sudo -v` cached before the run |
-| Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `cmp`, `curl`, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
+| Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `cmp`, `curl`, `getent`, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
 
 ## Usage
 
@@ -102,7 +102,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 | File | Purpose |
 |---|---|
-| `~/.config/environment.d/10-environment.conf` | session env — DXVK, GTK, MangoHud, Mesa, Proton, VKD3D, Wine, PowerDevil |
+| `~/.config/environment.d/10-environment.conf` | session env — DXVK, GTK, MangoHud, Mesa, PowerDevil, Proton, VKD3D, Wine |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
 
 ## Install Flow
@@ -202,14 +202,18 @@ All tunables are `set -g` globals in the script. Edit both repos in lockstep, th
 
 ### Session Environment
 
+New values reach programs started after the next graphical login; a running Steam keeps its old environment.
+
 | Variable | Effect |
 |---|---|
 | `DXVK_LOG_LEVEL=none` | DXVK logging off |
 | `GSK_RENDERER=gl` | GTK4 GL renderer; the Vulkan renderer aborts on gfx1151 |
 | `MANGOHUD=1` | HUD on for Vulkan titles |
+| `MANGOHUD_DLSYM=1` | OpenGL dlsym hook — already MangoHud's default; 0.8.4 never reads it |
 | `MESA_SHADER_CACHE_MAX_SIZE=16G` | Mesa shader cache cap |
 | `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
+| `RADV_PERFTEST=nggc` | RADV NGG culling, opt-in on GFX11+; a per-title `RADV_PERFTEST=` replaces it |
 | `VKD3D_DEBUG=none` | vkd3d logging off |
 | `VKD3D_SHADER_DEBUG=none` | vkd3d shader logging off |
 | `WINEDEBUG=-all` | Wine debug channels off |

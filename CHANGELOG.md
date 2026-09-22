@@ -3,58 +3,57 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.211.0
+7.212.1
 -------
 
-  - boot: the no-entries hint drops --verbose; a sudo lapse at the revert
-    probe no longer reads 'backup file missing'
-  - perf: governor powersave -> performance, reverting 7.204.0
-  - configuration: udev comments print the set EPP and GPU levels; the
-    resolved header drops its mDNS/LLMNR claim
-  - services: db.lck refusals name the manual fix; batch-removal and cache
-    trim messages match their siblings
-  - fstab: the symlink refusal stops offering a skip that does not exist
-  - install-file: live-apply hooks print OK on success; relative-path,
-    udev, MangoHud, logind and regdom messages corrected
-  - summary: removal, mask and enable counts read package(s) and unit(s)
-  - preflight: COUNTRY and dash-package refusals end '; refuse to deploy';
-    a missing root UUID names the findmnt exit code or an empty result
-  - cli: glued short flags take only h and v; -Vh and -hV fail like -V
-  - lock: a pidfile without a PID reads 'holds no PID'
-  - logging: the DO-NOT-REBOOT banner and a caught signal log before stderr
-  - changelog: same-tag bullets merged, clauses cut
+  - env: adds RADV_PERFTEST=nggc and MANGOHUD_DLSYM=1
+  - changelog: presentation-only clauses cut, same-tag bullets merged
 
 
-7.190.0 - 7.208.0
+7.190.0 - 7.211.0
 -----------------
 
   - boot: 7.206.0 every rebuild hint names sdboot-manage update
+  - boot: 7.211.0 the no-entries hint drops --verbose; a sudo lapse at the
+    revert probe no longer reads 'backup file missing'
   - kernel: 7.195.0 fsck.mode=force; 7.199.0 adds ttm.pages_limit=20971520;
     7.204.0 adds nowatchdog
-  - perf: 7.204.0 governor performance -> powersave, EPP performance kept
+  - perf: 7.204.0 governor performance -> powersave, EPP performance kept;
+    7.211.0 governor powersave -> performance, reverting 7.204.0
   - network: 7.200.0 disables NetworkManager connectivity checking
   - env: 7.195.0 drops PROTON_FSR4_INDICATOR=1
   - configuration: 7.195.0 MangoHud cpu_stats enabled, cpu_temp off; 7.203.0
     one managed-file header per file, nftables drops its ports invite
   - configuration: 7.205.0 cpupower-service.conf header names EnvironmentFile=
+  - configuration: 7.211.0 udev comments print the set EPP and GPU levels; the
+    resolved header drops its mDNS/LLMNR claim
   - packages: 7.198.0 adds and 7.200.0 drops dmemcg-booster and
     plasma-foreground-booster
   - services: 7.197.0 ufw mask withheld unless nftables.service is expected,
     7.203.0 as WARN; 7.206.0 its SECURITY note INFO once masked
-  - services: 7.207.0 mask and enable skip units is-enabled reports not-found
+  - services: 7.207.0 mask and enable skip units is-enabled reports not-found;
+    7.211.0 db.lck refusals name the manual fix
   - sysctl: 7.195.0 adds vm.watermark_scale_factor=125
-  - install: 7.207.0 a signal-time revert removes the empty /run/ry-install;
-    7.208.0 blank lines and message periods trimmed
+  - fstab: 7.211.0 the symlink refusal stops offering a skip that does not
+    exist
+  - install: 7.207.0 a signal-time revert removes the empty /run/ry-install
   - install-file: 7.201.0 a symlinked destination becomes a regular file;
     7.206.0 INSTALL-FILE END on every return, hook failures log POST_*
-  - install-file: 7.206.0 - 7.207.0 hints trimmed, blank lines dropped, the
-    udev retry hint joins its commands with &&
+  - install-file: 7.206.0 - 7.207.0 the udev retry hint joins its commands
+    with &&
+  - install-file: 7.211.0 live-apply hooks print OK on success; relative-path,
+    udev, MangoHud, logind and regdom messages corrected
   - summary: 7.206.0 PASS-WITH-WARNINGS Next says reboot; realtime and i2c
     group steps print after the matrix; abort paths record every SKIP row
-  - summary: 7.207.0 evidence fits the 50-ch cell; 7.208.0 the tainted-boot
-    SKIP row names the boot state
+  - summary: 7.208.0 the tainted-boot SKIP row names the boot state
+  - preflight: 7.211.0 a missing root UUID names the findmnt exit code or an
+    empty result
+  - cli: 7.211.0 glued short flags take only h and v; -Vh and -hV fail like -V
+  - lock: 7.211.0 a pidfile without a PID reads 'holds no PID'
   - logging: 7.206.0 signal-time mkinitcpio.conf revert lands before footer;
     7.207.0 suffixes _FAILED/_SKIPPED/_LAPSED -> _FAIL/_SKIP/_LAPSE
+  - logging: 7.211.0 the DO-NOT-REBOOT banner and a caught signal log before
+    stderr
   - split: 7.190.0 moves ry-verify.fish to its repository
 
 

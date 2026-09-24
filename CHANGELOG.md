@@ -3,14 +3,14 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.215.0
+7.216.0
 -------
 
-  - changelog: lockstep bump with ry-verify 7.215.0; the script is unchanged
+  - changelog: lockstep bump with ry-verify 7.216.0; the script is unchanged
     since 7.212.1
 
 
-7.190.0 - 7.214.0
+7.190.0 - 7.215.0
 -----------------
 
   - boot: 7.206.0 every rebuild hint names sdboot-manage update

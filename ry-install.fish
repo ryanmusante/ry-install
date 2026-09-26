@@ -505,7 +505,7 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-set -g KERNEL_PARAMS amd_pstate=active btusb.enable_autosuspend=n fsck.mode=force fsck.repair=yes iommu=pt ipv6.disable=1 mt7925e.disable_aspm=1 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off transparent_hugepage=madvise ttm.pages_limit=20971520 usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS amd_pstate=active btusb.enable_autosuspend=n fsck.mode=force fsck.repair=yes iommu=pt ipv6.disable=1 mt7925e.disable_aspm=1 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -3 # mkinitcpio prepends -T0 for zstd
@@ -585,7 +585,7 @@ function _ir_precompute_caches --description "Precompute tmpdir / Wi-Fi-backend 
 end
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
     set -l _expect \
-        KERNEL_PARAMS:17 \
+        KERNEL_PARAMS:15 \
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \

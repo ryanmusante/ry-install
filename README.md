@@ -78,7 +78,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
-| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 17 kernel tokens |
+| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 15 kernel tokens |
 | `/etc/sdboot-manage.conf` | `LINUX_OPTIONS` mirror, `LINUX_FALLBACK_OPTIONS="quiet"`, entry management keys |
 | `/etc/mkinitcpio.conf` | `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-3`) |
 
@@ -163,8 +163,6 @@ All tunables are `set -g` globals in the script. Edit both repos in lockstep, th
 | `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
 | `quiet` | suppress boot console noise |
 | `split_lock_detect=off` | no split-lock throttling penalty in games |
-| `transparent_hugepage=madvise` | THP only where a program asks for it — no background allocation stalls or TLB shootdowns behind a game |
-| `ttm.pages_limit=20971520` | TTM page cap in 4 KiB pages — the GTT ceiling `amdgpu` sizes from; replaces the deprecated `amdgpu.gttsize` |
 | `usbcore.autosuspend=-1` | USB autosuspend off globally |
 | `zswap.enabled=0` | zswap off from early boot — zram is the swap path |
 

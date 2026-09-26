@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.216.0** · [Changelog](CHANGELOG.md)
+**Version 7.217.0** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -78,7 +78,7 @@ In deploy order; system files land `0644`, user files `0600`.
 | File | Purpose |
 |---|---|
 | `/boot/loader/loader.conf` | systemd-boot: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
-| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 16 kernel tokens |
+| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 17 kernel tokens |
 | `/etc/sdboot-manage.conf` | `LINUX_OPTIONS` mirror, `LINUX_FALLBACK_OPTIONS="quiet"`, entry management keys |
 | `/etc/mkinitcpio.conf` | `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-3`) |
 
@@ -163,6 +163,7 @@ All tunables are `set -g` globals in the script. Edit both repos in lockstep, th
 | `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
 | `quiet` | suppress boot console noise |
 | `split_lock_detect=off` | no split-lock throttling penalty in games |
+| `transparent_hugepage=madvise` | THP only where a program asks for it — no background allocation stalls or TLB shootdowns behind a game |
 | `ttm.pages_limit=20971520` | TTM page cap in 4 KiB pages — the GTT ceiling `amdgpu` sizes from; replaces the deprecated `amdgpu.gttsize` |
 | `usbcore.autosuspend=-1` | USB autosuspend off globally |
 | `zswap.enabled=0` | zswap off from early boot — zram is the swap path |
@@ -213,7 +214,7 @@ New values reach programs started after the next graphical login; a running Stea
 | `MESA_SHADER_CACHE_MAX_SIZE=16G` | Mesa shader cache cap |
 | `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
-| `RADV_PERFTEST=nggc` | RADV NGG culling, opt-in on GFX11+; a per-title `RADV_PERFTEST=` replaces it |
+| `RADV_PERFTEST=nggc,nircache` | RADV NGG culling (opt-in on GFX11+) and the per-stage NIR cache; a per-title `RADV_PERFTEST=` replaces both |
 | `VKD3D_DEBUG=none` | vkd3d logging off |
 | `VKD3D_SHADER_DEBUG=none` | vkd3d shader logging off |
 | `WINEDEBUG=-all` | Wine debug channels off |

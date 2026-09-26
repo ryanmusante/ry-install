@@ -3,14 +3,16 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.216.0
+7.217.0
 -------
 
-  - changelog: lockstep bump with ry-verify 7.216.0; the script is unchanged
-    since 7.212.1
+  - kernel: transparent_hugepage=madvise; THP only where a program asks for
+    it, background allocation stalls leave the frame budget
+  - env: RADV_PERFTEST=nggc,nircache; the per-stage NIR cache shortens
+    pipeline compiles on a cold shader cache
 
 
-7.190.0 - 7.215.0
+7.190.0 - 7.216.0
 -----------------
 
   - boot: 7.206.0 every rebuild hint names sdboot-manage update

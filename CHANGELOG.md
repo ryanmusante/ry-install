@@ -7,6 +7,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 -------
 
   - kernel: drop ttm.pages_limit=20971520
+  - perf: governor performance -> powersave, EPP performance kept
   - env: RADV_PERFTEST=nggc -> nggc,nircache
 
 

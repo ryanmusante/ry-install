@@ -21,7 +21,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - kernel: 7.195.0 fsck.mode=force
   - kernel: 7.199.0 add ttm.pages_limit=20971520
   - kernel: 7.204.0 add nowatchdog
-  - perf: 7.204.0 governor performance -> powersave, EPP performance kept
   - perf: 7.211.0 governor powersave -> performance
   - network: 7.200.0 disable NetworkManager connectivity checking
   - env: 7.195.0 drop PROTON_FSR4_INDICATOR=1

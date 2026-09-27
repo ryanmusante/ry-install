@@ -3,6 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.219.0
+-------
+
+  - services: the enable-units verdict judges prior state by is-enabled; a
+    oneshot nftables.service no longer reads as newly enabled each run
+
+
 7.218.0
 -------
 

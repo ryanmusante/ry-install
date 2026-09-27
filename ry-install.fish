@@ -1452,16 +1452,24 @@ function _ry_validate_mkinitcpio_hooks --description "Validate mkinitcpio HOOKS 
     set errors (math $errors + $_order_errs)
     test "$errors" -eq 0
 end
-function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODULES array entries"
+function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODULES entries against every installed kernel"
     not command -q modinfo; and return 0
+    set -l _kvers # mkinitcpio -P builds the installed kernels, not the running one
+    for _pb in /usr/lib/modules/*/pkgbase; set -a _kvers (command basename -- (command dirname -- "$_pb")); end
     set -l _errors 0
     for mod in $MKINITCPIO_MODULES
-        command modinfo "$mod" >/dev/null 2>&1; and continue
+        set -l _miss
+        if test (count $_kvers) -eq 0
+            command modinfo -- "$mod" >/dev/null 2>&1; or set _miss "running kernel"
+        else
+            for _kv in $_kvers; command modinfo -k "$_kv" -- "$mod" >/dev/null 2>&1; or set -a _miss "$_kv"; end
+        end
+        test (count $_miss) -eq 0; and continue
         if test "$mod" = amdgpu
-            _err "Required module not found: amdgpu (gfx1151 KMS depends on it) — refusing to deploy"
+            _err "Required module not found: amdgpu for $_miss (gfx1151 KMS depends on it) — refusing to deploy"
             set _errors (math $_errors + 1)
         else
-            _warn "Module may not exist: $mod (continuing anyway)"
+            _warn "Module may not exist: $mod for $_miss (continuing anyway)"
         end
     end
     test "$_errors" -eq 0

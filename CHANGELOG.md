@@ -8,6 +8,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
   - services: the enable-units verdict judges prior state by is-enabled; a
     oneshot nftables.service no longer reads as newly enabled each run
+  - preflight: MODULES are checked against each installed kernel, not the
+    running one; a kernel upgraded before the run no longer blocks install
 
 
 7.218.0

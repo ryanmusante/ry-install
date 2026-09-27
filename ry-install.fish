@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.217.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.218.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.217.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.218.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -11,7 +11,7 @@ set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
-set -g -- _RY_ARGPARSE_SPEC h/help v/version install-file= # single option-spec source (root guard + main argparse)
+set -g -- _RY_ARGPARSE_SPEC h/help v/version install-file=+ # single option-spec source (root guard + main argparse); =+ keeps repeats so main can refuse them
 
 # ── HELP TEXT ──
 function _ry_show_help --description "Display usage information and available options"
@@ -2508,8 +2508,15 @@ function _configure_services_enable --description "Batch-enable system units (pe
         _phase_record "Services: enable units" "--" "no units to enable"
         return 0
     end
+    set -l _pre_up 0 # enabled and active before the run: enable --now re-asserts them, so the verdict must not count them as changes
+    for _u in $_units; command systemctl is-enabled --quiet -- $_u 2>/dev/null; and command systemctl is-active --quiet -- $_u 2>/dev/null; and set _pre_up (math $_pre_up + 1); end
+    _log "ENABLE_PRE_ACTIVE: $_pre_up/$_enable_count already enabled and active"
     if _cse_batch_enable $_units
-        _phase_record "Services: enable units" PASS "enabled $_enable_count unit(s)"
+        if test "$_pre_up" -eq "$_enable_count"
+            _phase_record "Services: enable units" PASS "all $_enable_count already enabled and active"
+        else
+            _phase_record "Services: enable units" PASS "enabled "(math $_enable_count - $_pre_up)" of $_enable_count unit(s), $_pre_up already active"
+        end
     else
         _phase_record "Services: enable units" FAIL "$_enable_count requested; see JSONL log"
         set _ret 1
@@ -3355,7 +3362,8 @@ _rm_tmp "$_ap_errfile" false
 if set -q _flag_help; _ry_show_help; _pre_dispatch_exit $EXIT_OK; end
 if set -q _flag_version; echo "v$VERSION"; _pre_dispatch_exit $EXIT_OK; end
 if set -q _flag_install_file
-    set -g MODE install-file; set -l _if_val "$_flag_install_file[-1]" # argparse collects repeats into a list; last one wins
+    set -g MODE install-file; test (count $_flag_install_file) -gt 1; and _early_usage_exit "--install-file given "(count $_flag_install_file)" times — one managed file per run" # argparse collects repeats; never drop one silently
+    set -l _if_val "$_flag_install_file[1]"
     test -z "$_if_val"; and _early_usage_exit "--install-file requires a non-empty absolute path"
     if not string match -q -- '/*' "$_if_val"
         if string match -qr -- '^--(verify|check|help|version)$' "$_if_val"
@@ -3383,6 +3391,15 @@ if set -q _flag_install_file
     end
 end
 if test (count $argv) -gt 0; echo "[ERR] Unexpected positional argument(s): $argv" >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
+if test "$MODE" = install-file # membership is a usage check: settle it before the hardware and preflight gates in _init_runtime
+    set -l _if_managed false
+    for _d in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
+        set -l _dc (command realpath -m -- "$_d" 2>/dev/null)
+        if test "$INSTALL_FILE_TARGET" = "$_d"; or test "$INSTALL_FILE_TARGET" = "$_dc"; set _if_managed true; break; end
+    end
+    set --erase _d
+    if test "$_if_managed" = false; echo "[ERR] Not a managed file: $INSTALL_FILE_TARGET" >&2; echo "[INFO] Managed files:" >&2; printf '  %s\n' $SYSTEM_DESTINATIONS $USER_DESTINATIONS >&2; _pre_dispatch_exit $EXIT_USAGE; end
+end
 test "$MODE" != install; and set -g QUIET false
 
 # ── MAIN: LOG RENAME + 0600 CREATE + JSONL HEADER ──

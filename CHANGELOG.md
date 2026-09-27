@@ -3,6 +3,16 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.218.0
+-------
+
+  - cli: a repeated --install-file exits 2 instead of deploying only the
+    last path
+  - cli: an unmanaged --install-file exits 2 before the hardware gate
+  - services: the enable-units verdict counts only units it enabled or
+    started
+
+
 7.217.0
 -------
 

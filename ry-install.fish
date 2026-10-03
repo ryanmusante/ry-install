@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.220.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.223.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.220.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.223.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -531,7 +531,7 @@ set -g SYSCTL_VALUES "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" "net.ip
 set -g PKGS_ADD \
     nvme-cli cachyos-gaming-meta cachyos-gaming-applications cachyos-benchmarker lib32-mesa mkinitcpio-firmware fd sd dust procs \
     bottom htop lm_sensors rtkit realtime-privileges pipewire-jack nftables pacman-contrib # pacman-contrib: pactree + paccache
-set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect jack2
+set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi+resolved: mDNS off by design; ufw: nft owns the ruleset
@@ -592,7 +592,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         ENV_VARS:12 \
         SYSCTL_VALUES:9 \
         PKGS_ADD:18 \
-        PKGS_DEL:10 \
+        PKGS_DEL:9 \
         MASK:11 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
@@ -2015,32 +2015,6 @@ function _ip_snapshot_mkinitcpio --description "_install_packages sub: Snapshot 
 end
 
 # ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + VERIFY) ──
-function _ip_swap_targets --description "_ip_pacman_invoke sub: Print targets whose Conflicts name an installed PKGS_DEL member"
-    set -l _held
-    for _d in (command pacman -Qq -- $PKGS_DEL 2>/dev/null)
-        set -a _held "$_d" (command env LC_ALL=C pacman -Qi -- "$_d" 2>/dev/null | string match -rg -- '^Provides\s*:\s*(.+)$' | string split -n ' ' | string replace -r -- '[<>=].*$' '' | string match -v -- None)
-    end
-    test (count $_held) -gt 0; or return 0
-    for _t in $argv
-        set -l _c (command env LC_ALL=C pacman -Si -- "$_t" 2>/dev/null | string match -rg -- '^Conflicts With\s*:\s*(.+)$' | string split -n ' ' | string replace -r -- '[<>=].*$' '' | string match -v -- None)
-        for _n in $_c
-            contains -- "$_n" $_held; or continue
-            _log "PKG_SWAP_TARGET: $_t conflicts with installed PKGS_DEL member or provision $_n"
-            echo "$_t"; break
-        end
-    end
-end
-function _ip_swap_install --description "_ip_pacman_invoke sub: Swap in conflict targets after -Syu (--ask 4 answers the prompt yes)"
-    _info "Replacing a conflicting PKGS_DEL package with: $argv (pacman answers its conflict prompt yes)"
-    if not _run sudo -n pacman -S --needed --noconfirm --ask 4 -- $argv
-        _err "Conflict swap failed for: $argv"
-        _err "  Swap by hand: sudo pacman -S --needed $argv (answer y to remove the conflicting package)"
-        _log "PKG_SWAP_FAIL: $argv"
-        return 1
-    end
-    _ok "Swapped in: $argv"; _log "PKG_SWAP_OK: $argv"
-    return 0
-end
 function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacman -Syu --needed (partial upgrades forbidden — Arch policy)"
     set -l _pacman_first -Syu --needed --noconfirm; set -l _pacman_retry -Syyu --needed --noconfirm
     if test -f /var/lib/pacman/db.lck
@@ -2049,12 +2023,10 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
         return 1
     end
     _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
-    set -l _swap (_ip_swap_targets $argv); set -l _syu
-    for _p in $argv; contains -- "$_p" $_swap; or set -a _syu "$_p"; end
     set -l _q_pre (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)') # name+version fingerprint; empty pre/post = fail-open true
-    if not _run sudo -n pacman $_pacman_first -- $_syu
+    if not _run sudo -n pacman $_pacman_first -- $argv
         _warn "Package installation failed — retrying with forced db re-sync (handles transient mirror staleness; will not resolve pkg conflicts — see JSONL log for first-pass stderr)..."
-        if not _run sudo -n pacman $_pacman_retry -- $_syu
+        if not _run sudo -n pacman $_pacman_retry -- $argv
             if test -f /var/lib/pacman/db.lck
                 _err "pacman database became locked during install — aborting"
             else
@@ -2067,7 +2039,6 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
         end
     end
     set -g SYSTEM_UPGRADED true
-    if test (count $_swap) -gt 0; _ip_swap_install $_swap; or return 1; end
     set -l _q_post (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
     if test -n "$_q_pre"; and test -n "$_q_post"; and test "$_q_pre" = "$_q_post"
         set -g SYSTEM_UPGRADED false

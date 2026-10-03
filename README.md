@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.220.0** · [Changelog](CHANGELOG.md)
+**Version 7.223.0** · [Changelog](CHANGELOG.md)
 
 Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -56,7 +56,7 @@ Per-phase verdicts:
 | `1` | a failed install step |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
 | `3` | missing dependency, uncached sudo, gate mismatch |
-| `4` | boot-critical — boot cascade or post-rebuild sanity failed; **do not reboot**, resolve first |
+| `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
 | `5` | lock — another instance holds the lock; ambiguous pidfiles fail closed |
 
 ## Environment Overrides
@@ -104,14 +104,14 @@ In deploy order; system files land `0644`, user files `0600`.
 |---|---|
 | `~/.config/environment.d/10-environment.conf` | session env — DXVK, GTK, MangoHud, Mesa, PowerDevil, Proton, SDL, VKD3D, Wine |
 | `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
-| `~/.config/wireplumber/wireplumber.conf.d/51-porosvoc-softmixer.conf` | soft mixer for the POROSVOC USB microphone, whose hardware gain spans about 0.39 dB |
+| `~/.config/wireplumber/wireplumber.conf.d/51-porosvoc-softmixer.conf` | POROSVOC USB microphone soft mixer (hardware gain spans about 0.39 dB) |
 
 ## Install Flow
 
 | Phase | Name | Work |
 |---|---|---|
 | 1 | Preflight | sudo cache, dependency, systemd, disk, network, and time-sync gates; config validation |
-| 2 | Packages | seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit), swap out an installed `PKGS_DEL` member a target conflicts with, refresh `updatedb`/`pkgfile` |
+| 2 | Packages | seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit), refresh `updatedb`/`pkgfile` |
 | 3 | Configuration | deploy 18 embedded configs atomically |
 | 4 | Services | fstab → resolved restart → package removal → mask → enable → regulatory domain |
 | 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
@@ -130,7 +130,7 @@ In deploy order; system files land `0644`, user files `0600`.
 ## Embedded Values
 
 > [!CAUTION]
-> `ry-install.fish` and `ry-verify.fish` carry their shared tunables verbatim and ship at the same version. Clone both repos at the same version. A version mismatch leaves `ry-verify.fish` checking values `ry-install.fish` no longer deploys.
+> `ry-install.fish` and `ry-verify.fish` carry their shared tunables verbatim and ship in lockstep; clone both repos at the same version. A version mismatch leaves `ry-verify.fish` checking values `ry-install.fish` no longer deploys.
 
 All tunables are `set -g` globals in the script. Edit both repos in lockstep, then re-run or `--install-file` the affected file.
 
@@ -214,7 +214,7 @@ New values reach programs started after the next graphical login; a running Stea
 | `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
 | `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
 | `RADV_PERFTEST=nggc,nircache` | RADV NGG culling (opt-in on GFX11+) and the per-stage NIR cache; a per-title `RADV_PERFTEST=` replaces both |
-| `SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030` | SDL games skip the Keychron K2 HE and Link receiver joystick interfaces; per title, Steam Input must be off, and proton-cachyos `sdlinput` and `wayland` modes need `PROTON_NO_STEAMINPUT=0` |
+| `SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030` | SDL games skip the Keychron K2 HE and Link receiver joystick interfaces; needs Steam Input off per title, and `PROTON_NO_STEAMINPUT=0` under proton-cachyos `sdlinput`/`wayland` |
 | `VKD3D_DEBUG=none` | vkd3d logging off |
 | `VKD3D_SHADER_DEBUG=none` | vkd3d shader logging off |
 | `WINEDEBUG=-all` | Wine debug channels off |
@@ -237,9 +237,9 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 
 ## Packages
 
-**Install** (`PKGS_ADD`, 18) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `cachyos-benchmarker`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `pipewire-jack`, `nftables`, `pacman-contrib`.
+**Install** (`PKGS_ADD`, 18) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `cachyos-benchmarker`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `pipewire-jack`, `nftables`, `pacman-contrib`. A host still on `jack2` swaps by hand first: `sudo pacman -S pipewire-jack`, answering `y`.
 
-**Remove** (`PKGS_DEL`, 10) — `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect`, `jack2`. An installed member that a `PKGS_ADD` package conflicts with is swapped out right after `pacman -Syu` (`jack2` → `pipewire-jack`).
+**Remove** (`PKGS_DEL`, 9) — `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect`.
 
 ## Units
 
@@ -286,7 +286,7 @@ There is no automated uninstaller. Use [Managed Files](#managed-files) as the ro
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 3 user files; step 3 reverts the 4 boot files.
 3. **Revert boot files and fstab** — restore the matching `~/ry-install/backups/*.ry.bak` copy over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present — a file no run ever rewrote has no copy — then delete the backups; older deployments keep the copies beside each file.
-4. **Reverse packages** — optional: `sudo pacman -S --needed` the Remove list, `sudo pacman -Rns` the Install list; both listed in [Packages](#packages).
+4. **Reverse packages** — optional: `sudo pacman -S --needed` the Remove list, `sudo pacman -Rns` the Install list except `pipewire-jack`, which `ffmpeg` needs as its JACK provider; both listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.
 
 ## Contributing

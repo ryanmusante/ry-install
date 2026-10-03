@@ -3,30 +3,32 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.217.0 - 7.223.0
+7.217.0 - 7.224.0
 -----------------
 
   - kernel: 7.217.0 drop ttm.pages_limit=20971520
   - perf: 7.217.0 governor performance -> powersave, EPP performance kept
-  - network: 7.223.0 NetworkManager leaves the Wi-Fi P2P device unmanaged
+  - network: 7.224.0 NetworkManager leaves the Wi-Fi P2P device unmanaged
   - env: 7.217.0 RADV_PERFTEST=nggc -> nggc,nircache
-  - env: 7.223.0 add SDL_GAMECONTROLLER_IGNORE_DEVICES (Keychron K2 HE, Link
+  - env: 7.224.0 add SDL_GAMECONTROLLER_IGNORE_DEVICES (Keychron K2 HE, Link
     receiver)
-  - configuration: 7.223.0 new managed user file, a WirePlumber soft-mixer
+  - configuration: 7.224.0 new managed user file, a WirePlumber soft-mixer
     rule for the POROSVOC USB microphone
-  - packages: 7.223.0 add pipewire-jack; a host still on jack2 swaps by hand
+  - packages: 7.224.0 add pipewire-jack; a host still on jack2 swaps by hand
     first
   - services: 7.218.0 the enable-units verdict counts only units it enabled or
     started
   - services: 7.219.0 enable-units judges prior state by is-enabled; a oneshot
     nftables.service no longer reads as newly enabled each run
-  - install-file: 7.223.0 the WirePlumber rule restarts wireplumber.service
+  - install-file: 7.224.0 the WirePlumber rule restarts wireplumber.service
   - preflight: 7.219.0 MODULES are checked against each installed kernel, not
     the running one; a kernel upgraded before the run no longer blocks install
+  - preflight: 7.224.0 a locked pacman database stops the run before anything
+    is deployed
   - cli: 7.218.0 a repeated --install-file exits 2 instead of deploying only
     the last path
   - cli: 7.218.0 an unmanaged --install-file exits 2 before the hardware gate
-  - readme: 7.223.0 Uninstall step 4 keeps pipewire-jack, which ffmpeg needs
+  - readme: 7.224.0 Uninstall step 4 keeps pipewire-jack, which ffmpeg needs
 
 
 7.190.0 - 7.216.0

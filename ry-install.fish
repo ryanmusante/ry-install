@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.223.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.224.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.223.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.224.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
@@ -1919,6 +1919,14 @@ function _install_preflight --description "Run all preflight checks before insta
         _ip_bail_prep
         return $EXIT_PREFLIGHT
     end
+    if test -f /var/lib/pacman/db.lck # a locked db fails -Syu anyway; stop before anything is deployed
+        _phase_record "Preflight: pacman lock" FAIL "/var/lib/pacman/db.lck present"
+        _err "pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run"
+        _err "  Remove the lock file manually if no pacman process is active"
+        _ip_bail_prep
+        return $EXIT_PREFLIGHT
+    end
+    _phase_record "Preflight: pacman lock" PASS "unlocked"
     if not _ry_check_network
         set -l _net_ev "2 HTTPS hosts + 2 raw IPs unreachable" # fallback; _RY_NET_FAIL_EVIDENCE overrides
         set -q _RY_NET_FAIL_EVIDENCE; and test -n "$_RY_NET_FAIL_EVIDENCE"; and set _net_ev "$_RY_NET_FAIL_EVIDENCE"

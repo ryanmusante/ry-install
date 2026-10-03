@@ -1,8 +1,8 @@
 # ry-install
 
-**Version 7.223.0** · [Changelog](CHANGELOG.md)
+**Version 7.224.0** · [Changelog](CHANGELOG.md)
 
-Deploys and converges a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
+Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
 ## Quick Start
 
@@ -35,7 +35,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 > [!CAUTION]
 > `--install-file` of a boot config runs the boot cascade; a cascade failure exits `4` — **do not reboot** until it succeeds.
 
-The bare invocation is the unattended install, all 6 phases; `--install-file <path>` re-deploys one managed file. `--verify`, `--check`, and `--report` belong to [ry-verify](https://github.com/ryanmusante/ry-verify) and are unknown options here, exit `2`. Positional arguments exit `2`. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
+The bare invocation is the unattended install, all 6 phases; `--install-file <path>` re-deploys one managed file. `--verify`, `--check`, and `--report` belong to [ry-verify](https://github.com/ryanmusante/ry-verify) and, like positional arguments, exit `2` here. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
 
 Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
 
@@ -55,7 +55,7 @@ Per-phase verdicts:
 | `0` | OK — success and `WARN`-only runs |
 | `1` | a failed install step |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
-| `3` | missing dependency, uncached sudo, gate mismatch |
+| `3` | missing dependency, uncached sudo, or a failed gate (hardware, disk, network, pacman lock) |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
 | `5` | lock — another instance holds the lock; ambiguous pidfiles fail closed |
 
@@ -100,7 +100,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 ## Install Flow
 
-1. **Preflight** — sudo cache, dependency, systemd, disk, network, and time-sync gates; config validation
+1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, network, and time-sync gates; config validation
 2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit), refresh `updatedb`/`pkgfile`
 3. **Configuration** — deploy 18 embedded configs atomically
 4. **Services** — fstab → resolved restart → package removal → mask → enable → regulatory domain
@@ -113,7 +113,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 **Symlinked destinations** — a managed path that is a symlink is replaced with a regular file at the managed mode; the link target is left in place.
 
-**Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab. A run that finds a file already current rewrites nothing and copies nothing.
+**Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab. A file already current is neither rewritten nor copied.
 
 **fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `*atime`, and any existing `commit=`; every other row is byte-preserved. A power loss can discard up to 10 s of metadata.
 
@@ -122,7 +122,7 @@ In deploy order; system files land `0644`, user files `0600`.
 > [!CAUTION]
 > `ry-install.fish` and `ry-verify.fish` carry their shared tunables verbatim and ship in lockstep; clone both repos at the same version. A version mismatch leaves `ry-verify.fish` checking values `ry-install.fish` no longer deploys.
 
-All tunables are `set -g` globals in the script. Edit both repos in lockstep, then re-run or `--install-file` the affected file.
+All tunables are `set -g` globals; after editing both scripts, re-run or `--install-file` the affected file.
 
 ### Bootloader Keys
 

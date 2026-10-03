@@ -3,6 +3,19 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.220.0
+-------
+
+  - network: NetworkManager leaves the Wi-Fi P2P device unmanaged
+  - env: add SDL_GAMECONTROLLER_IGNORE_DEVICES for the Keychron K2 HE and
+    Link receiver
+  - configuration: new managed user file, a WirePlumber rule that gives the
+    POROSVOC USB microphone a software volume
+  - packages: add pipewire-jack, remove jack2; a target that conflicts with
+    an installed PKGS_DEL member is swapped in right after -Syu
+  - install-file: the WirePlumber rule restarts wireplumber.service
+
+
 7.219.0
 -------
 

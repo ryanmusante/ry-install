@@ -1,15 +1,15 @@
 #!/usr/bin/env fish
-# ry-install v7.219.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.220.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.219.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.220.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC h/help v/version install-file=+ # one spec source (root guard + argparse); =+ keeps every repeat
 
@@ -497,7 +497,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     "/etc/iw-regdomain" "/etc/bluetooth/main.conf" "/etc/nftables.conf" "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" "/etc/udev/rules.d/99-ry-perf.rules" "/etc/modprobe.d/60-ry-modules.conf"
-set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf"
+set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf" "$HOME/.config/wireplumber/wireplumber.conf.d/51-porosvoc-softmixer.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set --erase _ry_dst_count
@@ -524,14 +524,14 @@ set -g EPP_PREFERENCE performance; set -g _RY_EPP_LEVELS default performance bal
 set -g BLACKLIST_AMDXDNA false # false + iommu=pt enables the NPU
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
-set -g ENV_VARS "DXVK_LOG_LEVEL=none" "GSK_RENDERER=gl" "MANGOHUD=1" "MANGOHUD_DLSYM=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_LOCAL_SHADER_CACHE=1" "RADV_PERFTEST=nggc,nircache" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
+set -g ENV_VARS "DXVK_LOG_LEVEL=none" "GSK_RENDERER=gl" "MANGOHUD=1" "MANGOHUD_DLSYM=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_LOCAL_SHADER_CACHE=1" "RADV_PERFTEST=nggc,nircache" "SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
 set -g SYSCTL_VALUES "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" "net.ipv4.tcp_congestion_control=bbr" "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" "vm.watermark_boost_factor=0" "vm.watermark_scale_factor=125"
 
 # ── EMBEDDED DATA: PACKAGES (ADD / DEL) ──
 set -g PKGS_ADD \
     nvme-cli cachyos-gaming-meta cachyos-gaming-applications cachyos-benchmarker lib32-mesa mkinitcpio-firmware fd sd dust procs \
-    bottom htop lm_sensors rtkit realtime-privileges nftables pacman-contrib # pacman-contrib: pactree + paccache
-set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
+    bottom htop lm_sensors rtkit realtime-privileges pipewire-jack nftables pacman-contrib # pacman-contrib: pactree + paccache
+set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect jack2
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS ──
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi+resolved: mDNS off by design; ufw: nft owns the ruleset
@@ -589,21 +589,21 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
-        ENV_VARS:11 \
+        ENV_VARS:12 \
         SYSCTL_VALUES:9 \
-        PKGS_ADD:17 \
-        PKGS_DEL:9 \
+        PKGS_ADD:18 \
+        PKGS_DEL:10 \
         MASK:11 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:17 \
+        _RY_POST_HOOKS:18 \
         _RY_ARGPARSE_SPEC:3 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:4 \
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:15 \
-        USER_DESTINATIONS:2 \
+        USER_DESTINATIONS:3 \
         MKINITCPIO_COMPRESSION_OPTIONS:1 # drift tripwires; sync arrays + docs on change
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -739,7 +739,10 @@ function _content__etc_systemd_system_NetworkManager-dispatcher.service.d_loggin
     printf '%s\n' "# ry-install: NetworkManager-dispatcher logging drop-in (managed file, do not edit by hand)" "# LogLevelMax drops info-level dispatcher lines (journald-logged; StandardError=null ineffective)" "[Service]" "LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX"
 end
 function _content__etc_NetworkManager_conf.d_99-cachyos-nm.conf --description "Generate content for NetworkManager drop-in (wifi.backend from NM_WIFI_BACKEND)"
-    printf '%s\n' "# ry-install: NetworkManager config, $NM_WIFI_BACKEND backend (managed file, do not edit by hand)" "[main]" "autoconnect-retries-default=0" "" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL" "" "[connectivity]" "enabled=false"
+    printf '%s\n' "# ry-install: NetworkManager config, $NM_WIFI_BACKEND backend (managed file, do not edit by hand)" \
+        "[main]" "autoconnect-retries-default=0" "" "[device]" "wifi.backend=$NM_WIFI_BACKEND" "" \
+        "[device-no-p2p]" "match-device=type:wifi-p2p" "managed=0" "" \
+        "[connection]" "wifi.powersave=$NM_WIFI_POWERSAVE" "" "[logging]" "level=$NM_LOG_LEVEL" "" "[connectivity]" "enabled=false"
 end
 function _content__etc_iw-regdomain --description "Generate content for /etc/iw-regdomain (CachyOS regdomain input)"; printf '%s\n' "# ry-install: wireless regulatory domain (managed file, do not edit by hand)" "COUNTRY=$COUNTRY"; end
 function _content__etc_bluetooth_main.conf --description "Generate content for /etc/bluetooth/main.conf (adapter auto-power-on + paired-sink reconnect)"
@@ -802,7 +805,7 @@ function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate con
     end
 end
 
-# ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──
+# ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud + WirePlumber) ──
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# ry-install: session environment for systemd --user services and graphical sessions (managed file, do not edit by hand)"
     set -l _printed 0; set -g _RY_ENVD_BAD_ENTRIES
@@ -838,6 +841,16 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
         "font_size=20" \
         "text_outline" \
         "background_alpha=0.4"
+end
+function _content_HOME_.config_wireplumber_wireplumber.conf.d_51-porosvoc-softmixer.conf --description "Generate content for ~/.config/wireplumber/wireplumber.conf.d/51-porosvoc-softmixer.conf"
+    printf '%s\n' "# ry-install: WirePlumber soft mixer for the POROSVOC USB microphone (managed file, do not edit by hand)" \
+        "# its hardware Mic Capture Volume spans about 0.39 dB, so PipeWire applies the volume in software" \
+        "monitor.alsa.rules = [" \
+        "  {" \
+        "    matches = [ { device.name = \"~alsa_card.usb-POROSVOC.*\" } ]" \
+        "    actions = { update-props = { api.alsa.soft-mixer = true } }" \
+        "  }" \
+        "]"
 end
 
 # ── CONTENT DISPATCH (_ry_get_file_content; fn name derived via _content_fn_for) ──
@@ -1527,7 +1540,7 @@ function _grep_ini_header --argument-names dst --description "Validate ≥1 [Sec
     return 0
 end
 
-# ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (MODPROBE → MANGOHUD) ──
+# ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (MODPROBE → WIREPLUMBER) ──
 function _grep_modprobe_entry --argument-names dst --description "Validate modprobe.d content: comment-only ok, else every non-comment line is a directive"
     test (count $argv) -lt 2; and _log "BUG: _grep_modprobe_entry called without content (dst=$dst)"; and return 2
     for _line in $argv[2..-1]
@@ -1591,6 +1604,18 @@ function _grep_mangohud_entry --argument-names dst --description "Validate ≥1 
     end
     return 0
 end
+function _grep_wireplumber_entry --argument-names dst --description "Validate a monitor.alsa.rules block with an update-props action (WirePlumber conf.d)"
+    test (count $argv) -lt 2; and _log "BUG: _grep_wireplumber_entry called without content (dst=$dst)"; and return 2
+    string match -qr '^monitor\.alsa\.rules = \[$' -- $argv[2..-1]; or begin
+        _fail "  $dst: no monitor.alsa.rules block found"
+        return 1
+    end
+    string match -qr 'update-props = \{' -- $argv[2..-1]; or begin
+        _fail "  $dst: no update-props action found"
+        return 1
+    end
+    return 0
+end
 
 # ── CONFIG-FORMAT VALIDATORS: DISPATCH + ORCHESTRATOR ──
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family"
@@ -1616,6 +1641,8 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_cpupower_entry "$dst" $_content
         case '*/MangoHud/MangoHud.conf'
             _grep_mangohud_entry "$dst" $_content
+        case '*/wireplumber.conf.d/*'
+            _grep_wireplumber_entry "$dst" $_content
         case '*/mkinitcpio.conf'
             string match -qr '^MODULES=\(' -- $_content; or begin; _fail "  $dst: no MODULES=() line"; return 1; end
             string match -qr '^HOOKS=\(' -- $_content; or begin; _fail "  $dst: no HOOKS=() line"; return 1; end
@@ -1988,6 +2015,32 @@ function _ip_snapshot_mkinitcpio --description "_install_packages sub: Snapshot 
 end
 
 # ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + VERIFY) ──
+function _ip_swap_targets --description "_ip_pacman_invoke sub: Print targets whose Conflicts name an installed PKGS_DEL member"
+    set -l _held
+    for _d in (command pacman -Qq -- $PKGS_DEL 2>/dev/null)
+        set -a _held "$_d" (command env LC_ALL=C pacman -Qi -- "$_d" 2>/dev/null | string match -rg -- '^Provides\s*:\s*(.+)$' | string split -n ' ' | string replace -r -- '[<>=].*$' '' | string match -v -- None)
+    end
+    test (count $_held) -gt 0; or return 0
+    for _t in $argv
+        set -l _c (command env LC_ALL=C pacman -Si -- "$_t" 2>/dev/null | string match -rg -- '^Conflicts With\s*:\s*(.+)$' | string split -n ' ' | string replace -r -- '[<>=].*$' '' | string match -v -- None)
+        for _n in $_c
+            contains -- "$_n" $_held; or continue
+            _log "PKG_SWAP_TARGET: $_t conflicts with installed PKGS_DEL member or provision $_n"
+            echo "$_t"; break
+        end
+    end
+end
+function _ip_swap_install --description "_ip_pacman_invoke sub: Swap in conflict targets after -Syu (--ask 4 answers the prompt yes)"
+    _info "Replacing a conflicting PKGS_DEL package with: $argv (pacman answers its conflict prompt yes)"
+    if not _run sudo -n pacman -S --needed --noconfirm --ask 4 -- $argv
+        _err "Conflict swap failed for: $argv"
+        _err "  Swap by hand: sudo pacman -S --needed $argv (answer y to remove the conflicting package)"
+        _log "PKG_SWAP_FAIL: $argv"
+        return 1
+    end
+    _ok "Swapped in: $argv"; _log "PKG_SWAP_OK: $argv"
+    return 0
+end
 function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacman -Syu --needed (partial upgrades forbidden — Arch policy)"
     set -l _pacman_first -Syu --needed --noconfirm; set -l _pacman_retry -Syyu --needed --noconfirm
     if test -f /var/lib/pacman/db.lck
@@ -1996,10 +2049,12 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
         return 1
     end
     _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
+    set -l _swap (_ip_swap_targets $argv); set -l _syu
+    for _p in $argv; contains -- "$_p" $_swap; or set -a _syu "$_p"; end
     set -l _q_pre (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)') # name+version fingerprint; empty pre/post = fail-open true
-    if not _run sudo -n pacman $_pacman_first -- $argv
+    if not _run sudo -n pacman $_pacman_first -- $_syu
         _warn "Package installation failed — retrying with forced db re-sync (handles transient mirror staleness; will not resolve pkg conflicts — see JSONL log for first-pass stderr)..."
-        if not _run sudo -n pacman $_pacman_retry -- $argv
+        if not _run sudo -n pacman $_pacman_retry -- $_syu
             if test -f /var/lib/pacman/db.lck
                 _err "pacman database became locked during install — aborting"
             else
@@ -2012,6 +2067,7 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
         end
     end
     set -g SYSTEM_UPGRADED true
+    if test (count $_swap) -gt 0; _ip_swap_install $_swap; or return 1; end
     set -l _q_post (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
     if test -n "$_q_pre"; and test -n "$_q_post"; and test "$_q_pre" = "$_q_post"
         set -g SYSTEM_UPGRADED false
@@ -3056,7 +3112,7 @@ set -g _RY_POST_HOOKS \
     "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/NetworkManager-dispatcher.service.d/*|nmdispatch" "*/NetworkManager/conf.d/*|nm" \
     "/etc/iw-regdomain|regdom" "/etc/bluetooth/main.conf|bluetooth" "/etc/nftables.conf|nft" "/etc/default/cpupower-service.conf|cpupower" \
     "*/sysctl.d/*|sysctl" "/etc/udev/rules.d/*|udev" "*/modprobe.d/*|modprobe" "*/environment.d/*|envd" \
-    "*/MangoHud/MangoHud.conf|mangohud"
+    "*/MangoHud/MangoHud.conf|mangohud" "*/wireplumber.conf.d/*|wireplumber"
 function _ir_validate_post_hooks --description "Refuse to deploy when a _RY_POST_HOOKS tag lacks a handler or breaks destination mirror" # mirrors _ir_validate_keys
     set -l _seen_tags
     set -l _mirror_dsts $SYSTEM_DESTINATIONS $USER_DESTINATIONS
@@ -3244,6 +3300,20 @@ function _post_envd --argument-names target --description "Post-hook: env-genera
         return 0
     end
     _ok "environment.d re-applied — user manager reloaded, plasma-powerdevil.service restarted"
+    return 0
+end
+function _post_wireplumber --argument-names target --description "Post-hook: restart WirePlumber so the soft-mixer rule applies"
+    if not _has_user_bus_active
+        _info "  No active user-bus — the WirePlumber rule applies at next graphical login"
+        _log "POST_WIREPLUMBER_SKIP: no active user-bus target=$target"
+        return 0
+    end
+    if not _run systemctl --user restart wireplumber.service
+        _warn "wireplumber.service restart failed — the rule applies at next login (non-fatal; file deployed)"
+        _log "POST_WIREPLUMBER_RESTART_FAIL: target=$target"
+        return 0
+    end
+    _ok "WirePlumber restarted — soft-mixer rule applied"
     return 0
 end
 

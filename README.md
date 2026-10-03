@@ -111,9 +111,9 @@ In deploy order; system files land `0644`, user files `0600`.
 
 **Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; a post-write mismatch restores the backup where one exists.
 
-**Symlinked destinations** — a managed path that is a symlink is replaced with a regular file at the managed mode; the link target is left in place.
+**Symlinked destinations** — a managed path that is a symlink is replaced with a regular file at the managed mode.
 
-**Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab. A file already current is neither rewritten nor copied.
+**Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab.
 
 **fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `*atime`, and any existing `commit=`; every other row is byte-preserved. A power loss can discard up to 10 s of metadata.
 

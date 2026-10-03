@@ -63,11 +63,9 @@ Per-phase verdicts:
 
 Skipping the hardware check is the risky override — a wrong-CPU deploy writes an incorrect kernel cmdline and initramfs `MODULES`.
 
-| Variable | Effect |
-|---|---|
-| `RY_RUN_TIMEOUT=<sec>` | per-command wall-clock cap; default `3600`, `0` disables, package/boot ops floor `7200` |
-| `RY_INSTALL_SKIP_HARDWARE_CHECK=1` | bypass the `EXPECTED_CPU_MATCH` hard-fail |
-| `NO_COLOR` | disable colored output when set to a non-empty value ([no-color.org](https://no-color.org)) |
+- `RY_RUN_TIMEOUT=<sec>` — per-command wall-clock cap; default `3600`, `0` disables, package/boot ops floor `7200`
+- `RY_INSTALL_SKIP_HARDWARE_CHECK=1` — bypass the `EXPECTED_CPU_MATCH` hard-fail
+- `NO_COLOR` — disable colored output when set to a non-empty value ([no-color.org](https://no-color.org))
 
 ## Managed Files
 
@@ -75,47 +73,39 @@ In deploy order; system files land `0644`, user files `0600`.
 
 ### Boot
 
-| File | Purpose |
-|---|---|
-| `/boot/loader/loader.conf` | systemd-boot: `default @saved`, `timeout 0`, `console-mode keep`, `editor no` |
-| `/etc/kernel/cmdline` | `rw root=UUID=<detected>` plus the 15 kernel tokens |
-| `/etc/sdboot-manage.conf` | `LINUX_OPTIONS` mirror, `LINUX_FALLBACK_OPTIONS="quiet"`, entry management keys |
-| `/etc/mkinitcpio.conf` | `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-3`) |
+- `/boot/loader/loader.conf` — systemd-boot: `default @saved`, `timeout 0`, `console-mode keep`, `editor no`
+- `/etc/kernel/cmdline` — `rw root=UUID=<detected>` plus the 15 kernel tokens
+- `/etc/sdboot-manage.conf` — `LINUX_OPTIONS` mirror, `LINUX_FALLBACK_OPTIONS="quiet"`, entry management keys
+- `/etc/mkinitcpio.conf` — `MODULES` (`amdgpu`, early KMS), `HOOKS`, `COMPRESSION` `zstd` (`-3`)
 
 ### System
 
-| File | Purpose |
-|---|---|
-| `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` | mDNS and LLMNR off |
-| `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` | 8 power, suspend, hibernate, and reboot keys ignored, long-press included |
-| `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` | `LogLevelMax=notice` |
-| `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` | `wpa_supplicant` backend, Wi-Fi powersave off, Wi-Fi P2P device unmanaged, unlimited autoconnect retries, connectivity checking off, log `WARN` |
-| `/etc/iw-regdomain` | regulatory domain (`US`) |
-| `/etc/bluetooth/main.conf` | auto-power-on, `FastConnectable`, 3 reconnect attempts |
-| `/etc/nftables.conf` | default-deny-inbound, IPv4 ping allowed, ICMPv6 base accept |
-| `/etc/default/cpupower-service.conf` | governor (`powersave`) |
-| `/etc/sysctl.d/95-ry-overrides.conf` | `fq` qdisc, TCP `bbr`, VM tunables |
-| `/etc/udev/rules.d/99-ry-perf.rules` | NVMe scheduler `none`, P-State EPP, GPU DPM level `high` |
-| `/etc/modprobe.d/60-ry-modules.conf` | `amdxdna` blacklist — comment-only while `BLACKLIST_AMDXDNA=false` |
+- `/etc/systemd/resolved.conf.d/99-cachyos-resolved.conf` — mDNS and LLMNR off
+- `/etc/systemd/logind.conf.d/99-cachyos-logind.conf` — 8 power, suspend, hibernate, and reboot keys ignored, long-press included
+- `/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf` — `LogLevelMax=notice`
+- `/etc/NetworkManager/conf.d/99-cachyos-nm.conf` — `wpa_supplicant` backend, Wi-Fi powersave off, Wi-Fi P2P device unmanaged, unlimited autoconnect retries, connectivity checking off, log `WARN`
+- `/etc/iw-regdomain` — regulatory domain (`US`)
+- `/etc/bluetooth/main.conf` — auto-power-on, `FastConnectable`, 3 reconnect attempts
+- `/etc/nftables.conf` — default-deny-inbound, IPv4 ping allowed, ICMPv6 base accept
+- `/etc/default/cpupower-service.conf` — governor (`powersave`)
+- `/etc/sysctl.d/95-ry-overrides.conf` — `fq` qdisc, TCP `bbr`, VM tunables
+- `/etc/udev/rules.d/99-ry-perf.rules` — NVMe scheduler `none`, P-State EPP, GPU DPM level `high`
+- `/etc/modprobe.d/60-ry-modules.conf` — `amdxdna` blacklist; comment-only while `BLACKLIST_AMDXDNA=false`
 
 ### User
 
-| File | Purpose |
-|---|---|
-| `~/.config/environment.d/10-environment.conf` | session env — DXVK, GTK, MangoHud, Mesa, PowerDevil, Proton, SDL, VKD3D, Wine |
-| `~/.config/MangoHud/MangoHud.conf` | readout-only HUD — horizontal, top-left, toggle `Shift_R+F12` |
-| `~/.config/wireplumber/wireplumber.conf.d/51-porosvoc-softmixer.conf` | POROSVOC USB microphone soft mixer (hardware gain spans about 0.39 dB) |
+- `~/.config/environment.d/10-environment.conf` — session env: DXVK, GTK, MangoHud, Mesa, PowerDevil, Proton, SDL, VKD3D, Wine
+- `~/.config/MangoHud/MangoHud.conf` — readout-only HUD: horizontal, top-left, toggle `Shift_R+F12`
+- `~/.config/wireplumber/wireplumber.conf.d/51-porosvoc-softmixer.conf` — POROSVOC USB microphone soft mixer (hardware gain spans about 0.39 dB)
 
 ## Install Flow
 
-| Phase | Name | Work |
-|---|---|---|
-| 1 | Preflight | sudo cache, dependency, systemd, disk, network, and time-sync gates; config validation |
-| 2 | Packages | seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit), refresh `updatedb`/`pkgfile` |
-| 3 | Configuration | deploy 18 embedded configs atomically |
-| 4 | Services | fstab → resolved restart → package removal → mask → enable → regulatory domain |
-| 5 | Boot | `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity |
-| 6 | Finalize | user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart |
+1. **Preflight** — sudo cache, dependency, systemd, disk, network, and time-sync gates; config validation
+2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit), refresh `updatedb`/`pkgfile`
+3. **Configuration** — deploy 18 embedded configs atomically
+4. **Services** — fstab → resolved restart → package removal → mask → enable → regulatory domain
+5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity
+6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart
 
 ## Safety and Reliability
 
@@ -136,104 +126,92 @@ All tunables are `set -g` globals in the script. Edit both repos in lockstep, th
 
 ### Bootloader Keys
 
-| Key | Value | Emitted as | File |
-|---|---|---|---|
-| `LOADER_DEFAULT` | `@saved` | `default` | `loader.conf` |
-| `LOADER_TIMEOUT` | `0` | `timeout` | `loader.conf` |
-| `LOADER_CONSOLE_MODE` | `keep` | `console-mode` | `loader.conf` |
-| `LOADER_EDITOR` | `no` | `editor` | `loader.conf` |
-| `SDBOOT_DEFAULT_ENTRY` | `manual` | `DEFAULT_ENTRY=` | `sdboot-manage.conf` |
-| `SDBOOT_OVERWRITE` | `yes` | `OVERWRITE_EXISTING=` | `sdboot-manage.conf` |
-| `SDBOOT_REMOVE_EXISTING` | `yes` | `REMOVE_EXISTING=` | `sdboot-manage.conf` |
-| `SDBOOT_REMOVE_OBSOLETE` | `yes` | `REMOVE_OBSOLETE=` | `sdboot-manage.conf` |
+- `LOADER_DEFAULT` = `@saved` → `default` in `loader.conf`
+- `LOADER_TIMEOUT` = `0` → `timeout` in `loader.conf`
+- `LOADER_CONSOLE_MODE` = `keep` → `console-mode` in `loader.conf`
+- `LOADER_EDITOR` = `no` → `editor` in `loader.conf`
+- `SDBOOT_DEFAULT_ENTRY` = `manual` → `DEFAULT_ENTRY=` in `sdboot-manage.conf`
+- `SDBOOT_OVERWRITE` = `yes` → `OVERWRITE_EXISTING=` in `sdboot-manage.conf`
+- `SDBOOT_REMOVE_EXISTING` = `yes` → `REMOVE_EXISTING=` in `sdboot-manage.conf`
+- `SDBOOT_REMOVE_OBSOLETE` = `yes` → `REMOVE_OBSOLETE=` in `sdboot-manage.conf`
 
 ### Kernel Parameters
 
-| Token | Effect |
-|---|---|
-| `amd_pstate=active` | CPPC autonomous mode — the `amd-pstate-epp` scaling driver |
-| `btusb.enable_autosuspend=n` | keep the BT controller powered — no reconnect stalls |
-| `fsck.mode=force` | full fsck on every boot, not only when the filesystem asks |
-| `fsck.repair=yes` | auto-repair whatever fsck finds |
-| `iommu=pt` | passthrough default domain — low DMA overhead |
-| `ipv6.disable=1` | disable the IPv6 stack |
-| `mt7925e.disable_aspm=1` | MT7925 endpoint ASPM off — driver-level coredump mitigation |
-| `nowatchdog` | soft- and hard-lockup detectors off — the CachyOS `sdboot-manage.conf` default |
-| `nvme_core.default_ps_max_latency_us=0` | NVMe APST off — no power-state exit latency |
-| `pcie_aspm.policy=performance` | bias every PCIe link away from ASPM |
-| `processor.max_cstate=1` | cap ACPI C-states at C1 — idle-exit latency floor |
-| `quiet` | suppress boot console noise |
-| `split_lock_detect=off` | no split-lock throttling penalty in games |
-| `usbcore.autosuspend=-1` | USB autosuspend off globally |
-| `zswap.enabled=0` | zswap off from early boot — zram is the swap path |
+- `amd_pstate=active` — CPPC autonomous mode; the `amd-pstate-epp` scaling driver
+- `btusb.enable_autosuspend=n` — keep the BT controller powered; no reconnect stalls
+- `fsck.mode=force` — full fsck on every boot, not only when the filesystem asks
+- `fsck.repair=yes` — auto-repair whatever fsck finds
+- `iommu=pt` — passthrough default domain; low DMA overhead
+- `ipv6.disable=1` — disable the IPv6 stack
+- `mt7925e.disable_aspm=1` — MT7925 endpoint ASPM off; driver-level coredump mitigation
+- `nowatchdog` — soft- and hard-lockup detectors off; the CachyOS `sdboot-manage.conf` default
+- `nvme_core.default_ps_max_latency_us=0` — NVMe APST off; no power-state exit latency
+- `pcie_aspm.policy=performance` — bias every PCIe link away from ASPM
+- `processor.max_cstate=1` — cap ACPI C-states at C1; idle-exit latency floor
+- `quiet` — suppress boot console noise
+- `split_lock_detect=off` — no split-lock throttling penalty in games
+- `usbcore.autosuspend=-1` — USB autosuspend off globally
+- `zswap.enabled=0` — zswap off from early boot; zram is the swap path
 
 ### Initramfs
 
 `HOOKS` order is an invariant, enforced when the profile is deployed: `base` first, `fsck` last, no duplicates, and `systemd` before `autodetect`, `keyboard`, and `sd-vconsole`; `autodetect` before `microcode` and `modconf`; `keyboard` before `sd-vconsole`; `modconf` before `kms`; `block` before `filesystems`.
 
-| Key | Value | Emitted as |
-|---|---|---|
-| `MKINITCPIO_MODULES` | `amdgpu` | `MODULES=()` |
-| `MKINITCPIO_HOOKS` | `base`, `systemd`, `autodetect`, `microcode`, `modconf`, `kms`, `keyboard`, `sd-vconsole`, `block`, `filesystems`, `fsck` | `HOOKS=()` |
-| `MKINITCPIO_COMPRESSION` | `zstd` | `COMPRESSION=` |
-| `MKINITCPIO_COMPRESSION_OPTIONS` | `-3` | `COMPRESSION_OPTIONS=()` |
+- `MKINITCPIO_MODULES` = `amdgpu` → `MODULES=()`
+- `MKINITCPIO_HOOKS` = `base`, `systemd`, `autodetect`, `microcode`, `modconf`, `kms`, `keyboard`, `sd-vconsole`, `block`, `filesystems`, `fsck` → `HOOKS=()`
+- `MKINITCPIO_COMPRESSION` = `zstd` → `COMPRESSION=`
+- `MKINITCPIO_COMPRESSION_OPTIONS` = `-3` → `COMPRESSION_OPTIONS=()`
 
 ### Service Keys
 
 `DNSOverTLS=` and `DNSSEC=` are unset by design — the router does DoT upstream and validates DNSSEC. `NM_WIFI_POWERSAVE` is `2` because the MT7925 spikes latency otherwise. `CPUPOWER_GOVERNOR` is `powersave` so the CPPC floor drops to minimum at idle; `EPP_PREFERENCE` `performance` steers the firmware toward performance and stays writable. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; [Tuning Notes](#tuning-notes) has the reverse switch.
 
-| Key | Value | Emitted as |
-|---|---|---|
-| `RESOLVED_MDNS` | `no` | `MulticastDNS=` |
-| `RESOLVED_LLMNR` | `no` | `LLMNR=` |
-| `NM_DISPATCHER_LOGLEVELMAX` | `notice` | `LogLevelMax=` |
-| `COUNTRY` | `US` | `COUNTRY=` |
-| `LOGIND_IGNORE_KEYS` | 8 power, suspend, hibernate, and reboot keys | `Handle*Key=ignore` |
-| `NM_WIFI_BACKEND` | `wpa_supplicant` | `wifi.backend=` |
-| `NM_WIFI_POWERSAVE` | `2` (disabled) | `wifi.powersave=` |
-| `NM_LOG_LEVEL` | `WARN` | `level=` |
-| `CPUPOWER_GOVERNOR` | `powersave` | `GOVERNOR=` |
-| `BT_AUTO_ENABLE` | `true` | `AutoEnable=` |
-| `BT_FAST_CONNECTABLE` | `true` | `FastConnectable=` |
-| `BT_RECONNECT_ATTEMPTS` | `3` | `ReconnectAttempts=` |
-| `GPU_DPM_LEVEL` | `high` | udev `ATTR{device/power_dpm_force_performance_level}` |
-| `EPP_PREFERENCE` | `performance` | udev `ATTR{cpufreq/energy_performance_preference}` |
-| `BLACKLIST_AMDXDNA` | `false` | nothing — `true` emits `blacklist amdxdna` |
+- `RESOLVED_MDNS` = `no` → `MulticastDNS=`
+- `RESOLVED_LLMNR` = `no` → `LLMNR=`
+- `NM_DISPATCHER_LOGLEVELMAX` = `notice` → `LogLevelMax=`
+- `COUNTRY` = `US` → `COUNTRY=`
+- `LOGIND_IGNORE_KEYS` = 8 power, suspend, hibernate, and reboot keys → `Handle*Key=ignore`
+- `NM_WIFI_BACKEND` = `wpa_supplicant` → `wifi.backend=`
+- `NM_WIFI_POWERSAVE` = `2` (disabled) → `wifi.powersave=`
+- `NM_LOG_LEVEL` = `WARN` → `level=`
+- `CPUPOWER_GOVERNOR` = `powersave` → `GOVERNOR=`
+- `BT_AUTO_ENABLE` = `true` → `AutoEnable=`
+- `BT_FAST_CONNECTABLE` = `true` → `FastConnectable=`
+- `BT_RECONNECT_ATTEMPTS` = `3` → `ReconnectAttempts=`
+- `GPU_DPM_LEVEL` = `high` → udev `ATTR{device/power_dpm_force_performance_level}`
+- `EPP_PREFERENCE` = `performance` → udev `ATTR{cpufreq/energy_performance_preference}`
+- `BLACKLIST_AMDXDNA` = `false` → nothing; `true` emits `blacklist amdxdna`
 
 ### Session Environment
 
 New values reach programs started after the next graphical login; a running Steam keeps its old environment.
 
-| Variable | Effect |
-|---|---|
-| `DXVK_LOG_LEVEL=none` | DXVK logging off |
-| `GSK_RENDERER=gl` | GTK4 GL renderer; the Vulkan renderer aborts on gfx1151 |
-| `MANGOHUD=1` | HUD on for Vulkan titles |
-| `MANGOHUD_DLSYM=1` | OpenGL dlsym hook — already MangoHud's default; 0.8.4 never reads it |
-| `MESA_SHADER_CACHE_MAX_SIZE=16G` | Mesa shader cache cap |
-| `POWERDEVIL_NO_DDCUTIL=1` | PowerDevil DDC/CI off — silences `org_kde_powerdevil` i2c errors |
-| `PROTON_LOCAL_SHADER_CACHE=1` | per-prefix shader cache |
-| `RADV_PERFTEST=nggc,nircache` | RADV NGG culling (opt-in on GFX11+) and the per-stage NIR cache; a per-title `RADV_PERFTEST=` replaces both |
-| `SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030` | SDL games skip the Keychron K2 HE and Link receiver joystick interfaces; needs Steam Input off per title, and `PROTON_NO_STEAMINPUT=0` under proton-cachyos `sdlinput`/`wayland` |
-| `VKD3D_DEBUG=none` | vkd3d logging off |
-| `VKD3D_SHADER_DEBUG=none` | vkd3d shader logging off |
-| `WINEDEBUG=-all` | Wine debug channels off |
+- `DXVK_LOG_LEVEL=none` — DXVK logging off
+- `GSK_RENDERER=gl` — GTK4 GL renderer; the Vulkan renderer aborts on gfx1151
+- `MANGOHUD=1` — HUD on for Vulkan titles
+- `MANGOHUD_DLSYM=1` — OpenGL dlsym hook, already MangoHud's default; 0.8.4 never reads it
+- `MESA_SHADER_CACHE_MAX_SIZE=16G` — Mesa shader cache cap
+- `POWERDEVIL_NO_DDCUTIL=1` — PowerDevil DDC/CI off; silences `org_kde_powerdevil` i2c errors
+- `PROTON_LOCAL_SHADER_CACHE=1` — per-prefix shader cache
+- `RADV_PERFTEST=nggc,nircache` — RADV NGG culling (opt-in on GFX11+) and the per-stage NIR cache; a per-title `RADV_PERFTEST=` replaces both
+- `SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030` — SDL games skip the Keychron K2 HE and Link receiver joystick interfaces; needs Steam Input off per title, and `PROTON_NO_STEAMINPUT=0` under proton-cachyos `sdlinput`/`wayland`
+- `VKD3D_DEBUG=none` — vkd3d logging off
+- `VKD3D_SHADER_DEBUG=none` — vkd3d shader logging off
+- `WINEDEBUG=-all` — Wine debug channels off
 
 ### Sysctl Overrides
 
 Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cluster` is left to the vendor file, which sets `0`.
 
-| Key | Value | Effect |
-|---|---|---|
-| `kernel.nmi_watchdog` | `0` | NMI watchdog off |
-| `net.core.default_qdisc` | `fq` | pairs with BBR |
-| `net.ipv4.tcp_congestion_control` | `bbr` | BBR congestion control |
-| `net.ipv4.tcp_notsent_lowat` | `16384` | cap unsent buffer at 16 KiB |
-| `net.ipv4.tcp_slow_start_after_idle` | `0` | keep the congestion window across idle |
-| `vm.compaction_proactiveness` | `0` | proactive compaction off |
-| `vm.max_map_count` | `2147483642` | map headroom for games (SteamOS value) |
-| `vm.watermark_boost_factor` | `0` | watermark boosting off |
-| `vm.watermark_scale_factor` | `125` | wider reclaim band for zram swap |
+- `kernel.nmi_watchdog` = `0` — NMI watchdog off
+- `net.core.default_qdisc` = `fq` — pairs with BBR
+- `net.ipv4.tcp_congestion_control` = `bbr` — BBR congestion control
+- `net.ipv4.tcp_notsent_lowat` = `16384` — cap unsent buffer at 16 KiB
+- `net.ipv4.tcp_slow_start_after_idle` = `0` — keep the congestion window across idle
+- `vm.compaction_proactiveness` = `0` — proactive compaction off
+- `vm.max_map_count` = `2147483642` — map headroom for games (SteamOS value)
+- `vm.watermark_boost_factor` = `0` — watermark boosting off
+- `vm.watermark_scale_factor` = `125` — wider reclaim band for zram swap
 
 ## Packages
 

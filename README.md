@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.226.0** · [Changelog](CHANGELOG.md)
+**Version 7.227.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -100,12 +100,12 @@ In deploy order; system files land `0644`, user files `0600`.
 
 ## Install Flow
 
-1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, network, and time-sync gates; config validation
-2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit), refresh `updatedb`/`pkgfile`
-3. **Configuration** — deploy 18 embedded configs atomically
-4. **Services** — fstab → resolved restart → package removal → mask → enable → regulatory domain
-5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity
-6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart
+1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, network, and time-sync gates; config validation.
+2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit), refresh `updatedb`/`pkgfile`.
+3. **Configuration** — deploy 18 embedded configs atomically.
+4. **Services** — fstab → resolved restart → package removal → mask → enable → regulatory domain.
+5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity.
+6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart.
 
 ## Safety and Reliability
 

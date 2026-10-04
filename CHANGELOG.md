@@ -3,19 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.226.0
+7.227.0
 -------
 
-  - changelog: trim older blocks
+  - changelog: tag order fixed; README Install Flow steps end in periods
 
 
-7.225.0
--------
-
-  - preflight: the modprobe.d format check names directives in match order
-
-
-7.217.0 - 7.224.0
+7.217.0 - 7.226.0
 -----------------
 
   - kernel: 7.217.0 drop ttm.pages_limit=20971520
@@ -30,6 +24,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - install-file: 7.224.0 the WirePlumber rule restarts wireplumber.service
   - preflight: 7.219.0 MODULES are checked against each installed kernel;
     7.224.0 a locked pacman database stops the run before anything is deployed
+  - preflight: 7.225.0 the modprobe.d format check names directives in
+    match order
   - cli: 7.218.0 a repeated --install-file exits 2; an unmanaged one exits 2
     before the hardware gate
 
@@ -118,8 +114,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.123.0 - 7.129.0
 -----------------
 
-  - dns: pin upstreams in resolved and the NM global-dns section
   - kernel: add mt7925e.disable_aspm=1 and kernel.nmi_watchdog=0
+  - dns: pin upstreams in resolved and the NM global-dns section
   - env: FSR4_UPGRADE -> PROTON_FSR4_UPGRADE; drop VKD3D_CONFIG
 
 
@@ -133,9 +129,9 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.108.0 - 7.117.0
 -----------------
 
-  - install-file: post-hook dispatch table with per-target handlers
   - boot: mkinitcpio.conf snapshot and byte-exact revert; fstab atomic replace
     behind parity, size and findmnt gates
+  - install-file: post-hook dispatch table with per-target handlers
   - lock: dead-PID reclaim only, live or ambiguous pidfiles fail closed
 
 

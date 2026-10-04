@@ -3,6 +3,12 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.225.0
+-------
+
+  - preflight: the modprobe.d format check names directives in match order
+
+
 7.217.0 - 7.224.0
 -----------------
 
@@ -21,7 +27,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     7.224.0 a locked pacman database stops the run before anything is deployed
   - cli: 7.218.0 a repeated --install-file exits 2; an unmanaged one exits 2
     before the hardware gate
-  - readme: 7.224.0 Uninstall step 4 keeps pipewire-jack, which ffmpeg needs
 
 
 7.190.0 - 7.216.0

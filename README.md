@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.224.0** · [Changelog](CHANGELOG.md)
+**Version 7.225.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -42,7 +42,7 @@ Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYY
 Per-phase verdicts:
 
 - `PASS` — completed its work.
-- `WARN` — hits something non-fatal and keeps exit `0`.
+- `WARN` — hit something non-fatal and kept exit `0`.
 - `FAIL` — did not complete.
 - `DEFER` — applies at next boot.
 - `SKIP` — preconditions absent; the phase did not run.

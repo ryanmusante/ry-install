@@ -1,12 +1,11 @@
 #!/usr/bin/env fish
-# ry-install v7.224.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.225.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.224.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.225.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
-set -g EXIT_RUN_TMPFAIL 251 # internal _run sentinel (fn return only)
-set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_MISUSE 255 # internal sentinels, never a process exit
+set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
 set -g PACTREE_TIMEOUT_S 60
 set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
@@ -123,13 +122,13 @@ end
 set -g _RY_NO_COLOR false
 test "$TERM" = dumb; and set -g _RY_NO_COLOR true
 set -q NO_COLOR; and test -n "$NO_COLOR"; and set -g _RY_NO_COLOR true # no-color.org: non-empty value disables color
-set -l fish_ver $FISH_VERSION; set -l parts (string split '.' -- "$fish_ver"); set -l _fish_minor (string replace -r '[^0-9].*' '' -- "$parts[2]"); test -z "$_fish_minor"; and set _fish_minor 0
-if not string match -qr '^\d+$' -- "$parts[1]"; or not string match -qr '^\d+$' -- "$_fish_minor"; echo "[ERR] fish version unparseable: '$fish_ver'" >&2; _ry_exit $EXIT_PREFLIGHT; end
+set -l _fish_ver $FISH_VERSION; set -l _fish_parts (string split '.' -- "$_fish_ver"); set -l _fish_minor (string replace -r '[^0-9].*' '' -- "$_fish_parts[2]"); test -z "$_fish_minor"; and set _fish_minor 0
+if not string match -qr '^\d+$' -- "$_fish_parts[1]"; or not string match -qr '^\d+$' -- "$_fish_minor"; echo "[ERR] fish version unparseable: '$_fish_ver'" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -l _fish_ok 0
-test "$parts[1]" -gt 3; and set _fish_ok 1
-test "$parts[1]" -eq 3; and test "$_fish_minor" -ge 6; and set _fish_ok 1
-if test "$_fish_ok" -eq 0; echo "[ERR] fish 3.6+ required (found: $fish_ver)" >&2; _ry_exit $EXIT_PREFLIGHT; end
-set --erase fish_ver parts _fish_minor _fish_ok
+test "$_fish_parts[1]" -gt 3; and set _fish_ok 1
+test "$_fish_parts[1]" -eq 3; and test "$_fish_minor" -ge 6; and set _fish_ok 1
+if test "$_fish_ok" -eq 0; echo "[ERR] fish 3.6+ required (found: $_fish_ver)" >&2; _ry_exit $EXIT_PREFLIGHT; end
+set --erase _fish_ver _fish_parts _fish_minor _fish_ok
 
 # ── TMP ROOT (PINNED /tmp) + COREUTILS PROBES ──
 set -q TMPDIR; and set --erase TMPDIR # pin tmp to /tmp; children must not honor inherited TMPDIR
@@ -537,7 +536,7 @@ set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme b
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target # avahi+resolved: mDNS off by design; ufw: nft owns the ruleset
 set -g EXPECTED_SERVICES fstrim.timer NetworkManager.service cpupower.service nftables.service bluetooth.service # enabled in Phase 4
 set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
-set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds
+set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds: /boot MiB, / GiB
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 
 # ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ──
@@ -1094,7 +1093,10 @@ function _warn_loud --description "Override-path warn: prints to stderr regardle
     set -q VERIFY_WARN; and set -g VERIFY_WARN (math $VERIFY_WARN + 1)
     _msg_print --force WARN $argv
 end
-function _echo --description "Print a plain message without level prefix"; set -q argv[1]; and _log "ECHO: $argv"; if test "$QUIET" = false; and not set -q _RY_OUTPUT_BROKEN; printf '%s\n' (string join ' ' -- $argv) >&2; end; end
+function _echo --description "Print a plain message without level prefix"
+    set -q argv[1]; and _log "ECHO: $argv"
+    if test "$QUIET" = false; and not set -q _RY_OUTPUT_BROKEN; printf '%s\n' (string join ' ' -- $argv) >&2; end
+end
 
 # ── PROGRESS BAR (PINNED BOTTOM ROW WITH SCROLL REGION) ──
 function _progress_now --description "Monotonic seconds (cached uptime or epoch)"
@@ -1546,7 +1548,7 @@ function _grep_modprobe_entry --argument-names dst --description "Validate modpr
     for _line in $argv[2..-1]
         string match -qr '^[[:space:]]*(#|$)' -- "$_line"; and continue # comment or blank ok
         string match -qr '^[[:space:]]*(options|blacklist|install|remove|alias|softdep)[[:space:]]+\S' -- "$_line"; or begin
-            _fail "  $dst: non-directive line (expected options/blacklist/install/alias/softdep/remove): $_line"
+            _fail "  $dst: non-directive line (expected options/blacklist/install/remove/alias/softdep): $_line"
             return 1
         end
     end
@@ -2566,7 +2568,7 @@ function _configure_services_enable --description "Batch-enable system units (pe
     end
     return $_ret
 end
-function _apply_wireless_regdom --description "Apply the wireless regulatory domain ($COUNTRY) at runtime"
+function _apply_wireless_regdom --description "Apply the wireless regulatory domain (\$COUNTRY) at runtime"
     set -g _RY_REGDOM_RESULT DEFER; set -g _RY_REGDOM_EVIDENCE ""
     if not command -q iw
         _info "  wireless regdom: iw(8) absent — $COUNTRY applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
@@ -2836,7 +2838,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     return 0
 end
 
-# ── INSTALL PHASE 6: FINALIZE (USER RELOAD + PACCACHE + NM RESTART) ──
+# ── INSTALL PHASE 6: FINALIZE (USER RELOAD + POWERDEVIL + PACCACHE + NM RESTART) ──
 function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk2 -ruk0"
     set -l _upgraded false; set -l _removed_n 0
     set -q SYSTEM_UPGRADED; and test "$SYSTEM_UPGRADED" = true; and set _upgraded true
@@ -3130,7 +3132,10 @@ function _idf_use_sudo_for_dst --argument-names target --description "Resolve ma
     end
     return 1
 end
-function _idf_dispatch_hook --argument-names target tag --description "Dispatch a post-hook tag to its _post_<tag> handler"; if test -z "$tag"; or not functions -q "_post_$tag"; _err "Internal: unknown post-hook tag '$tag' (target=$target)"; return 1; end; _post_$tag "$target"; end
+function _idf_dispatch_hook --argument-names target tag --description "Dispatch a post-hook tag to its _post_<tag> handler"
+    if test -z "$tag"; or not functions -q "_post_$tag"; _err "Internal: unknown post-hook tag '$tag' (target=$target)"; return 1; end
+    _post_$tag "$target"
+end
 function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"
     _log_section "INSTALL-FILE START"
     set -l _use_sudo (_idf_use_sudo_for_dst "$target")

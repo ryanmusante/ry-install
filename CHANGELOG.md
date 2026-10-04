@@ -3,6 +3,12 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.226.0
+-------
+
+  - changelog: trim older blocks
+
+
 7.225.0
 -------
 
@@ -17,8 +23,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - network: 7.224.0 NetworkManager leaves the Wi-Fi P2P device unmanaged
   - env: 7.217.0 RADV_PERFTEST=nggc -> nggc,nircache; 7.224.0 add
     SDL_GAMECONTROLLER_IGNORE_DEVICES (Keychron K2 HE, Link receiver)
-  - configuration: 7.224.0 new managed user file, a WirePlumber soft-mixer
-    rule for the POROSVOC USB microphone
+  - configuration: 7.224.0 manage a WirePlumber soft-mixer rule (POROSVOC mic)
   - packages: 7.224.0 add pipewire-jack; a host on jack2 swaps by hand first
   - services: 7.218.0 enable-units counts only units it enabled or started;
     7.219.0 a oneshot nftables.service no longer reads as newly enabled
@@ -41,36 +46,28 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - env: 7.195.0 drop PROTON_FSR4_INDICATOR=1; 7.212.1 add RADV_PERFTEST=nggc
     and MANGOHUD_DLSYM=1
   - configuration: 7.195.0 MangoHud cpu_stats on, cpu_temp off; 7.203.0 one
-    managed-file header per file, nftables drops its ports invite
-  - configuration: 7.205.0 cpupower-service.conf header names EnvironmentFile=
-  - configuration: 7.211.0 udev comments print the set EPP and GPU levels; the
-    resolved header drops its mDNS/LLMNR claim
+    header per managed file, nftables drops its ports invite
+  - configuration: 7.205.0 cpupower header names EnvironmentFile=; 7.211.0
+    udev comments print EPP and GPU levels; resolved drops mDNS/LLMNR claim
   - packages: 7.198.0 add dmemcg-booster and plasma-foreground-booster;
     7.200.0 drop both
-  - services: 7.197.0 ufw mask withheld unless nftables.service is expected;
-    7.203.0 the withheld ufw mask is a WARN; 7.206.0 its SECURITY note is INFO
-  - services: 7.207.0 mask and enable skip units is-enabled reports not-found;
-    7.211.0 db.lck refusals name the manual fix
+  - services: 7.197.0 ufw mask needs nftables.service; 7.203.0 a withheld mask
+    is a WARN, 7.206.0 its SECURITY note INFO; 7.207.0 skip not-found units
+  - services: 7.211.0 db.lck refusals name the manual fix
   - sysctl: 7.195.0 add vm.watermark_scale_factor=125
   - fstab: 7.211.0 the symlink refusal offers no skip
   - install: 7.207.0 a signal-time revert removes the empty /run/ry-install
   - install-file: 7.201.0 a symlinked destination becomes a regular file;
     7.206.0 INSTALL-FILE END on every return, hook failures log POST_*
   - install-file: 7.206.0 - 7.207.0 the udev retry hint joins its commands
-    with &&; 7.211.0 live-apply hooks print OK on success
-  - install-file: 7.211.0 relative-path, udev, MangoHud, logind and regdom
-    messages corrected
-  - summary: 7.206.0 PASS-WITH-WARNINGS Next says reboot; realtime and i2c
-    group steps print after the matrix; abort paths record every SKIP row
-  - summary: 7.208.0 the tainted-boot SKIP row names the boot state
-  - preflight: 7.211.0 a missing root UUID names the findmnt exit code or an
-    empty result
+    with &&; 7.211.0 live-apply hooks print OK, five messages corrected
+  - summary: 7.206.0 PASS-WITH-WARNINGS Next says reboot, group steps follow
+    the matrix, aborts record every SKIP row; 7.208.0 tainted SKIP names state
+  - preflight: 7.211.0 a missing root UUID names findmnt's rc or empty output
   - cli: 7.211.0 glued short flags take only h and v; -Vh and -hV fail like -V
   - lock: 7.211.0 a pidfile without a PID reads 'holds no PID'
-  - logging: 7.206.0 signal-time mkinitcpio.conf revert logs before the
-    footer; 7.207.0 suffixes _FAILED/_SKIPPED/_LAPSED -> _FAIL/_SKIP/_LAPSE
-  - logging: 7.211.0 the DO-NOT-REBOOT banner and a caught signal log before
-    stderr
+  - logging: 7.206.0 signal-time revert logs before the footer; 7.207.0 log
+    suffixes _FAIL/_SKIP/_LAPSE; 7.211.0 banner and signals log before stderr
   - split: 7.190.0 move ry-verify.fish to its repository
 
 

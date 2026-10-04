@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.225.0** · [Changelog](CHANGELOG.md)
+**Version 7.226.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -230,13 +230,13 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 ### Gaming Stack
 
 - `/dev/ntsync` — Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out.
-- `PROTON_FSR4_UPGRADE=1` — the Proton-CachyOS lever that upgrades FSR 3.1 titles to FSR 4; per title in the Steam launch options, never session-wide, and a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.1`. `PROTON_FSR4_INDICATOR=1` draws only the watermark and is not shipped.
+- `PROTON_FSR4_UPGRADE=1` — the Proton-CachyOS lever that upgrades FSR 3.1 titles to FSR 4; set it per title in the Steam launch options, never session-wide; a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.1`. `PROTON_FSR4_INDICATOR=1` draws only the watermark and is not shipped.
 - `cpu_stats` ships enabled; `cpu_temp` stays commented out — to turn it on, add it on its own line in the MangoHud generator of both scripts, then `--install-file` the file. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
 - `game-performance` — the CachyOS wrapper needs `power-profiles-daemon`, whose service this profile masks, so it runs the game unchanged; the profile pins the `powersave` governor with EPP `performance` instead.
 
 ### Kernel Parameter Notes
 
-- `iommu=pt` — IOMMU on for the XDNA NPU, VFIO and SR-IOV; to shed the DMA-mapping overhead on a box using none of them, add `amd_iommu=off`, set `BLACKLIST_AMDXDNA true`, and re-run.
+- `iommu=pt` — IOMMU on for the XDNA NPU, VFIO, and SR-IOV; to shed the DMA-mapping overhead on a box using none of them, add `amd_iommu=off`, set `BLACKLIST_AMDXDNA true`, and re-run.
 - `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — addresses Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
@@ -251,7 +251,7 @@ Multi-thread gains flatten past ~85 W. Set `SPL = fPPT = sPPT = 85 W` (stock boo
 
 **Boot failure** — live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update`.
 
-**PipeWire permission denied** — `sudo usermod -aG realtime $USER` and re-login, which needs `realtime-privileges`.
+**PipeWire permission denied** — `sudo usermod -aG realtime $USER`, then log in again; the `realtime` group comes from `realtime-privileges`.
 
 **Bluetooth speaker will not auto-reconnect** — `bluetoothctl trust <MAC>`, then power the speaker on after login.
 

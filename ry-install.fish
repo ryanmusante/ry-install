@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.227.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.228.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.227.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.228.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
@@ -132,7 +132,7 @@ set --erase _fish_ver _fish_parts _fish_minor _fish_ok
 
 # ── TMP ROOT (PINNED /tmp) + COREUTILS PROBES ──
 set -q TMPDIR; and set --erase TMPDIR # pin tmp to /tmp; children must not honor inherited TMPDIR
-if not test -w /tmp; echo "[ERR] tmp dir not writable: /tmp" >&2; _ry_exit $EXIT_PREFLIGHT; end
+if not test -w /tmp; echo "[ERR] Cannot write to /tmp" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command -q timeout; echo "[ERR] GNU coreutils timeout(1) required (used by _run for hang-protection)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command timeout --foreground --kill-after=1 1 true 2>/dev/null; echo "[ERR] timeout(1) lacks --foreground/--kill-after (need GNU coreutils ≥ 8.x; busybox/uutils not supported)" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if not command -q find; echo "[ERR] GNU findutils find(1) required (tmpfile sweeps + boot-entry enumeration)" >&2; _ry_exit $EXIT_PREFLIGHT; end
@@ -1324,7 +1324,7 @@ function _ry_check_deps --description "Verify required commands, GNU df --output
     for cmd in pacman systemctl mkinitcpio sdboot-manage findmnt sha256sum timeout mktemp awk grep curl getent id sudo head df mv tee stat find cp chmod chown install cat rm date wc tail basename dirname mkdir rmdir touch env sleep cmp
         command -q $cmd; or set -a missing $cmd
     end
-    if test (count $missing) -gt 0; _err "missing: $missing"; _log "DEPS_CHECK_FAIL: missing=$missing"; return 1; end
+    if test (count $missing) -gt 0; _err "Missing required commands: $missing"; _log "DEPS_CHECK_FAIL: missing=$missing"; return 1; end
     if not command env LC_ALL=C df --output=avail / >/dev/null 2>&1; _err "df(1) lacks --output flag — GNU coreutils required (busybox/uutils not supported)"; _log "DEPS_CHECK_FAIL: df lacks --output"; return 1; end
     _resolve_systemd_ver
     if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; _log "DEPS_CHECK_FAIL: systemd version unparseable"; return 1; end
@@ -2571,11 +2571,11 @@ end
 function _apply_wireless_regdom --description "Apply the wireless regulatory domain (\$COUNTRY) at runtime"
     set -g _RY_REGDOM_RESULT DEFER; set -g _RY_REGDOM_EVIDENCE ""
     if not command -q iw
-        _info "  wireless regdom: iw(8) absent — $COUNTRY applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
+        _info "  Wireless regdom: iw(8) absent — $COUNTRY applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
         set -g _RY_REGDOM_EVIDENCE "iw(8) absent — applies via /etc/iw-regdomain"
         return 0
     end
-    _info "  wireless regdom → $COUNTRY"
+    _info "  Wireless regdom → $COUNTRY"
     if _run sudo -n iw reg set "$COUNTRY"
         set -g _RY_REGDOM_RESULT PASS; set -g _RY_REGDOM_EVIDENCE "country $COUNTRY set"
         return 0
@@ -3331,7 +3331,7 @@ function _post_regdom --argument-names target --description "Post-hook: apply wi
     _apply_wireless_regdom
     switch "$_RY_REGDOM_RESULT"
         case PASS
-            _ok "wireless regdom $COUNTRY applied (iw reg set)"
+            _ok "Wireless regdom $COUNTRY applied (iw reg set)"
         case WARN
             _log "POST_REGDOM_APPLY_FAIL: target=$target"
         case DEFER

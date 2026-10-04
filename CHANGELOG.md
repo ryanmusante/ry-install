@@ -3,13 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.227.0
+7.228.0
 -------
 
-  - changelog: tag order fixed; README Install Flow steps end in periods
+  - changelog: GSK_RENDERER and governor history corrected
 
 
-7.217.0 - 7.226.0
+7.217.0 - 7.227.0
 -----------------
 
   - kernel: 7.217.0 drop ttm.pages_limit=20971520
@@ -37,10 +37,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     hint drops --verbose, a sudo lapse no longer reads 'backup file missing'
   - kernel: 7.195.0 fsck.mode=force; 7.199.0 add ttm.pages_limit=20971520;
     7.204.0 add nowatchdog
-  - perf: 7.211.0 governor powersave -> performance
+  - perf: 7.204.0 governor performance -> powersave; 7.211.0 performance again
   - network: 7.200.0 disable NetworkManager connectivity checking
-  - env: 7.195.0 drop PROTON_FSR4_INDICATOR=1; 7.212.1 add RADV_PERFTEST=nggc
-    and MANGOHUD_DLSYM=1
+  - env: 7.195.0 GSK_RENDERER ngl -> gl, drop PROTON_FSR4_INDICATOR=1; 7.212.1
+    add RADV_PERFTEST=nggc and MANGOHUD_DLSYM=1
   - configuration: 7.195.0 MangoHud cpu_stats on, cpu_temp off; 7.203.0 one
     header per managed file, nftables drops its ports invite
   - configuration: 7.205.0 cpupower header names EnvironmentFile=; 7.211.0
@@ -75,7 +75,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - dns: drop pinned upstreams, DNSOverTLS= and DNSSEC=; link DNS wins
   - network: autoconnect-retries-default=0
   - env: PROTON_FSR4_UPGRADE -> FSR4_WATERMARK -> PROTON_FSR4_INDICATOR=1;
-    drop PROTON_ENABLE_WAYLAND=1; GSK_RENDERER ngl then gl
+    drop PROTON_ENABLE_WAYLAND=1; add GSK_RENDERER=ngl
   - configuration: ICMPv6 base accept in nftables
   - packages: 7.173.0 add cachyos-benchmarker
   - sysctl: drop both net.core.netdev_budget keys and vm.swappiness=150

@@ -3,11 +3,17 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.230.0
+-------
+
+  - changelog: lockstep bump with ry-verify 7.230.0
+
+
 7.229.0
 -------
 
   - configuration: drop the WirePlumber soft-mixer rule (POROSVOC mic) and its
-    post-hook; 17 managed files
+    post-hook
   - configuration: MangoHud comments out text_outline, adds no_small_font and
     alpha=0.8
 

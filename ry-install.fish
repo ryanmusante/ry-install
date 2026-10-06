@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.229.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.230.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.229.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.230.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
@@ -1754,10 +1754,10 @@ function _awf_make_backup --argument-names dst use_sudo --description "_atomic_w
         _log "BACKUP_SYMLINK_REMOVED: $_bak"
     end
     if _run $_sp cp -p -- "$dst" "$_bak"
-        _log "BACKUP_CREATED: $dst -> $_bak"
+        _log "BACKUP_CREATED: $dst → $_bak"
     else
         _warn "  $dst: backup to $_bak failed — proceeding (atomic write still protects original on write failure)"
-        _log "BACKUP_FAIL: $dst -> $_bak"
+        _log "BACKUP_FAIL: $dst → $_bak"
     end
     return 0
 end
@@ -2645,6 +2645,7 @@ function _enum_boot_entries --argument-names boot --description "Enumerate \$boo
 end
 function _pbs_check_boot_files --argument-names boot glob label --description "_preflight_boot_sanity sub: Enumerate \$glob in \$boot root"
     set -l errors 0; set -l files (sudo -n find "$boot" -maxdepth 1 -name "$glob" -type f -print0 2>/dev/null | string split0); set -l _ps $pipestatus
+    test (count $files) -gt 1; and set files (path sort -- $files)
     if test "$_ps[1]" -ne 0
         _err "Cannot enumerate $boot/ for $glob (sudo lapsed or read error)"
         set errors (math $errors + 1)
@@ -2682,6 +2683,7 @@ function _pbs_entry_has_valid_kernel --argument-names boot conf --description "_
 end
 function _pbs_check_entries --argument-names boot --description "_preflight_boot_sanity sub: Enumerate \$BOOT/loader/entries/*.conf"
     set -l errors 0; set -l confs (sudo -n find "$boot/loader/entries" -maxdepth 1 -name '*.conf' -type f -print0 2>/dev/null | string split0); set -l _cf_ps $pipestatus
+    test (count $confs) -gt 1; and set confs (path sort -- $confs)
     if test "$_cf_ps[1]" -ne 0; _err "Cannot enumerate $boot/loader/entries (sudo lapsed or read error)"; set errors (math $errors + 1); echo $errors; return 0; end
     if test (count $confs) -eq 0; _err "No boot loader entries in $boot/loader/entries/"; set errors (math $errors + 1); echo $errors; return 0; end
     set -l valid_entry false
@@ -3435,10 +3437,10 @@ if test -f "$old_log"; and test "$old_log" != "$new_log"
     if not command mv -T -- "$old_log" "$new_log" 2>/dev/null
         if command cp -pT -- "$old_log" "$new_log" 2>/dev/null
             command rm -f -- "$old_log" 2>/dev/null
-            echo "[WARN] Log rename via mv failed; recovered via cp+rm: $old_log -> $new_log" >&2
+            echo "[WARN] Log rename via mv failed; recovered via cp+rm: $old_log → $new_log" >&2
         else
             set _log_rename_ok false # old path stays writable: keep logging there
-            echo "[WARN] Log rename failed (mv and cp both): $old_log -> $new_log (keeping old path)" >&2
+            echo "[WARN] Log rename failed (mv and cp both): $old_log → $new_log (keeping old path)" >&2
         end
     end
 end

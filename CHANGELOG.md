@@ -3,13 +3,16 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.228.0
+7.229.0
 -------
 
-  - changelog: GSK_RENDERER and governor history corrected
+  - configuration: drop the WirePlumber soft-mixer rule (POROSVOC mic) and its
+    post-hook; 17 managed files
+  - configuration: MangoHud comments out text_outline, adds no_small_font and
+    alpha=0.8
 
 
-7.217.0 - 7.227.0
+7.217.0 - 7.228.0
 -----------------
 
   - kernel: 7.217.0 drop ttm.pages_limit=20971520

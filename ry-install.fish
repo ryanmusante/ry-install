@@ -1,14 +1,14 @@
 #!/usr/bin/env fish
-# ry-install v7.228.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.229.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.228.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.229.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC h/help v/version install-file=+ # one spec source (root guard + argparse); =+ keeps every repeat
 
@@ -496,7 +496,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     "/etc/iw-regdomain" "/etc/bluetooth/main.conf" "/etc/nftables.conf" "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" "/etc/udev/rules.d/99-ry-perf.rules" "/etc/modprobe.d/60-ry-modules.conf"
-set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf" "$HOME/.config/wireplumber/wireplumber.conf.d/51-porosvoc-softmixer.conf"
+set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set --erase _ry_dst_count
@@ -595,14 +595,14 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         MASK:11 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:18 \
+        _RY_POST_HOOKS:17 \
         _RY_ARGPARSE_SPEC:3 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:4 \
         _RY_TMPDIR_GLOBS:6 \
         SYSTEM_DESTINATIONS:15 \
-        USER_DESTINATIONS:3 \
+        USER_DESTINATIONS:2 \
         MKINITCPIO_COMPRESSION_OPTIONS:1 # drift tripwires; sync arrays + docs on change
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -804,7 +804,7 @@ function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate con
     end
 end
 
-# ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud + WirePlumber) ──
+# ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# ry-install: session environment for systemd --user services and graphical sessions (managed file, do not edit by hand)"
     set -l _printed 0; set -g _RY_ENVD_BAD_ENTRIES
@@ -838,18 +838,10 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
         "vram" \
         "ram" \
         "font_size=20" \
-        "text_outline" \
+        "#text_outline" \
+        "no_small_font" \
+        "alpha=0.8" \
         "background_alpha=0.4"
-end
-function _content_HOME_.config_wireplumber_wireplumber.conf.d_51-porosvoc-softmixer.conf --description "Generate content for ~/.config/wireplumber/wireplumber.conf.d/51-porosvoc-softmixer.conf"
-    printf '%s\n' "# ry-install: WirePlumber soft mixer for the POROSVOC USB microphone (managed file, do not edit by hand)" \
-        "# its hardware Mic Capture Volume spans about 0.39 dB, so PipeWire applies the volume in software" \
-        "monitor.alsa.rules = [" \
-        "  {" \
-        "    matches = [ { device.name = \"~alsa_card.usb-POROSVOC.*\" } ]" \
-        "    actions = { update-props = { api.alsa.soft-mixer = true } }" \
-        "  }" \
-        "]"
 end
 
 # ── CONTENT DISPATCH (_ry_get_file_content; fn name derived via _content_fn_for) ──
@@ -1542,7 +1534,7 @@ function _grep_ini_header --argument-names dst --description "Validate ≥1 [Sec
     return 0
 end
 
-# ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (MODPROBE → WIREPLUMBER) ──
+# ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (MODPROBE → MANGOHUD) ──
 function _grep_modprobe_entry --argument-names dst --description "Validate modprobe.d content: comment-only ok, else every non-comment line is a directive"
     test (count $argv) -lt 2; and _log "BUG: _grep_modprobe_entry called without content (dst=$dst)"; and return 2
     for _line in $argv[2..-1]
@@ -1606,18 +1598,6 @@ function _grep_mangohud_entry --argument-names dst --description "Validate ≥1 
     end
     return 0
 end
-function _grep_wireplumber_entry --argument-names dst --description "Validate a monitor.alsa.rules block with an update-props action (WirePlumber conf.d)"
-    test (count $argv) -lt 2; and _log "BUG: _grep_wireplumber_entry called without content (dst=$dst)"; and return 2
-    string match -qr '^monitor\.alsa\.rules = \[$' -- $argv[2..-1]; or begin
-        _fail "  $dst: no monitor.alsa.rules block found"
-        return 1
-    end
-    string match -qr 'update-props = \{' -- $argv[2..-1]; or begin
-        _fail "  $dst: no update-props action found"
-        return 1
-    end
-    return 0
-end
 
 # ── CONFIG-FORMAT VALIDATORS: DISPATCH + ORCHESTRATOR ──
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family"
@@ -1643,8 +1623,6 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_cpupower_entry "$dst" $_content
         case '*/MangoHud/MangoHud.conf'
             _grep_mangohud_entry "$dst" $_content
-        case '*/wireplumber.conf.d/*'
-            _grep_wireplumber_entry "$dst" $_content
         case '*/mkinitcpio.conf'
             string match -qr '^MODULES=\(' -- $_content; or begin; _fail "  $dst: no MODULES=() line"; return 1; end
             string match -qr '^HOOKS=\(' -- $_content; or begin; _fail "  $dst: no HOOKS=() line"; return 1; end
@@ -3093,7 +3071,7 @@ set -g _RY_POST_HOOKS \
     "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/NetworkManager-dispatcher.service.d/*|nmdispatch" "*/NetworkManager/conf.d/*|nm" \
     "/etc/iw-regdomain|regdom" "/etc/bluetooth/main.conf|bluetooth" "/etc/nftables.conf|nft" "/etc/default/cpupower-service.conf|cpupower" \
     "*/sysctl.d/*|sysctl" "/etc/udev/rules.d/*|udev" "*/modprobe.d/*|modprobe" "*/environment.d/*|envd" \
-    "*/MangoHud/MangoHud.conf|mangohud" "*/wireplumber.conf.d/*|wireplumber"
+    "*/MangoHud/MangoHud.conf|mangohud"
 function _ir_validate_post_hooks --description "Refuse to deploy when a _RY_POST_HOOKS tag lacks a handler or breaks destination mirror" # mirrors _ir_validate_keys
     set -l _seen_tags
     set -l _mirror_dsts $SYSTEM_DESTINATIONS $USER_DESTINATIONS
@@ -3284,20 +3262,6 @@ function _post_envd --argument-names target --description "Post-hook: env-genera
         return 0
     end
     _ok "environment.d re-applied — user manager reloaded, plasma-powerdevil.service restarted"
-    return 0
-end
-function _post_wireplumber --argument-names target --description "Post-hook: restart WirePlumber so the soft-mixer rule applies"
-    if not _has_user_bus_active
-        _info "  No active user-bus — the WirePlumber rule applies at next graphical login"
-        _log "POST_WIREPLUMBER_SKIP: no active user-bus target=$target"
-        return 0
-    end
-    if not _run systemctl --user restart wireplumber.service
-        _warn "wireplumber.service restart failed — the rule applies at next login (non-fatal; file deployed)"
-        _log "POST_WIREPLUMBER_RESTART_FAIL: target=$target"
-        return 0
-    end
-    _ok "WirePlumber restarted — soft-mixer rule applied"
     return 0
 end
 

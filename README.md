@@ -1,8 +1,8 @@
 # ry-install
 
-**Version 7.228.0** · [Changelog](CHANGELOG.md)
+**Version 7.229.0** · [Changelog](CHANGELOG.md)
 
-Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
+Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
 ## Quick Start
 
@@ -96,13 +96,12 @@ In deploy order; system files land `0644`, user files `0600`.
 
 - `~/.config/environment.d/10-environment.conf` — session env: DXVK, GTK, MangoHud, Mesa, PowerDevil, Proton, SDL, VKD3D, Wine
 - `~/.config/MangoHud/MangoHud.conf` — readout-only HUD: horizontal, top-left, toggle `Shift_R+F12`
-- `~/.config/wireplumber/wireplumber.conf.d/51-porosvoc-softmixer.conf` — POROSVOC USB microphone soft mixer (hardware gain spans about 0.39 dB)
 
 ## Install Flow
 
 1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, network, and time-sync gates; config validation.
 2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit), refresh `updatedb`/`pkgfile`.
-3. **Configuration** — deploy 18 embedded configs atomically.
+3. **Configuration** — deploy 17 embedded configs atomically.
 4. **Services** — fstab → resolved restart → package removal → mask → enable → regulatory domain.
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity.
 6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart.
@@ -262,7 +261,7 @@ Multi-thread gains flatten past ~85 W. Set `SPL = fPPT = sPPT = 85 W` (stock boo
 There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference.
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
-2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 3 user files; step 3 reverts the 4 boot files.
+2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
 3. **Revert boot files and fstab** — restore the matching `~/ry-install/backups/*.ry.bak` copy over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present — a file no run ever rewrote has no copy — then delete the backups; older deployments keep the copies beside each file.
 4. **Reverse packages** — optional: `sudo pacman -S --needed` the Remove list, `sudo pacman -Rns` the Install list except `pipewire-jack`, which `ffmpeg` needs as its JACK provider; both listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.

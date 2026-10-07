@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.230.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.231.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if contains -- (status filename) - 'Standard input'; or string match -qr -- '^(/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; echo "[ERR] ry-install: must be executed as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.230.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.231.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
@@ -1738,7 +1738,10 @@ function _awf_make_backup --argument-names dst use_sudo --description "_atomic_w
     set -l _bak (_ry_bak_path "$dst")
     set -l _sp; test "$use_sudo" = true; and set _sp sudo -n
     if test "$use_sudo" = true
-        sudo -n test -f "$dst" 2>/dev/null; or return 0
+        if not sudo -n test -f "$dst" 2>/dev/null
+            sudo -n true 2>/dev/null; and return 0 # absent: nothing to back up
+            _warn "  $dst: backup skipped — existence probe inconclusive (sudo cache lapsed)"; _log "BACKUP_SKIP_SUDO_LAPSE: $dst"; return 0
+        end
     else
         test -f "$dst"; or return 0
     end

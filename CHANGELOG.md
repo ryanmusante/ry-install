@@ -3,22 +3,14 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.230.0
+7.231.0
 -------
 
-  - changelog: lockstep bump with ry-verify 7.230.0
+  - backup: a sudo lapse at the existence probe is warned and logged instead
+    of silently skipping the copy
 
 
-7.229.0
--------
-
-  - configuration: drop the WirePlumber soft-mixer rule (POROSVOC mic) and its
-    post-hook
-  - configuration: MangoHud comments out text_outline, adds no_small_font and
-    alpha=0.8
-
-
-7.217.0 - 7.228.0
+7.217.0 - 7.230.0
 -----------------
 
   - kernel: 7.217.0 drop ttm.pages_limit=20971520
@@ -27,6 +19,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - env: 7.217.0 RADV_PERFTEST=nggc -> nggc,nircache; 7.224.0 add
     SDL_GAMECONTROLLER_IGNORE_DEVICES (Keychron K2 HE, Link receiver)
   - configuration: 7.224.0 manage a WirePlumber soft-mixer rule (POROSVOC mic)
+  - configuration: 7.229.0 drop the WirePlumber soft-mixer rule (POROSVOC mic)
+    and its post-hook
+  - configuration: 7.229.0 MangoHud comments out text_outline, adds
+    no_small_font and alpha=0.8
   - packages: 7.224.0 add pipewire-jack; a host on jack2 swaps by hand first
   - services: 7.218.0 enable-units counts only units it enabled or started;
     7.219.0 a oneshot nftables.service no longer reads as newly enabled

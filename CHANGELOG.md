@@ -3,14 +3,66 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.231.0
+7.233.0
 -------
 
-  - backup: a sudo lapse at the existence probe is warned and logged instead
-    of silently skipping the copy
+  - install-file: a re-run on a boot file runs the boot cascade even when
+    its bytes are unchanged; a retry after a failed rebuild no longer exits
+    0 unrebuilt
+  - install-file: mkinitcpio.conf and sdboot-manage.conf check HOOKS and
+    MODULES before the write and exit 3, as the full install does
+  - install-file: with nft(8) absent the nftables post-hook says so instead
+    of reporting a failed nft -c
+  - configuration: an nft -c failure after this run's upgrade removed the
+    running kernel's modules is named as such, with reboot then re-run as
+    the next step; the ruleset is still not deployed
+  - configuration: a managed file with bytes after a NUL is rewritten
+    instead of reported unchanged
+  - packages: a failed -Syu whose mkinitcpio.conf revert succeeded keeps the
+    restored conf through Configuration (WARN 'mkinitcpio.conf held')
+  - packages: PKGS_ADD is re-marked explicit whatever the -Syu result and
+    again before -Rns, so a PKGS_ADD package is never removed as an orphan
+  - services: a unit that enables but fails to start reads WARN on the
+    enable row, naming the unit, and the warning prints during the run
+  - services: the live nftables policy-drop probe before the ufw flush
+    matches only the input hook line
+  - finalize: a run that stops before Finalize records the NetworkManager
+    restart and PowerDevil re-apply it owes in ~/ry-install/pending-apply as
+    each file lands; the next run of the same boot applies them
+  - preflight: the /boot free-space gate runs on stacked /boot mounts; ESP
+    autodetect and the sdboot-manage vfat gate read the topmost non-autofs
+    mount
+  - preflight: a setgid $HOME or a symlinked ~/ry-install no longer fails
+    the log-dir mode check
+  - lock: only the lock holder sweeps destination dirs; a peer refused with
+    exit 5 no longer deletes the holder's in-flight tmpfiles
+  - lock: stale-lock reclaim takes an exclusive claim and moves the stale
+    dir aside in one rename; the pidfile is installed with link(2), and
+    release checks it still carries this run's record
+  - lock: the pidfile records boot_id and process start time; a pidfile from
+    an earlier boot or a reused PID is reclaimed instead of exiting 5, and
+    an unreadable identity fails closed
+  - lock: a signal between the lock mkdir and the pidfile write no longer
+    leaves an empty .lock behind
+  - cleanup: tracked tmpfiles in the root-only /run/ry-install are removed
+    via sudo
+  - cli: --h, --he, --hel and --v through --versio are honored before the
+    root guard like --help and --version
+  - sudo: the credential check keeps sudo's error text in memory instead of
+    a /tmp file
+  - readme: the Kernel Parameter Notes name the KERNEL_PARAMS:<n> count
+    check in both scripts
 
 
-7.217.0 - 7.230.0
+7.232.0
+-------
+
+  - configuration: MangoHud sets text_outline=0; a commented-out line left
+    the default outline on
+  - readme: PROTON_FSR4_UPGRADE pins 4.0.0 or 4.1.1 only, not 4.0.1
+
+
+7.217.0 - 7.231.0
 -----------------
 
   - kernel: 7.217.0 drop ttm.pages_limit=20971520
@@ -27,6 +79,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - services: 7.218.0 enable-units counts only units it enabled or started;
     7.219.0 a oneshot nftables.service no longer reads as newly enabled
   - install-file: 7.224.0 the WirePlumber rule restarts wireplumber.service
+  - backup: 7.231.0 a sudo lapse at the existence probe is warned and logged
+    instead of silently skipping the copy
   - preflight: 7.219.0 MODULES are checked against each installed kernel;
     7.224.0 a locked pacman database stops the run before anything is deployed
   - preflight: 7.225.0 the modprobe.d format check names directives in

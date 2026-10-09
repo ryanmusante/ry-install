@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.231.0** · [Changelog](CHANGELOG.md)
+**Version 7.233.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -33,7 +33,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 ## Usage
 
 > [!CAUTION]
-> `--install-file` of a boot config runs the boot cascade; a cascade failure exits `4` — **do not reboot** until it succeeds.
+> `--install-file` of a boot config runs the boot cascade, even when the file is unchanged; a cascade failure exits `4` — **do not reboot** until it succeeds.
 
 The bare invocation is the unattended install, all 6 phases; `--install-file <path>` re-deploys one managed file. `--verify`, `--check`, and `--report` belong to [ry-verify](https://github.com/ryanmusante/ry-verify) and, like positional arguments, exit `2` here. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
 
@@ -57,7 +57,7 @@ Per-phase verdicts:
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
 | `3` | missing dependency, uncached sudo, or a failed gate (hardware, disk, network, pacman lock) |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
-| `5` | lock — another instance holds the lock; ambiguous pidfiles fail closed |
+| `5` | lock — another live instance holds the lock; a pidfile from a dead process, an earlier boot or a reused PID is reclaimed, an ambiguous one fails closed |
 
 ## Environment Overrides
 
@@ -100,11 +100,11 @@ In deploy order; system files land `0644`, user files `0600`.
 ## Install Flow
 
 1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, network, and time-sync gates; config validation.
-2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit), refresh `updatedb`/`pkgfile`.
+2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A failed `-Syu` restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 17 embedded configs atomically.
-4. **Services** — fstab → resolved restart → package removal → mask → enable → regulatory domain.
+4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first, so `-Rns` cannot orphan one) → mask → enable (a unit that enables but fails to start is a `WARN`) → regulatory domain.
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity.
-6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart.
+6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, and the next run applies them unless a reboot already has.
 
 ## Safety and Reliability
 
@@ -122,6 +122,8 @@ In deploy order; system files land `0644`, user files `0600`.
 > `ry-install.fish` and `ry-verify.fish` carry their shared tunables verbatim and ship in lockstep; clone both repos at the same version. A version mismatch leaves `ry-verify.fish` checking values `ry-install.fish` no longer deploys.
 
 All tunables are `set -g` globals; after editing both scripts, re-run or `--install-file` the affected file.
+
+The length of each array among the shared tunables is a drift tripwire in `_ir_validate_counts` of both scripts — `KERNEL_PARAMS:15` among them; the accepted-value sets `_RY_DPM_LEVELS` and `_RY_EPP_LEVELS` carry no pin, and an array only one script carries, such as `_RY_PKG_MANAGED_SERVICES` here or ry-verify's `EXPECTED_VULKAN_PKGS`, is pinned in that script alone. Adding or dropping an element also means updating that `NAME:<n>` in each script that pins it and any count this README quotes, such as the 15 kernel tokens in [Managed Files](#managed-files); otherwise that script refuses to run with `NAME count drift` and exits `3`.
 
 ### Bootloader Keys
 
@@ -154,7 +156,7 @@ All tunables are `set -g` globals; after editing both scripts, re-run or `--inst
 
 ### Initramfs
 
-`HOOKS` order is an invariant, enforced when the profile is deployed: `base` first, `fsck` last, no duplicates, and `systemd` before `autodetect`, `keyboard`, and `sd-vconsole`; `autodetect` before `microcode` and `modconf`; `keyboard` before `sd-vconsole`; `modconf` before `kms`; `block` before `filesystems`.
+`HOOKS` order is an invariant, checked along with hook and module presence before `mkinitcpio.conf` is deployed, `--install-file` of `mkinitcpio.conf` or `sdboot-manage.conf` (both rebuild the initramfs) included: `base` first, `fsck` last, no duplicates, and `systemd` before `autodetect`, `keyboard`, and `sd-vconsole`; `autodetect` before `microcode` and `modconf`; `keyboard` before `sd-vconsole`; `modconf` before `kms`; `block` before `filesystems`.
 
 - `MKINITCPIO_MODULES` = `amdgpu` → `MODULES=()`
 - `MKINITCPIO_HOOKS` = `base`, `systemd`, `autodetect`, `microcode`, `modconf`, `kms`, `keyboard`, `sd-vconsole`, `block`, `filesystems`, `fsck` → `HOOKS=()`
@@ -191,7 +193,7 @@ New values reach programs started after the next graphical login; a running Stea
 - `MANGOHUD_DLSYM=1` — OpenGL dlsym hook, already MangoHud's default; 0.8.4 never reads it
 - `MESA_SHADER_CACHE_MAX_SIZE=16G` — Mesa shader cache cap
 - `POWERDEVIL_NO_DDCUTIL=1` — PowerDevil DDC/CI off; silences `org_kde_powerdevil` i2c errors
-- `PROTON_LOCAL_SHADER_CACHE=1` — per-prefix shader cache
+- `PROTON_LOCAL_SHADER_CACHE=1` — per-game shader cache
 - `RADV_PERFTEST=nggc,nircache` — RADV NGG culling (opt-in on GFX11+) and the per-stage NIR cache; a per-title `RADV_PERFTEST=` replaces both
 - `SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030` — SDL games skip the Keychron K2 HE and Link receiver joystick interfaces; needs Steam Input off per title, and `PROTON_NO_STEAMINPUT=0` under proton-cachyos `sdlinput`/`wayland`
 - `VKD3D_DEBUG=none` — vkd3d logging off
@@ -229,17 +231,19 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 ### Gaming Stack
 
 - `/dev/ntsync` — Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out.
-- `PROTON_FSR4_UPGRADE=1` — the Proton-CachyOS lever that upgrades FSR 3.1 titles to FSR 4; set it per title in the Steam launch options, never session-wide; a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.1`. `PROTON_FSR4_INDICATOR=1` draws only the watermark and is not shipped.
+- `PROTON_FSR4_UPGRADE=1` — the Proton-CachyOS lever that upgrades FSR 3.1 titles to FSR 4; set it per title in the Steam launch options, never session-wide; a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.0` (`4.0.0` or `4.1.1`; more only through OptiScaler). `PROTON_FSR4_INDICATOR=1` draws only the watermark and is not shipped.
 - `cpu_stats` ships enabled; `cpu_temp` stays commented out — to turn it on, add it on its own line in the MangoHud generator of both scripts, then `--install-file` the file. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
 - `game-performance` — the CachyOS wrapper needs `power-profiles-daemon`, whose service this profile masks, so it runs the game unchanged; the profile pins the `powersave` governor with EPP `performance` instead.
 
 ### Kernel Parameter Notes
 
+Adding or dropping a token means editing `KERNEL_PARAMS` in both scripts and its `KERNEL_PARAMS:15` tripwire in each `_ir_validate_counts`, plus the token count in [Managed Files](#managed-files) — see [Embedded Values](#embedded-values); otherwise both scripts exit `3` with `KERNEL_PARAMS count drift`.
+
 - `iommu=pt` — IOMMU on for the XDNA NPU, VFIO, and SR-IOV; to shed the DMA-mapping overhead on a box using none of them, add `amd_iommu=off`, set `BLACKLIST_AMDXDNA true`, and re-run.
 - `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — addresses Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
-- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM.
+- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; `sdboot-manage` writes one only when a fallback initramfs image exists, which the stock `mkinitcpio` preset template no longer builds.
 - `timeout 0` with `default @saved` — with no saved entry (fresh ESP), sd-boot picks by its own sort order and can boot the fallback unseen; hold a key at power-on and select the tuned entry once.
 
 ## BIOS

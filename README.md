@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.233.0** · [Changelog](CHANGELOG.md)
+**Version 7.234.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -53,7 +53,7 @@ Per-phase verdicts:
 | Code | Meaning |
 |---|---|
 | `0` | OK — success and `WARN`-only runs |
-| `1` | a failed install step |
+| `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout closed or full) |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
 | `3` | missing dependency, uncached sudo, or a failed gate (hardware, disk, network, pacman lock) |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
@@ -102,19 +102,19 @@ In deploy order; system files land `0644`, user files `0600`.
 1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, network, and time-sync gates; config validation.
 2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A failed `-Syu` restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 17 embedded configs atomically.
-4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first, so `-Rns` cannot orphan one) → mask → enable (a unit that enables but fails to start is a `WARN`) → regulatory domain.
+4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first, so `-Rns` cannot orphan one) → mask (a unit that masks but fails to stop is a `WARN`) → enable (a unit that enables but fails to start is a `WARN`) → regulatory domain.
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity.
 6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, and the next run applies them unless a reboot already has.
 
 ## Safety and Reliability
 
-**Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; a post-write mismatch restores the backup where one exists.
+**Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; a post-write mismatch restores the backup this run took, where it took one.
 
 **Symlinked destinations** — a managed path that is a symlink is replaced with a regular file at the managed mode.
 
 **Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab.
 
-**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `*atime`, and any existing `commit=`; every other row is byte-preserved. A power loss can discard up to 10 s of metadata.
+**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `*atime`, and any existing `commit=`; every other row is byte-preserved. An ext4 row whose column 4 is all digits (options column missing) is left untouched and turns the `Services: fstab opts` summary row `WARN`. A power loss can discard up to 10 s of metadata.
 
 ## Embedded Values
 

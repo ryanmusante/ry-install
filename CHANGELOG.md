@@ -3,6 +3,44 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.234.0
+-------
+
+  - guard: a sourced or piped run is refused under any locale; fish's
+    translated 'Standard input' and 'from sourcing file' are read under
+    LC_ALL=C
+  - signals: a SIGINT, SIGTERM or SIGHUP during startup exits 128+N instead
+    of 0; the handler no longer registers QUIT, which fish never delivers
+  - cli: -h and -v exit 1 when stdout is closed or full; --install-file
+    rejects --report as its value
+  - logging: a signal or tmpfile helper before the header no longer leaves a
+    footer-only or header-second JSONL; child SIGKILL, a failed
+    pending-apply clear, an absent modinfo and a skipped mkinitcpio.conf
+    snapshot are logged
+  - preflight: the hardware override hint keeps --install-file; iommu=off
+    counts as no IOMMU for amdxdna; a failed timedatectl query and an absent
+    ping are named as such; low-disk and RY_RUN_TIMEOUT warnings print in
+    install mode; leading zeros in RY_RUN_TIMEOUT carry no magnitude
+  - mkinitcpio: a HOOKS entry needs a build script in an initcpio install
+    dir; a hooks/ script alone no longer passes
+  - backup: the post-write restore uses only the .ry.bak this run took; the
+    copy never writes through a symlink at the backup path
+  - packages: a failed pactree probe is reported as held, not as nothing
+    installed; a PKGS_DEL member removed by another's -s cascade is not
+    reported failed
+  - services: a unit that masks but fails to stop is a WARN, not a FAIL; the
+    enable-start WARN covers persistent enable states only; the fstab row is
+    WARN when a digits-only ext4 row is left; a preserved mkinitcpio.conf
+    snapshot path prints in install mode
+  - boot: the DO-NOT-REBOOT inspect step uses sudo and the resolved $BOOT
+  - summary: the verdict is still logged when stderr is gone; --install-file
+    prints Installed only when bytes changed
+  - progress: the bar reads the terminal size from the stderr tty
+  - consistency: function descriptions, banners and comments match their
+    code; lines over 300 characters are split (KERNEL_PARAMS stays on one
+    line for hand edits)
+
+
 7.233.0
 -------
 

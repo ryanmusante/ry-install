@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.234.0** · [Changelog](CHANGELOG.md)
+**Version 7.240.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -57,7 +57,7 @@ Per-phase verdicts:
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
 | `3` | missing dependency, uncached sudo, or a failed gate (hardware, disk, network, pacman lock) |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
-| `5` | lock — another live instance holds the lock; a pidfile from a dead process, an earlier boot or a reused PID is reclaimed, an ambiguous one fails closed |
+| `5` | lock — another live instance holds the lock; a stale pidfile is reclaimed, an ambiguous one fails closed |
 
 ## Environment Overrides
 
@@ -100,21 +100,21 @@ In deploy order; system files land `0644`, user files `0600`.
 ## Install Flow
 
 1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, network, and time-sync gates; config validation.
-2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A failed `-Syu` restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
+2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A `PKGS_ADD` member that an installed package conflicts with installs after `-Syu`, in a transaction that removes the conflicting package. A failed `-Syu` restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 17 embedded configs atomically.
-4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first, so `-Rns` cannot orphan one) → mask (a unit that masks but fails to stop is a `WARN`) → enable (a unit that enables but fails to start is a `WARN`) → regulatory domain.
+4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (a unit that masks but fails to stop is a `WARN`) → enable (a unit that enables but fails to start is a `WARN`) → regulatory domain.
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity.
 6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, and the next run applies them unless a reboot already has.
 
 ## Safety and Reliability
 
-**Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; a post-write mismatch restores the backup this run took, where it took one.
+**Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; a post-write mismatch restores the backup this run took.
 
 **Symlinked destinations** — a managed path that is a symlink is replaced with a regular file at the managed mode.
 
 **Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab.
 
-**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `*atime`, and any existing `commit=`; every other row is byte-preserved. An ext4 row whose column 4 is all digits (options column missing) is left untouched and turns the `Services: fstab opts` summary row `WARN`. A power loss can discard up to 10 s of metadata.
+**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `*atime`, `nolazytime`, and any existing `commit=`; every other row is byte-preserved. An ext4 row whose column 4 is all digits (options column missing) is left untouched and turns the `Services: fstab opts` summary row `WARN`. A power loss can discard up to 10 s of metadata.
 
 ## Embedded Values
 
@@ -216,7 +216,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 
 ## Packages
 
-**Install** (`PKGS_ADD`, 18) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `cachyos-benchmarker`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `pipewire-jack`, `nftables`, `pacman-contrib`. A host still on `jack2` swaps by hand first: `sudo pacman -S pipewire-jack`, answering `y`.
+**Install** (`PKGS_ADD`, 18) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `cachyos-benchmarker`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `pipewire-jack`, `nftables`, `pacman-contrib`. On a `jack2` host, `pipewire-jack` replaces `jack2` after `-Syu`; an installed `-git` or `-bin` build that provides a member is replaced the same way.
 
 **Remove** (`PKGS_DEL`, 9) — `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect`.
 
@@ -265,9 +265,9 @@ Multi-thread gains flatten past ~85 W. Set `SPL = fPPT = sPPT = 85 W` (stock boo
 There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference.
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
-2. **Remove configs** — `sudo systemctl disable --now nftables` first; its unit loads `/etc/nftables.conf` and fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
-3. **Revert boot files and fstab** — restore the matching `~/ry-install/backups/*.ry.bak` copy over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present — a file no run ever rewrote has no copy — then delete the backups; older deployments keep the copies beside each file.
-4. **Reverse packages** — optional: `sudo pacman -S --needed` the Remove list, `sudo pacman -Rns` the Install list except `pipewire-jack`, which `ffmpeg` needs as its JACK provider; both listed in [Packages](#packages).
+2. **Remove configs** — `sudo systemctl disable --now nftables` first, or its unit fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
+3. **Revert boot files and fstab** — restore the matching `~/ry-install/backups/*.ry.bak` copy over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the backups; older deployments keep the copies beside each file.
+4. **Reverse packages** — optional: `sudo pacman -Syu --needed` the Remove list, `sudo pacman -Rns` the Install list except `pipewire-jack`, which `ffmpeg` needs as its JACK provider; both listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.
 
 ## Contributing

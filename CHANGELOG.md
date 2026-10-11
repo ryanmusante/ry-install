@@ -3,6 +3,16 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.241.0
+-------
+
+  - services: a per-unit mask retry row keeps the ufw.service withheld note
+  - install-file: an nft -c timeout in the nftables post-hook reads as a
+    timeout, not as a failed ruleset
+  - consistency: help aligns its ENVIRONMENT column; banners, comments and
+    descriptions match their code; the KERNEL_PARAMS line is split
+
+
 7.240.0
 -------
 
@@ -19,8 +29,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     ruleset
   - logging: a failed command's echo keeps pacman's 'exists in filesystem'
     detail lines
-  - readme: Packages names the -git/-bin swap; the fstab rewrite lists
-    nolazytime
 
 
 7.235.0

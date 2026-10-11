@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.240.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.241.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 # guard above: fish translates 'Standard input' and 'from sourcing file' (de: Standardeingabe, aus der Quelldatei); LC_ALL=C keeps the English texts
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.240.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.241.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
@@ -38,9 +38,9 @@ function _ry_show_help --description "Display usage information and available op
         "EXIT CODES: 0 ok · 1 install-error · 2 usage · 3 preflight · 4 boot-critical · 5 lock" \
         "  (sentinels 11-14/250/251/255 are internal; signals exit 128+N; -h/-v exit 1 on a stdout write error)" \
         "ENVIRONMENT (see README.md for detail):" \
-        "  RY_RUN_TIMEOUT=<sec>  Per-command wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT""s; 0 disables; pkg/boot ops floor $_RY_LONGOP_HARD_CAP""s." \
+        "  RY_RUN_TIMEOUT=<sec>   Per-command wall-clock cap. Default $_RY_RUN_TIMEOUT_DEFAULT""s; 0 disables; pkg/boot ops floor $_RY_LONGOP_HARD_CAP""s." \
         "  RY_INSTALL_SKIP_HARDWARE_CHECK=1  Bypass EXPECTED_CPU_MATCH hard-fail." \
-        "  NO_COLOR              Disable colored output when set non-empty (no-color.org)." \
+        "  NO_COLOR               Disable colored output when set non-empty (no-color.org)." \
         "Log: ~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl" \
         "Backups: ~/ry-install/backups/<slash-encoded path>.ry.bak" \
         ""
@@ -573,7 +573,8 @@ set --erase _ry_dst_count
 # ── EMBEDDED DATA: BOOTLOADER KEYS + KERNEL_PARAMS + MKINITCPIO ──
 set -g LOADER_DEFAULT "@saved"; set -g LOADER_TIMEOUT 0; set -g LOADER_CONSOLE_MODE keep; set -g LOADER_EDITOR no
 set -g SDBOOT_DEFAULT_ENTRY manual; set -g SDBOOT_OVERWRITE yes; set -g SDBOOT_REMOVE_EXISTING yes; set -g SDBOOT_REMOVE_OBSOLETE yes
-set -g KERNEL_PARAMS amd_pstate=active btusb.enable_autosuspend=n fsck.mode=force fsck.repair=yes iommu=pt ipv6.disable=1 mt7925e.disable_aspm=1 nowatchdog nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
+set -g KERNEL_PARAMS amd_pstate=active btusb.enable_autosuspend=n fsck.mode=force fsck.repair=yes iommu=pt ipv6.disable=1 mt7925e.disable_aspm=1 nowatchdog \
+    nvme_core.default_ps_max_latency_us=0 pcie_aspm.policy=performance processor.max_cstate=1 quiet split_lock_detect=off usbcore.autosuspend=-1 zswap.enabled=0
 set -g MKINITCPIO_MODULES amdgpu
 set -g MKINITCPIO_HOOKS base systemd autodetect microcode modconf kms keyboard sd-vconsole block filesystems fsck
 set -g MKINITCPIO_COMPRESSION zstd; set -g MKINITCPIO_COMPRESSION_OPTIONS -3 # mkinitcpio prepends -T0 for zstd
@@ -1391,7 +1392,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     return $ret
 end
 
-# ── PREFLIGHT GATES: DEPS + NETWORK + DISK + SYSTEMD ──
+# ── PREFLIGHT GATES: DEPS + NETWORK + DISK + SYSTEMD + TIME SYNC ──
 function _ry_check_deps --description "Verify required commands, GNU df --output, and the systemd 250 floor"
     _log "DEPS_CHECK_START"
     set -l missing
@@ -1483,9 +1484,9 @@ function _ry_check_disk_space --description "Verify sufficient free disk space f
 end
 
 # ── MKINITCPIO HOOK + MODULE VALIDATORS (ordering invariants) ──
-function _mkinitcpio_hook_exists --argument-names hook --description "True iff a HOOKS entry has a build script in a mkinitcpio install dir"
+function _mkinitcpio_hook_exists --argument-names hook --description "True iff a HOOKS entry has a build script in an initcpio install dir"
     test -z "$hook"; and return 1
-    for _d in /etc/initcpio/install /usr/lib/initcpio/install; test -f "$_d/$hook"; and return 0; end # hooks/ holds runtime scripts only
+    for _d in /etc/initcpio/install /usr/lib/initcpio/install; test -f "$_d/$hook"; and return 0; end # initcpio/hooks holds runtime scripts only
     return 1
 end
 function _vmh_existence_only --description "_ry_validate_mkinitcpio_hooks sub: Existence-only path: emit _ok/_fail per hook"
@@ -2120,7 +2121,7 @@ function _ip_snapshot_mkinitcpio --description "_install_packages sub: Snapshot 
     set -g _RY_MKI_BACKUP_FILE "$_snap"; set -g _RY_MKI_HAD_ORIG true # revert chmods --reference=destination
 end
 
-# ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + VERIFY) ──
+# ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + CONFLICT SWAP + VERIFY) ──
 function _ip_conflict_held --description "_ip_pacman_invoke sub: Members missing by name that conflict either way with installed packages"
     set -l _have (command pacman -Qq 2>/dev/null) # names: pacman -Q NAME falls back to a provider
     set -l _theirs (command env LC_ALL=C COLUMNS=0 pacman -Qi 2>/dev/null | string match -rg -- '^Conflicts With\s*:\s*(.*\S)' | string split -n ' ' | string replace -r -- '[<>=].*$' '' | string match -v -- None) # COLUMNS=0: no wrapped list lines
@@ -2435,7 +2436,7 @@ function _install_fstab_opts --description "Add noatime,lazytime,commit=10 to ex
     end
     if test -z "$ext4_lines"; _info "  No ext4 entries in /etc/fstab"; set -g _RY_FSTAB_EVIDENCE "no ext4 entries"; set -g _RY_FSTAB_RESULT --; return 0; end
     _fstab_needs_change $ext4_lines
-    set -l _mal_ev ""; set -l _mal_n (count $_RY_FSTAB_MALFORMED); set --erase _RY_FSTAB_MALFORMED # left untouched; ry-verify FAILs them: the row must not read PASS
+    set -l _mal_ev ""; set -l _mal_n (count $_RY_FSTAB_MALFORMED); set --erase _RY_FSTAB_MALFORMED # left untouched; ry-verify WARNs them: the row must not read PASS
     test "$_mal_n" -gt 0; and set -g _RY_FSTAB_RESULT WARN; and set _mal_ev ", $_mal_n malformed ext4 row(s) left untouched"
     if test "$_RY_FSTAB_NEEDS_CHANGE" = false
         set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES
@@ -2621,8 +2622,7 @@ function _csm_retry_individual --description "_configure_services_mask sub: Per-
     return $_ret
 end
 function _nft_input_drop_live --description "True when live inet/filter/input chain has policy drop"
-    command -q nft; or return 1
-    sudo -n true 2>/dev/null; or return 1
+    command -q nft; or return 1; sudo -n true 2>/dev/null; or return 1
     set -l _in_chain (_as true env LC_ALL=C nft list chain inet filter input 2>/dev/null)
     string match -qr -- '^\s*type filter hook input\b.*\spolicy drop;' $_in_chain # hook line only: a rule comment naming "policy drop" must not pass
 end
@@ -2694,11 +2694,11 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     _csm_retry_individual $_to_mask
     set -l _rc $status
     if test "$_rc" -eq 0; and test (count $_RY_MASK_STOP_FAILS) -gt 0
-        _phase_record "Services: mask units" WARN "masked, stop failed: $_RY_MASK_STOP_FAILS"
+        _phase_record "Services: mask units" WARN "masked, stop failed: $_RY_MASK_STOP_FAILS$_held"
     else if test "$_rc" -eq 0
         _phase_record "Services: mask units" $_res "$_mask_count masked (retry)$_held"
     else
-        _phase_record "Services: mask units" FAIL "mask failed: $_RY_MASK_FAILS"
+        _phase_record "Services: mask units" FAIL "mask failed: $_RY_MASK_FAILS$_held"
     end
     return $_rc
 end
@@ -3553,7 +3553,13 @@ function _post_nft --argument-names target --description "Post-hook: validate, t
         _log "POST_NFT_SKIP_NO_NFT: target=$target"
         return 0
     end
-    if not _run sudo -n nft -c -f /etc/nftables.conf
+    _run sudo -n nft -c -f /etc/nftables.conf; set -l _nc_rc $status
+    if contains -- "$_nc_rc" 124 137 # timeout(1) TERM/KILL: no verdict on the ruleset
+        _warn "nft -c timed out (rc=$_nc_rc) — ruleset not reloaded; retry: sudo nft -c -f /etc/nftables.conf && sudo systemctl restart nftables.service"
+        _log "POST_NFT_VALIDATE_TIMEOUT: target=$target rc=$_nc_rc"
+        return 0
+    end
+    if test "$_nc_rc" -ne 0
         _warn "nftables ruleset failed validation (nft -c) — not reloaded; fix /etc/nftables.conf"
         _log "POST_NFT_VALIDATE_FAIL: target=$target"
         return 0
@@ -3632,7 +3638,7 @@ function _post_modprobe --argument-names target --description "Post-hook: notify
 end
 
 # ── PRE-DISPATCH EXIT (ARGPARSE-ERROR + EARLY-BAIL LOG CLEANUP) ──
-function _pre_dispatch_log_cleanup --description "Remove pre-dispatch log file/dir (no exit; for caller-managed return paths)"
+function _pre_dispatch_log_cleanup --description "_pre_dispatch_exit sub: Remove an unwritten log file and empty log dirs"
     set -l _preserve false
     set -q _RY_HEADER_WRITTEN; and test "$_RY_HEADER_WRITTEN" = true; and set _preserve true
     set -q _RY_LOG_WRITTEN; and test "$_RY_LOG_WRITTEN" = true; and set _preserve true

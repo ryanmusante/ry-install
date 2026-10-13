@@ -3,141 +3,15 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.241.0
--------
-
-  - services: a per-unit mask retry row keeps the ufw.service withheld note
-  - install-file: an nft -c timeout in the nftables post-hook reads as a
-    timeout, not as a failed ruleset
-  - consistency: help aligns its ENVIRONMENT column; banners, comments and
-    descriptions match their code; the KERNEL_PARAMS line is split
-
-
-7.240.0
--------
-
-  - packages: a member that an installed -git or -bin build provides and
-    conflicts with is swapped in after -Syu instead of aborting both passes
-  - packages: the post-install check counts members by name, as ry-verify
-    does, so a failed swap of a provided member reads FAIL
-  - packages: pacman -Si and -Qi output is read with COLUMNS=0; an exported
-    COLUMNS no longer wraps a conflict list past the parser
-  - services: a mask or enable FAIL row names the failing units
-  - services: the fstab rewrite drops nolazytime like *atime; a row carrying
-    it no longer reads as conformant
-  - configuration: an nft -c timeout reads as a timeout, not as a failed
-    ruleset
-  - logging: a failed command's echo keeps pacman's 'exists in filesystem'
-    detail lines
-
-
-7.235.0
--------
-
-  - packages: a PKGS_ADD member an installed package conflicts with sits out
-    -Syu, then installs alone with --ask=4 (pipewire-jack replaces jack2)
-  - packages: the -Syu FAIL row names its cause and missing count; manual
-    fixes read pacman -Syu --needed instead of a partial-upgrade -S
-  - services: PKGS_DEL removal is held after an earlier package or boot-file
-    failure
-  - services: a removal whose pacman hook or scriptlet logged an error reads
-    WARN instead of PASS
-  - boot: a refused rebuild no longer prints manual mkinitcpio -P steps; the
-    banner says to resolve the earlier FAIL and re-run
-  - logging: a failed command echoes its error lines instead of its first five
-    lines; pending-apply is rewritten only when the owed set changes
-
-
-7.234.0
--------
-
-  - guard: a sourced or piped run is refused under any locale
-  - signals: a SIGINT, SIGTERM or SIGHUP during startup exits 128+N instead of
-    0; the handler no longer registers QUIT
-  - cli: -h and -v exit 1 when stdout is closed or full; --install-file
-    rejects --report as its value
-  - logging: a signal or tmpfile helper before the header no longer leaves a
-    footer-only or header-second JSONL
-  - logging: child SIGKILL, a failed pending-apply clear, an absent modinfo
-    and a skipped mkinitcpio.conf snapshot are logged
-  - preflight: the hardware override hint keeps --install-file; iommu=off
-    counts as no IOMMU for amdxdna
-  - preflight: a failed timedatectl query and an absent ping are named;
-    low-disk and RY_RUN_TIMEOUT warnings print in install mode
-  - preflight: leading zeros in RY_RUN_TIMEOUT carry no magnitude
-  - mkinitcpio: a HOOKS entry needs a build script in an initcpio install
-    dir; a hooks/ script alone no longer passes
-  - backup: the post-write restore uses only the .ry.bak this run took; the
-    copy never writes through a symlink at the backup path
-  - packages: a failed pactree probe is reported as held, not as nothing
-    installed
-  - packages: a PKGS_DEL member removed by another's -s cascade is not
-    reported failed
-  - services: a unit that masks but fails to stop is a WARN, not a FAIL; the
-    enable-start WARN covers persistent enable states only
-  - services: the fstab row is WARN when a digits-only ext4 row is left; a
-    preserved mkinitcpio.conf snapshot path prints in install mode
-  - boot: the DO-NOT-REBOOT inspect step uses sudo and the resolved $BOOT
-  - summary: the verdict is still logged when stderr is gone; --install-file
-    prints Installed only when bytes changed
-  - progress: the bar reads the terminal size from the stderr tty
-  - consistency: function descriptions, banners and comments match their code;
-    lines over 300 characters are split
-
-
-7.233.0
--------
-
-  - install-file: a re-run on a boot file runs the boot cascade even when its
-    bytes are unchanged
-  - install-file: mkinitcpio.conf and sdboot-manage.conf check HOOKS and
-    MODULES before the write and exit 3
-  - install-file: with nft(8) absent the nftables post-hook says so instead
-    of reporting a failed nft -c
-  - configuration: an nft -c failure after an upgrade removed the running
-    kernel's modules is named, with reboot then re-run as the next step
-  - configuration: a managed file with bytes after a NUL is rewritten
-    instead of reported unchanged
-  - packages: a failed -Syu whose mkinitcpio.conf revert succeeded keeps the
-    restored conf through Configuration (WARN 'mkinitcpio.conf held')
-  - packages: PKGS_ADD is re-marked explicit whatever the -Syu result and
-    again before -Rns
-  - services: a unit that enables but fails to start reads WARN on the
-    enable row, naming the unit, and the warning prints during the run
-  - services: the live nftables policy-drop probe before the ufw flush
-    matches only the input hook line
-  - finalize: a run that stops before Finalize records the restarts it owes in
-    ~/ry-install/pending-apply; the next run of the same boot applies them
-  - preflight: the /boot free-space gate runs on stacked mounts; ESP
-    autodetect and the vfat gate read the topmost non-autofs mount
-  - preflight: a setgid $HOME or a symlinked ~/ry-install no longer fails
-    the log-dir mode check
-  - lock: only the lock holder sweeps destination dirs; a peer refused with
-    exit 5 no longer deletes the holder's in-flight tmpfiles
-  - lock: stale-lock reclaim takes an exclusive claim and moves the stale dir
-    aside in one rename
-  - lock: release checks the pidfile still carries this run's record
-  - lock: a pidfile from an earlier boot or a reused PID is reclaimed instead
-    of exiting 5; an unreadable identity fails closed
-  - lock: a signal between the lock mkdir and the pidfile write no longer
-    leaves an empty .lock behind
-  - cleanup: tracked tmpfiles in the root-only /run/ry-install are removed
-    via sudo
-  - cli: --h, --he, --hel and --v through --versio are honored before the root
-    guard
-  - sudo: the credential check keeps sudo's error text in memory instead of
-    a /tmp file
-
-
-7.232.0
--------
-
-  - configuration: MangoHud sets text_outline=0
-
-
-7.217.0 - 7.231.0
+7.217.0 - 7.241.0
 -----------------
 
+  - boot: 7.234.0 the DO-NOT-REBOOT inspect step uses sudo and the resolved
+    $BOOT
+  - boot: 7.235.0 a refused rebuild no longer prints manual mkinitcpio -P
+    steps; the banner says to resolve the earlier FAIL and re-run
+  - mkinitcpio: 7.234.0 a HOOKS entry needs a build script in an initcpio
+    install dir; a hooks/ script alone no longer passes
   - kernel: 7.217.0 drop ttm.pages_limit=20971520
   - perf: 7.217.0 governor performance -> powersave, EPP performance kept
   - network: 7.224.0 NetworkManager leaves the Wi-Fi P2P device unmanaged
@@ -147,19 +21,109 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - configuration: 7.229.0 drop the WirePlumber soft-mixer rule (POROSVOC mic)
     and its post-hook
   - configuration: 7.229.0 MangoHud comments out text_outline, adds
-    no_small_font and alpha=0.8
+    no_small_font and alpha=0.8; 7.232.0 sets text_outline=0
+  - configuration: 7.233.0 an nft -c failure after an upgrade removed the
+    running kernel's modules is named; the next step is reboot then re-run
+  - configuration: 7.233.0 a managed file with bytes after a NUL is rewritten;
+    7.240.0 an nft -c timeout reads as a timeout, not as a failed ruleset
   - packages: 7.224.0 add pipewire-jack; a host on jack2 swaps by hand first
+  - packages: 7.233.0 after a failed -Syu, Configuration keeps a restored
+    mkinitcpio.conf (WARN 'mkinitcpio.conf held')
+  - packages: 7.233.0 PKGS_ADD is re-marked explicit whatever the -Syu result
+    and again before -Rns
+  - packages: 7.234.0 a failed pactree probe is reported as held, not as
+    nothing installed
+  - packages: 7.234.0 a PKGS_DEL member removed by another's -s cascade is not
+    reported failed
+  - packages: 7.235.0 a member an installed package conflicts with sits out
+    -Syu, then installs alone with --ask=4 (pipewire-jack replaces jack2)
+  - packages: 7.235.0 the -Syu FAIL row names its cause and missing count;
+    manual fixes read pacman -Syu --needed instead of a partial-upgrade -S
+  - packages: 7.240.0 a member an installed -git or -bin build provides and
+    conflicts with is swapped in after -Syu instead of aborting both passes
+  - packages: 7.240.0 a failed swap of a provided member reads FAIL; pacman
+    -Si and -Qi output is read with COLUMNS=0
   - services: 7.218.0 enable-units counts only units it enabled or started;
     7.219.0 a oneshot nftables.service no longer reads as newly enabled
+  - services: 7.233.0 a unit that enables but fails to start reads WARN on the
+    enable row, naming the unit, and the warning prints during the run
+  - services: 7.233.0 the live nftables policy-drop probe before the ufw flush
+    matches only the input hook line
+  - services: 7.234.0 a unit that masks but fails to stop is a WARN, not a
+    FAIL; the enable-start WARN covers persistent enable states only
+  - services: 7.234.0 the fstab row is WARN when a digits-only ext4 row is
+    left; a preserved mkinitcpio.conf snapshot path prints in install mode
+  - services: 7.235.0 PKGS_DEL removal is held after an earlier package or
+    boot-file failure
+  - services: 7.235.0 a removal whose pacman hook or scriptlet logged an error
+    reads WARN; 7.240.0 a mask or enable FAIL row names the failing units
+  - services: 7.240.0 the fstab rewrite drops nolazytime like *atime; a row
+    carrying it no longer reads as conformant
+  - services: 7.241.0 a per-unit mask retry row keeps the ufw.service withheld
+    note
+  - finalize: 7.233.0 a run that stops before Finalize records owed restarts
+    in ~/ry-install/pending-apply; the next run of the same boot applies them
   - install-file: 7.224.0 the WirePlumber rule restarts wireplumber.service
+  - install-file: 7.233.0 a re-run on a boot file runs the boot cascade even
+    when its bytes are unchanged
+  - install-file: 7.233.0 mkinitcpio.conf and sdboot-manage.conf check HOOKS
+    and MODULES before the write and exit 3
+  - install-file: 7.233.0 with nft(8) absent the nftables post-hook says so;
+    7.241.0 its nft -c timeout reads as a timeout, not as a failed ruleset
   - backup: 7.231.0 a sudo lapse at the existence probe is warned and logged
     instead of silently skipping the copy
+  - backup: 7.234.0 the post-write restore uses only the .ry.bak this run
+    took; the copy never writes through a symlink at the backup path
+  - summary: 7.234.0 the verdict is still logged when stderr is gone;
+    --install-file prints Installed only when bytes changed
+  - progress: 7.234.0 the bar reads the terminal size from the stderr tty
   - preflight: 7.219.0 MODULES are checked against each installed kernel;
     7.224.0 a locked pacman database stops the run before anything is deployed
-  - preflight: 7.225.0 the modprobe.d format check names directives in
-    match order
+  - preflight: 7.225.0 the modprobe.d format check names directives in match
+    order
+  - preflight: 7.233.0 the /boot free-space gate runs on stacked mounts; ESP
+    autodetect and the vfat gate read the topmost non-autofs mount
+  - preflight: 7.233.0 a setgid $HOME or a symlinked ~/ry-install no longer
+    fails the log-dir mode check
+  - preflight: 7.234.0 the hardware override hint keeps --install-file;
+    iommu=off counts as no IOMMU for amdxdna
+  - preflight: 7.234.0 a failed timedatectl query and an absent ping are
+    named; low-disk and RY_RUN_TIMEOUT warnings print in install mode
+  - preflight: 7.234.0 leading zeros in RY_RUN_TIMEOUT carry no magnitude
+  - guard: 7.234.0 a sourced or piped run is refused under any locale
+  - signals: 7.234.0 a SIGINT, SIGTERM or SIGHUP during startup exits 128+N
+    instead of 0; the handler no longer registers QUIT
   - cli: 7.218.0 a repeated --install-file exits 2; an unmanaged one exits 2
     before the hardware gate
+  - cli: 7.233.0 --h, --he, --hel and --v through --versio are honored before
+    the root guard
+  - cli: 7.234.0 -h and -v exit 1 when stdout is closed or full;
+    --install-file rejects --report as its value
+  - lock: 7.233.0 only the lock holder sweeps destination dirs; a peer refused
+    with exit 5 no longer deletes the holder's in-flight tmpfiles
+  - lock: 7.233.0 stale-lock reclaim takes an exclusive claim and moves the
+    stale dir aside in one rename
+  - lock: 7.233.0 release checks the pidfile still carries this run's record
+  - lock: 7.233.0 a signal between the lock mkdir and the pidfile write no
+    longer leaves an empty .lock behind
+  - lock: 7.233.0 a pidfile from an earlier boot or a reused PID is reclaimed
+    instead of exiting 5; an unreadable identity fails closed
+  - cleanup: 7.233.0 tracked tmpfiles in the root-only /run/ry-install are
+    removed via sudo
+  - sudo: 7.233.0 the credential check keeps sudo's error text in memory
+    instead of a /tmp file
+  - logging: 7.234.0 a signal or tmpfile helper before the header no longer
+    leaves a footer-only or header-second JSONL
+  - logging: 7.234.0 child SIGKILL, a failed pending-apply clear, an absent
+    modinfo and a skipped mkinitcpio.conf snapshot are logged
+  - logging: 7.235.0 a failed command echoes its error lines, not its first
+    five; pending-apply is rewritten only when the owed set changes
+  - logging: 7.240.0 a failed command's echo keeps pacman's 'exists in
+    filesystem' detail lines
+  - consistency: 7.234.0 function descriptions, banners and comments match
+    their code; lines over 300 characters are split
+  - consistency: 7.241.0 the KERNEL_PARAMS line is split; help aligns its
+    ENVIRONMENT column; banners, comments and descriptions match their code
 
 
 7.190.0 - 7.216.0

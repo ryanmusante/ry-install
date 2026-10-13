@@ -99,7 +99,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 ## Install Flow
 
-1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, network, and time-sync gates; config validation.
+1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, and network gates; a warn-only time-sync check; config validation.
 2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A `PKGS_ADD` member that an installed package conflicts with installs after `-Syu`, in a transaction that removes the conflicting package. A failed `-Syu` restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 17 embedded configs atomically.
 4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (a unit that masks but fails to stop is a `WARN`) → enable (a unit that enables but fails to start is a `WARN`) → regulatory domain.

@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.241.0** · [Changelog](CHANGELOG.md)
+**Version 7.242.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -27,7 +27,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 | Shell | fish 3.6 or newer |
 | Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
-| Privileges | normal user with sudo rights; `sudo -v` cached before the run |
+| Privileges | normal user with sudo rights; `sudo -v` cached before the run — when it is not, the run prompts through `sudo -v` if stdin and stderr are both a TTY, and exits `3` otherwise or if the prompt fails |
 | Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `cmp`, `curl`, `getent`, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
 
 ## Usage
@@ -55,7 +55,7 @@ Per-phase verdicts:
 | `0` | OK — success and `WARN`-only runs |
 | `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout closed or full) |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
-| `3` | missing dependency, uncached sudo, or a failed gate (hardware, disk, network, pacman lock) |
+| `3` | missing dependency, uncached sudo that no TTY prompt resolved, or a failed gate (hardware, disk, network, pacman lock) |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
 | `5` | lock — another live instance holds the lock; a stale pidfile is reclaimed, an ambiguous one fails closed |
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env fish
-# ry-install v7.241.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.242.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 # guard above: fish translates 'Standard input' and 'from sourcing file' (de: Standardeingabe, aus der Quelldatei); LC_ALL=C keeps the English texts
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.241.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.242.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_HARD_CAP 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
@@ -86,7 +86,7 @@ set --erase _ry_path_new _ry_p
 command -q id; or begin; echo "[ERR] GNU coreutils id(1) required (resolves UID before privilege checks)" >&2; exit $EXIT_PREFLIGHT; end # first external command
 set -g _MY_UID (command id -u)
 
-# ── BAIL PRIMITIVES: _RY_EXIT + _SET_EXIT + HANDLER ERASE ──
+# ── BAIL PRIMITIVES: _RY_EXIT + _SET_EXIT + HANDLER ERASE + ROOT USAGE ──
 function _ry_erase_handlers --description "Erase signal/exit handler functions"; functions -e _cleanup_startup _cleanup _cleanup_pipe _cleanup_on_exit _progress_on_winch 2>/dev/null; end
 function _ry_exit --argument-names code --description "Set bail sentinel and exit"
     test -z "$code"; and set code 0
@@ -134,7 +134,7 @@ set -g _RY_NO_COLOR false
 test "$TERM" = dumb; and set -g _RY_NO_COLOR true
 set -q NO_COLOR; and test -n "$NO_COLOR"; and set -g _RY_NO_COLOR true # no-color.org: non-empty value disables color
 set -l _fish_ver $FISH_VERSION; set -l _fish_parts (string split '.' -- "$_fish_ver"); set -l _fish_minor (string replace -r '[^0-9].*' '' -- "$_fish_parts[2]"); test -z "$_fish_minor"; and set _fish_minor 0
-if not string match -qr '^\d+$' -- "$_fish_parts[1]"; or not string match -qr '^\d+$' -- "$_fish_minor"; echo "[ERR] fish version unparseable: '$_fish_ver'" >&2; _ry_exit $EXIT_PREFLIGHT; end
+if not string match -qr '^\d+$' -- "$_fish_parts[1]"; or not string match -qr '^\d+$' -- "$_fish_minor"; echo "[ERR] fish version unparsable: '$_fish_ver'" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -l _fish_ok 0
 test "$_fish_parts[1]" -gt 3; and set _fish_ok 1
 test "$_fish_parts[1]" -eq 3; and test "$_fish_minor" -ge 6; and set _fish_ok 1
@@ -367,7 +367,7 @@ function _acquire_lock --description "Acquire instance lock"
     return 1
 end
 
-# ── CLEANUP ORCHESTRATION: CHILDREN → REVERT → TMPFILES → LOCK → GLOBALS ──
+# ── CLEANUP ORCHESTRATION: CHILDREN → REVERT → TMPFILES → FS SWEEP → LOCK → GLOBALS ──
 function _dc_mki_revert --description "_do_cleanup sub: Signal-time mkinitcpio.conf revert"
     set -q _RY_MKI_HAD_ORIG; and test "$_RY_MKI_HAD_ORIG" = true; or return 0
     set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; or return 0
@@ -489,8 +489,8 @@ function _dc_kill_children --description "_do_cleanup sub: Reap child PIDs (TERM
     command pkill -KILL -P "$fish_pid" 2>/dev/null
 end
 
-# ── CLEANUP: MASTER ORCHESTRATOR (_do_cleanup) ──
-function _do_cleanup --description "Master cleanup: reap children → revert → tmpfiles → fs sweep → lock release → globals"
+# ── CLEANUP: TOP-LEVEL ORCHESTRATOR (_do_cleanup) ──
+function _do_cleanup --description "Top-level cleanup: reap children → revert → tmpfiles → fs sweep → lock release → globals"
     _dc_kill_children # quiesce children first: revert must not race live pacman
     _dc_mki_revert
     _dc_sweep_tmpfiles
@@ -801,7 +801,7 @@ function _content__etc_mkinitcpio.conf --description "Generate content for /etc/
     if set -q MKINITCPIO_COMPRESSION_OPTIONS; and test (count $MKINITCPIO_COMPRESSION_OPTIONS) -gt 0; printf '%s\n' "COMPRESSION_OPTIONS=("(string join -- " " $MKINITCPIO_COMPRESSION_OPTIONS)")"; end
 end
 
-# ── CONTENT GENERATORS: SYSTEM (resolved, logind, NM, bluetooth, nft, sysctl, udev) ──
+# ── CONTENT GENERATORS: SYSTEM (resolved → modprobe, deploy order) ──
 function _content__etc_systemd_resolved.conf.d_99-cachyos-resolved.conf --description "Generate content for systemd-resolved drop-in"
     printf '%s\n' "# ry-install: systemd-resolved drop-in, link DNS from DHCP (managed file, do not edit by hand)" "[Resolve]" "MulticastDNS=$RESOLVED_MDNS" "LLMNR=$RESOLVED_LLMNR"
 end
@@ -1024,7 +1024,7 @@ function _mktemp_or_null --description "Wrapper for mktemp; emits path on stdout
 end
 function _tmp_dir --description "Tmp root (pinned /tmp)"; printf '%s' /tmp; end
 
-# ── FILESYSTEM PROBES (symlink, system-dst, byte read) ──
+# ── FILESYSTEM PROBES (symlink, system-dst, byte read, byte count) ──
 function _is_symlink --argument-names path use_sudo --description "Sudo-aware test -L (rc 0/1/2 = symlink/not/sudo-lapse)"
     if test "$use_sudo" = true
         sudo -n true 2>/dev/null; or return 2
@@ -1145,7 +1145,7 @@ function _phase_record --argument-names check result evidence --description "App
     _log "PHASE_RESULT: check='$_c' result=$_r evidence='$_e'"
 end
 
-# ── MESSAGING: LOUD EMITTERS ──
+# ── MESSAGING: LOUD EMITTERS + PLAIN ECHO ──
 function _err --description "Emit ERR-level message (force-prints to stderr when _RY_LOUD_ERR=true)"
     if set -q _RY_LOUD_ERR; and test "$_RY_LOUD_ERR" = true
         _log "ERR: "(string join -- " " $argv)
@@ -1402,7 +1402,7 @@ function _ry_check_deps --description "Verify required commands, GNU df --output
     if test (count $missing) -gt 0; _err "Missing required commands: $missing"; _log "DEPS_CHECK_FAIL: missing=$missing"; return 1; end
     if not command env LC_ALL=C df --output=avail / >/dev/null 2>&1; _err "df(1) lacks --output flag — GNU coreutils required (busybox/uutils not supported)"; _log "DEPS_CHECK_FAIL: df lacks --output"; return 1; end
     _resolve_systemd_ver
-    if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparseable) — refusing install (systemd ≥ 250 is a hard requirement)"; _log "DEPS_CHECK_FAIL: systemd version unparseable"; return 1; end
+    if test -z "$_RY_SYSTEMD_VER"; _err "Cannot determine systemd version (systemctl --version unparsable) — refusing install (systemd ≥ 250 is a hard requirement)"; _log "DEPS_CHECK_FAIL: systemd version unparsable"; return 1; end
     if test "$_RY_SYSTEMD_VER" -lt 250; _err "systemd $_RY_SYSTEMD_VER < 250 — preflight gate; upgrade systemd before install"; _log "DEPS_CHECK_FAIL: systemd $_RY_SYSTEMD_VER < 250"; return 1; end
     set -l _opt_missing
     for cmd in bootctl modinfo pgrep tput pkill ping realpath ip kill; command -q $cmd; or set -a _opt_missing $cmd; end
@@ -1454,7 +1454,7 @@ function _check_avail --argument-names path divisor unit crit warn --description
     set -l _b (command env LC_ALL=C df --output=avail -B1 -- "$path" 2>/dev/null | command tail -n 1 | string trim --); set -l _v ""
     test -n "$_b"; and string match -qr '^\d+$' -- "$_b"; and set _v (math "floor($_b / $divisor)")
     if test -z "$_v"; or not string match -qr '^\d+$' -- "$_v"
-        if test "$MODE" = install; _err "Cannot determine disk space for $path (df --output=avail returned unparseable output) — refusing to install"; return 1; end
+        if test "$MODE" = install; _err "Cannot determine disk space for $path (df --output=avail returned unparsable output) — refusing to install"; return 1; end
         _warn "Could not determine disk space for $path"
         return 0
     end
@@ -1621,7 +1621,7 @@ function _grep_ini_header --argument-names dst --description "Validate ≥1 [Sec
     return 0
 end
 
-# ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (MODPROBE → MANGOHUD) ──
+# ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (REGDOMAIN → MANGOHUD, DEPLOY ORDER) ──
 function _grep_modprobe_entry --argument-names dst --description "Validate modprobe.d content: comment-only ok, else every non-comment line is a directive"
     test (count $argv) -lt 2; and _log "BUG: _grep_modprobe_entry called without content (dst=$dst)"; and return 2
     for _line in $argv[2..-1]
@@ -1738,7 +1738,7 @@ function _ry_validate_configs --description "Run all embedded config validators"
     return 0
 end
 
-# ── ATOMIC FILE INSTALL: RENDER → SYMLINK CHECK → CHMOD → MV -T ──
+# ── ATOMIC FILE INSTALL: RENDER → SYMLINK CHECK → CHMOD → MV -T; CONTENT BYTES, MODE REPAIR ──
 function _ry_content_bytes --argument-names dst --description "Raw bytes of embedded content" # pipestatus[1]=gen rc
     set -l _content (_ry_get_file_content "$dst" 2>/dev/null | string collect --no-trim-newlines --allow-empty); set -l _ps $pipestatus
     test "$_ps[1]" -ne 0; and return "$_ps[1]"
@@ -1915,7 +1915,7 @@ function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --descri
     return 0
 end
 
-# ── ATOMIC FILE INSTALL: PUBLIC ENTRY (_atomic_write_file → _ry_install_file) ──
+# ── ATOMIC FILE INSTALL: PUBLIC ENTRY (_ry_install_file → mkdir 0755 → _atomic_write_file) ──
 function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write. rc=0 ok; rc=1 any failure"
     set -l dst_dir (command dirname -- "$dst"); set -l _is_bt false
     contains -- "$dst" $_RY_BACKUP_TARGETS; and set _is_bt true
@@ -2121,7 +2121,7 @@ function _ip_snapshot_mkinitcpio --description "_install_packages sub: Snapshot 
     set -g _RY_MKI_BACKUP_FILE "$_snap"; set -g _RY_MKI_HAD_ORIG true # revert chmods --reference=destination
 end
 
-# ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + CONFLICT SWAP + VERIFY) ──
+# ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + CONFLICT SWAP + MARK EXPLICIT + VERIFY) ──
 function _ip_conflict_held --description "_ip_pacman_invoke sub: Members missing by name that conflict either way with installed packages"
     set -l _have (command pacman -Qq 2>/dev/null) # names: pacman -Q NAME falls back to a provider
     set -l _theirs (command env LC_ALL=C COLUMNS=0 pacman -Qi 2>/dev/null | string match -rg -- '^Conflicts With\s*:\s*(.*\S)' | string split -n ' ' | string replace -r -- '[<>=].*$' '' | string match -v -- None) # COLUMNS=0: no wrapped list lines
@@ -2139,7 +2139,7 @@ function _ip_conflict_held --description "_ip_pacman_invoke sub: Members missing
     end
 end
 function _ip_conflict_swap --description "_ip_pacman_invoke sub: Install held packages alone; pacman removes what they conflict with"
-    if _run sudo -n pacman -S --needed --noconfirm --ask=4 -- $argv # --ask=4 answers yes to 'Remove X?'; --noconfirm alone says N
+    if _run sudo -n LC_ALL=C.UTF-8 pacman -S --needed --noconfirm --ask=4 -- $argv # --ask=4 answers yes to 'Remove X?'; --noconfirm alone says N
         _ok "Conflict swap: $argv installed; the conflicting package was removed"
         _log "PKG_CONFLICT_SWAP_OK: $argv"; set -ga _RY_PKG_SWAPPED $argv
         return 0
@@ -2160,9 +2160,9 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
     for _p in $argv; contains -- "$_p" $_held; or set -a _syu_pkgs "$_p"; end
     test (count $_held) -gt 0; and _log "PKG_CONFLICT_HELD: $_held (an installed package conflicts; installed after -Syu)"
     set -l _q_pre (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)') # name+version fingerprint; empty pre/post = fail-open true
-    if not _run sudo -n pacman $_pacman_first -- $_syu_pkgs
+    if not _run sudo -n LC_ALL=C.UTF-8 pacman $_pacman_first -- $_syu_pkgs # C.UTF-8: English for the echo filter, UTF-8 paths still extract
         _warn "Package installation failed — retrying with forced db re-sync (handles transient mirror staleness; will not resolve pkg conflicts — see JSONL log for first-pass stderr)..."
-        if not _run sudo -n pacman $_pacman_retry -- $_syu_pkgs
+        if not _run sudo -n LC_ALL=C.UTF-8 pacman $_pacman_retry -- $_syu_pkgs
             if test -f /var/lib/pacman/db.lck
                 _err "pacman database became locked during install — aborting"; set -ga _RY_PKG_FAIL_EV "pacman db locked mid-run"
             else
@@ -2188,7 +2188,7 @@ function _mark_pkgs_add_explicit --description "Re-mark installed PKGS_ADD expli
     if test -f /var/lib/pacman/db.lck; _log "PKG_ASEXPLICIT_SKIP: pacman db locked"; return 1; end
     set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null)
     test (count $_add_present) -gt 0; or return 0
-    if not _run sudo -n pacman -D --asexplicit -- $_add_present
+    if not _run sudo -n LC_ALL=C.UTF-8 pacman -D --asexplicit -- $_add_present
         _warn "  Could not mark PKGS_ADD packages explicit — orphan-removal exemption not guaranteed for any pre-installed as a dependency"
         _log "PKG_ASEXPLICIT_FAIL: pacman -D --asexplicit returned non-zero for: $_add_present"
         return 1
@@ -2300,7 +2300,7 @@ function _install_system_files --description "Deploy all embedded config files"
     return 0
 end
 
-# ── INSTALL PHASE 4: SERVICES (fstab → resolved → pkg-remove → mask → enable → regdom) ──
+# ── INSTALL PHASE 4: FSTAB OPTS (EXT4 SCAN + AWK REWRITE) ──
 function _fstab_needs_change --description "Scan ext4 entries for missing noatime/lazytime/commit=10"
     set -g _RY_FSTAB_NEEDS_CHANGE false; set -g _RY_FSTAB_COMMIT_OVERRIDES; set -g _RY_FSTAB_MALFORMED; set -l _malformed_warned false
     for line in $argv
@@ -2308,7 +2308,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
         if string match -qr '^[0-9]+$' -- "$opts_field"
             functions -q _log; and _log "FSTAB_SKIP_MALFORMED: digits-only opts field (likely absent options column): $line"; set -ga _RY_FSTAB_MALFORMED "$line"
             if test "$_malformed_warned" = false
-                functions -q _warn; and _warn "  /etc/fstab: malformed ext4 entry detected (options column absent or unparseable) — entry left untouched; review manually: $line"
+                functions -q _warn; and _warn "  /etc/fstab: malformed ext4 entry detected (options column absent or unparsable) — entry left untouched; review manually: $line"
                 set _malformed_warned true
             end
             continue
@@ -2394,7 +2394,7 @@ function _far_awk_rewrite --argument-names tmpfstab --description "_fstab_atomic
     return 0
 end
 
-# ── INSTALL PHASE 4: FSTAB ATOMIC REPLACE (PARITY + SIZE + FINDMNT GATES) ──
+# ── INSTALL PHASE 4: FSTAB ATOMIC REPLACE (PARITY/SIZE/FINDMNT GATES) + _install_fstab_opts ──
 function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp + awk + verify + mv)"
     set -l tmpfstab (sudo -n mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null) # tmpfile in dst parent: same-FS mv -T atomic
     if test -z "$tmpfstab"; _fail "  /etc/fstab: mktemp failed"; return 1; end
@@ -2515,7 +2515,7 @@ function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg re
     end
     set -l _rm_op -Rns # -s cascade only once PKGS_ADD reads explicit
     if not _mark_pkgs_add_explicit; set _rm_op -Rn; _warn "  PKGS_ADD not confirmed explicit — removing without -s (orphaned deps kept)"; _log "PKG_REMOVE_NO_CASCADE: -Rn (PKGS_ADD re-mark failed)"; end
-    if _run sudo -n pacman $_rm_op --noconfirm -- $argv
+    if _run sudo -n LC_ALL=C.UTF-8 pacman $_rm_op --noconfirm -- $argv # C.UTF-8: the hook-error match reads untranslated lines
         _ok "Removed: $argv"; _log "PKG_REMOVE_BATCH_OK: $argv"; set -g _RY_PKGS_REMOVED_COUNT (math $_RY_PKGS_REMOVED_COUNT + (count $argv))
         _csp_hook_errors; return 0
     end
@@ -2527,7 +2527,7 @@ function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg re
     set -l _retry_failed
     for pkg in $argv
         contains -- "$pkg" $_retry_installed; or continue
-        if not _run sudo -n pacman $_rm_op --noconfirm -- "$pkg"
+        if not _run sudo -n LC_ALL=C.UTF-8 pacman $_rm_op --noconfirm -- "$pkg"
             set -a _retry_failed "$pkg" # judged after the loop: a later member's cascade can still take it
         else
             _log "PKG_REMOVE_OK: $pkg"
@@ -2703,7 +2703,7 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     return $_rc
 end
 
-# ── INSTALL PHASE 4: ENABLE UNITS + REGDOM ──
+# ── INSTALL PHASE 4: ENABLE UNITS + REGDOM + ORCHESTRATOR (_install_configure_services) ──
 function _cse_collect_units --description "Collect system units to enable"
     set -l _enable
     for _exp in $EXPECTED_SERVICES
@@ -2804,7 +2804,7 @@ function _install_configure_services --description "Phase 4: fstab opts, resolve
     return $_ret
 end
 
-# ── BOOT PATH RESOLUTION (ESP + $BOOT via bootctl / findmnt) ──
+# ── BOOT PATH RESOLUTION (ESP + $BOOT via bootctl / findmnt) + VFAT FALLBACK GUARD ──
 function _bootctl_dir --argument-names flag logtag fallnote --description "Probe bootctl path (user then sudo); empty on failure"
     command -q bootctl; or return 0
     set -l _p (command bootctl $flag 2>/dev/null | string trim -- | string trim -r -c / --)
@@ -2935,7 +2935,7 @@ function _preflight_boot_sanity --description "Verify boot artifacts are viable 
     return 0
 end
 
-# ── INSTALL PHASE 5: BOOT REBUILD (MKINITCPIO -P + SDBOOT GEN/UPDATE) ──
+# ── INSTALL PHASE 5: REBUILD SUBS (TAINT GATE + SDBOOT GEN/UPDATE + ENTRIES + SKIP ROWS) ──
 function _irb_skip_post_mki --description "_install_rebuild_boot sub: Record SKIP rows for sdboot-gen, sdboot-update, post-rebuild sanity"
     _phase_record "Boot: sdboot-manage gen" SKIP "aborted"
     _phase_record "Boot: sdboot-manage update" SKIP "aborted"
@@ -3046,7 +3046,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     return 0
 end
 
-# ── INSTALL PHASE 6: FINALIZE (USER RELOAD + POWERDEVIL + PACCACHE + NM RESTART) ──
+# ── INSTALL PHASE 6: FINALIZE (USER RELOAD, POWERDEVIL, PACCACHE, NM RESTART, PENDING-APPLY) ──
 function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk2 -ruk0"
     set -l _upgraded false; set -l _removed_n 0
     set -q SYSTEM_UPGRADED; and test "$SYSTEM_UPGRADED" = true; and set _upgraded true
@@ -3069,7 +3069,7 @@ function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk
             _phase_record "Finalize: pacman cache trim" WARN "paccache failed"
         end
     else
-        if _run sudo -n pacman -Sc --noconfirm
+        if _run sudo -n LC_ALL=C.UTF-8 pacman -Sc --noconfirm
             _phase_record "Finalize: pacman cache trim" PASS "pacman -Sc ($_reason)"
         else
             _warn "pacman cache trim failed (pacman -Sc)"
@@ -3161,7 +3161,7 @@ function _install_finalize --description "Finalize: user daemon-reload + PowerDe
     return 0
 end
 
-# ── PHASE DISPATCH (_rdi_run_phases) ──
+# ── PHASE DISPATCH (_rdi_run_phases + optional indexers) ──
 function _rrp_optional_indexer --argument-names cmd label --description "_rdi_run_phases sub: Run an optional indexer (updatedb / pkgfile) and record phase"
     set -l flag $argv[3..-1]
     if not command -q $cmd; _phase_record "Packages: $label" "--" "not installed"; return 0; end
@@ -3417,7 +3417,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     return $_hook_rc
 end
 
-# ── --INSTALL-FILE: POST-HOOK HANDLERS ──
+# ── POST-HOOKS: BOOT (BOOT, CMDLINE, LOADER; TAINT GATE → CASCADE → ENTRIES → SANITY) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot_apply sub: mkinitcpio -P + sdboot-manage cascade"
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAIL: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
@@ -3651,7 +3651,7 @@ end
 function _pre_dispatch_exit --argument-names code --description "Pre-dispatch teardown: log/dir cleanup, then exit"; _pre_dispatch_log_cleanup; _ry_exit $code; end
 function _early_usage_exit --description "Print usage error to stderr, remove pre-dispatch log, exit EXIT_USAGE"; echo "[ERR] $argv" >&2; _ry_show_help >&2; _pre_dispatch_exit $EXIT_USAGE; end
 
-# ── MAIN: ARGPARSE + MODE SELECTION + LOG HEADER + EXIT ──
+# ── MAIN: ARGPARSE + MODE SELECTION ──
 set -g MODE install; set -g INSTALL_FILE_TARGET ""
 set -l _ORIG_ARGV $argv; set -g _RY_LOG_SUPPRESS_CREATE true # header not written: a _log must not create the JSONL ahead of it
 set -l _ap_errfile (_mktemp_or_null -p (_tmp_dir) "ry-argparse-err.$fish_pid.XXXXXX")

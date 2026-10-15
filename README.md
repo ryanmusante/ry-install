@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.245.0** · [Changelog](CHANGELOG.md)
+**Version 7.247.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -100,7 +100,7 @@ In deploy order; system files land `0644`, user files `0600`.
 ## Install Flow
 
 1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, and network gates; a warn-only time-sync check; config validation.
-2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A `PKGS_ADD` member that an installed package conflicts with installs after `-Syu`, in a transaction that removes the conflicting package. A `-Syu` that fails, or is skipped because the pacman database is locked, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
+2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A `PKGS_ADD` member that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, in a transaction that removes the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 17 embedded configs atomically.
 4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (`ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next run stops it) → enable (a unit that enables but fails to start is a `WARN`) → regulatory domain.
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` files present inside `$BOOT`.
@@ -216,7 +216,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 
 ## Packages
 
-**Install** (`PKGS_ADD`, 18) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `cachyos-benchmarker`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `pipewire-jack`, `nftables`, `pacman-contrib`. On a `jack2` host, `pipewire-jack` replaces `jack2` after `-Syu`; an installed `-git` or `-bin` build that provides a member is replaced the same way.
+**Install** (`PKGS_ADD`, 18) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `cachyos-benchmarker`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `pipewire-jack`, `nftables`, `pacman-contrib`. On a `jack2` host, `pipewire-jack` replaces `jack2` after `-Syu`; an installed `-git` or `-bin` build that provides and conflicts with a member is replaced the same way, as is any installed package that conflicts with a dependency of a missing member. To keep such a package, drop the member whose swap removes it from `PKGS_ADD` in both scripts — see [Embedded Values](#embedded-values).
 
 **Remove** (`PKGS_DEL`, 9) — `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect`.
 

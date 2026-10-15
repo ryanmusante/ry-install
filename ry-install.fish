@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.245.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.247.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.245.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.247.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_FLOOR 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
@@ -96,7 +96,7 @@ function _ry_exit --argument-names code --description "Set bail sentinel and exi
     set -g _CLEANUP_DONE true; set -g _RY_INSTALL_LAST_EXIT $code; set -g _RY_INSTALL_BAILING true
     if not set -q _RY_HEADER_WRITTEN; and not set -q _RY_LOG_WRITTEN
         test -n "$LOG_FILE"; and command rm -f -- "$LOG_FILE" 2>/dev/null
-        test -n "$LOG_DIR"; and command rmdir -- "$LOG_DIR" 2>/dev/null; test -n "$_RY_BACKUP_DIR"; and command rmdir -- "$_RY_BACKUP_DIR" 2>/dev/null
+        test -n "$LOG_DIR"; and command rmdir -- "$LOG_DIR" 2>/dev/null; test "$_RY_BACKUP_NEW" = true; and command rmdir -- "$_RY_BACKUP_DIR" 2>/dev/null
         test -n "$LOG_DIR"; and command rmdir -- (command dirname -- "$LOG_DIR") 2>/dev/null
         test "$_RY_HOME_NEW" = true; and command rmdir -- "$_RY_HOME_DIR" 2>/dev/null # only a ~/ry-install this run created
     else
@@ -111,7 +111,7 @@ function _set_exit --argument-names _code --description "Set both _RY_EXIT_CODE 
 function _ry_root_usage --description "Root-guard usage error: print msg + help to stderr, exit EXIT_USAGE"; echo "[ERR] $argv" >&2; _ry_show_help >&2; _ry_exit $EXIT_USAGE; end
 
 # ── ROOT GUARD + COLOR/TTY + FISH VERSION CHECK ──
-set -g QUIET true; set -g MODE bootstrap; set -gu LOG_FILE ""; set -gu LOG_DIR ""; set -gu _RY_BACKUP_DIR ""; set -gu _RY_HOME_NEW false # pinned pre-argparse (signal footers); inherited paths never ours
+set -g QUIET true; set -g MODE bootstrap; set -gu LOG_FILE ""; set -gu LOG_DIR ""; set -gu _RY_BACKUP_DIR ""; set -gu _RY_HOME_NEW false; set -gu _RY_BACKUP_NEW false # pinned pre-argparse (signal footers); inherited paths never ours
 if not string match -qr '^\d+$' -- "$_MY_UID"; echo "[ERR] id -u returned non-numeric value: '$_MY_UID' — cannot determine user identity" >&2; _ry_exit $EXIT_PREFLIGHT; end
 if test "$_MY_UID" -eq 0
     set -l _rg_msgout (begin; argparse --name=(command basename -- (status filename)) $_RY_ARGPARSE_SPEC -- $argv 2>&1 >/dev/null; echo "@@RC@@$status"; end) # parity argparse in a cmdsub block; parent argv intact
@@ -166,6 +166,7 @@ set -gx HOME (string trim -r -c / -- (string trim -- "$HOME"))
 if test -z "$HOME"; or not test -d "$HOME"; echo "[ERR] HOME resolves to empty/non-dir after normalization: '$HOME'" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set -g _RY_HOME_DIR "$HOME/ry-install"; set -g LOG_DIR "$_RY_HOME_DIR/logs/$DATE_LABEL"; set -g _RY_BACKUP_DIR "$_RY_HOME_DIR/backups"
 test -d "$_RY_HOME_DIR"; or set -g _RY_HOME_NEW true # created by this run: ours to rmdir on bail
+test -d "$_RY_BACKUP_DIR"; or set -g _RY_BACKUP_NEW true # a concurrent run may already own it
 set -l _prev_mkdir_umask 022; set -q umask; and set _prev_mkdir_umask $umask # umask var directly; autoloaded umask(1) leaks to stderr
 set -g umask 0077
 command mkdir -p -- "$LOG_DIR" "$_RY_BACKUP_DIR" 2>/dev/null; or begin
@@ -186,6 +187,7 @@ set -g LOG_FILE "$LOG_DIR/preflight-$TIMESTAMP.jsonl"; set -g INSTALL_HAD_ERRORS
 
 # ── GLOBAL STATE: BOOT TAINT, TRACKED RESOURCES, AWK FILTERS ──
 set -g _RY_BOOT_TAINTED false
+set -gu _RY_MKI_HAD_ORIG false; set -gu _RY_MKI_BACKUP_FILE ""; set -gu _RY_MKI_REVERTED false; set -gu _RY_MKI_REVERT_FAILED false # pinned: inherited values never drive a revert
 set -g _RY_BOOT_CRITICAL_DSTS "/boot/loader/loader.conf" "/etc/kernel/cmdline" "/etc/sdboot-manage.conf" "/etc/mkinitcpio.conf"
 set -g _RY_BACKUP_TARGETS $_RY_BOOT_CRITICAL_DSTS; set -g _RY_BACKUP_SUFFIX .ry.bak
 set -g _RY_TMPDIR_GLOBS "ry-tee-err.$fish_pid.*" "ry-run.$fish_pid.*" "ry-fstab-tee-err.$fish_pid.*" "ry-fstab-awk-err.$fish_pid.*" # PID-scoped: never touch a peer run's files
@@ -459,7 +461,7 @@ function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK _RY_ENABLE_START_FAILS _RY_PKG_REMOVE_HOOK_ERR
     set --erase _RY_ENABLE_FAILS _RY_MASK_STOP_FAILS _RY_MASK_FAILS
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_DEPLOY_CHANGED_DSTS _RY_BOOT_CRIT_HIT _RY_DEPLOY_TAG _RY_BOOT_REFUSED _RY_BOOT_INFLIGHT _RY_NM_RESTART_DEFERRED
-    set --erase _RY_PKG_FAIL_EV _RY_PKG_SWAPPED _RY_RUN_ERR_CAP _RY_RUN_OUT_CAP
+    set --erase _RY_PKG_FAIL_EV _RY_PKG_SWAP_EV _RY_PKG_HOOK_ERR _RY_PKG_SWAP_HOOK_ERR _RY_RUN_ERR_CAP _RY_RUN_OUT_CAP _RY_PKG_ALL _RY_PKG_HELD _RY_PKG_DEP_HELD
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
     set --erase _RY_FSTAB_NEEDS_CHANGE _RY_FSTAB_COMMIT_OVERRIDES _RY_SYSCTL_BAD_ENTRIES _RY_ENVD_BAD_ENTRIES _RY_FSTAB_EVIDENCE _RY_FSTAB_RESULT
     set --erase _RY_RESOLVED_MANAGED_DST _RY_REGDOM_RESULT _RY_REGDOM_EVIDENCE _RY_SDBOOT_REFUSE_FS _RY_NET_FAIL_EVIDENCE
@@ -641,7 +643,7 @@ function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
             _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
             _pre_dispatch_exit $EXIT_PREFLIGHT
         case install-file # only cmdline embeds root=UUID
-            set -l _cmdline_canon (command realpath -m -- /etc/kernel/cmdline 2>/dev/null)
+            set -l _cmdline_canon; command -q realpath; and set _cmdline_canon (command realpath -m -- /etc/kernel/cmdline 2>/dev/null)
             if test "$INSTALL_FILE_TARGET" = /etc/kernel/cmdline; or begin; test -n "$_cmdline_canon"; and test "$INSTALL_FILE_TARGET" = "$_cmdline_canon"; end
                 _err_loud "Cannot detect root UUID ($_reason) — /etc/kernel/cmdline cannot be generated"
                 _pre_dispatch_exit $EXIT_PREFLIGHT
@@ -662,9 +664,9 @@ function _ir_precompute_caches --description "Precompute tmpdir / Wi-Fi-backend 
         if string match -q '*nm.conf' -- "$_d"; set -g _RY_PROFILE_USES_WIFI_BACKEND true; break; end
     end
     set -g _RY_CANON_SYSTEM_DSTS
-    for _d in $SYSTEM_DESTINATIONS; set -ga _RY_CANON_SYSTEM_DSTS (command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
+    for _d in $SYSTEM_DESTINATIONS; set -ga _RY_CANON_SYSTEM_DSTS (command -q realpath; and command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
     set -g _RY_CANON_USER_DSTS
-    for _d in $USER_DESTINATIONS; set -ga _RY_CANON_USER_DSTS (command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
+    for _d in $USER_DESTINATIONS; set -ga _RY_CANON_USER_DSTS (command -q realpath; and command realpath -m -- "$_d" 2>/dev/null; or echo "$_d"); end
     set -l _sys_in (count $SYSTEM_DESTINATIONS); set -l _sys_out (count $_RY_CANON_SYSTEM_DSTS)
     if test "$_sys_in" -ne "$_sys_out"; _err_loud "BUG: _RY_CANON_SYSTEM_DSTS count drift: in=$_sys_in out=$_sys_out"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     set -l _usr_in (count $USER_DESTINATIONS); set -l _usr_out (count $_RY_CANON_USER_DSTS)
@@ -731,6 +733,9 @@ function _ir_validate_keys --description "Refuse to deploy on out-of-domain embe
     end
     for _kp in $KERNEL_PARAMS # spliced into boot configs; charset excludes shell metachars
         if not string match -qr -- '^[A-Za-z0-9._,=-]+$' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refuse to deploy (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
+    for _mt in $MKINITCPIO_MODULES $MKINITCPIO_HOOKS # plain names (no ? marker): presence checks take them literally
+        if not string match -qr -- '^[A-Za-z0-9_-]+$' "$_mt"; _err_loud "MKINITCPIO_MODULES/HOOKS token invalid: '$_mt' — refuse to deploy (plain names only; spliced into a shell-sourced array literal)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 function _ir_validate_sets --description "Refuse to deploy when add and remove sets contradict each other"
@@ -1175,7 +1180,8 @@ end
 # ── MESSAGING: LOUD EMITTERS + PLAIN ECHO ──
 function _err --description "Emit ERR-level message (force-prints to stderr when _RY_LOUD_ERR=true)"
     if set -q _RY_LOUD_ERR; and test "$_RY_LOUD_ERR" = true
-        _log "ERR: "(string join -- " " $argv)
+        set -l msg (string join -- " " $argv); test -n "$msg"; or return 0 # as _msg: an empty message neither logs nor counts
+        _log "ERR: $msg"
         set -q VERIFY_FAIL; and set -g VERIFY_FAIL (math $VERIFY_FAIL + 1)
         _msg_print --force ERR $argv
     else
@@ -1306,7 +1312,6 @@ function _run_resolve_timeout --description "_run_effective_timeout sub: Resolve
             return 0
         end
         set -l _t (math "$RY_RUN_TIMEOUT")
-        if test "$_t" -eq 0; echo 0; return 0; end
         echo $_t
         return 0
     end
@@ -1350,6 +1355,9 @@ function _run_emit_stream --argument-names label_tag tmpfile ret cap --descripti
             set -l _show (string match -rie -- '^:: |\b(?:error|fatal|failed|cannot|denied|conflict)|\bexists in\b' $_captured)
             test (count $_show) -gt 0; or set _show $_captured # error lines come last: pacman --needed opens with warnings
             printf '%s\n' $_show[-5..-1] >&2; or _output_broken
+        else if test "$ret" -ne 0 # stdout: pacman --noconfirm prints its package-conflict report there
+            set -l _show (string match -r -- '^:: \S+ and \S+ are in conflict(?: \(.*\))?$' $_captured)
+            if set -q _show[1]; printf '%s\n' $_show[-5..-1] >&2; or _output_broken; end
         end
     end
 end
@@ -1380,6 +1388,7 @@ end
 
 # ── COMMAND RUNNER: _run ENTRY (capture + timeout dispatch; rc passthrough) ──
 function _run --description "Execute a command with logging, stdout/stderr capture, and timeout enforcement"
+    set -g _RY_RUN_ERR_CAP; set -g _RY_RUN_OUT_CAP # per call, before any early return: no reader sees a stale capture
     if test (count $argv) -eq 0; _log "BUG: _run called with no arguments"; return $EXIT_RUN_MISUSE; end
     if string match -q -- '-*' "$argv[1]"; _log "BUG: _run called with dash-prefixed argv[1]='$argv[1]' — refusing"; return $EXIT_RUN_MISUSE; end
     set -l log_cmd (_run_redact_cmd $argv)
@@ -1397,7 +1406,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     else
         command $argv </dev/null >"$stdout_tmp" 2>"$stderr_tmp"
     end
-    set -l ret $status; set -l _t1 (_progress_now); set -l _cap 500; set -g _RY_RUN_ERR_CAP; set -g _RY_RUN_OUT_CAP # per call: an empty stream leaves none
+    set -l ret $status; set -l _t1 (_progress_now); set -l _cap 500
     _run_emit_stream STDERR "$stderr_tmp" $ret $_cap
     _run_emit_stream STDOUT "$stdout_tmp" $ret $_cap
     _rm_tmp "$_run_dir" false
@@ -1581,7 +1590,7 @@ function _ry_validate_mkinitcpio_modules --description "Validate mkinitcpio MODU
             _err "Required module not found: amdgpu for $_miss (gfx1151 KMS depends on it) — refusing to deploy"
             set _errors (math $_errors + 1)
         else
-            _warn "Module may not exist: $mod for $_miss (continuing anyway)"
+            _warn_loud "Module may not exist: $mod for $_miss (continuing anyway)" # loud: install pins QUIET
         end
     end
     test "$_errors" -eq 0
@@ -1884,7 +1893,7 @@ function _awf_postwrite_verify_restore --argument-names dst use_sudo --descripti
     else
         test -f "$_bak"; and set _has_bak true
     end
-    if test "$_has_bak" = false; _err "  $dst: no backup ($_bak) to restore"; _log "POSTWRITE_RESTORE_NOBAK: dst=$dst"; return 1; end
+    if test "$_has_bak" = false; _err "  $dst: no backup from this run ($_bak) to restore"; _log "POSTWRITE_RESTORE_NOBAK: dst=$dst"; return 1; end
     set -l _spr; test "$use_sudo" = true; and set _spr sudo -n
     if _run $_spr mv -T -- "$_bak" "$dst"
         _warn "  $dst: restored from $_bak after verification failure"
@@ -2023,7 +2032,7 @@ function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache m
     printf '%s\n' "" \
         "[WARN] sudo cache may lapse during 3-8 min install. Mitigations:" \
         "[WARN]   Defaults timestamp_timeout=60 in /etc/sudoers, or a sudo -v keepalive backgrounded in this terminal (tickets are per-tty)" \
-        "[WARN]   Recovery: re-run ry-install (idempotent)" >&2
+        "[WARN]   Recovery: re-run ry-install (idempotent)" >&2; or _output_broken
 end
 
 # ── INSTALL PHASE 1: PREFLIGHT ──
@@ -2159,19 +2168,55 @@ function _ip_conflict_held --description "_ip_pacman_invoke sub: Members missing
         test "$_hit" = true; and printf '%s\n' "$_p"
     end
 end
+function _ip_conflict_dep_held --description "_ip_syu_pass sub: Missing members pulling a package that -Syu reported in conflict"
+    set -l _in (string match -rg -- '^:: (\S+) and \S+ are in conflict' $_RY_RUN_OUT_CAP $_RY_RUN_ERR_CAP) # incoming side: name, or name-ver-rel
+    set -q _in[1]; or return 0
+    set -l _have (command pacman -Qq 2>/dev/null)
+    for _p in $argv
+        contains -- "$_p" $_have; and continue # by name: -Syu upgrades it in place
+        for _t in (command env LC_ALL=C pacman -Sp --needed --print-format '%n' -- "$_p" 2>/dev/null) # print-only: no lock, no conflict check
+            string match -qr -- '^'(string escape --style=regex -- "$_t")'(-[^-]+-[^-]+)?$' $_in; or continue
+            _log "PKG_CONFLICT_DEP_HELD: $_p (its transaction pulls $_t, which -Syu reported in conflict)"; printf '%s\n' "$_p"; break
+        end
+    end
+end
 function _ip_conflict_swap --description "_ip_pacman_invoke sub: Install held packages alone; pacman removes what they conflict with"
+    set -l _pre (command pacman -Qq 2>/dev/null) # the swap's removals: names gone afterwards
     if _run sudo -n LC_ALL=C.UTF-8 pacman -S --needed --noconfirm --ask=4 -- $argv # --ask=4 answers yes to 'Remove X?'; --noconfirm alone says N
-        _ok "Conflict swap: $argv installed; the conflicting package was removed"
-        _log "PKG_CONFLICT_SWAP_OK: $argv"; set -ga _RY_PKG_SWAPPED $argv
+        _pacman_hook_errors "the conflict swap" _RY_PKG_SWAP_HOOK_ERR PKG_HOOK_ERROR
+        set -l _post (command pacman -Qq 2>/dev/null); set -l _gone (for _p in $_pre; contains -- "$_p" $_post; or echo $_p; end)
+        set -l _ev "removed "(string join -- ', ' $_gone); set -q _gone[1]; or set _ev "nothing removed"
+        set -q _pre[1]; and set -q _post[1]; or set _ev "removals unknown (pacman -Qq failed)" # an empty list must not read as all removed
+        _ok "Conflict swap: $argv installed; $_ev"
+        _log "PKG_CONFLICT_SWAP_OK: $argv ($_ev)"; set -g _RY_PKG_SWAP_EV "$_ev"
         return 0
     end
     _err "Conflict swap failed: $argv — by hand: sudo pacman -Syu $argv, answering y to the removal"
     _log "PKG_CONFLICT_SWAP_FAIL: $argv"
     return 1
 end
+function _pacman_hook_errors --argument-names what flag key --description "Flag an rc-0 pacman run whose hooks or scriptlets logged errors: WARN, JSONL key, set flag"
+    set -l _hits (string match -r -- '^error: .*|^==> ERROR: .*' $_RY_RUN_ERR_CAP $_RY_RUN_OUT_CAP | string match -rv -- '^error: failed retrieving file ') # alpm: a failed hook is an error line, rc 0; mirror fallback is not
+    set -q _hits[1]; or return 0
+    set -g $flag true
+    _warn "pacman reported hook or scriptlet errors during $what: $_hits[1]"
+    _log "$key: $what: "(string join -- ' | ' $_hits)
+end
 function _ip_seed_revert --description "_ip_pacman_invoke sub: Restore the pre-seed mkinitcpio.conf when nothing was installed"
     test "$_RY_MKI_HAD_ORIG" = true; and test -n "$_RY_MKI_BACKUP_FILE"; or return 0
     if not _mkinitcpio_revert "$_RY_MKI_BACKUP_FILE"; set -g _RY_MKI_REVERT_FAILED true; _err "mkinitcpio revert failed — boot state may be inconsistent; aborting"; else; set -g _RY_MKI_REVERTED true; end # reverted: phase 3 must not redeploy over the rollback
+end
+function _ip_syu_pass --description "_ip_pacman_invoke sub: Run -Syu; again while a failure names a conflict a missing member pulls"
+    for _n in (seq (math (count $_RY_PKG_ALL) + 1)) # every re-pass holds at least one more member: bounded
+        set -l _tx (for _p in $_RY_PKG_ALL; contains -- "$_p" $_RY_PKG_HELD; or echo $_p; end) # this pass's members
+        _run sudo -n LC_ALL=C.UTF-8 pacman $argv -- $_tx; and return 0 # C.UTF-8: English for the echo filter, UTF-8 paths still extract
+        set -l _add (_ip_conflict_dep_held $_tx) # alpm stops at the first refused conflict: one per pass
+        set -q _add[1]; or return 1
+        set -ga _RY_PKG_HELD $_add; set -ga _RY_PKG_DEP_HELD $_add; set argv (string replace -- -Syyu -Syu $argv) # a re-pass need not re-download the dbs
+        _warn_loud "pacman stopped on a dependency conflict — re-running without $_add, which the swap installs after -Syu" # loud: the failed pass's errors are on screen
+        _log "PKG_CONFLICT_HELD: $_RY_PKG_HELD (re-pass $_n after a dependency conflict)"
+    end
+    return 1
 end
 function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacman -Syu --needed (partial upgrades forbidden — Arch policy)"
     set -l _pacman_first -Syu --needed --noconfirm; set -l _pacman_retry -Syyu --needed --noconfirm
@@ -2181,15 +2226,14 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
         set -ga _RY_PKG_FAIL_EV "pacman db locked"; _ip_seed_revert; return 1 # nothing installed: the seed must not outlive it
     end
     _info "System upgrade proceeding unattended — review archlinux.org/news and wiki.cachyos.org post-install"
-    set -l _held (_ip_conflict_held $argv); set -l _syu_pkgs # held: --noconfirm answers N to 'Remove X?', aborting all of -Syu
-    for _p in $argv; contains -- "$_p" $_held; or set -a _syu_pkgs "$_p"; end
-    test (count $_held) -gt 0; and _log "PKG_CONFLICT_HELD: $_held (an installed package conflicts; installed after -Syu)"
+    set -g _RY_PKG_ALL $argv; set -g _RY_PKG_DEP_HELD; set -g _RY_PKG_HELD (_ip_conflict_held $argv) # held: --noconfirm answers N to 'Remove X?', aborting all of -Syu
+    set -q _RY_PKG_HELD[1]; and _log "PKG_CONFLICT_HELD: $_RY_PKG_HELD (an installed package conflicts; installed after -Syu)"
     set -l _q_pre (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)') # name+version fingerprint; empty pre/post = fail-open true
-    if not _run sudo -n LC_ALL=C.UTF-8 pacman $_pacman_first -- $_syu_pkgs # C.UTF-8: English for the echo filter, UTF-8 paths still extract
-        _warn "Package installation failed — retrying with forced db re-sync (handles transient mirror staleness; will not resolve pkg conflicts — see JSONL log for first-pass stderr)..."
-        set _held (_ip_conflict_held $argv); set _syu_pkgs (for _p in $argv; contains -- "$_p" $_held; or echo $_p; end) # -y refreshed the sync db: re-hold
-        test (count $_held) -gt 0; and _log "PKG_CONFLICT_HELD: $_held (re-read for the -Syyu retry)"
-        if not _run sudo -n LC_ALL=C.UTF-8 pacman $_pacman_retry -- $_syu_pkgs
+    if not _ip_syu_pass $_pacman_first
+        _warn_loud "Package installation failed — retrying with forced db re-sync (handles transient mirror staleness; will not resolve a conflict no missing member pulls — see JSONL log for the failed pass's output)..." # loud: install pins QUIET
+        set -g _RY_PKG_HELD (_ip_conflict_held $argv); for _p in $_RY_PKG_DEP_HELD; contains -- "$_p" $_RY_PKG_HELD; or set -ga _RY_PKG_HELD "$_p"; end # -y refreshed the sync db: re-hold
+        set -q _RY_PKG_HELD[1]; and _log "PKG_CONFLICT_HELD: $_RY_PKG_HELD (re-read for the -Syyu retry)"
+        if not _ip_syu_pass $_pacman_retry
             if test -f /var/lib/pacman/db.lck
                 _err "pacman database became locked during install — aborting"; set -ga _RY_PKG_FAIL_EV "pacman db locked mid-run"
             else
@@ -2199,8 +2243,8 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
             return 1
         end
     end
-    set -g SYSTEM_UPGRADED true
-    test (count $_held) -gt 0; and _ip_conflict_swap $_held # same db as -Syu: no partial upgrade; failure reads as missing
+    set -g SYSTEM_UPGRADED true; _pacman_hook_errors "pacman -Syu" _RY_PKG_HOOK_ERR PKG_HOOK_ERROR # the passing pass's capture
+    set -q _RY_PKG_HELD[1]; and _ip_conflict_swap $_RY_PKG_HELD # same db as -Syu: no partial upgrade; failure reads as missing
     set -l _q_post (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
     if test -n "$_q_pre"; and test -n "$_q_post"; and test "$_q_pre" = "$_q_post"
         set -g SYSTEM_UPGRADED false
@@ -2223,7 +2267,7 @@ function _mark_pkgs_add_explicit --description "Re-mark installed PKGS_ADD expli
     return 0
 end
 function _ip_run_and_verify --description "_install_packages sub: Run pacman -Syu + verify + revalidate hooks"
-    set -l pkgs_to_install $argv; set -l _fn_err false; set -g _RY_PKG_FAIL_EV # FAIL-row causes for _install_packages
+    set -l pkgs_to_install $argv; set -l _fn_err false; set -g _RY_PKG_FAIL_EV; set -g _RY_PKG_SWAP_EV; set -g _RY_PKG_HOOK_ERR false; set -g _RY_PKG_SWAP_HOOK_ERR false # row evidence for _install_packages
     if not _ip_pacman_invoke $pkgs_to_install; _taint; set _fn_err true; end
     _mark_pkgs_add_explicit # whatever the -Syu result: -D only changes install reason
     _info "Verifying package installation..."
@@ -2283,16 +2327,21 @@ function _install_packages --description "Install managed packages via pacman -S
     end
     set --erase _RY_MKI_BACKUP_FILE _RY_MKI_HAD_ORIG
     sudo -n rmdir /run/ry-install 2>/dev/null # reclaim empty snapshot dir
-    set -l _pk_ev (string join -- ', ' $_RY_PKG_FAIL_EV); set -l _swap_n (count $_RY_PKG_SWAPPED); set --erase _RY_PKG_FAIL_EV _RY_PKG_SWAPPED
+    set -l _pk_ev (string join -- ', ' $_RY_PKG_FAIL_EV); set -l _swap_ev "$_RY_PKG_SWAP_EV"; set -l _hook_err "$_RY_PKG_HOOK_ERR"; set -l _swap_hook "$_RY_PKG_SWAP_HOOK_ERR"; set --erase _RY_PKG_FAIL_EV _RY_PKG_SWAP_EV _RY_PKG_HOOK_ERR _RY_PKG_SWAP_HOOK_ERR
     if test "$_fn_err" = true
         test -n "$_pk_ev"; or set _pk_ev "see JSONL log"
-        _phase_record "Packages: pacman -Syu" FAIL "$_pk_ev"; return 1
+        _phase_record "Packages: pacman -Syu" FAIL "$_pk_ev"
+    else
+        set -l _syu_ev "system upgraded (full -Syu)"; set -l _syu_r PASS
+        test "$SYSTEM_UPGRADED" = true; or set _syu_ev "no package changes (-Syu no-op)"
+        test "$_hook_err" = true; and set _syu_r WARN; and set _syu_ev "$_syu_ev, pacman hook error" # as the PKGS_DEL row
+        _phase_record "Packages: pacman -Syu" $_syu_r "$_syu_ev"
     end
-    set -l _syu_ev "system upgraded (full -Syu)"
-    test "$SYSTEM_UPGRADED" = true; or set _syu_ev "no package changes (-Syu no-op)"
-    test "$_swap_n" -gt 0; and set _syu_ev "$_syu_ev, $_swap_n conflict swap(s)"
-    _phase_record "Packages: pacman -Syu" PASS "$_syu_ev"
-    return 0
+    if test -n "$_swap_ev"
+        set -l _swap_r PASS; test "$_swap_hook" = true; and set _swap_r WARN; and set _swap_ev "$_swap_ev; pacman hook error"
+        _phase_record "Packages: conflict swap" $_swap_r "$_swap_ev" # names what the swap removed
+    end
+    test "$_fn_err" = false
 end
 
 # ── INSTALL PHASE 3: CONFIGURATION (SYSTEM + USER CONFIG FILES, ATOMIC WRITES) ──
@@ -2530,13 +2579,6 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when n
     end
     printf '%s\n' "$pkg"
 end
-function _csp_hook_errors --description "_csp_remove_pkgs sub: Flag an rc-0 removal whose pacman hooks or scriptlets logged errors"
-    set -l _hits (string match -r -- '^error: .*|^==> ERROR: .*' $_RY_RUN_ERR_CAP $_RY_RUN_OUT_CAP) # alpm: a failed hook is an error line, rc 0
-    test (count $_hits) -gt 0; or return 0
-    set -g _RY_PKG_REMOVE_HOOK_ERR true
-    _warn "pacman reported hook or scriptlet errors during PKGS_DEL removal: $_hits[1]"
-    _log "PKG_REMOVE_HOOK_ERROR: "(string join -- ' | ' $_hits)
-end
 function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg retry on batch failure"
     if test -f /var/lib/pacman/db.lck
         _err "pacman database is locked (/var/lib/pacman/db.lck) — another pacman may be running, or it is a stale lock from a crashed run"
@@ -2549,7 +2591,7 @@ function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg re
     if not _mark_pkgs_add_explicit; set _rm_op -Rn; _warn "  PKGS_ADD not confirmed explicit — removing without -s (orphaned deps kept)"; _log "PKG_REMOVE_NO_CASCADE: -Rn (PKGS_ADD re-mark failed)"; end
     if _run sudo -n LC_ALL=C.UTF-8 pacman $_rm_op --noconfirm -- $argv # C.UTF-8: the hook-error match reads untranslated lines
         _ok "Removed: $argv"; _log "PKG_REMOVE_BATCH_OK: $argv"; set -g _RY_PKGS_REMOVED_COUNT (math $_RY_PKGS_REMOVED_COUNT + (count $argv))
-        _csp_hook_errors; return 0
+        _pacman_hook_errors "PKGS_DEL removal" _RY_PKG_REMOVE_HOOK_ERR PKG_REMOVE_HOOK_ERROR; return 0
     end
     if test -f /var/lib/pacman/db.lck; _err "pacman database became locked during removal — aborting"; set -g INSTALL_HAD_ERRORS true; set -g _RY_PKG_REMOVE_DBLOCK true; _log "PKG_REMOVE_BATCH_FAIL_DBLOCK: $argv"; return 0; end
     _warn "Batch removal failed — retrying individually to identify failures"
@@ -2563,7 +2605,7 @@ function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg re
             set -a _retry_failed "$pkg" # judged after the loop: a later member's cascade can still take it
         else
             _log "PKG_REMOVE_OK: $pkg"
-            set -g _RY_PKGS_REMOVED_COUNT (math $_RY_PKGS_REMOVED_COUNT + 1); _csp_hook_errors
+            set -g _RY_PKGS_REMOVED_COUNT (math $_RY_PKGS_REMOVED_COUNT + 1); _pacman_hook_errors "PKGS_DEL removal" _RY_PKG_REMOVE_HOOK_ERR PKG_REMOVE_HOOK_ERROR
         end
     end
     test (count $_retry_failed) -gt 0; or return 0
@@ -2612,7 +2654,8 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
     else if test "$_del_count" -eq 0
         _phase_record "Services: PKGS_DEL removal" WARN "$_skip_count skipped (rdep gate)"
     else if test "$_RY_PKG_REMOVE_HOOK_ERR" = true
-        _phase_record "Services: PKGS_DEL removal" WARN "removed $_RY_PKGS_REMOVED_COUNT of $_del_count, pacman hook error"
+        set -l _hk "removed $_RY_PKGS_REMOVED_COUNT of $_del_count, pacman hook error"; test "$_skip_count" -gt 0; and set _hk "$_hk, $_skip_count rdep-skipped"
+        _phase_record "Services: PKGS_DEL removal" WARN "$_hk"
     else if test "$_RY_PKGS_REMOVED_COUNT" -lt "$_del_count"
         set -l _rm_ev "removed $_RY_PKGS_REMOVED_COUNT of $_del_count"
         test "$_skip_count" -gt 0; and set _rm_ev "$_rm_ev, $_skip_count rdep-skipped"
@@ -3269,7 +3312,7 @@ function _rdi_run_phases --description "_ry_do_install sub: Run pkgs/sys/service
     set -g _RY_DEPLOY_CHANGED_COUNT 0; set -g _RY_DEPLOY_IDEMPOTENT_COUNT 0; set -g _RY_DEPLOY_CHANGED_DSTS # phase-3 scope
     if _install_system_files
         set -l _cfg_res PASS; set -l _cfg_ev "$_RY_DEPLOY_CHANGED_COUNT deployed, $_RY_DEPLOY_IDEMPOTENT_COUNT idempotent"
-        test "$_RY_MKI_REVERTED" = true; and set _cfg_res WARN; and set _cfg_ev "$_cfg_ev, mkinitcpio.conf held" # -Syu rollback stands
+        test "$_RY_MKI_REVERTED" = true; and set _cfg_res WARN; and set _cfg_ev "$_cfg_ev, mkinitcpio.conf held" # seed rollback stands: -Syu failed or was skipped
         _phase_record "Configuration: file deployment" $_cfg_res "$_cfg_ev"
     else
         set -g INSTALL_HAD_ERRORS true
@@ -3294,17 +3337,16 @@ function _rdi_elapsed --description "_rdi_render_matrix sub: Format elapsed seco
 end
 function _rdi_render_matrix --description "_rdi_summary sub: Render the install phase summary as aligned columns"
     test (count $_RY_PHASE_RESULTS) -eq 0; and return 0
-    set -l _out true; set -q _RY_OUTPUT_BROKEN; and set _out false # stderr gone: still tally and log the verdict
     set -l _w_c 34; set -l _w_e 50
     set -l _rule (string repeat -n (math "$_w_c + $_w_e + 11") '─')
     set -g _RY_MTX_PASS 0; set -g _RY_MTX_WARN 0; set -g _RY_MTX_FAIL 0
     set -g _RY_MTX_DEFER 0; set -g _RY_MTX_SKIP 0; set -g _RY_MTX_NA 0
-    test "$_out" = true; and printf '%s\n' "" "ry-install v$VERSION — RUN SUMMARY" $_rule >&2
+    set -q _RY_OUTPUT_BROKEN; or printf '%s\n' "" "ry-install v$VERSION — RUN SUMMARY" $_rule >&2; or _output_broken # stderr gone: tally and log only
     for _row in $_RY_PHASE_RESULTS
         set -l _p (string split '│' -- $_row)
         test (string length -- $_p[1]) -gt "$_w_c"; and functions -q _log; and _log "MATRIX_TRUNCATED: check "(string length -- $_p[1])" > $_w_c chars: $_p[1]"
         test (string length -- $_p[3]) -gt "$_w_e"; and functions -q _log; and _log "MATRIX_TRUNCATED: evidence "(string length -- $_p[3])" > $_w_e chars: $_p[3]"
-        test "$_out" = true; and printf '  %s  %s  %s\n' (string pad -r -w 5 -- $_p[2]) (string pad -r -w $_w_c -- (string sub -l $_w_c -- $_p[1])) (string sub -l $_w_e -- $_p[3]) >&2
+        set -q _RY_OUTPUT_BROKEN; or printf '  %s  %s  %s\n' (string pad -r -w 5 -- $_p[2]) (string pad -r -w $_w_c -- (string sub -l $_w_c -- $_p[1])) (string sub -l $_w_e -- $_p[3]) >&2; or _output_broken
         switch "$_p[2]"
             case PASS; set -g _RY_MTX_PASS (math $_RY_MTX_PASS + 1)
             case WARN; set -g _RY_MTX_WARN (math $_RY_MTX_WARN + 1)
@@ -3322,7 +3364,8 @@ function _rdi_render_matrix --description "_rdi_summary sub: Render the install 
     set -l _next "reboot · ./ry-verify.fish"
     test "$_v" = PASS-WITH-WARNINGS; and set _next "review WARN above · reboot · ./ry-verify.fish"
     contains -- "$_v" FAIL FAIL-BOOT-CRITICAL PREFLIGHT; and set _next "review FAIL/WARN above · re-run install (idempotent)"
-    test "$_out" = true; and printf '%s\n' $_rule "  Totals : $_RY_MTX_PASS PASS · $_RY_MTX_WARN WARN · $_RY_MTX_FAIL FAIL · $_RY_MTX_DEFER DEFER · $_RY_MTX_SKIP SKIP · $_RY_MTX_NA N/A" "  Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_v" "  Log    : $LOG_FILE" "  Next   : $_next" "" >&2
+    set -l _tot "  Totals : $_RY_MTX_PASS PASS · $_RY_MTX_WARN WARN · $_RY_MTX_FAIL FAIL · $_RY_MTX_DEFER DEFER · $_RY_MTX_SKIP SKIP · $_RY_MTX_NA N/A" "  Elapsed: "(_rdi_elapsed)"   ·   Verdict: $_v"
+    set -q _RY_OUTPUT_BROKEN; or printf '%s\n' $_rule $_tot "  Log    : $LOG_FILE" "  Next   : $_next" "" >&2; or _output_broken
     _log "MATRIX_RENDERED: rows="(count $_RY_PHASE_RESULTS)" pass=$_RY_MTX_PASS warn=$_RY_MTX_WARN fail=$_RY_MTX_FAIL defer=$_RY_MTX_DEFER skip=$_RY_MTX_SKIP na=$_RY_MTX_NA verdict=$_v"
     set --erase _RY_MTX_PASS _RY_MTX_WARN _RY_MTX_FAIL _RY_MTX_DEFER _RY_MTX_SKIP _RY_MTX_NA
 end
@@ -3404,8 +3447,9 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     end
     _progress_done
     _rdi_summary
+    test "$_boot_rc" -eq "$EXIT_BOOT_CRIT"; and _log "INSTALL_BAILOUT: boot-critical failure → returning EXIT_BOOT_CRIT"
     _log_section "INSTALLATION END"
-    if test "$_boot_rc" -eq "$EXIT_BOOT_CRIT"; _log "INSTALL_BAILOUT: boot-critical failure → returning EXIT_BOOT_CRIT"; return $EXIT_BOOT_CRIT; end
+    test "$_boot_rc" -eq "$EXIT_BOOT_CRIT"; and return $EXIT_BOOT_CRIT
     test "$INSTALL_HAD_ERRORS" = true; and return $EXIT_FAIL
     return $EXIT_OK
 end
@@ -3507,7 +3551,7 @@ end
 # ── POST-HOOKS: BOOT (BOOT, CMDLINE, LOADER; TAINT GATE → CASCADE → ENTRIES → SANITY) ──
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot_apply sub: mkinitcpio -P + sdboot-manage cascade"
     if test "$skip_mki" != true
-        if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "BOOT_REBUILD_FAIL: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
+        if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "POST_BOOT_REBUILD_FAIL: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     end
     set -l _boot (_resolve_boot_path) # resolve ESP-fallback before the vfat gate (mirrors phase 5)
     if not _sdboot_fallback_vfat_ok; _log "POST_BOOT_SDBOOT_REFUSED: target=$target"; return $EXIT_BOOT_CRIT; end
@@ -3518,8 +3562,8 @@ function _pb_rebuild_cascade --argument-names target skip_mki --description "_po
         _log "POST_BOOT_BOOT_RESOLVE_FAIL: target=$target"
         return $EXIT_BOOT_CRIT
     end
-    if not _run sudo -n sdboot-manage gen; _err "sdboot-manage gen failed"; _log "BOOT_REBUILD_FAIL: step='sdboot-manage gen' target=$target"; return $EXIT_BOOT_CRIT; end
-    if not _run sudo -n sdboot-manage update; _err "sdboot-manage update failed"; _log "BOOT_REBUILD_FAIL: step='sdboot-manage update' target=$target"; return $EXIT_BOOT_CRIT; end
+    if not _run sudo -n sdboot-manage gen; _err "sdboot-manage gen failed"; _log "POST_BOOT_REBUILD_FAIL: step='sdboot-manage gen' target=$target"; return $EXIT_BOOT_CRIT; end
+    if not _run sudo -n sdboot-manage update; _err "sdboot-manage update failed"; _log "POST_BOOT_REBUILD_FAIL: step='sdboot-manage update' target=$target"; return $EXIT_BOOT_CRIT; end
     return 0
 end
 function _post_boot_apply --argument-names target skip_mki --description "Shared post-hook body: taint gate + cascade + entry verify + sanity"
@@ -3706,7 +3750,7 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
     else
         set -l _sv (set -q _RY_SYSTEMD_VER; and echo "unavailable (systemd $_RY_SYSTEMD_VER < 254)"; or echo "skipped (systemd version unknown)")
         _warn "udevadm verify $_sv — reloading $target unvalidated; check the rule by hand if you edited it"
-        _log "UDEV_VERIFY_SKIP: udevadm verify $_sv; reloading rule unvalidated"
+        _log "POST_UDEV_VERIFY_SKIP: target=$target udevadm verify $_sv; reloading rule unvalidated"
     end
     if not _run sudo -n udevadm control --reload-rules
         _warn "udevadm control --reload-rules failed — rules apply at next boot (non-fatal; file deployed)"
@@ -3770,7 +3814,7 @@ if set -q _flag_install_file
             _early_usage_exit "--install-file requires an absolute path (got: $_if_val)"
         end
     end
-    if string match -qr -- '[\x00-\x1f\x7f]' "$_if_val"; _early_usage_exit "--install-file path contains control character — refusing (would break JSONL header / shell quoting)"; end
+    if string match -qr -- '[\x00-\x1f\x7f]' "$_if_val"; _early_usage_exit "--install-file path contains a control character — refusing (no managed path has one)"; end
     set -l _byte_len (printf '%s' "$_if_val" | command wc -c | string trim --)
     if not string match -qr '^\d+$' -- "$_byte_len"; _early_usage_exit "--install-file path byte-length probe failed (wc -c returned '$_byte_len') — refusing"; end
     test "$_byte_len" -gt 4095; and _early_usage_exit "--install-file path exceeds PATH_MAX (4096 bytes with the terminating NUL)"
@@ -3778,11 +3822,11 @@ if set -q _flag_install_file
         test (printf '%s' "$_comp" | command wc -c | string trim --) -gt 255; and _early_usage_exit "--install-file path component exceeds NAME_MAX (255 bytes): $_comp"
     end
     set --erase _comp
-    set -l _canon (command realpath -m -- "$_if_val" 2>/dev/null)
+    set -l _canon; command -q realpath; and set _canon (command realpath -m -- "$_if_val" 2>/dev/null)
     if test -n "$_canon"
         set -g INSTALL_FILE_TARGET "$_canon"
     else
-        echo "[WARN] realpath -m failed on '$_if_val' — using literal path; managed-file validation may not match" >&2; set -ga _RY_PERM_FIX_NOTICES "INSTALL_FILE_REALPATH_FAIL: $_if_val (literal path used)"
+        echo "[WARN] realpath -m gave no path for '$_if_val' (failed or absent) — using literal path; managed-file validation may not match" >&2; set -ga _RY_PERM_FIX_NOTICES "INSTALL_FILE_REALPATH_FAIL: $_if_val (literal path used)"
         set -g INSTALL_FILE_TARGET "$_if_val"
     end
 end
@@ -3790,7 +3834,7 @@ test (count $argv) -gt 0; and _early_usage_exit "Unexpected positional argument(
 if test "$MODE" = install-file # a usage check: settle membership before the _init_runtime gates
     set -l _if_managed false
     for _d in $SYSTEM_DESTINATIONS $USER_DESTINATIONS
-        set -l _dc (command realpath -m -- "$_d" 2>/dev/null)
+        set -l _dc; command -q realpath; and set _dc (command realpath -m -- "$_d" 2>/dev/null)
         if test "$INSTALL_FILE_TARGET" = "$_d"; or test "$INSTALL_FILE_TARGET" = "$_dc"; set _if_managed true; break; end
     end
     set --erase _d
@@ -3830,7 +3874,8 @@ for _r in $_argv_in; set -a _argv_parts '"'(_json_str "$_r" | string collect --a
 set --erase _r
 set -l _argv_json '['(string join -- ',' $_argv_parts)']'; set -l _verbose_json false
 test "$QUIET" = false; and set _verbose_json true
-_jsonl_write (printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}' (command date $_RY_TS_FMT) "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json")
+set -l _hdr_ts (command date $_RY_TS_FMT) # quoted below: an empty date must not shift the fields
+_jsonl_write (printf '{"ts":"%s","event":"header","version":"%s","profile":"%s","mode":"%s","verbose":%s,"argv":%s}' "$_hdr_ts" "$VERSION" "$PROFILE_NAME" "$MODE" "$_verbose_json" "$_argv_json")
 if test "$status" -eq 0
     set -g _RY_HEADER_WRITTEN true
 else

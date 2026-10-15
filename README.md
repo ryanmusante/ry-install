@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.242.0** · [Changelog](CHANGELOG.md)
+**Version 7.245.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -27,7 +27,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 | Shell | fish 3.6 or newer |
 | Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
-| Privileges | normal user with sudo rights; `sudo -v` cached before the run — when it is not, the run prompts through `sudo -v` if stdin and stderr are both a TTY, and exits `3` otherwise or if the prompt fails |
+| Privileges | normal user with sudo rights; `sudo -v` cached before the run — when it is not, the run prompts through `sudo -v` if stdin and stderr are both a TTY, and exits `3` otherwise, if the prompt fails, or if no credential ends up cached (`timestamp_timeout=0`) |
 | Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `cmp`, `curl`, `getent`, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
 
 ## Usage
@@ -37,15 +37,15 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 
 The bare invocation is the unattended install, all 6 phases; `--install-file <path>` re-deploys one managed file. `--verify`, `--check`, and `--report` belong to [ry-verify](https://github.com/ryanmusante/ry-verify) and, like positional arguments, exit `2` here. `--help` (`-h`) and `--version` (`-v`) are the only stdout output — every result goes to stderr.
 
-Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`.
+Each run writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, where `MODE` is `install` or `install-file`.
 
-Per-phase verdicts:
+Per-step results (one summary row each):
 
 - `PASS` — completed its work.
 - `WARN` — hit something non-fatal and kept exit `0`.
 - `FAIL` — did not complete.
 - `DEFER` — applies at next boot.
-- `SKIP` — preconditions absent; the phase did not run.
+- `SKIP` — the step did not run: nothing to do, a precondition absent, held, or aborted.
 - `--` — not applicable, tallied as `N/A` in Totals.
 
 ## Exit Codes
@@ -53,7 +53,7 @@ Per-phase verdicts:
 | Code | Meaning |
 |---|---|
 | `0` | OK — success and `WARN`-only runs |
-| `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout closed or full) |
+| `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout full, or closed under fish 3) |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
 | `3` | missing dependency, uncached sudo that no TTY prompt resolved, or a failed gate (hardware, disk, network, pacman lock) |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
@@ -100,21 +100,21 @@ In deploy order; system files land `0644`, user files `0600`.
 ## Install Flow
 
 1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, and network gates; a warn-only time-sync check; config validation.
-2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A `PKGS_ADD` member that an installed package conflicts with installs after `-Syu`, in a transaction that removes the conflicting package. A failed `-Syu` restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
+2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A `PKGS_ADD` member that an installed package conflicts with installs after `-Syu`, in a transaction that removes the conflicting package. A `-Syu` that fails, or is skipped because the pacman database is locked, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 17 embedded configs atomically.
-4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (a unit that masks but fails to stop is a `WARN`) → enable (a unit that enables but fails to start is a `WARN`) → regulatory domain.
-5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity.
-6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, and the next run applies them unless a reboot already has.
+4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (`ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next run stops it) → enable (a unit that enables but fails to start is a `WARN`) → regulatory domain.
+5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `sdboot-manage update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` files present inside `$BOOT`.
+6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, as does a NetworkManager restart deferred because Wi-Fi carries the default route; the next run applies them unless a reboot already has, and defers that restart again while Wi-Fi still carries the route.
 
 ## Safety and Reliability
 
-**Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; a post-write mismatch restores the backup this run took.
+**Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; for the 4 boot files, a post-write mismatch restores the backup this run took.
 
 **Symlinked destinations** — a managed path that is a symlink is replaced with a regular file at the managed mode.
 
 **Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab.
 
-**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `*atime`, `nolazytime`, and any existing `commit=`; every other row is byte-preserved. An ext4 row whose column 4 is all digits (options column missing) is left untouched and turns the `Services: fstab opts` summary row `WARN`. A power loss can discard up to 10 s of metadata.
+**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `relatime`, `atime`, `strictatime`, `nolazytime`, and every existing `commit=` (ext4 honors the last one); every other row is byte-preserved. An ext4 row with fewer than 4 fields, or whose column 4 is all digits (options column missing), is left untouched and turns the `Services: fstab opts` summary row `WARN`. A power loss can discard up to 10 s of metadata.
 
 ## Embedded Values
 
@@ -123,7 +123,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 All tunables are `set -g` globals; after editing both scripts, re-run or `--install-file` the affected file.
 
-The length of each array among the shared tunables is a drift tripwire in `_ir_validate_counts` of both scripts — `KERNEL_PARAMS:15` among them; the accepted-value sets `_RY_DPM_LEVELS` and `_RY_EPP_LEVELS` carry no pin, and an array only one script carries, such as `_RY_PKG_MANAGED_SERVICES` here or ry-verify's `EXPECTED_VULKAN_PKGS`, is pinned in that script alone. Adding or dropping an element also means updating that `NAME:<n>` in each script that pins it and any count this README quotes, such as the 15 kernel tokens in [Managed Files](#managed-files); otherwise that script refuses to run with `NAME count drift` and exits `3`.
+The length of each array among the shared tunables is a drift tripwire in `_ir_validate_counts` of both scripts — `KERNEL_PARAMS:15` among them; the accepted-value sets `_RY_DPM_LEVELS` and `_RY_EPP_LEVELS` carry no pin, and an array only one script carries, such as `_RY_PKG_MANAGED_SERVICES` here or ry-verify's `EXPECTED_VULKAN_PKGS`, is pinned in that script alone. Adding or dropping an element also means updating that `NAME:<n>` in each script that pins it; otherwise that script refuses to run with `NAME count drift` and exits `3`. Update any count this README quotes too, such as the 15 kernel tokens in [Managed Files](#managed-files).
 
 ### Bootloader Keys
 
@@ -156,7 +156,7 @@ The length of each array among the shared tunables is a drift tripwire in `_ir_v
 
 ### Initramfs
 
-`HOOKS` order is an invariant, checked along with hook and module presence before `mkinitcpio.conf` is deployed, `--install-file` of `mkinitcpio.conf` or `sdboot-manage.conf` (both rebuild the initramfs) included: `base` first, `fsck` last, no duplicates, and `systemd` before `autodetect`, `keyboard`, and `sd-vconsole`; `autodetect` before `microcode` and `modconf`; `keyboard` before `sd-vconsole`; `modconf` before `kms`; `block` before `filesystems`.
+`HOOKS` order is an invariant, checked along with hook and module presence before `mkinitcpio.conf` is deployed, `--install-file` of `mkinitcpio.conf` or `sdboot-manage.conf` (both rebuild the initramfs, so the preflight disk-space gate runs too) included: `base` first, `fsck` last, no duplicates, and `systemd` before `autodetect`, `keyboard`, and `sd-vconsole`; `autodetect` before `microcode` and `modconf`; `keyboard` before `sd-vconsole`; `modconf` before `kms`; `block` before `filesystems`.
 
 - `MKINITCPIO_MODULES` = `amdgpu` → `MODULES=()`
 - `MKINITCPIO_HOOKS` = `base`, `systemd`, `autodetect`, `microcode`, `modconf`, `kms`, `keyboard`, `sd-vconsole`, `block`, `filesystems`, `fsck` → `HOOKS=()`
@@ -171,7 +171,7 @@ The length of each array among the shared tunables is a drift tripwire in `_ir_v
 - `RESOLVED_LLMNR` = `no` → `LLMNR=`
 - `NM_DISPATCHER_LOGLEVELMAX` = `notice` → `LogLevelMax=`
 - `COUNTRY` = `US` → `COUNTRY=`
-- `LOGIND_IGNORE_KEYS` = 8 power, suspend, hibernate, and reboot keys → `Handle*Key=ignore`
+- `LOGIND_IGNORE_KEYS` = 8 power, suspend, hibernate, and reboot keys → `Handle*Key*=ignore`
 - `NM_WIFI_BACKEND` = `wpa_supplicant` → `wifi.backend=`
 - `NM_WIFI_POWERSAVE` = `2` (disabled) → `wifi.powersave=`
 - `NM_LOG_LEVEL` = `WARN` → `level=`
@@ -232,7 +232,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 
 - `/dev/ntsync` — Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out.
 - `PROTON_FSR4_UPGRADE=1` — the Proton-CachyOS lever that upgrades FSR 3.1 titles to FSR 4; set it per title in the Steam launch options, never session-wide; a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.0` (`4.0.0` or `4.1.1`; more only through OptiScaler). `PROTON_FSR4_INDICATOR=1` draws only the watermark and is not shipped.
-- `cpu_stats` ships enabled; `cpu_temp` stays commented out — to turn it on, add it on its own line in the MangoHud generator of both scripts, then `--install-file` the file. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
+- `cpu_stats` ships enabled; `cpu_temp` stays commented out — to turn it on, add it on its own line in the MangoHud generator of both scripts and in ry-verify's `_verify_static_user` directive list, then `--install-file` the file. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
 - `game-performance` — the CachyOS wrapper needs `power-profiles-daemon`, whose service this profile masks, so it runs the game unchanged; the profile pins the `powersave` governor with EPP `performance` instead.
 
 ### Kernel Parameter Notes
@@ -244,7 +244,7 @@ Adding or dropping a token means editing `KERNEL_PARAMS` in both scripts and its
 - `pcie_aspm.policy=performance` — addresses Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
 - `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; `sdboot-manage` writes one only when a fallback initramfs image exists, which the stock `mkinitcpio` preset template no longer builds.
-- `timeout 0` with `default @saved` — with no saved entry (fresh ESP), sd-boot picks by its own sort order and can boot the fallback unseen; hold a key at power-on and select the tuned entry once.
+- `timeout 0` with `default @saved` — with no saved entry (fresh ESP), systemd-boot picks by its own sort order and can boot the fallback unseen; hold a key at power-on and select the tuned entry once.
 
 ## BIOS
 

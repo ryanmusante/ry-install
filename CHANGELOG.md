@@ -3,24 +3,79 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.242.0
+7.245.0
 -------
 
-  - services: pacman runs with LC_ALL=C.UTF-8, so a PKGS_DEL removal whose
-    hook logged an error reads WARN under a translated locale
-  - logging: a failed pacman command's echo keeps its error lines under any
-    locale
-  - consistency: banners name the code under them; 'top-level' and
-    'unparsable' replace 'master' and 'unparseable'
+  - guard: an early exit removes ~/ry-install only when this run created it
+  - cli: an over-long RY_RUN_TIMEOUT warns that 2147483647 is used, not that
+    it is clamped
+  - signals: a signal during the startup mv -T probe no longer leaves its two
+    temp files in /tmp
+  - signals: no PIPE handler: fish ignores SIGPIPE, so only a kill -PIPE ran
+    it, and it silenced a live terminal
+  - preflight: a sudo -n -v that passes yet leaves sudo -n unusable exits 3,
+    as an interactive sudo -v does
+  - preflight: the sudo banner suggests a keepalive in this terminal, since
+    sudo tickets are per-tty
+  - preflight: missing optional tools and an absent modinfo warn on stderr;
+    the validation error counts failed checks
+  - packages: the -Syyu retry re-reads conflict holds from the sync db the
+    first pass refreshed
+  - packages: the held mkinitcpio.conf warning says the seed was rolled back,
+    not -Syu
+  - configuration: an nft -c that exits 124 or 137 reads timed out or was
+    killed
+  - services: a masked unit that is still running is masked again with --now,
+    as ry-verify FAILs it
+  - services: a systemd-resolved restart owed by an interrupted run stays owed
+    in pending-apply until it runs
+  - services: a mask failure is logged as an error; a failed findmnt --verify
+    lists its [E] lines first
+  - services: an enable FAIL row counts the units that failed to start, so the
+    row fits its column
+  - boot: a symlinked loader/entries directory is listed; entry checks name a
+    rejected path and a missing directory
+  - boot: a signal during the read-only post-rebuild checks no longer prints
+    the interrupted-rebuild banner
+  - finalize: a pending-apply marker from another boot is deleted when first
+    read
+  - install-file: a boot config runs the preflight disk-space gate first and
+    exits 3 when it fails
+  - install-file: a failed nftables reload names the retry command; an
+    environment.d deploy says try-restarted
+  - logging: a failed stderr write logs STDERR_WRITE_FAIL once and the run
+    continues in the JSONL
+  - logging: tmpfile and child-reap records precede the footer again; a signal
+    while the footer is built still writes it
+  - logging: a log rename that falls back to cp, or fails, is logged; the
+    log-write warning allows a removed JSONL
+  - logging: _run times commands on the monotonic clock; TIMEOUT_LONGOP_CAP is
+    renamed TIMEOUT_LONGOP_FLOOR
+  - progress: the bar unpins before its last writes, so a resize then cannot
+    re-pin it
+  - consistency: COMPRESSION_OPTIONS uses the array idiom; lock hints quote
+    the path and pass --preserve-root
+  - consistency: comments and descriptions match their code; a kill-less host
+    takes the /proc lock branch silently
 
 
-7.235.0 - 7.241.0
+7.235.0 - 7.243.0
 -----------------
 
-  - boot: 7.235.0 a refused rebuild no longer prints manual mkinitcpio -P
-    steps; the banner says to resolve the earlier FAIL and re-run
-  - configuration: 7.240.0 an nft -c timeout reads as a timeout, not as a
-    failed ruleset
+  - guard: 7.243.0 an inherited LOG_FILE, LOG_DIR or _RY_BACKUP_DIR is not
+    deleted when the run exits before creating its own log
+  - guard: 7.243.0 TMPDIR is pinned to /tmp, so no child writes under an
+    inherited or universal TMPDIR
+  - cli: 7.243.0 an argument error writes no /tmp file; a 4096-byte
+    --install-file path fails as over PATH_MAX
+  - signals: 7.243.0 a signal during the boot rebuild prints the DO NOT REBOOT
+    recovery banner before exiting 128+N
+  - preflight: 7.243.0 a sudo -v that caches nothing (timestamp_timeout=0)
+    exits 3 instead of failing every later sudo step
+  - preflight: 7.243.0 the sudo banner drops the NOPASSWD drop-in; an absent
+    findmnt is named as the root-UUID failure
+  - preflight: 7.243.0 the dual-stack warning says to edit the nftables
+    generator in both scripts
   - packages: 7.235.0 a PKGS_ADD member an installed package conflicts with
     sits out -Syu, installs alone with --ask=4 (pipewire-jack replaces jack2)
   - packages: 7.235.0 the -Syu FAIL row names its cause and missing count;
@@ -31,6 +86,16 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     ry-verify does, so a failed swap of a provided member reads FAIL
   - packages: 7.240.0 pacman -Si and -Qi output is read with COLUMNS=0; an
     exported COLUMNS no longer wraps a conflict list past the parser
+  - packages: 7.243.0 a pacman database lock at the package step reverts the
+    seeded mkinitcpio.conf, as a failed -Syu does
+  - configuration: 7.240.0 an nft -c timeout reads as a timeout, not as a
+    failed ruleset
+  - configuration: 7.243.0 an nft -c a lapsed sudo cannot run refuses the
+    deploy as a sudo lapse, not an invalid ruleset
+  - configuration: 7.243.0 a sudo-lapse directory create failure says so; a
+    mode drift chmod cannot repair warns on stderr
+  - backup: 7.243.0 the .ry.bak copy runs cp -T, so a directory at the backup
+    path is never written into
   - services: 7.235.0 PKGS_DEL removal is held after an earlier package or
     boot-file failure
   - services: 7.235.0 a removal whose pacman hook or scriptlet logged an error
@@ -40,15 +105,62 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     carrying it no longer reads as conformant
   - services: 7.241.0 a per-unit mask retry row keeps the ufw.service withheld
     note
+  - services: 7.242.0 every pacman transaction runs with LC_ALL=C.UTF-8; a
+    PKGS_DEL removal whose hook logged an error reads WARN in any locale
+  - services: 7.243.0 an ext4 fstab row with more than one commit= is
+    rewritten to a single commit=10, as ext4 honors the last
+  - services: 7.243.0 an fstab row naming ext4 with fewer than 4 fields is
+    left untouched and turns the fstab row WARN
+  - services: 7.243.0 a findmnt --verify failure logs its full output along
+    with its [E] and [W] lines
+  - services: 7.243.0 with ufw.service masked and nftables down, a loud
+    SECURITY warning names the fix; the mask row says no firewall
+  - services: 7.243.0 an enable FAIL row names the units that failed to start;
+    a pacman -Qq failure is a local database read error
+  - boot: 7.235.0 a refused rebuild no longer prints manual mkinitcpio -P
+    steps; the banner says to resolve the earlier FAIL and re-run
+  - boot: 7.243.0 post-rebuild sanity checks each linux entry's kernel and
+    initrd lines, skips efi entries, names a missing entries dir
+  - boot: 7.243.0 the ESP-not-vfat and unresolved-$BOOT refusals drop the
+    manual rebuild step, as other gate refusals do
+  - boot: 7.243.0 the ESP-not-vfat refusal no longer claims a non-systemd-boot
+    bootloader; it says to mount the ESP and re-run
+  - finalize: 7.243.0 an NM restart deferred over Wi-Fi stays owed in
+    pending-apply until a run off Wi-Fi or a reboot applies it
+  - finalize: 7.243.0 the PowerDevil re-apply uses try-restart and never
+    starts the unit outside a session
   - install-file: 7.241.0 an nft -c timeout in the nftables post-hook reads as
     a timeout, not as a failed ruleset
+  - install-file: 7.243.0 the nftables and udev post-hook failures say how the
+    deployed file applies and what to re-run
+  - install-file: 7.243.0 the DO NOT REBOOT banner cites exit 4 and the [ERR]
+    lines and says to re-run the same --install-file
+  - install-file: 7.243.0 an environment.d deploy uses try-restart for
+    PowerDevil; an NM restart deferred over Wi-Fi stays owed
   - logging: 7.235.0 a failed command echoes its error lines instead of its
     first five lines
   - logging: 7.235.0 pending-apply is rewritten only when the owed set changes
   - logging: 7.240.0 a failed command's echo keeps pacman's 'exists in
     filesystem' detail lines
+  - logging: 7.242.0 a failed pacman command's echo keeps its error lines
+    under any locale
+  - logging: 7.243.0 a JSONL string ending in a newline keeps it; a run whose
+    stderr write fails stops writing to the terminal
+  - logging: 7.243.0 _run reads 124 or 137 as a timeout only once the cap has
+    elapsed; a removed log symlink is logged
+  - logging: 7.243.0 an unresolved --install-file path is logged; no
+    TMPFILE_STUCK line follows the footer
+  - logging: 7.243.0 a mkinitcpio.conf snapshot a failed signal-time revert
+    left prints its restore command
+  - progress: 7.243.0 a terminal resize re-pins the bar on the new bottom row;
+    an aborted run still counts 6 phases
+  - summary: 7.243.0 the result matrix rule matches the full row width
   - consistency: 7.241.0 help aligns its ENVIRONMENT column; banners, comments
     and descriptions match their code; the KERNEL_PARAMS line is split
+  - consistency: 7.242.0 banners name the code under them; 'Top-level' and
+    'unparsable' replace 'Master' and 'unparseable'
+  - consistency: 7.243.0 banners, comments and descriptions match their code;
+    dead branches are removed
 
 
 7.234.0

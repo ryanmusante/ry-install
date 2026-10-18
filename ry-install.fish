@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.248.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.249.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.248.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.249.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_FLOOR 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
@@ -3029,16 +3029,14 @@ end
 function _preflight_boot_sanity --description "Verify boot artifacts are viable after rebuild"
     set -l _boot (_resolve_boot_path)
     if test -z "$_boot"
-        _err "Boot sanity: \$BOOT path unresolved (bootctl/findmnt failed) — DO NOT REBOOT"
+        _err "Boot sanity: \$BOOT path unresolved (bootctl/findmnt failed)"
         return 1
     end
     set -l _k (_pbs_check_boot_files "$_boot" 'vmlinuz-*' kernel); set -l _i (_pbs_check_boot_files "$_boot" 'initramfs-*.img' initramfs); set -l _e (_pbs_check_entries "$_boot")
     for _v in _k _i _e; string match -qr '^\d+$' -- "$$_v"; or set $_v 1; end
     set -l errors (math $_k + $_i + $_e)
     if test "$errors" -gt 0
-        _err "Boot sanity check failed ($errors error(s)) — DO NOT REBOOT"
-        _info "  Inspect: sudo ls -la $_boot/" # no user-side glob: $BOOT is root-only (read via sudo -n above)
-        _info "  Rebuild: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update"
+        _err "Boot sanity check failed ($errors error(s))" # the DO NOT REBOOT banner that follows carries the steps
         return 1
     end
     _ok "Boot sanity: vmlinuz present, initramfs non-zero, entries valid"
@@ -3578,10 +3576,10 @@ function _post_boot_apply --argument-names target skip_mki --description "Shared
     set -g _RY_BOOT_INFLIGHT true # a signal from here leaves a partial rebuild: banner on teardown
     _pb_rebuild_cascade "$target" "$skip_mki"
     set -l _cas_rc $status; set --erase _RY_BOOT_INFLIGHT
-    if test "$_cas_rc" -ne 0; _err "CRITICAL: boot rebuild cascade failed — DO NOT REBOOT"; set -q _RY_BOOT_REFUSED; or _info "  Fix: sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update"; return $_cas_rc; end
+    if test "$_cas_rc" -ne 0; _err "CRITICAL: boot rebuild cascade failed"; return $_cas_rc; end # the caller prints the DO NOT REBOOT banner
     set -l _boot_v (_resolve_boot_path)
     test -n "$_boot_v"; and _irb_verify_entries "$_boot_v"
-    if not _preflight_boot_sanity; _err "CRITICAL: boot sanity check failed after single-file install — DO NOT REBOOT"; return $EXIT_BOOT_CRIT; end
+    _preflight_boot_sanity; or return $EXIT_BOOT_CRIT # it names the failure; the caller prints the banner
     return 0
 end
 function _post_boot --argument-names target --description "Post-hook: rebuild boot entries (mkinitcpio + sdboot-manage)"; _post_boot_apply "$target" false; end

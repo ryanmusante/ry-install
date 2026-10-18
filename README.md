@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.247.0** · [Changelog](CHANGELOG.md)
+**Version 7.248.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -55,7 +55,7 @@ Per-step results (one summary row each):
 | `0` | OK — success and `WARN`-only runs |
 | `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout full, or closed under fish 3) |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
-| `3` | missing dependency, uncached sudo that no TTY prompt resolved, or a failed gate (hardware, disk, network, pacman lock) |
+| `3` | missing dependency, uncached sudo that no TTY prompt resolved, a failed gate (hardware, disk, network, pacman lock), or failed config validation |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
 | `5` | lock — another live instance holds the lock; a stale pidfile is reclaimed, an ambiguous one fails closed |
 
@@ -89,7 +89,7 @@ In deploy order; system files land `0644`, user files `0600`.
 - `/etc/nftables.conf` — default-deny-inbound, IPv4 ping allowed, ICMPv6 base accept
 - `/etc/default/cpupower-service.conf` — governor (`powersave`)
 - `/etc/sysctl.d/95-ry-overrides.conf` — `fq` qdisc, TCP `bbr`, VM tunables
-- `/etc/udev/rules.d/99-ry-perf.rules` — NVMe scheduler `none`, P-State EPP, GPU DPM level `high`
+- `/etc/udev/rules.d/99-ry-perf.rules` — NVMe scheduler `none`, P-State EPP, GPU DPM level `high`, `LIBINPUT_IGNORE_DEVICE` for the Xbox Wireless Controller
 - `/etc/modprobe.d/60-ry-modules.conf` — `amdxdna` blacklist; comment-only while `BLACKLIST_AMDXDNA=false`
 
 ### User
@@ -114,7 +114,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 **Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab.
 
-**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `relatime`, `atime`, `strictatime`, `nolazytime`, and every existing `commit=` (ext4 honors the last one); every other row is byte-preserved. An ext4 row with fewer than 4 fields, or whose column 4 is all digits (options column missing), is left untouched and turns the `Services: fstab opts` summary row `WARN`. A power loss can discard up to 10 s of metadata.
+**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `relatime`, `atime`, `strictatime`, `nolazytime`, and every existing `commit=`; every other row is byte-preserved. An ext4 row with fewer than 4 fields, or whose column 4 is all digits (options column missing), is left untouched and turns the `Services: fstab opts` summary row `WARN`. A power loss can discard up to 10 s of metadata.
 
 ## Embedded Values
 
@@ -195,7 +195,7 @@ New values reach programs started after the next graphical login; a running Stea
 - `POWERDEVIL_NO_DDCUTIL=1` — PowerDevil DDC/CI off; silences `org_kde_powerdevil` i2c errors
 - `PROTON_LOCAL_SHADER_CACHE=1` — per-game shader cache
 - `RADV_PERFTEST=nggc,nircache` — RADV NGG culling (opt-in on GFX11+) and the per-stage NIR cache; a per-title `RADV_PERFTEST=` replaces both
-- `SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030` — SDL games skip the Keychron K2 HE and Link receiver joystick interfaces; needs Steam Input off per title, and `PROTON_NO_STEAMINPUT=0` under proton-cachyos `sdlinput`/`wayland`
+- `SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030,0x3434/0x0b00` — SDL games skip the Keychron K2 HE, Link receiver, and Q0 HE joystick interfaces; needs Steam Input off per title, and `PROTON_NO_STEAMINPUT=0` under proton-cachyos `sdlinput`/`wayland`
 - `VKD3D_DEBUG=none` — vkd3d logging off
 - `VKD3D_SHADER_DEBUG=none` — vkd3d shader logging off
 - `WINEDEBUG=-all` — Wine debug channels off
@@ -216,7 +216,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 
 ## Packages
 
-**Install** (`PKGS_ADD`, 18) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `cachyos-benchmarker`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `pipewire-jack`, `nftables`, `pacman-contrib`. On a `jack2` host, `pipewire-jack` replaces `jack2` after `-Syu`; an installed `-git` or `-bin` build that provides and conflicts with a member is replaced the same way, as is any installed package that conflicts with a dependency of a missing member. To keep such a package, drop the member whose swap removes it from `PKGS_ADD` in both scripts — see [Embedded Values](#embedded-values).
+**Install** (`PKGS_ADD`, 18) — `nvme-cli`, `cachyos-gaming-meta`, `cachyos-gaming-applications`, `cachyos-benchmarker`, `lib32-mesa`, `mkinitcpio-firmware`, `fd`, `sd`, `dust`, `procs`, `bottom`, `htop`, `lm_sensors`, `rtkit`, `realtime-privileges`, `pipewire-jack`, `nftables`, `pacman-contrib`. On a `jack2` host, `pipewire-jack` replaces `jack2` after `-Syu`; an installed `-git` or `-bin` build that provides and conflicts with a member is replaced the same way, as is any installed package that conflicts with a dependency of a missing member. To keep such a package, drop from `PKGS_ADD` in both scripts the member whose swap removes it — see [Embedded Values](#embedded-values).
 
 **Remove** (`PKGS_DEL`, 9) — `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect`.
 
@@ -258,6 +258,8 @@ Multi-thread gains flatten past ~85 W. Set `SPL = fPPT = sPPT = 85 W` (stock boo
 
 **Bluetooth speaker will not auto-reconnect** — `bluetoothctl trust <MAC>`, then power the speaker on after login.
 
+**HP printer not discovered** — the profile masks Avahi and turns mDNS off, so add the printer by IP: `sudo lpadmin -p hp-printer -E -v ipp://192.168.50.228/ipp/print -m everywhere`. Change `192.168.50.228` to the printer's address from the router's DHCP assignment; a DHCP reservation keeps that address fixed.
+
 **libvirt and QEMU NAT** — `forward { policy drop; }` breaks guest WAN access. VMs are out of scope; if you run them, do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`).
 
 ## Uninstall
@@ -266,7 +268,7 @@ There is no automated uninstaller. Use [Managed Files](#managed-files) as the ro
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first, or its unit fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
-3. **Revert boot files and fstab** — restore the matching `~/ry-install/backups/*.ry.bak` copy over `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, `/etc/fstab` where present, then delete the backups; older deployments keep the copies beside each file.
+3. **Revert boot files and fstab** — restore `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, and `/etc/fstab` from their matching `~/ry-install/backups/*.ry.bak` copies where present, then delete the backups; older deployments keep the copies beside each file.
 4. **Reverse packages** — optional: `sudo pacman -Syu --needed` the Remove list, `sudo pacman -Rns` the Install list except `pipewire-jack`, which `ffmpeg` needs as its JACK provider; both listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.
 

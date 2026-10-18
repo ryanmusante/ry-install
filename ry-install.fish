@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.247.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.248.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.247.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.248.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_FLOOR 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
@@ -610,7 +610,7 @@ set -g BLACKLIST_AMDXDNA false # false + iommu=pt enables the NPU
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
 set -g ENV_VARS "DXVK_LOG_LEVEL=none" "GSK_RENDERER=gl" "MANGOHUD=1" "MANGOHUD_DLSYM=1" "MESA_SHADER_CACHE_MAX_SIZE=16G" "POWERDEVIL_NO_DDCUTIL=1" "PROTON_LOCAL_SHADER_CACHE=1" \
-    "RADV_PERFTEST=nggc,nircache" "SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
+    "RADV_PERFTEST=nggc,nircache" "SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030,0x3434/0x0b00" "VKD3D_DEBUG=none" "VKD3D_SHADER_DEBUG=none" "WINEDEBUG=-all"
 set -g SYSCTL_VALUES "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" "net.ipv4.tcp_congestion_control=bbr" "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" \
     "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" "vm.watermark_boost_factor=0" "vm.watermark_scale_factor=125"
 
@@ -882,15 +882,17 @@ function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate con
     end
     if test "$_printed" -ne (count $SYSCTL_VALUES); functions -q _log; and _log "SYSCTL_COUNT_MISMATCH: printed=$_printed expected="(count $SYSCTL_VALUES); return $EXIT_GEN_SYSCTL; end
 end
-function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate content for combined udev perf rules"
+function _content__etc_udev_rules.d_99-ry-perf.rules --description "Generate content for combined udev perf and input rules"
     printf '%s\n' \
-        "# ry-install: udev performance rules (managed file, do not edit by hand)" \
+        "# ry-install: udev performance and input rules (managed file, do not edit by hand)" \
         "# NVMe scheduler none (lowest tail latency; diverges from CachyOS kyber default)" \
         'ACTION=="add|change", KERNEL=="nvme[0-9]*n[0-9]*", ENV{DEVTYPE}=="disk", ATTR{queue/scheduler}="none"' \
         "# AMD P-State EPP $EPP_PREFERENCE (CPPC hint)" \
         'ACTION=="add|change", SUBSYSTEM=="cpu", KERNEL=="cpu[0-9]*", ATTR{cpufreq/energy_performance_preference}="'$EPP_PREFERENCE'"' \
         "# GPU performance level $GPU_DPM_LEVEL (gfx1151)" \
-        'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"'
+        'ACTION=="add", KERNEL=="card[0-9]*", SUBSYSTEM=="drm", ENV{DEVTYPE}=="drm_minor", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="'$GPU_DPM_LEVEL'"' \
+        "# Xbox Wireless Controller ignored by libinput (games still read it directly)" \
+        'ACTION!="remove", SUBSYSTEM=="input", KERNEL=="event[0-9]*", ATTRS{name}=="Xbox Wireless Controller", ENV{LIBINPUT_IGNORE_DEVICE}="1"'
 end
 function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate content for /etc/modprobe.d/60-ry-modules.conf (optional amdxdna blacklist)"
     printf '%s\n' \
@@ -3758,7 +3760,7 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
         _log "POST_UDEV_RELOAD_FAIL: target=$target"
         return 0
     end
-    if _run sudo -n udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change # drm rule is ACTION==add: applies at boot
+    if _run sudo -n udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change # drm and input rules take effect on device add (boot, reconnect)
         _ok "udev rules reloaded; block and cpu devices re-triggered"
     else
         _warn "udevadm trigger failed — scheduler/EPP apply at next boot or device event"

@@ -3,14 +3,69 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.249.0
+7.250.0
 -------
 
-  - install-file: a boot-critical failure prints DO NOT REBOOT and its
-    recovery steps once, in the closing banner
+  - configuration: a managed file that is a symlink behind a directory this
+    user cannot traverse is replaced, and its target is never chmodded
+  - guard: internal state inherited from the environment or config.fish (an
+    _RY_* flag, _FOOTER_WRITTEN, an argparse _flag_*) is erased at startup
+  - guard: a fish universal variable named like internal state stops the run
+    with exit 3, naming the set -eU that clears it
+  - guard: the mkinitcpio snapshot path and its flag are reset, never erased,
+    so a fish universal of the same name can never drive a revert
+  - guard: an early exit or a signal before the JSONL header removes only the
+    empty log and ~/ry-install dirs this run created
+  - guard: an early exit no longer loads or runs a user's fish function named
+    _do_cleanup (config.fish or the function path)
+  - guard: a config.fish job-control or IFS setting no longer steers a run (a
+    Ctrl-C reaching only pacman, output read as one line)
+  - guard: inherited LOCK_DIR and LOCK_FILE values are ignored, so an early
+    exit or a signal never removes a path they name
+  - guard: fish with the regex-easyesc feature turned off exits 3; the JSONL
+    escaping depends on it
+  - guard: the tmpfile list is reset, never erased, so a fish universal of
+    that name set mid-run cannot steer the final sweep
+  - guard: the boot-path and systemd-version caches read only this run's
+    globals, never a fish universal set mid-run
+  - guard: a fish universal named _early_ch is no longer erased, and the root
+    check ignores a universal _flag_install_file
+  - signals: a signal after a boot-critical failure, before its DO NOT REBOOT
+    banner has fully printed, prints the banner worded for the interrupted run
+  - signals: an interrupted banner for a refused rebuild points at the JSONL
+    log, not the summary matrix or an [ERR] line it may precede
+  - signals: a signal after a package, boot-critical file or mkinitcpio revert
+    failure, in any later phase, prints the DO NOT REBOOT banner
+  - signals: a second signal while a startup signal is handled no longer ends
+    the run with exit 0 or 1, skipping the notice and dir cleanup
+  - signals: a signal in the final step of an early exit keeps its exit code,
+    and one during a signal teardown no longer turns 128+N into 0
+  - packages: a HOOKS build script behind a 0700 /etc/initcpio/install no
+    longer reads as missing after -Syu (a false exit 4)
+  - backup: ~/ry-install/backups is made by the first .ry.bak copy, so no
+    early exit, this run's or a concurrent one's, removes it
+  - services: a drop-in behind a directory this user cannot traverse no longer
+    skips the systemd-resolved restart as absent
+  - services: the systemd-resolved restart row says the drop-in is unreadable,
+    not absent, when a lapsed sudo hides it
+  - boot: an empty loader entries directory no longer adds sdboot-manage gen
+    or LINUX_OPTIONS hints ahead of the DO NOT REBOOT banner
+  - boot: after ESP autodetect falls back to /boot, the DO NOT REBOOT banner
+    says to check the ESP and re-run, never a hand sdboot-manage gen
+  - boot: the loader-entry boundary check resolves symlinks as root, so an
+    entry escaping a 0700 $BOOT through a link is caught
+  - logging: a full-install boot-critical failure no longer logs a second copy
+    of the rebuild command ahead of the banner
+  - logging: the closing log-file lines are skipped once stderr is gone
+  - logging: the preflight log is created as soon as its dir exists, so a
+    concurrent run's early exit cannot remove that dir
+  - logging: a full install no longer logs the per-file reboot hint after an
+    nft -c failure on a kernel upgraded since boot
+  - readme: exit 3 lists a fish universal named like internal state or
+    regex-easyesc off, Shell names it
 
 
-7.246.0 - 7.248.0
+7.246.0 - 7.249.0
 -----------------
 
   - env: 7.248.0 add 0x3434/0x0b00 (Keychron Q0 HE) to
@@ -39,9 +94,11 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     console beside the failed pass's pacman errors
   - services: 7.247.0 a PKGS_DEL row with a pacman hook error keeps its
     rdep-skip count
+  - install-file: 7.249.0 a boot-critical failure prints DO NOT REBOOT and its
+    recovery steps once, in the closing banner
   - logging: 7.246.0 a failed pacman call echoes its package-conflict lines
   - logging: 7.247.0 boot-cascade and udev-skip records carry the POST_
-    prefix; the header timestamp survives a failed date
+    prefix; a failed date no longer breaks the header JSON
   - logging: 7.247.0 _run clears its capture before an early return; the
     bail-out record precedes INSTALLATION END
   - logging: 7.247.0 an empty loud _err logs nothing
@@ -87,8 +144,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - install-file: a failed nftables reload names the retry command; an
     environment.d deploy says try-restarted
   - logging: a failed stderr write logs STDERR_WRITE_FAIL once
-  - logging: tmpfile and child-reap records precede the footer again; a signal
-    while the footer is built still writes it
+  - logging: tmpfile and child-reap records precede the footer; a signal while
+    the footer is built still writes it
   - logging: a log rename that falls back to cp, or fails, is logged; the
     log-write warning allows a removed JSONL
   - logging: _run times commands on the monotonic clock; TIMEOUT_LONGOP_CAP is
@@ -140,10 +197,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     until a run off Wi-Fi or a reboot applies it
   - finalize: the PowerDevil re-apply uses try-restart and never starts the
     unit outside a session
-  - install-file: the nftables and udev post-hook failures say how the
+  - install-file: the nft -c and udevadm verify post-hook failures say how the
     deployed file applies and what to re-run
-  - install-file: the DO NOT REBOOT banner cites exit 4 and the [ERR] lines
-    and says to re-run the same --install-file
+  - install-file: the DO NOT REBOOT banner cites exit 4 and a refusal's [ERR]
+    lines, and says to re-run the same --install-file
   - install-file: an environment.d deploy uses try-restart for PowerDevil; an
     NM restart deferred over Wi-Fi stays owed
   - logging: a JSONL string ending in a newline keeps it; a run whose stderr
@@ -198,10 +255,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 -------
 
   - guard: a sourced or piped run is refused under any locale
-  - signals: a SIGINT, SIGTERM or SIGHUP during startup exits 128+N instead of
-    0; the handler no longer registers QUIT
-  - cli: -h and -v exit 1 when stdout is closed or full; --install-file
-    rejects --report as its value
+  - signals: a SIGINT during startup exits 130 instead of 0, and every startup
+    signal prints a notice; the handler no longer registers QUIT
+  - cli: -h and -v exit 1 when stdout is full (closed too, under fish 3);
+    --install-file --report says its value is missing
   - logging: a signal or tmpfile helper before the header no longer leaves a
     footer-only or header-second JSONL
   - logging: child SIGKILL, a failed pending-apply clear, an absent modinfo
@@ -244,8 +301,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     of reported unchanged
   - packages: after a failed -Syu, a reverted mkinitcpio.conf stays in place
     through Configuration (WARN 'mkinitcpio.conf held')
-  - packages: PKGS_ADD is re-marked explicit whatever the -Syu result and
-    again before -Rns
+  - packages: PKGS_ADD is re-marked explicit whatever the -Syu result; -Rns
+    runs only after a successful mark, retried if it failed; else -Rn
   - services: a unit that enables but fails to start reads WARN on the enable
     row, naming the unit, and the warning prints during the run
   - services: the live nftables policy-drop probe before the ufw flush matches

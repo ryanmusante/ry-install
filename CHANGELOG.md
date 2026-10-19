@@ -3,6 +3,38 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.251.0
+-------
+
+  - signals: a signal during a pacman transaction (-Syu, its retry or the
+    conflict swap) prints the DO NOT REBOOT banner: alpm skips its hooks
+  - signals: a package failure marks the run before its [ERR] lines and the
+    mkinitcpio.conf revert, so a signal there still prints the banner
+  - signals: a signal during an early exit, before the main handler takes
+    over, keeps the exit code instead of exiting 128+N
+  - guard: an early exit reads only this run's globals, so a fish universal
+    can no longer make it load or run a user's _dc_settle or _write_footer
+  - guard: an invalid root UUID resets the global, never erases it, so a
+    fish universal of that name cannot reach the kernel cmdline
+  - packages: a failed pacman -Q no longer reads as an unchanged package set
+    (a no-op -Syu); the run counts it as an upgrade
+  - packages: a PKGS_DEL member an earlier member's -Rns took is logged as
+    removed, not retried as a failing removal
+  - packages: HOOKS build scripts are probed as this user first; sudo runs
+    only for one this user cannot see
+  - services: an owed systemd-resolved restart that a lapsed sudo cache
+    blocks reads WARN (applies next boot), not SKIP
+  - boot: the DO NOT REBOOT banner resolves the ESP first, so a fallback
+    host never gets a hand sdboot-manage gen step
+  - configuration: the 60-ry-modules.conf header no longer claims module
+    options; an existing install redeploys it once
+  - logging: the hardware gate logs HARDWARE_MATCH with the detected CPU
+  - logging: a failed ~/ry-install/backups mkdir logs BACKUP_DIR_MKDIR_FAIL
+  - logging: a struck pending-apply entry logs PENDING_APPLY_DROPPED
+  - logging: SECURITY_POSTURE records ufw.service's state ahead of its mask,
+    not a mask that has not run yet
+
+
 7.250.0
 -------
 
@@ -61,8 +93,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     concurrent run's early exit cannot remove that dir
   - logging: a full install no longer logs the per-file reboot hint after an
     nft -c failure on a kernel upgraded since boot
-  - readme: exit 3 lists a fish universal named like internal state or
-    regex-easyesc off, Shell names it
 
 
 7.246.0 - 7.249.0

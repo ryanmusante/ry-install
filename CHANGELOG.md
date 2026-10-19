@@ -3,36 +3,70 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.251.0
+7.252.0
 -------
 
-  - signals: a signal during a pacman transaction (-Syu, its retry or the
-    conflict swap) prints the DO NOT REBOOT banner: alpm skips its hooks
+  - signals: a signal during a pacman transaction (-Syu, its retry, the
+    conflict swap or a PKGS_DEL removal) prints the DO NOT REBOOT banner
   - signals: a package failure marks the run before its [ERR] lines and the
     mkinitcpio.conf revert, so a signal there still prints the banner
+  - signals: a boot file failing its post-write check marks the run before
+    its [FAIL] lines and restore, so a signal there still prints the banner
+  - signals: a pacman pass alpm refused at prepare no longer leaves the run
+    marked mid-transaction while the re-pass is worked out
   - signals: a signal during an early exit, before the main handler takes
     over, keeps the exit code instead of exiting 128+N
+  - signals: teardown no longer probes _progress_teardown or _tmp_dir by
+    name, so a same-named user function cannot autoload during startup
   - guard: an early exit reads only this run's globals, so a fish universal
     can no longer make it load or run a user's _dc_settle or _write_footer
   - guard: an invalid root UUID resets the global, never erases it, so a
     fish universal of that name cannot reach the kernel cmdline
+  - cli: an unexpected positional argument prints escaped, so an empty one
+    reads '' rather than nothing
+  - preflight: a HOME that normalizes to empty or a non-directory names the
+    value set in its exit-3 error
   - packages: a failed pacman -Q no longer reads as an unchanged package set
     (a no-op -Syu); the run counts it as an upgrade
   - packages: a PKGS_DEL member an earlier member's -Rns took is logged as
     removed, not retried as a failing removal
   - packages: HOOKS build scripts are probed as this user first; sudo runs
     only for one this user cannot see
+  - packages: a hook error past the 500-line output capture still reads WARN
+    (the elided middle is scanned for error and conflict lines)
   - services: an owed systemd-resolved restart that a lapsed sudo cache
     blocks reads WARN (applies next boot), not SKIP
+  - services: the fstab rewrite no longer refuses over a findmnt --verify
+    error the original carries, such as an unplugged nofail device
+  - services: under a lapsed sudo cache a masked ufw.service reports the
+    firewall unverified, not down; enable and mask retries name the lapse
+  - services: nftables-first no longer claims ufw rules stay in place before
+    the ufw step decides; SECURITY says whether the mask follows or holds
+  - services: an environment.d change without plasma-powerdevil.service, or a
+    bluetooth change without bluez's unit, no longer WARNs a failed restart
   - boot: the DO NOT REBOOT banner resolves the ESP first, so a fallback
-    host never gets a hand sdboot-manage gen step
-  - configuration: the 60-ry-modules.conf header no longer claims module
-    options; an existing install redeploys it once
-  - logging: the hardware gate logs HARDWARE_MATCH with the detected CPU
+    host never gets a hand sdboot-manage gen step, mid-pacman included
+  - boot: the EFI binary refresh runs bootctl --graceful update, whose
+    failure fails the step; sdboot-manage update always exits 0
+  - configuration: the 60-ry-modules.conf header and post-hook no longer
+    claim module options; an existing install redeploys it once
+  - configuration: a sudo cache lapse before an atomic move FAILs the file
+    as a failed chmod or move does, not with an [ERR] line
+  - logging: the hardware gate logs HARDWARE_MATCH and the root UUID gate
+    ROOT_UUID_OK
   - logging: a failed ~/ry-install/backups mkdir logs BACKUP_DIR_MKDIR_FAIL
-  - logging: a struck pending-apply entry logs PENDING_APPLY_DROPPED
+  - logging: each pending-apply write or strike logs PENDING_APPLY_SAVED,
+    _DROPPED or a _FAIL key, Finalize and the NM post-hook included
   - logging: SECURITY_POSTURE records ufw.service's state ahead of its mask,
     not a mask that has not run yet
+  - logging: the mkinitcpio.conf snapshot logs MKINITCPIO_SNAPSHOT_OK; its
+    skip and fail keys carry the SNAPSHOT name too
+  - logging: the regdom post-hook logs POST_REGDOM_APPLY_OK, not a start
+    key; the NM post-hook defers under POST_NM_RESTART_DEFERRED
+  - readme: Requirements names the ESP at /boot with no XBOOTLDR; exit 3
+    names the root UUID gate and an unusable HOME, log tree or /tmp
+  - readme: Boot names bootctl --graceful update; Finalize says the next
+    full run applies owed restarts
 
 
 7.250.0

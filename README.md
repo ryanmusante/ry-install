@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.252.0** · [Changelog](CHANGELOG.md)
+**Version 7.254.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -17,7 +17,7 @@ sudo -v
 ./ry-install.fish
 ```
 
-A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` on exit `0`, otherwise `PREFLIGHT`, `FAIL`, or `FAIL-BOOT-CRITICAL` — see [Exit Codes](#exit-codes).
+A run that reaches Preflight closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` on exit `0`, otherwise `PREFLIGHT`, `FAIL`, or `FAIL-BOOT-CRITICAL`; the startup gates (hardware, root UUID, embedded values) and the lock stop earlier with `[ERR]` lines only — see [Exit Codes](#exit-codes).
 
 ## Requirements
 
@@ -28,7 +28,7 @@ A run closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` 
 | Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
 | Privileges | normal user with sudo rights; `sudo -v` cached before the run — when it is not, the run prompts through `sudo -v` if stdin and stderr are both a TTY, and exits `3` otherwise, if the prompt fails, or if no credential ends up cached (`timestamp_timeout=0`) |
-| Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `cmp`, `curl`, `getent`, `pacman`, `mkinitcpio`, `sdboot-manage`, `systemctl` |
+| Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `cmp`, `curl`, `getent`, `pacman`, `mkinitcpio`, `sdboot-manage`, `bootctl`, `systemctl` |
 
 ## Usage
 
@@ -55,7 +55,7 @@ Per-step results (one summary row each):
 | `0` | OK — success and `WARN`-only runs |
 | `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout full, or closed under fish 3) |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
-| `3` | missing dependency, uncached sudo that no TTY prompt resolved, a failed gate (hardware, root UUID, disk, network, pacman lock), a fish universal variable named like internal state, fish's `regex-easyesc` feature turned off, failed config validation, or an unusable HOME, log tree or `/tmp` |
+| `3` | missing dependency, uncached sudo that no TTY prompt resolved, a failed gate (hardware, root UUID, systemd, disk, network, pacman lock), a fish universal variable named like internal state, fish's `regex-easyesc` feature turned off, failed config validation, or an unusable HOME, log tree or `/tmp` |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
 | `5` | lock — another live instance holds the lock; a stale pidfile is reclaimed, an ambiguous one fails closed |
 
@@ -102,9 +102,9 @@ In deploy order; system files land `0644`, user files `0600`.
 1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, and network gates; a warn-only time-sync check; config validation.
 2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A `PKGS_ADD` member that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, in a transaction that removes the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 17 embedded configs atomically.
-4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (`ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next run stops it) → enable (a unit that enables but fails to start is a `WARN`) → regulatory domain.
+4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (`ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next full run stops it) → enable (a unit that enables but fails to start is a `WARN`) → regulatory domain.
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `bootctl --graceful update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` files present inside `$BOOT`.
-6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, as does a NetworkManager restart deferred because Wi-Fi carries the default route; the next full run applies them unless a reboot already has, and defers that restart again while Wi-Fi still carries the route.
+6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, as does a NetworkManager restart deferred because Wi-Fi carries the default route, or an `--install-file` restart that fails; the next full run applies them unless a reboot already has, and defers that restart again while Wi-Fi still carries the route.
 
 ## Safety and Reliability
 
@@ -112,7 +112,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 **Symlinked destinations** — a managed path that is a symlink is replaced with a regular file at the managed mode.
 
-**Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab.
+**Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab, replacing the previous copy.
 
 **fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `relatime`, `atime`, `strictatime`, `nolazytime`, and every existing `commit=`; every other row is byte-preserved. An ext4 row with fewer than 4 fields, or whose column 4 is all digits (options column missing), is left untouched and turns the `Services: fstab opts` summary row `WARN`. A power loss can discard up to 10 s of metadata.
 
@@ -252,7 +252,7 @@ Multi-thread gains flatten past ~85 W. Set `SPL = fPPT = sPPT = 85 W` (stock boo
 
 ## Troubleshooting
 
-**Boot failure** — live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `sdboot-manage update`.
+**Boot failure** — live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `bootctl --graceful update`.
 
 **PipeWire permission denied** — `sudo usermod -aG realtime $USER`, then log in again; the `realtime` group comes from `realtime-privileges`.
 
@@ -268,9 +268,9 @@ There is no automated uninstaller. Use [Managed Files](#managed-files) as the ro
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first, or its unit fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
-3. **Revert boot files and fstab** — restore `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, and `/etc/fstab` from their matching `~/ry-install/backups/*.ry.bak` copies where present, then delete the backups; older deployments keep the copies beside each file.
+3. **Revert boot files and fstab** — restore `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, and `/etc/fstab` from their matching `~/ry-install/backups/*.ry.bak` copies where present — each holds the file as it stood before the latest rewrite, so check it first — then delete the backups; older deployments keep the copies beside each file.
 4. **Reverse packages** — optional: `sudo pacman -Syu --needed` the Remove list, `sudo pacman -Rns` the Install list except `pipewire-jack`, which `ffmpeg` needs as its JACK provider; both listed in [Packages](#packages).
-5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo sdboot-manage update`, then `sudo systemctl reboot`.
+5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo bootctl --graceful update`, then `sudo systemctl reboot`.
 
 ## Contributing
 

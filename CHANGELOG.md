@@ -3,70 +3,188 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.254.0
+-------
+
+  - signals: a pacman pass alpm refused at prepare keeps the run marked when
+    an earlier pass failed past prepare and its hooks may not have run
+  - signals: a pacman pass that passes after one failed mid-transaction keeps
+    DO NOT REBOOT owed until Boot's rebuild; the -Syu row WARNs
+  - signals: a pacman run that committed nothing (it never ran, or stopped
+    before its hooks) no longer reads as cut short mid-transaction
+  - signals: a PKGS_DEL removal that fails mid-transaction keeps DO NOT
+    REBOOT owed until Boot's rebuild
+  - signals: a signal right after the mkinitcpio.conf snapshot is created no
+    longer strands it in /run/ry-install until reboot
+  - signals: a signal right after the mkinitcpio.conf snapshot is removed no
+    longer prints a restore command for the deleted file
+  - cli: a root run escapes each leftover argument whole, so an embedded
+    newline no longer splits or forges the message
+  - cli: argument errors print control characters escaped or as ?, C1 and
+    raw bytes included; an --install-file value holding one is refused first
+  - cli: --install-file given --verify, --check, --report, --help or
+    --version as its value names both spellings
+  - cli: every --install-file error escapes the value, so a trailing blank
+    no longer reads as the managed path
+  - cli: --install-file checks NAME_MAX without a fork per short component,
+    so a path of 4095 slashes no longer stalls for seconds
+  - cli: -h or -v ending in a newline is an unknown option (exit 2), not help
+  - preflight: embedded values match to the string end (\z), so one ending in
+    a newline (governor, country, count, kernel or HOOKS token) is refused
+  - preflight: a relative HOME takes the passwd entry, and a relative passwd
+    entry exits 3, instead of resolving under the current directory
+  - preflight: the root UUID takes findmnt's first match, so a mount stacked
+    on / no longer fails the run as an invalid UUID
+  - preflight: an RY_RUN_TIMEOUT ending in a newline reads invalid, not a fish
+    error at every command; its WARN prints the value escaped
+  - preflight: the network probe skips ~/.curlrc (curl -q), so a write-out it
+    sets no longer reaches stdout
+  - preflight: a TLS handshake or certificate failure names the clock or a
+    TLS proxy, not DNS or blocked egress
+  - preflight: the dependency gate also requires bootctl, ln, readlink and
+    uname, so a host without bootctl stops before any change
+  - lock: the printed lock-removal command escapes its path, so a quote in
+    HOME no longer breaks or splits it
+  - lock: a signal while dropping a reclaim claim no longer strands .claim
+  - lock: the lock directory is set 00700, clearing an inherited setgid bit
+  - lock: a holder that releases the lock mid-check no longer makes the next
+    run exit 5; it retries the claim
+  - progress: a signal while the bar pins or unpins no longer leaves the
+    scroll region set or clears the top row
+  - packages: kept middle lines stay in file order, print with QUIET off, and
+    log under _OVERFLOW_KEPT (first 10, last 5) with a kept= count
+  - packages: a re-run whose mkinitcpio.conf seed changed nothing drops its
+    rollback, so a failed -Syu no longer reverts and holds the file
+  - configuration: an nft -c that could not run (no capture directory)
+    refuses the deploy as not run, not as a failed ruleset
+  - configuration: an owed restart is on file before its config lands, so a
+    signal right after the move no longer drops it
+  - configuration: a config that fails to land is no longer left owed, so a
+    later run does not restart its service as if it changed
+  - services: the fstab rewrite no longer refuses over a parse error the
+    original carries, in any locale; a refusal names its new entries first
+  - services: an fstab with only malformed ext4 rows WARNs that none is
+    well-formed, not that all are conformant
+  - services: a mask retry under a lapsed sudo cache FAILs naming the lapse
+    (MASK_LAPSE), not a WARN that the stop failed
+  - services: a mask FAIL row also counts units that masked but did not stop
+  - services: the mask row puts its ufw-withheld note first, so the matrix
+    cell no longer cuts it off
+  - services: the enable row no longer counts nftables.service as already
+    enabled when the nftables-first step enabled it this run
+  - services: the enable row WARNs naming a package-managed unit that is not
+    installed, as ry-verify does, instead of PASS
+  - boot: the DO NOT REBOOT rebuild step prints bootctl --graceful update,
+    as the run itself does, not sdboot-manage update
+  - finalize: an NM_RESTART_DELAY ending in a newline falls back to 3 s
+    instead of failing the settle sleep
+  - install-file: a cpupower deploy without cpupower.service skips the
+    restart instead of claiming the governor applied
+  - install-file: the boot-file gates run after sudo is cached, so a hook
+    only root can see no longer reads as invalid
+  - install-file: an absent udevadm, or a failed verify or reload, says udevd
+    re-reads the changed rule on its next event, not at next boot
+  - install-file: a post-write nft -c or udevadm verify that could not run,
+    or a udevadm verify that timed out, reads as no verdict, not a failure
+  - install-file: a resolved, NetworkManager or environment.d apply that
+    succeeds strikes its owed entry, so a later run does not repeat it
+  - install-file: each managed file runs its own post-hook, so a HOME under a
+    directory such as sysctl.d no longer reroutes a user file
+  - install-file: a sysctl --system failure says the keys that loaded are
+    live, not that none apply until reboot
+  - install-file: a changed file prints and counts one OK line, not two; the
+    nm-dispatcher apply confirms with an OK line like the others
+  - logging: Finalize's NM deferral logs PENDING_APPLY_DROPPED for the owed
+    entries it drops
+  - logging: enable skips log ENABLE_ALREADY and ENABLE_NOT_INSTALLED; an
+    absent NetworkManager logs NM_RESTART_SKIP_NO_NM
+  - logging: BACKUP_SKIP_SUDO_LAPSE logs dst= and probe= at both sites; NM
+    restart deferrals and failures log context=finalize
+  - logging: the end-of-run summary is JSONL-only, so the footer no longer
+    counts Done! as a pass or the error recap as a fail and a warn
+  - readme: exit 3 names the systemd gate; the mask step says the next full
+    run stops a unit that masked but did not stop
+  - readme: pending-apply also records an --install-file restart that fails
+  - readme: Troubleshooting and Uninstall rebuild with bootctl --graceful
+    update; Tools lists bootctl
+  - readme: only a run that reaches Preflight closes with Totals; a .ry.bak
+    holds the file as it stood before the latest rewrite
+
+
 7.252.0
 -------
 
-  - signals: a signal during a pacman transaction (-Syu, its retry, the
-    conflict swap or a PKGS_DEL removal) prints the DO NOT REBOOT banner
-  - signals: a package failure marks the run before its [ERR] lines and the
-    mkinitcpio.conf revert, so a signal there still prints the banner
+  - signals: a PKGS_DEL removal is marked mid-transaction like -Syu, so a
+    signal during it prints the DO NOT REBOOT banner
   - signals: a boot file failing its post-write check marks the run before
     its [FAIL] lines and restore, so a signal there still prints the banner
   - signals: a pacman pass alpm refused at prepare no longer leaves the run
     marked mid-transaction while the re-pass is worked out
-  - signals: a signal during an early exit, before the main handler takes
-    over, keeps the exit code instead of exiting 128+N
   - signals: teardown no longer probes _progress_teardown or _tmp_dir by
     name, so a same-named user function cannot autoload during startup
-  - guard: an early exit reads only this run's globals, so a fish universal
-    can no longer make it load or run a user's _dc_settle or _write_footer
-  - guard: an invalid root UUID resets the global, never erases it, so a
-    fish universal of that name cannot reach the kernel cmdline
   - cli: an unexpected positional argument prints escaped, so an empty one
     reads '' rather than nothing
   - preflight: a HOME that normalizes to empty or a non-directory names the
     value set in its exit-3 error
-  - packages: a failed pacman -Q no longer reads as an unchanged package set
-    (a no-op -Syu); the run counts it as an upgrade
-  - packages: a PKGS_DEL member an earlier member's -Rns took is logged as
-    removed, not retried as a failing removal
-  - packages: HOOKS build scripts are probed as this user first; sudo runs
-    only for one this user cannot see
   - packages: a hook error past the 500-line output capture still reads WARN
     (the elided middle is scanned for error and conflict lines)
-  - services: an owed systemd-resolved restart that a lapsed sudo cache
-    blocks reads WARN (applies next boot), not SKIP
+  - configuration: a sudo cache lapse before an atomic move FAILs the file
+    as a failed chmod or move does, not with an [ERR] line
   - services: the fstab rewrite no longer refuses over a findmnt --verify
     error the original carries, such as an unplugged nofail device
   - services: under a lapsed sudo cache a masked ufw.service reports the
     firewall unverified, not down; enable and mask retries name the lapse
   - services: nftables-first no longer claims ufw rules stay in place before
     the ufw step decides; SECURITY says whether the mask follows or holds
-  - services: an environment.d change without plasma-powerdevil.service, or a
-    bluetooth change without bluez's unit, no longer WARNs a failed restart
-  - boot: the DO NOT REBOOT banner resolves the ESP first, so a fallback
-    host never gets a hand sdboot-manage gen step, mid-pacman included
+  - boot: on an ESP-fallback host the banner's ESP step outranks the pacman
+    step, so a signal mid-pacman never prints a hand sdboot-manage gen step
   - boot: the EFI binary refresh runs bootctl --graceful update, whose
     failure fails the step; sdboot-manage update always exits 0
-  - configuration: the 60-ry-modules.conf header and post-hook no longer
-    claim module options; an existing install redeploys it once
-  - configuration: a sudo cache lapse before an atomic move FAILs the file
-    as a failed chmod or move does, not with an [ERR] line
-  - logging: the hardware gate logs HARDWARE_MATCH and the root UUID gate
-    ROOT_UUID_OK
-  - logging: a failed ~/ry-install/backups mkdir logs BACKUP_DIR_MKDIR_FAIL
-  - logging: each pending-apply write or strike logs PENDING_APPLY_SAVED,
-    _DROPPED or a _FAIL key, Finalize and the NM post-hook included
-  - logging: SECURITY_POSTURE records ufw.service's state ahead of its mask,
-    not a mask that has not run yet
+  - finalize: an environment.d change without plasma-powerdevil.service
+    skips the PowerDevil re-apply instead of WARNing a failed restart
+  - install-file: an environment.d or bluetooth deploy without the unit to
+    restart no longer WARNs a failed restart
+  - install-file: the modprobe.d post-hook no longer claims module options,
+    matching the 60-ry-modules.conf header
+  - logging: the root UUID gate logs ROOT_UUID_OK
+  - logging: Finalize logs PENDING_APPLY_SAVED and PENDING_APPLY_DROPPED, and
+    the NM post-hook PENDING_APPLY_SAVED, like the other pending-apply writes
   - logging: the mkinitcpio.conf snapshot logs MKINITCPIO_SNAPSHOT_OK; its
     skip and fail keys carry the SNAPSHOT name too
   - logging: the regdom post-hook logs POST_REGDOM_APPLY_OK, not a start
     key; the NM post-hook defers under POST_NM_RESTART_DEFERRED
-  - readme: Requirements names the ESP at /boot with no XBOOTLDR; exit 3
-    names the root UUID gate and an unusable HOME, log tree or /tmp
-  - readme: Boot names bootctl --graceful update; Finalize says the next
-    full run applies owed restarts
+
+
+7.251.0
+-------
+
+  - signals: a signal during a pacman transaction (-Syu, its retry or the
+    conflict swap) prints the DO NOT REBOOT banner: alpm skips its hooks
+  - signals: a package failure marks the run before its [ERR] lines and the
+    mkinitcpio.conf revert, so a signal there still prints the banner
+  - signals: a signal during an early exit, before the main handler takes
+    over, keeps the exit code instead of exiting 128+N
+  - guard: an early exit reads only this run's globals, so a fish universal
+    can no longer make it load or run a user's _dc_settle or _write_footer
+  - guard: an invalid root UUID resets the global, never erases it, so a
+    fish universal of that name cannot reach the kernel cmdline
+  - packages: a failed pacman -Q no longer reads as an unchanged package set
+    (a no-op -Syu); the run counts it as an upgrade
+  - packages: a PKGS_DEL member an earlier member's -Rns took is logged as
+    removed, not retried as a failing removal
+  - packages: HOOKS build scripts are probed as this user first; sudo runs
+    only for one this user cannot see
+  - services: an owed systemd-resolved restart that a lapsed sudo cache
+    blocks reads WARN (applies next boot), not SKIP
+  - boot: the DO NOT REBOOT banner resolves the ESP first, so a fallback
+    host never gets a hand sdboot-manage gen step
+  - configuration: the 60-ry-modules.conf header no longer claims module
+    options; an existing install redeploys it once
+  - logging: the hardware gate logs HARDWARE_MATCH with the detected CPU
+  - logging: a failed ~/ry-install/backups mkdir logs BACKUP_DIR_MKDIR_FAIL
+  - logging: a struck pending-apply entry logs PENDING_APPLY_DROPPED
+  - logging: SECURITY_POSTURE records ufw.service's state ahead of its mask,
+    not a mask that has not run yet
 
 
 7.250.0

@@ -3,190 +3,43 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.255.0
+7.256.0
 -------
 
-  - signals: a pacman pass alpm refused at prepare keeps the run marked when
-    an earlier pass failed past prepare
-  - signals: a pacman pass that passes after one failed mid-transaction keeps
-    DO NOT REBOOT owed until Boot's rebuild; the -Syu row WARNs
-  - signals: a pacman run that never ran or stopped before its hooks no longer
-    reads as cut short mid-transaction
-  - signals: a PKGS_DEL removal that fails mid-transaction keeps DO NOT
-    REBOOT owed until Boot's rebuild
-  - signals: a signal just after the mkinitcpio.conf snapshot is made no
-    longer strands it; one just after its removal prints no restore command
-  - signals: a signal before the mkinitcpio.conf seed lands no longer rewrites
-    the unchanged file or prints a restore WARN
-  - signals: a signal after -Syu passes no longer reverts the mkinitcpio.conf
-    seed the initramfs was built from
-  - cli: a root run escapes each leftover argument whole, so an embedded
-    newline no longer splits or forges the message
-  - cli: argument errors print control characters escaped or as ?, C1 and
-    raw bytes included; an --install-file value holding one is refused first
-  - cli: --install-file given --verify, --check, --report, --help or
-    --version as its value names both spellings
-  - cli: every --install-file error escapes the value, so a trailing blank
-    no longer reads as the managed path
-  - cli: an --install-file path of 4095 slashes no longer stalls the NAME_MAX
-    check for seconds
-  - cli: -h or -v ending in a newline is an unknown option (exit 2), not help
-  - preflight: an embedded value ending in a newline (governor, country,
-    count, kernel or HOOKS token) is refused
-  - preflight: a relative HOME takes the passwd entry, and a relative passwd
-    entry exits 3, instead of resolving under the current directory
-  - preflight: a HOME holding a control character takes the passwd entry; one
-    there exits 3, so a newline or escape never reaches printed lines
-  - preflight: the root UUID takes findmnt's first match, so a mount stacked
-    on / no longer fails the run as an invalid UUID
-  - preflight: an RY_RUN_TIMEOUT ending in a newline reads invalid, not a fish
-    error at every command; its WARN prints the value escaped
-  - preflight: the network probe skips ~/.curlrc, so a write-out it sets no
-    longer reaches stdout
-  - preflight: a TLS handshake or certificate failure names the clock or a
-    TLS proxy, not DNS or blocked egress
-  - preflight: an unreadable CA store (curl rc 77) names SSL_CERT_FILE,
-    CURL_CA_BUNDLE and ca-certificates, not the clock or a TLS proxy
-  - preflight: a ping that cannot open an ICMP socket leaves the raw IPs
-    unprobed instead of reporting them unreachable
-  - preflight: sudo uncached with no TTY prints one ERR that names the TTY
-  - preflight: the hardware override hint and the nftables manual step name
-    the script as invoked, not ./ry-install.fish
-  - preflight: config validation picks each validator by managed path, so a
-    HOME under a dir such as modprobe.d no longer fails it
-  - preflight: the dependency gate also requires bootctl, ln, readlink and
-    uname, so a host without bootctl stops before any change
-  - lock: the printed lock-removal command escapes its path, so a quote in
-    HOME no longer breaks or splits it
-  - lock: a signal while dropping a reclaim claim or releasing the lock no
-    longer strands .claim or an empty lock directory
-  - lock: a lock that cannot be taken logs ERR and counts in the footer
-  - lock: the lock directory is set 00700, clearing an inherited setgid bit
-  - lock: a holder releasing the lock mid-check, or between this run's mkdir
-    and its check, no longer makes the run exit 5
-  - progress: a signal while the bar pins or unpins no longer leaves the
-    scroll region set or clears the top row
-  - packages: error lines kept from a long pacman output's elided middle stay
-    in file order, print with QUIET off, log under _OVERFLOW_KEPT
-  - packages: a re-run whose mkinitcpio.conf seed changed nothing drops its
-    rollback, so a failed -Syu no longer reverts and holds the file
-  - packages: a failed mkinitcpio.conf seed reverts any bytes it landed from
-    the snapshot before dropping it
-  - packages: a conflict-swap hook error leads its row, so a long removal
-    list no longer cuts it from the matrix
-  - packages: a -Syyu retry, conflict swap, explicit mark, updatedb or pkgfile
-    that sudo refused reads as not run (sudo cache lapsed), not failed
-  - configuration: an nft -c that could not run refuses the deploy as not run,
-    not as a failed ruleset
-  - configuration: an owed restart is on file before its config lands, so a
-    signal right after the move no longer drops it
-  - configuration: a config that fails to land is no longer left owed, so a
-    later run does not restart its service as if it changed
-  - configuration: an unchanged system file not owned by root:root is
-    chowned back, as a drifted mode is restored
-  - services: the fstab rewrite no longer refuses over a parse error the
-    original carries, in any locale; a refusal names its new entries first
-  - services: an fstab with only malformed ext4 rows WARNs that none is
-    well-formed, not that all are conformant
-  - services: a mask retry under a lapsed sudo cache FAILs naming the lapse
-    (MASK_LAPSE), not a WARN that the stop failed
-  - services: a mask FAIL row also counts units that masked but did not stop
-  - services: the mask and enable rows put their notes before unit lists, so
-    the matrix cell no longer cuts them off
-  - services: the enable row no longer counts nftables.service as already
-    enabled when the nftables-first step enabled it this run
-  - services: the enable row WARNs naming any unit that is not installed, as
-    ry-verify does, instead of PASS or a failed enable
-  - services: the fstab rewrite names a lapsed sudo cache when its mktemp or
-    read fails, not fstab perms
-  - services: a masked unit still activating is stopped by mask --now, not
-    read as already masked
-  - services: a regdom apply that sudo refused names the lapsed cache, not a
-    failed iw reg set
-  - services: with ufw masked and nftables down, the SECURITY line names a
-    diagnosis, not the enable that just failed
-  - services: a PKGS_DEL package that a failed batch removal took counts as
-    removed
-  - boot: the DO NOT REBOOT rebuild step prints bootctl --graceful update, not
-    sdboot-manage update
-  - boot: the DO NOT REBOOT inspect step quotes $BOOT, so a mount path with a
-    space prints a working command
-  - boot: the sanity check lists loader entries as systemd-boot does, hidden
-    files skipped and .conf matched in any case
-  - boot: the sanity check fails a loader entry it cannot read instead of
-    skipping it as an efi entry
-  - finalize: an NM_RESTART_DELAY ending in a newline falls back to 3 s
-    instead of failing the settle sleep
-  - finalize: the matrix Next line points at ./ry-verify.fish in the
-    ry-verify clone, not beside this script
-  - finalize: the usermod manual steps quote the account name, so one ending
-    in $ prints a command fish can run
-  - install-file: a cpupower deploy without cpupower.service skips the
-    restart instead of claiming the governor applied
-  - install-file: the boot-file gates run after sudo is cached, so a hook
-    only root can see no longer reads as invalid
-  - install-file: an absent udevadm, or a failed verify or reload, says udevd
-    re-reads the changed rule on its next event, not at next boot
-  - install-file: a post-write nft -c or udevadm verify that could not run,
-    or a udevadm verify that timed out, reads as no verdict, not a failure
-  - install-file: a resolved, NetworkManager or environment.d apply that
-    succeeds strikes its owed entry, so a later run does not repeat it
-  - install-file: each managed file runs its own post-hook, so a HOME under a
-    directory such as sysctl.d no longer reroutes a user file
-  - install-file: a HOME under /etc or /boot no longer reads the user files
-    via sudo, so a lapsed cache no longer redeploys them
-  - install-file: a sysctl --system that rejected a key says the rest are
-    live, fix the key; one that did not run or finish says retry or reboot
-  - install-file: a changed file prints one OK and a failed write one FAIL,
-    not two; the nm-dispatcher apply confirms with an OK like the others
-  - install-file: a boot file runs the dependency and ESP gates before the
-    write, so a missing bootctl or unmounted ESP exits 3 instead of 4 after it
-  - logging: Finalize's NM deferral logs PENDING_APPLY_DROPPED for entries it
-    drops and leaves an NM-only owed list as filed
-  - logging: enable skips log ENABLE_ALREADY and ENABLE_NOT_INSTALLED; an
-    absent NetworkManager logs NM_RESTART_SKIP_NO_NM
-  - logging: an explicit mark that finds no PKGS_ADD package logs
-    PKG_ASEXPLICIT_SKIP
-  - logging: BACKUP_SKIP_SUDO_LAPSE logs dst= and probe= at both sites;
-    Finalize's NM restart deferral and failure log context=finalize
-  - logging: the end-of-run summary is JSONL-only, so the footer no longer
-    counts Done! as a pass or the error recap as a fail and a warn
-  - logging: one failure counts once in the footer, however many ERR, FAIL or
-    WARN lines explain, restate or retry it
-  - logging: a skipped enable and an owed resolved restart that cannot run
-    count a WARN, as their rows do
-  - logging: hardware and root UUID refusals log HARDWARE_*_REFUSED and
-    ROOT_UUID_UNAVAILABLE
-  - logging: a signal-time mkinitcpio.conf revert skipped under a lapsed sudo
-    cache logs that cause
-  - readme: exit 3 names the systemd gate; the mask step says the next full
-    run stops a unit that masked but did not stop; enable WARNs an absent unit
-  - readme: pending-apply also records a failed --install-file resolved or
-    NetworkManager restart or PowerDevil re-apply
-  - readme: Troubleshooting and Uninstall rebuild with bootctl --graceful
-    update; Tools lists bootctl
-  - readme: only a run that reaches Preflight closes with Totals; Backups says
-    each rewrite replaces the previous .ry.bak
-  - readme: only a run past argument parsing writes a JSONL log; an
-    --install-file of a user file needs no sudo
-  - readme: --install-file of a boot config gates before the write (exit 3)
+  - configuration: manage WP_BLUEZ_ROLES as bluez5.roles, no hfp_*/hsp_* role,
+    in ~/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf
+  - preflight: WP_BLUEZ_ROLES entries must be PipeWire role names;
+    WP_BLUEZ_ROLES:4 is a drift tripwire
+  - finalize: a changed or owed bluez5.roles drop-in try-restarts
+    wireplumber.service; no user bus, no unit or exit 4 is a SKIP row
+  - install-file: the bluez5.roles drop-in try-restarts wireplumber.service;
+    one that fails or finds no user bus stays owed
+  - readme: 18 managed files; WP_BLUEZ_ROLES under Service Keys, Bluetooth
+    Audio note; pending-apply covers no-user-bus applies
 
 
-7.246.0 - 7.252.0
+7.246.0 - 7.255.0
 -----------------
 
   - env: 7.248.0 add 0x3434/0x0b00 (Keychron Q0 HE) to
     SDL_GAMECONTROLLER_IGNORE_DEVICES
   - configuration: 7.247.0 a post-write mismatch with only an older run's
     .ry.bak says no backup from this run
-  - configuration: 7.248.0 udev has libinput ignore the Xbox Wireless
-    Controller
+  - configuration: 7.248.0 libinput ignores the Xbox Wireless Controller
   - configuration: 7.250.0 a managed symlink behind a directory this user
     cannot traverse is replaced; its target is never chmodded
   - configuration: 7.251.0 the 60-ry-modules.conf header no longer claims
     module options; an existing install redeploys it once
   - configuration: 7.252.0 a sudo cache lapse before an atomic move FAILs the
     file rather than printing an [ERR] line
+  - configuration: 7.254.0 an nft -c that could not run refuses the deploy as
+    not run, not as a failed ruleset
+  - configuration: 7.254.0 an owed restart is on file before its config lands,
+    so a signal right after the move no longer drops it
+  - configuration: 7.254.0 a config that fails to land is no longer left owed,
+    so a later run does not restart its service as if it changed
+  - configuration: 7.255.0 an unchanged system file not owned by root:root is
+    chowned back, as a drifted mode is restored
   - guard: 7.247.0 an early exit removes ~/ry-install/backups only when this
     run created it
   - guard: 7.247.0 inherited mkinitcpio rollback variables are pinned, so they
@@ -231,16 +84,76 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     the run marked mid-transaction
   - signals: 7.252.0 teardown no longer autoloads a user function named
     _progress_teardown or _tmp_dir during startup
-  - cli: 7.247.0 the --install-file control-character refusal states its real
-    reason
+  - signals: 7.254.0 a pacman pass alpm refused at prepare keeps the run
+    marked when an earlier pass failed past prepare
+  - signals: 7.254.0 a pacman pass after one that failed mid-transaction keeps
+    DO NOT REBOOT owed until Boot's rebuild; the -Syu row WARNs
+  - signals: 7.254.0 a pacman run that never ran or stopped before its hooks
+    no longer reads as cut short mid-transaction
+  - signals: 7.254.0 a PKGS_DEL removal that fails mid-transaction keeps DO
+    NOT REBOOT owed until Boot's rebuild
+  - signals: 7.254.0 a signal just after the mkinitcpio.conf snapshot is made
+    no longer strands it; one just after its removal prints no restore command
+  - signals: 7.255.0 a signal before the mkinitcpio.conf seed lands no longer
+    rewrites the unchanged file or prints a restore WARN
+  - signals: 7.255.0 a signal after -Syu passes no longer reverts the
+    mkinitcpio.conf seed the initramfs was built from
+  - cli: 7.247.0 the --install-file control-character refusal states why
   - cli: 7.252.0 an unexpected positional argument prints escaped; an empty
     one reads ''
+  - cli: 7.254.0 a root run escapes each leftover argument whole, so an
+    embedded newline no longer splits or forges the message
+  - cli: 7.254.0 argument errors print control characters (C1, raw bytes)
+    escaped or as ?; an --install-file value holding one is refused first
+  - cli: 7.254.0 --install-file given --verify, --check, --report, --help or
+    --version as its value names both spellings
+  - cli: 7.254.0 every --install-file error escapes the value, so a trailing
+    blank no longer reads as the managed path
+  - cli: 7.254.0 an --install-file path of 4095 slashes no longer stalls the
+    NAME_MAX check for seconds
+  - cli: 7.254.0 -h or -v ending in a newline is an unknown option (exit 2),
+    not help
   - preflight: 7.247.0 MKINITCPIO_MODULES and MKINITCPIO_HOOKS tokens are
     charset-checked
   - preflight: 7.247.0 a missing realpath no longer prints fish errors; a
     module that may not exist warns on the console
   - preflight: 7.252.0 a HOME that normalizes to empty or a non-directory
     names the value set in its exit-3 error
+  - preflight: 7.254.0 an embedded value ending in a newline (governor,
+    country, count, kernel or HOOKS token) is refused
+  - preflight: 7.254.0 a relative HOME takes the passwd entry, and a relative
+    passwd entry exits 3, instead of resolving under the current directory
+  - preflight: 7.254.0 the root UUID takes findmnt's first match, so a mount
+    stacked on / no longer fails the run as an invalid UUID
+  - preflight: 7.254.0 an RY_RUN_TIMEOUT ending in a newline reads invalid,
+    not a fish error at every command; its WARN prints the value escaped
+  - preflight: 7.254.0 the network probe skips ~/.curlrc, so a write-out it
+    sets no longer reaches stdout
+  - preflight: 7.254.0 a TLS handshake or certificate failure names the clock
+    or a TLS proxy, not DNS or blocked egress
+  - preflight: 7.254.0 the dependency gate also requires bootctl, ln, readlink
+    and uname, so a host without bootctl stops before any change
+  - preflight: 7.255.0 a HOME with a control character takes the passwd entry,
+    and one there exits 3: no newline or escape reaches output
+  - preflight: 7.255.0 curl rc 77 (unreadable CA store) names SSL_CERT_FILE,
+    CURL_CA_BUNDLE and ca-certificates, not the clock or a TLS proxy
+  - preflight: 7.255.0 a ping that cannot open an ICMP socket leaves the raw
+    IPs unprobed instead of reporting them unreachable
+  - preflight: 7.255.0 sudo uncached with no TTY prints one ERR naming the TTY
+  - preflight: 7.255.0 the hardware override hint and the nftables manual step
+    name the script as invoked, not ./ry-install.fish
+  - preflight: 7.255.0 config validation picks each validator by managed path,
+    so a HOME under a dir such as modprobe.d no longer fails it
+  - lock: 7.254.0 the printed lock-removal command escapes its path, so a
+    quote in HOME no longer breaks or splits it
+  - lock: 7.254.0 the lock dir is set 00700, clearing an inherited setgid bit
+  - lock: 7.254.0 - 7.255.0 a signal while dropping a reclaim claim or
+    releasing the lock no longer strands .claim or an empty lock directory
+  - lock: 7.254.0 - 7.255.0 a holder releasing the lock mid-check, or between
+    this run's mkdir and its check, no longer makes the run exit 5
+  - lock: 7.255.0 a lock not taken logs ERR and counts in the footer
+  - progress: 7.254.0 a signal while the bar pins or unpins no longer leaves
+    the scroll region set or clears the top row
   - packages: 7.246.0 a missing member whose dependency conflicts with an
     installed package is held for the swap, not left to fail both passes
   - packages: 7.246.0 a conflict swap gets a summary row naming what it
@@ -257,8 +170,17 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     logged as removed, not retried as a failing removal
   - packages: 7.251.0 HOOKS build scripts are probed as this user first, with
     sudo only for one this user cannot see
-  - packages: 7.252.0 a hook error past the 500-line output capture still
-    reads WARN
+  - packages: 7.252.0 a hook error past the 500-line capture still reads WARN
+  - packages: 7.254.0 error lines kept from a long pacman output's elided
+    middle stay in file order, print with QUIET off, log under _OVERFLOW_KEPT
+  - packages: 7.254.0 a re-run whose mkinitcpio.conf seed changed nothing
+    drops its rollback, so a failed -Syu no longer reverts and holds the file
+  - packages: 7.255.0 a failed mkinitcpio.conf seed reverts any bytes it
+    landed from the snapshot before dropping it
+  - packages: 7.255.0 a conflict-swap hook error leads its row, so a long
+    removal list no longer cuts it from the matrix
+  - packages: 7.255.0 a -Syyu retry, conflict swap, explicit mark, updatedb or
+    pkgfile that sudo refused reads as not run (sudo cache lapsed), not failed
   - backup: 7.250.0 ~/ry-install/backups is created by the first .ry.bak copy,
     so no run's early exit removes it
   - services: 7.247.0 a PKGS_DEL row with a pacman hook error keeps its
@@ -275,6 +197,29 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     firewall unverified, not down; enable and mask retries name the lapse
   - services: 7.252.0 nftables-first no longer claims ufw rules stay before
     the ufw step decides; SECURITY says whether the mask follows or holds
+  - services: 7.254.0 the fstab rewrite no longer refuses over a parse error
+    the original carries, in any locale; a refusal names its new entries first
+  - services: 7.254.0 an fstab with only malformed ext4 rows WARNs that none
+    is well-formed, not that all are conformant
+  - services: 7.254.0 a mask retry under a lapsed sudo cache FAILs naming the
+    lapse (MASK_LAPSE), not a WARN that the stop failed
+  - services: 7.254.0 a mask FAIL row also counts units masked but not stopped
+  - services: 7.254.0 the enable row no longer counts nftables.service as
+    already enabled when the nftables-first step enabled it this run
+  - services: 7.254.0 - 7.255.0 the mask and enable rows put their notes
+    before unit lists, so the matrix cell no longer cuts them off
+  - services: 7.254.0 - 7.255.0 the enable row WARNs naming any unit that is
+    not installed, as ry-verify does, instead of PASS or a failed enable
+  - services: 7.255.0 the fstab rewrite names a lapsed sudo cache when its
+    mktemp or read fails, not fstab perms
+  - services: 7.255.0 a masked unit still activating is stopped by mask --now,
+    not read as already masked
+  - services: 7.255.0 a regdom apply that sudo refused names the lapsed cache,
+    not a failed iw reg set
+  - services: 7.255.0 with ufw masked and nftables down, the SECURITY line
+    names a diagnosis, not the enable that just failed
+  - services: 7.255.0 a PKGS_DEL package that a failed batch removal took
+    counts as removed
   - boot: 7.250.0 an empty loader entries directory no longer adds
     sdboot-manage gen or LINUX_OPTIONS hints before the banner
   - boot: 7.250.0 - 7.252.0 an ESP-fallback host's DO NOT REBOOT banner says
@@ -283,14 +228,48 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     catching an entry that escapes a 0700 $BOOT through a link
   - boot: 7.252.0 the EFI binary refresh runs bootctl --graceful update, whose
     failure fails the step (sdboot-manage update always exits 0)
+  - boot: 7.254.0 the DO NOT REBOOT rebuild step prints bootctl --graceful
+    update, not sdboot-manage update
+  - boot: 7.255.0 the DO NOT REBOOT inspect step quotes $BOOT, so a mount path
+    with a space prints a working command
+  - boot: 7.255.0 the sanity check lists loader entries as systemd-boot does,
+    hidden files skipped and .conf matched in any case
+  - boot: 7.255.0 the sanity check fails a loader entry it cannot read instead
+    of skipping it as an efi entry
   - finalize: 7.252.0 with no plasma-powerdevil.service, an environment.d
     change skips the re-apply instead of WARNing a failed restart
+  - finalize: 7.254.0 an NM_RESTART_DELAY ending in a newline falls back to 3
+    s instead of failing the settle sleep
+  - finalize: 7.255.0 the matrix Next line points at ./ry-verify.fish in the
+    ry-verify clone, not beside this script
+  - finalize: 7.255.0 the usermod manual steps quote the account name, so one
+    ending in $ prints a command fish can run
   - install-file: 7.249.0 a boot-critical failure prints DO NOT REBOOT and its
     recovery steps once, in the closing banner
   - install-file: 7.252.0 an environment.d or bluetooth deploy without the
     unit to restart no longer WARNs a failed restart
   - install-file: 7.252.0 the modprobe.d post-hook no longer claims module
     options, matching the 60-ry-modules.conf header
+  - install-file: 7.254.0 a cpupower deploy without cpupower.service skips the
+    restart instead of claiming the governor applied
+  - install-file: 7.254.0 the boot-file gates run after sudo is cached, so a
+    hook only root can see no longer reads as invalid
+  - install-file: 7.254.0 an absent udevadm, or a failed verify or reload,
+    says udevd re-reads the changed rule on its next event, not at next boot
+  - install-file: 7.254.0 a post-write nft -c or udevadm verify that could not
+    run, or a udevadm verify that timed out, is no verdict, not a failure
+  - install-file: 7.254.0 a resolved, NetworkManager or environment.d apply
+    that succeeds strikes its owed entry, so a later run does not repeat it
+  - install-file: 7.254.0 each managed file runs its own post-hook, so a HOME
+    under a directory such as sysctl.d no longer reroutes a user file
+  - install-file: 7.254.0 - 7.255.0 a sysctl --system that rejected a key says
+    the rest are live, fix the key; one that did not run or finish says retry
+  - install-file: 7.254.0 - 7.255.0 a changed file prints one OK, a failed
+    write one FAIL; the nm-dispatcher apply confirms with an OK too
+  - install-file: 7.255.0 a HOME under /etc or /boot no longer reads the user
+    files via sudo, so a lapsed cache no longer redeploys them
+  - install-file: 7.255.0 a boot file runs the dependency and ESP gates before
+    the write: a missing bootctl or unmounted ESP exits 3, not 4 after it
   - logging: 7.246.0 a failed pacman call echoes its package-conflict lines
   - logging: 7.247.0 boot-cascade and udev-skip records carry the POST_
     prefix; a failed date no longer breaks the header JSON
@@ -315,6 +294,24 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     its skip and fail keys carry the SNAPSHOT name too
   - logging: 7.252.0 the regdom post-hook logs POST_REGDOM_APPLY_OK, not a
     start key; the NM post-hook defers under POST_NM_RESTART_DEFERRED
+  - logging: 7.254.0 enable skips log ENABLE_ALREADY and ENABLE_NOT_INSTALLED;
+    an absent NetworkManager logs NM_RESTART_SKIP_NO_NM
+  - logging: 7.254.0 BACKUP_SKIP_SUDO_LAPSE logs dst= and probe= at both
+    sites; Finalize's NM restart deferral and failure log context=finalize
+  - logging: 7.254.0 the end-of-run summary is JSONL-only, so the footer no
+    longer counts Done! as a pass or the error recap as a fail and a warn
+  - logging: 7.254.0 - 7.255.0 Finalize's NM deferral leaves an NM-only owed
+    list as filed and logs PENDING_APPLY_DROPPED per drop
+  - logging: 7.255.0 an explicit mark that finds no PKGS_ADD package logs
+    PKG_ASEXPLICIT_SKIP
+  - logging: 7.255.0 one failure counts once in the footer, however many ERR,
+    FAIL or WARN lines explain, restate or retry it
+  - logging: 7.255.0 a skipped enable and an owed resolved restart that cannot
+    run count a WARN, as their rows do
+  - logging: 7.255.0 hardware and root UUID refusals log HARDWARE_*_REFUSED
+    and ROOT_UUID_UNAVAILABLE
+  - logging: 7.255.0 a signal-time mkinitcpio.conf revert skipped under a
+    lapsed sudo cache logs that cause
   - summary: 7.247.0 a failed write of the run summary or the sudo banner logs
     STDERR_WRITE_FAIL
 
@@ -325,8 +322,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - guard: 7.243.0 TMPDIR is pinned to /tmp
   - guard: 7.243.0 an inherited LOG_FILE, LOG_DIR or _RY_BACKUP_DIR is not
     deleted when the run exits before creating its own log
-  - guard: 7.245.0 an early exit removes ~/ry-install only when this run
-    created it
+  - guard: 7.245.0 an early exit removes ~/ry-install only if this run made it
   - lock: 7.245.0 lock hints quote the path and pass --preserve-root; a
     kill-less host takes the /proc lock branch silently
   - cli: 7.241.0 help aligns its ENVIRONMENT column
@@ -489,8 +485,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     --install-file --report says its value is missing
   - preflight: 7.219.0 MODULES are checked against each installed kernel;
     7.224.0 a locked pacman database stops the run before anything is deployed
-  - preflight: 7.225.0 the modprobe.d format check names directives in match
-    order
+  - preflight: 7.225.0 the modprobe.d check names directives in match order
   - preflight: 7.233.0 the /boot free-space gate runs on stacked mounts; ESP
     autodetect and the vfat gate read the topmost non-autofs mount
   - preflight: 7.233.0 a setgid $HOME or a symlinked ~/ry-install no longer
@@ -527,8 +522,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     FAIL; the enable-start WARN covers persistent enable states only
   - services: 7.234.0 the fstab row is WARN when a digits-only ext4 row is
     left; a preserved mkinitcpio.conf snapshot path prints in install mode
-  - boot: 7.234.0 the DO-NOT-REBOOT inspect step uses sudo and the resolved
-    $BOOT
+  - boot: 7.234.0 the DO-NOT-REBOOT inspect step uses sudo and resolved $BOOT
   - finalize: 7.233.0 a run that stops before Finalize records the restarts it
     owes in ~/ry-install/pending-apply for the next run of the same boot
   - install-file: 7.233.0 a re-run on a boot file runs the boot cascade even
@@ -610,8 +604,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 
   - kernel: 7.123.0 - 7.129.0 add mt7925e.disable_aspm=1 and
     kernel.nmi_watchdog=0
-  - dns: 7.123.0 - 7.129.0 pin upstreams in resolved and the NM global-dns
-    section
+  - dns: 7.123.0 - 7.129.0 pin upstreams in resolved and NM global-dns
   - env: 7.123.0 - 7.129.0 FSR4_UPGRADE -> PROTON_FSR4_UPGRADE; drop
     VKD3D_CONFIG
   - perf: 7.130.0 - 7.131.1 governor and EPP performance, GPU DPM level high

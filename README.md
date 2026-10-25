@@ -1,8 +1,8 @@
 # ry-install
 
-**Version 7.255.0** · [Changelog](CHANGELOG.md)
+**Version 7.256.0** · [Changelog](CHANGELOG.md)
 
-Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 17 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
+Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
 ## Quick Start
 
@@ -96,15 +96,16 @@ In deploy order; system files land `0644`, user files `0600`.
 
 - `~/.config/environment.d/10-environment.conf` — session env: DXVK, GTK, MangoHud, Mesa, PowerDevil, Proton, SDL, VKD3D, Wine
 - `~/.config/MangoHud/MangoHud.conf` — readout-only HUD: horizontal, top-left, toggle `Shift_R+F12`
+- `~/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf` — Bluetooth audio roles: A2DP and LE Audio, no hands-free (HFP/HSP)
 
 ## Install Flow
 
 1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, and network gates; a warn-only time-sync check; config validation.
 2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A `PKGS_ADD` member that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, in a transaction that removes the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
-3. **Configuration** — deploy 17 embedded configs atomically.
+3. **Configuration** — deploy 18 embedded configs atomically.
 4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (`ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next full run stops it) → enable (a unit not installed, or one that enables but fails to start, is a `WARN`) → regulatory domain.
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `bootctl --graceful update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` files present inside `$BOOT`.
-6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, as does a NetworkManager restart deferred because Wi-Fi carries the default route, or an `--install-file` systemd-resolved restart, NetworkManager restart or PowerDevil re-apply that fails; the next full run applies them unless a reboot already has, and defers that restart again while Wi-Fi still carries the route.
+6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, WirePlumber restart, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, as does a NetworkManager restart deferred because Wi-Fi carries the default route, or an `--install-file` systemd-resolved, NetworkManager or WirePlumber restart or PowerDevil re-apply that fails or finds no user bus; the next full run applies them unless a reboot already has, and defers that restart again while Wi-Fi still carries the route.
 
 ## Safety and Reliability
 
@@ -123,7 +124,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 All tunables are `set -g` globals; after editing both scripts, re-run or `--install-file` the affected file.
 
-The length of each array among the shared tunables is a drift tripwire in `_ir_validate_counts` of both scripts — `KERNEL_PARAMS:15` among them; the accepted-value sets `_RY_DPM_LEVELS` and `_RY_EPP_LEVELS` carry no pin, and an array only one script carries, such as `_RY_PKG_MANAGED_SERVICES` here or ry-verify's `EXPECTED_VULKAN_PKGS`, is pinned in that script alone. Adding or dropping an element also means updating that `NAME:<n>` in each script that pins it; otherwise that script refuses to run with `NAME count drift` and exits `3`. Update any count this README quotes too, such as the 15 kernel tokens in [Managed Files](#managed-files).
+The length of each array among the shared tunables is a drift tripwire in `_ir_validate_counts` of both scripts — `KERNEL_PARAMS:15` among them; the accepted-value sets `_RY_DPM_LEVELS`, `_RY_EPP_LEVELS` and `_RY_BLUEZ_ROLES` carry no pin, and an array only one script carries, such as `_RY_PKG_MANAGED_SERVICES` here or ry-verify's `EXPECTED_VULKAN_PKGS`, is pinned in that script alone. Adding or dropping an element also means updating that `NAME:<n>` in each script that pins it; otherwise that script refuses to run with `NAME count drift` and exits `3`. Update any count this README quotes too, such as the 15 kernel tokens in [Managed Files](#managed-files).
 
 ### Bootloader Keys
 
@@ -165,7 +166,7 @@ The length of each array among the shared tunables is a drift tripwire in `_ir_v
 
 ### Service Keys
 
-`DNSOverTLS=` and `DNSSEC=` are unset by design — the router does DoT upstream and validates DNSSEC. `NM_WIFI_POWERSAVE` is `2` because the MT7925 spikes latency otherwise. `CPUPOWER_GOVERNOR` is `powersave` so the CPPC floor drops to minimum at idle; `EPP_PREFERENCE` `performance` steers the firmware toward performance and stays writable. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; [Tuning Notes](#tuning-notes) has the reverse switch.
+`DNSOverTLS=` and `DNSSEC=` are unset by design — the router does DoT upstream and validates DNSSEC. `NM_WIFI_POWERSAVE` is `2` because the MT7925 spikes latency otherwise. `CPUPOWER_GOVERNOR` is `powersave` so the CPPC floor drops to minimum at idle; `EPP_PREFERENCE` `performance` steers the firmware toward performance and stays writable. `BLACKLIST_AMDXDNA` is `false` because the IOMMU is on; [Tuning Notes](#tuning-notes) has the reverse switch. `WP_BLUEZ_ROLES` is the role list WirePlumber documents as its default, minus `hfp_hf` and `hfp_ag`, so a Bluetooth speaker with a microphone, such as the Marshall Middleton II, stays on A2DP when an app opens a microphone; as an explicit list it also leaves off the `bap_bcast_*` (Auracast) and `asha_sink` (hearing aid) roles PipeWire enables when the key is unset.
 
 - `RESOLVED_MDNS` = `no` → `MulticastDNS=`
 - `RESOLVED_LLMNR` = `no` → `LLMNR=`
@@ -179,6 +180,7 @@ The length of each array among the shared tunables is a drift tripwire in `_ir_v
 - `BT_AUTO_ENABLE` = `true` → `AutoEnable=`
 - `BT_FAST_CONNECTABLE` = `true` → `FastConnectable=`
 - `BT_RECONNECT_ATTEMPTS` = `3` → `ReconnectAttempts=`
+- `WP_BLUEZ_ROLES` = `a2dp_sink a2dp_source bap_sink bap_source` → `bluez5.roles` in `monitor.bluez.properties`
 - `GPU_DPM_LEVEL` = `high` → udev `ATTR{device/power_dpm_force_performance_level}`
 - `EPP_PREFERENCE` = `performance` → udev `ATTR{cpufreq/energy_performance_preference}`
 - `BLACKLIST_AMDXDNA` = `false` → nothing; `true` emits `blacklist amdxdna`
@@ -235,6 +237,10 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 - `cpu_stats` ships enabled; `cpu_temp` stays commented out — to turn it on, add it on its own line in the MangoHud generator of both scripts and in ry-verify's `_verify_static_user` directive list, then `--install-file` the file. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
 - `game-performance` — the CachyOS wrapper needs `power-profiles-daemon`, whose service this profile masks, so it runs the game unchanged; the profile pins the `powersave` governor with EPP `performance` instead.
 
+### Bluetooth Audio
+
+- `WP_BLUEZ_ROLES` leaves out HFP and HSP, so the speaker's microphone is unavailable. To take calls through it, add `hfp_hf hfp_ag` in both scripts, raise the `WP_BLUEZ_ROLES:4` tripwire to `6` in each `_ir_validate_counts`, then `--install-file` the drop-in; `wpctl settings --save bluetooth.autoswitch-to-headset-profile false` then keeps A2DP until you pick the headset profile for a call.
+
 ### Kernel Parameter Notes
 
 Adding or dropping a token means editing `KERNEL_PARAMS` in both scripts and its `KERNEL_PARAMS:15` tripwire in each `_ir_validate_counts`, plus the token count in [Managed Files](#managed-files) — see [Embedded Values](#embedded-values); otherwise both scripts exit `3` with `KERNEL_PARAMS count drift`.
@@ -267,7 +273,7 @@ Multi-thread gains flatten past ~85 W. Set `SPL = fPPT = sPPT = 85 W` (stock boo
 There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference.
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
-2. **Remove configs** — `sudo systemctl disable --now nftables` first, or its unit fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 2 user files; step 3 reverts the 4 boot files.
+2. **Remove configs** — `sudo systemctl disable --now nftables` first, or its unit fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 3 user files, then `systemctl --user restart wireplumber.service`; step 3 reverts the 4 boot files.
 3. **Revert boot files and fstab** — restore `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, and `/etc/fstab` from their matching `~/ry-install/backups/*.ry.bak` copies where present, then delete the backups; older deployments keep the copies beside each file.
 4. **Reverse packages** — optional: `sudo pacman -Syu --needed` the Remove list, `sudo pacman -Rns` the Install list except `pipewire-jack`, which `ffmpeg` needs as its JACK provider; both listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo bootctl --graceful update`, then `sudo systemctl reboot`.

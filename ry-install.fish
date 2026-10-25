@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.255.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.256.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.255.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.256.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t # config.fish job control or IFS would steer this run
@@ -13,7 +13,7 @@ set -g QUIET true; set -g MODE bootstrap; set -gu LOG_FILE ""; set -gu LOG_DIR "
 set -gu LOCK_DIR ""; set -gu LOCK_FILE "" # inherited lock paths never ours: cleanup tests -n
 set -g _RY_RUN_TIMEOUT_DEFAULT 3600; set -g _RY_LONGOP_FLOOR 7200; set -g _RY_TS_FMT '+%Y-%m-%dT%H:%M:%S.%3N%z'
 set -g PACTREE_TIMEOUT_S 60
-set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 17
+set -g PROFILE_NAME gtr9_pro; set -g PROFILE_DESC "Beelink GTR9 Pro — Ryzen AI Max+ 395 / Radeon 8060S"; set -g _RY_MANAGED_FILE_COUNT 18
 set -g _RY_PHASE_NAMES Preflight Packages Configuration Services Boot Finalize
 set -g -- _RY_ARGPARSE_SPEC h/help v/version install-file=+ # one spec source (root guard + argparse); =+ keeps every repeat
 
@@ -615,7 +615,7 @@ set -g SYSTEM_DESTINATIONS \
     "/etc/systemd/system/NetworkManager-dispatcher.service.d/logging.conf" "/etc/NetworkManager/conf.d/99-cachyos-nm.conf" \
     "/etc/iw-regdomain" "/etc/bluetooth/main.conf" "/etc/nftables.conf" "/etc/default/cpupower-service.conf" \
     "/etc/sysctl.d/95-ry-overrides.conf" "/etc/udev/rules.d/99-ry-perf.rules" "/etc/modprobe.d/60-ry-modules.conf"
-set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf"
+set -g USER_DESTINATIONS "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/MangoHud/MangoHud.conf" "$HOME/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf"
 set -l _ry_dst_count (count $SYSTEM_DESTINATIONS $USER_DESTINATIONS)
 if test "$_ry_dst_count" -ne "$_RY_MANAGED_FILE_COUNT"; echo "[ERR] _RY_MANAGED_FILE_COUNT drift: declared=$_RY_MANAGED_FILE_COUNT computed=$_ry_dst_count" >&2; _ry_exit $EXIT_PREFLIGHT; end
 set --erase _ry_dst_count
@@ -637,6 +637,8 @@ set -g LOGIND_IGNORE_KEYS HandlePowerKey HandlePowerKeyLongPress HandleSuspendKe
 set -g NM_WIFI_BACKEND wpa_supplicant; set -g NM_WIFI_POWERSAVE 2; set -g NM_LOG_LEVEL WARN # Wi-Fi PS off: MT7925/mt76 PS in software causes latency spikes
 set -g CPUPOWER_GOVERNOR powersave # CPPC floor at min; EPP performance steers the firmware
 set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 3 # adapter auto-power-on; paired-sink reconnect retries
+set -g WP_BLUEZ_ROLES a2dp_sink a2dp_source bap_sink bap_source # WirePlumber bluez5.roles; no hfp_*/hsp_*: no headset profile
+set -g _RY_BLUEZ_ROLES hsp_hs hsp_ag hfp_hf hfp_ag a2dp_sink a2dp_source bap_sink bap_source bap_bcast_sink bap_bcast_source asha_sink # role names PipeWire parses
 set -g GPU_DPM_LEVEL high # gfx1151 dpm; high pins clocks, gating stays active
 set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set
 set -g EPP_PREFERENCE performance; set -g _RY_EPP_LEVELS default performance balance_performance balance_power power # accepted set; udev-pinned per CPU; blocked if dynamic_epp on
@@ -712,6 +714,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         MKINITCPIO_HOOKS:11 \
         MKINITCPIO_MODULES:1 \
         LOGIND_IGNORE_KEYS:8 \
+        WP_BLUEZ_ROLES:4 \
         ENV_VARS:12 \
         SYSCTL_VALUES:9 \
         PKGS_ADD:18 \
@@ -719,14 +722,14 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         MASK:11 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
-        _RY_POST_HOOKS:17 \
+        _RY_POST_HOOKS:18 \
         _RY_ARGPARSE_SPEC:3 \
         _RY_BOOT_CRITICAL_DSTS:4 \
         _RY_PHASE_NAMES:6 \
         _RY_BACKUP_TARGETS:4 \
         _RY_TMPDIR_GLOBS:4 \
         SYSTEM_DESTINATIONS:15 \
-        USER_DESTINATIONS:2 \
+        USER_DESTINATIONS:3 \
         MKINITCPIO_COMPRESSION_OPTIONS:1 # drift tripwires; sync arrays + docs on change
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
@@ -748,6 +751,9 @@ function _ir_validate_keys --description "Refuse to deploy on out-of-domain embe
     if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)\z' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
     if not contains -- "$EPP_PREFERENCE" $_RY_EPP_LEVELS; _err_loud "EPP_PREFERENCE must be one of "(string join '|' -- $_RY_EPP_LEVELS)" (got: '$EPP_PREFERENCE') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
+    for _r in $WP_BLUEZ_ROLES # spliced unquoted into SPA-JSON
+        if not contains -- "$_r" $_RY_BLUEZ_ROLES; _err_loud "WP_BLUEZ_ROLES entries must be among "(string join '|' -- $_RY_BLUEZ_ROLES)" (got: '$_r') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
     if not string match -qr '^[a-z][a-z0-9_-]*\z' -- "$CPUPOWER_GOVERNOR"; _err_loud "CPUPOWER_GOVERNOR must match ^[a-z][a-z0-9_-]*\\z (got: '$CPUPOWER_GOVERNOR') — refuse to deploy (the domain _grep_cpupower_entry accepts)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # base ICMPv6 is accepted; service rules are not
         _warn_loud "Dual-stack: the ruleset accepts only the ICMPv6 base set — add service-specific IPv6 rules to _content__etc_nftables.conf in both scripts and re-run (a hand edit to the managed /etc/nftables.conf is overwritten)" # loud: install pins QUIET
@@ -783,8 +789,8 @@ function _ir_validate_sets --description "Refuse to deploy when add and remove s
         if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and _RY_PKG_MANAGED_SERVICES — a masked unit cannot be package-managed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
-function _ir_validate_change_keys --description "Refuse to deploy when a phase change-key literal is not a managed destination" # resolved restart, NM restart, PowerDevil re-apply
-    for _k in /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf "$HOME/.config/environment.d/10-environment.conf"
+function _ir_validate_change_keys --description "Refuse to deploy when a phase change-key literal is not a managed destination" # resolved, NM, WirePlumber restarts; PowerDevil re-apply
+    for _k in /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf"
         if not contains -- "$_k" $SYSTEM_DESTINATIONS $USER_DESTINATIONS; _err_loud "'$_k' keys a phase restart but is not a managed destination — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
@@ -943,7 +949,7 @@ function _content__etc_modprobe.d_60-ry-modules.conf --description "Generate con
     end
 end
 
-# ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud) ──
+# ── CONTENT GENERATORS: USER ($HOME dotfiles; environment.d + MangoHud + WirePlumber) ──
 function _content_HOME_.config_environment.d_10-environment.conf --description "Generate content for ~/.config/environment.d/10-environment.conf"
     printf '%s\n' "# ry-install: session environment for systemd --user services and graphical sessions (managed file, do not edit by hand)"
     set -l _printed 0; set -g _RY_ENVD_BAD_ENTRIES
@@ -981,6 +987,14 @@ function _content_HOME_.config_MangoHud_MangoHud.conf --description "Generate co
         "no_small_font" \
         "alpha=0.8" \
         "background_alpha=0.4"
+end
+function _content_HOME_.config_wireplumber_wireplumber.conf.d_51-ry-bluez-roles.conf --description "Generate content for the WirePlumber bluez5.roles drop-in (no HFP/HSP role)"
+    printf '%s\n' \
+        "# ry-install: WirePlumber Bluetooth audio roles (managed file, do not edit by hand)" \
+        "# no hfp_*/hsp_* role: no headset profile to drop to when an app opens a microphone" \
+        "monitor.bluez.properties = {" \
+        "  bluez5.roles = [ $WP_BLUEZ_ROLES ]" \
+        "}"
 end
 
 # ── CONTENT DISPATCH (_ry_get_file_content; fn name derived via _content_fn_for) ──
@@ -1710,7 +1724,7 @@ function _grep_ini_header --argument-names dst --description "Validate ≥1 [Sec
     return 0
 end
 
-# ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (MODPROBE → MANGOHUD) ──
+# ── CONFIG-FORMAT VALIDATORS: ENTRY GREPS (MODPROBE → WIREPLUMBER) ──
 function _grep_modprobe_entry --argument-names dst --description "Validate modprobe.d content: comment-only ok, else every non-comment line is a directive"
     test (count $argv) -lt 2; and _log "BUG: _grep_modprobe_entry called without content (dst=$dst)"; and return 2
     for _line in $argv[2..-1]
@@ -1774,6 +1788,18 @@ function _grep_mangohud_entry --argument-names dst --description "Validate ≥1 
     end
     return 0
 end
+function _grep_wireplumber_entry --argument-names dst --description "Validate a monitor.bluez.properties block that sets bluez5.roles (WirePlumber SPA-JSON)"
+    test (count $argv) -lt 2; and _log "BUG: _grep_wireplumber_entry called without content (dst=$dst)"; and return 2
+    string match -qr '^monitor\.bluez\.properties = \{$' -- $argv[2..-1]; or begin
+        _fail "  $dst: no monitor.bluez.properties block found"
+        return 1
+    end
+    string match -qr '^  bluez5\.roles = \[( [a-z0-9_]+)+ \]$' -- $argv[2..-1]; or begin
+        _fail "  $dst: no bluez5.roles = [ <role> ... ] line found"
+        return 1
+    end
+    return 0
+end
 
 # ── CONFIG-FORMAT VALIDATORS: DISPATCH + ORCHESTRATOR ──
 function _rvc_dispatch --argument-names dst --description "Validate single embedded content by format family"
@@ -1783,6 +1809,8 @@ function _rvc_dispatch --argument-names dst --description "Validate single embed
             _grep_envd_entry "$dst" $_content
         case '*/.config/MangoHud/MangoHud.conf'
             _grep_mangohud_entry "$dst" $_content
+        case '*/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf'
+            _grep_wireplumber_entry "$dst" $_content
         case /boot/loader/loader.conf /etc/sdboot-manage.conf
             _grep_kv "$dst" $_content
         case /etc/kernel/cmdline
@@ -2112,6 +2140,7 @@ function _has_user_bus_active --description "True iff user systemd manager is re
     return 1
 end
 function _has_powerdevil --description "True when the user manager has plasma-powerdevil.service (try-restart of an absent unit exits 5)"; test (command systemctl --user list-unit-files --no-legend -- plasma-powerdevil.service 2>/dev/null | count) -gt 0; end
+function _has_wireplumber --description "True when the user manager has wireplumber.service (try-restart of an absent unit exits 5)"; test (command systemctl --user list-unit-files --no-legend -- wireplumber.service 2>/dev/null | count) -gt 0; end
 function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache may lapse mid-run"
     set -q _RY_OUTPUT_BROKEN; and return 0
     _log "SUDO_CACHE_BANNER: emitted (install-mode preflight)"
@@ -3306,7 +3335,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     return 0
 end
 
-# ── INSTALL PHASE 6: FINALIZE (USER RELOAD, POWERDEVIL, PACCACHE, NM RESTART, PENDING-APPLY) ──
+# ── INSTALL PHASE 6: FINALIZE (USER RELOAD + RESTARTS, PACCACHE, NM RESTART, PENDING-APPLY) ──
 function _if_trim_pacman_cache --description "Trim pacman cache via paccache -rk2 -ruk0"
     set -l _upgraded false; set -l _removed_n 0
     set -q SYSTEM_UPGRADED; and test "$SYSTEM_UPGRADED" = true; and set _upgraded true
@@ -3351,7 +3380,7 @@ function _pending_apply_write --description "Write the boot-stamped owed list vi
     test "$pipestatus[2]" -eq 0
 end
 function _pending_apply_save --description "Persist owed applies past a run that stops before making them (Finalize settles them)"
-    set -l _ad /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf "$HOME/.config/environment.d/10-environment.conf"
+    set -l _ad /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf"
     set -q argv[1]; and not contains -- "$argv[1]" $_ad; and return 0 # argv: a file about to land; others owe no apply
     set -l _prev (_pending_apply_load); set -l _owed
     for _d in $_ad
@@ -3404,7 +3433,33 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
     command sleep $_nm_delay </dev/null 2>/dev/null; or _warn "Sleep interrupted during NM restart settle window"
     return 0
 end
-function _install_finalize --description "Finalize: user daemon-reload + PowerDevil re-apply + pacman cache trim + NetworkManager restart"
+function _if_wireplumber_restart --description "Try-restart WirePlumber so a changed or owed bluez5.roles drop-in applies"
+    if not contains -- "$HOME/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf" $argv # unchanged bytes, none owed: no audio blip
+        _log "WIREPLUMBER_RESTART_SKIP_UNCHANGED: drop-in bytes identical this run, no restart owed"
+        _phase_record "Finalize: WirePlumber restart" SKIP "bluez5.roles unchanged (no restart pending)"
+        return 0
+    end
+    if not _has_user_bus_active
+        _info "Skipping WirePlumber restart (no active user-bus) — bluez5.roles applies at next graphical login"
+        _log "WIREPLUMBER_RESTART_SKIP: no active user-bus"
+        _phase_record "Finalize: WirePlumber restart" SKIP "no active user-bus (applies at next login)"
+        return 0
+    end
+    if not _has_wireplumber
+        _log "WIREPLUMBER_RESTART_SKIP: wireplumber.service not installed"
+        _phase_record "Finalize: WirePlumber restart" SKIP "wireplumber.service not installed"
+        return 0
+    end
+    if _run systemctl --user try-restart -- wireplumber.service # try-restart: never starts it outside a session
+        _phase_record "Finalize: WirePlumber restart" PASS "bluez5.roles changed (restarts only if running)"
+    else
+        _warn "wireplumber.service restart failed — bluez5.roles applies at next login (non-fatal)"
+        _log "WIREPLUMBER_RESTART_FAIL: context=finalize"
+        _phase_record "Finalize: WirePlumber restart" WARN "restart failed (non-fatal)"
+    end
+    return 0
+end
+function _install_finalize --description "Finalize: user reload, PowerDevil re-apply, WirePlumber and NetworkManager restarts, cache trim"
     _progress Finalize
     set -l _owed (_pending_apply_load); set -l _apply $_RY_DEPLOY_CHANGED_DSTS $_owed # + owed by an earlier run this boot (unfinished or deferred)
     set -l _pd_res SKIP; set -l _pd_ev "environment.d unchanged (no restart pending)" # one row per run, like the restart siblings
@@ -3433,6 +3488,7 @@ function _install_finalize --description "Finalize: user daemon-reload + PowerDe
         set _pd_ev "no active user-bus"
     end
     _phase_record "Finalize: PowerDevil env re-apply" $_pd_res "$_pd_ev"
+    _if_wireplumber_restart $_apply
     _if_trim_pacman_cache
     _if_nm_restart $_apply
     if set -q _RY_NM_RESTART_DEFERRED # deferred over Wi-Fi: a re-run this boot still owes the restart
@@ -3605,7 +3661,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
         _err_cont "Boot-critical failure — skipping finalization" # the DO NOT REBOOT banner after the matrix carries the steps
         set -g _PROG_FINALIZED_SKIP true; set -g _RY_BOOT_CRIT_HIT true
         _progress Finalize skip
-        for _sk in "Finalize: systemctl --user reload" "Finalize: PowerDevil env re-apply" "Finalize: pacman cache trim" "Finalize: NetworkManager restart"; _phase_record "$_sk" SKIP "aborted"; end
+        for _sk in "Finalize: systemctl --user reload" "Finalize: PowerDevil env re-apply" "Finalize: WirePlumber restart" "Finalize: pacman cache trim" "Finalize: NetworkManager restart"; _phase_record "$_sk" SKIP "aborted"; end
     else
         _install_finalize
     end
@@ -3624,7 +3680,7 @@ set -g _RY_POST_HOOKS \
     "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/NetworkManager-dispatcher.service.d/*|nmdispatch" "*/NetworkManager/conf.d/*|nm" \
     "/etc/iw-regdomain|regdom" "/etc/bluetooth/main.conf|bluetooth" "/etc/nftables.conf|nft" "/etc/default/cpupower-service.conf|cpupower" \
     "*/sysctl.d/*|sysctl" "/etc/udev/rules.d/*|udev" "*/modprobe.d/*|modprobe" "*/environment.d/*|envd" \
-    "*/MangoHud/MangoHud.conf|mangohud"
+    "*/MangoHud/MangoHud.conf|mangohud" "*/wireplumber.conf.d/*|wireplumber"
 function _ir_validate_post_hooks --description "Refuse to deploy when a _RY_POST_HOOKS tag lacks a handler or breaks destination mirror" # mirrors _ir_validate_keys
     set -l _seen_tags
     set -l _mirror_dsts $SYSTEM_DESTINATIONS $USER_DESTINATIONS
@@ -3840,6 +3896,27 @@ function _post_envd --argument-names target --description "Post-hook: env-genera
         return 0
     end
     _ok "environment.d re-applied — user manager reloaded, plasma-powerdevil.service try-restarted (restarts only if running)"
+    _pending_apply_drop "$target" # applied: a later run owes nothing
+    return 0
+end
+function _post_wireplumber --argument-names target --description "Post-hook: try-restart wireplumber.service so the bluez5.roles drop-in applies"
+    if not _has_user_bus_active
+        _info "  No active user-bus — bluez5.roles applies at next graphical login"
+        _log "POST_WIREPLUMBER_SKIP: no active user-bus target=$target"
+        return 0
+    end
+    if not _has_wireplumber
+        _info "  wireplumber.service not installed — bluez5.roles applies once WirePlumber runs"
+        _log "POST_WIREPLUMBER_SKIP: no wireplumber.service target=$target"
+        _pending_apply_drop "$target"
+        return 0
+    end
+    if not _run systemctl --user try-restart -- wireplumber.service # try-restart: never starts it outside a session
+        _warn "wireplumber.service restart failed — bluez5.roles applies at next login (non-fatal; file deployed)"
+        _log "POST_WIREPLUMBER_RESTART_FAIL: target=$target"
+        return 0
+    end
+    _ok "WirePlumber try-restarted (restarts only if running) — bluez5.roles applied"
     _pending_apply_drop "$target" # applied: a later run owes nothing
     return 0
 end

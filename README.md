@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.256.0** · [Changelog](CHANGELOG.md)
+**Version 7.257.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -96,7 +96,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 - `~/.config/environment.d/10-environment.conf` — session env: DXVK, GTK, MangoHud, Mesa, PowerDevil, Proton, SDL, VKD3D, Wine
 - `~/.config/MangoHud/MangoHud.conf` — readout-only HUD: horizontal, top-left, toggle `Shift_R+F12`
-- `~/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf` — Bluetooth audio roles: A2DP and LE Audio, no hands-free (HFP/HSP)
+- `~/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf` — Bluetooth audio roles: A2DP and LE Audio (idle; see [Bluetooth Audio](#bluetooth-audio)), no hands-free (HFP/HSP)
 
 ## Install Flow
 
@@ -239,7 +239,8 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 
 ### Bluetooth Audio
 
-- `WP_BLUEZ_ROLES` leaves out HFP and HSP, so the speaker's microphone is unavailable. To take calls through it, add `hfp_hf hfp_ag` in both scripts, raise the `WP_BLUEZ_ROLES:4` tripwire to `6` in each `_ir_validate_counts`, then `--install-file` the drop-in; `wpctl settings --save bluetooth.autoswitch-to-headset-profile false` then keeps A2DP until you pick the headset profile for a call.
+- `WP_BLUEZ_ROLES` leaves out HFP and HSP, so a Bluetooth speaker's microphone is unavailable. To take calls through it, add `hfp_hf hfp_ag` in both scripts, raise the `WP_BLUEZ_ROLES:4` tripwire to `6` in each `_ir_validate_counts`, then `--install-file` the drop-in; `wpctl settings --save bluetooth.autoswitch-to-headset-profile false` then keeps A2DP until you pick the headset profile for a call.
+- LE Audio needs `Experimental = true` and `KernelExperimental = 6fbaf188-05e0-496a-9885-d6ddfdb4e03e` (ISO socket) under `[General]` in `/etc/bluetooth/main.conf`; the profile's `main.conf` sets neither, so the `bap_*` roles stay idle and audio plays over A2DP.
 
 ### Kernel Parameter Notes
 

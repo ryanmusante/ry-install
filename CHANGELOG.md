@@ -3,22 +3,27 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.256.0
+7.257.0
 -------
 
-  - configuration: manage WP_BLUEZ_ROLES as bluez5.roles, no hfp_*/hsp_* role,
-    in ~/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf
-  - preflight: WP_BLUEZ_ROLES entries must be PipeWire role names;
-    WP_BLUEZ_ROLES:4 is a drift tripwire
-  - finalize: a changed or owed bluez5.roles drop-in try-restarts
-    wireplumber.service; no user bus, no unit or exit 4 is a SKIP row
-  - install-file: the bluez5.roles drop-in try-restarts wireplumber.service;
-    one that fails or finds no user bus stays owed
-  - readme: 18 managed files; WP_BLUEZ_ROLES under Service Keys, Bluetooth
-    Audio note; pending-apply covers no-user-bus applies
+  - configuration: a boot file's post-write check also compares sizes, so one
+    with NUL bytes no longer passes as identical
+  - configuration: a sudo lapse at the post-write restore probe prints the
+    hand-restore command rather than claiming no backup from this run
+  - configuration: with an hfp_*/hsp_* role in WP_BLUEZ_ROLES, the
+    bluez5.roles drop-in comment no longer says there is none
+  - configuration: a mode drift repair names the old mode as 0666, not 666,
+    like the mode it restores
+  - services: an fstab ext4 scan that fails FAILs the fstab step rather than
+    reading as no ext4 entries
+  - install-file: the nft module-tree hint names the script to re-run
+  - install-file: a WirePlumber try-restart no longer claims bluez5.roles
+    applied when WirePlumber was not running
+  - readme: Bluetooth Audio names a Bluetooth speaker and says the LE Audio
+    roles stay idle without BlueZ's Experimental and KernelExperimental
 
 
-7.246.0 - 7.255.0
+7.246.0 - 7.256.0
 -----------------
 
   - env: 7.248.0 add 0x3434/0x0b00 (Keychron Q0 HE) to
@@ -40,6 +45,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     so a later run does not restart its service as if it changed
   - configuration: 7.255.0 an unchanged system file not owned by root:root is
     chowned back, as a drifted mode is restored
+  - configuration: 7.256.0 bluez5.roles from WP_BLUEZ_ROLES, no hfp_*/hsp_*
+    role, in ~/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf
   - guard: 7.247.0 an early exit removes ~/ry-install/backups only when this
     run created it
   - guard: 7.247.0 inherited mkinitcpio rollback variables are pinned, so they
@@ -144,6 +151,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     name the script as invoked, not ./ry-install.fish
   - preflight: 7.255.0 config validation picks each validator by managed path,
     so a HOME under a dir such as modprobe.d no longer fails it
+  - preflight: 7.256.0 WP_BLUEZ_ROLES entries must be PipeWire role names;
+    WP_BLUEZ_ROLES:4 is a drift tripwire
   - lock: 7.254.0 the printed lock-removal command escapes its path, so a
     quote in HOME no longer breaks or splits it
   - lock: 7.254.0 the lock dir is set 00700, clearing an inherited setgid bit
@@ -244,6 +253,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     ry-verify clone, not beside this script
   - finalize: 7.255.0 the usermod manual steps quote the account name, so one
     ending in $ prints a command fish can run
+  - finalize: 7.256.0 a changed or owed bluez5.roles drop-in try-restarts
+    wireplumber.service; no user bus, no unit or exit 4 is a SKIP row
   - install-file: 7.249.0 a boot-critical failure prints DO NOT REBOOT and its
     recovery steps once, in the closing banner
   - install-file: 7.252.0 an environment.d or bluetooth deploy without the
@@ -270,6 +281,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     files via sudo, so a lapsed cache no longer redeploys them
   - install-file: 7.255.0 a boot file runs the dependency and ESP gates before
     the write: a missing bootctl or unmounted ESP exits 3, not 4 after it
+  - install-file: 7.256.0 the bluez5.roles drop-in try-restarts
+    wireplumber.service; one that fails or finds no user bus stays owed
   - logging: 7.246.0 a failed pacman call echoes its package-conflict lines
   - logging: 7.247.0 boot-cascade and udev-skip records carry the POST_
     prefix; a failed date no longer breaks the header JSON

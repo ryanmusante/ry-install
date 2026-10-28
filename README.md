@@ -55,7 +55,7 @@ Per-step results (one summary row each):
 | `0` | OK — success and `WARN`-only runs |
 | `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout full, or closed under fish 3) |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
-| `3` | missing dependency, uncached sudo that no TTY prompt resolved, a failed gate (hardware, root UUID, systemd, disk, network, pacman lock), a fish universal variable named like internal state, fish's `regex-easyesc` feature turned off, failed config validation, or an unusable HOME, log tree or `/tmp` |
+| `3` | missing dependency, uncached sudo that no TTY prompt resolved, a failed gate (hardware, root UUID, systemd, disk, network, pacman lock, ESP), a fish universal variable named like internal state, fish's `regex-easyesc` feature turned off, failed config validation, or an unusable HOME, log tree or `/tmp` |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
 | `5` | lock — another live instance holds the lock; a stale pidfile is reclaimed, an ambiguous one fails closed |
 
@@ -101,7 +101,7 @@ In deploy order; system files land `0644`, user files `0600`.
 ## Install Flow
 
 1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, and network gates; a warn-only time-sync check; config validation.
-2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A `PKGS_ADD` member that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, in a transaction that removes the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
+2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A `PKGS_ADD` member that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, in a transaction that removes the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked or the `mkinitcpio.conf` seed failed to deploy, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 18 embedded configs atomically.
 4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (`ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next full run stops it) → enable (a unit not installed, or one that enables but fails to start, is a `WARN`) → regulatory domain.
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `bootctl --graceful update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` files present inside `$BOOT`.
@@ -113,7 +113,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 **Symlinked destinations** — a managed path that is a symlink is replaced with a regular file at the managed mode.
 
-**Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab, replacing the previous copy.
+**Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab, replacing the previous copy; a copy that fails prints a `WARN`, and the rewrite proceeds.
 
 **fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `relatime`, `atime`, `strictatime`, `nolazytime`, and every existing `commit=`; every other row is byte-preserved. An ext4 row with fewer than 4 fields, or whose column 4 is all digits (options column missing), is left untouched and turns the `Services: fstab opts` summary row `WARN`. A power loss can discard up to 10 s of metadata.
 

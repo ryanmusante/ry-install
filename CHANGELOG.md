@@ -12,13 +12,40 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     hand-restore command rather than claiming no backup from this run
   - configuration: with an hfp_*/hsp_* role in WP_BLUEZ_ROLES, the
     bluez5.roles drop-in comment no longer says there is none
-  - configuration: a mode drift repair names the old mode as 0666, not 666,
-    like the mode it restores
-  - services: an fstab ext4 scan that fails FAILs the fstab step rather than
-    reading as no ext4 entries
-  - install-file: the nft module-tree hint names the script to re-run
+  - configuration: a mode drift repair names the old mode in 0644 form, read
+    before an owner repair's chown clears setuid/setgid
+  - configuration: a sudo lapse before a managed file's temp copy is named in
+    its FAIL, not reported as a bare mktemp failure
+  - signals: when pacman dies holding its lock, the DO NOT REBOOT banner
+    says to remove the stale db.lck before -Syu
+  - preflight: a failed config validation names the failing checks, not
+    only how many
+  - packages: after a failed mkinitcpio.conf seed, Configuration holds the
+    restored original, as after a failed or skipped -Syu
+  - packages: a failed install counts once in the footer; neither the
+    missing-package recap nor a failed retry's notice adds a count
+  - packages: a sudo lapse at a HOOKS check reads as unchecked (a WARN after
+    -Syu), not as a missing or invalid hook
+  - backup: a failed .ry.bak copy of a boot file or fstab prints its WARN on
+    the terminal, not only in the JSONL
+  - services: an fstab scan that fails, ext4 or malformed rows, FAILs the
+    fstab step rather than reading as nothing found
+  - services: the enable row with a unit not installed counts only units this
+    run enabled, not ones already enabled
+  - boot: a loader entry path whose name merely ends in .. no longer fails
+    boot sanity as parent-dir traversal
+  - finalize: the PowerDevil and WirePlumber PASS rows read changed or owed,
+    as a restart owed by an earlier run also fires them
+  - install-file: the nft module-tree and udevadm verify hints name the
+    script to re-run
   - install-file: a WirePlumber try-restart no longer claims bluez5.roles
     applied when WirePlumber was not running
+  - logging: a failed resolved or PowerDevil restart, user daemon-reload,
+    cache trim or indexer run logs a _FAIL key
+  - logging: a non-UTF-8 byte in a logged string is written as U+FFFD, so
+    every JSONL line stays valid UTF-8
+  - summary: a run whose -Syu changed packages adds a manual step to review
+    archlinux.org/news and wiki.cachyos.org
   - readme: Bluetooth Audio names a Bluetooth speaker and says the LE Audio
     roles stay idle without BlueZ's Experimental and KernelExperimental
 

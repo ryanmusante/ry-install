@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.257.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.257.1 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.257.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.257.1"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t # config.fish job control or IFS would steer this run
@@ -595,11 +595,12 @@ set -g ENV_VARS "DXVK_LOG_LEVEL=none" "GSK_RENDERER=gl" "MANGOHUD=1" "MANGOHUD_D
 set -g SYSCTL_VALUES "kernel.nmi_watchdog=0" "net.core.default_qdisc=fq" "net.ipv4.tcp_congestion_control=bbr" "net.ipv4.tcp_notsent_lowat=16384" "net.ipv4.tcp_slow_start_after_idle=0" \
     "vm.compaction_proactiveness=0" "vm.max_map_count=2147483642" "vm.watermark_boost_factor=0" "vm.watermark_scale_factor=125"
 
-# ── EMBEDDED DATA: PACKAGES (ADD / DEL) ──
+# ── EMBEDDED DATA: PACKAGES (ADD / DEL / VULKAN) ──
 set -g PKGS_ADD \
     nvme-cli cachyos-gaming-meta cachyos-gaming-applications cachyos-benchmarker lib32-mesa mkinitcpio-firmware fd sd dust procs \
     bottom htop lm_sensors rtkit realtime-privileges pipewire-jack nftables pacman-contrib # pacman-contrib: pactree + paccache
 set -g PKGS_DEL plymouth cachyos-plymouth-bootanimation cachyos-plymouth-theme breeze-plymouth plymouth-kcm micro cachyos-micro-settings cachy-update kdeconnect
+set -g EXPECTED_VULKAN_PKGS vulkan-radeon lib32-vulkan-radeon # chwd Vulkan drivers; -Syu targets pin the vulkan-driver provider
 
 # ── EMBEDDED DATA: UNITS (MASK / EXPECTED) + THRESHOLDS + CPU MATCH ──
 set -g MASK ananicy-cpp.service power-profiles-daemon.service NetworkManager-wait-online.service avahi-daemon.service avahi-daemon.socket ufw.service \
@@ -665,6 +666,7 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         PKGS_ADD:18 \
         PKGS_DEL:9 \
         MASK:11 \
+        EXPECTED_VULKAN_PKGS:2 \
         EXPECTED_SERVICES:5 \
         _RY_PKG_MANAGED_SERVICES:1 \
         _RY_POST_HOOKS:18 \
@@ -727,6 +729,9 @@ function _ir_validate_sets --description "Refuse to deploy when add and remove s
     for _p in $PKGS_ADD # phase 2 installs, phase 4 -Rns removes: verify would assert both
         if contains -- "$_p" $PKGS_DEL; _err_loud "'$_p' is in both PKGS_ADD and PKGS_DEL — phase 4 would remove what phase 2 installed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
+    for _p in $EXPECTED_VULKAN_PKGS # phase 2 names them as -Syu targets too
+        if contains -- "$_p" $PKGS_DEL; _err_loud "'$_p' is in both EXPECTED_VULKAN_PKGS and PKGS_DEL — phase 4 would remove what phase 2 installed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    end
     for _u in $EXPECTED_SERVICES # phase 4 masks before it enables: enable would fail
         if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and EXPECTED_SERVICES — phase 4 masks before it enables; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
@@ -776,7 +781,7 @@ function _init_runtime --description "Cache root UUID + CPU-model gate + validat
         _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
     end
     _ir_precompute_caches
-    for _pn in $PKGS_ADD $PKGS_DEL
+    for _pn in $PKGS_ADD $PKGS_DEL $EXPECTED_VULKAN_PKGS
         if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman would parse as flag; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
@@ -2259,7 +2264,7 @@ function _ip_run_and_verify --description "_install_packages sub: Run pacman -Sy
     test "$_fn_err" = false
 end
 function _install_packages --description "Install managed packages via pacman -Syu"
-    set -l _fn_err false; _progress Packages; _info "Package installation..."; set -l pkgs_to_install $PKGS_ADD; set -g SYSTEM_UPGRADED false; _ip_snapshot_mkinitcpio
+    set -l _fn_err false; _progress Packages; _info "Package installation..."; set -l pkgs_to_install $PKGS_ADD $EXPECTED_VULKAN_PKGS; set -g SYSTEM_UPGRADED false; _ip_snapshot_mkinitcpio
     set -g _RY_DEPLOY_TAG "pre-Syu seed"; set -l _seed_n $_RY_DEPLOY_CHANGED_COUNT # tag seed deploy vs phase-3
     if not _ry_install_file "/etc/mkinitcpio.conf" true
         set --erase _RY_DEPLOY_TAG; _taint; _err_cont "Failed to pre-deploy mkinitcpio.conf before package install"

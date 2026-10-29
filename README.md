@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.257.0** · [Changelog](CHANGELOG.md)
+**Version 7.257.1** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -101,7 +101,7 @@ In deploy order; system files land `0644`, user files `0600`.
 ## Install Flow
 
 1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, and network gates; a warn-only time-sync check; config validation.
-2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails), refresh `updatedb`/`pkgfile`. A `PKGS_ADD` member that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, in a transaction that removes the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked or the `mkinitcpio.conf` seed failed to deploy, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
+2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails) and `EXPECTED_VULKAN_PKGS`, refresh `updatedb`/`pkgfile`. A member of either list that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, in a transaction that removes the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked or the `mkinitcpio.conf` seed failed to deploy, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 18 embedded configs atomically.
 4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (`ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next full run stops it) → enable (a unit not installed, or one that enables but fails to start, is a `WARN`) → regulatory domain.
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `bootctl --graceful update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` files present inside `$BOOT`.
@@ -124,7 +124,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 All tunables are `set -g` globals; after editing both scripts, re-run or `--install-file` the affected file.
 
-The length of each array among the shared tunables is a drift tripwire in `_ir_validate_counts` of both scripts — `KERNEL_PARAMS:15` among them; the accepted-value sets `_RY_DPM_LEVELS`, `_RY_EPP_LEVELS` and `_RY_BLUEZ_ROLES` carry no pin, and an array only one script carries, such as `_RY_PKG_MANAGED_SERVICES` here or ry-verify's `EXPECTED_VULKAN_PKGS`, is pinned in that script alone. Adding or dropping an element also means updating that `NAME:<n>` in each script that pins it; otherwise that script refuses to run with `NAME count drift` and exits `3`. Update any count this README quotes too, such as the 15 kernel tokens in [Managed Files](#managed-files).
+The length of each array among the shared tunables is a drift tripwire in `_ir_validate_counts` of both scripts — `KERNEL_PARAMS:15` among them; the accepted-value sets `_RY_DPM_LEVELS`, `_RY_EPP_LEVELS` and `_RY_BLUEZ_ROLES` carry no pin, and an array only one script carries, such as `_RY_PKG_MANAGED_SERVICES` here, is pinned in that script alone. Adding or dropping an element also means updating that `NAME:<n>` in each script that pins it; otherwise that script refuses to run with `NAME count drift` and exits `3`. Update any count this README quotes too, such as the 15 kernel tokens in [Managed Files](#managed-files).
 
 ### Bootloader Keys
 
@@ -222,6 +222,8 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 
 **Remove** (`PKGS_DEL`, 9) — `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect`.
 
+**Vulkan** (`EXPECTED_VULKAN_PKGS`, 2) — `vulkan-radeon`, `lib32-vulkan-radeon`. `chwd` installs both RADV drivers, and `-Syu` names both as targets, so `--noconfirm` never resolves `vulkan-driver` to another provider. A conflicting `-git` or `-bin` build is replaced as under Install; to keep one, drop from `EXPECTED_VULKAN_PKGS` in both scripts the member whose swap removes it — see [Embedded Values](#embedded-values).
+
 ## Units
 
 **Masked** (`MASK`, 11) — `ananicy-cpp.service`, `power-profiles-daemon.service`, `NetworkManager-wait-online.service`, `avahi-daemon.service`, `avahi-daemon.socket`, `ufw.service`, `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target`, `suspend-then-hibernate.target`.
@@ -276,7 +278,7 @@ There is no automated uninstaller. Use [Managed Files](#managed-files) as the ro
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
 2. **Remove configs** — `sudo systemctl disable --now nftables` first, or its unit fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 3 user files, then `systemctl --user restart wireplumber.service`; step 3 reverts the 4 boot files.
 3. **Revert boot files and fstab** — restore `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, and `/etc/fstab` from their matching `~/ry-install/backups/*.ry.bak` copies where present, then delete the backups; older deployments keep the copies beside each file.
-4. **Reverse packages** — optional: `sudo pacman -Syu --needed` the Remove list, `sudo pacman -Rns` the Install list except `pipewire-jack`, which `ffmpeg` needs as its JACK provider; both listed in [Packages](#packages).
+4. **Reverse packages** — optional: `sudo pacman -Syu --needed` the Remove list, `sudo pacman -Rns` the Install list except `pipewire-jack`, which `ffmpeg` needs as its JACK provider, and keep the Vulkan drivers; all three listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo bootctl --graceful update`, then `sudo systemctl reboot`.
 
 ## Contributing

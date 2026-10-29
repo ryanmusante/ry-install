@@ -3,54 +3,17 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.257.0
+7.257.1
 -------
 
-  - configuration: a boot file's post-write check also compares sizes, so one
-    with NUL bytes no longer passes as identical
-  - configuration: a sudo lapse at the post-write restore probe prints the
-    hand-restore command rather than claiming no backup from this run
-  - configuration: with an hfp_*/hsp_* role in WP_BLUEZ_ROLES, the
-    bluez5.roles drop-in comment no longer says there is none
-  - configuration: a mode drift repair names the old mode in 0644 form, read
-    before an owner repair's chown clears setuid/setgid
-  - configuration: a sudo lapse before a managed file's temp copy is named in
-    its FAIL, not reported as a bare mktemp failure
-  - signals: when pacman dies holding its lock, the DO NOT REBOOT banner
-    says to remove the stale db.lck before -Syu
-  - preflight: a failed config validation names the failing checks, not
-    only how many
-  - packages: after a failed mkinitcpio.conf seed, Configuration holds the
-    restored original, as after a failed or skipped -Syu
-  - packages: a failed install counts once in the footer; neither the
-    missing-package recap nor a failed retry's notice adds a count
-  - packages: a sudo lapse at a HOOKS check reads as unchecked (a WARN after
-    -Syu), not as a missing or invalid hook
-  - backup: a failed .ry.bak copy of a boot file or fstab prints its WARN on
-    the terminal, not only in the JSONL
-  - services: an fstab scan that fails, ext4 or malformed rows, FAILs the
-    fstab step rather than reading as nothing found
-  - services: the enable row with a unit not installed counts only units this
-    run enabled, not ones already enabled
-  - boot: a loader entry path whose name merely ends in .. no longer fails
-    boot sanity as parent-dir traversal
-  - finalize: the PowerDevil and WirePlumber PASS rows read changed or owed,
-    as a restart owed by an earlier run also fires them
-  - install-file: the nft module-tree and udevadm verify hints name the
-    script to re-run
-  - install-file: a WirePlumber try-restart no longer claims bluez5.roles
-    applied when WirePlumber was not running
-  - logging: a failed resolved or PowerDevil restart, user daemon-reload,
-    cache trim or indexer run logs a _FAIL key
-  - logging: a non-UTF-8 byte in a logged string is written as U+FFFD, so
-    every JSONL line stays valid UTF-8
-  - summary: a run whose -Syu changed packages adds a manual step to review
-    archlinux.org/news and wiki.cachyos.org
-  - readme: Bluetooth Audio names a Bluetooth speaker and says the LE Audio
-    roles stay idle without BlueZ's Experimental and KernelExperimental
+  - preflight: EXPECTED_VULKAN_PKGS:2 is a drift tripwire; a member in
+    PKGS_DEL or starting with a dash refuses to deploy
+  - packages: -Syu also installs EXPECTED_VULKAN_PKGS, so on a host without
+    RADV, vulkan-driver no longer resolves to an NVIDIA package
+  - readme: Packages, Install Flow and Uninstall cover the Vulkan drivers
 
 
-7.246.0 - 7.256.0
+7.246.0 - 7.257.0
 -----------------
 
   - env: 7.248.0 add 0x3434/0x0b00 (Keychron Q0 HE) to
@@ -74,6 +37,16 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     chowned back, as a drifted mode is restored
   - configuration: 7.256.0 bluez5.roles from WP_BLUEZ_ROLES, no hfp_*/hsp_*
     role, in ~/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf
+  - configuration: 7.257.0 a boot file's post-write check also compares sizes,
+    so one with NUL bytes no longer passes as identical
+  - configuration: 7.257.0 a sudo lapse at the post-write restore probe prints
+    the hand-restore command rather than claiming no backup from this run
+  - configuration: 7.257.0 with an hfp_*/hsp_* role in WP_BLUEZ_ROLES, the
+    bluez5.roles drop-in comment no longer says there is none
+  - configuration: 7.257.0 a mode drift repair names the old mode in 0644
+    form, read before an owner repair's chown clears setuid/setgid
+  - configuration: 7.257.0 a sudo lapse before a managed file's temp copy is
+    named in its FAIL, not reported as a bare mktemp failure
   - guard: 7.247.0 an early exit removes ~/ry-install/backups only when this
     run created it
   - guard: 7.247.0 inherited mkinitcpio rollback variables are pinned, so they
@@ -132,6 +105,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     rewrites the unchanged file or prints a restore WARN
   - signals: 7.255.0 a signal after -Syu passes no longer reverts the
     mkinitcpio.conf seed the initramfs was built from
+  - signals: 7.257.0 when pacman dies holding its lock, the DO NOT REBOOT
+    banner says to remove the stale db.lck before -Syu
   - cli: 7.247.0 the --install-file control-character refusal states why
   - cli: 7.252.0 an unexpected positional argument prints escaped; an empty
     one reads ''
@@ -180,6 +155,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     so a HOME under a dir such as modprobe.d no longer fails it
   - preflight: 7.256.0 WP_BLUEZ_ROLES entries must be PipeWire role names;
     WP_BLUEZ_ROLES:4 is a drift tripwire
+  - preflight: 7.257.0 a failed config validation names the failing checks,
+    not only how many
   - lock: 7.254.0 the printed lock-removal command escapes its path, so a
     quote in HOME no longer breaks or splits it
   - lock: 7.254.0 the lock dir is set 00700, clearing an inherited setgid bit
@@ -217,8 +194,16 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     removal list no longer cuts it from the matrix
   - packages: 7.255.0 a -Syyu retry, conflict swap, explicit mark, updatedb or
     pkgfile that sudo refused reads as not run (sudo cache lapsed), not failed
+  - packages: 7.257.0 after a failed mkinitcpio.conf seed, Configuration holds
+    the restored original, as after a failed or skipped -Syu
+  - packages: 7.257.0 a failed install counts once in the footer; neither the
+    missing-package recap nor a failed retry's notice adds a count
+  - packages: 7.257.0 a sudo lapse at a HOOKS check reads as unchecked (a WARN
+    after -Syu), not as a missing or invalid hook
   - backup: 7.250.0 ~/ry-install/backups is created by the first .ry.bak copy,
     so no run's early exit removes it
+  - backup: 7.257.0 a failed .ry.bak copy of a boot file or fstab prints its
+    WARN on the terminal, not only in the JSONL
   - services: 7.247.0 a PKGS_DEL row with a pacman hook error keeps its
     rdep-skip count
   - services: 7.250.0 a resolved drop-in behind a directory this user cannot
@@ -256,6 +241,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     names a diagnosis, not the enable that just failed
   - services: 7.255.0 a PKGS_DEL package that a failed batch removal took
     counts as removed
+  - services: 7.257.0 an fstab scan that fails, ext4 or malformed rows, FAILs
+    the fstab step rather than reading as nothing found
+  - services: 7.257.0 the enable row with a unit not installed counts only
+    units this run enabled, not ones already enabled
   - boot: 7.250.0 an empty loader entries directory no longer adds
     sdboot-manage gen or LINUX_OPTIONS hints before the banner
   - boot: 7.250.0 - 7.252.0 an ESP-fallback host's DO NOT REBOOT banner says
@@ -272,6 +261,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     hidden files skipped and .conf matched in any case
   - boot: 7.255.0 the sanity check fails a loader entry it cannot read instead
     of skipping it as an efi entry
+  - boot: 7.257.0 a loader entry path whose name merely ends in .. no longer
+    fails boot sanity as parent-dir traversal
   - finalize: 7.252.0 with no plasma-powerdevil.service, an environment.d
     change skips the re-apply instead of WARNing a failed restart
   - finalize: 7.254.0 an NM_RESTART_DELAY ending in a newline falls back to 3
@@ -282,6 +273,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     ending in $ prints a command fish can run
   - finalize: 7.256.0 a changed or owed bluez5.roles drop-in try-restarts
     wireplumber.service; no user bus, no unit or exit 4 is a SKIP row
+  - finalize: 7.257.0 the PowerDevil and WirePlumber PASS rows read changed or
+    owed, as a restart owed by an earlier run also fires them
   - install-file: 7.249.0 a boot-critical failure prints DO NOT REBOOT and its
     recovery steps once, in the closing banner
   - install-file: 7.252.0 an environment.d or bluetooth deploy without the
@@ -310,6 +303,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     the write: a missing bootctl or unmounted ESP exits 3, not 4 after it
   - install-file: 7.256.0 the bluez5.roles drop-in try-restarts
     wireplumber.service; one that fails or finds no user bus stays owed
+  - install-file: 7.257.0 the nft module-tree and udevadm verify hints name
+    the script to re-run
+  - install-file: 7.257.0 a WirePlumber try-restart no longer claims
+    bluez5.roles applied when WirePlumber was not running
   - logging: 7.246.0 a failed pacman call echoes its package-conflict lines
   - logging: 7.247.0 boot-cascade and udev-skip records carry the POST_
     prefix; a failed date no longer breaks the header JSON
@@ -352,8 +349,14 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     and ROOT_UUID_UNAVAILABLE
   - logging: 7.255.0 a signal-time mkinitcpio.conf revert skipped under a
     lapsed sudo cache logs that cause
+  - logging: 7.257.0 a failed resolved or PowerDevil restart, user
+    daemon-reload, cache trim or indexer run logs a _FAIL key
+  - logging: 7.257.0 a non-UTF-8 byte in a logged string is written as U+FFFD,
+    so every JSONL line stays valid UTF-8
   - summary: 7.247.0 a failed write of the run summary or the sudo banner logs
     STDERR_WRITE_FAIL
+  - summary: 7.257.0 a run whose -Syu changed packages adds a manual step to
+    review archlinux.org/news and wiki.cachyos.org
 
 
 7.235.0 - 7.245.0

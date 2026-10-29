@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.257.1** · [Changelog](CHANGELOG.md)
+**Version 7.258.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -100,11 +100,11 @@ In deploy order; system files land `0644`, user files `0600`.
 
 ## Install Flow
 
-1. **Preflight** — sudo cache, dependency, systemd, disk, pacman-lock, and network gates; a warn-only time-sync check; config validation.
-2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails) and `EXPECTED_VULKAN_PKGS`, refresh `updatedb`/`pkgfile`. A member of either list that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, in a transaction that removes the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked or the `mkinitcpio.conf` seed failed to deploy, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
+1. **Preflight** — sudo cache, dependency, systemd, disk, ESP, pacman-lock, and network gates; a warn-only time-sync check; config validation. The first failed gate ends the run with exit `3`, and its summary lists only the checks that ran.
+2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails) and any `EXPECTED_VULKAN_PKGS` member not yet installed, refresh `updatedb`/`pkgfile`. A member of either list that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, in a transaction that removes the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked or the `mkinitcpio.conf` seed failed to deploy, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 18 embedded configs atomically.
-4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (`ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next full run stops it) → enable (a unit not installed, or one that enables but fails to start, is a `WARN`) → regulatory domain.
-5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `bootctl --graceful update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` files present inside `$BOOT`.
+4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (`ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next full run stops it) → enable (a unit not installed, or one that enables but fails to start, is a `WARN`; `NetworkManager.service` keeps its package preset and is started when it is not running) → regulatory domain.
+5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `bootctl --graceful update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` present as non-empty files inside `$BOOT`.
 6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, WirePlumber restart, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, as does a NetworkManager restart deferred because Wi-Fi carries the default route, or an `--install-file` systemd-resolved, NetworkManager or WirePlumber restart or PowerDevil re-apply that fails or finds no user bus; the next full run applies them unless a reboot already has, and defers that restart again while Wi-Fi still carries the route.
 
 ## Safety and Reliability
@@ -222,7 +222,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 
 **Remove** (`PKGS_DEL`, 9) — `plymouth`, `cachyos-plymouth-bootanimation`, `cachyos-plymouth-theme`, `breeze-plymouth`, `plymouth-kcm`, `micro`, `cachyos-micro-settings`, `cachy-update`, `kdeconnect`.
 
-**Vulkan** (`EXPECTED_VULKAN_PKGS`, 2) — `vulkan-radeon`, `lib32-vulkan-radeon`. `chwd` installs both RADV drivers, and `-Syu` names both as targets, so `--noconfirm` never resolves `vulkan-driver` to another provider. A conflicting `-git` or `-bin` build is replaced as under Install; to keep one, drop from `EXPECTED_VULKAN_PKGS` in both scripts the member whose swap removes it — see [Embedded Values](#embedded-values).
+**Vulkan** (`EXPECTED_VULKAN_PKGS`, 2) — `vulkan-radeon`, `lib32-vulkan-radeon`. `chwd` installs both RADV drivers. A missing one becomes a `-Syu` target, so `--noconfirm` never has to pick a `vulkan-driver` or `lib32-vulkan-driver` provider; an installed one is left to the system upgrade, so an `IgnorePkg` hold on it stands. A conflicting `-git` or `-bin` build is replaced as under Install; to keep one, drop from `EXPECTED_VULKAN_PKGS` in both scripts the member whose swap removes it — see [Embedded Values](#embedded-values).
 
 ## Units
 

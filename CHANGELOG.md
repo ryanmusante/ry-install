@@ -3,17 +3,64 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.257.1
+7.258.0
 -------
 
-  - preflight: EXPECTED_VULKAN_PKGS:2 is a drift tripwire; a member in
-    PKGS_DEL or starting with a dash refuses to deploy
-  - packages: -Syu also installs EXPECTED_VULKAN_PKGS, so on a host without
-    RADV, vulkan-driver no longer resolves to an NVIDIA package
-  - readme: Packages, Install Flow and Uninstall cover the Vulkan drivers
+  - guard: a fish_read_limit set in config.fish or as a universal no longer
+    fails a large command output; it is pinned to the 100 MiB default
+  - configuration: the held mkinitcpio.conf WARN no longer claims a rollback
+    when the seed never landed
+  - configuration: a mkinitcpio.conf revert whose cmp cannot compare the copy
+    gives cmp's rc, not content mismatch
+  - preflight: an unresolvable $BOOT or a fallback /boot that is not vfat
+    exits 3 before -Syu, not 4 after the boot files were written
+  - preflight: true(1) and test(1), which every sudo -n probe runs, are
+    checked at startup, before the first probe
+  - preflight: an unresolvable $BOOT prints one ERR, the gate's refusal; the
+    resolver's own line is INFO
+  - packages: -Syu names only a missing EXPECTED_VULKAN_PKGS member, none when
+    pacman -Qq fails, so an IgnorePkg hold stands
+  - packages: a pacman run stopped by a pre-transaction hook reads as nothing
+    committed, not as a pass failed mid-transaction
+  - packages: a failed conflict swap is named on the -Syu row (conflict swap
+    failed, N missing), not only in an [ERR] line
+  - services: a PKGS_DEL member that failed while a later member depended on
+    it is retried once that member is gone
+  - services: the PKGS_DEL row tells pactree probe failures (probe-failed)
+    apart from rdep skips
+  - services: a MASK unit whose file is gone but which still runs is masked
+    and stopped, not skipped as not installed
+  - services: on systemd 253+, an empty is-enabled answer is a failed query:
+    the unit is masked or enabled, not skipped
+  - services: an enabled NetworkManager.service that is not running is
+    started; its package preset stays
+  - services: the fstab rewrite's findmnt --verify runs under RY_RUN_TIMEOUT
+    (0: no limit); a timeout refuses the rewrite
+  - boot: boot sanity also fails an entry whose kernel is empty or whose
+    initrd is not a regular file (a directory passed the old -s test)
+  - install-file: a post-write udevadm verify that a lapsed sudo cache kept
+    from running is no verdict, not a failed rule
+  - summary: a failed mkinitcpio, sdboot-manage gen or bootctl update row
+    gives the command's rc, or that it never ran, not rc=non-zero
+  - logging: a host that fails the network check logs its curl rc; an
+    unparsable df read logs its raw value
+  - logging: a mask or enable failure logs MASK_FAIL or ENABLE_FAIL, a failed
+    batch MASK_BATCH_FAIL or ENABLE_BATCH_FAIL
+  - logging: a sudo lapse at a managed file's read, mode or owner probe logs
+    SKIP_PROBE_SUDO_LAPSE or MODE_DRIFT_UNPROBED
+  - logging: the mkinitcpio revert's cp, cmp, chmod, chown and mv, the
+    snapshot's cp and the fstab chmod and chown log their command's error line
+  - logging: PACTREE_PROBE_FAIL logs the probe rc; POSTWRITE_VERIFY_FAIL logs
+    a reason, both content digests and, for reason=size, both byte counts
+  - logging: POSTWRITE_RESTORE_STALE only when an older copy exists; an
+    unmanaged nftables.service logs NFT_PRE_ENABLE_UNMANAGED
+  - readme: Install Flow names the ESP gate and non-empty entry files; Vulkan
+    says only a missing driver is a -Syu target
+  - readme: Install Flow says a failed preflight gate exits 3 with only the
+    checks that ran, and that a stopped NetworkManager is started
 
 
-7.246.0 - 7.257.0
+7.246.0 - 7.257.1
 -----------------
 
   - env: 7.248.0 add 0x3434/0x0b00 (Keychron Q0 HE) to
@@ -157,6 +204,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     WP_BLUEZ_ROLES:4 is a drift tripwire
   - preflight: 7.257.0 a failed config validation names the failing checks,
     not only how many
+  - preflight: 7.257.1 EXPECTED_VULKAN_PKGS:2 is a drift tripwire; a member in
+    PKGS_DEL or starting with a dash refuses to deploy
   - lock: 7.254.0 the printed lock-removal command escapes its path, so a
     quote in HOME no longer breaks or splits it
   - lock: 7.254.0 the lock dir is set 00700, clearing an inherited setgid bit
@@ -200,6 +249,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     missing-package recap nor a failed retry's notice adds a count
   - packages: 7.257.0 a sudo lapse at a HOOKS check reads as unchecked (a WARN
     after -Syu), not as a missing or invalid hook
+  - packages: 7.257.1 -Syu also installs EXPECTED_VULKAN_PKGS, so on a host
+    without RADV, vulkan-driver no longer resolves to an NVIDIA package
+  - packages: 7.257.1 an installed -git or -bin build conflicting with a
+    Vulkan driver is swapped out after -Syu, as for PKGS_ADD
   - backup: 7.250.0 ~/ry-install/backups is created by the first .ry.bak copy,
     so no run's early exit removes it
   - backup: 7.257.0 a failed .ry.bak copy of a boot file or fstab prints its

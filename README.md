@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.258.0** · [Changelog](CHANGELOG.md)
+**Version 7.260.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -55,7 +55,7 @@ Per-step results (one summary row each):
 | `0` | OK — success and `WARN`-only runs |
 | `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout full, or closed under fish 3) |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
-| `3` | missing dependency, uncached sudo that no TTY prompt resolved, a failed gate (hardware, root UUID, systemd, disk, network, pacman lock, ESP), a fish universal variable named like internal state, fish's `regex-easyesc` feature turned off, failed config validation, or an unusable HOME, log tree or `/tmp` |
+| `3` | missing dependency, uncached sudo that no TTY prompt resolved, a failed gate (hardware, root UUID, systemd, disk, network, pacman lock, ESP), a fish universal variable named like internal state, fish's `regex-easyesc` feature turned off, failed config validation, or an unusable HOME, `~/ry-install` tree or `/tmp` |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
 | `5` | lock — another live instance holds the lock; a stale pidfile is reclaimed, an ambiguous one fails closed |
 
@@ -69,7 +69,7 @@ Skipping the hardware check is the risky override — a wrong-CPU deploy writes 
 
 ## Managed Files
 
-In deploy order; system files land `0644`, user files `0600`.
+In deploy order; system files land `0644`, user files `0600`; `loader.conf` on the vfat ESP takes the mode its mount sets.
 
 ### Boot
 
@@ -109,7 +109,7 @@ In deploy order; system files land `0644`, user files `0600`.
 
 ## Safety and Reliability
 
-**Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; for the 4 boot files, a post-write mismatch restores the backup this run took.
+**Atomic writes** — temp file, validated where a validator exists (`nft -c`), then `mv -T`; for the 4 boot files, a post-write mismatch, or an installed copy that cannot be read back with sudo cached, restores the backup this run took.
 
 **Symlinked destinations** — a managed path that is a symlink is replaced with a regular file at the managed mode.
 

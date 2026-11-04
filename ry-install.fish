@@ -1,12 +1,12 @@
 #!/usr/bin/env fish
-# ry-install v7.258.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
-if begin; set -lx LC_ALL C; string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
+# ry-install v7.260.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+if begin; set -lx LC_ALL C; string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.258.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.260.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
-status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 104857600 # config.fish job control, IFS or read limit would steer this run
+status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
 set -l _ry_irx '^_(?:(?:RY|PROG|RPT|KCONFIG)_[A-Z0-9_]*|flag_[A-Za-z0-9_]+|CLEANUP_DONE|FOOTER_WRITTEN|INTENDED_EXIT_CODE|TRACKED_TMPFILES|SYS_TMP_DIRS|USR_TMP_DIRS|ROOT_UUID|MY_UID|ORIG_ARGV)$' # internal names, argparse _flag_* included
 for _iv in (set -g -n | string match -r -- $_ry_irx); set --erase -g $_iv; end; set --erase _iv # inherited internal state never steers a run
 set -g QUIET true; set -g MODE bootstrap; set -gu LOG_FILE ""; set -gu LOG_DIR ""; set -gu _RY_BACKUP_DIR ""; set -gu _RY_HOME_NEW false; set -gu _RY_LOGROOT_NEW false; set -gu _RY_LOGDIR_NEW false # pinned pre-argparse (signal footers); inherited paths never ours
@@ -201,8 +201,8 @@ for _ld_path in "$_RY_HOME_DIR" "$_RY_HOME_DIR/logs" "$LOG_DIR" (test -d "$_RY_B
     set -l _pre (command stat -L -c '%a' -- "$_ld_path" 2>/dev/null) # -L: chmod follows a symlinked dir, so read the mode it set
     command chmod -- 00700 "$_ld_path" 2>/dev/null # 5 digits: GNU chmod keeps a dir's setgid on '700'
     set -l _post (command stat -L -c '%a' -- "$_ld_path" 2>/dev/null)
-    if test -n "$_pre"; and test "$_pre" != "$_post"; set -ga _RY_PERM_FIX_NOTICES "LOG_DIR_PERM_FIX: $_ld_path $_pre→$_post"; end
-    if test "$_post" != 700; echo "[ERR] Log tree dir mode is $_post (expected 700): $_ld_path" >&2; _ry_exit $EXIT_PREFLIGHT; end
+    if test -n "$_pre"; and test "$_pre" != "$_post"; set -ga _RY_PERM_FIX_NOTICES "STATE_DIR_PERM_FIX: $_ld_path $_pre→$_post"; end
+    if test "$_post" != 700; echo "[ERR] State tree dir mode is $_post (expected 700): $_ld_path" >&2; _ry_exit $EXIT_PREFLIGHT; end
 end
 set --erase _ld_path _prev_mkdir_umask
 set -g INSTALL_HAD_ERRORS false
@@ -270,8 +270,8 @@ set -g _CLEANUP_DONE false; set -g _RY_SETTLE_DONE false
 
 # ── INSTANCE LOCK: ATOMIC MKDIR + STALE-PID RECLAIM ──
 function _lock_ident --argument-names pid --description "Lock identity of PID: boot_id:starttime (/proc/PID/stat field 22)"
-    set -l _b (command cat /proc/sys/kernel/random/boot_id 2>/dev/null | string trim --); test -n "$_b"; or return 1
-    set -l _st (command cat -- "/proc/$pid/stat" 2>/dev/null | string match -rg '^.*\) (?:\S+ ){19}(\d+)') # last ') ' ends comm; field 22 = 20th after it
+    set -l _b (command cat -- /proc/sys/kernel/random/boot_id 2>/dev/null | string trim --); test -n "$_b"; or return 1
+    set -l _st (command cat -- "/proc/$pid/stat" 2>/dev/null | string match -rg -- '^.*\) (?:\S+ ){19}(\d+)') # last ') ' ends comm; field 22 = 20th after it
     test -n "$_st"; or return 1 # a 'boot:' record would make a live holder look reused
     printf '%s:%s\n' "$_b" "$_st"
 end
@@ -377,19 +377,19 @@ function _dc_mki_revert --description "_dc_settle sub: Signal-time mkinitcpio.co
     set -q _RY_MKI_BACKUP_FILE; and test -n "$_RY_MKI_BACKUP_FILE"; or return 0
     set -l _rv_rc 1; set -l _rv_tried false
     if command -q sudo; and sudo -n test -f "$_RY_MKI_BACKUP_FILE" 2>/dev/null
-        set _rv_tried true; _log "MKINITCPIO_REVERT_SIGNAL: cleanup-time revert triggered (backup=$_RY_MKI_BACKUP_FILE)"
+        set _rv_tried true; not set -q _FOOTER_WRITTEN; and _log "MKINITCPIO_REVERT_SIGNAL: cleanup-time revert triggered (backup=$_RY_MKI_BACKUP_FILE)"
         _mkinitcpio_revert "$_RY_MKI_BACKUP_FILE" 2>/dev/null; set _rv_rc $status
     else
         set -l _why "backup unavailable or sudo missing"; command -q sudo; and not sudo -n true 2>/dev/null; and set _why "sudo cache lapsed"
-        _log "MKINITCPIO_REVERT_SIGNAL_SKIP: $_why (backup=$_RY_MKI_BACKUP_FILE)"
+        not set -q _FOOTER_WRITTEN; and _log "MKINITCPIO_REVERT_SIGNAL_SKIP: $_why (backup=$_RY_MKI_BACKUP_FILE)"
     end
     if test "$_rv_tried" = true; and test "$_rv_rc" -eq 0
         command -q sudo; and _rm_tmp "$_RY_MKI_BACKUP_FILE" true
         command -q sudo; and sudo -n rmdir /run/ry-install 2>/dev/null # reclaim empty snapshot dir
     else # keep /run snapshot for manual restore
-        _untrack_tmpfile "$_RY_MKI_BACKUP_FILE"; _log "MKINITCPIO_SNAPSHOT_PRESERVED: $_RY_MKI_BACKUP_FILE (signal-time revert failed or skipped)"
+        _untrack_tmpfile "$_RY_MKI_BACKUP_FILE"; not set -q _FOOTER_WRITTEN; and _log "MKINITCPIO_SNAPSHOT_PRESERVED: $_RY_MKI_BACKUP_FILE (signal-time revert failed or skipped)"
         set -l _snap "  mkinitcpio.conf not reverted — snapshot (until reboot): $_RY_MKI_BACKUP_FILE; restore it before any mkinitcpio -P: sudo cp -- $_RY_MKI_BACKUP_FILE /etc/mkinitcpio.conf"
-        not set -q _FOOTER_WRITTEN; and _log "WARN: $_snap"; _msg_print --force WARN "$_snap" # QUIET hides _warn; a reboot clears /run
+        if set -q _FOOTER_WRITTEN; _msg_print --force WARN "$_snap"; else if test "$_rv_tried" = true; _warn_loud_cont "$_snap"; else; _warn_loud "$_snap"; end # a skip counts its WARN; a failed revert counted its ERR
     end
     set -g _RY_MKI_BACKUP_FILE ""; set -g _RY_MKI_HAD_ORIG false # reset, not erased: no universal surfaces
 end
@@ -443,7 +443,7 @@ end
 function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_ESP_PATH _RY_BOOT_PATH; set --erase _RY_ESP_TRIED _RY_BOOT_TRIED; set --erase _RY_SYSTEMD_VER _RY_SYSTEMD_VER_TRIED
     set --erase _RY_BOOT_COUNT _RY_BOOT_ENUM_OK; set --erase _RY_CANON_SYSTEM_DSTS _RY_CANON_USER_DSTS _SYS_TMP_DIRS _USR_TMP_DIRS
-    set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK
+    set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_ESP_VIA _RY_BOOT_VIA _RY_ESP_LAYOUT _RY_BOOT_LAPSE_NAMED
     set --erase _RY_MKI_REVERT_FAILED _RY_MKI_REVERTED _RY_ADD_EXPLICIT_OK _RY_ADD_EXPLICIT_WARNED _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED _RY_MKI_SNAP_TRY
     set --erase _RY_RUN_TIMEOUT_WARNED _RY_RUN_TIMEOUT_CLAMPED _PROG_CLOCK _PROG_NOW_LAST _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK _RY_LOCK_REC _RY_LOCK_CLAIM
     set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK _RY_ENABLE_START_FAILS _RY_PKG_REMOVE_HOOK_ERR
@@ -462,7 +462,7 @@ function _dc_release_lock --description "_do_cleanup sub: Release the instance l
             _lock_owned; and set _own true # a peer's record: not ours to remove
         else if set -q _RY_LOCK_MKDIR_OK # empty pidfile ours only if we created LOCK_DIR
             set -l _lp (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --); test -z "$_lp"; or test "$_lp" = "$_RY_LOCK_REC"; and set _own true
-        else # signal between mkdir and its rc capture: LOCK_DIR may be ours
+        else # signal near mkdir: ours, or a winner's still-empty dir (rare)
             for _try in 1 2 3 4 5; command rmdir -- "$LOCK_DIR" 2>/dev/null; test $status -lt 128; and break; end # a signal-killed try is redone
         end
         test "$_own" = true; and for _try in 1 2 3 4 5; command rm -rf --preserve-root -- "$LOCK_DIR" 2>/dev/null; test $status -lt 128; and break; end # a signal-killed rm is redone
@@ -1193,13 +1193,13 @@ end
 # ── PROGRESS BAR (PINNED BOTTOM ROW WITH SCROLL REGION) ──
 function _progress_now --description "Monotonic seconds (cached uptime or epoch)"
     if set -q _PROG_CLOCK; and test "$_PROG_CLOCK" = uptime
-        set -l _u (command cat -- /proc/uptime 2>/dev/null | string split ' ')[1]
+        set -l _u (command cat -- /proc/uptime 2>/dev/null | string split -- ' ')[1]
         if string match -qr '^\d+(\.\d+)?$' -- "$_u"; set -g _PROG_NOW_LAST (math "floor($_u)"); printf '%s\n' $_PROG_NOW_LAST; return 0; end
         set -q _PROG_NOW_LAST; and printf '%s\n' $_PROG_NOW_LAST; and return 0 # freeze on read failure — never mix clock bases
     else if set -q _PROG_CLOCK
         command date +%s; return 0
     end
-    set -l _u (command cat -- /proc/uptime 2>/dev/null | string split ' ')[1]
+    set -l _u (command cat -- /proc/uptime 2>/dev/null | string split -- ' ')[1]
     if string match -qr '^\d+(\.\d+)?$' -- "$_u"; set -g _PROG_CLOCK uptime; set -g _PROG_NOW_LAST (math "floor($_u)"); printf '%s\n' $_PROG_NOW_LAST; return 0; end
     set -g _PROG_CLOCK epoch; command date +%s
 end
@@ -1282,7 +1282,7 @@ function _run_resolve_timeout --description "_run_effective_timeout and _fstab_a
         if test (string length -- (string replace -r '^0+(?=.)' '' -- "$RY_RUN_TIMEOUT")) -gt 9 # fish math overflows past 2^53; >9 significant digits ≈ 31 y — clamp
             if not set -q _RY_RUN_TIMEOUT_CLAMPED
                 set -g _RY_RUN_TIMEOUT_CLAMPED true
-                _warn_loud_cont "RY_RUN_TIMEOUT='$RY_RUN_TIMEOUT' exceeds 9 digits — using 2147483647" # install pins QUIET
+                _warn_loud "RY_RUN_TIMEOUT='$RY_RUN_TIMEOUT' exceeds 9 digits — using 2147483647" # install pins QUIET
                 _log "RY_RUN_TIMEOUT_CLAMPED: value=$RY_RUN_TIMEOUT — using 2147483647"
             end
             echo 2147483647; return 0
@@ -1291,15 +1291,15 @@ function _run_resolve_timeout --description "_run_effective_timeout and _fstab_a
     end
     if not set -q _RY_RUN_TIMEOUT_WARNED
         set -g _RY_RUN_TIMEOUT_WARNED true
-        set -l _v (string escape -- "$RY_RUN_TIMEOUT" | string replace -ra -- '[\x00-\x1f\x7f-\x9f\x{f680}-\x{f6ff}]' '?') # quoted only where needed; C1 and raw bytes print as ?
-        _warn_loud_cont "RY_RUN_TIMEOUT=$_v is invalid (expected non-negative integer; 0 to disable) — using default $_RY_RUN_TIMEOUT_DEFAULT""s" # install pins QUIET
+        set -l _v (string escape -- "$RY_RUN_TIMEOUT" | string replace -ra -- '[\x00-\x1f\x7f-\x9f\x{f680}-\x{f6ff}]' '?') # quoted only where needed; C1 prints as ?, a raw byte as \XHH
+        _warn_loud "RY_RUN_TIMEOUT=$_v is invalid (expected non-negative integer; 0 to disable) — using default $_RY_RUN_TIMEOUT_DEFAULT""s" # install pins QUIET
         _log "RY_RUN_TIMEOUT_INVALID: value=$RY_RUN_TIMEOUT — using default $_RY_RUN_TIMEOUT_DEFAULT"
     end
     echo $_RY_RUN_TIMEOUT_DEFAULT
 end
 function _run_emit_stream --argument-names label_tag tmpfile ret cap --description "_run sub: Capture stream, log, emit per QUIET/rc"
     test -s "$tmpfile"; or return 0
-    set -l _total (command wc -l -- "$tmpfile" 2>/dev/null | string match -rg '^\s*(\d+)'); set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
+    set -l _total (command wc -l -- "$tmpfile" 2>/dev/null | string match -rg -- '^\s*(\d+)'); set -l _last_byte (command tail -c1 -- "$tmpfile" 2>/dev/null)
     test -n "$_last_byte"; and string match -qr '^\d+$' -- "$_total"; and set _total (math $_total + 1)
     set -l _captured; set -l _elided; set -l _tail_cap (math "min(100, floor($cap / 2))"); set -l _head_cap (math "max(1, $cap - $_tail_cap)"); set -l _need_tail false # head+tail<=cap, elided>=0 for cap>=1
     string match -qr '^\d+$' -- "$_total"; and test "$_total" -gt "$cap"; and set _need_tail true
@@ -1481,12 +1481,12 @@ end
 function _ry_check_disk_space --description "Verify sufficient free disk space for installation"
     _log "DISK_CHECK_START"
     if not _check_avail / 1073741824 GiB $ROOT_AVAIL_CRIT $ROOT_AVAIL_WARN; _log "DISK_CHECK_FAIL: /"; return 1; end
-    set -l _boot_mnt (command findmnt -no TARGET /boot 2>/dev/null | string trim --)[-1] # gate only when /boot is its own mount; topmost entry
-    if test "$_boot_mnt" = /boot
+    set -l _boot_mnt (command findmnt -no TARGET -T /boot 2>/dev/null | string trim --)[-1] # mount holding /boot: a link resolves
+    if test -n "$_boot_mnt"; and test "$_boot_mnt" != /
         if not _check_avail /boot 1048576 MiB $BOOT_SPACE_CRIT $BOOT_SPACE_WARN; _log "DISK_CHECK_FAIL: /boot"; return 1; end
     else
         _info "  /boot is not a separate mount — its free space is covered by the / check"
-        _log "DISK_CHECK_BOOT_NOT_SEPARATE: findmnt target='$_boot_mnt' (expected /boot); skipping dedicated /boot gate"
+        _log "DISK_CHECK_BOOT_NOT_SEPARATE: mount holding /boot='$_boot_mnt' (/ or none); skipping dedicated /boot gate"
     end
     _log "DISK_CHECK_OK"; return 0
 end
@@ -1857,18 +1857,20 @@ function _awf_postwrite_verify_restore --argument-names dst use_sudo --descripti
     set -l _bak (_ry_bak_path "$dst"); set -l _expected (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _gen_ps $pipestatus
     if test "$_gen_ps[1]" -ne 0; _warn "  $dst: post-write verify skipped (content generator re-run rc=$_gen_ps[1])"; _log "POSTWRITE_VERIFY_SKIP: dst=$dst reason=gen_rerun rc=$_gen_ps[1]"; return 0; end
     set -l _actual (_installed_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _ib_ps $pipestatus
-    if test "$_ib_ps[1]" -ne 0; _warn "  $dst: post-write verify skipped (installed-bytes read rc=$_ib_ps[1]; e.g. sudo cache lapse)"; _log "POSTWRITE_VERIFY_SKIP: dst=$dst reason=read_fail rc=$_ib_ps[1]"; return 0; end
+    if test "$_ib_ps[1]" -eq 2; _warn "  $dst: post-write verify skipped (sudo cache lapsed during the read-back)"; _log "POSTWRITE_VERIFY_SKIP: dst=$dst reason=read_lapse rc=2"; return 0; end # rc 1, unreadable with sudo valid: fails below
     test "$_expected" = "$_actual"; and _installed_size_is "$dst" "$_expected"; and return 0 # size: fish strings stop at NUL
     if test "$_expected" = "$_actual"; and test "$use_sudo" = true; and not sudo -n true 2>/dev/null # text equal, size unprobed: no verdict
         _warn "  $dst: post-write verify skipped (sudo cache lapsed during the size probe)"; _log "POSTWRITE_VERIFY_SKIP: dst=$dst reason=size_lapse"; return 0
     end
     test "$MODE" = install; and begin; set -g _RY_BOOT_TAINTED true; _boot_refuse_mark; end # pending before any [FAIL]: each one forks
-    _fail "→ $dst (post-write verification mismatch — installed bytes differ from expected)"; set -l _why content; set -l _szk ""
+    set -l _why content; set -l _szk ""; set -l _fm "mismatch — installed bytes differ from expected"; test "$_ib_ps[1]" -eq 1; and set _why unreadable; and set _fm "failed — the installed file cannot be read back"
+    _fail "→ $dst (post-write verification $_fm)"
     if test "$_expected" = "$_actual" # text equal: bytes after a NUL
         set _why size; set -l _sz (_as $use_sudo stat -L -c '%s' -- "$dst" 2>/dev/null); test -n "$_sz"; and set _szk " expected_bytes="(printf '%s' "$_expected" | command wc -c | string trim --)" actual_bytes=$_sz"
     end
-    set -l _esha (printf '%s' "$_expected" | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)'); set -l _asha (printf '%s' "$_actual" | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)')
-    _log "POSTWRITE_VERIFY_FAIL: dst=$dst reason=$_why expected_content_sha=$_esha actual_content_sha=$_asha$_szk" # as ry-verify logs VERIFY_STATIC_MISMATCH
+    set -l _esha (printf '%s' "$_expected" | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)'); set -l _ask ""
+    test "$_why" = unreadable; or set _ask " actual_content_sha="(printf '%s' "$_actual" | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)') # unreadable: no bytes to hash
+    _log "POSTWRITE_VERIFY_FAIL: dst=$dst reason=$_why expected_content_sha=$_esha$_ask$_szk" # as ry-verify logs VERIFY_STATIC_MISMATCH
     set -l _has_bak false
     if test "$_RY_BACKUP_LAST" != "$_bak" # an older run's .ry.bak would roll back past this run's start
         _as $use_sudo test -f "$_bak" 2>/dev/null; and _log "POSTWRITE_RESTORE_STALE: dst=$dst — $_bak was not written this run; not restoring it"
@@ -1877,13 +1879,14 @@ function _awf_postwrite_verify_restore --argument-names dst use_sudo --descripti
     else
         test -f "$_bak"; and set _has_bak true
     end
-    if test "$_has_bak" = lapsed; _err_cont "  $dst: backup probe inconclusive (sudo cache lapsed) — restore by hand: sudo mv -T -- "(string join ' ' -- (string escape -- "$_bak" "$dst")); _log "POSTWRITE_RESTORE_SUDO_LAPSE: dst=$dst bak=$_bak"; return 1; end # the mismatch FAIL counted
+    if test "$_has_bak" = lapsed; _err_cont "  $dst: backup probe inconclusive (sudo cache lapsed) — restore by hand: sudo cp -- "(string join ' ' -- (string escape -- "$_bak" "$dst")); _log "POSTWRITE_RESTORE_SUDO_LAPSE: dst=$dst bak=$_bak"; return 1; end # the mismatch FAIL counted
     if test "$_has_bak" = false; _err_cont "  $dst: no backup from this run ($_bak) to restore"; _log "POSTWRITE_RESTORE_NOBAK: dst=$dst"; return 1; end # the mismatch FAIL counted
     set -l _spr; test "$use_sudo" = true; and set _spr sudo -n
-    if _run $_spr mv -T -- "$_bak" "$dst"
-        _warn "  $dst: restored from $_bak after verification failure"; _log "POSTWRITE_RESTORE_OK: dst=$dst"
+    set -l _rt (_as $use_sudo mktemp -p (command dirname -- "$dst") .ry-install.XXXXXX 2>/dev/null); _track_tmpfile "$_rt" # dst's dir: the mv is a rename
+    if test -n "$_rt"; and _run $_spr cp -p -T --remove-destination -- "$_bak" "$_rt"; and _run $_spr mv -T -- "$_rt" "$dst"
+        _untrack_tmpfile "$_rt"; _warn "  $dst: restored from $_bak after verification failure"; _log "POSTWRITE_RESTORE_OK: dst=$dst"
     else
-        _err "  $dst: restore from $_bak FAILED — file may be inconsistent"; _log "POSTWRITE_RESTORE_FAIL: dst=$dst"
+        _rm_tmp "$_rt" $use_sudo; _err "  $dst: restore from $_bak FAILED — file may be inconsistent"; _log "POSTWRITE_RESTORE_FAIL: dst=$dst"
     end
     return 1
 end
@@ -1901,7 +1904,7 @@ function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --descri
             end
             set -l _sp; test "$use_sudo" = true; and set _sp sudo -n; _run $_sp nft -c -f "$tmpfile"; set -l _nc_rc $status
             if test "$_nc_rc" -eq "$EXIT_RUN_TMPFAIL" # _run made no capture dir: nft never ran
-                _fail "  $dst: nft -c did not run (no capture tmpdir) — refusing deploy (live ruleset and installed file unchanged)"
+                _fail "  $dst: nft -c did not run (no capture dir) — refusing deploy (live ruleset and installed file unchanged)"
                 _log "NFT_PREVALIDATE_NORUN: $dst rc=$_nc_rc"; return 1
             end
             if contains -- "$_nc_rc" 124 137 # timeout(1) or a kill: no verdict on the ruleset
@@ -1909,7 +1912,7 @@ function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --descri
                 _log "NFT_PREVALIDATE_TIMEOUT: $dst rc=$_nc_rc"; return 1
             end
             if test "$_nc_rc" -ne 0
-                if test "$use_sudo" = true; and not sudo -n true 2>/dev/null # a lapsed sudo -n fails nft -c too: no verdict on the ruleset
+                if test "$use_sudo" = true; and string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null # sudo refused nft -c: no verdict
                     _fail "  $dst: nft -c could not run (sudo cache lapsed) — refusing deploy (live ruleset and installed file unchanged)"
                     _log "NFT_PREVALIDATE_LAPSE: $dst rc=$_nc_rc"; return 1
                 end
@@ -1957,7 +1960,7 @@ function _ry_mkdir_0755 --argument-names use_sudo dir --description "Create dirs
 end
 function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination"
     set -l dir (command dirname -- "$dst")
-    if not _ry_mkdir_0755 "$use_sudo" "$dir"; set -l _why ""; test "$use_sudo" = true; and not sudo -n true 2>/dev/null; and set _why " (sudo cache lapsed)"; _fail "Cannot create directory: $dir$_why"; return 1; end
+    if not _ry_mkdir_0755 "$use_sudo" "$dir"; set -l _why ""; test "$use_sudo" = true; and string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _why " (sudo cache lapsed)"; _fail "Cannot create directory: $dir$_why"; return 1; end
     set -l perms 0644; test "$use_sudo" = false; and set perms 0600
     set -l _new_bytes (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _gen_rc $pipestatus[1]
     set -l _cur_bytes ""; set -l _read_rc -1 # fn scope: shared by the probe and compare branches
@@ -2023,6 +2026,7 @@ function _install_preflight --description "Run all preflight checks before insta
     end
     set -l _bp (_resolve_boot_path) # ESP gates before -Syu or Configuration writes under /boot
     if test -z "$_bp"; _phase_record "Preflight: ESP" FAIL "cannot resolve \$BOOT"; _err "Cannot resolve \$BOOT path — refusing to install"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
+    _esp_layout_ok "$_bp"; set -l _lo $status; if test "$_lo" -ne 0; set -l _c "$_RY_ESP_LAYOUT (need /boot)"; test "$_lo" -eq 2; and set _c "not checked (sudo cache lapsed)"; _phase_record "Preflight: ESP" FAIL "$_c"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
     if not _sdboot_fallback_vfat_ok; _phase_record "Preflight: ESP" FAIL "fallback /boot not vfat (fstype=$_RY_SDBOOT_REFUSE_FS)"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
     _phase_record "Preflight: ESP" PASS "$_bp"
     if test -f /var/lib/pacman/db.lck # a locked db fails -Syu anyway; stop before anything is deployed
@@ -2122,14 +2126,14 @@ end
 # ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + CONFLICT SWAP + MARK EXPLICIT + VERIFY) ──
 function _ip_conflict_held --description "_ip_pacman_invoke sub: Members missing by name that conflict either way with installed packages"
     set -l _have (command pacman -Qq 2>/dev/null) # names: pacman -Q NAME falls back to a provider
-    set -l _theirs (command env LC_ALL=C COLUMNS=0 pacman -Qi 2>/dev/null | string match -rg -- '^Conflicts With\s*:\s*(.*\S)' | string split -n ' ' | string replace -r -- '[<>=].*$' '' | string match -v -- None) # COLUMNS=0: no wrapped list lines
+    set -l _theirs (command env LC_ALL=C COLUMNS=0 pacman -Qi 2>/dev/null | string match -rg -- '^Conflicts With\s*:\s*(.*\S)' | string split -n -- ' ' | string replace -r -- '[<>=].*$' '' | string match -v -- None) # COLUMNS=0: no wrapped list lines
     for _p in $argv
         contains -- "$_p" $_have; and continue # by name: -Syu upgrades it in place
         set -l _si (command env LC_ALL=C COLUMNS=0 pacman -Si -- "$_p" 2>/dev/null); set -l _hit false
-        for _n in $_p (string match -rg -- '^Provides\s*:\s*(.*\S)' $_si | string split -n ' ' | string replace -r -- '[<>=].*$' '')
+        for _n in $_p (string match -rg -- '^Provides\s*:\s*(.*\S)' $_si | string split -n -- ' ' | string replace -r -- '[<>=].*$' '')
             contains -- "$_n" $_theirs; and set _hit true # an installed package declares it: a -git or -bin build
         end
-        for _c in (string match -rg -- '^Conflicts With\s*:\s*(.*\S)' $_si | string split -n ' ' | string match -v -- None)
+        for _c in (string match -rg -- '^Conflicts With\s*:\s*(.*\S)' $_si | string split -n -- ' ' | string match -v -- None)
             test "$_hit" = true; and break
             command pacman -T -- "$_c" >/dev/null 2>&1; and set _hit true # rc 0: an installed package is or provides it
         end
@@ -2330,7 +2334,7 @@ function _install_system_files --description "Deploy all embedded config files"
     return 0
 end
 
-# ── INSTALL PHASE 4: FSTAB OPTS (EXT4 SCAN + AWK REWRITE) ──
+# ── INSTALL PHASE 4: FSTAB OPTS (EXT4 SCAN + AWK REWRITE + PARITY/SIZE GATES) ──
 function _fstab_needs_change --description "Scan ext4 entries for missing noatime/lazytime/commit=10"
     set -g _RY_FSTAB_NEEDS_CHANGE false; set -g _RY_FSTAB_COMMIT_OVERRIDES; set -g _RY_FSTAB_MALFORMED; set -l _malformed_warned false
     for line in $argv
@@ -2414,7 +2418,7 @@ function _far_awk_rewrite --argument-names tmpfstab --description "_fstab_atomic
     return 0
 end
 
-# ── INSTALL PHASE 4: FSTAB ATOMIC REPLACE (PARITY/SIZE/FINDMNT GATES) + _install_fstab_opts ──
+# ── INSTALL PHASE 4: FSTAB ATOMIC REPLACE (FINDMNT GATE) + _install_fstab_opts ──
 function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp + awk + verify + mv)"
     set -l tmpfstab (sudo -n mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null) # tmpfile in dst parent: same-FS mv -T atomic
     if test -z "$tmpfstab"; set -l _why ""; sudo -n true 2>/dev/null; or set _why " (sudo cache lapsed)"; _fail "  /etc/fstab: mktemp failed$_why"; return 1; end
@@ -2496,8 +2500,10 @@ function _configure_services_resolved_restart --description "Restart systemd-res
         _phase_record "Services: resolved restart" PASS "systemd-resolved restarted"
         _pending_apply_drop /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf # applied: a re-run owes nothing
     else
-        _warn "systemd-resolved restart failed — drop-in still applies at next boot (non-fatal)"; _log "RESOLVED_RESTART_FAIL: context=services"
-        _phase_record "Services: resolved restart" WARN "restart failed (applies next boot)"
+        set -l _why "restart failed"; set -l _cell "restart failed (applies next boot)"; set -l _key RESOLVED_RESTART_FAIL
+        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "restart not run (sudo cache lapsed)"; set _cell "not run (sudo cache lapsed); applies next boot"; set _key RESOLVED_RESTART_LAPSE; end # sudo refused it
+        _warn "systemd-resolved $_why — drop-in still applies at next boot (non-fatal)"; _log "$_key: context=services"
+        _phase_record "Services: resolved restart" WARN "$_cell"
     end
     return 0
 end
@@ -2643,7 +2649,7 @@ function _csm_retry_individual --description "_configure_services_mask sub: Per-
             _ok "Masked: $_unit"
         else
             set -l _state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
-            if not sudo -n true 2>/dev/null # mask never ran: no stop failure to report
+            if string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null # sudo refused the mask: no stop failure
                 _err "Failed to mask: $_unit (sudo cache lapsed; is-enabled=$_state)"; _log "MASK_LAPSE: unit=$_unit is-enabled=$_state"
                 set -ga _RY_MASK_FAILS $_unit; set _ret 1
             else if test "$_state" = masked # --now stops only after a successful mask: the stop failed
@@ -2768,7 +2774,7 @@ function _cse_batch_enable --description "Batch enable system units"
             _ok "Enabled: $_unit"
         else
             set -l _enabled_state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
-            if not sudo -n true 2>/dev/null # enable never ran: no start failure to report
+            if string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null # sudo refused the enable: no start failure
                 _err "Failed to enable: $_unit (sudo cache lapsed; is-enabled=$_enabled_state)"; _log "ENABLE_LAPSE: unit=$_unit is-enabled=$_enabled_state"
                 set -g INSTALL_HAD_ERRORS true; set -ga _RY_ENABLE_FAILS $_unit; set _ret 1
             else if contains -- "$_enabled_state" enabled alias static indirect generated # persistent states only: linked* read not-enabled (is-enabled rc 1)
@@ -2784,15 +2790,16 @@ function _cse_batch_enable --description "Batch enable system units"
 end
 function _cse_start_preset --description "_configure_services_enable sub: Start a package-preset unit that is enabled but not running"
     for _u in $_RY_PKG_MANAGED_SERVICES
-        contains -- "$_u" $EXPECTED_SERVICES; or continue
+        contains -- "$_u" $EXPECTED_SERVICES; or continue; contains -- "$_u" $argv; and continue # argv: the batch's units, reported there
         set -l _st (command systemctl is-enabled -- "$_u" 2>/dev/null | string trim --); test "$_st" = enabled; or continue # the preset branch skipped only these
         set -l _act (command systemctl show --value --property=ActiveState -- "$_u" 2>/dev/null); contains -- "$_act" active activating reloading refreshing; and continue
-        if _run sudo -n systemctl start -- "$_u" # start, not enable: an enable also links the masked Also= units
+        if _run sudo -n systemctl start -- "$_u" # start only: the package preset already enabled it
             _ok "Started: $_u (enabled by its package preset; was $_act)"; _log "PRESET_START_OK: unit=$_u was=$_act"
         else
-            set -l _why "failed to start"; sudo -n true 2>/dev/null; or set _why "not started (sudo cache lapsed)"
-            _warn_loud "Enabled but $_why: $_u (will activate on next boot if config is fixed)" # loud: install pins QUIET
-            _warn_loud_cont "  Diagnose: systemctl status $_u; journalctl -u $_u -b"; _log "PRESET_START_FAIL: unit=$_u was=$_act"; set -ga _RY_ENABLE_START_FAILS "$_u"
+            set -l _why "failed to start"; set -l _hint "will activate on next boot if config is fixed"; set -l _key PRESET_START_FAIL
+            string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "not started (sudo cache lapsed)"; set _hint "starts at next boot"; set _key PRESET_START_LAPSE; end # sudo refused it
+            _warn_loud "Enabled but $_why: $_u ($_hint)" # loud: install pins QUIET
+            test "$_key" = PRESET_START_FAIL; and _warn_loud_cont "  Diagnose: systemctl status $_u; journalctl -u $_u -b"; _log "$_key: unit=$_u was=$_act"; set -ga _RY_ENABLE_START_FAILS "$_u"
         end
     end
 end
@@ -2800,12 +2807,12 @@ function _configure_services_enable --description "Batch-enable system units (pe
     set -l _ret 0; set -l _units (_cse_collect_units); set -l _enable_count (count $_units); set -l _pre_en 0 # already enabled: enable --now only re-asserts them
     for _u in $_units; test "$_u" = nftables.service; and set -q _RY_NFT_FIRST_ENABLED; and continue; command systemctl is-enabled --quiet -- $_u 2>/dev/null; and set _pre_en (math $_pre_en + 1); end # nftables-first enabled it this run
     test "$_enable_count" -gt 0; and _log "ENABLE_PRE_ENABLED: $_pre_en/$_enable_count already enabled"
-    _cse_batch_enable $_units; set -l _be $status; _cse_start_preset # after the batch: it resets the lists the row reads
+    _cse_batch_enable $_units; set -l _be $status; _cse_start_preset $_units # after the batch: it resets the lists the row reads
     if test "$_be" -ne 0
         set -l _sf ""; test (count $_RY_ENABLE_START_FAILS) -gt 0; and set _sf "; "(count $_RY_ENABLE_START_FAILS)" unstarted"; _phase_record "Services: enable units" FAIL "enable failed$_sf; units: $_RY_ENABLE_FAILS"
         set _ret 1
     else if test (count $_RY_ENABLE_START_FAILS) -gt 0
-        _phase_record "Services: enable units" WARN "enabled, start failed: $_RY_ENABLE_START_FAILS"
+        _phase_record "Services: enable units" WARN "enabled, not started: $_RY_ENABLE_START_FAILS"
     else if test "$_enable_count" -eq 0; and set -q _RY_ENABLE_MISSING[1]
         _phase_record "Services: enable units" WARN "not installed: $_RY_ENABLE_MISSING"
     else if test "$_enable_count" -eq 0
@@ -2856,8 +2863,9 @@ function _bootctl_dir --argument-names flag logtag fallnote --description "Probe
 end
 function _resolve_esp --description "Resolve EFI system partition path (cached; empty result also cached)"
     if set -q -g _RY_ESP_TRIED; printf '%s' "$_RY_ESP_PATH"; return 0; end
-    set -l _p (_bootctl_dir -p ESP_BOOTCTL_PIPE_FAIL "falling through to findmnt")
+    set -l _p (_bootctl_dir -p ESP_BOOTCTL_PIPE_FAIL "falling through to findmnt"); set -g _RY_ESP_VIA bootctl # the ESP layout check reads how
     if test -z "$_p"; or begin; not test -d "$_p"; and not sudo -n test -d "$_p" 2>/dev/null; end
+        set -g _RY_ESP_VIA findmnt
         for _candidate in /efi /boot/efi /boot/EFI /boot # only independently-mounted vfat (plain dir: findmnt empty)
             set -l _fs (command findmnt -no FSTYPE -- "$_candidate" 2>/dev/null | string trim -- | string match -v -- autofs)[-1] # topmost real entry (an automounted ESP prints autofs, then vfat)
             if test "$_fs" = vfat; set _p "$_candidate"; break; end
@@ -2865,11 +2873,11 @@ function _resolve_esp --description "Resolve EFI system partition path (cached; 
     end
     if test -z "$_p"; or begin; not test -d "$_p"; and not sudo -n test -d "$_p" 2>/dev/null; end
         if test -d /boot; or sudo -n test -d /boot 2>/dev/null
-            set _p /boot; set -g _RY_ESP_FALLBACK true; _warn "  ESP autodetect failed — defaulting to /boot. Verify systemd-boot mount: findmnt /boot"
+            set _p /boot; set -g _RY_ESP_FALLBACK true; set -g _RY_ESP_VIA fallback; _warn "  ESP autodetect failed — defaulting to /boot. Verify systemd-boot mount: findmnt /boot"
             _log "ESP_RESOLVE_FALLBACK: bootctl/findmnt failed, defaulting to /boot"
         else
             _msg_nocount INFO "  ESP autodetect failed AND /boot is not a directory — cannot resolve boot path" # each caller grades an empty $BOOT
-            _log "ESP_RESOLVE_HARD_FAIL: bootctl/findmnt failed AND /boot missing"; set _p ""
+            _log "ESP_RESOLVE_HARD_FAIL: bootctl/findmnt failed AND /boot missing"; set _p ""; set -g _RY_ESP_VIA none
         end
     else
         set -g _RY_ESP_FALLBACK false
@@ -2878,24 +2886,37 @@ function _resolve_esp --description "Resolve EFI system partition path (cached; 
 end
 function _resolve_boot_path --description "Resolve \$BOOT (XBOOTLDR if present, else ESP) per BLS (cached; empty result also cached)"
     if set -q -g _RY_BOOT_TRIED; printf '%s' "$_RY_BOOT_PATH"; return 0; end
-    set -l _p (_bootctl_dir -x BOOT_BOOTCTL_PIPE_FAIL "falling through to ESP")
-    test -z "$_p"; or begin; not test -d "$_p"; and not sudo -n test -d "$_p" 2>/dev/null; end; and set _p (_resolve_esp)
+    set -l _p (_bootctl_dir -x BOOT_BOOTCTL_PIPE_FAIL "falling through to ESP"); set -g _RY_BOOT_VIA bootctl # with no ESP from -p: an XBOOTLDR
+    test -z "$_p"; or begin; not test -d "$_p"; and not sudo -n test -d "$_p" 2>/dev/null; end; and begin; set _p (_resolve_esp); set -g _RY_BOOT_VIA esp; end
     set -g _RY_BOOT_PATH "$_p"; set -g _RY_BOOT_TRIED true; printf '%s' "$_p"
 end
 function _sdboot_fallback_vfat_ok --description "Refuse sdboot when ESP fell back to a non-vfat /boot (rc 0=ok 1=refuse)"
+    set -q -g _RY_ESP_TRIED; or _resolve_esp >/dev/null # the ESP resolver sets the flag; bootctl -x skips it
     set -q _RY_ESP_FALLBACK; and test "$_RY_ESP_FALLBACK" = true; or return 0
     set -l _boot_fs (command findmnt -n -o FSTYPE /boot 2>/dev/null | string trim -- | string match -v -- autofs)[-1] # topmost real entry (autofs placeholder ignored; none → refuse)
     if test "$_boot_fs" = vfat; return 0; end
+    test -n "$_boot_fs"; or set _boot_fs none # not a mount point: findmnt prints nothing
     set -g _RY_SDBOOT_REFUSE_FS "$_boot_fs"; set -g _RY_BOOT_REFUSED true # gate refusal: the banner must not prescribe the gen by hand
     _err "ESP autodetect fell back to /boot, which is not vfat (fstype=$_boot_fs) — refusing to continue"
-    _err_cont "  No vfat ESP found (bootctl failed; /boot fstype='$_boot_fs') — mount the ESP, then re-run"
+    _err_cont "  No vfat ESP found (bootctl failed; /boot fstype=$_boot_fs) — mount the ESP, then re-run"
     _log "SDBOOT_APPLY_REFUSED: esp_fallback=true boot_fstype=$_boot_fs"; return 1
+end
+function _esp_layout_ok --argument-names bp --description "_install_preflight and _ry_do_install_file sub: ESP mounted at /boot, \$BOOT on it (no XBOOTLDR)"
+    set -l _esp (_resolve_esp); set -l _rb; command -q realpath; and set _rb (command realpath -- /boot 2>/dev/null); test -n "$_rb"; or set _rb /boot # /boot linked to the ESP: loader.conf still lands there
+    set -l _xb false; test "$_RY_BOOT_VIA" = bootctl; and test "$_RY_ESP_VIA" != bootctl; and set _xb true # bootctl -x found $BOOT, -p no ESP
+    if test "$_xb" = true; and not sudo -n true 2>/dev/null # -p may have failed for the lapse alone
+        set -g _RY_ESP_LAYOUT "ESP unresolved, sudo cache lapsed"; _err "Cannot resolve the ESP (sudo cache lapsed) — re-run"; _log "ESP_LAYOUT_LAPSE: boot=$bp"; return 2 # 2: sudo lapse
+    end
+    test "$_xb" = false; and test "$bp" = "$_esp"; and test "$_esp" = "$_rb"; and return 0
+    set -g _RY_ESP_LAYOUT "ESP=$_esp, \$BOOT=$bp"; test "$_xb" = true; and set -g _RY_ESP_LAYOUT "XBOOTLDR \$BOOT=$bp, no ESP found"
+    _err "The ESP must be mounted at /boot with no XBOOTLDR ($_RY_ESP_LAYOUT) — systemd-boot reads loader.conf only from the ESP"
+    _log "ESP_LAYOUT_REFUSED: esp=$_esp boot=$bp boot_dir=$_rb esp_via=$_RY_ESP_VIA boot_via=$_RY_BOOT_VIA"; return 1
 end
 
 # ── BOOT SANITY: ENTRIES + KERNEL/INITRAMFS PROBES + SIZE SCAN ──
 function _enum_boot_entries --argument-names boot --description "Enumerate \$boot/loader/entries/*.conf"
     set -g _RY_BOOT_ENUM_OK true
-    set -l _basenames (sudo -n find -H "$boot/loader/entries" -maxdepth 1 -type f -iname '*.conf' ! -name '.*' -printf '%f\0' 2>/dev/null | string split0); set -l _ps $pipestatus # as systemd-boot lists them
+    set -l _basenames (sudo -n find -H "$boot/loader/entries" -maxdepth 1 -type f -iname '*.conf' ! -name '.*' ! -iname 'auto-*' -printf '%f\0' 2>/dev/null | string split0); set -l _ps $pipestatus # as systemd-boot lists them
     if test "$_ps[1]" -ne 0; set -g _RY_BOOT_ENUM_OK false; set -g _RY_BOOT_COUNT 0; _log "BOOT_ENUM_FAIL: boot=$boot pipestatus=$_ps (sudo lapse or read error)"; return 0; end
     set -g _RY_BOOT_COUNT (count $_basenames)
 end
@@ -2903,14 +2924,16 @@ function _pbs_check_boot_files --argument-names boot glob label --description "_
     set -l errors 0; set -l files (sudo -n find -H "$boot" -maxdepth 1 -name "$glob" -type f -print0 2>/dev/null | string split0); set -l _ps $pipestatus
     test (count $files) -gt 1; and set files (path sort -- $files)
     if test "$_ps[1]" -ne 0
-        set -g _RY_BOOT_CRIT_PENDING true; _err "Cannot enumerate $boot/ for $glob (sudo lapse or read error)" # pending before any [ERR]: each one forks
+        set -g _RY_BOOT_CRIT_PENDING true; set -l _why "read error"; sudo -n true 2>/dev/null; or begin; set _why "sudo cache lapsed"; set -g _RY_BOOT_LAPSE_NAMED true; end; _err "Cannot enumerate $boot/ for $glob ($_why)" # pending before any [ERR]: each one forks
         set errors (math $errors + 1)
     else if test (count $files) -eq 0
         set -g _RY_BOOT_CRIT_PENDING true; _err "No $label found in $boot/"; set errors (math $errors + 1)
     else
         for f in $files
-            sudo -n test -s "$f" 2>/dev/null
-            if test "$status" -ne 0; set -g _RY_BOOT_CRIT_PENDING true; _err "Zero-byte $label image: $f"; set errors (math $errors + 1); end
+            sudo -n test -s "$f" 2>/dev/null; and continue
+            set -g _RY_BOOT_CRIT_PENDING true; set errors (math $errors + 1)
+            sudo -n true 2>/dev/null; or begin; set -g _RY_BOOT_LAPSE_NAMED true; _err "Cannot probe $label images in $boot/ (sudo cache lapsed)"; break; end # one lapse, one ERR
+            _err "Zero-byte $label image: $f"
         end
     end
     echo $errors
@@ -2929,54 +2952,65 @@ function _pbs_entry_path_ok --argument-names boot conf path op --description "_p
         end
         set canon (string replace -ra '/+' '/' -- "$boot/$rel") # realpath absent: normalized join
     end
-    if test -z "$canon"; set -g _RY_BOOT_CRIT_PENDING true; _msg_nocount WARN "  Loader entry path could not be canonicalized: $conf ($path)"; return 1; end
+    if test -z "$canon"; sudo -n true 2>/dev/null; or return 3; set -g _RY_BOOT_CRIT_PENDING true; _msg_nocount WARN "  Loader entry path could not be canonicalized: $conf ($path)"; return 1; end
     set -l _boot_re (string escape --style=regex -- "$boot")
     if not string match -qr -- "^"$_boot_re"(/|\$)" "$canon"; set -g _RY_BOOT_CRIT_PENDING true; _msg_nocount WARN "  Loader entry escapes \$BOOT boundary: $conf → $canon"; return 1; end
-    sudo -n test -f "$canon" 2>/dev/null; and sudo -n test $op "$canon" 2>/dev/null # a directory passes -s alone
+    sudo -n test -f "$canon" 2>/dev/null; and sudo -n test $op "$canon" 2>/dev/null; and return 0 # a directory passes -s alone
+    sudo -n true 2>/dev/null; or return 3; return 1 # 3: sudo lapsed, the caller names it once
 end
-function _pbs_entry_valid --argument-names boot conf --description "_pbs_check_entries sub: Probe one entry (rc 0 kernel + initrds present, 1 broken, 2 not linux)"
+function _pbs_entry_valid --argument-names boot conf --description "_pbs_check_entries sub: Probe one entry (rc 0 ok, 1 broken, 2 not linux, 3 sudo lapse)"
     set -l _ls (sudo -n grep -E '^[[:space:]]*(linux|initrd)[[:space:]]' -- "$conf" 2>/dev/null); set -l _grc $status # 2: a read error
-    set -l _kl (string match -rg -- '^\s*linux\s+(.*\S)' $_ls)[1]
+    set -l _kl (string match -rg -- '^\s*linux\s+(.*\S)' $_ls)[-1] # systemd-boot keeps the last linux line
     if test -z "$_kl"
-        sudo -n true 2>/dev/null; or begin; set -g _RY_BOOT_CRIT_PENDING true; _msg_nocount WARN "  $conf: unreadable (sudo cache lapsed)"; return 1; end
+        sudo -n true 2>/dev/null; or return 3
         test "$_grc" -gt 1; and begin; set -g _RY_BOOT_CRIT_PENDING true; _msg_nocount WARN "  $conf: unreadable (read error)"; return 1; end # as ry-verify
         return 2 # efi or chainload entry: no kernel to probe
     end
-    _pbs_entry_path_ok "$boot" "$conf" "$_kl" -s; or begin; set -g _RY_BOOT_CRIT_PENDING true; _msg_nocount WARN "  $conf: kernel path rejected, or not a non-empty file: $_kl"; return 1; end
-    for _ir in (string match -rg -- '^\s*initrd\s+(.*\S)' $_ls) # BLS: one path per initrd line; every one must load
-        _pbs_entry_path_ok "$boot" "$conf" "$_ir" -s; or begin; set -g _RY_BOOT_CRIT_PENDING true; _msg_nocount WARN "  $conf: initrd path rejected, or not a non-empty file: $_ir"; return 1; end
+    _pbs_entry_path_ok "$boot" "$conf" "$_kl" -s; set -l _po $status; test "$_po" -eq 3; and return 3
+    test "$_po" -eq 0; or begin; set -g _RY_BOOT_CRIT_PENDING true; _msg_nocount WARN "  $conf: kernel path rejected, or not a non-empty file: $_kl"; return 1; end
+    set -l _irs (string match -rg -- '^\s*initrd\s+(.*\S)' $_ls); set -q _irs[1]; or begin; set -g _RY_BOOT_CRIT_PENDING true; _msg_nocount WARN "  $conf: no initrd line (the kernel would boot without an initramfs)"; return 1; end
+    for _ir in $_irs # BLS: one path per initrd line; every one must load
+        _pbs_entry_path_ok "$boot" "$conf" "$_ir" -s; set -l _pi $status; test "$_pi" -eq 3; and return 3
+        test "$_pi" -eq 0; or begin; set -g _RY_BOOT_CRIT_PENDING true; _msg_nocount WARN "  $conf: initrd path rejected, or not a non-empty file: $_ir"; return 1; end
     end
     return 0
 end
 function _pbs_check_entries --argument-names boot --description "_boot_sanity sub: Every linux entry in \$BOOT/loader/entries has its kernel + initrds"
-    set -l errors 0; set -l confs (sudo -n find -H "$boot/loader/entries" -maxdepth 1 -iname '*.conf' ! -name '.*' -type f -print0 2>/dev/null | string split0); set -l _cf_ps $pipestatus # as systemd-boot lists them
+    set -l errors 0; set -l confs (sudo -n find -H "$boot/loader/entries" -maxdepth 1 -iname '*.conf' ! -name '.*' ! -iname 'auto-*' -type f -print0 2>/dev/null | string split0); set -l _cf_ps $pipestatus # as systemd-boot lists them
     test (count $confs) -gt 1; and set confs (path sort -- $confs)
     if test "$_cf_ps[1]" -ne 0
         set -g _RY_BOOT_CRIT_PENDING true # a failed listing fails the check: mark before the probes
-        if sudo -n true 2>/dev/null; and not sudo -n test -d "$boot/loader/entries" 2>/dev/null
+        if not sudo -n true 2>/dev/null
+            set -g _RY_BOOT_LAPSE_NAMED true; _err "Cannot enumerate $boot/loader/entries (sudo cache lapsed)"
+        else if not sudo -n test -d "$boot/loader/entries" 2>/dev/null
             _err "Boot loader entries directory missing: $boot/loader/entries"
         else
-            _err "Cannot enumerate $boot/loader/entries (sudo lapse or read error)"
+            _err "Cannot enumerate $boot/loader/entries (read error)"
         end
         echo 1; return 0
     end
     if test (count $confs) -eq 0; set -g _RY_BOOT_CRIT_PENDING true; _err "No boot loader entries in $boot/loader/entries/"; echo 1; return 0; end
-    set -l _linux 0
+    set -l _linux 0; set -l _lapsed false
     for conf in $confs
         _pbs_entry_valid "$boot" "$conf"; set -l _ev $status; test "$_ev" -eq 2; and continue
+        if test "$_ev" -eq 3; set -g _RY_BOOT_CRIT_PENDING true; set -g _RY_BOOT_LAPSE_NAMED true; _err "Boot entry $conf and later ones unverified (sudo cache lapsed)"; set errors (math $errors + 1); set _lapsed true; break; end # one lapse, one ERR
         set _linux (math $_linux + 1)
         test "$_ev" -eq 0; or begin; set -g _RY_BOOT_CRIT_PENDING true; _err "Boot entry broken (kernel or initrd missing or invalid): $conf"; set errors (math $errors + 1); end
     end
-    if test "$_linux" -eq 0; set -g _RY_BOOT_CRIT_PENDING true; _err "No boot entry references a valid kernel image"; set errors (math $errors + 1); end
+    if test "$_linux" -eq 0; and test "$_lapsed" = false; set -g _RY_BOOT_CRIT_PENDING true; _err "No boot entry references a valid kernel image"; set errors (math $errors + 1); end
     echo $errors
 end
 function _boot_sanity --description "Verify boot artifacts are viable after rebuild"
     set -l _boot (_resolve_boot_path)
     test -n "$_boot"; or begin; set -g _RY_BOOT_CRIT_PENDING true; _err "BUG: boot sanity reached with \$BOOT unresolved — the ESP gates refuse that"; return 1; end
     set -l _f0 $VERIFY_FAIL # each failed probe counts its own line
-    set -l _k (_pbs_check_boot_files "$_boot" 'vmlinuz-*' kernel); set -l _i (_pbs_check_boot_files "$_boot" 'initramfs-*.img' initramfs); set -l _e (_pbs_check_entries "$_boot")
+    set -g _RY_BOOT_LAPSE_NAMED false; set -l _k (_pbs_check_boot_files "$_boot" 'vmlinuz-*' kernel); set -l _i 0; set -l _e 0; set -l _l 0 # one lapse, one ERR
+    if sudo -n true 2>/dev/null; set _i (_pbs_check_boot_files "$_boot" 'initramfs-*.img' initramfs); else; set _l 1; end
+    if test "$_l" -eq 0; and sudo -n true 2>/dev/null; set _e (_pbs_check_entries "$_boot"); else; set _l 1; end
+    test "$_RY_BOOT_LAPSE_NAMED" = true; and set _l 0 # the probe that met the lapse named and counted it
+    test "$_l" -eq 1; and begin; set -g _RY_BOOT_CRIT_PENDING true; _err "Boot sanity: the later probes did not run (sudo cache lapsed)"; end # unverified fails
     for _v in _k _i _e; string match -qr '^\d+$' -- "$$_v"; or set $_v 1; end
-    set -l errors (math $_k + $_i + $_e)
+    set -l errors (math $_k + $_i + $_e + $_l)
     if test "$errors" -gt 0
         set -g _RY_BOOT_CRIT_PENDING true; _err_recap $_f0 "Boot sanity check failed ($errors error(s))" # the DO NOT REBOOT banner that follows carries the steps
         return 1
@@ -2986,12 +3020,16 @@ function _boot_sanity --description "Verify boot artifacts are viable after rebu
 end
 
 # ── INSTALL PHASE 5: REBUILD SUBS (TAINT GATE + SDBOOT GEN + BOOTCTL + ENTRIES + SKIP ROWS) ──
-function _irb_skip_post_mki --description "_install_rebuild_boot sub: Record SKIP rows for sdboot-gen, bootctl update, post-rebuild sanity"
+function _irb_skip_post_mki --description "_install_rebuild_boot and _irb_taint_gate sub: SKIP rows for sdboot-gen, bootctl update, sanity"
     _phase_record "Boot: sdboot-manage gen" SKIP "aborted"
     _phase_record "Boot: bootctl update" SKIP "aborted"
     _phase_record "Boot: post-rebuild sanity" SKIP "aborted"
 end
-function _run_rc_cell --argument-names rc --description "_irb_sdboot_apply and _install_rebuild_boot sub: Row cell for a failed _run rc"; test "$rc" -eq "$EXIT_RUN_TMPFAIL" 2>/dev/null; and echo "not run (no capture dir)"; or echo "rc=$rc"; end
+function _run_rc_cell --argument-names rc --description "_irb_sdboot_apply and _install_rebuild_boot sub: Row cell for a failed _run rc"
+    test "$rc" -eq "$EXIT_RUN_TMPFAIL" 2>/dev/null; and echo "not run (no capture dir)"; and return 0
+    string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and echo "not run (sudo cache lapsed)"; and return 0 # sudo refused it
+    echo "rc=$rc"
+end
 function _irb_sdboot_apply --description "_install_rebuild_boot sub: Run sdboot-manage gen + bootctl update"
     if not _sdboot_fallback_vfat_ok
         _phase_record "Boot: sdboot-manage gen" FAIL "ESP fallback to /boot not vfat (fstype=$_RY_SDBOOT_REFUSE_FS)"
@@ -3016,7 +3054,7 @@ end
 function _irb_verify_entries --argument-names boot --description "_install_rebuild_boot and _post_boot_apply sub: Re-enumerate boot entries post-rebuild"
     _enum_boot_entries "$boot"
     if test "$_RY_BOOT_ENUM_OK" = false
-        set -g _RY_BOOT_CRIT_PENDING true; _msg_nocount WARN "Boot entries: cannot enumerate $boot/loader/entries (missing, sudo lapse or read error)" # the sanity check after fails and counts it
+        set -g _RY_BOOT_CRIT_PENDING true; set -l _why "missing or read error"; sudo -n true 2>/dev/null; or set _why "sudo cache lapsed"; _msg_nocount WARN "Boot entries: cannot enumerate $boot/loader/entries ($_why)" # the sanity check after fails and counts it
     else
         set -l entry_count $_RY_BOOT_COUNT
         if test "$entry_count" -gt 0
@@ -3079,20 +3117,23 @@ function _if_trim_pacman_cache --description "Trim pacman cache: paccache -rk2 t
     end
     set -l _reason "upgrade"; test "$_upgraded" = false; and set _reason "removals=$_removed_n"
     if command -q paccache
-        set -l _pc_ok true # -k last-wins, -u blacklists installed: separate invocations
-        _run sudo -n paccache -rk2; or set _pc_ok false; _run sudo -n paccache -ruk0; or set _pc_ok false
+        set -l _pc_ok true; set -l _pl false # -k last-wins, -u blacklists installed: separate invocations
+        _run sudo -n paccache -rk2; or begin; set _pc_ok false; string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _pl true; end # refused: nothing ran
+        test "$_pl" = true; or _run sudo -n paccache -ruk0; or set _pc_ok false
         if test "$_pc_ok" = true
             _phase_record "Finalize: pacman cache trim" PASS "paccache -rk2 + -ruk0 ($_reason)"
         else
-            _warn "pacman cache trim failed (paccache)"; _log "PACMAN_CACHE_TRIM_FAIL: tool=paccache"
-            _phase_record "Finalize: pacman cache trim" WARN "paccache failed"
+            set -l _w "failed (paccache)"; set -l _c "paccache failed"; set -l _k PACMAN_CACHE_TRIM_FAIL
+            test "$_pl" = true; and begin; set _w "not run (sudo cache lapsed)"; set _c "paccache not run (sudo cache lapsed)"; set _k PACMAN_CACHE_TRIM_LAPSE; end # sudo refused the first call
+            _warn "pacman cache trim $_w"; _log "$_k: tool=paccache"; _phase_record "Finalize: pacman cache trim" WARN "$_c"
         end
     else
         if _run sudo -n LC_ALL=C.UTF-8 pacman -Sc --noconfirm
             _phase_record "Finalize: pacman cache trim" PASS "pacman -Sc ($_reason)"
         else
-            _warn "pacman cache trim failed (pacman -Sc)"; _log "PACMAN_CACHE_TRIM_FAIL: tool=pacman-Sc"
-            _phase_record "Finalize: pacman cache trim" WARN "pacman -Sc failed"
+            set -l _w "failed (pacman -Sc)"; set -l _c "pacman -Sc failed"; set -l _k PACMAN_CACHE_TRIM_FAIL
+            string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _w "not run (sudo cache lapsed)"; set _c "pacman -Sc not run (sudo cache lapsed)"; set _k PACMAN_CACHE_TRIM_LAPSE; end # sudo refused it
+            _warn "pacman cache trim $_w"; _log "$_k: tool=pacman-Sc"; _phase_record "Finalize: pacman cache trim" WARN "$_c"
         end
     end
     return 0
@@ -3147,8 +3188,10 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
     end
     _info "NetworkManager will restart (D-Bus disconnect expected)"
     if not _run sudo -n systemctl restart -- NetworkManager.service
-        _warn "NetworkManager restart failed (will recover on reboot)"; _log "NM_RESTART_FAIL: context=finalize"
-        _phase_record "Finalize: NetworkManager restart" WARN "restart failed (will recover on reboot)"
+        set -l _why "restart failed (will recover on reboot)"; set -l _cell "restart failed (will recover on reboot)"; set -l _key NM_RESTART_FAIL
+        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "restart not run (sudo cache lapsed) — applies on reboot"; set _cell "not run (sudo cache lapsed); applies on reboot"; set _key NM_RESTART_LAPSE; end # sudo refused it
+        _warn "NetworkManager $_why"; _log "$_key: context=finalize"
+        _phase_record "Finalize: NetworkManager restart" WARN "$_cell"
     else
         _phase_record "Finalize: NetworkManager restart" PASS "restarted"
     end
@@ -3295,7 +3338,7 @@ end
 
 # ── INSTALL SUMMARY: FINAL VERDICT + MANUAL STEPS + DO-NOT-REBOOT GATE ──
 function _idf_boot_crit_banner --argument-names why --description "Forced DO-NOT-REBOOT recovery banner (full install, --install-file, signal teardown)"
-    set -q -g _RY_BOOT_TRIED; or _resolve_boot_path >/dev/null # step 2 depends on the ESP fallback: resolve it if no phase did
+    set -q -g _RY_BOOT_TRIED; or _resolve_boot_path >/dev/null; set -q -g _RY_ESP_TRIED; or _resolve_esp >/dev/null # steps read both
     set -l _head "DO NOT REBOOT — boot-critical failure (verdict: FAIL-BOOT-CRITICAL)"
     test "$MODE" = install-file; and set _head "DO NOT REBOOT — boot-critical failure (exit 4)" # --install-file prints no verdict
     test "$why" = interrupted; and set _head "DO NOT REBOOT — interrupted during the boot rebuild (initramfs or entries may be partial)"
@@ -3332,12 +3375,12 @@ function _rdi_summary --description "_ry_do_install sub: Matrix, then the DO NOT
     _log "INFO:   2. REBOOT to apply kernel cmdline and module changes" # the matrix Next line says it on screen
     set -l _post_uname (command getent passwd $_MY_UID 2>/dev/null | command head -n 1 | command awk -F: '{print $1}'); set -l _post_q (string escape -- "$_post_uname") # single resolve; quoted for the printed commands
     if command -q pacman; and command pacman -Qq realtime-privileges >/dev/null 2>&1
-        if test -n "$_post_uname"; and not contains -- realtime (command id -Gn -- "$_post_uname" 2>/dev/null | string split ' ')
+        if test -n "$_post_uname"; and not contains -- realtime (command id -Gn -- "$_post_uname" 2>/dev/null | string split -- ' ')
             _rdi_hint "Manual step: sudo usermod -aG realtime $_post_q (then log out and back in) — PipeWire RT scheduling"
         end
     end
     if command -q pacman; and command pacman -Qq ddcutil >/dev/null 2>&1
-        if test -n "$_post_uname"; and not contains -- i2c (command id -Gn -- "$_post_uname" 2>/dev/null | string split ' ')
+        if test -n "$_post_uname"; and not contains -- i2c (command id -Gn -- "$_post_uname" 2>/dev/null | string split -- ' ')
             _rdi_hint "Manual step: sudo usermod -aG i2c $_post_q (then log out and back in) — ddcutil monitor control"
         end
     end
@@ -3433,6 +3476,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     if contains -- "$_mdst" $_RY_BOOT_CRITICAL_DSTS # the cascade's ESP gates, before the write
         set -l _bp (_resolve_boot_path)
         if test -z "$_bp"; _err "Cannot resolve \$BOOT path — refusing to deploy $_mdst"; _log "INSTALL_FILE_BOOT_UNRESOLVED: target=$_mdst"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
+        if not _esp_layout_ok "$_bp"; _log "INSTALL_FILE_ESP_LAYOUT_REFUSED: target=$_mdst"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
         if not _sdboot_fallback_vfat_ok; _log "INSTALL_FILE_SDBOOT_REFUSED: target=$_mdst"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     end
     if test "$_if_tag" = boot # HOOKS/MODULES and disk space (preflight parity): refuse pre-write
@@ -3466,7 +3510,6 @@ function _pb_rebuild_cascade --argument-names target skip_mki --description "_po
     if test "$skip_mki" != true
         if not _run sudo -n mkinitcpio -P; _err "mkinitcpio failed"; _log "POST_BOOT_REBUILD_FAIL: step=mkinitcpio target=$target"; return $EXIT_BOOT_CRIT; end
     end
-    _resolve_boot_path >/dev/null # resolve ESP-fallback before the vfat gate (mirrors phase 5)
     if not _sdboot_fallback_vfat_ok; _log "POST_BOOT_SDBOOT_REFUSED: target=$target"; return $EXIT_BOOT_CRIT; end
     if not _run sudo -n sdboot-manage gen; _err "sdboot-manage gen failed"; _log "POST_BOOT_REBUILD_FAIL: step='sdboot-manage gen' target=$target"; return $EXIT_BOOT_CRIT; end
     if not _run sudo -n bootctl --graceful update; _err "bootctl update failed"; _log "POST_BOOT_REBUILD_FAIL: step='bootctl update' target=$target"; return $EXIT_BOOT_CRIT; end
@@ -3493,7 +3536,9 @@ function _post_loader --argument-names target --description "Post-hook: sdboot-m
 # ── POST-HOOKS: NON-BOOT LIVE-APPLY (SERVICE/CONFIG; FAILURES NON-FATAL, EXIT 0) ──
 function _post_resolved --argument-names target --description "Post-hook: restart systemd-resolved"
     if not _run sudo -n systemctl restart -- systemd-resolved.service
-        _warn "systemd-resolved restart failed — drop-in applies at next boot (non-fatal; file deployed)"; _log "POST_RESOLVED_RESTART_FAIL: target=$target"; return 0
+        set -l _why "restart failed"; set -l _key POST_RESOLVED_RESTART_FAIL
+        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "restart not run (sudo cache lapsed)"; set _key POST_RESOLVED_RESTART_LAPSE; end # sudo refused it
+        _warn "systemd-resolved $_why — drop-in applies at next boot (non-fatal; file deployed)"; _log "$_key: target=$target"; return 0
     end
     _ok "systemd-resolved restarted — drop-in applied"
     _pending_apply_drop "$target" # applied: a later run owes nothing
@@ -3510,7 +3555,7 @@ end
 function _post_nm --argument-names target --description "Post-hook: restart NetworkManager; deferred when Wi-Fi is active route"
     if not command -q NetworkManager
         _warn "NetworkManager config deployed but NetworkManager not installed — restart skipped; drop-in keys apply once installed or at next boot"
-        _log "POST_NM_SKIP_NO_NM: target=$target"; return 0
+        _log "POST_NM_SKIP_NO_NM: target=$target"; _pending_apply_drop "$target"; return 0
     end
     if _is_wifi_active_route
         _warn "NetworkManager config installed but restart deferred — Wi-Fi is the active route"
@@ -3521,7 +3566,9 @@ function _post_nm --argument-names target --description "Post-hook: restart Netw
     if _run sudo -n systemctl restart -- NetworkManager.service
         _ok "NetworkManager restarted — drop-in applied"; _pending_apply_drop "$target" # applied: a later run owes nothing
     else
-        _warn "NetworkManager restart failed — config applies on next reboot (non-fatal; file deployed)"; _log "POST_NM_RESTART_FAIL: target=$target"
+        set -l _why "restart failed"; set -l _key POST_NM_RESTART_FAIL
+        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "restart not run (sudo cache lapsed)"; set _key POST_NM_RESTART_LAPSE; end # sudo refused it
+        _warn "NetworkManager $_why — config applies on next reboot (non-fatal; file deployed)"; _log "$_key: target=$target"
     end
     return 0
 end
@@ -3533,7 +3580,9 @@ function _post_sysctl --argument-names target --description "Post-hook: apply sy
     _run sudo -n sysctl --system; set -l _sc_rc $status
     if test "$_sc_rc" -ne 0
         set -l _why "a sysctl.d key failed; the keys that loaded are live"; set -l _next "  Fix or drop the key sysctl rejected above, then: sudo sysctl --system"
-        if test "$_sc_rc" -eq "$EXIT_RUN_TMPFAIL"; or contains -- "$_sc_rc" 124 137; or not sudo -n true 2>/dev/null; set _why "it did not run or finish, so the tunables apply at next boot"; set _next "  Retry: sudo sysctl --system"; end # no capture dir, timeout, kill or sudo lapse
+        set -l _nr false; test "$_sc_rc" -eq "$EXIT_RUN_TMPFAIL"; or contains -- "$_sc_rc" 124 137; and set _nr true # no capture dir, timeout or kill
+        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _nr true # sudo refused it
+        test "$_nr" = true; and begin; set _why "it did not run or finish, so the tunables apply at next boot"; set _next "  Retry: sudo sysctl --system"; end
         _warn "sysctl --system failed (rc=$_sc_rc) — $_why (non-fatal; file deployed)"
         _info "$_next"; _log "POST_SYSCTL_APPLY_FAIL: target=$target rc=$_sc_rc"; return 0
     end
@@ -3598,7 +3647,7 @@ function _post_nft --argument-names target --description "Post-hook: validate, t
     end
     _run sudo -n nft -c -f /etc/nftables.conf; set -l _nc_rc $status
     if test "$_nc_rc" -eq "$EXIT_RUN_TMPFAIL" # _run made no capture dir: nft never ran
-        _warn "nft -c did not run (no capture tmpdir) — ruleset not reloaded; retry: sudo nft -c -f /etc/nftables.conf && sudo systemctl restart nftables.service"
+        _warn "nft -c did not run (no capture dir) — ruleset not reloaded; retry: sudo nft -c -f /etc/nftables.conf && sudo systemctl restart nftables.service"
         _log "POST_NFT_VALIDATE_NORUN: target=$target rc=$_nc_rc"; return 0
     end
     if contains -- "$_nc_rc" 124 137 # timeout(1) or a kill: no verdict on the ruleset
@@ -3648,7 +3697,7 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
     _resolve_systemd_ver
     if set -q _RY_SYSTEMD_VER; and test "$_RY_SYSTEMD_VER" -ge 254 # udevadm verify landed in v254
         _run sudo -n udevadm verify -- "$target"; set -l _uv_rc $status
-        if test "$_uv_rc" -eq "$EXIT_RUN_TMPFAIL"; or contains -- "$_uv_rc" 124 137; or begin; test "$_uv_rc" -ne 0; and not sudo -n true 2>/dev/null; end # no capture dir, timeout(1), a kill or a sudo lapse: no verdict
+        if test "$_uv_rc" -eq "$EXIT_RUN_TMPFAIL"; or contains -- "$_uv_rc" 124 137; or begin; test "$_uv_rc" -ne 0; and string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; end # no capture dir, timeout(1), a kill or a sudo lapse: no verdict
             _warn "udevadm verify gave no verdict for $target (rc=$_uv_rc) — not reloaded or re-triggered, but udevd re-reads changed rules on its next event; retry: sudo udevadm verify $target"
             _log "POST_UDEV_VERIFY_NORUN: target=$target rc=$_uv_rc"; return 0
         end

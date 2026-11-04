@@ -3,6 +3,77 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.260.0
+-------
+
+  - guard: fish_read_limit is pinned to 1 GiB, the fish 4 default; 100 MiB,
+    the fish 3 default, cut fish 4's limit tenfold
+  - signals: a signal-time mkinitcpio.conf revert skipped for a sudo lapse
+    counts its WARN in the footer tally
+  - configuration: a boot file the post-write check cannot read back with
+    sudo cached FAILs and restores its .ry.bak, as a mismatch does
+  - configuration: that restore copies the .ry.bak into the boot file's
+    directory, then renames it over the file; the .ry.bak stays
+  - configuration: the hand-restore hint after a lapsed backup probe copies
+    the .ry.bak (sudo cp), so it stays, rather than moving it
+  - configuration: an nft -c or a parent-dir mkdir that ran and failed as
+    the sudo ticket expired reads as failed, not as a lapse
+  - preflight: the ESP gate refuses an ESP not mounted at /boot, or an
+    XBOOTLDR $BOOT: systemd-boot reads loader.conf only from the ESP
+  - preflight: a sudo lapse at the ESP gate reads not checked (sudo cache
+    lapsed), not a wrong layout
+  - preflight: a /boot linked to the ESP gets the /boot free-space gate, not
+    the INFO that the / check covers it
+  - services: a package-preset unit the enable batch owned is reported once
+    when its start fails, not retried and counted again
+  - services: a resolved restart that sudo refused reads not run (sudo cache
+    lapsed); a lapsed preset start shows no Diagnose hint
+  - services: a start, enable or mask that ran and failed while the sudo
+    ticket expired reads as failed, not as a lapse
+  - services: the enable row reads enabled, not started for a unit whose
+    start failed or was refused
+  - boot: boot sanity also fails a linux entry with no initrd line, which
+    would boot its kernel without an initramfs
+  - boot: boot sanity names a sudo lapse once and fails without running the
+    probes after it; a failed listing says lapsed, missing or read error
+  - boot: boot sanity reads entries as systemd-boot does: the last linux
+    line counts, and auto-* entries are skipped
+  - boot: the non-vfat /boot fallback refusal reads fstype=none when /boot
+    is not a mount point
+  - finalize: a NetworkManager restart or pacman cache trim that sudo
+    refused reads not run (sudo cache lapsed), not failed
+  - install-file: a boot file's gates also refuse an ESP not mounted at
+    /boot or an XBOOTLDR $BOOT (exit 3)
+  - install-file: a NetworkManager drop-in deployed without NetworkManager
+    owes no restart in ~/ry-install/pending-apply
+  - install-file: a resolved or NetworkManager restart sudo refused reads
+    not run (sudo cache lapsed), as in a full install
+  - install-file: a sysctl --system or udevadm verify that ran and failed as
+    the sudo ticket expired reads as failed, not as a lapse
+  - summary: a boot step that sudo refused reads not run (sudo cache
+    lapsed), not rc=1
+  - logging: an invalid or clamped RY_RUN_TIMEOUT counts in the footer's
+    warn tally
+  - logging: a ~/ry-install dir moded to 0700 logs STATE_DIR_PERM_FIX; one
+    that stays wrong names the state tree in its ERR, not the log tree
+  - logging: an ESP layout refusal logs ESP_LAYOUT_REFUSED, with how the
+    ESP and $BOOT were found
+  - logging: sudo-refused steps log PRESET_START_LAPSE, NM_RESTART_LAPSE,
+    RESOLVED_RESTART_LAPSE or PACMAN_CACHE_TRIM_LAPSE, not a _FAIL key
+  - logging: refused post-hook restarts log POST_RESOLVED_RESTART_LAPSE or
+    POST_NM_RESTART_LAPSE; an ESP gate lapse logs ESP_LAYOUT_LAPSE
+  - logging: a lapsed read-back logs POSTWRITE_VERIFY_SKIP reason=read_lapse,
+    an unreadable one POSTWRITE_VERIFY_FAIL reason=unreadable
+  - logging: a mkinitcpio revert after the footer prints but logs nothing,
+    so the footer stays the last JSONL record
+  - consistency: an nft -c that _run cannot start reads no capture dir, as
+    the summary cell does
+  - readme: Exit Codes 3 names the ~/ry-install tree; Safety restores a boot
+    file that cannot be read back with sudo cached, as one that mismatches
+  - readme: Managed Files notes that loader.conf on the vfat ESP takes the
+    mode its mount sets
+
+
 7.258.0
 -------
 
@@ -54,10 +125,6 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     a reason, both content digests and, for reason=size, both byte counts
   - logging: POSTWRITE_RESTORE_STALE only when an older copy exists; an
     unmanaged nftables.service logs NFT_PRE_ENABLE_UNMANAGED
-  - readme: Install Flow names the ESP gate and non-empty entry files; Vulkan
-    says only a missing driver is a -Syu target
-  - readme: Install Flow says a failed preflight gate exits 3 with only the
-    checks that ran, and that a stopped NetworkManager is started
 
 
 7.246.0 - 7.257.1
@@ -724,4 +791,4 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.99.1 and earlier
 ------------------
 
-  - initial profile for the Beelink GTR9 Pro
+  - profile: initial profile for the Beelink GTR9 Pro

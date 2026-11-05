@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.260.0** · [Changelog](CHANGELOG.md)
+**Version 7.261.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -41,12 +41,14 @@ Each run that passes argument parsing writes one JSONL log (`0600`) to `~/ry-ins
 
 Per-step results (one summary row each):
 
-- `PASS` — completed its work.
-- `WARN` — hit something non-fatal and kept exit `0`.
-- `FAIL` — did not complete.
-- `DEFER` — applies at next boot.
-- `SKIP` — the step did not run: nothing to do, a precondition absent, held, or aborted.
-- `--` — not applicable, tallied as `N/A` in Totals.
+| Result | Meaning |
+|---|---|
+| `PASS` | completed its work |
+| `WARN` | hit something non-fatal and kept exit `0` |
+| `FAIL` | did not complete |
+| `DEFER` | applies at next boot |
+| `SKIP` | did not run: nothing to do, a precondition absent, held, or aborted |
+| `--` | not applicable, tallied as `N/A` in Totals |
 
 ## Exit Codes
 
@@ -54,8 +56,8 @@ Per-step results (one summary row each):
 |---|---|
 | `0` | OK — success and `WARN`-only runs |
 | `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout full, or closed under fish 3) |
-| `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, root misuse |
-| `3` | missing dependency, uncached sudo that no TTY prompt resolved, a failed gate (hardware, root UUID, systemd, disk, network, pacman lock, ESP), a fish universal variable named like internal state, fish's `regex-easyesc` feature turned off, failed config validation, or an unusable HOME, `~/ry-install` tree or `/tmp` |
+| `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, or root misuse |
+| `3` | missing dependency, uncached sudo that no TTY prompt resolved, a failed gate (hardware, root UUID, systemd, disk, network, pacman lock, ESP), a fish universal variable named like internal state, fish's `regex-easyesc` feature turned off, failed config validation, or an unusable HOME, `~/ry-install` tree, or `/tmp` |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
 | `5` | lock — another live instance holds the lock; a stale pidfile is reclaimed, an ambiguous one fails closed |
 
@@ -105,7 +107,7 @@ In deploy order; system files land `0644`, user files `0600`; `loader.conf` on t
 3. **Configuration** — deploy 18 embedded configs atomically.
 4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (`ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next full run stops it) → enable (a unit not installed, or one that enables but fails to start, is a `WARN`; `NetworkManager.service` keeps its package preset and is started when it is not running) → regulatory domain.
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `bootctl --graceful update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` present as non-empty files inside `$BOOT`.
-6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, WirePlumber restart, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, as does a NetworkManager restart deferred because Wi-Fi carries the default route, or an `--install-file` systemd-resolved, NetworkManager or WirePlumber restart or PowerDevil re-apply that fails or finds no user bus; the next full run applies them unless a reboot already has, and defers that restart again while Wi-Fi still carries the route.
+6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, WirePlumber restart, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, as does a NetworkManager restart deferred because Wi-Fi carries the default route, or an `--install-file` systemd-resolved, NetworkManager, or WirePlumber restart or PowerDevil re-apply that fails or finds no user bus; the next full run applies them unless a reboot already has, and defers that restart again while Wi-Fi still carries the route.
 
 ## Safety and Reliability
 
@@ -124,7 +126,7 @@ In deploy order; system files land `0644`, user files `0600`; `loader.conf` on t
 
 All tunables are `set -g` globals; after editing both scripts, re-run or `--install-file` the affected file.
 
-The length of each array among the shared tunables is a drift tripwire in `_ir_validate_counts` of both scripts — `KERNEL_PARAMS:15` among them; the accepted-value sets `_RY_DPM_LEVELS`, `_RY_EPP_LEVELS` and `_RY_BLUEZ_ROLES` carry no pin, and an array only one script carries, such as `_RY_PKG_MANAGED_SERVICES` here, is pinned in that script alone. Adding or dropping an element also means updating that `NAME:<n>` in each script that pins it; otherwise that script refuses to run with `NAME count drift` and exits `3`. Update any count this README quotes too, such as the 15 kernel tokens in [Managed Files](#managed-files).
+The length of each array among the shared tunables is a drift tripwire in `_ir_validate_counts` of both scripts — `KERNEL_PARAMS:15` among them; the accepted-value sets `_RY_DPM_LEVELS`, `_RY_EPP_LEVELS`, and `_RY_BLUEZ_ROLES` carry no pin, and an array only one script carries, such as `_RY_PKG_MANAGED_SERVICES` here, is pinned in that script alone. Adding or dropping an element also means updating that `NAME:<n>` in each script that pins it; otherwise that script refuses to run with `NAME count drift` and exits `3`. Update any count this README quotes too, such as the 15 kernel tokens in [Managed Files](#managed-files).
 
 ### Bootloader Keys
 
@@ -235,7 +237,7 @@ Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cl
 ### Gaming Stack
 
 - `/dev/ntsync` — Proton reads it directly; `PROTON_NO_NTSYNC=1` opts out.
-- `PROTON_FSR4_UPGRADE=1` — the Proton-CachyOS lever that upgrades FSR 3.1 titles to FSR 4; set it per title in the Steam launch options, never session-wide; a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.0` (`4.0.0` or `4.1.1`; more only through OptiScaler). `PROTON_FSR4_INDICATOR=1` draws only the watermark and is not shipped.
+- `PROTON_FSR4_UPGRADE=1` — the proton-cachyos lever that upgrades FSR 3.1 titles to FSR 4; set it per title in the Steam launch options, never session-wide; a version can be pinned as `PROTON_FSR4_UPGRADE=4.0.0` (`4.0.0` or `4.1.1`; more only through OptiScaler). `PROTON_FSR4_INDICATOR=1` draws only the watermark and is not shipped.
 - `cpu_stats` ships enabled; `cpu_temp` stays commented out — to turn it on, add it on its own line in the MangoHud generator of both scripts and in ry-verify's `_verify_static_user` directive list, then `--install-file` the file. `cpu_custom_temp_sensor` is inert: MangoHud reads `apu_cpu_temp` from `gpu_metrics` first. Zen 5 `cpu_power` is open upstream ([MangoHud #1794](https://github.com/flightlessmango/MangoHud/issues/1794)).
 - `game-performance` — the CachyOS wrapper needs `power-profiles-daemon`, whose service this profile masks, so it runs the game unchanged; the profile pins the `powersave` governor with EPP `performance` instead.
 

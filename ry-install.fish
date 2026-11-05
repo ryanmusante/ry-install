@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.260.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.261.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.260.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.261.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -611,7 +611,7 @@ set -g _RY_PKG_MANAGED_SERVICES NetworkManager.service
 set -g BOOT_SPACE_CRIT 200; set -g BOOT_SPACE_WARN 500; set -g ROOT_AVAIL_CRIT 2; set -g ROOT_AVAIL_WARN 5 # disk thresholds: /boot MiB, / GiB
 set -g EXPECTED_CPU_MATCH "Ryzen AI Max"
 
-# ── RUNTIME INIT: ROOT UUID + INVARIANT VALIDATION + CACHE PRECOMPUTE ──
+# ── RUNTIME INIT: ROOT UUID + CACHE PRECOMPUTE ──
 function _ir_resolve_root_uuid --description "Cache root UUID into _ROOT_UUID"
     set -g _ROOT_UUID; set -l _fm_rc 127 # probe first: fish prints its own not-found error past 2>/dev/null
     command -q findmnt; and begin; set -g _ROOT_UUID (command findmnt -f -no UUID / 2>/dev/null); set _fm_rc $status; end
@@ -655,6 +655,8 @@ function _ir_precompute_caches --description "Precompute tmpdir / Wi-Fi-backend 
     set -l _usr_in (count $USER_DESTINATIONS); set -l _usr_out (count $_RY_CANON_USER_DSTS)
     if test "$_usr_in" -ne "$_usr_out"; _err_loud "BUG: _RY_CANON_USER_DSTS count drift: in=$_usr_in out=$_usr_out"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
 end
+
+# ── RUNTIME INIT: INVARIANT VALIDATION ──
 function _ir_validate_counts --description "Refuse to deploy when array counts drift from expected"
     set -l _expect \
         KERNEL_PARAMS:15 \
@@ -2123,7 +2125,7 @@ function _ip_snapshot_settle --description "_install_packages sub: Keep the mkin
     sudo -n rmdir /run/ry-install 2>/dev/null # reclaim empty snapshot dir
 end
 
-# ── INSTALL PHASE 2: PACKAGES (PACMAN -SYU + CONFLICT SWAP + MARK EXPLICIT + VERIFY) ──
+# ── INSTALL PHASE 2: PACKAGES (CONFLICT HOLDS + SWAP + RESULT PREDICATES + SEED REVERT) ──
 function _ip_conflict_held --description "_ip_pacman_invoke sub: Members missing by name that conflict either way with installed packages"
     set -l _have (command pacman -Qq 2>/dev/null) # names: pacman -Q NAME falls back to a provider
     set -l _theirs (command env LC_ALL=C COLUMNS=0 pacman -Qi 2>/dev/null | string match -rg -- '^Conflicts With\s*:\s*(.*\S)' | string split -n -- ' ' | string replace -r -- '[<>=].*$' '' | string match -v -- None) # COLUMNS=0: no wrapped list lines
@@ -2183,6 +2185,8 @@ function _ip_seed_revert --description "_ip_pacman_invoke and _install_packages 
     test "$_RY_MKI_HAD_ORIG" = true; and test -n "$_RY_MKI_BACKUP_FILE"; or return 0
     if not _mkinitcpio_revert "$_RY_MKI_BACKUP_FILE"; set -g _RY_MKI_REVERT_FAILED true; _boot_refuse_mark; _err_cont "mkinitcpio revert failed — boot state may be inconsistent; aborting"; else; set -g _RY_MKI_REVERTED true; end # reverted: phase 3 must not redeploy over the rollback
 end
+
+# ── INSTALL PHASE 2: PACKAGES (pacman -Syu PASSES + -Syyu RETRY) ──
 function _ip_syu_pass --description "_ip_pacman_invoke sub: Run -Syu; again while a failure names a conflict a missing member pulls"
     for _n in (seq (math (count $_RY_PKG_ALL) + 1)) # every re-pass holds at least one more member: bounded
         set -l _tx (for _p in $_RY_PKG_ALL; contains -- "$_p" $_RY_PKG_HELD; or echo $_p; end) # this pass's members
@@ -2242,6 +2246,8 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
     end
     return 0
 end
+
+# ── INSTALL PHASE 2: PACKAGES (MARK EXPLICIT + VERIFY + ORCHESTRATOR) ──
 function _mark_pkgs_add_explicit --description "Re-mark installed PKGS_ADD explicit so -Rns cannot orphan them"
     test "$_RY_ADD_EXPLICIT_OK" = true; and return 0 # -D idempotent: one success per run
     if test -f /var/lib/pacman/db.lck; _log "PKG_ASEXPLICIT_SKIP: pacman db locked"; return 1; end
@@ -3108,7 +3114,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     _phase_record "Boot: post-rebuild sanity" PASS "vmlinuz+initramfs+entries OK"; return 0
 end
 
-# ── INSTALL PHASE 6: FINALIZE (USER RELOAD + RESTARTS, PACCACHE, NM RESTART, PENDING-APPLY) ──
+# ── INSTALL PHASE 6: FINALIZE (PACCACHE TRIM + PENDING-APPLY LEDGER) ──
 function _if_trim_pacman_cache --description "Trim pacman cache: paccache -rk2 then -ruk0, else pacman -Sc"
     set -l _upgraded false; set -l _removed_n 0; set -q SYSTEM_UPGRADED; and test "$SYSTEM_UPGRADED" = true; and set _upgraded true
     set -q _RY_PKGS_REMOVED_COUNT; and set _removed_n $_RY_PKGS_REMOVED_COUNT
@@ -3170,6 +3176,8 @@ function _pending_apply_drop --argument-names dst --description "Strike an entry
     end
     command rm -f -- "$_RY_HOME_DIR/pending-apply" 2>/dev/null; and _log "PENDING_APPLY_DROPPED: $dst (nothing left owed)"; or _log "PENDING_APPLY_CLEAR_FAIL: $_RY_HOME_DIR/pending-apply"; return 0
 end
+
+# ── INSTALL PHASE 6: FINALIZE (NM + WIREPLUMBER RESTARTS + ORCHESTRATOR) ──
 function _if_nm_restart --description "Restart NetworkManager so the deployed wifi.backend/powersave drop-in applies"
     if test "$_RY_PROFILE_USES_WIFI_BACKEND" = false; _info "NetworkManager not managed — skipping NM restart"; _phase_record "Finalize: NetworkManager restart" SKIP "NM backend not active"; return 0; end
     if not contains -- /etc/NetworkManager/conf.d/99-cachyos-nm.conf $argv # unchanged bytes, none owed: no reconnect blip on idempotent re-runs
@@ -3412,7 +3420,7 @@ function _ry_do_install --description "Full installation: preflight, packages, c
     return $EXIT_OK
 end
 
-# ── --INSTALL-FILE: DISPATCH TABLE + ORCHESTRATOR ──
+# ── --install-file: DISPATCH TABLE + ORCHESTRATOR ──
 set -g _RY_POST_HOOKS \
     "/boot/loader/loader.conf|loader" "/etc/kernel/cmdline|cmdline" "/etc/sdboot-manage.conf|boot" "/etc/mkinitcpio.conf|boot" \
     "*/resolved.conf.d/*|resolved" "*/logind.conf.d/*|logind" "*/NetworkManager-dispatcher.service.d/*|nmdispatch" "*/NetworkManager/conf.d/*|nm" \

@@ -3,13 +3,23 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.262.0
+7.264.0
 -------
 
-  - changelog: fold the previous two releases into the range; trim bullets
+  - guard: an inherited fish_read_limit of a few bytes no longer prints a fish
+    error at startup or lets a piped run past its refusal
+  - guard: a fish universal named _RPT_* no longer exits 3; ry-verify's report
+    state is gone
+  - cli: --install-file given --report as its value reads got flag, like any
+    other dash value; ry-verify dropped that flag
+  - consistency: messages and log lines read user bus, not user-bus, as the
+    README does; the DEPLOY_HELD log line reads re-deploy
+  - consistency: the lock pidfile write and install errors read pidfile, as
+    the other lock errors and log keys do
+  - changelog: fold the previous release into the range
 
 
-7.246.0 - 7.261.0
+7.246.0 - 7.262.0
 -----------------
 
   - env: 7.248.0 SDL_GAMECONTROLLER_IGNORE_DEVICES gains 0x3434/0x0b00 (Q0 HE)
@@ -19,7 +29,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - configuration: 7.250.0 a managed symlink behind a directory this user
     cannot traverse is replaced; its target is never chmodded
   - configuration: 7.251.0 the 60-ry-modules.conf header no longer claims
-    module options; an existing install redeploys it once
+    module options; an existing install re-deploys it once
   - configuration: 7.252.0 a sudo lapse before the atomic move FAILs the file,
     not an [ERR] line; 7.257.0 one before the temp copy is named in the FAIL
   - configuration: 7.254.0 an nft -c that could not run refuses the deploy as
@@ -244,10 +254,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     whose start failed or was refused
   - boot: 7.250.0 an empty loader entries directory no longer adds
     sdboot-manage gen or LINUX_OPTIONS hints before the banner
-  - boot: 7.250.0 - 7.252.0 an ESP-fallback host's DO NOT REBOOT banner says
-    to check the ESP and re-run, even mid-pacman, never sdboot-manage gen
   - boot: 7.250.0 the loader-entry boundary check resolves symlinks as root,
     catching an entry that escapes a 0700 $BOOT through a link
+  - boot: 7.250.0 - 7.252.0 an ESP-fallback host's DO NOT REBOOT banner says
+    to check the ESP and re-run, even mid-pacman, never sdboot-manage gen
   - boot: 7.252.0 the EFI refresh runs bootctl --graceful update and fails on
     its error; 7.254.0 the DO NOT REBOOT rebuild step prints it too
   - boot: 7.255.0 the DO NOT REBOOT inspect step quotes $BOOT, so a mount path
@@ -297,7 +307,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - install-file: 7.254.0 - 7.255.0 a changed file prints one OK, a failed
     write one FAIL; the nm-dispatcher apply confirms with an OK too
   - install-file: 7.255.0 a HOME under /etc or /boot no longer reads the user
-    files via sudo, so a lapsed cache no longer redeploys them
+    files via sudo, so a lapsed cache no longer re-deploys them
   - install-file: 7.255.0 a boot file runs the dependency and ESP gates before
     the write: a missing bootctl or unmounted ESP exits 3, not 4 after it
   - install-file: 7.256.0 the bluez5.roles drop-in try-restarts

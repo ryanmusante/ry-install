@@ -1,13 +1,13 @@
 #!/usr/bin/env fish
-# ry-install v7.262.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
-if begin; set -lx LC_ALL C; string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$' (status filename); or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
+# ry-install v7.264.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.262.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.264.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
-set -l _ry_irx '^_(?:(?:RY|PROG|RPT|KCONFIG)_[A-Z0-9_]*|flag_[A-Za-z0-9_]+|CLEANUP_DONE|FOOTER_WRITTEN|INTENDED_EXIT_CODE|TRACKED_TMPFILES|SYS_TMP_DIRS|USR_TMP_DIRS|ROOT_UUID|MY_UID|ORIG_ARGV)$' # internal names, argparse _flag_* included
+set -l _ry_irx '^_(?:(?:RY|PROG|KCONFIG)_[A-Z0-9_]*|flag_[A-Za-z0-9_]+|CLEANUP_DONE|FOOTER_WRITTEN|INTENDED_EXIT_CODE|TRACKED_TMPFILES|SYS_TMP_DIRS|USR_TMP_DIRS|ROOT_UUID|MY_UID|ORIG_ARGV)$' # internal names, argparse _flag_* included
 for _iv in (set -g -n | string match -r -- $_ry_irx); set --erase -g $_iv; end; set --erase _iv # inherited internal state never steers a run
 set -g QUIET true; set -g MODE bootstrap; set -gu LOG_FILE ""; set -gu LOG_DIR ""; set -gu _RY_BACKUP_DIR ""; set -gu _RY_HOME_NEW false; set -gu _RY_LOGROOT_NEW false; set -gu _RY_LOGDIR_NEW false # pinned pre-argparse (signal footers); inherited paths never ours
 set -gu LOCK_DIR ""; set -gu LOCK_FILE "" # inherited lock paths never ours: cleanup tests -n
@@ -298,11 +298,11 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     set -l _pid_tmp (command mktemp -p "$LOCK_DIR" .pid.XXXXXX 2>/dev/null)
     if test -z "$_pid_tmp"; or not printf '%s\n' "$_RY_LOCK_REC" >"$_pid_tmp" 2>/dev/null
         test -n "$_pid_tmp"; and command rm -f -- "$_pid_tmp" 2>/dev/null; command rmdir -- "$LOCK_DIR" 2>/dev/null; set --erase _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
-        _log "LOCK_PIDFILE_WRITE_FAIL: $LOCK_FILE"; echo "[ERR] Failed to write lock pid file: $LOCK_FILE" >&2; return 1
+        _log "LOCK_PIDFILE_WRITE_FAIL: $LOCK_FILE"; echo "[ERR] Failed to write lock pidfile: $LOCK_FILE" >&2; return 1
     end
     if not command ln -T -- "$_pid_tmp" "$LOCK_FILE" 2>/dev/null # link(2) never replaces: only one of two writers installs a pidfile
         command rm -f -- "$_pid_tmp" 2>/dev/null; command rmdir -- "$LOCK_DIR" 2>/dev/null; set --erase _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK
-        _log "LOCK_PIDFILE_INSTALL_FAIL: $LOCK_FILE"; echo "[ERR] Failed to install lock pid file: $LOCK_FILE" >&2; return 1
+        _log "LOCK_PIDFILE_INSTALL_FAIL: $LOCK_FILE"; echo "[ERR] Failed to install lock pidfile: $LOCK_FILE" >&2; return 1
     end
     command rm -f -- "$_pid_tmp" 2>/dev/null; command chmod -- 600 "$LOCK_FILE" 2>/dev/null
     set -l _own_pid (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --) # read-back belt
@@ -346,7 +346,7 @@ function _acquire_lock --description "Acquire instance lock"
     test "$_fresh_rc" -ne 2; and return 1
     for _reclaim_attempt in 1 2 3 # bounded stale-reclaim
         set -l _rec (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
-        if not string match -qr '^[1-9]\d*( \S+)?$' -- "$_rec" # no PID record: settle then recheck
+        if not string match -qr '^[1-9]\d*( \S+)?$' -- "$_rec" # no PID record: settle then re-check
             command sleep 0.2 </dev/null 2>/dev/null; set _rec (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
         end
         if test -z "$_rec"; and not test -e "$LOCK_DIR"; and not test -L "$LOCK_DIR"; _acquire_lock_fresh; set -l _g_rc $status; test "$_g_rc" -eq 0; and return 0; test "$_g_rc" -eq 2; and continue; return 1; end # holder released mid-pass: retry the mkdir
@@ -585,7 +585,7 @@ set -g CPUPOWER_GOVERNOR powersave # CPPC floor at min; EPP performance steers t
 set -g BT_AUTO_ENABLE true; set -g BT_FAST_CONNECTABLE true; set -g BT_RECONNECT_ATTEMPTS 3 # adapter auto-power-on; paired-sink reconnect retries
 set -g WP_BLUEZ_ROLES a2dp_sink a2dp_source bap_sink bap_source # WirePlumber bluez5.roles; no hfp_*/hsp_*: no headset profile
 set -g _RY_BLUEZ_ROLES hsp_hs hsp_ag hfp_hf hfp_ag a2dp_sink a2dp_source bap_sink bap_source bap_bcast_sink bap_bcast_source asha_sink # role names PipeWire parses
-set -g GPU_DPM_LEVEL high # gfx1151 dpm; high pins clocks, gating stays active
+set -g GPU_DPM_LEVEL high # gfx1151 DPM; high pins clocks, gating stays active
 set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set
 set -g EPP_PREFERENCE performance; set -g _RY_EPP_LEVELS default performance balance_performance balance_power power # accepted set; udev-pinned per CPU; blocked if dynamic_epp on
 set -g BLACKLIST_AMDXDNA false # false + iommu=pt enables the NPU
@@ -1242,8 +1242,7 @@ end
 function _progress_done --description "Finalize progress bar and log elapsed seconds"
     set -l _now (_progress_now); set -l elapsed (math $_now - $_PROG_START)
     test -n "$_PROG_STEP_NAME"; and _log "PROG_STEP_END: name=$_PROG_STEP_NAME secs="(math $_now - $_PROG_STEP_START)
-    set -l _skip false; set -q _PROG_FINALIZED_SKIP; and test "$_PROG_FINALIZED_SKIP" = true; and set _skip true
-    _log "PROG_DONE: elapsed_secs=$elapsed skip=$_skip"
+    set -l _skip false; set -q _PROG_FINALIZED_SKIP; and test "$_PROG_FINALIZED_SKIP" = true; and set _skip true; _log "PROG_DONE: elapsed_secs=$elapsed skip=$_skip"
     set -q _RY_OUTPUT_BROKEN; and set -g _PROG_PINNED false # stderr consumer gone: skip terminal writes
     test "$_PROG_PINNED" = true; or return 0
     set -g _PROG_PINNED closing # not true: a WINCH must not re-pin, a teardown still resets
@@ -1980,7 +1979,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     test "$_aw_rc" -eq 0; and set -g _RY_DEPLOY_CHANGED_COUNT (math $_RY_DEPLOY_CHANGED_COUNT + 1); and set -ga _RY_DEPLOY_CHANGED_DSTS "$dst"; return $_aw_rc
 end
 
-# ── MISC HELPERS: WIFI ROUTE, USER-BUS + USER UNITS, SUDO BANNER ──
+# ── MISC HELPERS: WI-FI ROUTE, USER BUS + USER UNITS, SUDO BANNER ──
 function _is_wifi_active_route --description "True if default route exits via wireless interface"
     command -q ip; or return 1
     set -l _def_iface ""
@@ -2183,7 +2182,7 @@ function _pacman_nocommit --argument-names rc --description "True when a failed 
 end
 function _ip_seed_revert --description "_ip_pacman_invoke and _install_packages sub: Restore the pre-seed mkinitcpio.conf"
     test "$_RY_MKI_HAD_ORIG" = true; and test -n "$_RY_MKI_BACKUP_FILE"; or return 0
-    if not _mkinitcpio_revert "$_RY_MKI_BACKUP_FILE"; set -g _RY_MKI_REVERT_FAILED true; _boot_refuse_mark; _err_cont "mkinitcpio revert failed — boot state may be inconsistent; aborting"; else; set -g _RY_MKI_REVERTED true; end # reverted: phase 3 must not redeploy over the rollback
+    if not _mkinitcpio_revert "$_RY_MKI_BACKUP_FILE"; set -g _RY_MKI_REVERT_FAILED true; _boot_refuse_mark; _err_cont "mkinitcpio revert failed — boot state may be inconsistent; aborting"; else; set -g _RY_MKI_REVERTED true; end # reverted: phase 3 must not re-deploy over the rollback
 end
 
 # ── INSTALL PHASE 2: PACKAGES (pacman -Syu PASSES + -Syyu RETRY) ──
@@ -2322,7 +2321,7 @@ function _isf_deploy_set --argument-names use_sudo phase --description "Deploy a
     for dst in $argv[3..]
         if test "$dst" = /etc/mkinitcpio.conf; and test "$_RY_MKI_REVERTED" = true
             _msg_nocount WARN "  /etc/mkinitcpio.conf held at pre-install content — -Syu failed or was skipped (pacman db locked, seed deploy failed), so the seed was rolled back or never landed (re-run once pacman succeeds)" # the failure's ERR counted, and any restore WARN
-            _log "DEPLOY_HELD: /etc/mkinitcpio.conf (MKINITCPIO_REVERT_OK or _NOOP this run; a redeploy would land the seed without -Syu)"; continue
+            _log "DEPLOY_HELD: /etc/mkinitcpio.conf (MKINITCPIO_REVERT_OK or _NOOP this run; a re-deploy would land the seed without -Syu)"; continue
         end
         if not _ry_install_file "$dst" $use_sudo # an owed apply is on file before its bytes land
             set _had_failure true; contains -- "$dst" $_RY_BOOT_CRITICAL_DSTS; and _taint
@@ -2348,8 +2347,7 @@ function _fstab_needs_change --description "Scan ext4 entries for missing noatim
         if string match -qr '^[0-9]+$' -- "$opts_field"
             _log "FSTAB_SKIP_MALFORMED: digits-only opts field (likely absent options column): $line"; set -ga _RY_FSTAB_MALFORMED "$line"
             if test "$_malformed_warned" = false
-                _warn "  /etc/fstab: ext4 entry with a digits-only options field (column absent?) — left untouched; review manually: $line"
-                set _malformed_warned true
+                _warn "  /etc/fstab: ext4 entry with a digits-only options field (column absent?) — left untouched; review manually: $line"; set _malformed_warned true
             end
             continue
         end
@@ -2739,8 +2737,7 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
         _phase_record "Services: mask units" $_res "masked $_mask_count unit(s)$_held"; return 0
     end
     _msg_nocount WARN "Batch mask failed — retrying individually to identify failures" # each unit the retry fails counts
-    _log "MASK_BATCH_FAIL: $_to_mask"
-    _csm_retry_individual $_to_mask; set -l _rc $status
+    _log "MASK_BATCH_FAIL: $_to_mask"; _csm_retry_individual $_to_mask; set -l _rc $status
     if test "$_rc" -eq 0; and test (count $_RY_MASK_STOP_FAILS) -gt 0
         _phase_record "Services: mask units" WARN "masked$_held; stop failed: $_RY_MASK_STOP_FAILS" # the note leads: 50-column cell
     else if test "$_rc" -eq 0
@@ -2773,8 +2770,7 @@ function _cse_batch_enable --description "Batch enable system units"
     test (count $argv) -eq 0; and return 0
     _run sudo -n systemctl enable --now -- $argv; and return 0
     _msg_nocount WARN "Batch enable failed — retrying individually to identify failures" # each unit the retry fails counts
-    _log "ENABLE_BATCH_FAIL: $argv"
-    set -l _ret 0
+    _log "ENABLE_BATCH_FAIL: $argv"; set -l _ret 0
     for _unit in $argv
         if _run sudo -n systemctl enable --now -- $_unit
             _ok "Enabled: $_unit"
@@ -3151,7 +3147,7 @@ function _pending_apply_load --description "Emit the applies an earlier run of t
     printf '%s\n' $_pa[2..]; return 0
 end
 function _pending_apply_write --description "Write the boot-stamped owed list via tee (save, drop, Finalize)"
-    set -l _b (command cat -- /proc/sys/kernel/random/boot_id 2>/dev/null | string trim --) # boot-stamped: NM and the user session reread the files at boot
+    set -l _b (command cat -- /proc/sys/kernel/random/boot_id 2>/dev/null | string trim --) # boot-stamped: NM and the user session re-read the files at boot
     printf '%s\n' "boot $_b" $argv | command tee -- "$_RY_HOME_DIR/pending-apply" >/dev/null 2>/dev/null # tee: fish prints its own redirection errors past 2>/dev/null
     test "$pipestatus[2]" -eq 0
 end
@@ -3212,8 +3208,8 @@ function _if_wireplumber_restart --description "Try-restart WirePlumber so a cha
         _phase_record "Finalize: WirePlumber restart" SKIP "bluez5.roles unchanged (no restart pending)"; return 0
     end
     if not _has_user_bus_active
-        _info "Skipping WirePlumber restart (no active user-bus) — bluez5.roles applies at next graphical login"; _log "WIREPLUMBER_RESTART_SKIP: no active user-bus"
-        _phase_record "Finalize: WirePlumber restart" SKIP "no active user-bus (applies at next login)"; return 0
+        _info "Skipping WirePlumber restart (no active user bus) — bluez5.roles applies at next graphical login"; _log "WIREPLUMBER_RESTART_SKIP: no active user bus"
+        _phase_record "Finalize: WirePlumber restart" SKIP "no active user bus (applies at next login)"; return 0
     end
     if not _has_wireplumber
         _log "WIREPLUMBER_RESTART_SKIP: wireplumber.service not installed"; _phase_record "Finalize: WirePlumber restart" SKIP "wireplumber.service not installed"
@@ -3233,7 +3229,7 @@ function _install_finalize --description "Finalize: user reload, PowerDevil re-a
     set -l _pd_res SKIP; set -l _pd_ev "environment.d unchanged (no restart pending)" # one row per run, like the restart siblings
     if _has_user_bus_active
         if _run systemctl --user daemon-reload
-            _phase_record "Finalize: systemctl --user reload" PASS "user-bus active"
+            _phase_record "Finalize: systemctl --user reload" PASS "user bus active"
             if contains -- "$HOME/.config/environment.d/10-environment.conf" $_apply # reload re-ran env generators — re-apply to PowerDevil
                 if not _has_powerdevil
                     set _pd_ev "plasma-powerdevil.service not installed"
@@ -3249,8 +3245,8 @@ function _install_finalize --description "Finalize: user reload, PowerDevil re-a
             _phase_record "Finalize: systemctl --user reload" WARN "daemon-reload failed (non-fatal)"; set _pd_ev "user daemon-reload failed"
         end
     else
-        _info "Skipping systemctl --user daemon-reload (no active user-bus — log in graphically or enable-linger)"; _log "USER_DAEMON_RELOAD_SKIP: no active user-bus"
-        _phase_record "Finalize: systemctl --user reload" SKIP "no active user-bus"; set _pd_ev "no active user-bus"
+        _info "Skipping systemctl --user daemon-reload (no active user bus — log in graphically or enable-linger)"; _log "USER_DAEMON_RELOAD_SKIP: no active user bus"
+        _phase_record "Finalize: systemctl --user reload" SKIP "no active user bus"; set _pd_ev "no active user bus"
     end
     _phase_record "Finalize: PowerDevil env re-apply" $_pd_res "$_pd_ev"; _if_wireplumber_restart $_apply; _if_trim_pacman_cache; _if_nm_restart $_apply
     if set -q _RY_NM_RESTART_DEFERRED # deferred over Wi-Fi: a re-run this boot still owes the restart
@@ -3445,7 +3441,7 @@ end
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path" # index mirror of SYSTEM_ + USER_DESTINATIONS
     set -l _i (contains -i -- "$target" $SYSTEM_DESTINATIONS $USER_DESTINATIONS); or return 1
     set -l _parts (string split -m1 '|' -- "$_RY_POST_HOOKS[$_i]")
-    string match -q "$_parts[1]" -- "$target"; or return 1 # the validator's mirror, rechecked
+    string match -q "$_parts[1]" -- "$target"; or return 1 # the validator's mirror, re-checked
     echo "$_parts[2]"
 end
 function _idf_use_sudo_for_dst --argument-names target --description "Resolve managed-dst membership + emit sudo flag (true=system, false=user, empty=not-managed)"
@@ -3604,7 +3600,7 @@ function _post_envd --argument-names target --description "Post-hook: env-genera
     _info "environment.d $target changed — log out and back in (or restart the user session) to apply session-wide"
     _info "  Active systemd --user services retain the old environment until restarted"
     if not _has_user_bus_active
-        _info "  No active user-bus — POWERDEVIL_NO_DDCUTIL applies at next graphical login"; _log "POST_ENVD_SKIP: no active user-bus target=$target"; return 0
+        _info "  No active user bus — POWERDEVIL_NO_DDCUTIL applies at next graphical login"; _log "POST_ENVD_SKIP: no active user bus target=$target"; return 0
     end
     if not _run systemctl --user daemon-reload # re-runs systemd.environment-generator(7)
         _warn "systemctl --user daemon-reload failed — environment.d applies at next login (non-fatal; file deployed)"; _log "POST_ENVD_RELOAD_FAIL: target=$target"
@@ -3621,7 +3617,7 @@ function _post_envd --argument-names target --description "Post-hook: env-genera
 end
 function _post_wireplumber --argument-names target --description "Post-hook: try-restart wireplumber.service so the bluez5.roles drop-in applies"
     if not _has_user_bus_active
-        _info "No active user-bus — bluez5.roles applies at next graphical login"; _log "POST_WIREPLUMBER_SKIP: no active user-bus target=$target"; return 0
+        _info "No active user bus — bluez5.roles applies at next graphical login"; _log "POST_WIREPLUMBER_SKIP: no active user bus target=$target"; return 0
     end
     if not _has_wireplumber
         _info "wireplumber.service not installed — bluez5.roles applies once WirePlumber runs"; _log "POST_WIREPLUMBER_SKIP: no wireplumber.service target=$target"
@@ -3761,7 +3757,7 @@ if set -q _flag_install_file
     test -z "$_if_val"; and _early_usage_exit "--install-file requires a non-empty absolute path"
     if string match -qr -- '[\x00-\x1f\x7f-\x9f\x{f680}-\x{f6ff}]' "$_if_val"; _early_usage_exit "--install-file path contains a control character or a non-UTF-8 byte — refusing (no managed path has one)"; end
     if not string match -q -- '/*' "$_if_val"
-        if string match -qr -- '^--(verify|check|report|help|version)$' "$_if_val"
+        if string match -qr -- '^--(verify|check|help|version)$' "$_if_val"
             _early_usage_exit "--install-file got the flag $_if_val as its value — pass an absolute path: --install-file <path> or --install-file=<path>"
         else if string match -q -- '-*' "$_if_val"
             _early_usage_exit "--install-file requires an absolute path argument (got flag: "(string escape -- "$_if_val")")"

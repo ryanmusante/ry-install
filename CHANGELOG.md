@@ -3,17 +3,14 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.265.0
+7.266.0
 -------
 
-  - logging: every run logs the running kernel release as KERNEL_RELEASE
-  - consistency: --help and the README say the 7200 s floor covers pkg/boot/db
-    ops, as the log line does
-  - changelog: fold the previous release into the range; one tag order in
-    every block; trim
+  - changelog: lockstep release with ry-verify 7.266.0, script unchanged; fold
+    the previous release into the range
 
 
-7.246.0 - 7.264.0
+7.246.0 - 7.265.0
 -----------------
 
   - env: 7.248.0 SDL_GAMECONTROLLER_IGNORE_DEVICES gains 0x3434/0x0b00 (Q0 HE)
@@ -320,6 +317,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - logging: 7.260.0 a lapsed read-back logs POSTWRITE_VERIFY_SKIP
     reason=read_lapse, a failed one POSTWRITE_VERIFY_FAIL reason=unreadable
   - logging: 7.260.0 a mkinitcpio revert after the footer prints, logs nothing
+  - logging: 7.265.0 every run logs the running kernel release as
+    KERNEL_RELEASE
   - progress: 7.254.0 a signal while the bar pins or unpins no longer leaves
     the scroll region set or clears the top row
   - summary: 7.247.0 failed summary or banner writes log STDERR_WRITE_FAIL
@@ -331,6 +330,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - consistency: 7.260.0 an nft -c that _run cannot start reads no capture dir
   - consistency: 7.264.0 messages and log lines read user bus, not user-bus;
     DEPLOY_HELD reads re-deploy; lock write and install errors read pidfile
+  - consistency: 7.265.0 --help and the README say the 7200 s floor covers
+    pkg/boot/db ops, as the log line does
 
 
 7.235.0 - 7.245.0

@@ -3,14 +3,32 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.266.0
+7.267.0
 -------
 
-  - changelog: lockstep release with ry-verify 7.266.0, script unchanged; fold
-    the previous release into the range
+  - configuration: a temp-file chmod, an atomic move or an owner or mode
+    repair that sudo refused names the lapsed cache
+  - packages: a mkinitcpio.conf snapshot that sudo refused names the lapsed
+    cache, not a failed mktemp or cp
+  - backup: a backup copy or a post-write restore, its mktemp included, that
+    sudo refused reads not run, not failed
+  - services: a PKGS_DEL removal, an fstab size probe or move or a ufw disable
+    that sudo refused names the lapsed cache
+  - services: an nftables ruleset probe that sudo refused before the ufw flush
+    reads not probed, not as a ruleset not confirmed live
+  - boot: a full install's rebuild step that sudo refused logs not run, not
+    failed, as its summary row reads
+  - finalize: a paccache -ruk0 that sudo refused after -rk2 ran reads cut
+    short, not failed; the row names the call
+  - install-file: a boot rebuild step (mkinitcpio, sdboot-manage gen, bootctl
+    update) that sudo refused reads not run
+  - install-file: a daemon-reload, a cpupower, nftables or bluetooth restart,
+    or a udev reload or trigger that sudo refused reads not run
+  - logging: sudo-refused steps log their key with _LAPSE for _FAIL, as
+    POST_BOOT_REBUILD_LAPSE, PKG_REMOVE_LAPSE or MKINITCPIO_SNAPSHOT_LAPSE
 
 
-7.246.0 - 7.265.0
+7.246.0 - 7.266.0
 -----------------
 
   - env: 7.248.0 SDL_GAMECONTROLLER_IGNORE_DEVICES gains 0x3434/0x0b00 (Q0 HE)

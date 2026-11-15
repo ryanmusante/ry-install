@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.267.0** · [Changelog](CHANGELOG.md)
+**Version 7.268.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -27,7 +27,7 @@ A run that reaches Preflight closes with the Totals line and a verdict: `PASS` o
 | Shell | fish 3.6 or newer, with its default `regex-easyesc` feature on |
 | Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
 | BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
-| Privileges | normal user with sudo rights; `sudo -v` cached before the run — when it is not, the run prompts if stdin and stderr are both a TTY, and exits `3` otherwise, if the prompt fails, or if no credential ends up cached (`timestamp_timeout=0`); an `--install-file` of a user file needs no sudo |
+| Privileges | normal user with sudo rights; `sudo -v` cached before the run and re-armed every 30 s until the run exits — when it is not cached, the run prompts if stdin and stderr are both a TTY, and exits `3` otherwise, if the prompt fails, if no credential ends up cached (`timestamp_timeout=0`), or if the credential is tied to the parent process (`timestamp_type=ppid`); an `--install-file` of a user file needs no sudo |
 | Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `cmp`, `curl`, `getent`, `pacman`, `mkinitcpio`, `sdboot-manage`, `bootctl`, `systemctl` |
 
 ## Usage
@@ -57,7 +57,7 @@ Per-step results (one summary row each):
 | `0` | OK — success and `WARN`-only runs |
 | `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout full, or closed under fish 3) |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, or root misuse |
-| `3` | missing dependency; uncached sudo that no TTY prompt resolved; a failed gate (hardware, root UUID, systemd, disk, network, pacman lock, ESP); a fish universal variable named like internal state; fish's `regex-easyesc` feature turned off; failed config validation; an unusable HOME, `~/ry-install` tree, or `/tmp` |
+| `3` | missing dependency; uncached sudo that no TTY prompt resolved, or a sudo credential tied to the parent process; a failed gate (hardware, root UUID, systemd, disk, network, pacman lock, ESP); a fish universal variable named like internal state; fish's `regex-easyesc` feature turned off; failed config validation; an unusable HOME, `~/ry-install` tree, or `/tmp` |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
 | `5` | lock — another live instance holds the lock; a stale pidfile is reclaimed, an ambiguous one fails closed |
 

@@ -3,32 +3,16 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.267.0
+7.268.0
 -------
 
-  - configuration: a temp-file chmod, an atomic move or an owner or mode
-    repair that sudo refused names the lapsed cache
-  - packages: a mkinitcpio.conf snapshot that sudo refused names the lapsed
-    cache, not a failed mktemp or cp
-  - backup: a backup copy or a post-write restore, its mktemp included, that
-    sudo refused reads not run, not failed
-  - services: a PKGS_DEL removal, an fstab size probe or move or a ufw disable
-    that sudo refused names the lapsed cache
-  - services: an nftables ruleset probe that sudo refused before the ufw flush
-    reads not probed, not as a ruleset not confirmed live
-  - boot: a full install's rebuild step that sudo refused logs not run, not
-    failed, as its summary row reads
-  - finalize: a paccache -ruk0 that sudo refused after -rk2 ran reads cut
-    short, not failed; the row names the call
-  - install-file: a boot rebuild step (mkinitcpio, sdboot-manage gen, bootctl
-    update) that sudo refused reads not run
-  - install-file: a daemon-reload, a cpupower, nftables or bluetooth restart,
-    or a udev reload or trigger that sudo refused reads not run
-  - logging: sudo-refused steps log their key with _LAPSE for _FAIL, as
-    POST_BOOT_REBUILD_LAPSE, PKG_REMOVE_LAPSE or MKINITCPIO_SNAPSHOT_LAPSE
+  - preflight: sudo tickets tied to the parent process (timestamp_type=ppid)
+    exit 3 at the sudo gate; they refused every command run under timeout
+  - preflight: a background sudo -n true every 30 s keeps the ticket alive
+    until exit, so a long -Syu no longer lapses it; the sudo banner is cut
 
 
-7.246.0 - 7.266.0
+7.246.0 - 7.267.0
 -----------------
 
   - env: 7.248.0 SDL_GAMECONTROLLER_IGNORE_DEVICES gains 0x3434/0x0b00 (Q0 HE)
@@ -58,6 +42,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     restores its .ry.bak by copy then rename; the restore hint uses sudo cp
   - configuration: 7.260.0 an nft -c or a parent-dir mkdir that ran and failed
     as the sudo ticket expired reads as failed, not as a lapse
+  - configuration: 7.267.0 a temp-file chmod, an atomic move or an owner or
+    mode repair that sudo refused names the lapsed cache
   - packages: 7.246.0 a missing member whose dependency conflicts with an
     installed package is held for the swap
   - packages: 7.246.0 a conflict swap gets a summary row naming what it
@@ -88,6 +74,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     none when pacman -Qq fails, so an IgnorePkg hold stands
   - packages: 7.258.0 a pacman run stopped by a pre-transaction hook reads as
     nothing committed; a failed conflict swap is named on the -Syu row
+  - packages: 7.267.0 a mkinitcpio.conf snapshot that sudo refused names the
+    lapsed cache, not a failed mktemp or cp
   - guard: 7.247.0 an early exit keeps a ~/ry-install/backups it did not
     create; inherited mkinitcpio rollback variables never drive a revert
   - guard: 7.250.0 state inherited from the environment or config.fish is
@@ -180,6 +168,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     exits 5; 7.255.0 a lock not taken logs ERR and counts in the footer
   - backup: 7.250.0 ~/ry-install/backups is created by the first .ry.bak copy,
     so no early exit removes it; 7.257.0 a failed copy WARNs on the terminal
+  - backup: 7.267.0 a backup copy or a post-write restore, its mktemp
+    included, that sudo refused reads not run, not failed
   - services: 7.247.0 a PKGS_DEL hook error keeps the row's rdep-skip count
   - services: 7.250.0 a resolved drop-in in a root-only directory no longer
     skips the restart, nor reads absent under a lapsed sudo
@@ -220,6 +210,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     sudo ticket expired reads as failed, not as a lapse
   - services: 7.260.0 the enable row reads enabled, not started for a unit
     whose start failed or was refused
+  - services: 7.267.0 a PKGS_DEL removal, an fstab size probe or move or a ufw
+    disable that sudo refused names the lapsed cache
+  - services: 7.267.0 an nftables ruleset probe that sudo refused before the
+    ufw flush reads not probed, not as a ruleset not confirmed live
   - boot: 7.250.0 an empty loader entries directory no longer adds
     sdboot-manage gen or LINUX_OPTIONS hints before the banner
   - boot: 7.250.0 the loader-entry boundary check resolves symlinks as root
@@ -237,6 +231,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     names a sudo lapse once and stops probing, and says why a listing failed
   - boot: 7.260.0 boot sanity reads entries as systemd-boot does (last linux
     line, auto-* skipped); an unmounted /boot reads fstype=none
+  - boot: 7.267.0 a full install's rebuild step that sudo refused logs not
+    run, not failed, as its summary row reads
   - finalize: 7.252.0 without PowerDevil, an environment.d change skips the
     re-apply; 7.254.0 an NM_RESTART_DELAY ending in a newline reads as 3 s
   - finalize: 7.255.0 the matrix Next line points at ./ry-verify.fish in the
@@ -245,6 +241,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     wireplumber.service; no user bus, no unit or exit 4 is a SKIP row
   - finalize: 7.257.0 PowerDevil and WirePlumber PASS rows say changed or
     owed; 7.260.0 an NM restart or cache trim that sudo refused reads not run
+  - finalize: 7.267.0 a paccache -ruk0 that sudo refused after -rk2 ran reads
+    cut short, not failed; the row names the call
   - install-file: 7.249.0 a boot-critical failure prints DO NOT REBOOT and its
     recovery steps once, in the closing banner
   - install-file: 7.252.0 an environment.d or bluetooth deploy without the
@@ -277,6 +275,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     NetworkManager owes no restart; one sudo refused reads not run
   - install-file: 7.260.0 a sysctl --system or udevadm verify that ran and
     failed as the sudo ticket expired reads as failed, not as a lapse
+  - install-file: 7.267.0 a boot rebuild step (mkinitcpio, sdboot-manage gen,
+    bootctl update) that sudo refused reads not run
+  - install-file: 7.267.0 a daemon-reload, a cpupower, nftables or bluetooth
+    restart, or a udev reload or trigger that sudo refused reads not run
   - logging: 7.246.0 a failed pacman call echoes its package-conflict lines
   - logging: 7.247.0 boot-cascade and udev-skip records carry the POST_
     prefix; a failed date no longer breaks the header JSON
@@ -337,6 +339,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - logging: 7.260.0 a mkinitcpio revert after the footer prints, logs nothing
   - logging: 7.265.0 every run logs the running kernel release as
     KERNEL_RELEASE
+  - logging: 7.267.0 sudo-refused steps log their key with _LAPSE for _FAIL,
+    as POST_BOOT_REBUILD_LAPSE, PKG_REMOVE_LAPSE or MKINITCPIO_SNAPSHOT_LAPSE
   - progress: 7.254.0 a signal while the bar pins or unpins no longer leaves
     the scroll region set or clears the top row
   - summary: 7.247.0 failed summary or banner writes log STDERR_WRITE_FAIL

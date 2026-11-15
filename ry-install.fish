@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.267.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.268.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.267.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.268.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -491,7 +491,7 @@ end
 # ── CLEANUP: SETTLE + TOP-LEVEL ORCHESTRATOR (_dc_settle → _do_cleanup) ──
 function _dc_settle --description "Reap children, revert mkinitcpio.conf and sweep tmpfiles once, ahead of the footer"
     test "$_RY_SETTLE_DONE" = true; and return 0
-    _dc_kill_children # defensive: fish runs handlers only after the foreground job exits
+    _dc_kill_children # the sudo keepalive; else defensive: handlers run after the job
     _dc_mki_revert; _dc_sweep_tmpfiles
     set -g _RY_SETTLE_DONE true # last: a signal mid-settle redoes all three (each re-entry safe)
 end
@@ -587,7 +587,7 @@ set -g WP_BLUEZ_ROLES a2dp_sink a2dp_source bap_sink bap_source # WirePlumber bl
 set -g _RY_BLUEZ_ROLES hsp_hs hsp_ag hfp_hf hfp_ag a2dp_sink a2dp_source bap_sink bap_source bap_bcast_sink bap_bcast_source asha_sink # role names PipeWire parses
 set -g GPU_DPM_LEVEL high # gfx1151 DPM; high pins clocks, gating stays active
 set -g _RY_DPM_LEVELS auto low high manual profile_standard profile_min_sclk profile_min_mclk profile_peak perf_determinism # power_dpm_force_performance_level accepted set
-set -g EPP_PREFERENCE performance; set -g _RY_EPP_LEVELS default performance balance_performance balance_power power # accepted set; udev-pinned per CPU; blocked if dynamic_epp on
+set -g EPP_PREFERENCE performance; set -g _RY_EPP_LEVELS default performance balance_performance balance_power power # accepted set; udev-pinned per CPU; 7.1-7.2 dynamic_epp blocks it
 set -g BLACKLIST_AMDXDNA false # false + iommu=pt enables the NPU
 
 # ── EMBEDDED DATA: ENV_VARS + SYSCTL_VALUES ──
@@ -956,7 +956,7 @@ end
 function _content_fn_for --argument-names dst --description "Resolve the _content_ generator function name for a destination"; echo "_content_"(_dst_key "$dst"); end
 function _ry_get_file_content --argument-names dst --description "Generate expected content for a destination (dispatcher)"; set -l fn (_content_fn_for "$dst"); functions -q $fn; or return $EXIT_GEN_NOFN; $fn; end
 
-# ── SUDO CREDENTIAL CACHE + COMMAND ESCALATION ──
+# ── SUDO CREDENTIAL CACHE + KEEPALIVE + COMMAND ESCALATION ──
 function _ensure_sudo_cached --description "Cache sudo credential once before repeated sudo -n calls"
     _log "SUDO_CACHE_START"
     if not command -q sudo; _err "sudo credential cache failed: sudo not found"; _log "SUDO_CACHE_FAIL: sudo not found"; return 1; end
@@ -984,6 +984,14 @@ function _ensure_sudo_cached --description "Cache sudo credential once before re
         return 1
     end
     _log "SUDO_CACHE_OK"; return 0
+end
+function _sudo_ready --description "Cache sudo, refuse tickets tied to the parent process, keep the ticket alive"
+    _ensure_sudo_cached; or return 1
+    if not command timeout --foreground --kill-after=1 30 sudo -n true 2>/dev/null # _run's shape: sudo under timeout(1)
+        _log "SUDO_CACHE_PER_PARENT: sudo -n under timeout(1) refused"; _err "sudo credential cache failed: ticket is tied to the parent process — commands under timeout(1) cannot reuse it (timestamp_type=ppid?)"; return 1
+    end
+    command sh -c 'trap "kill \$s 2>/dev/null; exit 0" TERM INT HUP; while kill -0 "$1" 2>/dev/null; do sleep 30 & s=$!; wait "$s"; if ! sudo -n true 2>/dev/null; then exit 0; fi; done' ry-sudo-keepalive $fish_pid </dev/null >/dev/null 2>&1 &
+    _log "SUDO_KEEPALIVE_START: pid=$last_pid interval=30s" # reaped by _dc_kill_children on every exit path
 end
 function _as --argument-names use_sudo --description "Prefix command with sudo or command based on use_sudo flag"
     if test (count $argv) -lt 2; _log "BUG: _as called without command (argv=$argv)"; return $EXIT_AS_MISUSE; end
@@ -1995,7 +2003,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
     test "$_aw_rc" -eq 0; and set -g _RY_DEPLOY_CHANGED_COUNT (math $_RY_DEPLOY_CHANGED_COUNT + 1); and set -ga _RY_DEPLOY_CHANGED_DSTS "$dst"; return $_aw_rc
 end
 
-# ── MISC HELPERS: WI-FI ROUTE, USER BUS + USER UNITS, SUDO BANNER ──
+# ── MISC HELPERS: WI-FI ROUTE, USER BUS + USER UNITS ──
 function _is_wifi_active_route --description "True if default route exits via wireless interface"
     command -q ip; or return 1
     set -l _def_iface ""
@@ -2022,20 +2030,12 @@ function _has_user_bus_active --description "True iff user systemd manager is re
 end
 function _has_powerdevil --description "True when the user manager has plasma-powerdevil.service (try-restart of an absent unit exits 5)"; test (command systemctl --user list-unit-files --no-legend -- plasma-powerdevil.service 2>/dev/null | count) -gt 0; end
 function _has_wireplumber --description "True when the user manager has wireplumber.service (try-restart of an absent unit exits 5)"; test (command systemctl --user list-unit-files --no-legend -- wireplumber.service 2>/dev/null | count) -gt 0; end
-function _ry_sudo_cache_banner --description "Install-mode warning: sudo cache may lapse mid-run"
-    set -q _RY_OUTPUT_BROKEN; and return 0
-    _log "SUDO_CACHE_BANNER: emitted (install-mode preflight)"
-    printf '%s\n' "" \
-        "[WARN] sudo cache may lapse during 3-8 min install. Mitigations:" \
-        "[WARN]   Defaults timestamp_timeout=60 in /etc/sudoers, or a sudo -v keepalive backgrounded in this terminal (tickets are per-tty)" \
-        "[WARN]   Recovery: re-run ry-install (idempotent)" >&2; or _output_broken
-end
 
 # ── INSTALL PHASE 1: PREFLIGHT ──
 function _ip_bail_prep --description "_install_preflight sub: Bail prep: clear _RY_LOUD_ERR, mark progress skip"; set --erase _RY_LOUD_ERR; set -g _PROG_FINALIZED_SKIP true; end
 function _install_preflight --description "Run all preflight checks before installation"
-    _progress Preflight; _ry_sudo_cache_banner
-    set -g _RY_LOUD_ERR true; set -l _chks _ensure_sudo_cached _ry_check_deps _ry_check_disk_space; set -l _chk_labels "Preflight: sudo credential cache" "Preflight: dependency check" "Preflight: disk space"; set -l _i 1
+    _progress Preflight
+    set -g _RY_LOUD_ERR true; set -l _chks _sudo_ready _ry_check_deps _ry_check_disk_space; set -l _chk_labels "Preflight: sudo credential cache" "Preflight: dependency check" "Preflight: disk space"; set -l _i 1
     if test (count $_chk_labels) -ne (count $_chks); _err_loud "BUG: _chk_labels size drift (got "(count $_chk_labels)" expected "(count $_chks)")"; _ip_bail_prep; return $EXIT_PREFLIGHT; end
     for _chk in $_chks
         if $_chk; _phase_record $_chk_labels[$_i] PASS "ok"; set _i (math $_i + 1); continue; end # _i advances on PASS only
@@ -3510,7 +3510,7 @@ function _ry_do_install_file --argument-names target --description "Install a si
     if test "$status" -ne 0; _err "Content generator failed for $_mdst — refusing to deploy"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     set -l _f0 $VERIFY_FAIL; if not _rvc_dispatch "$_mdst" $_if_content; _err_recap $_f0 "Embedded content failed format validation for $_mdst — refusing to deploy"; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     set -l _if_tag (_post_hook_for_target "$_mdst") # 'boot' = mkinitcpio.conf + sdboot-manage.conf
-    if test "$_use_sudo" = true; and not _ensure_sudo_cached; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
+    if test "$_use_sudo" = true; and not _sudo_ready; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end
     if contains -- "$_mdst" $_RY_BOOT_CRITICAL_DSTS; and not _ry_check_deps; _log_section "INSTALL-FILE END"; return $EXIT_PREFLIGHT; end # the boot cascade needs the install deps
     if contains -- "$_mdst" $_RY_BOOT_CRITICAL_DSTS # the cascade's ESP gates, before the write
         set -l _bp (_resolve_boot_path)

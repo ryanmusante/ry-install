@@ -3,16 +3,14 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.268.0
+7.269.0
 -------
 
-  - preflight: sudo tickets tied to the parent process (timestamp_type=ppid)
-    exit 3 at the sudo gate; they refused every command run under timeout
-  - preflight: a background sudo -n true every 30 s keeps the ticket alive
-    until exit, so a long -Syu no longer lapses it; the sudo banner is cut
+  - preflight: a sudoers verifypw that lets sudo -v skip authentication now
+    prompts once through a command on a TTY instead of exiting 3
 
 
-7.246.0 - 7.267.0
+7.246.0 - 7.268.0
 -----------------
 
   - env: 7.248.0 SDL_GAMECONTROLLER_IGNORE_DEVICES gains 0x3434/0x0b00 (Q0 HE)
@@ -160,6 +158,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     exits 3 before -Syu; true(1) and test(1) are checked at startup
   - preflight: 7.260.0 the ESP gate refuses an ESP not at /boot or an XBOOTLDR
     $BOOT; a /boot linked to the ESP gets the /boot free-space gate
+  - preflight: 7.268.0 sudo tickets tied to the parent process exit 3 at the
+    sudo gate (timestamp_type=ppid); they refused every command under timeout
+  - preflight: 7.268.0 a background sudo -n true every 30 s keeps the ticket
+    alive until exit, so a long -Syu no longer lapses it; sudo banner cut
   - lock: 7.254.0 the lock dir is set 00700, clearing an inherited setgid bit;
     the printed lock-removal command escapes its path
   - lock: 7.254.0 - 7.255.0 a signal while dropping a reclaim claim or

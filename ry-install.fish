@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.268.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.269.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.268.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.269.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -961,11 +961,11 @@ function _ensure_sudo_cached --description "Cache sudo credential once before re
     _log "SUDO_CACHE_START"
     if not command -q sudo; _err "sudo credential cache failed: sudo not found"; _log "SUDO_CACHE_FAIL: sudo not found"; return 1; end
     set -l _sudo_err (sudo -n -v 2>&1 >/dev/null) # stderr kept in memory, no tmpfile; set keeps the cmdsub status
-    set -l _rc $status
+    set -l _rc $status; set -l _asked false
     if test "$_rc" -ne 0
         if isatty 0; and isatty 2
             set _sudo_err (sudo -v 2>&1 >/dev/null) # replaces stale stderr; the prompt goes to /dev/tty
-            set _rc $status
+            set _rc $status; set _asked true
         else
             set -p _sudo_err "stdin/stderr is not a TTY — pre-cache via 'sudo -v' before running" # the one ERR below names it
             _log "SUDO_CACHE_NONINTERACTIVE: stdin or stderr is not a tty — refusing interactive sudo -v"
@@ -973,6 +973,7 @@ function _ensure_sudo_cached --description "Cache sudo credential once before re
     end
     if test "$_rc" -eq 0; and not sudo -n true 2>/dev/null # -v can pass yet cache nothing: timestamp_timeout=0, verifypw
         set _rc 1; set _sudo_err "sudo -v left sudo -n unusable (timestamp_timeout=0 or verifypw?)"
+        test "$_asked" = false; and isatty 0; and isatty 2; and sudo true 2>/dev/null; and sudo -n true 2>/dev/null; and set _rc 0 # -v passed unasked (verifypw): a command authenticates
     end
     if test "$_rc" -ne 0
         set -l _reason $_sudo_err[1]; _log "SUDO_CACHE_FAIL: $_reason"
